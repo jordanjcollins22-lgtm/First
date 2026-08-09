@@ -31,9 +31,8 @@ import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
 import { serviceTypeById } from "./service-catalog";
-import { RENTAL_TOOLS, toolIcon } from "./tools-catalog";
-import { zoneMaterialLineItems, formatMaterialQuantity, type MaterialLineItem } from "./materials-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
+import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 625;
@@ -41,6 +40,9 @@ const CLOSE_POINT_RADIUS = 12;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
 const METERS_TO_FEET = 3.28084;
+const CUBIC_FEET_PER_YARD = 27;
+// Typical loaded wheelbarrow capacity used for hauling estimates.
+const WHEELBARROW_CUBIC_FEET = 3;
 
 // PDF page canvases, sized to match a US Letter page's aspect ratio (8.5x11).
 const PAGE_WIDTH = 1000;
@@ -104,6 +106,86 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   }
   lines.push(current);
   return lines;
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** Draws a titled box, wrapping raw (unwrapped) lines to fit. Returns the next y. */
+function drawBoxedSection(
+  ctx: CanvasRenderingContext2D,
+  title: string,
+  rawLines: string[],
+  y: number,
+  bg = "#f9fafb"
+): number {
+  const padding = 14;
+  const lineHeight = 20;
+  const font = "14px sans-serif";
+  const titleFont = "700 15px sans-serif";
+  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
+  const innerMaxWidth = maxWidth - padding * 2;
+
+  ctx.font = font;
+  const wrapped: string[] = [];
+  for (const raw of rawLines) wrapped.push(...wrapText(ctx, raw, innerMaxWidth));
+
+  const titleHeight = title ? 24 : 0;
+  const boxHeight = padding * 2 + titleHeight + Math.max(wrapped.length, 1) * lineHeight;
+
+  ctx.fillStyle = bg;
+  roundRect(ctx, PAGE_MARGIN, y, maxWidth, boxHeight, 8);
+  ctx.fill();
+
+  let innerY = y + padding;
+  if (title) {
+    ctx.font = titleFont;
+    ctx.fillStyle = "#111827";
+    ctx.fillText(title, PAGE_MARGIN + padding, innerY);
+    innerY += titleHeight;
+  }
+  ctx.font = font;
+  ctx.fillStyle = "#374151";
+  for (const line of wrapped) {
+    ctx.fillText(line, PAGE_MARGIN + padding, innerY);
+    innerY += lineHeight;
+  }
+
+  return y + boxHeight + 18;
+}
+
+/** Draws wrapping pill chips. Returns the next y. */
+function drawChips(ctx: CanvasRenderingContext2D, labels: string[], x: number, y: number, maxWidth: number): number {
+  const paddingX = 10;
+  const chipHeight = 26;
+  const gap = 8;
+  ctx.font = "13px sans-serif";
+  ctx.textBaseline = "middle";
+  let cx = x;
+  let cy = y;
+  for (const label of labels) {
+    const textWidth = ctx.measureText(label).width;
+    const chipWidth = textWidth + paddingX * 2;
+    if (cx + chipWidth > x + maxWidth && cx > x) {
+      cx = x;
+      cy += chipHeight + gap;
+    }
+    ctx.fillStyle = "#eef2f7";
+    roundRect(ctx, cx, cy, chipWidth, chipHeight, chipHeight / 2);
+    ctx.fill();
+    ctx.fillStyle = "#111827";
+    ctx.fillText(label, cx + paddingX, cy + chipHeight / 2 + 1);
+    cx += chipWidth + gap;
+  }
+  ctx.textBaseline = "top";
+  return cy + chipHeight + 18;
 }
 
 /** Breaks an auto-scope sentence (or sentences) into ordered checklist steps. */
@@ -176,6 +258,10 @@ function formatMeasurements(m: { areaSqFt: number; perimeterFt: number }): strin
   return `${Math.round(m.areaSqFt).toLocaleString()} sq ft · ${Math.round(m.perimeterFt).toLocaleString()} ft perimeter`;
 }
 
+function toolIconFor(name: string, catalog: CanvasCatalog): string {
+  return catalog.tools.find((t) => t.name === name)?.icon ?? "🧰";
+}
+
 function allToolsAcrossZones(zones: WorkZone[]): string[] {
   const set = new Set<string>();
   for (const zone of zones) {
@@ -184,7 +270,43 @@ function allToolsAcrossZones(zones: WorkZone[]): string[] {
   return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
 
-function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: string[]): HTMLCanvasElement {
+interface MaterialLineItem {
+  zoneName: string;
+  material: string;
+  unit: string;
+  quantity: number;
+  totalCost: number | null;
+}
+
+function zoneMaterialLineItems(zone: WorkZone, areaSqFt: number, catalog: CanvasCatalog): MaterialLineItem[] {
+  const service = zone.service;
+  if (!service) return [];
+  const items: MaterialLineItem[] = [];
+  for (const rule of catalog.serviceMaterialRules) {
+    if (rule.service_type_id !== service.typeId) continue;
+    if (rule.match_field && service.values[rule.match_field] !== rule.match_value) continue;
+    const material = catalog.materials.find((m) => m.id === rule.material_id);
+    if (!material || !material.coverage_per_unit_sqft) continue;
+    const rawUnits = areaSqFt / material.coverage_per_unit_sqft;
+    const quantity = rawUnits * (1 + material.waste_factor_pct / 100);
+    const totalCost = material.cost_per_unit != null ? quantity * material.cost_per_unit : null;
+    items.push({ zoneName: zone.name, material: material.name, unit: material.unit, quantity, totalCost });
+  }
+  return items;
+}
+
+function formatMaterialQuantity(item: MaterialLineItem): string {
+  const qty = item.quantity < 10 ? item.quantity.toFixed(1) : Math.round(item.quantity).toLocaleString();
+  let text = `${qty} ${item.unit}`;
+  if (item.unit === "cubic yards") {
+    const loads = Math.ceil((item.quantity * CUBIC_FEET_PER_YARD) / WHEELBARROW_CUBIC_FEET);
+    text += ` (≈${loads} wheelbarrow loads)`;
+  }
+  if (item.totalCost != null) text += ` · $${item.totalCost.toFixed(2)}`;
+  return text;
+}
+
+function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: string[], catalog: CanvasCatalog): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = PAGE_HEIGHT;
@@ -233,14 +355,14 @@ function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: 
     tools.forEach((tool, i) => {
       const col = Math.floor(i / rowsPerColumn);
       const row = i % rowsPerColumn;
-      ctx.fillText(`☐ ${toolIcon(tool)} ${tool}`, PAGE_MARGIN + col * colWidth, y + row * rowHeight);
+      ctx.fillText(`☐ ${toolIconFor(tool, catalog)} ${tool}`, PAGE_MARGIN + col * colWidth, y + row * rowHeight);
     });
   }
 
   return canvas;
 }
 
-async function renderZonePage(zone: WorkZone): Promise<HTMLCanvasElement> {
+async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = PAGE_HEIGHT;
@@ -253,85 +375,51 @@ async function renderZonePage(zone: WorkZone): Promise<HTMLCanvasElement> {
   ctx.textBaseline = "top";
 
   const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
-  let y = PAGE_MARGIN;
 
-  ctx.font = "700 28px sans-serif";
-  ctx.fillStyle = "#111827";
-  ctx.fillText(zone.name, PAGE_MARGIN, y);
-  y += 40;
-
+  const HEADER_HEIGHT = 96;
+  ctx.fillStyle = zone.color;
+  ctx.fillRect(0, 0, PAGE_WIDTH, HEADER_HEIGHT);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 32px sans-serif";
+  ctx.fillText(zone.name, PAGE_MARGIN, 26);
   if (zone.location.trim()) {
     ctx.font = "16px sans-serif";
-    ctx.fillStyle = "#6b7280";
-    ctx.fillText(`📍 ${zone.location.trim()}`, PAGE_MARGIN, y);
-    y += 26;
+    ctx.fillText(`📍 ${zone.location.trim()}`, PAGE_MARGIN, 66);
   }
-  y += 8;
 
+  let y = HEADER_HEIGHT + 28;
   const service = zone.service;
   const serviceType = service ? serviceTypeById(service.typeId) : undefined;
 
   if (service && serviceType) {
-    ctx.font = "700 20px sans-serif";
+    ctx.font = "700 22px sans-serif";
     ctx.fillStyle = "#111827";
     ctx.fillText(serviceType.label, PAGE_MARGIN, y);
-    y += 32;
+    y += 36;
 
-    ctx.font = "15px sans-serif";
-    ctx.fillStyle = "#374151";
-    for (const field of serviceType.fields) {
-      if (!service.values[field.key]) continue;
-      const value = displayFieldValue(service.values, field.key);
-      for (const line of wrapText(ctx, `${field.label}: ${value}`, maxWidth)) {
-        ctx.fillText(line, PAGE_MARGIN, y);
-        y += 22;
-      }
+    const fieldLines = serviceType.fields
+      .filter((field) => service.values[field.key])
+      .map((field) => `${field.label}: ${displayFieldValue(service.values, field.key)}`);
+    if (fieldLines.length > 0) {
+      y = drawBoxedSection(ctx, "Details", fieldLines, y);
     }
-    y += 8;
 
-    if ((service.tools?.length ?? 0) > 0) {
+    if (service.tools.length > 0) {
       ctx.font = "700 15px sans-serif";
       ctx.fillStyle = "#111827";
-      ctx.fillText("Tools for this zone", PAGE_MARGIN, y);
-      y += 22;
-      ctx.font = "15px sans-serif";
-      ctx.fillStyle = "#374151";
-      const toolsText = service.tools.map((t) => `${toolIcon(t)} ${t}`).join(", ");
-      for (const line of wrapText(ctx, toolsText, maxWidth)) {
-        ctx.fillText(line, PAGE_MARGIN, y);
-        y += 22;
-      }
-      y += 8;
+      ctx.fillText("Tools", PAGE_MARGIN, y);
+      y += 24;
+      const chipLabels = service.tools.map((name) => `${toolIconFor(name, catalog)} ${name}`);
+      y = drawChips(ctx, chipLabels, PAGE_MARGIN, y, maxWidth);
     }
 
     if (serviceType.autoScope) {
-      ctx.font = "700 15px sans-serif";
-      ctx.fillStyle = "#111827";
-      ctx.fillText("Checklist", PAGE_MARGIN, y);
-      y += 26;
-      ctx.font = "15px sans-serif";
-      ctx.fillStyle = "#374151";
-      for (const step of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
-        for (const line of wrapText(ctx, `☐ ${step}`, maxWidth)) {
-          ctx.fillText(line, PAGE_MARGIN, y);
-          y += 24;
-        }
-      }
-      y += 8;
+      const steps = splitScopeIntoSteps(serviceType.autoScope(service.values)).map((s) => `☐ ${s}`);
+      y = drawBoxedSection(ctx, "Checklist", steps, y, "#eff6ff");
     }
 
     if (service.notes.trim()) {
-      ctx.font = "700 15px sans-serif";
-      ctx.fillStyle = "#111827";
-      ctx.fillText("Notes", PAGE_MARGIN, y);
-      y += 22;
-      ctx.font = "15px sans-serif";
-      ctx.fillStyle = "#374151";
-      for (const line of wrapText(ctx, service.notes.trim(), maxWidth)) {
-        ctx.fillText(line, PAGE_MARGIN, y);
-        y += 22;
-      }
-      y += 8;
+      y = drawBoxedSection(ctx, "Notes", [service.notes.trim()], y, "#fffbeb");
     }
 
     if (service.photos.length > 0) {
@@ -343,6 +431,9 @@ async function renderZonePage(zone: WorkZone): Promise<HTMLCanvasElement> {
         try {
           const photoElement = await loadImageElement(service.photos[i]);
           ctx.drawImage(photoElement, x, y, photoSize, photoSize);
+          ctx.strokeStyle = "#e5e7eb";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, y, photoSize, photoSize);
         } catch {
           // Skip a photo that fails to load rather than blocking the whole page.
         }
@@ -367,7 +458,8 @@ async function renderZonePage(zone: WorkZone): Promise<HTMLCanvasElement> {
 function renderMaterialsPage(
   zones: WorkZone[],
   image: CanvasImage | null,
-  address: string
+  address: string,
+  catalog: CanvasCatalog
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
@@ -397,13 +489,9 @@ function renderMaterialsPage(
 
   const allItems: MaterialLineItem[] = [];
   for (const zone of zones) {
-    const service = zone.service;
-    if (!service) continue;
     const measurements = zoneMeasurements(zone, image);
     if (!measurements) continue;
-    allItems.push(
-      ...zoneMaterialLineItems(zone.id, zone.name, service.typeId, service.values, measurements.areaSqFt)
-    );
+    allItems.push(...zoneMaterialLineItems(zone, measurements.areaSqFt, catalog));
   }
 
   ctx.font = "700 19px sans-serif";
@@ -416,7 +504,7 @@ function renderMaterialsPage(
     ctx.fillStyle = "#9ca3af";
     for (const line of wrapText(
       ctx,
-      "No bulk materials calculated yet — needs a zone with an automatically-scaled background and a material selected.",
+      "No bulk materials calculated yet — needs a zone with an automatically-scaled background and a material rule configured.",
       maxWidth
     )) {
       ctx.fillText(line, PAGE_MARGIN, y);
@@ -445,7 +533,11 @@ function renderMaterialsPage(
   y += 28;
 
   const rentals = Array.from(
-    new Set(zones.flatMap((zone) => (zone.service?.tools ?? []).filter((tool) => RENTAL_TOOLS.has(tool))))
+    new Set(
+      zones
+        .flatMap((zone) => zone.service?.tools ?? [])
+        .filter((toolName) => catalog.tools.find((t) => t.name === toolName)?.is_rental)
+    )
   );
   if (rentals.length === 0) {
     ctx.font = "italic 14px sans-serif";
@@ -455,7 +547,7 @@ function renderMaterialsPage(
     ctx.font = "14px sans-serif";
     ctx.fillStyle = "#374151";
     for (const tool of rentals) {
-      ctx.fillText(`☐ ${toolIcon(tool)} ${tool}`, PAGE_MARGIN, y);
+      ctx.fillText(`☐ ${toolIconFor(tool, catalog)} ${tool}`, PAGE_MARGIN, y);
       y += 22;
     }
   }
@@ -575,7 +667,11 @@ function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
   return <img src={url} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />;
 }
 
-export function ImageCanvasBoard() {
+interface ImageCanvasBoardProps {
+  catalog: CanvasCatalog;
+}
+
+export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
@@ -811,11 +907,11 @@ export function ImageCanvasBoard() {
     lat: number
   ): Promise<{ blob: Blob; realWidthFeet: number }> {
     // Mapbox requires its logo/attribution on static images, anchored to the bottom
-    // edge. Fetch a bit more area than we need (zoomed out slightly, plus extra
-    // vertical padding) so we can crop the bottom strip back off without losing
-    // meaningful coverage of the property.
+    // edge. Fetch extra vertical padding, split evenly so the requested lat/lng stays
+    // vertically centered in the final crop (cropping only from the bottom would push
+    // the property off-center), and trim it back off after loading.
     const zoom = 18.7;
-    const padding = 130;
+    const padding = 220;
     const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},0/${CANVAS_WIDTH}x${CANVAS_HEIGHT + padding}@2x?access_token=${env.mapboxToken}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
@@ -828,11 +924,24 @@ export function ImageCanvasBoard() {
     cropCanvas.height = CANVAS_HEIGHT * pixelRatio;
     const cropCtx = cropCanvas.getContext("2d");
     if (!cropCtx) throw new Error("Couldn't process the satellite photo.");
-    cropCtx.drawImage(rawImage, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
+    const cropTop = (padding * pixelRatio) / 2;
+    cropCtx.drawImage(
+      rawImage,
+      0,
+      cropTop,
+      cropCanvas.width,
+      cropCanvas.height,
+      0,
+      0,
+      cropCanvas.width,
+      cropCanvas.height
+    );
 
     // Web Mercator ground resolution at this zoom/latitude, applied to the
     // requested (unscaled) width, gives the real-world span of the image —
     // so measurements are ready automatically, with no manual calibration step.
+    // Reference: standard XYZ/slippy-map tile scheme, 256px tiles doubling per
+    // zoom level (same convention Mapbox, Google Maps, and OSM all use).
     const metersPerPixel =
       (EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
     const realWidthFeet = CANVAS_WIDTH * metersPerPixel * METERS_TO_FEET;
@@ -937,8 +1046,7 @@ export function ImageCanvasBoard() {
     setExporting(true);
     try {
       const tools = allToolsAcrossZones(zones);
-      const coverCanvas = renderCoverPage(planCanvas, address, tools);
-      const materialsCanvas = renderMaterialsPage(zones, image, address);
+      const coverCanvas = renderCoverPage(planCanvas, address, tools, catalog);
 
       const pdf = new jsPDF({ unit: "pt", format: "letter" });
       const pageWidthPt = pdf.internal.pageSize.getWidth();
@@ -954,12 +1062,15 @@ export function ImageCanvasBoard() {
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
       };
 
+      // Cover first, then the zone detail pages the crew flips through on-site,
+      // and the office-facing materials/job-plan pages trail at the very end.
       addPageCanvas(coverCanvas);
-      addPageCanvas(materialsCanvas);
 
       for (const zone of zones) {
-        addPageCanvas(await renderZonePage(zone));
+        addPageCanvas(await renderZonePage(zone, catalog));
       }
+
+      addPageCanvas(renderMaterialsPage(zones, image, address, catalog));
 
       for (const jobPlanCanvas of renderJobPlanPages(zones, image, address)) {
         addPageCanvas(jobPlanCanvas);
@@ -1061,7 +1172,7 @@ export function ImageCanvasBoard() {
         {image?.realWidthFeet && (
           <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
             <Ruler className="h-3.5 w-3.5" />
-            Auto-scaled
+            Auto-scaled · ≈{Math.round(image.realWidthFeet).toLocaleString()} ft across
           </div>
         )}
       </div>
@@ -1246,6 +1357,7 @@ export function ImageCanvasBoard() {
         open={dialogZone !== null}
         zoneName={dialogZone?.name ?? ""}
         measurementSummary={dialogMeasurements ? formatMeasurements(dialogMeasurements) : undefined}
+        catalog={catalog}
         initialLocation={dialogZone?.location ?? ""}
         initialService={dialogZone?.service ?? null}
         onSave={handleSaveZoneService}

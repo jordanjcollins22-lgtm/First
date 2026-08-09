@@ -17,9 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SERVICE_TYPES, serviceTypeById } from "./service-catalog";
-import { defaultToolsForService, toolIcon } from "./tools-catalog";
-import { cn } from "@/lib/utils";
 import type { ZoneServiceData } from "./types";
+import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 
 function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -53,6 +52,7 @@ interface ZoneServiceDialogProps {
   open: boolean;
   zoneName: string;
   measurementSummary?: string;
+  catalog: CanvasCatalog;
   initialLocation: string;
   initialService: ZoneServiceData | null;
   onSave: (location: string, service: ZoneServiceData | null) => void;
@@ -63,6 +63,7 @@ export function ZoneServiceDialog({
   open,
   zoneName,
   measurementSummary,
+  catalog,
   initialLocation,
   initialService,
   onSave,
@@ -73,31 +74,48 @@ export function ZoneServiceDialog({
   const [values, setValues] = useState<Record<string, string>>(initialService?.values ?? {});
   const [notes, setNotes] = useState(initialService?.notes ?? "");
   const [photos, setPhotos] = useState<Blob[]>(initialService?.photos ?? []);
-  const [tools, setTools] = useState<string[]>(initialService?.tools ?? []);
   const [customTool, setCustomTool] = useState("");
 
   const serviceType = serviceTypeById(typeId);
-  const toolOptions = Array.from(new Set([...defaultToolsForService(typeId), ...tools]));
+
+  const autoTools = catalog.tools.filter((tool) =>
+    catalog.serviceTools.some((link) => link.service_type_id === typeId && link.tool_id === tool.id)
+  );
+  const autoToolNames = new Set(autoTools.map((tool) => tool.name));
+
+  const [extraTools, setExtraTools] = useState<string[]>(() => {
+    if (!initialService) return [];
+    const initialAutoNames = new Set(
+      catalog.tools
+        .filter((tool) =>
+          catalog.serviceTools.some(
+            (link) => link.service_type_id === initialService.typeId && link.tool_id === tool.id
+          )
+        )
+        .map((tool) => tool.name)
+    );
+    return initialService.tools.filter((name) => !initialAutoNames.has(name));
+  });
 
   function handleTypeChange(nextTypeId: string) {
     setTypeId(nextTypeId);
     setValues({});
-    setTools(defaultToolsForService(nextTypeId));
+    setExtraTools([]);
   }
 
   function handleFieldChange(key: string, value: string) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function toggleTool(tool: string) {
-    setTools((prev) => (prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool]));
-  }
-
   function handleAddCustomTool() {
     const trimmed = customTool.trim();
-    if (!trimmed || tools.includes(trimmed)) return;
-    setTools((prev) => [...prev, trimmed]);
+    if (!trimmed || autoToolNames.has(trimmed) || extraTools.includes(trimmed)) return;
+    setExtraTools((prev) => [...prev, trimmed]);
     setCustomTool("");
+  }
+
+  function handleRemoveExtraTool(index: number) {
+    setExtraTools((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
@@ -113,6 +131,7 @@ export function ZoneServiceDialog({
   }
 
   function handleSave() {
+    const tools = [...autoTools.map((tool) => tool.name), ...extraTools];
     const service: ZoneServiceData | null = typeId ? { typeId, values, notes, photos, tools } : null;
     onSave(location, service);
   }
@@ -208,27 +227,42 @@ export function ZoneServiceDialog({
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label>Tools needed</Label>
-                <div className="flex flex-wrap gap-2">
-                  {toolOptions.map((tool) => (
-                    <button
-                      type="button"
-                      key={tool}
-                      onClick={() => toggleTool(tool)}
-                      className={cn(
-                        "rounded-full border px-3 py-1 text-xs",
-                        tools.includes(tool)
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent"
-                      )}
-                    >
-                      <span aria-hidden>{toolIcon(tool)}</span> {tool}
-                    </button>
-                  ))}
-                </div>
+                <Label>Tools (selected automatically for this service)</Label>
+                {autoTools.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {autoTools.map((tool) => (
+                      <span
+                        key={tool.id}
+                        className="flex items-center gap-1 rounded-full border border-border bg-muted px-3 py-1 text-xs"
+                      >
+                        <span aria-hidden>{tool.icon}</span> {tool.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No tools configured for this service yet — add some under Tools and assign
+                    them to this service.
+                  </p>
+                )}
+                {extraTools.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {extraTools.map((tool, index) => (
+                      <span
+                        key={index}
+                        className="flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary"
+                      >
+                        {tool}
+                        <button type="button" onClick={() => handleRemoveExtraTool(index)}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Add a tool"
+                    placeholder="Add an extra tool for this zone only"
                     value={customTool}
                     onChange={(e) => setCustomTool(e.target.value)}
                     onKeyDown={(e) => {

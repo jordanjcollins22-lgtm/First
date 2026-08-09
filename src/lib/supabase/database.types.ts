@@ -232,6 +232,81 @@ export interface Database {
           },
         ];
       };
+      tools: {
+        Row: {
+          id: string;
+          name: string;
+          icon: string;
+          cost: number | null;
+          is_rental: boolean;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["tools"]["Row"]> & {
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tools"]["Row"]>;
+        Relationships: [];
+      };
+      materials: {
+        Row: {
+          id: string;
+          name: string;
+          unit: string;
+          coverage_per_unit_sqft: number | null;
+          waste_factor_pct: number;
+          cost_per_unit: number | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["materials"]["Row"]> & {
+          name: string;
+          unit: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["materials"]["Row"]>;
+        Relationships: [];
+      };
+      service_tools: {
+        Row: {
+          service_type_id: string;
+          tool_id: string;
+        };
+        Insert: Database["public"]["Tables"]["service_tools"]["Row"];
+        Update: Partial<Database["public"]["Tables"]["service_tools"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "service_tools_tool_id_fkey";
+            columns: ["tool_id"];
+            referencedRelation: "tools";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      service_materials: {
+        Row: {
+          id: string;
+          service_type_id: string;
+          material_id: string;
+          match_field: string | null;
+          match_value: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["service_materials"]["Row"]> & {
+          service_type_id: string;
+          material_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["service_materials"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "service_materials_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "materials";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

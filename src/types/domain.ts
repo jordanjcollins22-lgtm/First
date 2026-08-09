@@ -144,3 +144,40 @@ export interface GeneratedScope {
   quality_control_requirements: string[];
   generated_at: string;
 }
+
+export interface Tool {
+  id: string;
+  name: string;
+  icon: string;
+  cost: number | null;
+  is_rental: boolean;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Material {
+  id: string;
+  name: string;
+  unit: string;
+  coverage_per_unit_sqft: number | null;
+  waste_factor_pct: number;
+  cost_per_unit: number | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceToolLink {
+  service_type_id: string;
+  tool_id: string;
+}
+
+export interface ServiceMaterialRule {
+  id: string;
+  service_type_id: string;
+  material_id: string;
+  match_field: string | null;
+  match_value: string | null;
+  created_at: string;
+}
