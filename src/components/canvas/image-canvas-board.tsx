@@ -43,6 +43,7 @@ interface CanvasImage {
   x: number;
   y: number;
   scale: number;
+  rotation: number;
 }
 
 type Tool = "move" | "zone";
@@ -73,6 +74,33 @@ function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
     };
     element.src = url;
   });
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const lines: string[] = [];
+  let current = words[0];
+  for (const word of words.slice(1)) {
+    const candidate = `${current} ${word}`;
+    if (ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function zoneServiceSummary(service: ZoneService): string {
@@ -131,10 +159,14 @@ export function ImageCanvasBoard() {
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     if (image) {
-      const { element, x, y, scale } = image;
+      const { element, x, y, scale, rotation } = image;
       const w = element.width * scale;
       const h = element.height * scale;
-      ctx.drawImage(element, x - w / 2, y - h / 2, w, h);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.drawImage(element, -w / 2, -h / 2, w, h);
+      ctx.restore();
     }
 
     for (const zone of zones) {
@@ -211,7 +243,14 @@ export function ImageCanvasBoard() {
           if (design.imageBlob) {
             const element = await loadImageElement(design.imageBlob);
             if (!cancelled) {
-              setImage({ element, blob: design.imageBlob, x: design.imageX, y: design.imageY, scale: design.imageScale });
+              setImage({
+                element,
+                blob: design.imageBlob,
+                x: design.imageX,
+                y: design.imageY,
+                scale: design.imageScale,
+                rotation: design.imageRotation ?? 0,
+              });
             }
           }
           if (!cancelled) {
@@ -240,6 +279,7 @@ export function ImageCanvasBoard() {
         imageX: image?.x ?? CANVAS_WIDTH / 2,
         imageY: image?.y ?? CANVAS_HEIGHT / 2,
         imageScale: image?.scale ?? 1,
+        imageRotation: image?.rotation ?? 0,
         locked,
         plants,
         zones,
@@ -261,6 +301,7 @@ export function ImageCanvasBoard() {
         name: `Zone ${prev.length + 1}`,
         color: ZONE_COLORS[prev.length % ZONE_COLORS.length],
         points,
+        location: "",
         service: null,
         areaPhoto: null,
       },
@@ -296,7 +337,7 @@ export function ImageCanvasBoard() {
       (CANVAS_HEIGHT * 0.9) / element.height,
       1
     );
-    setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale });
+    setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale, rotation: 0 });
     setLocked(false);
   }
 
@@ -306,14 +347,40 @@ export function ImageCanvasBoard() {
     e.target.value = "";
   }
 
+  async function fetchSatelliteImageBlob(lng: number, lat: number): Promise<Blob> {
+    // Mapbox requires its logo/attribution on static images, anchored to the bottom
+    // edge. Fetch a bit more area than we need (zoomed out slightly, plus extra
+    // vertical padding) so we can crop the bottom strip back off without losing
+    // meaningful coverage of the property.
+    const zoom = 18.7;
+    const padding = 130;
+    const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},0/${CANVAS_WIDTH}x${CANVAS_HEIGHT + padding}@2x?access_token=${env.mapboxToken}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
+    const rawBlob = await res.blob();
+    const rawImage = await loadImageElement(rawBlob);
+
+    const pixelRatio = rawImage.width / CANVAS_WIDTH;
+    const cropCanvas = document.createElement("canvas");
+    cropCanvas.width = CANVAS_WIDTH * pixelRatio;
+    cropCanvas.height = CANVAS_HEIGHT * pixelRatio;
+    const cropCtx = cropCanvas.getContext("2d");
+    if (!cropCtx) throw new Error("Couldn't process the satellite photo.");
+    cropCtx.drawImage(rawImage, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
+
+    return new Promise((resolve, reject) => {
+      cropCanvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Couldn't process the satellite photo."))),
+        "image/png"
+      );
+    });
+  }
+
   async function handleSelectSatelliteLocation(suggestion: GeocodeSuggestion) {
     setSatelliteError(null);
     setSatelliteLoading(true);
     try {
-      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${suggestion.lng},${suggestion.lat},19,0/1000x625@2x?access_token=${env.mapboxToken}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
-      const blob = await res.blob();
+      const blob = await fetchSatelliteImageBlob(suggestion.lng, suggestion.lat);
       await loadImageBlob(blob);
       setShowSatelliteSearch(false);
     } catch (err) {
@@ -333,9 +400,9 @@ export function ImageCanvasBoard() {
     setZones((prev) => prev.filter((zone) => zone.id !== id));
   }
 
-  function handleSaveZoneService(service: ZoneService, areaPhoto: Blob | null) {
+  function handleSaveZoneService(service: ZoneService, areaPhoto: Blob | null, location: string) {
     setZones((prev) =>
-      prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, service, areaPhoto } : zone))
+      prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, service, areaPhoto, location } : zone))
     );
     setServiceDialogZoneId(null);
   }
@@ -389,6 +456,11 @@ export function ImageCanvasBoard() {
     setImage({ ...image, scale: Number(e.target.value) });
   }
 
+  function handleRotationChange(e: ChangeEvent<HTMLInputElement>) {
+    if (locked || !image) return;
+    setImage({ ...image, rotation: Number(e.target.value) });
+  }
+
   function handleRemoveImage() {
     setImage(null);
     setLocked(false);
@@ -409,18 +481,121 @@ export function ImageCanvasBoard() {
     setPlants((prev) => [...prev, { id: uuid(), typeId, x: point.x, y: point.y }]);
   }
 
-  function handleExportImage() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "work-zone-plan.png";
-      a.click();
-      URL.revokeObjectURL(url);
-    }, "image/png");
+  async function handleExportImage() {
+    const planCanvas = canvasRef.current;
+    if (!planCanvas) return;
+
+    if (zones.length === 0) {
+      planCanvas.toBlob((blob) => blob && downloadBlob(blob, "work-zone-plan.png"), "image/png");
+      return;
+    }
+
+    const MARGIN = 32;
+    const PHOTO_SIZE = 110;
+    const GAP = 16;
+    const TITLE_HEIGHT = 48;
+    const ZONE_GAP = 24;
+    const LINE_HEIGHT = 20;
+    const textMaxWidth = CANVAS_WIDTH - MARGIN * 2 - PHOTO_SIZE - GAP;
+
+    const measureCanvas = document.createElement("canvas");
+    const mctx = measureCanvas.getContext("2d");
+    if (!mctx) return;
+
+    const zonePhotos = new Map<string, HTMLImageElement>();
+    for (const zone of zones) {
+      if (!zone.areaPhoto) continue;
+      try {
+        zonePhotos.set(zone.id, await loadImageElement(zone.areaPhoto));
+      } catch {
+        // Skip a photo that fails to load rather than blocking the whole export.
+      }
+    }
+
+    interface ZoneLine {
+      text: string;
+      font: string;
+      color: string;
+    }
+    interface ZoneBlock {
+      zone: WorkZone;
+      lines: ZoneLine[];
+      height: number;
+    }
+
+    const blocks: ZoneBlock[] = zones.map((zone) => {
+      const lines: ZoneLine[] = [{ text: zone.name, font: "700 16px sans-serif", color: "#111827" }];
+
+      mctx.font = "13px sans-serif";
+      if (zone.location.trim()) {
+        for (const line of wrapText(mctx, `Location: ${zone.location.trim()}`, textMaxWidth)) {
+          lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
+        }
+      }
+      if (zone.service?.name.trim()) {
+        for (const line of wrapText(mctx, zone.service.name.trim(), textMaxWidth)) {
+          lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
+        }
+      }
+      if (zone.service) {
+        const counts = [
+          zone.service.trim > 0 ? `Trim ${zone.service.trim}` : null,
+          zone.service.remove > 0 ? `Remove ${zone.service.remove}` : null,
+          zone.service.plantNew > 0 ? `Plant new ${zone.service.plantNew}` : null,
+        ].filter((part): part is string => Boolean(part));
+        if (counts.length > 0) {
+          lines.push({ text: counts.join(" · "), font: "13px sans-serif", color: "#374151" });
+        }
+      }
+      if (lines.length === 1) {
+        lines.push({ text: "No service details added yet.", font: "italic 13px sans-serif", color: "#9ca3af" });
+      }
+
+      const height = Math.max(PHOTO_SIZE, lines.length * LINE_HEIGHT) + 20;
+      return { zone, lines, height };
+    });
+
+    const scopeHeight = TITLE_HEIGHT + blocks.reduce((sum, b) => sum + b.height + ZONE_GAP, 0) + MARGIN;
+
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = CANVAS_WIDTH;
+    exportCanvas.height = CANVAS_HEIGHT + scopeHeight;
+    const ctx = exportCanvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ctx.drawImage(planCanvas, 0, 0);
+
+    let cursorY = CANVAS_HEIGHT + MARGIN;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#111827";
+    ctx.font = "700 22px sans-serif";
+    ctx.fillText("Scope of Work", MARGIN, cursorY);
+    cursorY += TITLE_HEIGHT;
+
+    for (const block of blocks) {
+      const blockTop = cursorY;
+      const photo = zonePhotos.get(block.zone.id);
+
+      if (photo) {
+        ctx.drawImage(photo, MARGIN, blockTop, PHOTO_SIZE, PHOTO_SIZE);
+      }
+
+      const textX = MARGIN + (photo ? PHOTO_SIZE + GAP : 0);
+      let lineY = blockTop;
+      for (const line of block.lines) {
+        ctx.font = line.font;
+        ctx.fillStyle = line.color;
+        ctx.fillText(line.text, textX, lineY);
+        lineY += LINE_HEIGHT;
+      }
+
+      cursorY = blockTop + block.height + ZONE_GAP;
+    }
+
+    exportCanvas.toBlob((blob) => blob && downloadBlob(blob, "work-zone-plan.png"), "image/png");
   }
 
   async function handleClearSavedDesign() {
@@ -512,17 +687,34 @@ export function ImageCanvasBoard() {
       </p>
 
       {image && !locked && tool === "move" && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Scale</span>
-          <input
-            type="range"
-            min={0.1}
-            max={maxScale}
-            step={0.01}
-            value={image.scale}
-            onChange={handleScaleChange}
-            className="flex-1"
-          />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <span className="w-14 shrink-0 text-sm text-muted-foreground">Scale</span>
+            <input
+              type="range"
+              min={0.1}
+              max={maxScale}
+              step={0.01}
+              value={image.scale}
+              onChange={handleScaleChange}
+              className="flex-1"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="w-14 shrink-0 text-sm text-muted-foreground">Rotate</span>
+            <input
+              type="range"
+              min={-180}
+              max={180}
+              step={1}
+              value={image.rotation}
+              onChange={handleRotationChange}
+              className="flex-1"
+            />
+            <span className="w-10 shrink-0 text-right text-xs text-muted-foreground">
+              {image.rotation}°
+            </span>
+          </div>
         </div>
       )}
 
@@ -619,6 +811,9 @@ export function ImageCanvasBoard() {
                   {zone.areaPhoto && <ZonePhotoThumbnail blob={zone.areaPhoto} />}
                   <span className="flex flex-col">
                     <span className="font-medium">{zone.name}</span>
+                    {zone.location && (
+                      <span className="text-xs text-muted-foreground">📍 {zone.location}</span>
+                    )}
                     <span className="text-xs text-muted-foreground">
                       {zone.service ? zoneServiceSummary(zone.service) : "Add service details"}
                     </span>
@@ -645,6 +840,7 @@ export function ImageCanvasBoard() {
         zoneName={dialogZone?.name ?? ""}
         initialService={dialogZone?.service ?? null}
         initialPhoto={dialogZone?.areaPhoto ?? null}
+        initialLocation={dialogZone?.location ?? ""}
         onSave={handleSaveZoneService}
         onCancel={() => setServiceDialogZoneId(null)}
       />

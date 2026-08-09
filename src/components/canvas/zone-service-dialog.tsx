@@ -23,7 +23,8 @@ interface ZoneServiceDialogProps {
   zoneName: string;
   initialService: ZoneService | null;
   initialPhoto: Blob | null;
-  onSave: (service: ZoneService, photo: Blob | null) => void;
+  initialLocation: string;
+  onSave: (service: ZoneService, photo: Blob | null, location: string) => void;
   onCancel: () => void;
 }
 
@@ -32,12 +33,14 @@ export function ZoneServiceDialog({
   zoneName,
   initialService,
   initialPhoto,
+  initialLocation,
   onSave,
   onCancel,
 }: ZoneServiceDialogProps) {
   const [service, setService] = useState<ZoneService>(initialService ?? EMPTY_SERVICE);
   const [photo, setPhoto] = useState<Blob | null>(initialPhoto);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [location, setLocation] = useState(initialLocation);
 
   useEffect(() => {
     // Object URLs must be created/revoked alongside the blob's lifecycle, so this
@@ -64,7 +67,7 @@ export function ZoneServiceDialog({
   }
 
   function handleSave() {
-    onSave(service, photo);
+    onSave(service, photo, location);
   }
 
   return (
@@ -79,13 +82,23 @@ export function ZoneServiceDialog({
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
+            <Label htmlFor="zone-location">Where is this zone located?</Label>
+            <Input
+              id="zone-location"
+              placeholder="e.g. Front yard, near the driveway"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
             <Label htmlFor="service-name">Service</Label>
             <Input
               id="service-name"
               placeholder="e.g. Mulch bed cleanup"
               value={service.name}
               onChange={(e) => setService((prev) => ({ ...prev, name: e.target.value }))}
-              autoFocus
             />
           </div>
 
