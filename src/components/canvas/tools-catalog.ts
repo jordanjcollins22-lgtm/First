@@ -18,3 +18,47 @@ export const SERVICE_TOOL_KITS: Record<string, string[]> = {
 export function defaultToolsForService(typeId: string): string[] {
   return SERVICE_TOOL_KITS[typeId] ?? [];
 }
+
+/** Best-effort icon per tool — approximate, not literal. Falls back to a toolbox. */
+const TOOL_ICONS: Record<string, string> = {
+  Shovel: "⛏️",
+  Spade: "⛏️",
+  "Bed Edger": "🔪",
+  Rake: "🧹",
+  Wheelbarrow: "🛒",
+  "Bed Blade": "🔪",
+  Tarp: "🧺",
+  Tarps: "🧺",
+  Gloves: "🧤",
+  Mattock: "⛏️",
+  Loppers: "✂️",
+  "Pruning Saw": "🪚",
+  "Root Saw": "🪚",
+  Trowel: "🥄",
+  Hose: "💧",
+  "Watering Can": "🚿",
+  "Hand Pruners": "✂️",
+  "Hedge Trimmer": "✂️",
+  "Pole Saw": "🪚",
+  "Leaf Blower": "🌬️",
+  "Trash Bags": "🗑️",
+  Spreader: "🌱",
+  Aerator: "🛠️",
+  "Topsoil Rake": "🧹",
+  "Landscape Rake": "🧹",
+  Level: "📏",
+  "Stakes & String": "🧵",
+  "Soft Wash System": "🧽",
+  "Extension Wand": "🧽",
+  "Chemical Sprayer": "🧴",
+  "Surface Cleaner": "🧽",
+  "Stump Grinder": "🛠️",
+  "Sod Cutter": "🛠️",
+};
+
+export function toolIcon(tool: string): string {
+  return TOOL_ICONS[tool] ?? "🧰";
+}
+
+/** Equipment that's typically rented rather than kept in inventory. */
+export const RENTAL_TOOLS = new Set(["Aerator", "Sod Cutter", "Stump Grinder"]);

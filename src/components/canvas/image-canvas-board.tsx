@@ -31,6 +31,8 @@ import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
 import { serviceTypeById } from "./service-catalog";
+import { RENTAL_TOOLS, toolIcon } from "./tools-catalog";
+import { zoneMaterialLineItems, formatMaterialQuantity, type MaterialLineItem } from "./materials-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
 
 const CANVAS_WIDTH = 1000;
@@ -231,14 +233,14 @@ function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: 
     tools.forEach((tool, i) => {
       const col = Math.floor(i / rowsPerColumn);
       const row = i % rowsPerColumn;
-      ctx.fillText(`☐ ${tool}`, PAGE_MARGIN + col * colWidth, y + row * rowHeight);
+      ctx.fillText(`☐ ${toolIcon(tool)} ${tool}`, PAGE_MARGIN + col * colWidth, y + row * rowHeight);
     });
   }
 
   return canvas;
 }
 
-async function renderZonePage(zone: WorkZone, image: CanvasImage | null): Promise<HTMLCanvasElement> {
+async function renderZonePage(zone: WorkZone): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = PAGE_HEIGHT;
@@ -264,16 +266,7 @@ async function renderZonePage(zone: WorkZone, image: CanvasImage | null): Promis
     ctx.fillText(`📍 ${zone.location.trim()}`, PAGE_MARGIN, y);
     y += 26;
   }
-
-  const measurements = zoneMeasurements(zone, image);
-  if (measurements) {
-    ctx.font = "16px sans-serif";
-    ctx.fillStyle = "#374151";
-    ctx.fillText(formatMeasurements(measurements), PAGE_MARGIN, y);
-    y += 30;
-  } else {
-    y += 8;
-  }
+  y += 8;
 
   const service = zone.service;
   const serviceType = service ? serviceTypeById(service.typeId) : undefined;
@@ -303,7 +296,8 @@ async function renderZonePage(zone: WorkZone, image: CanvasImage | null): Promis
       y += 22;
       ctx.font = "15px sans-serif";
       ctx.fillStyle = "#374151";
-      for (const line of wrapText(ctx, service.tools.join(", "), maxWidth)) {
+      const toolsText = service.tools.map((t) => `${toolIcon(t)} ${t}`).join(", ");
+      for (const line of wrapText(ctx, toolsText, maxWidth)) {
         ctx.fillText(line, PAGE_MARGIN, y);
         y += 22;
       }
@@ -368,6 +362,200 @@ async function renderZonePage(zone: WorkZone, image: CanvasImage | null): Promis
   }
 
   return canvas;
+}
+
+function renderMaterialsPage(
+  zones: WorkZone[],
+  image: CanvasImage | null,
+  address: string
+): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = PAGE_WIDTH;
+  canvas.height = PAGE_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+
+  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
+  let y = PAGE_MARGIN;
+
+  ctx.font = "700 26px sans-serif";
+  ctx.fillStyle = "#111827";
+  ctx.fillText("Materials & Rentals to Order", PAGE_MARGIN, y);
+  y += 34;
+  if (address.trim()) {
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(address.trim(), PAGE_MARGIN, y);
+    y += 24;
+  }
+  y += 12;
+
+  const allItems: MaterialLineItem[] = [];
+  for (const zone of zones) {
+    const service = zone.service;
+    if (!service) continue;
+    const measurements = zoneMeasurements(zone, image);
+    if (!measurements) continue;
+    allItems.push(
+      ...zoneMaterialLineItems(zone.id, zone.name, service.typeId, service.values, measurements.areaSqFt)
+    );
+  }
+
+  ctx.font = "700 19px sans-serif";
+  ctx.fillStyle = "#111827";
+  ctx.fillText("Materials", PAGE_MARGIN, y);
+  y += 28;
+
+  if (allItems.length === 0) {
+    ctx.font = "italic 14px sans-serif";
+    ctx.fillStyle = "#9ca3af";
+    for (const line of wrapText(
+      ctx,
+      "No bulk materials calculated yet — needs a zone with an automatically-scaled background and a material selected.",
+      maxWidth
+    )) {
+      ctx.fillText(line, PAGE_MARGIN, y);
+      y += 20;
+    }
+  } else {
+    for (const item of allItems) {
+      ctx.font = "700 14px sans-serif";
+      ctx.fillStyle = "#111827";
+      ctx.fillText(item.zoneName, PAGE_MARGIN, y);
+      y += 19;
+      ctx.font = "14px sans-serif";
+      ctx.fillStyle = "#374151";
+      for (const line of wrapText(ctx, `☐ ${item.material}: ${formatMaterialQuantity(item)}`, maxWidth)) {
+        ctx.fillText(line, PAGE_MARGIN, y);
+        y += 20;
+      }
+      y += 6;
+    }
+  }
+
+  y += 14;
+  ctx.font = "700 19px sans-serif";
+  ctx.fillStyle = "#111827";
+  ctx.fillText("Equipment to Rent", PAGE_MARGIN, y);
+  y += 28;
+
+  const rentals = Array.from(
+    new Set(zones.flatMap((zone) => (zone.service?.tools ?? []).filter((tool) => RENTAL_TOOLS.has(tool))))
+  );
+  if (rentals.length === 0) {
+    ctx.font = "italic 14px sans-serif";
+    ctx.fillStyle = "#9ca3af";
+    ctx.fillText("No rental equipment flagged for this job.", PAGE_MARGIN, y);
+  } else {
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#374151";
+    for (const tool of rentals) {
+      ctx.fillText(`☐ ${toolIcon(tool)} ${tool}`, PAGE_MARGIN, y);
+      y += 22;
+    }
+  }
+
+  return canvas;
+}
+
+interface JobPlanLine {
+  text: string;
+  font: string;
+  color: string;
+  indent: number;
+}
+
+function buildJobPlanTaskLines(zones: WorkZone[]): JobPlanLine[] {
+  const lines: JobPlanLine[] = [];
+  let step = 1;
+  for (const zone of zones) {
+    lines.push({
+      text: zone.name + (zone.location.trim() ? ` — ${zone.location.trim()}` : ""),
+      font: "700 15px sans-serif",
+      color: "#111827",
+      indent: 0,
+    });
+    const service = zone.service;
+    const serviceType = service ? serviceTypeById(service.typeId) : undefined;
+    if (service && serviceType?.autoScope) {
+      for (const taskStep of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
+        lines.push({ text: `${step}. ${taskStep}`, font: "14px sans-serif", color: "#374151", indent: 16 });
+        step++;
+      }
+    } else {
+      lines.push({ text: "No service details added.", font: "italic 14px sans-serif", color: "#9ca3af", indent: 16 });
+    }
+  }
+  return lines;
+}
+
+/** Paginates the whole-job task list so large jobs don't silently overflow one page. */
+function renderJobPlanPages(zones: WorkZone[], image: CanvasImage | null, address: string): HTMLCanvasElement[] {
+  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
+  const measureCanvas = document.createElement("canvas");
+  const mctx = measureCanvas.getContext("2d");
+  if (!mctx) return [];
+
+  const totalAreaSqFt = zones.reduce((sum, zone) => sum + (zoneMeasurements(zone, image)?.areaSqFt ?? 0), 0);
+  const summary = `${zones.length} zone${zones.length === 1 ? "" : "s"}${
+    totalAreaSqFt > 0 ? ` · ${Math.round(totalAreaSqFt).toLocaleString()} sq ft total` : ""
+  }`;
+
+  const headerLines: JobPlanLine[] = [
+    { text: "Job Plan", font: "700 28px sans-serif", color: "#111827", indent: 0 },
+    ...(address.trim() ? [{ text: address.trim(), font: "16px sans-serif", color: "#6b7280", indent: 0 }] : []),
+    { text: summary, font: "15px sans-serif", color: "#374151", indent: 0 },
+    { text: "Order of Work", font: "700 18px sans-serif", color: "#111827", indent: 0 },
+  ];
+
+  const wrapped: JobPlanLine[] = [];
+  for (const line of [...headerLines, ...buildJobPlanTaskLines(zones)]) {
+    mctx.font = line.font;
+    for (const piece of wrapText(mctx, line.text, maxWidth - line.indent)) {
+      wrapped.push({ ...line, text: piece });
+    }
+  }
+
+  const LINE_HEIGHT = 24;
+  const linesPerPage = Math.max(1, Math.floor((PAGE_HEIGHT - PAGE_MARGIN * 2) / LINE_HEIGHT));
+
+  const pages: HTMLCanvasElement[] = [];
+  for (let i = 0; i < wrapped.length; i += linesPerPage) {
+    const chunk = wrapped.slice(i, i + linesPerPage);
+    const canvas = document.createElement("canvas");
+    canvas.width = PAGE_WIDTH;
+    canvas.height = PAGE_HEIGHT;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    let y = PAGE_MARGIN;
+    for (const line of chunk) {
+      ctx.font = line.font;
+      ctx.fillStyle = line.color;
+      ctx.fillText(line.text, PAGE_MARGIN + line.indent, y);
+      y += LINE_HEIGHT;
+    }
+    pages.push(canvas);
+  }
+
+  if (pages.length > 0) return pages;
+  const fallback = document.createElement("canvas");
+  fallback.width = PAGE_WIDTH;
+  fallback.height = PAGE_HEIGHT;
+  const fctx = fallback.getContext("2d");
+  if (fctx) {
+    fctx.fillStyle = "#ffffff";
+    fctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+  }
+  return [fallback];
 }
 
 function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
@@ -467,6 +655,34 @@ export function ImageCanvasBoard() {
         ctx.arc(point.x, point.y, i === 0 && drawingPoints.length >= 3 ? 6 : 4, 0, Math.PI * 2);
         ctx.fillStyle = i === 0 ? "#16a34a" : "#2563eb";
         ctx.fill();
+      }
+
+      const fpp = feetPerCanvasPixel(image);
+      if (fpp) {
+        let perimeterPx = 0;
+        for (let i = 0; i < drawingPoints.length - 1; i++) {
+          perimeterPx += distance(drawingPoints[i], drawingPoints[i + 1]);
+        }
+        if (cursorPos) perimeterPx += distance(drawingPoints[drawingPoints.length - 1], cursorPos);
+        const perimeterFt = perimeterPx * fpp;
+
+        const openPoints = cursorPos ? [...drawingPoints, cursorPos] : drawingPoints;
+        const label =
+          openPoints.length >= 3
+            ? `${Math.round(polygonAreaPx(openPoints) * fpp * fpp).toLocaleString()} sq ft (open) · ${Math.round(perimeterFt).toLocaleString()} ft`
+            : `${Math.round(perimeterFt).toLocaleString()} ft so far`;
+
+        const anchor = cursorPos ?? drawingPoints[drawingPoints.length - 1];
+        ctx.font = "600 13px sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        const textWidth = ctx.measureText(label).width;
+        const boxX = anchor.x + 12;
+        const boxY = anchor.y - 28;
+        ctx.fillStyle = "rgba(17,24,39,0.85)";
+        ctx.fillRect(boxX - 6, boxY - 4, textWidth + 12, 24);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(label, boxX, boxY);
       }
     }
   }, [image, zones, tool, drawingPoints, cursorPos]);
@@ -722,6 +938,7 @@ export function ImageCanvasBoard() {
     try {
       const tools = allToolsAcrossZones(zones);
       const coverCanvas = renderCoverPage(planCanvas, address, tools);
+      const materialsCanvas = renderMaterialsPage(zones, image, address);
 
       const pdf = new jsPDF({ unit: "pt", format: "letter" });
       const pageWidthPt = pdf.internal.pageSize.getWidth();
@@ -730,12 +947,22 @@ export function ImageCanvasBoard() {
       // JPEG compresses these mostly-flat, opaque pages far better than PNG does
       // through jsPDF (which doesn't reuse PNG's own DEFLATE stream), keeping the
       // PDF a reasonable size to email or download.
-      pdf.addImage(coverCanvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
+      let firstPage = true;
+      const addPageCanvas = (canvas: HTMLCanvasElement) => {
+        if (!firstPage) pdf.addPage("letter", "portrait");
+        firstPage = false;
+        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
+      };
+
+      addPageCanvas(coverCanvas);
+      addPageCanvas(materialsCanvas);
 
       for (const zone of zones) {
-        const zoneCanvas = await renderZonePage(zone, image);
-        pdf.addPage("letter", "portrait");
-        pdf.addImage(zoneCanvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
+        addPageCanvas(await renderZonePage(zone));
+      }
+
+      for (const jobPlanCanvas of renderJobPlanPages(zones, image, address)) {
+        addPageCanvas(jobPlanCanvas);
       }
 
       pdf.save("scope-of-work.pdf");

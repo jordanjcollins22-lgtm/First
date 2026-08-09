@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SERVICE_TYPES, serviceTypeById } from "./service-catalog";
-import { defaultToolsForService } from "./tools-catalog";
+import { defaultToolsForService, toolIcon } from "./tools-catalog";
 import { cn } from "@/lib/utils";
 import type { ZoneServiceData } from "./types";
 
@@ -222,7 +222,7 @@ export function ZoneServiceDialog({
                           : "border-border text-muted-foreground hover:bg-accent"
                       )}
                     >
-                      {tool}
+                      <span aria-hidden>{toolIcon(tool)}</span> {tool}
                     </button>
                   ))}
                 </div>
@@ -256,7 +256,6 @@ export function ZoneServiceDialog({
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       multiple
                       className="hidden"
                       onChange={handlePhotosChange}
