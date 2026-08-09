@@ -10,11 +10,26 @@ import {
   type PointerEvent,
 } from "react";
 import { v4 as uuid } from "uuid";
-import { ImageUp, Lock, MousePointer2, PenTool, Trash2, Unlock } from "lucide-react";
+import {
+  Download,
+  ImageUp,
+  Lock,
+  MousePointer2,
+  PenTool,
+  Satellite,
+  Trash2,
+  Unlock,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { env } from "@/lib/env";
+import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
+import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { PLANT_DRAG_MIME, plantTypeById } from "./plant-types";
+import { SatelliteAddressSearch } from "./satellite-address-search";
+import { ZoneServiceDialog } from "./zone-service-dialog";
+import type { PlacedPlant, Point, WorkZone, ZoneService } from "./types";
 
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 625;
@@ -22,28 +37,12 @@ const CLOSE_POINT_RADIUS = 12;
 const PLANT_MARKER_RADIUS = 14;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 
-interface Point {
-  x: number;
-  y: number;
-}
-
 interface CanvasImage {
   element: HTMLImageElement;
+  blob: Blob;
   x: number;
   y: number;
   scale: number;
-}
-
-interface PlacedPlant extends Point {
-  id: string;
-  typeId: string;
-}
-
-interface WorkZone {
-  id: string;
-  name: string;
-  color: string;
-  points: Point[];
 }
 
 type Tool = "move" | "zone";
@@ -60,10 +59,54 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const element = new Image();
+    element.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(element);
+    };
+    element.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Couldn't load that image."));
+    };
+    element.src = url;
+  });
+}
+
+function zoneServiceSummary(service: ZoneService): string {
+  const parts: string[] = [];
+  if (service.trim > 0) parts.push(`Trim ${service.trim}`);
+  if (service.remove > 0) parts.push(`Remove ${service.remove}`);
+  if (service.plantNew > 0) parts.push(`Plant new ${service.plantNew}`);
+  const counts = parts.join(" · ");
+  if (service.name && counts) return `${service.name} · ${counts}`;
+  return service.name || counts || "Details added";
+}
+
+function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Object URLs must be created/revoked alongside the blob's lifecycle, so this
+    // is a real external-system sync, not derivable state.
+    const objectUrl = URL.createObjectURL(blob);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />;
+}
+
 export function ImageCanvasBoard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const loadedRef = useRef(false);
 
   const [image, setImage] = useState<CanvasImage | null>(null);
   const [locked, setLocked] = useState(false);
@@ -72,6 +115,11 @@ export function ImageCanvasBoard() {
   const [zones, setZones] = useState<WorkZone[]>([]);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
+  const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
+  const [showSatelliteSearch, setShowSatelliteSearch] = useState(false);
+  const [satelliteLoading, setSatelliteLoading] = useState(false);
+  const [satelliteError, setSatelliteError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -153,22 +201,73 @@ export function ImageCanvasBoard() {
     draw();
   }, [draw]);
 
-  // Reads drawingPoints/zones from render-time closures (not a setState updater),
-  // so it's never subject to StrictMode's double-invocation of updater functions.
+  // Restore a previously autosaved design from this browser once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const design = await loadDesign();
+        if (!cancelled && design) {
+          if (design.imageBlob) {
+            const element = await loadImageElement(design.imageBlob);
+            if (!cancelled) {
+              setImage({ element, blob: design.imageBlob, x: design.imageX, y: design.imageY, scale: design.imageScale });
+            }
+          }
+          if (!cancelled) {
+            setLocked(design.locked);
+            setPlants(design.plants);
+            setZones(design.zones);
+          }
+        }
+      } catch {
+        // No saved design (or it failed to load) — start from a blank canvas.
+      } finally {
+        loadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Debounced autosave to this browser's storage whenever the design changes.
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    const timer = setTimeout(() => {
+      saveDesign({
+        imageBlob: image?.blob ?? null,
+        imageX: image?.x ?? CANVAS_WIDTH / 2,
+        imageY: image?.y ?? CANVAS_HEIGHT / 2,
+        imageScale: image?.scale ?? 1,
+        locked,
+        plants,
+        zones,
+      })
+        .then(() => setLastSavedAt(Date.now()))
+        .catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [image, locked, plants, zones]);
+
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
     const points = drawingPoints;
+    const id = uuid();
     setZones((prev) => [
       ...prev,
       {
-        id: uuid(),
+        id,
         name: `Zone ${prev.length + 1}`,
         color: ZONE_COLORS[prev.length % ZONE_COLORS.length],
         points,
+        service: null,
+        areaPhoto: null,
       },
     ]);
     setDrawingPoints([]);
     setCursorPos(null);
+    setServiceDialogZoneId(id);
   }
 
   useEffect(() => {
@@ -190,26 +289,38 @@ export function ImageCanvasBoard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, drawingPoints, zones]);
 
-  function loadFile(file: File) {
-    const url = URL.createObjectURL(file);
-    const element = new Image();
-    element.onload = () => {
-      const scale = Math.min(
-        (CANVAS_WIDTH * 0.9) / element.width,
-        (CANVAS_HEIGHT * 0.9) / element.height,
-        1
-      );
-      setImage({ element, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale });
-      setLocked(false);
-      URL.revokeObjectURL(url);
-    };
-    element.src = url;
+  async function loadImageBlob(blob: Blob) {
+    const element = await loadImageElement(blob);
+    const scale = Math.min(
+      (CANVAS_WIDTH * 0.9) / element.width,
+      (CANVAS_HEIGHT * 0.9) / element.height,
+      1
+    );
+    setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale });
+    setLocked(false);
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) loadFile(file);
+    if (file) loadImageBlob(file);
     e.target.value = "";
+  }
+
+  async function handleSelectSatelliteLocation(suggestion: GeocodeSuggestion) {
+    setSatelliteError(null);
+    setSatelliteLoading(true);
+    try {
+      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${suggestion.lng},${suggestion.lat},19,0/1000x625@2x?access_token=${env.mapboxToken}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
+      const blob = await res.blob();
+      await loadImageBlob(blob);
+      setShowSatelliteSearch(false);
+    } catch (err) {
+      setSatelliteError(err instanceof Error ? err.message : "Couldn't load a satellite photo.");
+    } finally {
+      setSatelliteLoading(false);
+    }
   }
 
   function selectTool(next: Tool) {
@@ -220,6 +331,13 @@ export function ImageCanvasBoard() {
 
   function handleDeleteZone(id: string) {
     setZones((prev) => prev.filter((zone) => zone.id !== id));
+  }
+
+  function handleSaveZoneService(service: ZoneService, areaPhoto: Blob | null) {
+    setZones((prev) =>
+      prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, service, areaPhoto } : zone))
+    );
+    setServiceDialogZoneId(null);
   }
 
   function handlePointerDown(e: PointerEvent<HTMLCanvasElement>) {
@@ -291,11 +409,37 @@ export function ImageCanvasBoard() {
     setPlants((prev) => [...prev, { id: uuid(), typeId, x: point.x, y: point.y }]);
   }
 
+  function handleExportImage() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "work-zone-plan.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }
+
+  async function handleClearSavedDesign() {
+    await clearDesign();
+    setImage(null);
+    setLocked(false);
+    setPlants([]);
+    setZones([]);
+    setDrawingPoints([]);
+    setCursorPos(null);
+    setLastSavedAt(null);
+  }
+
   const maxScale = image ? Math.max(1, Math.min(4, (CANVAS_WIDTH * 2) / image.element.width)) : 1;
+  const dialogZone = zones.find((zone) => zone.id === serviceDialogZoneId) ?? null;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-2">
         <div className="flex items-center gap-1 rounded-md bg-muted p-1">
           <Button
             type="button"
@@ -315,6 +459,16 @@ export function ImageCanvasBoard() {
             <PenTool className="h-4 w-4" />
             Draw Work Zone
           </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={handleExportImage}>
+            <Download className="h-4 w-4" />
+            Save Image
+          </Button>
+          {lastSavedAt && (
+            <span className="text-xs text-muted-foreground">Autosaved in this browser</span>
+          )}
         </div>
       </div>
 
@@ -390,6 +544,16 @@ export function ImageCanvasBoard() {
           {image ? "Replace Image" : "Upload Image"}
         </Button>
 
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={locked}
+          onClick={() => setShowSatelliteSearch((prev) => !prev)}
+        >
+          <Satellite className="h-4 w-4" />
+          From Address
+        </Button>
+
         {image && (
           <Button type="button" variant={locked ? "outline" : "default"} onClick={() => setLocked((prev) => !prev)}>
             {locked ? (
@@ -412,7 +576,22 @@ export function ImageCanvasBoard() {
             Remove
           </Button>
         )}
+
+        {(image || plants.length > 0 || zones.length > 0) && (
+          <Button type="button" variant="ghost" onClick={handleClearSavedDesign}>
+            <Trash2 className="h-4 w-4" />
+            Clear Saved Design
+          </Button>
+        )}
       </div>
+
+      {showSatelliteSearch && !locked && (
+        <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
+          <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
+          {satelliteLoading && <p className="text-xs text-muted-foreground">Loading satellite photo...</p>}
+          {satelliteError && <p className="text-xs text-destructive">{satelliteError}</p>}
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-card p-3">
         <h2 className="text-sm font-semibold">Work Zones</h2>
@@ -427,19 +606,29 @@ export function ImageCanvasBoard() {
                 key={zone.id}
                 className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
               >
-                <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setServiceDialogZoneId(zone.id)}
+                  className="flex flex-1 items-center gap-2 text-left"
+                >
                   <span
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: zone.color }}
                     aria-hidden
                   />
-                  {zone.name}
-                </span>
+                  {zone.areaPhoto && <ZonePhotoThumbnail blob={zone.areaPhoto} />}
+                  <span className="flex flex-col">
+                    <span className="font-medium">{zone.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {zone.service ? zoneServiceSummary(zone.service) : "Add service details"}
+                    </span>
+                  </span>
+                </button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-7 w-7 shrink-0"
                   onClick={() => handleDeleteZone(zone.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -449,6 +638,16 @@ export function ImageCanvasBoard() {
           </ul>
         )}
       </div>
+
+      <ZoneServiceDialog
+        key={serviceDialogZoneId ?? "none"}
+        open={dialogZone !== null}
+        zoneName={dialogZone?.name ?? ""}
+        initialService={dialogZone?.service ?? null}
+        initialPhoto={dialogZone?.areaPhoto ?? null}
+        onSave={handleSaveZoneService}
+        onCancel={() => setServiceDialogZoneId(null)}
+      />
     </div>
   );
 }
