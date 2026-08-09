@@ -498,7 +498,7 @@ export function ImageCanvasBoard() {
 
     const zonePhotos = new Map<string, HTMLImageElement>();
     for (const zone of zones) {
-      const firstPhoto = zone.service?.photos[0];
+      const firstPhoto = zone.service?.photos?.[0];
       if (!firstPhoto) continue;
       try {
         zonePhotos.set(zone.id, await loadImageElement(firstPhoto));
@@ -554,7 +554,7 @@ export function ImageCanvasBoard() {
           }
         }
 
-        if (service.photos.length > 1) {
+        if ((service.photos?.length ?? 0) > 1) {
           const more = service.photos.length - 1;
           lines.push({
             text: `+${more} more photo${more === 1 ? "" : "s"} on file`,
@@ -823,7 +823,7 @@ export function ImageCanvasBoard() {
                     style={{ backgroundColor: zone.color }}
                     aria-hidden
                   />
-                  {zone.service?.photos[0] && <ZonePhotoThumbnail blob={zone.service.photos[0]} />}
+                  {zone.service?.photos?.[0] && <ZonePhotoThumbnail blob={zone.service.photos[0]} />}
                   <span className="flex flex-col">
                     <span className="font-medium">{zone.name}</span>
                     {zone.location && (
