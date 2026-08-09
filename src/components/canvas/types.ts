@@ -8,11 +8,11 @@ export interface PlacedPlant extends Point {
   typeId: string;
 }
 
-export interface ZoneService {
-  name: string;
-  trim: number;
-  remove: number;
-  plantNew: number;
+export interface ZoneServiceData {
+  typeId: string;
+  values: Record<string, string>;
+  notes: string;
+  photos: Blob[];
 }
 
 export interface WorkZone {
@@ -21,8 +21,7 @@ export interface WorkZone {
   color: string;
   points: Point[];
   location: string;
-  service: ZoneService | null;
-  areaPhoto: Blob | null;
+  service: ZoneServiceData | null;
 }
 
 export interface StoredDesign {

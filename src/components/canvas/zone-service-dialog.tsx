@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent } from "react";
-import { Camera, Trash2 } from "lucide-react";
+import { Camera, X } from "lucide-react";
 
 import {
   Dialog,
@@ -14,69 +14,98 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ZoneService } from "./types";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SERVICE_TYPES, serviceTypeById } from "./service-catalog";
+import type { ZoneServiceData } from "./types";
 
-const EMPTY_SERVICE: ZoneService = { name: "", trim: 0, remove: 0, plantNew: 0 };
+function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Object URLs must be created/revoked alongside the blob's lifecycle, so this
+    // is a real external-system sync, not derivable state.
+    const objectUrl = URL.createObjectURL(blob);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+
+  if (!url) return null;
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute -right-1.5 -top-1.5 rounded-full bg-black/70 p-0.5 text-white"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
 
 interface ZoneServiceDialogProps {
   open: boolean;
   zoneName: string;
-  initialService: ZoneService | null;
-  initialPhoto: Blob | null;
   initialLocation: string;
-  onSave: (service: ZoneService, photo: Blob | null, location: string) => void;
+  initialService: ZoneServiceData | null;
+  onSave: (location: string, service: ZoneServiceData | null) => void;
   onCancel: () => void;
 }
 
 export function ZoneServiceDialog({
   open,
   zoneName,
-  initialService,
-  initialPhoto,
   initialLocation,
+  initialService,
   onSave,
   onCancel,
 }: ZoneServiceDialogProps) {
-  const [service, setService] = useState<ZoneService>(initialService ?? EMPTY_SERVICE);
-  const [photo, setPhoto] = useState<Blob | null>(initialPhoto);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [location, setLocation] = useState(initialLocation);
+  const [typeId, setTypeId] = useState(initialService?.typeId ?? "");
+  const [values, setValues] = useState<Record<string, string>>(initialService?.values ?? {});
+  const [notes, setNotes] = useState(initialService?.notes ?? "");
+  const [photos, setPhotos] = useState<Blob[]>(initialService?.photos ?? []);
 
-  useEffect(() => {
-    // Object URLs must be created/revoked alongside the blob's lifecycle, so this
-    // is a real external-system sync, not derivable state.
-    if (!photo) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPhotoUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(photo);
-    setPhotoUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photo]);
+  const serviceType = serviceTypeById(typeId);
 
-  function handleCountChange(field: "trim" | "remove" | "plantNew", value: string) {
-    const parsed = Math.max(0, Number(value) || 0);
-    setService((prev) => ({ ...prev, [field]: parsed }));
+  function handleTypeChange(nextTypeId: string) {
+    setTypeId(nextTypeId);
+    setValues({});
   }
 
-  function handlePhotoChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) setPhoto(file);
+  function handleFieldChange(key: string, value: string) {
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setPhotos((prev) => [...prev, ...Array.from(files)]);
+    }
     e.target.value = "";
   }
 
+  function handleRemovePhoto(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function handleSave() {
-    onSave(service, photo, location);
+    const service: ZoneServiceData | null = typeId ? { typeId, values, notes, photos } : null;
+    onSave(location, service);
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
-      <DialogContent>
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>What&apos;s being done in {zoneName}?</DialogTitle>
+          <DialogTitle>{zoneName}</DialogTitle>
           <DialogDescription>
-            Describe the service, note any plant work, and add a photo of the area.
+            Set the location, pick a service, and fill in what applies. The standard scope
+            for that service is added automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,97 +122,99 @@ export function ZoneServiceDialog({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="service-name">Service</Label>
-            <Input
-              id="service-name"
-              placeholder="e.g. Mulch bed cleanup"
-              value={service.name}
-              onChange={(e) => setService((prev) => ({ ...prev, name: e.target.value }))}
-            />
+            <Label htmlFor="service-type">Service</Label>
+            <Select value={typeId} onValueChange={handleTypeChange}>
+              <SelectTrigger id="service-type">
+                <SelectValue placeholder="Select a service" />
+              </SelectTrigger>
+              <SelectContent>
+                {SERVICE_TYPES.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="service-trim">Trim</Label>
-              <Input
-                id="service-trim"
-                type="number"
-                min={0}
-                value={service.trim}
-                onChange={(e) => handleCountChange("trim", e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="service-remove">Remove</Label>
-              <Input
-                id="service-remove"
-                type="number"
-                min={0}
-                value={service.remove}
-                onChange={(e) => handleCountChange("remove", e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="service-plant-new">Plant new</Label>
-              <Input
-                id="service-plant-new"
-                type="number"
-                min={0}
-                value={service.plantNew}
-                onChange={(e) => handleCountChange("plantNew", e.target.value)}
-              />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Drag plant markers from the sidebar onto this zone to mark exactly where the
-            work happens.
-          </p>
+          {serviceType ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {serviceType.fields.map((field) => (
+                  <div key={field.key} className="flex flex-col gap-2">
+                    <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
+                    {field.type === "select" ? (
+                      <Select
+                        value={values[field.key] ?? ""}
+                        onValueChange={(v) => handleFieldChange(field.key, v)}
+                      >
+                        <SelectTrigger id={`field-${field.key}`}>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.options?.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`field-${field.key}`}
+                        type={field.type === "number" ? "number" : "text"}
+                        min={field.type === "number" ? 0 : undefined}
+                        value={values[field.key] ?? ""}
+                        onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>Area photo</Label>
-            {photoUrl ? (
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photoUrl}
-                  alt=""
-                  className="h-16 w-16 rounded-md border border-border object-cover"
-                />
-                <div className="flex flex-col items-start gap-1">
-                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-primary hover:underline">
-                    Replace photo
+              <div className="flex flex-col gap-2">
+                <Label>Photos</Label>
+                <div className="flex flex-wrap gap-2">
+                  {photos.map((photo, index) => (
+                    <PhotoThumb key={index} blob={photo} onRemove={() => handleRemovePhoto(index)} />
+                  ))}
+                  <label className="flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent">
+                    <Camera className="h-4 w-4" />
+                    <span className="text-[10px]">Add</span>
                     <input
                       type="file"
                       accept="image/*"
                       capture="environment"
+                      multiple
                       className="hidden"
-                      onChange={handlePhotoChange}
+                      onChange={handlePhotosChange}
                     />
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setPhoto(null)}
-                    className="inline-flex items-center gap-1 text-sm text-destructive hover:underline"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Remove
-                  </button>
                 </div>
               </div>
-            ) : (
-              <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-accent">
-                <Camera className="h-4 w-4" />
-                Add a photo of this area
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handlePhotoChange}
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="service-notes">Notes</Label>
+                <Textarea
+                  id="service-notes"
+                  placeholder="Anything else worth noting for this zone"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                 />
-              </label>
-            )}
-          </div>
+              </div>
+
+              {serviceType.autoScope && (
+                <div className="rounded-md bg-muted p-3 text-xs">
+                  <p className="mb-1 font-medium text-foreground">Automatically included</p>
+                  <p className="text-muted-foreground">{serviceType.autoScope(values)}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Select a service to fill in its details, or save with just a location.
+            </p>
+          )}
         </div>
 
         <DialogFooter>

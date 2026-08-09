@@ -29,7 +29,8 @@ import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { PLANT_DRAG_MIME, plantTypeById } from "./plant-types";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
-import type { PlacedPlant, Point, WorkZone, ZoneService } from "./types";
+import { serviceTypeById } from "./service-catalog";
+import type { PlacedPlant, Point, WorkZone, ZoneServiceData } from "./types";
 
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 625;
@@ -103,14 +104,8 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function zoneServiceSummary(service: ZoneService): string {
-  const parts: string[] = [];
-  if (service.trim > 0) parts.push(`Trim ${service.trim}`);
-  if (service.remove > 0) parts.push(`Remove ${service.remove}`);
-  if (service.plantNew > 0) parts.push(`Plant new ${service.plantNew}`);
-  const counts = parts.join(" · ");
-  if (service.name && counts) return `${service.name} · ${counts}`;
-  return service.name || counts || "Details added";
+function zoneServiceSummary(service: ZoneServiceData): string {
+  return serviceTypeById(service.typeId)?.label ?? "Details added";
 }
 
 function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
@@ -303,7 +298,6 @@ export function ImageCanvasBoard() {
         points,
         location: "",
         service: null,
-        areaPhoto: null,
       },
     ]);
     setDrawingPoints([]);
@@ -400,9 +394,9 @@ export function ImageCanvasBoard() {
     setZones((prev) => prev.filter((zone) => zone.id !== id));
   }
 
-  function handleSaveZoneService(service: ZoneService, areaPhoto: Blob | null, location: string) {
+  function handleSaveZoneService(location: string, service: ZoneServiceData | null) {
     setZones((prev) =>
-      prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, service, areaPhoto, location } : zone))
+      prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, location, service } : zone))
     );
     setServiceDialogZoneId(null);
   }
@@ -504,9 +498,10 @@ export function ImageCanvasBoard() {
 
     const zonePhotos = new Map<string, HTMLImageElement>();
     for (const zone of zones) {
-      if (!zone.areaPhoto) continue;
+      const firstPhoto = zone.service?.photos[0];
+      if (!firstPhoto) continue;
       try {
-        zonePhotos.set(zone.id, await loadImageElement(zone.areaPhoto));
+        zonePhotos.set(zone.id, await loadImageElement(firstPhoto));
       } catch {
         // Skip a photo that fails to load rather than blocking the whole export.
       }
@@ -532,22 +527,42 @@ export function ImageCanvasBoard() {
           lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
         }
       }
-      if (zone.service?.name.trim()) {
-        for (const line of wrapText(mctx, zone.service.name.trim(), textMaxWidth)) {
-          lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
+
+      const service = zone.service;
+      const serviceType = service ? serviceTypeById(service.typeId) : undefined;
+
+      if (service && serviceType) {
+        lines.push({ text: serviceType.label, font: "700 13px sans-serif", color: "#111827" });
+
+        for (const field of serviceType.fields) {
+          const value = service.values[field.key];
+          if (!value) continue;
+          for (const line of wrapText(mctx, `${field.label}: ${value}`, textMaxWidth)) {
+            lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
+          }
         }
-      }
-      if (zone.service) {
-        const counts = [
-          zone.service.trim > 0 ? `Trim ${zone.service.trim}` : null,
-          zone.service.remove > 0 ? `Remove ${zone.service.remove}` : null,
-          zone.service.plantNew > 0 ? `Plant new ${zone.service.plantNew}` : null,
-        ].filter((part): part is string => Boolean(part));
-        if (counts.length > 0) {
-          lines.push({ text: counts.join(" · "), font: "13px sans-serif", color: "#374151" });
+
+        if (serviceType.autoScope) {
+          for (const line of wrapText(mctx, serviceType.autoScope(service.values), textMaxWidth)) {
+            lines.push({ text: line, font: "italic 12px sans-serif", color: "#6b7280" });
+          }
         }
-      }
-      if (lines.length === 1) {
+
+        if (service.notes.trim()) {
+          for (const line of wrapText(mctx, `Notes: ${service.notes.trim()}`, textMaxWidth)) {
+            lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
+          }
+        }
+
+        if (service.photos.length > 1) {
+          const more = service.photos.length - 1;
+          lines.push({
+            text: `+${more} more photo${more === 1 ? "" : "s"} on file`,
+            font: "italic 12px sans-serif",
+            color: "#6b7280",
+          });
+        }
+      } else {
         lines.push({ text: "No service details added yet.", font: "italic 13px sans-serif", color: "#9ca3af" });
       }
 
@@ -808,7 +823,7 @@ export function ImageCanvasBoard() {
                     style={{ backgroundColor: zone.color }}
                     aria-hidden
                   />
-                  {zone.areaPhoto && <ZonePhotoThumbnail blob={zone.areaPhoto} />}
+                  {zone.service?.photos[0] && <ZonePhotoThumbnail blob={zone.service.photos[0]} />}
                   <span className="flex flex-col">
                     <span className="font-medium">{zone.name}</span>
                     {zone.location && (
@@ -838,9 +853,8 @@ export function ImageCanvasBoard() {
         key={serviceDialogZoneId ?? "none"}
         open={dialogZone !== null}
         zoneName={dialogZone?.name ?? ""}
-        initialService={dialogZone?.service ?? null}
-        initialPhoto={dialogZone?.areaPhoto ?? null}
         initialLocation={dialogZone?.location ?? ""}
+        initialService={dialogZone?.service ?? null}
         onSave={handleSaveZoneService}
         onCancel={() => setServiceDialogZoneId(null)}
       />
