@@ -9,6 +9,7 @@ import {
   type PointerEvent,
 } from "react";
 import { v4 as uuid } from "uuid";
+import jsPDF from "jspdf";
 import {
   Download,
   ImageUp,
@@ -29,7 +30,6 @@ import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
-import { ScaleCalibrationDialog } from "./scale-calibration-dialog";
 import { serviceTypeById } from "./service-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
 
@@ -39,6 +39,11 @@ const CLOSE_POINT_RADIUS = 12;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
 const METERS_TO_FEET = 3.28084;
+
+// PDF page canvases, sized to match a US Letter page's aspect ratio (8.5x11).
+const PAGE_WIDTH = 1000;
+const PAGE_HEIGHT = Math.round((PAGE_WIDTH / 8.5) * 11);
+const PAGE_MARGIN = 48;
 
 interface CanvasImage {
   element: HTMLImageElement;
@@ -51,7 +56,7 @@ interface CanvasImage {
   realWidthFeet: number | null;
 }
 
-type Tool = "move" | "zone" | "scale";
+type Tool = "move" | "zone";
 
 function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasElement): Point {
   const rect = canvas.getBoundingClientRect();
@@ -116,15 +121,6 @@ function splitScopeIntoSteps(scope: string): string[] {
   return steps;
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function zoneServiceSummary(service: ZoneServiceData): string {
   return serviceTypeById(service.typeId)?.label ?? "Details added";
 }
@@ -178,6 +174,202 @@ function formatMeasurements(m: { areaSqFt: number; perimeterFt: number }): strin
   return `${Math.round(m.areaSqFt).toLocaleString()} sq ft · ${Math.round(m.perimeterFt).toLocaleString()} ft perimeter`;
 }
 
+function allToolsAcrossZones(zones: WorkZone[]): string[] {
+  const set = new Set<string>();
+  for (const zone of zones) {
+    for (const tool of zone.service?.tools ?? []) set.add(tool);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: string[]): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = PAGE_WIDTH;
+  canvas.height = PAGE_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+
+  let y = PAGE_MARGIN;
+  ctx.font = "700 30px sans-serif";
+  ctx.fillStyle = "#111827";
+  ctx.fillText("Site Plan", PAGE_MARGIN, y);
+  y += 40;
+
+  if (address.trim()) {
+    ctx.font = "16px sans-serif";
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(address.trim(), PAGE_MARGIN, y);
+    y += 26;
+  }
+  y += 12;
+
+  const mapWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
+  const mapHeight = mapWidth * (planCanvas.height / planCanvas.width);
+  ctx.drawImage(planCanvas, PAGE_MARGIN, y, mapWidth, mapHeight);
+  y += mapHeight + 36;
+
+  ctx.font = "700 20px sans-serif";
+  ctx.fillStyle = "#111827";
+  ctx.fillText("Tools to Grab", PAGE_MARGIN, y);
+  y += 30;
+
+  if (tools.length === 0) {
+    ctx.font = "italic 15px sans-serif";
+    ctx.fillStyle = "#9ca3af";
+    ctx.fillText("No tools listed yet.", PAGE_MARGIN, y);
+  } else {
+    ctx.font = "15px sans-serif";
+    ctx.fillStyle = "#374151";
+    const colWidth = (PAGE_WIDTH - PAGE_MARGIN * 2) / 2;
+    const rowHeight = 26;
+    const rowsPerColumn = Math.ceil(tools.length / 2);
+    tools.forEach((tool, i) => {
+      const col = Math.floor(i / rowsPerColumn);
+      const row = i % rowsPerColumn;
+      ctx.fillText(`☐ ${tool}`, PAGE_MARGIN + col * colWidth, y + row * rowHeight);
+    });
+  }
+
+  return canvas;
+}
+
+async function renderZonePage(zone: WorkZone, image: CanvasImage | null): Promise<HTMLCanvasElement> {
+  const canvas = document.createElement("canvas");
+  canvas.width = PAGE_WIDTH;
+  canvas.height = PAGE_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+
+  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
+  let y = PAGE_MARGIN;
+
+  ctx.font = "700 28px sans-serif";
+  ctx.fillStyle = "#111827";
+  ctx.fillText(zone.name, PAGE_MARGIN, y);
+  y += 40;
+
+  if (zone.location.trim()) {
+    ctx.font = "16px sans-serif";
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(`📍 ${zone.location.trim()}`, PAGE_MARGIN, y);
+    y += 26;
+  }
+
+  const measurements = zoneMeasurements(zone, image);
+  if (measurements) {
+    ctx.font = "16px sans-serif";
+    ctx.fillStyle = "#374151";
+    ctx.fillText(formatMeasurements(measurements), PAGE_MARGIN, y);
+    y += 30;
+  } else {
+    y += 8;
+  }
+
+  const service = zone.service;
+  const serviceType = service ? serviceTypeById(service.typeId) : undefined;
+
+  if (service && serviceType) {
+    ctx.font = "700 20px sans-serif";
+    ctx.fillStyle = "#111827";
+    ctx.fillText(serviceType.label, PAGE_MARGIN, y);
+    y += 32;
+
+    ctx.font = "15px sans-serif";
+    ctx.fillStyle = "#374151";
+    for (const field of serviceType.fields) {
+      if (!service.values[field.key]) continue;
+      const value = displayFieldValue(service.values, field.key);
+      for (const line of wrapText(ctx, `${field.label}: ${value}`, maxWidth)) {
+        ctx.fillText(line, PAGE_MARGIN, y);
+        y += 22;
+      }
+    }
+    y += 8;
+
+    if ((service.tools?.length ?? 0) > 0) {
+      ctx.font = "700 15px sans-serif";
+      ctx.fillStyle = "#111827";
+      ctx.fillText("Tools for this zone", PAGE_MARGIN, y);
+      y += 22;
+      ctx.font = "15px sans-serif";
+      ctx.fillStyle = "#374151";
+      for (const line of wrapText(ctx, service.tools.join(", "), maxWidth)) {
+        ctx.fillText(line, PAGE_MARGIN, y);
+        y += 22;
+      }
+      y += 8;
+    }
+
+    if (serviceType.autoScope) {
+      ctx.font = "700 15px sans-serif";
+      ctx.fillStyle = "#111827";
+      ctx.fillText("Checklist", PAGE_MARGIN, y);
+      y += 26;
+      ctx.font = "15px sans-serif";
+      ctx.fillStyle = "#374151";
+      for (const step of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
+        for (const line of wrapText(ctx, `☐ ${step}`, maxWidth)) {
+          ctx.fillText(line, PAGE_MARGIN, y);
+          y += 24;
+        }
+      }
+      y += 8;
+    }
+
+    if (service.notes.trim()) {
+      ctx.font = "700 15px sans-serif";
+      ctx.fillStyle = "#111827";
+      ctx.fillText("Notes", PAGE_MARGIN, y);
+      y += 22;
+      ctx.font = "15px sans-serif";
+      ctx.fillStyle = "#374151";
+      for (const line of wrapText(ctx, service.notes.trim(), maxWidth)) {
+        ctx.fillText(line, PAGE_MARGIN, y);
+        y += 22;
+      }
+      y += 8;
+    }
+
+    if (service.photos.length > 0) {
+      const photoSize = 200;
+      const gap = 16;
+      const maxPhotos = Math.min(service.photos.length, 3);
+      let x = PAGE_MARGIN;
+      for (let i = 0; i < maxPhotos; i++) {
+        try {
+          const photoElement = await loadImageElement(service.photos[i]);
+          ctx.drawImage(photoElement, x, y, photoSize, photoSize);
+        } catch {
+          // Skip a photo that fails to load rather than blocking the whole page.
+        }
+        x += photoSize + gap;
+      }
+      y += photoSize + 16;
+      if (service.photos.length > maxPhotos) {
+        ctx.font = "italic 13px sans-serif";
+        ctx.fillStyle = "#6b7280";
+        ctx.fillText(`+${service.photos.length - maxPhotos} more photo(s) on file`, PAGE_MARGIN, y);
+      }
+    }
+  } else {
+    ctx.font = "italic 16px sans-serif";
+    ctx.fillStyle = "#9ca3af";
+    ctx.fillText("No service details added yet.", PAGE_MARGIN, y);
+  }
+
+  return canvas;
+}
+
 function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -208,13 +400,12 @@ export function ImageCanvasBoard() {
   const [zones, setZones] = useState<WorkZone[]>([]);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
-  const [scalePoints, setScalePoints] = useState<Point[]>([]);
-  const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
   const [showSatelliteSearch, setShowSatelliteSearch] = useState(false);
   const [satelliteLoading, setSatelliteLoading] = useState(false);
   const [satelliteError, setSatelliteError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -278,27 +469,7 @@ export function ImageCanvasBoard() {
         ctx.fill();
       }
     }
-
-    if (tool === "scale" && scalePoints.length > 0) {
-      const end = scalePoints[1] ?? cursorPos;
-      if (end) {
-        ctx.beginPath();
-        ctx.moveTo(scalePoints[0].x, scalePoints[0].y);
-        ctx.lineTo(end.x, end.y);
-        ctx.strokeStyle = "#ea580c";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      for (const point of scalePoints) {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#ea580c";
-        ctx.fill();
-      }
-    }
-  }, [image, zones, tool, drawingPoints, cursorPos, scalePoints]);
+  }, [image, zones, tool, drawingPoints, cursorPos]);
 
   useEffect(() => {
     draw();
@@ -384,15 +555,14 @@ export function ImageCanvasBoard() {
   }
 
   useEffect(() => {
-    if (tool !== "zone" && tool !== "scale") return;
+    if (tool !== "zone") return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setDrawingPoints([]);
-        setScalePoints([]);
         setCursorPos(null);
-      } else if (tool === "zone" && e.key === "Enter") {
+      } else if (e.key === "Enter") {
         finalizeZone();
-      } else if (tool === "zone" && e.key === "Backspace") {
+      } else if (e.key === "Backspace") {
         setDrawingPoints((prev) => prev.slice(0, -1));
       }
     }
@@ -445,7 +615,8 @@ export function ImageCanvasBoard() {
     cropCtx.drawImage(rawImage, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
 
     // Web Mercator ground resolution at this zoom/latitude, applied to the
-    // requested (unscaled) width, gives the real-world span of the image.
+    // requested (unscaled) width, gives the real-world span of the image —
+    // so measurements are ready automatically, with no manual calibration step.
     const metersPerPixel =
       (EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
     const realWidthFeet = CANVAS_WIDTH * metersPerPixel * METERS_TO_FEET;
@@ -476,7 +647,6 @@ export function ImageCanvasBoard() {
   function selectTool(next: Tool) {
     setTool(next);
     setDrawingPoints([]);
-    setScalePoints([]);
     setCursorPos(null);
   }
 
@@ -489,25 +659,6 @@ export function ImageCanvasBoard() {
       prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, location, service } : zone))
     );
     setServiceDialogZoneId(null);
-  }
-
-  function handleConfirmScale(feet: number) {
-    if (image && scalePoints.length === 2) {
-      const pixelDistance = distance(scalePoints[0], scalePoints[1]);
-      const feetPerPixel = feet / pixelDistance;
-      const realWidthFeet = feetPerPixel * image.element.width * image.scale;
-      setImage({ ...image, realWidthFeet });
-    }
-    setScalePoints([]);
-    setScaleDialogOpen(false);
-    setCursorPos(null);
-    setTool("move");
-  }
-
-  function handleCancelScale() {
-    setScalePoints([]);
-    setScaleDialogOpen(false);
-    setCursorPos(null);
   }
 
   function handlePointerDown(e: PointerEvent<HTMLCanvasElement>) {
@@ -523,14 +674,6 @@ export function ImageCanvasBoard() {
       return;
     }
 
-    if (tool === "scale") {
-      if (scalePoints.length >= 2) return;
-      const next = [...scalePoints, point];
-      setScalePoints(next);
-      if (next.length === 2) setScaleDialogOpen(true);
-      return;
-    }
-
     if (locked || !image) return;
     dragRef.current = { startX: point.x, startY: point.y, originX: image.x, originY: image.y };
     canvas.setPointerCapture(e.pointerId);
@@ -541,11 +684,6 @@ export function ImageCanvasBoard() {
 
     if (tool === "zone") {
       if (drawingPoints.length > 0) setCursorPos(point);
-      return;
-    }
-
-    if (tool === "scale") {
-      if (scalePoints.length === 1) setCursorPos(point);
       return;
     }
 
@@ -576,163 +714,34 @@ export function ImageCanvasBoard() {
     setLocked(false);
   }
 
-  async function handleExportImage() {
+  async function handleExportPdf() {
     const planCanvas = canvasRef.current;
     if (!planCanvas) return;
 
-    if (zones.length === 0 && !address.trim()) {
-      planCanvas.toBlob((blob) => blob && downloadBlob(blob, "work-zone-plan.png"), "image/png");
-      return;
-    }
+    setExporting(true);
+    try {
+      const tools = allToolsAcrossZones(zones);
+      const coverCanvas = renderCoverPage(planCanvas, address, tools);
 
-    const MARGIN = 32;
-    const PHOTO_SIZE = 110;
-    const GAP = 16;
-    const TITLE_HEIGHT = address.trim() ? 68 : 48;
-    const ZONE_GAP = 24;
-    const LINE_HEIGHT = 20;
-    const textMaxWidth = CANVAS_WIDTH - MARGIN * 2 - PHOTO_SIZE - GAP;
+      const pdf = new jsPDF({ unit: "pt", format: "letter" });
+      const pageWidthPt = pdf.internal.pageSize.getWidth();
+      const pageHeightPt = pdf.internal.pageSize.getHeight();
 
-    const measureCanvas = document.createElement("canvas");
-    const mctx = measureCanvas.getContext("2d");
-    if (!mctx) return;
+      // JPEG compresses these mostly-flat, opaque pages far better than PNG does
+      // through jsPDF (which doesn't reuse PNG's own DEFLATE stream), keeping the
+      // PDF a reasonable size to email or download.
+      pdf.addImage(coverCanvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
 
-    const zonePhotos = new Map<string, HTMLImageElement>();
-    for (const zone of zones) {
-      const firstPhoto = zone.service?.photos?.[0];
-      if (!firstPhoto) continue;
-      try {
-        zonePhotos.set(zone.id, await loadImageElement(firstPhoto));
-      } catch {
-        // Skip a photo that fails to load rather than blocking the whole export.
-      }
-    }
-
-    interface ZoneLine {
-      text: string;
-      font: string;
-      color: string;
-    }
-    interface ZoneBlock {
-      zone: WorkZone;
-      lines: ZoneLine[];
-      height: number;
-    }
-
-    const blocks: ZoneBlock[] = zones.map((zone) => {
-      const lines: ZoneLine[] = [{ text: zone.name, font: "700 16px sans-serif", color: "#111827" }];
-
-      mctx.font = "13px sans-serif";
-      if (zone.location.trim()) {
-        for (const line of wrapText(mctx, `Location: ${zone.location.trim()}`, textMaxWidth)) {
-          lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
-        }
+      for (const zone of zones) {
+        const zoneCanvas = await renderZonePage(zone, image);
+        pdf.addPage("letter", "portrait");
+        pdf.addImage(zoneCanvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
       }
 
-      const measurements = zoneMeasurements(zone, image);
-      if (measurements) {
-        lines.push({ text: formatMeasurements(measurements), font: "13px sans-serif", color: "#374151" });
-      }
-
-      const service = zone.service;
-      const serviceType = service ? serviceTypeById(service.typeId) : undefined;
-
-      if (service && serviceType) {
-        lines.push({ text: serviceType.label, font: "700 13px sans-serif", color: "#111827" });
-
-        for (const field of serviceType.fields) {
-          if (!service.values[field.key]) continue;
-          const value = displayFieldValue(service.values, field.key);
-          for (const line of wrapText(mctx, `${field.label}: ${value}`, textMaxWidth)) {
-            lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
-          }
-        }
-
-        if ((service.tools?.length ?? 0) > 0) {
-          for (const line of wrapText(mctx, `Tools: ${service.tools.join(", ")}`, textMaxWidth)) {
-            lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
-          }
-        }
-
-        if (serviceType.autoScope) {
-          lines.push({ text: "Checklist:", font: "700 12px sans-serif", color: "#111827" });
-          for (const step of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
-            for (const line of wrapText(mctx, `☐ ${step}`, textMaxWidth)) {
-              lines.push({ text: line, font: "12px sans-serif", color: "#374151" });
-            }
-          }
-        }
-
-        if (service.notes.trim()) {
-          for (const line of wrapText(mctx, `Notes: ${service.notes.trim()}`, textMaxWidth)) {
-            lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
-          }
-        }
-
-        if ((service.photos?.length ?? 0) > 1) {
-          const more = service.photos.length - 1;
-          lines.push({
-            text: `+${more} more photo${more === 1 ? "" : "s"} on file`,
-            font: "italic 12px sans-serif",
-            color: "#6b7280",
-          });
-        }
-      } else {
-        lines.push({ text: "No service details added yet.", font: "italic 13px sans-serif", color: "#9ca3af" });
-      }
-
-      const height = Math.max(PHOTO_SIZE, lines.length * LINE_HEIGHT) + 20;
-      return { zone, lines, height };
-    });
-
-    const scopeHeight = TITLE_HEIGHT + blocks.reduce((sum, b) => sum + b.height + ZONE_GAP, 0) + MARGIN;
-
-    const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = CANVAS_WIDTH;
-    exportCanvas.height = CANVAS_HEIGHT + scopeHeight;
-    const ctx = exportCanvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-    ctx.drawImage(planCanvas, 0, 0);
-
-    let cursorY = CANVAS_HEIGHT + MARGIN;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "#111827";
-    ctx.font = "700 22px sans-serif";
-    ctx.fillText("Scope of Work", MARGIN, cursorY);
-    cursorY += 30;
-    if (address.trim()) {
-      ctx.font = "14px sans-serif";
-      ctx.fillStyle = "#6b7280";
-      ctx.fillText(address.trim(), MARGIN, cursorY);
-      cursorY += 20;
+      pdf.save("scope-of-work.pdf");
+    } finally {
+      setExporting(false);
     }
-    cursorY += TITLE_HEIGHT - 30 - (address.trim() ? 20 : 0);
-
-    for (const block of blocks) {
-      const blockTop = cursorY;
-      const photo = zonePhotos.get(block.zone.id);
-
-      if (photo) {
-        ctx.drawImage(photo, MARGIN, blockTop, PHOTO_SIZE, PHOTO_SIZE);
-      }
-
-      const textX = MARGIN + (photo ? PHOTO_SIZE + GAP : 0);
-      let lineY = blockTop;
-      for (const line of block.lines) {
-        ctx.font = line.font;
-        ctx.fillStyle = line.color;
-        ctx.fillText(line.text, textX, lineY);
-        lineY += LINE_HEIGHT;
-      }
-
-      cursorY = blockTop + block.height + ZONE_GAP;
-    }
-
-    exportCanvas.toBlob((blob) => blob && downloadBlob(blob, "work-zone-plan.png"), "image/png");
   }
 
   async function handleClearSavedDesign() {
@@ -742,7 +751,6 @@ export function ImageCanvasBoard() {
     setAddress("");
     setZones([]);
     setDrawingPoints([]);
-    setScalePoints([]);
     setCursorPos(null);
     setLastSavedAt(null);
   }
@@ -782,22 +790,12 @@ export function ImageCanvasBoard() {
             <PenTool className="h-4 w-4" />
             Draw Work Zone
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={tool === "scale" ? "default" : "ghost"}
-            disabled={!image}
-            onClick={() => selectTool("scale")}
-          >
-            <Ruler className="h-4 w-4" />
-            Set Scale
-          </Button>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={handleExportImage}>
+          <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
             <Download className="h-4 w-4" />
-            Save Image
+            {exporting ? "Building PDF..." : "Export PDF"}
           </Button>
           {lastSavedAt && (
             <span className="text-xs text-muted-foreground">Autosaved in this browser</span>
@@ -812,11 +810,7 @@ export function ImageCanvasBoard() {
           height={CANVAS_HEIGHT}
           className={cn(
             "block w-full",
-            tool === "zone" || tool === "scale"
-              ? "cursor-crosshair"
-              : !locked && image
-                ? "cursor-move"
-                : "cursor-default"
+            tool === "zone" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
           )}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -840,7 +834,7 @@ export function ImageCanvasBoard() {
         {image?.realWidthFeet && (
           <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
             <Ruler className="h-3.5 w-3.5" />
-            Scale set
+            Auto-scaled
           </div>
         )}
       </div>
@@ -848,11 +842,9 @@ export function ImageCanvasBoard() {
       <p className="text-xs text-muted-foreground">
         {tool === "zone"
           ? "Click to add points. Click the first point (or press Enter) to close the zone. Backspace undoes a point, Escape cancels."
-          : tool === "scale"
-            ? "Click two points a known distance apart (e.g. both ends of a fence panel), then enter that distance in feet."
-            : locked
-              ? "The background is locked in place. Unlock it to reposition, rescale, or replace it."
-              : "Drag the image to reposition it, use the scale slider to resize, then lock it in place before drawing zones."}
+          : locked
+            ? "The background is locked in place. Unlock it to reposition, rescale, or replace it."
+            : "Drag the image to reposition it, use the scale slider to resize, then lock it in place before drawing zones."}
       </p>
 
       {image && !locked && tool === "move" && (
@@ -946,6 +938,13 @@ export function ImageCanvasBoard() {
         )}
       </div>
 
+      {image && !image.realWidthFeet && (
+        <p className="text-xs text-muted-foreground">
+          This background isn&apos;t scaled, so zone measurements aren&apos;t available. Use
+          &ldquo;From Address&rdquo; for a satellite photo — its scale is set automatically.
+        </p>
+      )}
+
       {showSatelliteSearch && !locked && (
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
           <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
@@ -1024,12 +1023,6 @@ export function ImageCanvasBoard() {
         initialService={dialogZone?.service ?? null}
         onSave={handleSaveZoneService}
         onCancel={() => setServiceDialogZoneId(null)}
-      />
-
-      <ScaleCalibrationDialog
-        open={scaleDialogOpen}
-        onConfirm={handleConfirmScale}
-        onCancel={handleCancelScale}
       />
     </div>
   );
