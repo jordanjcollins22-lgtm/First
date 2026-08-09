@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type DragEvent,
   type PointerEvent,
 } from "react";
 import { v4 as uuid } from "uuid";
@@ -16,27 +15,30 @@ import {
   Lock,
   MousePointer2,
   PenTool,
+  Ruler,
   Satellite,
   Trash2,
   Unlock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-import { PLANT_DRAG_MIME, plantTypeById } from "./plant-types";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
+import { ScaleCalibrationDialog } from "./scale-calibration-dialog";
 import { serviceTypeById } from "./service-catalog";
-import type { PlacedPlant, Point, WorkZone, ZoneServiceData } from "./types";
+import type { Point, WorkZone, ZoneServiceData } from "./types";
 
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 625;
 const CLOSE_POINT_RADIUS = 12;
-const PLANT_MARKER_RADIUS = 14;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
+const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
+const METERS_TO_FEET = 3.28084;
 
 interface CanvasImage {
   element: HTMLImageElement;
@@ -45,9 +47,11 @@ interface CanvasImage {
   y: number;
   scale: number;
   rotation: number;
+  /** Real-world feet spanned by the image's full native width, once known. */
+  realWidthFeet: number | null;
 }
 
-type Tool = "move" | "zone";
+type Tool = "move" | "zone" | "scale";
 
 function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasElement): Point {
   const rect = canvas.getBoundingClientRect();
@@ -95,6 +99,23 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 }
 
+/** Breaks an auto-scope sentence (or sentences) into ordered checklist steps. */
+function splitScopeIntoSteps(scope: string): string[] {
+  const sentences = scope.split(/(?<=\.)\s+/).map((s) => s.trim()).filter(Boolean);
+  const steps: string[] = [];
+  for (const sentence of sentences) {
+    const withoutPeriod = sentence.replace(/\.$/, "");
+    const parts = withoutPeriod
+      .split(/,\s*(?:and\s+)?|\s+and\s+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    for (const part of parts) {
+      steps.push(part.charAt(0).toUpperCase() + part.slice(1));
+    }
+  }
+  return steps;
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -106,6 +127,55 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function zoneServiceSummary(service: ZoneServiceData): string {
   return serviceTypeById(service.typeId)?.label ?? "Details added";
+}
+
+function displayFieldValue(values: Record<string, string>, key: string): string {
+  const value = values[key];
+  if (value === "Other") {
+    const explanation = values[`${key}__other`];
+    return explanation ? `Other — ${explanation}` : "Other";
+  }
+  return value;
+}
+
+function polygonAreaPx(points: Point[]): number {
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+function polygonPerimeterPx(points: Point[]): number {
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    sum += distance(points[i], points[(i + 1) % points.length]);
+  }
+  return sum;
+}
+
+function feetPerCanvasPixel(image: CanvasImage | null): number | null {
+  if (!image || !image.realWidthFeet) return null;
+  return image.realWidthFeet / (image.element.width * image.scale);
+}
+
+function zoneMeasurements(
+  zone: WorkZone,
+  image: CanvasImage | null
+): { areaSqFt: number; perimeterFt: number } | null {
+  if (zone.points.length < 3) return null;
+  const fpp = feetPerCanvasPixel(image);
+  if (!fpp) return null;
+  return {
+    areaSqFt: polygonAreaPx(zone.points) * fpp * fpp,
+    perimeterFt: polygonPerimeterPx(zone.points) * fpp,
+  };
+}
+
+function formatMeasurements(m: { areaSqFt: number; perimeterFt: number }): string {
+  return `${Math.round(m.areaSqFt).toLocaleString()} sq ft · ${Math.round(m.perimeterFt).toLocaleString()} ft perimeter`;
 }
 
 function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
@@ -134,10 +204,12 @@ export function ImageCanvasBoard() {
   const [image, setImage] = useState<CanvasImage | null>(null);
   const [locked, setLocked] = useState(false);
   const [tool, setTool] = useState<Tool>("move");
-  const [plants, setPlants] = useState<PlacedPlant[]>([]);
+  const [address, setAddress] = useState("");
   const [zones, setZones] = useState<WorkZone[]>([]);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
+  const [scalePoints, setScalePoints] = useState<Point[]>([]);
+  const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
   const [showSatelliteSearch, setShowSatelliteSearch] = useState(false);
   const [satelliteLoading, setSatelliteLoading] = useState(false);
@@ -188,7 +260,7 @@ export function ImageCanvasBoard() {
       ctx.fillText(zone.name, cx, cy);
     }
 
-    if (drawingPoints.length > 0) {
+    if (tool === "zone" && drawingPoints.length > 0) {
       ctx.beginPath();
       ctx.moveTo(drawingPoints[0].x, drawingPoints[0].y);
       for (const point of drawingPoints.slice(1)) ctx.lineTo(point.x, point.y);
@@ -207,22 +279,26 @@ export function ImageCanvasBoard() {
       }
     }
 
-    for (const plant of plants) {
-      const type = plantTypeById(plant.typeId);
-      if (!type) continue;
-      ctx.beginPath();
-      ctx.arc(plant.x, plant.y, PLANT_MARKER_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.fill();
-      ctx.strokeStyle = type.color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.font = "16px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(type.emoji, plant.x, plant.y);
+    if (tool === "scale" && scalePoints.length > 0) {
+      const end = scalePoints[1] ?? cursorPos;
+      if (end) {
+        ctx.beginPath();
+        ctx.moveTo(scalePoints[0].x, scalePoints[0].y);
+        ctx.lineTo(end.x, end.y);
+        ctx.strokeStyle = "#ea580c";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      for (const point of scalePoints) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ea580c";
+        ctx.fill();
+      }
     }
-  }, [image, zones, drawingPoints, cursorPos, plants]);
+  }, [image, zones, tool, drawingPoints, cursorPos, scalePoints]);
 
   useEffect(() => {
     draw();
@@ -245,12 +321,13 @@ export function ImageCanvasBoard() {
                 y: design.imageY,
                 scale: design.imageScale,
                 rotation: design.imageRotation ?? 0,
+                realWidthFeet: design.imageRealWidthFeet ?? null,
               });
             }
           }
           if (!cancelled) {
             setLocked(design.locked);
-            setPlants(design.plants);
+            setAddress(design.address ?? "");
             setZones(design.zones);
           }
         }
@@ -275,15 +352,16 @@ export function ImageCanvasBoard() {
         imageY: image?.y ?? CANVAS_HEIGHT / 2,
         imageScale: image?.scale ?? 1,
         imageRotation: image?.rotation ?? 0,
+        imageRealWidthFeet: image?.realWidthFeet ?? null,
         locked,
-        plants,
+        address,
         zones,
       })
         .then(() => setLastSavedAt(Date.now()))
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [image, locked, plants, zones]);
+  }, [image, locked, address, zones]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
@@ -306,14 +384,15 @@ export function ImageCanvasBoard() {
   }
 
   useEffect(() => {
-    if (tool !== "zone") return;
+    if (tool !== "zone" && tool !== "scale") return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setDrawingPoints([]);
+        setScalePoints([]);
         setCursorPos(null);
-      } else if (e.key === "Enter") {
+      } else if (tool === "zone" && e.key === "Enter") {
         finalizeZone();
-      } else if (e.key === "Backspace") {
+      } else if (tool === "zone" && e.key === "Backspace") {
         setDrawingPoints((prev) => prev.slice(0, -1));
       }
     }
@@ -324,14 +403,14 @@ export function ImageCanvasBoard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, drawingPoints, zones]);
 
-  async function loadImageBlob(blob: Blob) {
+  async function loadImageBlob(blob: Blob, realWidthFeet: number | null = null) {
     const element = await loadImageElement(blob);
     const scale = Math.min(
       (CANVAS_WIDTH * 0.9) / element.width,
       (CANVAS_HEIGHT * 0.9) / element.height,
       1
     );
-    setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale, rotation: 0 });
+    setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale, rotation: 0, realWidthFeet });
     setLocked(false);
   }
 
@@ -341,7 +420,10 @@ export function ImageCanvasBoard() {
     e.target.value = "";
   }
 
-  async function fetchSatelliteImageBlob(lng: number, lat: number): Promise<Blob> {
+  async function fetchSatelliteImageBlob(
+    lng: number,
+    lat: number
+  ): Promise<{ blob: Blob; realWidthFeet: number }> {
     // Mapbox requires its logo/attribution on static images, anchored to the bottom
     // edge. Fetch a bit more area than we need (zoomed out slightly, plus extra
     // vertical padding) so we can crop the bottom strip back off without losing
@@ -362,11 +444,17 @@ export function ImageCanvasBoard() {
     if (!cropCtx) throw new Error("Couldn't process the satellite photo.");
     cropCtx.drawImage(rawImage, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
 
+    // Web Mercator ground resolution at this zoom/latitude, applied to the
+    // requested (unscaled) width, gives the real-world span of the image.
+    const metersPerPixel =
+      (EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+    const realWidthFeet = CANVAS_WIDTH * metersPerPixel * METERS_TO_FEET;
+
     return new Promise((resolve, reject) => {
-      cropCanvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("Couldn't process the satellite photo."))),
-        "image/png"
-      );
+      cropCanvas.toBlob((blob) => {
+        if (!blob) reject(new Error("Couldn't process the satellite photo."));
+        else resolve({ blob, realWidthFeet });
+      }, "image/png");
     });
   }
 
@@ -374,8 +462,9 @@ export function ImageCanvasBoard() {
     setSatelliteError(null);
     setSatelliteLoading(true);
     try {
-      const blob = await fetchSatelliteImageBlob(suggestion.lng, suggestion.lat);
-      await loadImageBlob(blob);
+      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(suggestion.lng, suggestion.lat);
+      await loadImageBlob(blob, realWidthFeet);
+      setAddress(suggestion.fullAddress);
       setShowSatelliteSearch(false);
     } catch (err) {
       setSatelliteError(err instanceof Error ? err.message : "Couldn't load a satellite photo.");
@@ -387,6 +476,7 @@ export function ImageCanvasBoard() {
   function selectTool(next: Tool) {
     setTool(next);
     setDrawingPoints([]);
+    setScalePoints([]);
     setCursorPos(null);
   }
 
@@ -399,6 +489,25 @@ export function ImageCanvasBoard() {
       prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, location, service } : zone))
     );
     setServiceDialogZoneId(null);
+  }
+
+  function handleConfirmScale(feet: number) {
+    if (image && scalePoints.length === 2) {
+      const pixelDistance = distance(scalePoints[0], scalePoints[1]);
+      const feetPerPixel = feet / pixelDistance;
+      const realWidthFeet = feetPerPixel * image.element.width * image.scale;
+      setImage({ ...image, realWidthFeet });
+    }
+    setScalePoints([]);
+    setScaleDialogOpen(false);
+    setCursorPos(null);
+    setTool("move");
+  }
+
+  function handleCancelScale() {
+    setScalePoints([]);
+    setScaleDialogOpen(false);
+    setCursorPos(null);
   }
 
   function handlePointerDown(e: PointerEvent<HTMLCanvasElement>) {
@@ -414,9 +523,11 @@ export function ImageCanvasBoard() {
       return;
     }
 
-    const hitPlant = [...plants].reverse().find((plant) => distance(plant, point) <= PLANT_MARKER_RADIUS);
-    if (hitPlant) {
-      setPlants((prev) => prev.filter((p) => p.id !== hitPlant.id));
+    if (tool === "scale") {
+      if (scalePoints.length >= 2) return;
+      const next = [...scalePoints, point];
+      setScalePoints(next);
+      if (next.length === 2) setScaleDialogOpen(true);
       return;
     }
 
@@ -433,6 +544,11 @@ export function ImageCanvasBoard() {
       return;
     }
 
+    if (tool === "scale") {
+      if (scalePoints.length === 1) setCursorPos(point);
+      return;
+    }
+
     if (locked || !dragRef.current || !image) return;
     setImage({
       ...image,
@@ -445,7 +561,7 @@ export function ImageCanvasBoard() {
     dragRef.current = null;
   }
 
-  function handleScaleChange(e: ChangeEvent<HTMLInputElement>) {
+  function handleScaleSliderChange(e: ChangeEvent<HTMLInputElement>) {
     if (locked || !image) return;
     setImage({ ...image, scale: Number(e.target.value) });
   }
@@ -460,26 +576,11 @@ export function ImageCanvasBoard() {
     setLocked(false);
   }
 
-  function handleDragOver(e: DragEvent<HTMLCanvasElement>) {
-    if (e.dataTransfer.types.includes(PLANT_DRAG_MIME)) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-    }
-  }
-
-  function handleDrop(e: DragEvent<HTMLCanvasElement>) {
-    const typeId = e.dataTransfer.getData(PLANT_DRAG_MIME);
-    if (!typeId) return;
-    e.preventDefault();
-    const point = toCanvasPoint(e.clientX, e.clientY, e.currentTarget);
-    setPlants((prev) => [...prev, { id: uuid(), typeId, x: point.x, y: point.y }]);
-  }
-
   async function handleExportImage() {
     const planCanvas = canvasRef.current;
     if (!planCanvas) return;
 
-    if (zones.length === 0) {
+    if (zones.length === 0 && !address.trim()) {
       planCanvas.toBlob((blob) => blob && downloadBlob(blob, "work-zone-plan.png"), "image/png");
       return;
     }
@@ -487,7 +588,7 @@ export function ImageCanvasBoard() {
     const MARGIN = 32;
     const PHOTO_SIZE = 110;
     const GAP = 16;
-    const TITLE_HEIGHT = 48;
+    const TITLE_HEIGHT = address.trim() ? 68 : 48;
     const ZONE_GAP = 24;
     const LINE_HEIGHT = 20;
     const textMaxWidth = CANVAS_WIDTH - MARGIN * 2 - PHOTO_SIZE - GAP;
@@ -528,6 +629,11 @@ export function ImageCanvasBoard() {
         }
       }
 
+      const measurements = zoneMeasurements(zone, image);
+      if (measurements) {
+        lines.push({ text: formatMeasurements(measurements), font: "13px sans-serif", color: "#374151" });
+      }
+
       const service = zone.service;
       const serviceType = service ? serviceTypeById(service.typeId) : undefined;
 
@@ -535,16 +641,25 @@ export function ImageCanvasBoard() {
         lines.push({ text: serviceType.label, font: "700 13px sans-serif", color: "#111827" });
 
         for (const field of serviceType.fields) {
-          const value = service.values[field.key];
-          if (!value) continue;
+          if (!service.values[field.key]) continue;
+          const value = displayFieldValue(service.values, field.key);
           for (const line of wrapText(mctx, `${field.label}: ${value}`, textMaxWidth)) {
             lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
           }
         }
 
+        if ((service.tools?.length ?? 0) > 0) {
+          for (const line of wrapText(mctx, `Tools: ${service.tools.join(", ")}`, textMaxWidth)) {
+            lines.push({ text: line, font: "13px sans-serif", color: "#374151" });
+          }
+        }
+
         if (serviceType.autoScope) {
-          for (const line of wrapText(mctx, serviceType.autoScope(service.values), textMaxWidth)) {
-            lines.push({ text: line, font: "italic 12px sans-serif", color: "#6b7280" });
+          lines.push({ text: "Checklist:", font: "700 12px sans-serif", color: "#111827" });
+          for (const step of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
+            for (const line of wrapText(mctx, `☐ ${step}`, textMaxWidth)) {
+              lines.push({ text: line, font: "12px sans-serif", color: "#374151" });
+            }
           }
         }
 
@@ -588,7 +703,14 @@ export function ImageCanvasBoard() {
     ctx.fillStyle = "#111827";
     ctx.font = "700 22px sans-serif";
     ctx.fillText("Scope of Work", MARGIN, cursorY);
-    cursorY += TITLE_HEIGHT;
+    cursorY += 30;
+    if (address.trim()) {
+      ctx.font = "14px sans-serif";
+      ctx.fillStyle = "#6b7280";
+      ctx.fillText(address.trim(), MARGIN, cursorY);
+      cursorY += 20;
+    }
+    cursorY += TITLE_HEIGHT - 30 - (address.trim() ? 20 : 0);
 
     for (const block of blocks) {
       const blockTop = cursorY;
@@ -617,18 +739,29 @@ export function ImageCanvasBoard() {
     await clearDesign();
     setImage(null);
     setLocked(false);
-    setPlants([]);
+    setAddress("");
     setZones([]);
     setDrawingPoints([]);
+    setScalePoints([]);
     setCursorPos(null);
     setLastSavedAt(null);
   }
 
   const maxScale = image ? Math.max(1, Math.min(4, (CANVAS_WIDTH * 2) / image.element.width)) : 1;
   const dialogZone = zones.find((zone) => zone.id === serviceDialogZoneId) ?? null;
+  const dialogMeasurements = dialogZone ? zoneMeasurements(dialogZone, image) : null;
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">Property address</span>
+        <Input
+          placeholder="123 Main St, City, ST"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+        />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-2">
         <div className="flex items-center gap-1 rounded-md bg-muted p-1">
           <Button
@@ -648,6 +781,16 @@ export function ImageCanvasBoard() {
           >
             <PenTool className="h-4 w-4" />
             Draw Work Zone
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={tool === "scale" ? "default" : "ghost"}
+            disabled={!image}
+            onClick={() => selectTool("scale")}
+          >
+            <Ruler className="h-4 w-4" />
+            Set Scale
           </Button>
         </div>
 
@@ -669,14 +812,16 @@ export function ImageCanvasBoard() {
           height={CANVAS_HEIGHT}
           className={cn(
             "block w-full",
-            tool === "zone" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
+            tool === "zone" || tool === "scale"
+              ? "cursor-crosshair"
+              : !locked && image
+                ? "cursor-move"
+                : "cursor-default"
           )}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
         />
 
         {!image && (
@@ -691,14 +836,23 @@ export function ImageCanvasBoard() {
             Locked
           </div>
         )}
+
+        {image?.realWidthFeet && (
+          <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
+            <Ruler className="h-3.5 w-3.5" />
+            Scale set
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">
         {tool === "zone"
           ? "Click to add points. Click the first point (or press Enter) to close the zone. Backspace undoes a point, Escape cancels."
-          : locked
-            ? "The background is locked in place. Unlock it to reposition, rescale, or replace it. Click a plant to remove it."
-            : "Drag the image to reposition it, use the scale slider to resize, then lock it in place before adding plants and zones."}
+          : tool === "scale"
+            ? "Click two points a known distance apart (e.g. both ends of a fence panel), then enter that distance in feet."
+            : locked
+              ? "The background is locked in place. Unlock it to reposition, rescale, or replace it."
+              : "Drag the image to reposition it, use the scale slider to resize, then lock it in place before drawing zones."}
       </p>
 
       {image && !locked && tool === "move" && (
@@ -711,7 +865,7 @@ export function ImageCanvasBoard() {
               max={maxScale}
               step={0.01}
               value={image.scale}
-              onChange={handleScaleChange}
+              onChange={handleScaleSliderChange}
               className="flex-1"
             />
           </div>
@@ -784,7 +938,7 @@ export function ImageCanvasBoard() {
           </Button>
         )}
 
-        {(image || plants.length > 0 || zones.length > 0) && (
+        {(image || zones.length > 0) && (
           <Button type="button" variant="ghost" onClick={handleClearSavedDesign}>
             <Trash2 className="h-4 w-4" />
             Clear Saved Design
@@ -797,6 +951,10 @@ export function ImageCanvasBoard() {
           <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
           {satelliteLoading && <p className="text-xs text-muted-foreground">Loading satellite photo...</p>}
           {satelliteError && <p className="text-xs text-destructive">{satelliteError}</p>}
+          <p className="text-xs text-muted-foreground">
+            Scale is calculated automatically from the satellite imagery, so zone measurements
+            are ready right away.
+          </p>
         </div>
       )}
 
@@ -808,43 +966,51 @@ export function ImageCanvasBoard() {
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1">
-            {zones.map((zone) => (
-              <li
-                key={zone.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
-              >
-                <button
-                  type="button"
-                  onClick={() => setServiceDialogZoneId(zone.id)}
-                  className="flex flex-1 items-center gap-2 text-left"
+            {zones.map((zone) => {
+              const measurements = zoneMeasurements(zone, image);
+              return (
+                <li
+                  key={zone.id}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
                 >
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: zone.color }}
-                    aria-hidden
-                  />
-                  {zone.service?.photos?.[0] && <ZonePhotoThumbnail blob={zone.service.photos[0]} />}
-                  <span className="flex flex-col">
-                    <span className="font-medium">{zone.name}</span>
-                    {zone.location && (
-                      <span className="text-xs text-muted-foreground">📍 {zone.location}</span>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {zone.service ? zoneServiceSummary(zone.service) : "Add service details"}
+                  <button
+                    type="button"
+                    onClick={() => setServiceDialogZoneId(zone.id)}
+                    className="flex flex-1 items-center gap-2 text-left"
+                  >
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: zone.color }}
+                      aria-hidden
+                    />
+                    {zone.service?.photos?.[0] && <ZonePhotoThumbnail blob={zone.service.photos[0]} />}
+                    <span className="flex flex-col">
+                      <span className="font-medium">{zone.name}</span>
+                      {zone.location && (
+                        <span className="text-xs text-muted-foreground">📍 {zone.location}</span>
+                      )}
+                      {measurements && (
+                        <span className="text-xs text-muted-foreground">
+                          {formatMeasurements(measurements)}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {zone.service ? zoneServiceSummary(zone.service) : "Add service details"}
+                      </span>
                     </span>
-                  </span>
-                </button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={() => handleDeleteZone(zone.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </li>
-            ))}
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => handleDeleteZone(zone.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -853,10 +1019,17 @@ export function ImageCanvasBoard() {
         key={serviceDialogZoneId ?? "none"}
         open={dialogZone !== null}
         zoneName={dialogZone?.name ?? ""}
+        measurementSummary={dialogMeasurements ? formatMeasurements(dialogMeasurements) : undefined}
         initialLocation={dialogZone?.location ?? ""}
         initialService={dialogZone?.service ?? null}
         onSave={handleSaveZoneService}
         onCancel={() => setServiceDialogZoneId(null)}
+      />
+
+      <ScaleCalibrationDialog
+        open={scaleDialogOpen}
+        onConfirm={handleConfirmScale}
+        onCancel={handleCancelScale}
       />
     </div>
   );

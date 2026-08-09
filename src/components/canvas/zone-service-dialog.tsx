@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SERVICE_TYPES, serviceTypeById } from "./service-catalog";
+import { defaultToolsForService } from "./tools-catalog";
+import { cn } from "@/lib/utils";
 import type { ZoneServiceData } from "./types";
 
 function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
@@ -50,6 +52,7 @@ function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
 interface ZoneServiceDialogProps {
   open: boolean;
   zoneName: string;
+  measurementSummary?: string;
   initialLocation: string;
   initialService: ZoneServiceData | null;
   onSave: (location: string, service: ZoneServiceData | null) => void;
@@ -59,6 +62,7 @@ interface ZoneServiceDialogProps {
 export function ZoneServiceDialog({
   open,
   zoneName,
+  measurementSummary,
   initialLocation,
   initialService,
   onSave,
@@ -69,16 +73,31 @@ export function ZoneServiceDialog({
   const [values, setValues] = useState<Record<string, string>>(initialService?.values ?? {});
   const [notes, setNotes] = useState(initialService?.notes ?? "");
   const [photos, setPhotos] = useState<Blob[]>(initialService?.photos ?? []);
+  const [tools, setTools] = useState<string[]>(initialService?.tools ?? []);
+  const [customTool, setCustomTool] = useState("");
 
   const serviceType = serviceTypeById(typeId);
+  const toolOptions = Array.from(new Set([...defaultToolsForService(typeId), ...tools]));
 
   function handleTypeChange(nextTypeId: string) {
     setTypeId(nextTypeId);
     setValues({});
+    setTools(defaultToolsForService(nextTypeId));
   }
 
   function handleFieldChange(key: string, value: string) {
     setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleTool(tool: string) {
+    setTools((prev) => (prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool]));
+  }
+
+  function handleAddCustomTool() {
+    const trimmed = customTool.trim();
+    if (!trimmed || tools.includes(trimmed)) return;
+    setTools((prev) => [...prev, trimmed]);
+    setCustomTool("");
   }
 
   function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
@@ -94,7 +113,7 @@ export function ZoneServiceDialog({
   }
 
   function handleSave() {
-    const service: ZoneServiceData | null = typeId ? { typeId, values, notes, photos } : null;
+    const service: ZoneServiceData | null = typeId ? { typeId, values, notes, photos, tools } : null;
     onSave(location, service);
   }
 
@@ -102,7 +121,14 @@ export function ZoneServiceDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{zoneName}</DialogTitle>
+          <DialogTitle>
+            {zoneName}
+            {measurementSummary && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {measurementSummary}
+              </span>
+            )}
+          </DialogTitle>
           <DialogDescription>
             Set the location, pick a service, and fill in what applies. The standard scope
             for that service is added automatically.
@@ -144,21 +170,30 @@ export function ZoneServiceDialog({
                   <div key={field.key} className="flex flex-col gap-2">
                     <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
                     {field.type === "select" ? (
-                      <Select
-                        value={values[field.key] ?? ""}
-                        onValueChange={(v) => handleFieldChange(field.key, v)}
-                      >
-                        <SelectTrigger id={`field-${field.key}`}>
-                          <SelectValue placeholder="Select..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {field.options?.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <>
+                        <Select
+                          value={values[field.key] ?? ""}
+                          onValueChange={(v) => handleFieldChange(field.key, v)}
+                        >
+                          <SelectTrigger id={`field-${field.key}`}>
+                            <SelectValue placeholder="Select..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {field.options?.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {values[field.key] === "Other" && (
+                          <Input
+                            placeholder="Please explain"
+                            value={values[`${field.key}__other`] ?? ""}
+                            onChange={(e) => handleFieldChange(`${field.key}__other`, e.target.value)}
+                          />
+                        )}
+                      </>
                     ) : (
                       <Input
                         id={`field-${field.key}`}
@@ -170,6 +205,43 @@ export function ZoneServiceDialog({
                     )}
                   </div>
                 ))}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label>Tools needed</Label>
+                <div className="flex flex-wrap gap-2">
+                  {toolOptions.map((tool) => (
+                    <button
+                      type="button"
+                      key={tool}
+                      onClick={() => toggleTool(tool)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs",
+                        tools.includes(tool)
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:bg-accent"
+                      )}
+                    >
+                      {tool}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add a tool"
+                    value={customTool}
+                    onChange={(e) => setCustomTool(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCustomTool();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="secondary" onClick={handleAddCustomTool}>
+                    Add
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-2">

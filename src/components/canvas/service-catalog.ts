@@ -15,7 +15,7 @@ export interface ServiceTypeDef {
   autoScope?: (values: Record<string, string>) => string;
 }
 
-export const SERVICE_TYPES: ServiceTypeDef[] = [
+const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
   {
     id: "landscape-bed",
     label: "Landscape Bed",
@@ -131,6 +131,17 @@ export const SERVICE_TYPES: ServiceTypeDef[] = [
     ],
   },
 ];
+
+// Every select field gets an "Other" option (with a free-text explanation the
+// dialog asks for when it's chosen) so nothing forces a bad fit into a preset.
+export const SERVICE_TYPES: ServiceTypeDef[] = RAW_SERVICE_TYPES.map((type) => ({
+  ...type,
+  fields: type.fields.map((field) =>
+    field.type === "select" && field.options
+      ? { ...field, options: Array.from(new Set([...field.options, "Other"])) }
+      : field
+  ),
+}));
 
 export function serviceTypeById(id: string): ServiceTypeDef | undefined {
   return SERVICE_TYPES.find((t) => t.id === id);
