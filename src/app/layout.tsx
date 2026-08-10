@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SiteNav } from "@/components/site-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,26 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-lg font-bold text-primary">
               Field Estimator
             </Link>
-            <nav className="flex items-center gap-4 text-sm font-medium">
-              <Link href="/properties" className="hover:text-primary">
-                Properties
-              </Link>
-              <Link href="/admin/service-templates" className="hover:text-primary">
-                Service Templates
-              </Link>
-              <Link href="/admin/tools" className="hover:text-primary">
-                Tool Database
-              </Link>
-              <Link href="/admin/materials" className="hover:text-primary">
-                Material List
-              </Link>
-              <Link href="/admin/service-pricing" className="hover:text-primary">
-                Service Pricing
-              </Link>
-              <Link href="/canvas" className="hover:text-primary">
-                Canvas
-              </Link>
-            </nav>
+            <SiteNav />
           </div>
         </header>
         <main className="flex-1">{children}</main>

@@ -1333,7 +1333,7 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
               rel="noopener noreferrer"
               className="underline-offset-2 hover:text-primary hover:underline"
             >
-              Material List
+              Material Database
             </Link>
             <span aria-hidden>·</span>
             <Link

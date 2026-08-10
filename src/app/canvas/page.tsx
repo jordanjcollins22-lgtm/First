@@ -27,7 +27,7 @@ export default async function CanvasPage() {
         <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
           Supabase isn&apos;t configured, so tools, materials, and pricing aren&apos;t available —
           set it up and add some in <span className="font-medium">Tools</span> /{" "}
-          <span className="font-medium">Material List</span> / <span className="font-medium">Service Pricing</span> to
+          <span className="font-medium">Material Database</span> / <span className="font-medium">Service Pricing</span> to
           have them picked automatically per zone.
         </p>
       )}

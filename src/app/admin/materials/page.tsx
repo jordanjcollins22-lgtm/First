@@ -28,7 +28,7 @@ export default async function MaterialsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">Material List</h1>
+      <h1 className="mb-1 text-2xl font-bold">Material Database</h1>
       <p className="mb-6 text-muted-foreground">
         Coverage rates and costs used to turn a zone&apos;s real square footage into an
         order quantity on the canvas&apos;s Materials &amp; Rentals page.
