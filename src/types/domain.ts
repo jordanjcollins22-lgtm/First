@@ -181,3 +181,11 @@ export interface ServiceMaterialRule {
   match_value: string | null;
   created_at: string;
 }
+
+export interface ServicePricing {
+  service_type_id: string;
+  cost: number | null;
+  cost_unit: string;
+  estimated_hours: number | null;
+  updated_at: string;
+}

@@ -307,6 +307,20 @@ export interface Database {
           },
         ];
       };
+      services: {
+        Row: {
+          service_type_id: string;
+          cost: number | null;
+          cost_unit: string;
+          estimated_hours: number | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["services"]["Row"]> & {
+          service_type_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["services"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

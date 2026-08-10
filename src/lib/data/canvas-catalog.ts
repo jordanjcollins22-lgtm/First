@@ -1,20 +1,23 @@
 import { createClient } from "@/lib/supabase/server";
 import { listTools } from "./tools";
 import { listMaterials } from "./materials";
-import type { Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
+import { listServicePricing } from "./service-pricing";
+import type { Material, ServiceMaterialRule, ServicePricing, ServiceToolLink, Tool } from "@/types/domain";
 
 export interface CanvasCatalog {
   tools: Tool[];
   materials: Material[];
   serviceTools: ServiceToolLink[];
   serviceMaterialRules: ServiceMaterialRule[];
+  servicePricing: ServicePricing[];
 }
 
 export async function getCanvasCatalog(): Promise<CanvasCatalog> {
   const supabase = await createClient();
-  const [tools, materials, serviceToolsRes, serviceMaterialsRes] = await Promise.all([
+  const [tools, materials, servicePricing, serviceToolsRes, serviceMaterialsRes] = await Promise.all([
     listTools(),
     listMaterials(),
+    listServicePricing(),
     supabase.from("service_tools").select("*"),
     supabase.from("service_materials").select("*"),
   ]);
@@ -25,6 +28,7 @@ export async function getCanvasCatalog(): Promise<CanvasCatalog> {
   return {
     tools,
     materials,
+    servicePricing,
     serviceTools: (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[],
     serviceMaterialRules: (serviceMaterialsRes.data ?? []) as unknown as ServiceMaterialRule[],
   };

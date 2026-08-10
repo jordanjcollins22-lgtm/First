@@ -77,6 +77,7 @@ export function ZoneServiceDialog({
   const [customTool, setCustomTool] = useState("");
 
   const serviceType = serviceTypeById(typeId);
+  const pricing = catalog.servicePricing.find((p) => p.service_type_id === typeId);
 
   const autoTools = catalog.tools.filter((tool) =>
     catalog.serviceTools.some((link) => link.service_type_id === typeId && link.tool_id === tool.id)
@@ -180,6 +181,13 @@ export function ZoneServiceDialog({
                 ))}
               </SelectContent>
             </Select>
+            {pricing && (pricing.cost != null || pricing.estimated_hours != null) && (
+              <p className="text-xs text-muted-foreground">
+                {pricing.cost != null && `$${pricing.cost.toFixed(2)} (${pricing.cost_unit})`}
+                {pricing.cost != null && pricing.estimated_hours != null && " · "}
+                {pricing.estimated_hours != null && `Est. ${pricing.estimated_hours} hrs`}
+              </p>
+            )}
           </div>
 
           {serviceType ? (

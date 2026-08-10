@@ -2,7 +2,13 @@ import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { getCanvasCatalog, type CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { isSupabaseConfigured } from "@/lib/env";
 
-const EMPTY_CATALOG: CanvasCatalog = { tools: [], materials: [], serviceTools: [], serviceMaterialRules: [] };
+const EMPTY_CATALOG: CanvasCatalog = {
+  tools: [],
+  materials: [],
+  serviceTools: [],
+  serviceMaterialRules: [],
+  servicePricing: [],
+};
 
 export default async function CanvasPage() {
   const catalog = isSupabaseConfigured ? await getCanvasCatalog() : EMPTY_CATALOG;
@@ -19,8 +25,9 @@ export default async function CanvasPage() {
 
       {!isSupabaseConfigured && (
         <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Supabase isn&apos;t configured, so tools and materials aren&apos;t available — set it up and
-          add some in <span className="font-medium">Tools</span> / <span className="font-medium">Materials</span> to
+          Supabase isn&apos;t configured, so tools, materials, and pricing aren&apos;t available —
+          set it up and add some in <span className="font-medium">Tools</span> /{" "}
+          <span className="font-medium">Materials</span> / <span className="font-medium">Service Pricing</span> to
           have them picked automatically per zone.
         </p>
       )}

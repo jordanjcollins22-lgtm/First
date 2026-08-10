@@ -587,7 +587,33 @@ function buildJobPlanTaskLines(zones: WorkZone[]): JobPlanLine[] {
 }
 
 /** Paginates the whole-job task list so large jobs don't silently overflow one page. */
-function renderJobPlanPages(zones: WorkZone[], image: CanvasImage | null, address: string): HTMLCanvasElement[] {
+function computeJobTotals(
+  zones: WorkZone[],
+  catalog: CanvasCatalog
+): { totalCost: number; totalHours: number; hasNonFlatRate: boolean } {
+  let totalCost = 0;
+  let totalHours = 0;
+  let hasNonFlatRate = false;
+  for (const zone of zones) {
+    const service = zone.service;
+    if (!service) continue;
+    const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
+    if (!pricing) continue;
+    if (pricing.cost != null) {
+      totalCost += pricing.cost;
+      if (pricing.cost_unit.trim().toLowerCase() !== "flat rate") hasNonFlatRate = true;
+    }
+    if (pricing.estimated_hours != null) totalHours += pricing.estimated_hours;
+  }
+  return { totalCost, totalHours, hasNonFlatRate };
+}
+
+function renderJobPlanPages(
+  zones: WorkZone[],
+  image: CanvasImage | null,
+  address: string,
+  catalog: CanvasCatalog
+): HTMLCanvasElement[] {
   const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
   const measureCanvas = document.createElement("canvas");
   const mctx = measureCanvas.getContext("2d");
@@ -598,10 +624,20 @@ function renderJobPlanPages(zones: WorkZone[], image: CanvasImage | null, addres
     totalAreaSqFt > 0 ? ` · ${Math.round(totalAreaSqFt).toLocaleString()} sq ft total` : ""
   }`;
 
+  const totals = computeJobTotals(zones, catalog);
+  const totalsParts: string[] = [];
+  if (totals.totalCost > 0) {
+    totalsParts.push(`Est. cost: $${totals.totalCost.toFixed(2)}${totals.hasNonFlatRate ? " (includes per-unit rates — verify)" : ""}`);
+  }
+  if (totals.totalHours > 0) totalsParts.push(`Est. time: ${totals.totalHours} hrs`);
+
   const headerLines: JobPlanLine[] = [
     { text: "Job Plan", font: "700 28px sans-serif", color: "#111827", indent: 0 },
     ...(address.trim() ? [{ text: address.trim(), font: "16px sans-serif", color: "#6b7280", indent: 0 }] : []),
     { text: summary, font: "15px sans-serif", color: "#374151", indent: 0 },
+    ...(totalsParts.length > 0
+      ? [{ text: totalsParts.join(" · "), font: "700 15px sans-serif", color: "#111827", indent: 0 }]
+      : []),
     { text: "Order of Work", font: "700 18px sans-serif", color: "#111827", indent: 0 },
   ];
 
@@ -1072,7 +1108,7 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
 
       addPageCanvas(renderMaterialsPage(zones, image, address, catalog));
 
-      for (const jobPlanCanvas of renderJobPlanPages(zones, image, address)) {
+      for (const jobPlanCanvas of renderJobPlanPages(zones, image, address, catalog)) {
         addPageCanvas(jobPlanCanvas);
       }
 
