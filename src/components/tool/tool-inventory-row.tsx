@@ -8,6 +8,7 @@ import { ToolImageUpload } from "./tool-image-upload";
 import { ToolKitsInput } from "./tool-kits-input";
 import { ToolCostInput } from "./tool-cost-input";
 import { ToolQuantityInput } from "./tool-quantity-input";
+import { ToolOwnershipSelect } from "./tool-ownership-select";
 import { ToolServiceToggles } from "./tool-service-toggles";
 import { DeactivateToolButton } from "./deactivate-tool-button";
 import type { Tool } from "@/types/domain";
@@ -38,7 +39,6 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds }: T
             </div>
             <div>
               <p className="font-medium">{tool.name}</p>
-              {tool.is_rental && <p className="text-xs text-muted-foreground">Rental item</p>}
             </div>
           </div>
         </td>
@@ -57,6 +57,9 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds }: T
               <span className="text-xs text-muted-foreground">—</span>
             )}
           </div>
+        </td>
+        <td className="p-2">
+          <ToolOwnershipSelect toolId={tool.id} initialIsRental={tool.is_rental} />
         </td>
         <td className="p-2">
           <ToolQuantityInput toolId={tool.id} initialQuantity={tool.quantity} />
@@ -82,7 +85,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds }: T
       </tr>
       {open && (
         <tr className="border-b border-border bg-muted/30">
-          <td colSpan={6} className="p-3">
+          <td colSpan={7} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Photo</span>

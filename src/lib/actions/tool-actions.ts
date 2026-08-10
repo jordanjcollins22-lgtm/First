@@ -50,6 +50,14 @@ export async function updateToolQuantity(id: string, quantity: number | null) {
   revalidatePath("/canvas");
 }
 
+export async function updateToolOwnership(id: string, isRental: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ is_rental: isRental }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
 export async function updateToolKits(id: string, kits: string[]) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ kits }).eq("id", id);
