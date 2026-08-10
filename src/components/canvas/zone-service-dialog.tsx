@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent } from "react";
+import Link from "next/link";
 import { Camera, X } from "lucide-react";
 
 import {
@@ -188,6 +189,29 @@ export function ZoneServiceDialog({
                 {pricing.estimated_hours != null && `Est. ${pricing.estimated_hours} hrs`}
               </p>
             )}
+            {typeId && (
+              <p className="text-xs text-muted-foreground">
+                Need to add or fix a price?{" "}
+                <Link
+                  href="/admin/service-pricing"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline-offset-2 hover:text-primary hover:underline"
+                >
+                  Set it here
+                </Link>{" "}
+                — materials for this job are managed on the{" "}
+                <Link
+                  href="/admin/materials"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline-offset-2 hover:text-primary hover:underline"
+                >
+                  Materials page
+                </Link>
+                .
+              </p>
+            )}
           </div>
 
           {serviceType ? (
@@ -235,7 +259,17 @@ export function ZoneServiceDialog({
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label>Tools (selected automatically for this service)</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Tools (selected automatically for this service)</Label>
+                  <Link
+                    href="/admin/tools"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                  >
+                    Don&apos;t see it? Add a tool
+                  </Link>
+                </div>
                 {autoTools.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {autoTools.map((tool) => (

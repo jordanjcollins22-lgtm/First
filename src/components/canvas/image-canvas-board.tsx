@@ -10,6 +10,7 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 import jsPDF from "jspdf";
+import Link from "next/link";
 import {
   Download,
   ImageUp,
@@ -20,6 +21,7 @@ import {
   Satellite,
   Trash2,
   Unlock,
+  Wrench,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -1167,6 +1169,35 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Wrench className="h-3 w-3" aria-hidden />
+            <Link
+              href="/admin/tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline-offset-2 hover:text-primary hover:underline"
+            >
+              Tools
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              href="/admin/materials"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline-offset-2 hover:text-primary hover:underline"
+            >
+              Materials
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              href="/admin/service-pricing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline-offset-2 hover:text-primary hover:underline"
+            >
+              Pricing
+            </Link>
+          </div>
           <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
             <Download className="h-4 w-4" />
             {exporting ? "Building PDF..." : "Export PDF"}
