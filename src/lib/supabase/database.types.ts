@@ -94,6 +94,7 @@ export interface Database {
           image_path: string | null;
           quantity: number | null;
           storage_location: string | null;
+          purchase_url: string | null;
           created_at: string;
           updated_at: string;
         };

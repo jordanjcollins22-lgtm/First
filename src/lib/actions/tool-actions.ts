@@ -29,6 +29,7 @@ export async function createTool(formData: FormData) {
   const quantity = quantityRaw ? Number(quantityRaw) : null;
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
   const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
+  const purchaseUrl = String(formData.get("purchase_url") ?? "").trim() || null;
 
   const { error } = await supabase.from("tools").insert({
     name,
@@ -39,6 +40,7 @@ export async function createTool(formData: FormData) {
     quantity,
     image_path: imagePath,
     storage_location: storageLocation,
+    purchase_url: purchaseUrl,
   });
   if (error) throw error;
 
@@ -73,6 +75,14 @@ export async function updateToolOwnership(id: string, isRental: boolean) {
 export async function updateToolStorageLocation(id: string, storageLocation: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ storage_location: storageLocation }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ purchase_url: purchaseUrl }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");

@@ -53,7 +53,7 @@ export default async function ToolsPage() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[940px] border-collapse text-sm">
+          <table className="w-full min-w-[1040px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="p-2 font-medium">Tool</th>
@@ -63,6 +63,7 @@ export default async function ToolsPage() {
                 <th className="p-2 font-medium">Qty</th>
                 <th className="p-2 font-medium">Cost</th>
                 <th className="p-2 font-medium">Status</th>
+                <th className="p-2 font-medium">Buy</th>
                 <th className="p-2" />
               </tr>
             </thead>
