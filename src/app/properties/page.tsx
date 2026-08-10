@@ -25,10 +25,25 @@ async function getJobsByProperty(propertyIds: string[]) {
     .select("id, name, property_id, assigned_to")
     .in("property_id", propertyIds)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+
+  // Falls back to jobs without assignment info if the "assigned_to" column
+  // (added by a later migration) hasn't been applied to this database yet —
+  // this page should still work for its core job even if that one migration
+  // hasn't been run.
+  let rows: { id: string; name: string; property_id: string; assigned_to: string | null }[] = [];
+  if (!error) {
+    rows = data ?? [];
+  } else {
+    const fallback = await supabase
+      .from("jobs")
+      .select("id, name, property_id")
+      .in("property_id", propertyIds)
+      .order("created_at", { ascending: false });
+    rows = (fallback.data ?? []).map((job) => ({ ...job, assigned_to: null }));
+  }
 
   const map = new Map<string, PropertyJob[]>();
-  for (const job of data ?? []) {
+  for (const job of rows) {
     if (!map.has(job.property_id)) map.set(job.property_id, []);
     map.get(job.property_id)!.push({ id: job.id, name: job.name, assigned_to: job.assigned_to });
   }
@@ -38,7 +53,10 @@ async function getJobsByProperty(propertyIds: string[]) {
 export default async function PropertiesPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
-  const [properties, profiles] = await Promise.all([listProperties(), listProfiles()]);
+  // listProfiles() depends on the "profiles" table from a later migration —
+  // fall back to an empty roster (assignment dropdowns just show
+  // "Unassigned") instead of taking the whole page down if it's missing.
+  const [properties, profiles] = await Promise.all([listProperties(), listProfiles().catch(() => [])]);
   const jobsByProperty = await getJobsByProperty(properties.map((p) => p.id));
 
   return (

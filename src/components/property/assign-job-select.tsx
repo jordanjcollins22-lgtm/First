@@ -20,7 +20,13 @@ export function AssignJobSelect({
   const [isPending, startTransition] = useTransition();
 
   function handleChange(value: string) {
-    startTransition(() => assignJob(jobId, value === UNASSIGNED ? null : value));
+    startTransition(async () => {
+      try {
+        await assignJob(jobId, value === UNASSIGNED ? null : value);
+      } catch {
+        // Best-effort — e.g. the "assigned_to" column migration hasn't run yet.
+      }
+    });
   }
 
   return (
