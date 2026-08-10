@@ -33,8 +33,7 @@ export async function createTeamMember(formData: FormData) {
 
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const rawRole = formData.get("role");
-  const role: Role = rawRole === "admin" ? "admin" : rawRole === "evaluator" ? "evaluator" : "crew";
+  const role = String(formData.get("role") ?? "").trim() || "crew";
 
   if (!email || !password) {
     throw new Error("Enter an email and password.");
@@ -83,4 +82,40 @@ export async function setTeamMemberPassword(profileId: string, password: string)
   if (error) {
     throw new Error(error.message || "Couldn't update that password.");
   }
+}
+
+export async function addRole(name: string) {
+  const caller = await getCurrentProfile();
+  if (caller?.role !== "admin") {
+    throw new Error("Only admins can add roles.");
+  }
+
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed) throw new Error("Enter a role name.");
+  if (!/^[a-z][a-z0-9 _-]*$/.test(trimmed)) {
+    throw new Error("Start with a letter — letters, numbers, spaces, - and _ only.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("roles").insert({ name: trimmed });
+  if (error) {
+    if (error.code === "23505") throw new Error("That role already exists.");
+    throw error;
+  }
+  revalidatePath("/admin/team");
+}
+
+export async function deleteRole(name: string) {
+  const caller = await getCurrentProfile();
+  if (caller?.role !== "admin") {
+    throw new Error("Only admins can remove roles.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("roles").delete().eq("name", name);
+  if (error) {
+    if (error.code === "23503") throw new Error("Someone still has this role — change their role first.");
+    throw error;
+  }
+  revalidatePath("/admin/team");
 }

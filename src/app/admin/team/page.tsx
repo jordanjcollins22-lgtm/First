@@ -1,20 +1,22 @@
-import { listProfiles, getCurrentProfile } from "@/lib/data/team";
+import { listProfiles, listRoles, getCurrentProfile } from "@/lib/data/team";
 import { isSupabaseConfigured, isSupabaseAdminConfigured } from "@/lib/env";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { RoleSelect } from "@/components/team/role-select";
 import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
 import { ResetPasswordControl } from "@/components/team/reset-password-control";
-import type { Profile } from "@/types/domain";
+import { ManageRoles } from "@/components/team/manage-roles";
+import type { CustomRole, Profile } from "@/types/domain";
 
 export default async function TeamPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   let profiles: Profile[] = [];
+  let roles: CustomRole[] = [];
   let currentProfile: Profile | null = null;
   let migrationMissing = false;
   try {
-    [profiles, currentProfile] = await Promise.all([listProfiles(), getCurrentProfile()]);
+    [profiles, roles, currentProfile] = await Promise.all([listProfiles(), listRoles(), getCurrentProfile()]);
   } catch {
     migrationMissing = true;
   }
@@ -24,9 +26,10 @@ export default async function TeamPage() {
       <div className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="mb-1 text-2xl font-bold">Team</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
-          This page needs the roles migration run on your database first. In Supabase&apos;s SQL
-          Editor, run <code>supabase/migrations/0019_roles_and_assignment.sql</code>, then reload
-          this page.
+          This page needs its database migrations run first. In Supabase&apos;s SQL Editor, run{" "}
+          <code>supabase/migrations/0019_roles_and_assignment.sql</code> and{" "}
+          <code>supabase/migrations/0020_custom_roles.sql</code> (in that order), then reload this
+          page.
         </p>
       </div>
     );
@@ -54,11 +57,22 @@ export default async function TeamPage() {
       {isAdmin && (
         <Card className="mb-6">
           <CardHeader>
+            <CardTitle>Roles</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ManageRoles roles={roles} />
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card className="mb-6">
+          <CardHeader>
             <CardTitle>Add a team member</CardTitle>
           </CardHeader>
           <CardContent>
             {isSupabaseAdminConfigured ? (
-              <CreateTeamMemberForm />
+              <CreateTeamMemberForm roles={roles} />
             ) : (
               <p className="text-sm text-muted-foreground">
                 Add <code>SUPABASE_SERVICE_ROLE_KEY</code> to <code>.env.local</code> (from your
@@ -92,6 +106,7 @@ export default async function TeamPage() {
                       <RoleSelect
                         profileId={profile.id}
                         initialRole={profile.role}
+                        roles={roles}
                         disabled={profile.id === currentProfile?.id}
                       />
                     ) : (

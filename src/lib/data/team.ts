@@ -1,5 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/types/domain";
+import type { CustomRole, Profile } from "@/types/domain";
+
+export async function listRoles(): Promise<CustomRole[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("roles")
+    .select("*")
+    .order("is_system", { ascending: false })
+    .order("name");
+
+  if (error) throw error;
+  return (data ?? []) as unknown as CustomRole[];
+}
 
 export async function listProfiles(): Promise<Profile[]> {
   const supabase = await createClient();

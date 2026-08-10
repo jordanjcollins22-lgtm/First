@@ -36,7 +36,8 @@ export interface Job {
   updated_at: string;
 }
 
-export type Role = "admin" | "crew" | "evaluator";
+/** Role names are freeform now — managed in the "roles" table, not a fixed union. */
+export type Role = string;
 
 export interface Profile {
   id: string;
@@ -45,6 +46,11 @@ export interface Profile {
   role: Role;
   created_at: string;
   updated_at: string;
+}
+
+export interface CustomRole {
+  name: string;
+  is_system: boolean;
 }
 
 export interface Tool {

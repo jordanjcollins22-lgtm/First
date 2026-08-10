@@ -103,6 +103,25 @@ export interface Database {
           email: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "profiles_role_fkey";
+            columns: ["role"];
+            referencedRelation: "roles";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      roles: {
+        Row: {
+          name: string;
+          is_system: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["roles"]["Row"]> & {
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["roles"]["Row"]>;
         Relationships: [];
       };
       tools: {

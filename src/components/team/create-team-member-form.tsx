@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createTeamMember } from "@/lib/actions/team-actions";
-import type { Role } from "@/types/domain";
+import type { CustomRole, Role } from "@/types/domain";
 
-export function CreateTeamMemberForm() {
+export function CreateTeamMemberForm({ roles }: { roles: CustomRole[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [role, setRole] = useState<Role>("crew");
   const [error, setError] = useState<string | null>(null);
@@ -62,14 +62,16 @@ export function CreateTeamMemberForm() {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="new-member-role">Role</Label>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger id="new-member-role" className="h-11 w-32">
+          <Select value={role} onValueChange={(v) => setRole(v)}>
+            <SelectTrigger id="new-member-role" className="h-11 w-32 capitalize">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="crew">Crew</SelectItem>
-              <SelectItem value="evaluator">Evaluator</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
+              {roles.map((r) => (
+                <SelectItem key={r.name} value={r.name} className="capitalize">
+                  {r.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
