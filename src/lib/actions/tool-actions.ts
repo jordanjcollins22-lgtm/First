@@ -14,13 +14,20 @@ export async function createTool(formData: FormData) {
   const costRaw = String(formData.get("cost") ?? "").trim();
   const cost = costRaw ? Number(costRaw) : null;
   const isRental = formData.get("is_rental") === "on";
-  const kit = String(formData.get("kit") ?? "").trim() || null;
+  const kitsRaw = String(formData.get("kits") ?? "").trim();
+  const kits = kitsRaw
+    ? kitsRaw
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean)
+    : [];
   const quantityRaw = String(formData.get("quantity") ?? "").trim();
   const quantity = quantityRaw ? Number(quantityRaw) : null;
+  const imagePath = String(formData.get("image_path") ?? "").trim() || null;
 
   const { error } = await supabase
     .from("tools")
-    .insert({ name, icon, cost, is_rental: isRental, kit, quantity });
+    .insert({ name, icon, cost, is_rental: isRental, kits, quantity, image_path: imagePath });
   if (error) throw error;
 
   revalidatePath("/admin/tools");
@@ -43,9 +50,9 @@ export async function updateToolQuantity(id: string, quantity: number | null) {
   revalidatePath("/canvas");
 }
 
-export async function updateToolKit(id: string, kit: string | null) {
+export async function updateToolKits(id: string, kits: string[]) {
   const supabase = await createClient();
-  const { error } = await supabase.from("tools").update({ kit }).eq("id", id);
+  const { error } = await supabase.from("tools").update({ kits }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");

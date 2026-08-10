@@ -1,49 +1,77 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition, type ChangeEvent } from "react";
+import { v4 as uuid } from "uuid";
+import { ImageUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 import { createTool } from "@/lib/actions/tool-actions";
 
 export function CreateToolForm() {
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0] ?? null;
+    setFile(picked);
+    setPreviewUrl(picked ? URL.createObjectURL(picked) : null);
+  }
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
+      if (file) {
+        const supabase = createClient();
+        const path = `${uuid()}/${file.name}`;
+        const { error } = await supabase.storage.from("tool-images").upload(path, file, { upsert: false });
+        if (!error) formData.set("image_path", path);
+      }
       await createTool(formData);
       formRef.current?.reset();
+      setFile(null);
+      setPreviewUrl(null);
     });
   }
 
   return (
     <form ref={formRef} action={handleSubmit} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1.5">
+        <Label>Image</Label>
+        <div className="flex items-center gap-2">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="" className="h-12 w-12 rounded-md border border-border object-cover" />
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent"
+            >
+              <ImageUp className="h-4 w-4" />
+            </button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="tool-name">Name</Label>
-        <Input id="tool-name" name="name" required placeholder="Chainsaw" className="w-40" />
+        <Input id="tool-name" name="name" required placeholder="Chainsaw" className="w-44" />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tool-icon">Icon (emoji)</Label>
-        <Input id="tool-icon" name="icon" placeholder="🧰" className="w-20" />
+        <Label htmlFor="tool-kits">Kit(s)</Label>
+        <Input id="tool-kits" name="kits" placeholder="e.g. Bed Prep Kit, Trimming Kit" className="w-64" />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tool-cost">Cost</Label>
-        <Input id="tool-cost" name="cost" type="number" step="0.01" min={0} placeholder="0.00" className="w-28" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tool-kit">Kit</Label>
-        <Input id="tool-kit" name="kit" placeholder="e.g. Bed Prep Kit" className="w-44" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tool-quantity">In stock</Label>
-        <Input id="tool-quantity" name="quantity" type="number" step="1" min={0} placeholder="1" className="w-20" />
-      </div>
-      <label className="flex items-center gap-2 pb-2 text-sm">
-        <input type="checkbox" name="is_rental" className="h-4 w-4" />
-        Rental item
-      </label>
       <Button type="submit" disabled={isPending}>
         {isPending ? "Adding..." : "Add Tool"}
       </Button>

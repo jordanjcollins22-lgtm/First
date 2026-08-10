@@ -152,7 +152,7 @@ export interface Tool {
   cost: number | null;
   is_rental: boolean;
   active: boolean;
-  kit: string | null;
+  kits: string[];
   image_path: string | null;
   quantity: number | null;
   created_at: string;
