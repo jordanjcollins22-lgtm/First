@@ -10,6 +10,8 @@ import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
 import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
 import { MaterialStorageLocationInput } from "./material-storage-location-input";
+import { MaterialImageUpload } from "./material-image-upload";
+import { MaterialImageThumb } from "./material-image-thumb";
 import { MaterialOrderStatus } from "./material-order-status";
 import { DeactivateMaterialButton } from "./deactivate-material-button";
 import { DeleteMaterialRuleButton } from "./delete-material-rule-button";
@@ -35,13 +37,20 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
     <>
       <tr className="border-b border-border align-middle">
         <td className="p-2">
-          <p className="font-medium">{material.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {material.coverage_per_unit_sqft
-              ? `${material.coverage_per_unit_sqft} sq ft / ${material.unit.replace(/s$/, "")}`
-              : material.unit}{" "}
-            · {material.waste_factor_pct}% waste
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 shrink-0">
+              <MaterialImageThumb imagePath={material.image_path} />
+            </div>
+            <div>
+              <p className="font-medium">{material.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {material.coverage_per_unit_sqft
+                  ? `${material.coverage_per_unit_sqft} sq ft / ${material.unit.replace(/s$/, "")}`
+                  : material.unit}{" "}
+                · {material.waste_factor_pct}% waste
+              </p>
+            </div>
+          </div>
         </td>
         <td className="p-2">
           <MaterialStorageLocationInput materialId={material.id} initialLocation={material.storage_location} />
@@ -81,6 +90,10 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
         <tr className="border-b border-border bg-muted/30">
           <td colSpan={8} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Photo</span>
+                <MaterialImageUpload materialId={material.id} imagePath={material.image_path} />
+              </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>
                 <MaterialPurchaseLinkInput materialId={material.id} initialUrl={material.purchase_url} />

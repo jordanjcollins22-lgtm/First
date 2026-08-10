@@ -64,6 +64,7 @@ export interface Material {
   reorder_threshold: number | null;
   on_order: boolean;
   storage_location: string | null;
+  image_path: string | null;
   created_at: string;
   updated_at: string;
 }

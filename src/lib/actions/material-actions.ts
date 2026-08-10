@@ -20,6 +20,7 @@ export async function createMaterial(formData: FormData) {
   const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
   const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
+  const imagePath = String(formData.get("image_path") ?? "").trim() || null;
 
   const { error } = await supabase.from("materials").insert({
     name,
@@ -32,6 +33,7 @@ export async function createMaterial(formData: FormData) {
     reorder_threshold: reorderRaw ? Number(reorderRaw) : null,
     description,
     storage_location: storageLocation,
+    image_path: imagePath,
   });
   if (error) throw error;
 
@@ -58,6 +60,20 @@ export async function updateMaterialDescription(id: string, description: string 
 export async function updateMaterialStorageLocation(id: string, storageLocation: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("materials").update({ storage_location: storageLocation }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialImage(id: string, imagePath: string | null) {
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase.from("materials").select("image_path").eq("id", id).maybeSingle();
+  if (existing?.image_path && existing.image_path !== imagePath) {
+    await supabase.storage.from("material-images").remove([existing.image_path]);
+  }
+
+  const { error } = await supabase.from("materials").update({ image_path: imagePath }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");

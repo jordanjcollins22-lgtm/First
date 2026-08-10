@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Search } from "lucide-react";
+import { useRef, useState, useTransition, type ChangeEvent } from "react";
+import { v4 as uuid } from "uuid";
+import { ImageUp, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { createClient } from "@/lib/supabase/client";
 import { createMaterial } from "@/lib/actions/material-actions";
 import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
 
@@ -16,14 +18,31 @@ export function CreateMaterialForm() {
   const costRef = useRef<HTMLInputElement>(null);
   const purchaseUrlRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
 
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0] ?? null;
+    setFile(picked);
+    setPreviewUrl(picked ? URL.createObjectURL(picked) : null);
+  }
+
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
+      if (file) {
+        const supabase = createClient();
+        const path = `${uuid()}/${file.name}`;
+        const { error } = await supabase.storage.from("material-images").upload(path, file, { upsert: false });
+        if (!error) formData.set("image_path", path);
+      }
       await createMaterial(formData);
       formRef.current?.reset();
+      setFile(null);
+      setPreviewUrl(null);
       setFetchMessage(null);
     });
   }
@@ -69,6 +88,30 @@ export function CreateMaterialForm() {
   return (
     <form ref={formRef} action={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label>Image</Label>
+          <div className="flex items-center gap-2">
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="" className="h-12 w-12 rounded-md border border-border object-cover" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent"
+              >
+                <ImageUp className="h-4 w-4" />
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+        </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="material-name">Name</Label>
           <Input id="material-name" name="name" ref={nameRef} required placeholder="Pea Gravel" className="w-40" />
