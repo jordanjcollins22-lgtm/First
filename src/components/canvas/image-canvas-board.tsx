@@ -28,6 +28,14 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
@@ -718,6 +726,7 @@ export function ImageCanvasBoard({
   const [satelliteError, setSatelliteError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1224,10 +1233,29 @@ export function ImageCanvasBoard({
         addPageCanvas(jobPlanCanvas);
       }
 
-      pdf.save("scope-of-work.pdf");
+      const blob = pdf.output("blob");
+      setPdfPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(blob);
+      });
     } finally {
       setExporting(false);
     }
+  }
+
+  function handleClosePdfPreview() {
+    setPdfPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }
+
+  function handleDownloadPdf() {
+    if (!pdfPreviewUrl) return;
+    const link = document.createElement("a");
+    link.href = pdfPreviewUrl;
+    link.download = "scope-of-work.pdf";
+    link.click();
   }
 
   async function handleClearSavedDesign() {
@@ -1333,7 +1361,7 @@ export function ImageCanvasBoard({
           </div>
           <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
             <Download className="h-4 w-4" />
-            {exporting ? "Building PDF..." : "Export PDF"}
+            {exporting ? "Building PDF..." : "Preview PDF"}
           </Button>
           {lastSavedAt && (
             <span className="text-xs text-muted-foreground">
@@ -1573,6 +1601,36 @@ export function ImageCanvasBoard({
         onSave={handleSaveZoneService}
         onCancel={() => setServiceDialogZoneId(null)}
       />
+
+      <Dialog open={pdfPreviewUrl !== null} onOpenChange={(next) => !next && handleClosePdfPreview()}>
+        <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col">
+          <DialogHeader>
+            <DialogTitle>Preview scope of work PDF</DialogTitle>
+            <DialogDescription>
+              Review every page before downloading. Close this and adjust the job plan if
+              anything looks off.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pdfPreviewUrl && (
+            <iframe
+              src={pdfPreviewUrl}
+              title="Scope of work PDF preview"
+              className="h-[65vh] w-full flex-1 rounded-md border border-border"
+            />
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClosePdfPreview}>
+              Close
+            </Button>
+            <Button type="button" onClick={handleDownloadPdf}>
+              <Download className="h-4 w-4" />
+              Download PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
