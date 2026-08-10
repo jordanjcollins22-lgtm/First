@@ -30,6 +30,8 @@ export async function createTool(formData: FormData) {
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
   const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
   const purchaseUrl = String(formData.get("purchase_url") ?? "").trim() || null;
+  const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
+  const reorderThreshold = reorderRaw ? Number(reorderRaw) : null;
 
   const { error } = await supabase.from("tools").insert({
     name,
@@ -41,6 +43,7 @@ export async function createTool(formData: FormData) {
     image_path: imagePath,
     storage_location: storageLocation,
     purchase_url: purchaseUrl,
+    reorder_threshold: reorderThreshold,
   });
   if (error) throw error;
 
@@ -83,6 +86,22 @@ export async function updateToolStorageLocation(id: string, storageLocation: str
 export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ purchase_url: purchaseUrl }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolReorderThreshold(id: string, threshold: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ reorder_threshold: threshold }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function setToolOnOrder(id: string, onOrder: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ on_order: onOrder }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");

@@ -154,6 +154,22 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
             className="w-40"
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tool-quantity">On hand</Label>
+          <Input id="tool-quantity" name="quantity" type="number" step="1" min={0} placeholder="0" className="w-20" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tool-reorder">Reorder at</Label>
+          <Input
+            id="tool-reorder"
+            name="reorder_threshold"
+            type="number"
+            step="1"
+            min={0}
+            placeholder="0"
+            className="w-24"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

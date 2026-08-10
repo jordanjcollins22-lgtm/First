@@ -8,6 +8,8 @@ import { ToolImageUpload } from "./tool-image-upload";
 import { ToolKitsInput } from "./tool-kits-input";
 import { ToolCostInput } from "./tool-cost-input";
 import { ToolQuantityInput } from "./tool-quantity-input";
+import { ToolReorderThresholdInput } from "./tool-reorder-threshold-input";
+import { ToolOrderStatus } from "./tool-order-status";
 import { ToolOwnershipSelect } from "./tool-ownership-select";
 import { ToolStorageLocationInput } from "./tool-storage-location-input";
 import { ToolPurchaseLinkInput } from "./tool-purchase-link-input";
@@ -25,13 +27,6 @@ interface ToolInventoryRowProps {
 
 export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, availableKits }: ToolInventoryRowProps) {
   const [open, setOpen] = useState(false);
-
-  const status =
-    tool.quantity === 0
-      ? { label: "Out of stock", className: "bg-destructive/10 text-destructive" }
-      : tool.quantity != null
-        ? { label: "In stock", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" }
-        : { label: "Not tracked", className: "bg-muted text-muted-foreground" };
 
   return (
     <>
@@ -74,12 +69,19 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
           <ToolQuantityInput toolId={tool.id} initialQuantity={tool.quantity} />
         </td>
         <td className="p-2">
-          <ToolCostInput toolId={tool.id} initialCost={tool.cost} />
+          <ToolReorderThresholdInput toolId={tool.id} initialThreshold={tool.reorder_threshold} />
         </td>
         <td className="p-2">
-          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
-            {status.label}
-          </span>
+          <ToolOrderStatus
+            toolId={tool.id}
+            quantity={tool.quantity}
+            reorderThreshold={tool.reorder_threshold}
+            onOrder={tool.on_order}
+            isRental={tool.is_rental}
+          />
+        </td>
+        <td className="p-2">
+          <ToolCostInput toolId={tool.id} initialCost={tool.cost} />
         </td>
         <td className="p-2">
           <ToolBuyLink url={tool.purchase_url} />
@@ -97,7 +99,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
       </tr>
       {open && (
         <tr className="border-b border-border bg-muted/30">
-          <td colSpan={9} className="p-3">
+          <td colSpan={10} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Photo</span>

@@ -47,6 +47,8 @@ export interface Tool {
   quantity: number | null;
   storage_location: string | null;
   purchase_url: string | null;
+  reorder_threshold: number | null;
+  on_order: boolean;
   created_at: string;
   updated_at: string;
 }

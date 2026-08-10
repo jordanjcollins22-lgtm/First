@@ -24,7 +24,9 @@ export default async function ToolsPage() {
   }
 
   const serviceTypeOptions = SERVICE_TYPES.map((t) => ({ id: t.id, label: t.label }));
-  const outOfStockCount = tools.filter((t) => t.quantity === 0).length;
+  const toOrderCount = tools.filter(
+    (t) => !t.on_order && t.quantity != null && t.reorder_threshold != null && t.quantity <= t.reorder_threshold
+  ).length;
   const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
 
   return (
@@ -46,14 +48,14 @@ export default async function ToolsPage() {
 
       <div className="mb-3 flex items-center gap-4 text-sm text-muted-foreground">
         <span>{tools.length} tools</span>
-        {outOfStockCount > 0 && (
-          <span className="font-medium text-destructive">{outOfStockCount} out of stock</span>
+        {toOrderCount > 0 && (
+          <span className="font-medium text-destructive">{toOrderCount} need buying or renting</span>
         )}
       </div>
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px] border-collapse text-sm">
+          <table className="w-full min-w-[1160px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="p-2 font-medium">Tool</th>
@@ -61,8 +63,9 @@ export default async function ToolsPage() {
                 <th className="p-2 font-medium">Stored At</th>
                 <th className="p-2 font-medium">Own/Rent</th>
                 <th className="p-2 font-medium">Qty</th>
-                <th className="p-2 font-medium">Cost</th>
+                <th className="p-2 font-medium">Reorder at</th>
                 <th className="p-2 font-medium">Status</th>
+                <th className="p-2 font-medium">Cost</th>
                 <th className="p-2 font-medium">Buy</th>
                 <th className="p-2" />
               </tr>
