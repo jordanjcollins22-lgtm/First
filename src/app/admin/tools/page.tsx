@@ -30,7 +30,7 @@ export default async function ToolsPage() {
   const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Tool Database</h1>
       <p className="mb-6 text-muted-foreground">
         Your tool inventory — stock on hand, where it&apos;s stored, cost, kits, and

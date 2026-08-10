@@ -29,7 +29,7 @@ export default async function MaterialsPage() {
   ).length;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Material Database</h1>
       <p className="mb-6 text-muted-foreground">
         Stock on hand, reorder thresholds, cost, and where to buy each material.

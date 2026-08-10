@@ -76,3 +76,21 @@ body {
   border-radius: var(--radius-md);
   padding: 12px;
 }
+
+/* Always-visible, subtle scrollbars on wide tables — the glass borders are
+   soft enough that a hidden/auto-appearing scrollbar makes cut-off content
+   easy to miss instead of read as "scroll for more". */
+.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.overflow-x-auto::-webkit-scrollbar {
+  height: 8px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
