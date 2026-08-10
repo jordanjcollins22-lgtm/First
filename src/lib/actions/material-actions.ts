@@ -65,6 +65,40 @@ export async function updateMaterialStorageLocation(id: string, storageLocation:
   revalidatePath("/canvas");
 }
 
+export async function updateMaterialCanStore(id: string, canStore: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ can_store: canStore }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+}
+
+export async function updateMaterialStorageAlternative(id: string, storageAlternative: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("materials")
+    .update({ storage_alternative: storageAlternative })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+}
+
+export async function updateMaterialStorageRequirements(id: string, storageRequirements: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("materials")
+    .update({ storage_requirements: storageRequirements })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+}
+
+export async function updateMaterialStorageCost(id: string, storageCost: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ storage_cost: storageCost }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+}
+
 export async function updateMaterialImage(id: string, imagePath: string | null) {
   const supabase = await createClient();
 

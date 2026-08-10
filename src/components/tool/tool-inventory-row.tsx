@@ -13,6 +13,8 @@ import { ToolOrderStatus } from "./tool-order-status";
 import { ToolOwnershipSelect } from "./tool-ownership-select";
 import { ToolStorageLocationInput } from "./tool-storage-location-input";
 import { ToolPurchaseLinkInput } from "./tool-purchase-link-input";
+import { ToolNotOwnedReasonInput } from "./tool-not-owned-reason-input";
+import { ToolCostToOwnInput } from "./tool-cost-to-own-input";
 import { ToolBuyLink } from "./tool-buy-link";
 import { ToolServiceToggles } from "./tool-service-toggles";
 import { DeactivateToolButton } from "./deactivate-tool-button";
@@ -109,6 +111,18 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
                 <span className="text-xs text-muted-foreground">Purchase link</span>
                 <ToolPurchaseLinkInput toolId={tool.id} initialUrl={tool.purchase_url} />
               </div>
+              {tool.is_rental && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">Why don&apos;t we own it?</span>
+                    <ToolNotOwnedReasonInput toolId={tool.id} initialReason={tool.not_owned_reason} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">Cost to own it</span>
+                    <ToolCostToOwnInput toolId={tool.id} initialCost={tool.cost_to_own} />
+                  </div>
+                </>
+              )}
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Kits</span>
                 <ToolKitsInput toolId={tool.id} initialKits={tool.kits} availableKits={availableKits} />

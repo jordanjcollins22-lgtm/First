@@ -10,6 +10,10 @@ import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
 import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
 import { MaterialStorageLocationInput } from "./material-storage-location-input";
+import { MaterialCanStoreSelect } from "./material-can-store-select";
+import { MaterialStorageAlternativeInput } from "./material-storage-alternative-input";
+import { MaterialStorageRequirementsInput } from "./material-storage-requirements-input";
+import { MaterialStorageCostInput } from "./material-storage-cost-input";
 import { MaterialImageUpload } from "./material-image-upload";
 import { MaterialImageThumb } from "./material-image-thumb";
 import { MaterialOrderStatus } from "./material-order-status";
@@ -101,6 +105,30 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Description</span>
                 <MaterialDescriptionInput materialId={material.id} initialDescription={material.description} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Can we store it?</span>
+                <MaterialCanStoreSelect materialId={material.id} initialCanStore={material.can_store} />
+              </div>
+              {!material.can_store && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted-foreground">Where to go instead</span>
+                  <MaterialStorageAlternativeInput
+                    materialId={material.id}
+                    initialValue={material.storage_alternative}
+                  />
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">What&apos;s needed to store it</span>
+                <MaterialStorageRequirementsInput
+                  materialId={material.id}
+                  initialValue={material.storage_requirements}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Cost to store</span>
+                <MaterialStorageCostInput materialId={material.id} initialCost={material.storage_cost} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Applies to services</span>

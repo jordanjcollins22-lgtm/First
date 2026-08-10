@@ -139,6 +139,8 @@ export interface Database {
           purchase_url: string | null;
           reorder_threshold: number | null;
           on_order: boolean;
+          not_owned_reason: string | null;
+          cost_to_own: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -164,6 +166,10 @@ export interface Database {
           on_order: boolean;
           storage_location: string | null;
           image_path: string | null;
+          can_store: boolean;
+          storage_alternative: string | null;
+          storage_requirements: string | null;
+          storage_cost: number | null;
           created_at: string;
           updated_at: string;
         };

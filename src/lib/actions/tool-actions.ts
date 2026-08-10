@@ -83,6 +83,20 @@ export async function updateToolStorageLocation(id: string, storageLocation: str
   revalidatePath("/canvas");
 }
 
+export async function updateToolNotOwnedReason(id: string, reason: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ not_owned_reason: reason }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+}
+
+export async function updateToolCostToOwn(id: string, costToOwn: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ cost_to_own: costToOwn }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+}
+
 export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ purchase_url: purchaseUrl }).eq("id", id);
