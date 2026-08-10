@@ -240,6 +240,8 @@ export interface Database {
           cost: number | null;
           is_rental: boolean;
           active: boolean;
+          kit: string | null;
+          image_path: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -320,6 +322,36 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["services"]["Row"]>;
         Relationships: [];
+      };
+      canvas_designs: {
+        Row: {
+          id: string;
+          job_id: string;
+          address: string;
+          image_path: string | null;
+          image_x: number;
+          image_y: number;
+          image_scale: number;
+          image_rotation: number;
+          image_real_width_feet: number | null;
+          locked: boolean;
+          property_line: Json;
+          zones: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["canvas_designs"]["Row"]> & {
+          job_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["canvas_designs"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "canvas_designs_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;

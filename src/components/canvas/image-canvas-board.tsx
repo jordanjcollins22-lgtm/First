@@ -17,6 +17,7 @@ import {
   Lock,
   MousePointer2,
   PenTool,
+  Route,
   Ruler,
   Satellite,
   Trash2,
@@ -29,12 +30,15 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
+import { createClient } from "@/lib/supabase/client";
+import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
 import { serviceTypeById } from "./service-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
+import type { CanvasDesignRow } from "@/types/domain";
 
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 625;
@@ -62,7 +66,7 @@ interface CanvasImage {
   realWidthFeet: number | null;
 }
 
-type Tool = "move" | "zone";
+type Tool = "move" | "zone" | "property-line";
 
 function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasElement): Point {
   const rect = canvas.getBoundingClientRect();
@@ -707,19 +711,26 @@ function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
 
 interface ImageCanvasBoardProps {
   catalog: CanvasCatalog;
+  /** When present, the design is saved to/loaded from the database (scoped to this job) instead of this browser's IndexedDB. */
+  jobId?: string;
+  initialDesign?: CanvasDesignRow | null;
+  initialAddress?: string;
 }
 
-export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
+export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const loadedRef = useRef(false);
+  const uploadedImagePathRef = useRef<string | null>(null);
+  const imageDirtyRef = useRef(false);
 
   const [image, setImage] = useState<CanvasImage | null>(null);
   const [locked, setLocked] = useState(false);
   const [tool, setTool] = useState<Tool>("move");
   const [address, setAddress] = useState("");
   const [zones, setZones] = useState<WorkZone[]>([]);
+  const [propertyLine, setPropertyLine] = useState<Point[]>([]);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
@@ -749,6 +760,18 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
       ctx.restore();
     }
 
+    if (propertyLine.length >= 2) {
+      ctx.beginPath();
+      ctx.moveTo(propertyLine[0].x, propertyLine[0].y);
+      for (const point of propertyLine.slice(1)) ctx.lineTo(point.x, point.y);
+      ctx.closePath();
+      ctx.strokeStyle = "#111827";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     for (const zone of zones) {
       if (zone.points.length < 2) continue;
       ctx.beginPath();
@@ -773,7 +796,7 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
       ctx.fillText(zone.name, cx, cy);
     }
 
-    if (tool === "zone" && drawingPoints.length > 0) {
+    if ((tool === "zone" || tool === "property-line") && drawingPoints.length > 0) {
       ctx.beginPath();
       ctx.moveTo(drawingPoints[0].x, drawingPoints[0].y);
       for (const point of drawingPoints.slice(1)) ctx.lineTo(point.x, point.y);
@@ -819,14 +842,64 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
         ctx.fillText(label, boxX, boxY);
       }
     }
-  }, [image, zones, tool, drawingPoints, cursorPos]);
+  }, [image, zones, propertyLine, tool, drawingPoints, cursorPos]);
 
   useEffect(() => {
     draw();
   }, [draw]);
 
-  // Restore a previously autosaved design from this browser once on mount.
+  // Job-scoped canvases are loaded from the database (passed in as a prop from
+  // the server), not this browser's IndexedDB.
   useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        uploadedImagePathRef.current = initialDesign?.image_path ?? null;
+        if (initialDesign) {
+          setLocked(initialDesign.locked);
+          setAddress(initialDesign.address || initialAddress || "");
+          setZones(initialDesign.zones as unknown as WorkZone[]);
+          setPropertyLine(initialDesign.property_line ?? []);
+          if (initialDesign.image_path) {
+            const supabase = createClient();
+            const url = supabase.storage.from("canvas-images").getPublicUrl(initialDesign.image_path).data
+              .publicUrl;
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const element = await loadImageElement(blob);
+            if (!cancelled) {
+              setImage({
+                element,
+                blob,
+                x: initialDesign.image_x,
+                y: initialDesign.image_y,
+                scale: initialDesign.image_scale,
+                rotation: initialDesign.image_rotation,
+                realWidthFeet: initialDesign.image_real_width_feet,
+              });
+            }
+          }
+        } else {
+          setAddress(initialAddress ?? "");
+        }
+      } catch {
+        // No saved design yet (or it failed to load) — start from a blank canvas.
+      } finally {
+        loadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Runs once for the job this board was mounted for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
+  // Restore a previously autosaved design from this browser once on mount.
+  // Only for the standalone /canvas page — job-scoped canvases use the effect above.
+  useEffect(() => {
+    if (jobId) return;
     let cancelled = false;
     (async () => {
       try {
@@ -850,6 +923,7 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
             setLocked(design.locked);
             setAddress(design.address ?? "");
             setZones(design.zones);
+            setPropertyLine(design.propertyLine ?? []);
           }
         }
       } catch {
@@ -861,10 +935,13 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [jobId]);
 
   // Debounced autosave to this browser's storage whenever the design changes.
+  // Only for the standalone /canvas page — job-scoped canvases autosave to the
+  // database instead (see the effect below).
   useEffect(() => {
+    if (jobId) return;
     if (!loadedRef.current) return;
     const timer = setTimeout(() => {
       saveDesign({
@@ -877,12 +954,56 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
         locked,
         address,
         zones,
+        propertyLine,
       })
         .then(() => setLastSavedAt(Date.now()))
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [image, locked, address, zones]);
+  }, [jobId, image, locked, address, zones, propertyLine]);
+
+  // Debounced autosave to the database for job-scoped canvases. Zone photos are
+  // kept in memory for this session (and still make it into an exported PDF)
+  // but are not persisted to the database yet — only the background image,
+  // zones' shapes/service data, property line, and address are saved.
+  useEffect(() => {
+    if (!jobId || !loadedRef.current) return;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          let imagePath = uploadedImagePathRef.current;
+          if (imageDirtyRef.current && image?.blob) {
+            const supabase = createClient();
+            const path = `${jobId}/background-${uuid()}.jpg`;
+            const { error } = await supabase.storage
+              .from("canvas-images")
+              .upload(path, image.blob, { upsert: true });
+            if (!error) {
+              imagePath = path;
+              uploadedImagePathRef.current = path;
+              imageDirtyRef.current = false;
+            }
+          }
+          await saveCanvasDesign(jobId, {
+            address,
+            imagePath,
+            imageX: image?.x ?? CANVAS_WIDTH / 2,
+            imageY: image?.y ?? CANVAS_HEIGHT / 2,
+            imageScale: image?.scale ?? 1,
+            imageRotation: image?.rotation ?? 0,
+            imageRealWidthFeet: image?.realWidthFeet ?? null,
+            locked,
+            propertyLine,
+            zones: zones.map((zone) => (zone.service ? { ...zone, service: { ...zone.service, photos: [] } } : zone)),
+          });
+          setLastSavedAt(Date.now());
+        } catch {
+          // Best-effort autosave; the design is still held in memory this session.
+        }
+      })();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [jobId, image, locked, address, zones, propertyLine]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
@@ -904,22 +1025,31 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
     setServiceDialogZoneId(id);
   }
 
+  function finalizePropertyLine() {
+    if (drawingPoints.length < 3) return;
+    setPropertyLine(drawingPoints);
+    setDrawingPoints([]);
+    setCursorPos(null);
+    setTool("move");
+  }
+
   useEffect(() => {
-    if (tool !== "zone") return;
+    if (tool !== "zone" && tool !== "property-line") return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setDrawingPoints([]);
         setCursorPos(null);
       } else if (e.key === "Enter") {
-        finalizeZone();
+        if (tool === "zone") finalizeZone();
+        else finalizePropertyLine();
       } else if (e.key === "Backspace") {
         setDrawingPoints((prev) => prev.slice(0, -1));
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-    // finalizeZone reads drawingPoints/zones directly, so this effect must re-bind
-    // whenever they change to avoid acting on a stale closure.
+    // finalizeZone/finalizePropertyLine read drawingPoints/zones directly, so this
+    // effect must re-bind whenever they change to avoid acting on a stale closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, drawingPoints, zones]);
 
@@ -932,6 +1062,7 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
     );
     setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale, rotation: 0, realWidthFeet });
     setLocked(false);
+    imageDirtyRef.current = true;
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -1028,9 +1159,10 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
     const canvas = e.currentTarget;
     const point = toCanvasPoint(e.clientX, e.clientY, canvas);
 
-    if (tool === "zone") {
+    if (tool === "zone" || tool === "property-line") {
       if (drawingPoints.length >= 3 && distance(point, drawingPoints[0]) <= CLOSE_POINT_RADIUS) {
-        finalizeZone();
+        if (tool === "zone") finalizeZone();
+        else finalizePropertyLine();
       } else {
         setDrawingPoints((prev) => [...prev, point]);
       }
@@ -1045,7 +1177,7 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
   function handlePointerMove(e: PointerEvent<HTMLCanvasElement>) {
     const point = toCanvasPoint(e.clientX, e.clientY, e.currentTarget);
 
-    if (tool === "zone") {
+    if (tool === "zone" || tool === "property-line") {
       if (drawingPoints.length > 0) setCursorPos(point);
       return;
     }
@@ -1075,6 +1207,8 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
   function handleRemoveImage() {
     setImage(null);
     setLocked(false);
+    uploadedImagePathRef.current = null;
+    imageDirtyRef.current = true;
   }
 
   async function handleExportPdf() {
@@ -1121,14 +1255,17 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
   }
 
   async function handleClearSavedDesign() {
-    await clearDesign();
+    if (!jobId) await clearDesign();
     setImage(null);
     setLocked(false);
-    setAddress("");
+    setAddress(initialAddress ?? "");
     setZones([]);
+    setPropertyLine([]);
     setDrawingPoints([]);
     setCursorPos(null);
     setLastSavedAt(null);
+    uploadedImagePathRef.current = null;
+    imageDirtyRef.current = true;
   }
 
   const maxScale = image ? Math.max(1, Math.min(4, (CANVAS_WIDTH * 2) / image.element.width)) : 1;
@@ -1160,6 +1297,16 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
           <Button
             type="button"
             size="sm"
+            variant={tool === "property-line" ? "default" : "ghost"}
+            disabled={!image}
+            onClick={() => selectTool("property-line")}
+          >
+            <Route className="h-4 w-4" />
+            {propertyLine.length > 0 ? "Redraw Property Line" : "Draw Property Line"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
             variant={tool === "zone" ? "default" : "ghost"}
             onClick={() => selectTool("zone")}
           >
@@ -1186,7 +1333,7 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
               rel="noopener noreferrer"
               className="underline-offset-2 hover:text-primary hover:underline"
             >
-              Materials
+              Material List
             </Link>
             <span aria-hidden>·</span>
             <Link
@@ -1203,7 +1350,9 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
             {exporting ? "Building PDF..." : "Export PDF"}
           </Button>
           {lastSavedAt && (
-            <span className="text-xs text-muted-foreground">Autosaved in this browser</span>
+            <span className="text-xs text-muted-foreground">
+              {jobId ? "Saved to this job" : "Autosaved in this browser"}
+            </span>
           )}
         </div>
       </div>
@@ -1244,9 +1393,21 @@ export function ImageCanvasBoard({ catalog }: ImageCanvasBoardProps) {
         )}
       </div>
 
+      {image && propertyLine.length === 0 && tool !== "property-line" && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span>Start by drawing a rough outline of the property line, so zones stay in context.</span>
+          <Button type="button" size="sm" onClick={() => selectTool("property-line")}>
+            <Route className="h-4 w-4" />
+            Draw Property Line
+          </Button>
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
-        {tool === "zone"
-          ? "Click to add points. Click the first point (or press Enter) to close the zone. Backspace undoes a point, Escape cancels."
+        {tool === "zone" || tool === "property-line"
+          ? `Click to add points. Click the first point (or press Enter) to close the ${
+              tool === "property-line" ? "property line" : "zone"
+            }. Backspace undoes a point, Escape cancels.`
           : locked
             ? "The background is locked in place. Unlock it to reposition, rescale, or replace it."
             : "Drag the image to reposition it, use the scale slider to resize, then lock it in place before drawing zones."}

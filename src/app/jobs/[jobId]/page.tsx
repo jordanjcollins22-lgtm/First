@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { getJobWorkspace } from "@/lib/data/jobs";
-import { listServiceTemplates } from "@/lib/data/service-templates";
-import { JobWorkspaceClient as JobWorkspace } from "@/components/map/job-workspace-loader";
+import { createClient } from "@/lib/supabase/server";
+import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
+import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
+import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { isSupabaseConfigured } from "@/lib/env";
 
@@ -14,19 +15,35 @@ export default async function JobPage({
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const { jobId } = await params;
-  const [workspace, serviceTemplates] = await Promise.all([
-    getJobWorkspace(jobId),
-    listServiceTemplates(),
-  ]);
+  const supabase = await createClient();
 
-  if (!workspace) notFound();
+  const { data: jobRow, error: jobError } = await supabase
+    .from("jobs")
+    .select("*, property:properties(address)")
+    .eq("id", jobId)
+    .maybeSingle();
+  if (jobError) throw jobError;
+  if (!jobRow) notFound();
+
+  const job = jobRow as unknown as { id: string; name: string; property: { address: string } | null };
+
+  const [catalog, design] = await Promise.all([getCanvasCatalog(), getCanvasDesignForJob(jobId)]);
 
   return (
-    <JobWorkspace
-      job={workspace.job}
-      zones={workspace.zones}
-      workAreas={workspace.workAreas}
-      serviceTemplates={serviceTemplates}
-    />
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10">
+      <div>
+        <h1 className="text-2xl font-bold">{job.name}</h1>
+        <p className="text-muted-foreground">
+          Draw work zones and fill in the service details to build a scope of work for this job.
+        </p>
+      </div>
+
+      <ImageCanvasBoard
+        catalog={catalog}
+        jobId={jobId}
+        initialDesign={design}
+        initialAddress={job.property?.address ?? ""}
+      />
+    </div>
   );
 }

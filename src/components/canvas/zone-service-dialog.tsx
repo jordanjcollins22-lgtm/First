@@ -207,7 +207,7 @@ export function ZoneServiceDialog({
                   rel="noopener noreferrer"
                   className="underline-offset-2 hover:text-primary hover:underline"
                 >
-                  Materials page
+                  Material List page
                 </Link>
                 .
               </p>

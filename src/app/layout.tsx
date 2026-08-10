@@ -27,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 Tool Database
               </Link>
               <Link href="/admin/materials" className="hover:text-primary">
-                Materials
+                Material List
               </Link>
               <Link href="/admin/service-pricing" className="hover:text-primary">
                 Service Pricing

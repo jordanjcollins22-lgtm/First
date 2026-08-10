@@ -31,4 +31,6 @@ export interface StoredDesign {
   locked: boolean;
   address: string;
   zones: WorkZone[];
+  /** A rough property boundary drawn once, up front, before work zones. */
+  propertyLine: Point[];
 }

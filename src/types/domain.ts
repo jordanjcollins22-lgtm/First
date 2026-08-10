@@ -152,6 +152,8 @@ export interface Tool {
   cost: number | null;
   is_rental: boolean;
   active: boolean;
+  kit: string | null;
+  image_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -187,5 +189,22 @@ export interface ServicePricing {
   cost: number | null;
   cost_unit: string;
   estimated_hours: number | null;
+  updated_at: string;
+}
+
+export interface CanvasDesignRow {
+  id: string;
+  job_id: string;
+  address: string;
+  image_path: string | null;
+  image_x: number;
+  image_y: number;
+  image_scale: number;
+  image_rotation: number;
+  image_real_width_feet: number | null;
+  locked: boolean;
+  property_line: { x: number; y: number }[];
+  zones: unknown[];
+  created_at: string;
   updated_at: string;
 }

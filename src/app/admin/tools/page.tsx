@@ -6,8 +6,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { CreateToolForm } from "@/components/tool/create-tool-form";
 import { ToolCostInput } from "@/components/tool/tool-cost-input";
+import { ToolKitInput } from "@/components/tool/tool-kit-input";
+import { ToolImageUpload } from "@/components/tool/tool-image-upload";
 import { ToolServiceToggles } from "@/components/tool/tool-service-toggles";
 import { DeactivateToolButton } from "@/components/tool/deactivate-tool-button";
+import type { Tool } from "@/types/domain";
+
+const UNGROUPED_KIT = "Ungrouped";
+
+function groupToolsByKit(tools: Tool[]): Map<string, Tool[]> {
+  const groups = new Map<string, Tool[]>();
+  for (const tool of tools) {
+    const key = tool.kit?.trim() || UNGROUPED_KIT;
+    const arr = groups.get(key) ?? [];
+    arr.push(tool);
+    groups.set(key, arr);
+  }
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    if (a === UNGROUPED_KIT) return 1;
+    if (b === UNGROUPED_KIT) return -1;
+    return a.localeCompare(b);
+  });
+  const sorted = new Map<string, Tool[]>();
+  for (const key of sortedKeys) sorted.set(key, groups.get(key)!);
+  return sorted;
+}
 
 export default async function ToolsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -26,14 +49,16 @@ export default async function ToolsPage() {
   }
 
   const serviceTypeOptions = SERVICE_TYPES.map((t) => ({ id: t.id, label: t.label }));
+  const groups = groupToolsByKit(tools);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Tools</h1>
       <p className="mb-6 text-muted-foreground">
-        Your tool inventory and costs. Toggle which services a tool applies to — the
-        canvas picks tools for a zone automatically from these, no manual selection
-        needed there.
+        Your tool inventory and costs. Group tools into kits for organization and
+        inventory tracking, and toggle which services a tool applies to — the canvas
+        picks tools for a zone automatically from these, no manual selection needed
+        there.
       </p>
 
       <Card className="mb-6">
@@ -45,34 +70,45 @@ export default async function ToolsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col gap-3">
-        {tools.map((tool) => (
-          <Card key={tool.id}>
-            <CardContent className="flex flex-col gap-3 pt-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl" aria-hidden>
-                    {tool.icon}
-                  </span>
-                  <div>
-                    <p className="font-semibold">{tool.name}</p>
-                    {tool.is_rental && (
-                      <p className="text-xs text-muted-foreground">Rental item</p>
-                    )}
+      <div className="flex flex-col gap-8">
+        {[...groups.entries()].map(([kit, kitTools]) => (
+          <div key={kit} className="flex flex-col gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {kit} <span className="font-normal">({kitTools.length})</span>
+            </h2>
+            {kitTools.map((tool) => (
+              <Card key={tool.id}>
+                <CardContent className="flex flex-col gap-3 pt-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <ToolImageUpload toolId={tool.id} imagePath={tool.image_path} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl" aria-hidden>
+                          {tool.icon}
+                        </span>
+                        <div>
+                          <p className="font-semibold">{tool.name}</p>
+                          {tool.is_rental && (
+                            <p className="text-xs text-muted-foreground">Rental item</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ToolKitInput toolId={tool.id} initialKit={tool.kit} />
+                      <ToolCostInput toolId={tool.id} initialCost={tool.cost} />
+                      <DeactivateToolButton id={tool.id} />
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ToolCostInput toolId={tool.id} initialCost={tool.cost} />
-                  <DeactivateToolButton id={tool.id} />
-                </div>
-              </div>
-              <ToolServiceToggles
-                toolId={tool.id}
-                serviceTypes={serviceTypeOptions}
-                linkedServiceTypeIds={linksByTool.get(tool.id) ?? []}
-              />
-            </CardContent>
-          </Card>
+                  <ToolServiceToggles
+                    toolId={tool.id}
+                    serviceTypes={serviceTypeOptions}
+                    linkedServiceTypeIds={linksByTool.get(tool.id) ?? []}
+                  />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ))}
         {tools.length === 0 && (
           <p className="text-sm text-muted-foreground">No tools yet — add one above.</p>
