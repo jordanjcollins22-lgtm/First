@@ -25,7 +25,7 @@ export default async function CanvasPage() {
       </div>
 
       {!isSupabaseConfigured && (
-        <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
           Supabase isn&apos;t configured, so tools, materials, and pricing aren&apos;t available —
           set it up and add some in <span className="font-medium">Tools</span> /{" "}
           <span className="font-medium">Material Database</span> / <span className="font-medium">Services</span> to

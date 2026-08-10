@@ -1391,7 +1391,7 @@ export function ImageCanvasBoard({
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-card/70 p-2 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <div className="flex items-center gap-1 rounded-md bg-muted p-1">
           <Button
             type="button"
@@ -1630,14 +1630,14 @@ export function ImageCanvasBoard({
       )}
 
       {showSatelliteSearch && !locked && (
-        <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-col gap-1 rounded-2xl border border-white/60 bg-card/70 p-3 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
           <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
           {satelliteLoading && <p className="text-xs text-muted-foreground">Loading satellite photo...</p>}
           {satelliteError && <p className="text-xs text-destructive">{satelliteError}</p>}
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card p-3">
+      <div className="rounded-2xl border border-white/60 bg-card/70 p-3 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <h2 className="text-sm font-semibold">Work Zones</h2>
         {zones.length === 0 ? (
           <p className="mt-1 text-xs text-muted-foreground">

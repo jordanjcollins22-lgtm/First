@@ -52,7 +52,7 @@ export function SiteNav({ userEmail }: { userEmail: string | null }) {
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {open && (
-          <div className="absolute right-0 top-full z-10 mt-2 w-56 rounded-md border border-border bg-card py-1 shadow-md">
+          <div className="absolute right-0 top-full z-10 mt-2 w-56 rounded-xl border border-white/60 bg-card/80 py-1 shadow-xl backdrop-blur-xl backdrop-saturate-150">
             {DATABASE_LINKS.map((link) => (
               <Link
                 key={link.href}

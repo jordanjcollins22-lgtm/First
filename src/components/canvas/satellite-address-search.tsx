@@ -68,7 +68,7 @@ export function SatelliteAddressSearch({ onSelect, disabled }: SatelliteAddressS
       )}
 
       {suggestions.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-card shadow-sm">
+        <div className="absolute z-10 mt-1 w-full rounded-lg border border-white/60 bg-card/85 shadow-xl backdrop-blur-xl backdrop-saturate-150">
           {suggestions.map((s) => (
             <button
               key={s.id}

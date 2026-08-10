@@ -110,7 +110,7 @@ export function NewPropertyForm() {
         </div>
 
         {suggestions.length > 0 && !selected && (
-          <div className="rounded-md border border-border bg-card shadow-sm">
+          <div className="rounded-lg border border-white/60 bg-card/85 shadow-xl backdrop-blur-xl backdrop-saturate-150">
             {suggestions.map((s) => (
               <button
                 key={s.id}
