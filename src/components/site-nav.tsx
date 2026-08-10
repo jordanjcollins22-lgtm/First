@@ -7,8 +7,7 @@ import { ChevronDown } from "lucide-react";
 const DATABASE_LINKS = [
   { href: "/admin/tools", label: "Tool Database" },
   { href: "/admin/materials", label: "Material Database" },
-  { href: "/admin/service-pricing", label: "Service Pricing Database" },
-  { href: "/admin/service-templates", label: "Service Template Database" },
+  { href: "/admin/service-pricing", label: "Services Database" },
 ];
 
 export function SiteNav() {

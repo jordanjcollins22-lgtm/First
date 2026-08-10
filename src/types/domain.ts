@@ -3,27 +3,6 @@
  * supabase/migrations. Keep in sync manually (no codegen for MVP).
  */
 
-import type { Feature, Geometry } from "geojson";
-
-export type GeometryType = "Point" | "LineString" | "Polygon";
-
-/** GeoJSON feature carrying only the geometry types Draw supports. */
-export type WorkAreaGeometry = Feature<Geometry>;
-
-export type MeasurementType = "area" | "length" | "count";
-
-export interface CalculatedMeasurements {
-  measurement_type: MeasurementType;
-  area_sqft?: number;
-  perimeter_ft?: number;
-  length_ft?: number;
-  point_count?: number;
-  calculated_at: string;
-  geometry_source: "original" | "cleaned";
-  /** Version counter, bumped every time geometry changes after a lock. */
-  version: number;
-}
-
 export interface Customer {
   id: string;
   name: string;
@@ -54,95 +33,6 @@ export interface Job {
   status: JobStatus;
   created_at: string;
   updated_at: string;
-}
-
-export interface Zone {
-  id: string;
-  job_id: string;
-  name: string;
-  auto_named: boolean;
-  sequence_order: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export type WorkAreaStatus = "draft" | "scoped" | "priced" | "approved" | "completed";
-
-export interface WorkArea {
-  id: string;
-  job_id: string;
-  zone_id: string | null;
-  service_template_id: string;
-  geometry: WorkAreaGeometry;
-  cleaned_geometry: WorkAreaGeometry | null;
-  calculated_measurements: CalculatedMeasurements | null;
-  notes: string | null;
-  sequence_order: number | null;
-  status: WorkAreaStatus;
-  /** Set once measurements have been used for a price sent to a customer. */
-  geometry_locked_at: string | null;
-  geometry_version: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface EstimatorQuestion {
-  id: string;
-  label: string;
-  type: "text" | "number" | "boolean" | "select";
-  options?: string[];
-  required?: boolean;
-}
-
-export interface MaterialFormula {
-  material: string;
-  unit: string;
-  /** Coverage rate used to derive quantity from measurement, e.g. sq ft per bag. */
-  coverage_per_unit: number;
-  waste_factor_pct?: number;
-}
-
-export interface ServiceTemplate {
-  id: string;
-  name: string;
-  description: string | null;
-  allowed_geometry_types: GeometryType[];
-  required_measurement_type: MeasurementType;
-  estimator_questions: EstimatorQuestion[];
-  required_photo_count: number;
-  crew_steps: string[];
-  tools_required: string[];
-  equipment_required: string[];
-  materials_formula: MaterialFormula[];
-  quality_control_requirements: string[];
-  before_photo_requirements: string[];
-  after_photo_requirements: string[];
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export type PhotoStage = "before" | "after" | "reference";
-
-export interface Photo {
-  id: string;
-  work_area_id: string;
-  storage_path: string;
-  stage: PhotoStage;
-  caption: string | null;
-  created_at: string;
-}
-
-export interface GeneratedScope {
-  work_area_id: string;
-  service_template_name: string;
-  measurement_summary: string;
-  crew_steps: string[];
-  tools_required: string[];
-  equipment_required: string[];
-  materials: { material: string; quantity: number; unit: string }[];
-  quality_control_requirements: string[];
-  generated_at: string;
 }
 
 export interface Tool {

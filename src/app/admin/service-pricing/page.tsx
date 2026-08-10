@@ -13,10 +13,10 @@ export default async function ServicePricingPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">Service Pricing</h1>
+      <h1 className="mb-1 text-2xl font-bold">Services</h1>
       <p className="mb-6 text-muted-foreground">
-        Cost and time estimates per service. These appear automatically once a zone
-        uses that service, and roll up into the Job Plan&apos;s total estimate.
+        Every service type, with its cost and time estimate. These appear automatically
+        once a zone uses that service, and roll up into the Job Plan&apos;s total estimate.
       </p>
 
       <Card>

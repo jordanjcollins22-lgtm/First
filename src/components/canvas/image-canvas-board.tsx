@@ -1303,7 +1303,7 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
               rel="noopener noreferrer"
               className="underline-offset-2 hover:text-primary hover:underline"
             >
-              Pricing
+              Services
             </Link>
           </div>
           <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
