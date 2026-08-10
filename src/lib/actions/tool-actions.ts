@@ -16,10 +16,14 @@ export async function createTool(formData: FormData) {
   const isRental = formData.get("is_rental") === "on";
   const kitsRaw = String(formData.get("kits") ?? "").trim();
   const kits = kitsRaw
-    ? kitsRaw
-        .split(",")
-        .map((k) => k.trim())
-        .filter(Boolean)
+    ? [
+        ...new Set(
+          kitsRaw
+            .split(",")
+            .map((k) => Number(k.trim()))
+            .filter((n) => Number.isInteger(n) && n > 0)
+        ),
+      ]
     : [];
   const quantityRaw = String(formData.get("quantity") ?? "").trim();
   const quantity = quantityRaw ? Number(quantityRaw) : null;
@@ -58,7 +62,7 @@ export async function updateToolOwnership(id: string, isRental: boolean) {
   revalidatePath("/canvas");
 }
 
-export async function updateToolKits(id: string, kits: string[]) {
+export async function updateToolKits(id: string, kits: number[]) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ kits }).eq("id", id);
   if (error) throw error;

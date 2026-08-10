@@ -17,9 +17,10 @@ interface ToolInventoryRowProps {
   tool: Tool;
   serviceTypes: { id: string; label: string }[];
   linkedServiceTypeIds: string[];
+  availableKits: number[];
 }
 
-export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds }: ToolInventoryRowProps) {
+export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, availableKits }: ToolInventoryRowProps) {
   const [open, setOpen] = useState(false);
 
   const status =
@@ -45,14 +46,16 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds }: T
         <td className="p-2">
           <div className="flex flex-wrap gap-1">
             {tool.kits.length > 0 ? (
-              tool.kits.map((kit) => (
-                <span
-                  key={kit}
-                  className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground"
-                >
-                  {kit}
-                </span>
-              ))
+              [...tool.kits]
+                .sort((a, b) => a - b)
+                .map((kit) => (
+                  <span
+                    key={kit}
+                    className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground"
+                  >
+                    Kit {kit}
+                  </span>
+                ))
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
             )}
@@ -93,7 +96,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds }: T
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Kits</span>
-                <ToolKitsInput toolId={tool.id} initialKits={tool.kits} />
+                <ToolKitsInput toolId={tool.id} initialKits={tool.kits} availableKits={availableKits} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Applies to services</span>

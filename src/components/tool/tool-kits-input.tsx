@@ -2,29 +2,27 @@
 
 import { useState, useTransition } from "react";
 
-import { Input } from "@/components/ui/input";
+import { KitPicker } from "./kit-picker";
 import { updateToolKits } from "@/lib/actions/tool-actions";
 
-export function ToolKitsInput({ toolId, initialKits }: { toolId: string; initialKits: string[] }) {
-  const [value, setValue] = useState(initialKits.join(", "));
+export function ToolKitsInput({
+  toolId,
+  initialKits,
+  availableKits,
+}: {
+  toolId: string;
+  initialKits: number[];
+  availableKits: number[];
+}) {
+  const [kits, setKits] = useState<number[]>(initialKits);
   const [isPending, startTransition] = useTransition();
 
-  function handleBlur() {
-    const kits = value
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
-    startTransition(() => updateToolKits(toolId, kits));
+  function handleChange(next: number[]) {
+    setKits(next);
+    startTransition(() => updateToolKits(toolId, next));
   }
 
   return (
-    <Input
-      placeholder="Kits, comma separated"
-      value={value}
-      disabled={isPending}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={handleBlur}
-      className="h-9 w-full text-sm"
-    />
+    <KitPicker availableKits={availableKits} value={kits} onChange={handleChange} disabled={isPending} />
   );
 }

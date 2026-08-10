@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { KitPicker } from "./kit-picker";
 import { createClient } from "@/lib/supabase/client";
 import { createTool } from "@/lib/actions/tool-actions";
 
-export function CreateToolForm() {
+export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [ownership, setOwnership] = useState<"own" | "rent">("own");
+  const [kits, setKits] = useState<number[]>([]);
   const [isPending, startTransition] = useTransition();
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -34,11 +36,13 @@ export function CreateToolForm() {
         if (!error) formData.set("image_path", path);
       }
       formData.set("is_rental", ownership === "rent" ? "on" : "");
+      formData.set("kits", kits.join(","));
       await createTool(formData);
       formRef.current?.reset();
       setFile(null);
       setPreviewUrl(null);
       setOwnership("own");
+      setKits([]);
     });
   }
 
@@ -73,8 +77,8 @@ export function CreateToolForm() {
         <Input id="tool-name" name="name" required placeholder="Chainsaw" className="w-44" />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tool-kits">Kit(s)</Label>
-        <Input id="tool-kits" name="kits" placeholder="e.g. Bed Prep Kit, Trimming Kit" className="w-64" />
+        <Label>Kit(s)</Label>
+        <KitPicker availableKits={availableKits} value={kits} onChange={setKits} />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="tool-own-rent">Own or Rent</Label>

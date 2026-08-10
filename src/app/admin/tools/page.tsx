@@ -25,6 +25,7 @@ export default async function ToolsPage() {
 
   const serviceTypeOptions = SERVICE_TYPES.map((t) => ({ id: t.id, label: t.label }));
   const outOfStockCount = tools.filter((t) => t.quantity === 0).length;
+  const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -39,7 +40,7 @@ export default async function ToolsPage() {
           <CardTitle>Add a tool</CardTitle>
         </CardHeader>
         <CardContent>
-          <CreateToolForm />
+          <CreateToolForm availableKits={availableKits} />
         </CardContent>
       </Card>
 
@@ -71,6 +72,7 @@ export default async function ToolsPage() {
                   tool={tool}
                   serviceTypes={serviceTypeOptions}
                   linkedServiceTypeIds={linksByTool.get(tool.id) ?? []}
+                  availableKits={availableKits}
                 />
               ))}
             </tbody>
