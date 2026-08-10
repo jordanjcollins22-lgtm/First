@@ -19,13 +19,17 @@ export default async function JobPage({
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
-    .select("*, property:properties(address)")
+    .select("*, property:properties(address, lat, lng)")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
   if (!jobRow) notFound();
 
-  const job = jobRow as unknown as { id: string; name: string; property: { address: string } | null };
+  const job = jobRow as unknown as {
+    id: string;
+    name: string;
+    property: { address: string; lat: number; lng: number } | null;
+  };
 
   const [catalog, design] = await Promise.all([getCanvasCatalog(), getCanvasDesignForJob(jobId)]);
 
@@ -43,6 +47,8 @@ export default async function JobPage({
         jobId={jobId}
         initialDesign={design}
         initialAddress={job.property?.address ?? ""}
+        initialLat={job.property?.lat}
+        initialLng={job.property?.lng}
       />
     </div>
   );

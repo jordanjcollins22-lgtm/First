@@ -683,9 +683,20 @@ interface ImageCanvasBoardProps {
   jobId?: string;
   initialDesign?: CanvasDesignRow | null;
   initialAddress?: string;
+  /** Coordinates of the address confirmed when the property was created — used to
+   * auto-load the same satellite photo here instead of making the user search again. */
+  initialLat?: number;
+  initialLng?: number;
 }
 
-export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress }: ImageCanvasBoardProps) {
+export function ImageCanvasBoard({
+  catalog,
+  jobId,
+  initialDesign,
+  initialAddress,
+  initialLat,
+  initialLng,
+}: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
@@ -822,6 +833,20 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
           }
         } else {
           setAddress(initialAddress ?? "");
+          // No canvas design saved yet for this job — this is a freshly created
+          // property, so load the same satellite photo the user already confirmed
+          // when creating it instead of making them search for the address again.
+          // Mark as loaded first so the state changes this triggers are picked up
+          // by the debounced database autosave below, instead of being ignored.
+          if (initialLat != null && initialLng != null) {
+            loadedRef.current = true;
+            await handleSelectSatelliteLocation({
+              id: "confirmed-property",
+              fullAddress: initialAddress ?? "",
+              lat: initialLat,
+              lng: initialLng,
+            });
+          }
         }
       } catch {
         // No saved design yet (or it failed to load) — start from a blank canvas.
@@ -1464,6 +1489,12 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
           </Button>
         )}
       </div>
+
+      {!showSatelliteSearch && (satelliteLoading || satelliteError) && (
+        <p className={`text-xs ${satelliteError ? "text-destructive" : "text-muted-foreground"}`}>
+          {satelliteError ?? "Loading the satellite photo you confirmed..."}
+        </p>
+      )}
 
       {showSatelliteSearch && !locked && (
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
