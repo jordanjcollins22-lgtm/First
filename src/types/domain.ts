@@ -167,6 +167,7 @@ export interface Material {
   waste_factor_pct: number;
   cost_per_unit: number | null;
   active: boolean;
+  description: string | null;
   purchase_url: string | null;
   quantity_on_hand: number | null;
   reorder_threshold: number | null;

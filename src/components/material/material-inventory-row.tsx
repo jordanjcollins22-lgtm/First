@@ -7,6 +7,7 @@ import { MaterialCostInput } from "./material-cost-input";
 import { MaterialQuantityInput } from "./material-quantity-input";
 import { MaterialReorderThresholdInput } from "./material-reorder-threshold-input";
 import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
+import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
 import { MaterialOrderStatus } from "./material-order-status";
 import { DeactivateMaterialButton } from "./deactivate-material-button";
@@ -79,6 +80,10 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>
                 <MaterialPurchaseLinkInput materialId={material.id} initialUrl={material.purchase_url} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Description</span>
+                <MaterialDescriptionInput materialId={material.id} initialDescription={material.description} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Applies to services</span>
