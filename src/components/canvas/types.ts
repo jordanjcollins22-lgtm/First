@@ -18,6 +18,9 @@ export interface WorkZone {
   points: Point[];
   location: string;
   service: ZoneServiceData | null;
+  /** Manually entered — on-screen pixel measurements weren't reliable enough to trust. */
+  areaSqFt: number | null;
+  perimeterFt: number | null;
 }
 
 export interface StoredDesign {

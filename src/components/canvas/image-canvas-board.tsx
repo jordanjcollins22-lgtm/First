@@ -225,40 +225,9 @@ function displayFieldValue(values: Record<string, string>, key: string): string 
   return value;
 }
 
-function polygonAreaPx(points: Point[]): number {
-  let sum = 0;
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    sum += a.x * b.y - b.x * a.y;
-  }
-  return Math.abs(sum) / 2;
-}
-
-function polygonPerimeterPx(points: Point[]): number {
-  let sum = 0;
-  for (let i = 0; i < points.length; i++) {
-    sum += distance(points[i], points[(i + 1) % points.length]);
-  }
-  return sum;
-}
-
-function feetPerCanvasPixel(image: CanvasImage | null): number | null {
-  if (!image || !image.realWidthFeet) return null;
-  return image.realWidthFeet / (image.element.width * image.scale);
-}
-
-function zoneMeasurements(
-  zone: WorkZone,
-  image: CanvasImage | null
-): { areaSqFt: number; perimeterFt: number } | null {
-  if (zone.points.length < 3) return null;
-  const fpp = feetPerCanvasPixel(image);
-  if (!fpp) return null;
-  return {
-    areaSqFt: polygonAreaPx(zone.points) * fpp * fpp,
-    perimeterFt: polygonPerimeterPx(zone.points) * fpp,
-  };
+function zoneMeasurements(zone: WorkZone): { areaSqFt: number; perimeterFt: number } | null {
+  if (zone.areaSqFt == null && zone.perimeterFt == null) return null;
+  return { areaSqFt: zone.areaSqFt ?? 0, perimeterFt: zone.perimeterFt ?? 0 };
 }
 
 function formatMeasurements(m: { areaSqFt: number; perimeterFt: number }): string {
@@ -464,7 +433,6 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
 
 function renderMaterialsPage(
   zones: WorkZone[],
-  image: CanvasImage | null,
   address: string,
   catalog: CanvasCatalog
 ): HTMLCanvasElement {
@@ -496,7 +464,7 @@ function renderMaterialsPage(
 
   const allItems: MaterialLineItem[] = [];
   for (const zone of zones) {
-    const measurements = zoneMeasurements(zone, image);
+    const measurements = zoneMeasurements(zone);
     if (!measurements) continue;
     allItems.push(...zoneMaterialLineItems(zone, measurements.areaSqFt, catalog));
   }
@@ -511,7 +479,7 @@ function renderMaterialsPage(
     ctx.fillStyle = "#9ca3af";
     for (const line of wrapText(
       ctx,
-      "No bulk materials calculated yet — needs a zone with an automatically-scaled background and a material rule configured.",
+      "No bulk materials calculated yet — needs a zone with a manually entered area (sq ft) and a material rule configured.",
       maxWidth
     )) {
       ctx.fillText(line, PAGE_MARGIN, y);
@@ -617,7 +585,6 @@ function computeJobTotals(
 
 function renderJobPlanPages(
   zones: WorkZone[],
-  image: CanvasImage | null,
   address: string,
   catalog: CanvasCatalog
 ): HTMLCanvasElement[] {
@@ -626,7 +593,7 @@ function renderJobPlanPages(
   const mctx = measureCanvas.getContext("2d");
   if (!mctx) return [];
 
-  const totalAreaSqFt = zones.reduce((sum, zone) => sum + (zoneMeasurements(zone, image)?.areaSqFt ?? 0), 0);
+  const totalAreaSqFt = zones.reduce((sum, zone) => sum + (zoneMeasurements(zone)?.areaSqFt ?? 0), 0);
   const summary = `${zones.length} zone${zones.length === 1 ? "" : "s"}${
     totalAreaSqFt > 0 ? ` · ${Math.round(totalAreaSqFt).toLocaleString()} sq ft total` : ""
   }`;
@@ -814,34 +781,6 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
         ctx.fillStyle = i === 0 ? "#16a34a" : "#2563eb";
         ctx.fill();
       }
-
-      const fpp = feetPerCanvasPixel(image);
-      if (fpp) {
-        let perimeterPx = 0;
-        for (let i = 0; i < drawingPoints.length - 1; i++) {
-          perimeterPx += distance(drawingPoints[i], drawingPoints[i + 1]);
-        }
-        if (cursorPos) perimeterPx += distance(drawingPoints[drawingPoints.length - 1], cursorPos);
-        const perimeterFt = perimeterPx * fpp;
-
-        const openPoints = cursorPos ? [...drawingPoints, cursorPos] : drawingPoints;
-        const label =
-          openPoints.length >= 3
-            ? `${Math.round(polygonAreaPx(openPoints) * fpp * fpp).toLocaleString()} sq ft (open) · ${Math.round(perimeterFt).toLocaleString()} ft`
-            : `${Math.round(perimeterFt).toLocaleString()} ft so far`;
-
-        const anchor = cursorPos ?? drawingPoints[drawingPoints.length - 1];
-        ctx.font = "600 13px sans-serif";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        const textWidth = ctx.measureText(label).width;
-        const boxX = anchor.x + 12;
-        const boxY = anchor.y - 28;
-        ctx.fillStyle = "rgba(17,24,39,0.85)";
-        ctx.fillRect(boxX - 6, boxY - 4, textWidth + 12, 24);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(label, boxX, boxY);
-      }
     }
   }, [image, zones, propertyLine, tool, drawingPoints, cursorPos]);
 
@@ -1019,6 +958,8 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
         points,
         location: "",
         service: null,
+        areaSqFt: null,
+        perimeterFt: null,
       },
     ]);
     setDrawingPoints([]);
@@ -1109,7 +1050,9 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
 
     // Web Mercator ground resolution at this zoom/latitude, applied to the
     // requested (unscaled) width, gives the real-world span of the image —
-    // so measurements are ready automatically, with no manual calibration step.
+    // shown as an informational "≈X ft across" badge only. Zone area/perimeter
+    // are entered manually (see ZoneServiceDialog) since pixel-derived
+    // measurements weren't reliable enough to trust.
     // Reference: standard XYZ/slippy-map tile scheme, 256px tiles doubling per
     // zoom level (same convention Mapbox, Google Maps, and OSM all use).
     const metersPerPixel =
@@ -1149,9 +1092,16 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
     setZones((prev) => prev.filter((zone) => zone.id !== id));
   }
 
-  function handleSaveZoneService(location: string, service: ZoneServiceData | null) {
+  function handleSaveZoneService(
+    location: string,
+    service: ZoneServiceData | null,
+    areaSqFt: number | null,
+    perimeterFt: number | null
+  ) {
     setZones((prev) =>
-      prev.map((zone) => (zone.id === serviceDialogZoneId ? { ...zone, location, service } : zone))
+      prev.map((zone) =>
+        zone.id === serviceDialogZoneId ? { ...zone, location, service, areaSqFt, perimeterFt } : zone
+      )
     );
     setServiceDialogZoneId(null);
   }
@@ -1243,9 +1193,9 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
         addPageCanvas(await renderZonePage(zone, catalog));
       }
 
-      addPageCanvas(renderMaterialsPage(zones, image, address, catalog));
+      addPageCanvas(renderMaterialsPage(zones, address, catalog));
 
-      for (const jobPlanCanvas of renderJobPlanPages(zones, image, address, catalog)) {
+      for (const jobPlanCanvas of renderJobPlanPages(zones, address, catalog)) {
         addPageCanvas(jobPlanCanvas);
       }
 
@@ -1271,7 +1221,6 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
 
   const maxScale = image ? Math.max(1, Math.min(4, (CANVAS_WIDTH * 2) / image.element.width)) : 1;
   const dialogZone = zones.find((zone) => zone.id === serviceDialogZoneId) ?? null;
-  const dialogMeasurements = dialogZone ? zoneMeasurements(dialogZone, image) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -1516,22 +1465,11 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
         )}
       </div>
 
-      {image && !image.realWidthFeet && (
-        <p className="text-xs text-muted-foreground">
-          This background isn&apos;t scaled, so zone measurements aren&apos;t available. Use
-          &ldquo;From Address&rdquo; for a satellite photo — its scale is set automatically.
-        </p>
-      )}
-
       {showSatelliteSearch && !locked && (
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
           <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
           {satelliteLoading && <p className="text-xs text-muted-foreground">Loading satellite photo...</p>}
           {satelliteError && <p className="text-xs text-destructive">{satelliteError}</p>}
-          <p className="text-xs text-muted-foreground">
-            Scale is calculated automatically from the satellite imagery, so zone measurements
-            are ready right away.
-          </p>
         </div>
       )}
 
@@ -1544,7 +1482,7 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
         ) : (
           <ul className="mt-2 flex flex-col gap-1">
             {zones.map((zone) => {
-              const measurements = zoneMeasurements(zone, image);
+              const measurements = zoneMeasurements(zone);
               return (
                 <li
                   key={zone.id}
@@ -1596,10 +1534,11 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
         key={serviceDialogZoneId ?? "none"}
         open={dialogZone !== null}
         zoneName={dialogZone?.name ?? ""}
-        measurementSummary={dialogMeasurements ? formatMeasurements(dialogMeasurements) : undefined}
         catalog={catalog}
         initialLocation={dialogZone?.location ?? ""}
         initialService={dialogZone?.service ?? null}
+        initialAreaSqFt={dialogZone?.areaSqFt ?? null}
+        initialPerimeterFt={dialogZone?.perimeterFt ?? null}
         onSave={handleSaveZoneService}
         onCancel={() => setServiceDialogZoneId(null)}
       />

@@ -52,21 +52,28 @@ function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
 interface ZoneServiceDialogProps {
   open: boolean;
   zoneName: string;
-  measurementSummary?: string;
   catalog: CanvasCatalog;
   initialLocation: string;
   initialService: ZoneServiceData | null;
-  onSave: (location: string, service: ZoneServiceData | null) => void;
+  initialAreaSqFt: number | null;
+  initialPerimeterFt: number | null;
+  onSave: (
+    location: string,
+    service: ZoneServiceData | null,
+    areaSqFt: number | null,
+    perimeterFt: number | null
+  ) => void;
   onCancel: () => void;
 }
 
 export function ZoneServiceDialog({
   open,
   zoneName,
-  measurementSummary,
   catalog,
   initialLocation,
   initialService,
+  initialAreaSqFt,
+  initialPerimeterFt,
   onSave,
   onCancel,
 }: ZoneServiceDialogProps) {
@@ -76,6 +83,8 @@ export function ZoneServiceDialog({
   const [notes, setNotes] = useState(initialService?.notes ?? "");
   const [photos, setPhotos] = useState<Blob[]>(initialService?.photos ?? []);
   const [customTool, setCustomTool] = useState("");
+  const [areaSqFt, setAreaSqFt] = useState(initialAreaSqFt?.toString() ?? "");
+  const [perimeterFt, setPerimeterFt] = useState(initialPerimeterFt?.toString() ?? "");
 
   const serviceType = serviceTypeById(typeId);
   const pricing = catalog.servicePricing.find((p) => p.service_type_id === typeId);
@@ -135,21 +144,19 @@ export function ZoneServiceDialog({
   function handleSave() {
     const tools = [...autoTools.map((tool) => tool.name), ...extraTools];
     const service: ZoneServiceData | null = typeId ? { typeId, values, notes, photos, tools } : null;
-    onSave(location, service);
+    onSave(
+      location,
+      service,
+      areaSqFt.trim() ? Number(areaSqFt) : null,
+      perimeterFt.trim() ? Number(perimeterFt) : null
+    );
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>
-            {zoneName}
-            {measurementSummary && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                {measurementSummary}
-              </span>
-            )}
-          </DialogTitle>
+          <DialogTitle>{zoneName}</DialogTitle>
           <DialogDescription>
             Set the location, pick a service, and fill in what applies. The standard scope
             for that service is added automatically.
@@ -166,6 +173,33 @@ export function ZoneServiceDialog({
               onChange={(e) => setLocation(e.target.value)}
               autoFocus
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="zone-area">Area (sq ft)</Label>
+              <Input
+                id="zone-area"
+                type="number"
+                step="0.1"
+                min={0}
+                placeholder="Measure on site and enter here"
+                value={areaSqFt}
+                onChange={(e) => setAreaSqFt(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="zone-perimeter">Perimeter (ft)</Label>
+              <Input
+                id="zone-perimeter"
+                type="number"
+                step="0.1"
+                min={0}
+                placeholder="Measure on site and enter here"
+                value={perimeterFt}
+                onChange={(e) => setPerimeterFt(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
