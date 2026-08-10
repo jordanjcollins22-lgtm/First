@@ -24,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 Service Templates
               </Link>
               <Link href="/admin/tools" className="hover:text-primary">
-                Tools
+                Tool Database
               </Link>
               <Link href="/admin/materials" className="hover:text-primary">
                 Materials
