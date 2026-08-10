@@ -261,6 +261,10 @@ export interface Database {
           waste_factor_pct: number;
           cost_per_unit: number | null;
           active: boolean;
+          purchase_url: string | null;
+          quantity_on_hand: number | null;
+          reorder_threshold: number | null;
+          on_order: boolean;
           created_at: string;
           updated_at: string;
         };

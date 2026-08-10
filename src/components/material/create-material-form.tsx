@@ -64,6 +64,40 @@ export function CreateMaterialForm() {
           className="w-28"
         />
       </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="material-quantity">On hand</Label>
+        <Input
+          id="material-quantity"
+          name="quantity_on_hand"
+          type="number"
+          step="0.1"
+          min={0}
+          placeholder="0"
+          className="w-24"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="material-reorder">Reorder at</Label>
+        <Input
+          id="material-reorder"
+          name="reorder_threshold"
+          type="number"
+          step="0.1"
+          min={0}
+          placeholder="0"
+          className="w-24"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="material-purchase-url">Purchase link</Label>
+        <Input
+          id="material-purchase-url"
+          name="purchase_url"
+          type="url"
+          placeholder="https://..."
+          className="w-56"
+        />
+      </div>
       <Button type="submit" disabled={isPending}>
         {isPending ? "Adding..." : "Add Material"}
       </Button>

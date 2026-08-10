@@ -15,6 +15,9 @@ export async function createMaterial(formData: FormData) {
   const coverageRaw = String(formData.get("coverage_per_unit_sqft") ?? "").trim();
   const costRaw = String(formData.get("cost_per_unit") ?? "").trim();
   const wasteRaw = String(formData.get("waste_factor_pct") ?? "").trim();
+  const purchaseUrl = String(formData.get("purchase_url") ?? "").trim() || null;
+  const quantityRaw = String(formData.get("quantity_on_hand") ?? "").trim();
+  const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
 
   const { error } = await supabase.from("materials").insert({
     name,
@@ -22,6 +25,9 @@ export async function createMaterial(formData: FormData) {
     coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,
     cost_per_unit: costRaw ? Number(costRaw) : null,
     waste_factor_pct: wasteRaw ? Number(wasteRaw) : 10,
+    purchase_url: purchaseUrl,
+    quantity_on_hand: quantityRaw ? Number(quantityRaw) : null,
+    reorder_threshold: reorderRaw ? Number(reorderRaw) : null,
   });
   if (error) throw error;
 
@@ -32,6 +38,38 @@ export async function createMaterial(formData: FormData) {
 export async function updateMaterialCost(id: string, costPerUnit: number | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("materials").update({ cost_per_unit: costPerUnit }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialPurchaseUrl(id: string, purchaseUrl: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ purchase_url: purchaseUrl }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialQuantityOnHand(id: string, quantity: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ quantity_on_hand: quantity }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialReorderThreshold(id: string, threshold: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ reorder_threshold: threshold }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function setMaterialOnOrder(id: string, onOrder: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ on_order: onOrder }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");
