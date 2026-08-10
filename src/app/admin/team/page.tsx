@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { RoleSelect } from "@/components/team/role-select";
 import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
+import { ResetPasswordControl } from "@/components/team/reset-password-control";
 
 export default async function TeamPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -41,11 +42,12 @@ export default async function TeamPage() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] border-collapse text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="p-2 font-medium">Email</th>
                 <th className="p-2 font-medium">Role</th>
+                {isAdmin && isSupabaseAdminConfigured && <th className="p-2 font-medium">Password</th>}
               </tr>
             </thead>
             <tbody>
@@ -66,6 +68,11 @@ export default async function TeamPage() {
                       <span className="capitalize">{profile.role}</span>
                     )}
                   </td>
+                  {isAdmin && isSupabaseAdminConfigured && (
+                    <td className="p-2">
+                      <ResetPasswordControl profileId={profile.id} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
