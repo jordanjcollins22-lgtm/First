@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SERVICE_TYPES, serviceTypeById } from "./service-catalog";
 import type { ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
+import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
 
 function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -144,6 +145,15 @@ export function ZoneServiceDialog({
   function handleSave() {
     const tools = [...autoTools.map((tool) => tool.name), ...extraTools];
     const service: ZoneServiceData | null = typeId ? { typeId, values, notes, photos, tools } : null;
+
+    if (serviceType) {
+      for (const field of serviceType.fields) {
+        if (field.type !== "select" || values[field.key] !== "Other") continue;
+        const explanation = values[`${field.key}__other`];
+        if (explanation?.trim()) addCustomFieldOption(typeId, field.key, explanation).catch(() => {});
+      }
+    }
+
     onSave(
       location,
       service,
@@ -251,45 +261,55 @@ export function ZoneServiceDialog({
           {serviceType ? (
             <>
               <div className="grid grid-cols-2 gap-3">
-                {serviceType.fields.map((field) => (
-                  <div key={field.key} className="flex flex-col gap-2">
-                    <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
-                    {field.type === "select" ? (
-                      <>
-                        <Select
+                {serviceType.fields.map((field) => {
+                  const customOptions =
+                    (catalog.customFieldOptions[serviceType.id]?.[field.key] ?? []).filter(
+                      (option) => !field.options?.includes(option)
+                    );
+                  const fieldOptions = field.options
+                    ? [...field.options.filter((o) => o !== "Other"), ...customOptions, "Other"]
+                    : field.options;
+
+                  return (
+                    <div key={field.key} className="flex flex-col gap-2">
+                      <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
+                      {field.type === "select" ? (
+                        <>
+                          <Select
+                            value={values[field.key] ?? ""}
+                            onValueChange={(v) => handleFieldChange(field.key, v)}
+                          >
+                            <SelectTrigger id={`field-${field.key}`}>
+                              <SelectValue placeholder="Select..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {fieldOptions?.map((option) => (
+                                <SelectItem key={option} value={option}>
+                                  {option}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {values[field.key] === "Other" && (
+                            <Input
+                              placeholder="Please explain"
+                              value={values[`${field.key}__other`] ?? ""}
+                              onChange={(e) => handleFieldChange(`${field.key}__other`, e.target.value)}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <Input
+                          id={`field-${field.key}`}
+                          type={field.type === "number" ? "number" : "text"}
+                          min={field.type === "number" ? 0 : undefined}
                           value={values[field.key] ?? ""}
-                          onValueChange={(v) => handleFieldChange(field.key, v)}
-                        >
-                          <SelectTrigger id={`field-${field.key}`}>
-                            <SelectValue placeholder="Select..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {field.options?.map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {values[field.key] === "Other" && (
-                          <Input
-                            placeholder="Please explain"
-                            value={values[`${field.key}__other`] ?? ""}
-                            onChange={(e) => handleFieldChange(`${field.key}__other`, e.target.value)}
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <Input
-                        id={`field-${field.key}`}
-                        type={field.type === "number" ? "number" : "text"}
-                        min={field.type === "number" ? 0 : undefined}
-                        value={values[field.key] ?? ""}
-                        onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                      />
-                    )}
-                  </div>
-                ))}
+                          onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex flex-col gap-2">

@@ -215,6 +215,22 @@ export interface Database {
           },
         ];
       };
+      custom_field_options: {
+        Row: {
+          id: string;
+          service_type_id: string;
+          field_key: string;
+          value: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["custom_field_options"]["Row"]> & {
+          service_type_id: string;
+          field_key: string;
+          value: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["custom_field_options"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

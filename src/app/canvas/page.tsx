@@ -8,6 +8,7 @@ const EMPTY_CATALOG: CanvasCatalog = {
   serviceTools: [],
   serviceMaterialRules: [],
   servicePricing: [],
+  customFieldOptions: {},
 };
 
 export default async function CanvasPage() {
