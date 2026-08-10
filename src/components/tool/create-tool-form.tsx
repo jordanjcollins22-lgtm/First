@@ -36,6 +36,10 @@ export function CreateToolForm() {
         <Label htmlFor="tool-kit">Kit</Label>
         <Input id="tool-kit" name="kit" placeholder="e.g. Bed Prep Kit" className="w-44" />
       </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="tool-quantity">In stock</Label>
+        <Input id="tool-quantity" name="quantity" type="number" step="1" min={0} placeholder="1" className="w-20" />
+      </div>
       <label className="flex items-center gap-2 pb-2 text-sm">
         <input type="checkbox" name="is_rental" className="h-4 w-4" />
         Rental item

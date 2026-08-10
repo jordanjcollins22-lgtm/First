@@ -242,6 +242,7 @@ export interface Database {
           active: boolean;
           kit: string | null;
           image_path: string | null;
+          quantity: number | null;
           created_at: string;
           updated_at: string;
         };

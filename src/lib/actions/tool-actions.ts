@@ -15,8 +15,12 @@ export async function createTool(formData: FormData) {
   const cost = costRaw ? Number(costRaw) : null;
   const isRental = formData.get("is_rental") === "on";
   const kit = String(formData.get("kit") ?? "").trim() || null;
+  const quantityRaw = String(formData.get("quantity") ?? "").trim();
+  const quantity = quantityRaw ? Number(quantityRaw) : null;
 
-  const { error } = await supabase.from("tools").insert({ name, icon, cost, is_rental: isRental, kit });
+  const { error } = await supabase
+    .from("tools")
+    .insert({ name, icon, cost, is_rental: isRental, kit, quantity });
   if (error) throw error;
 
   revalidatePath("/admin/tools");
@@ -26,6 +30,14 @@ export async function createTool(formData: FormData) {
 export async function updateToolCost(id: string, cost: number | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ cost }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolQuantity(id: string, quantity: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ quantity }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");

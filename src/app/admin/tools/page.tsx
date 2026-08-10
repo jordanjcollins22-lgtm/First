@@ -8,6 +8,7 @@ import { CreateToolForm } from "@/components/tool/create-tool-form";
 import { ToolCostInput } from "@/components/tool/tool-cost-input";
 import { ToolKitInput } from "@/components/tool/tool-kit-input";
 import { ToolImageUpload } from "@/components/tool/tool-image-upload";
+import { ToolQuantityInput } from "@/components/tool/tool-quantity-input";
 import { ToolServiceToggles } from "@/components/tool/tool-service-toggles";
 import { DeactivateToolButton } from "@/components/tool/deactivate-tool-button";
 import type { Tool } from "@/types/domain";
@@ -55,8 +56,8 @@ export default async function ToolsPage() {
     <div className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Tools</h1>
       <p className="mb-6 text-muted-foreground">
-        Your tool inventory and costs. Group tools into kits for organization and
-        inventory tracking, and toggle which services a tool applies to — the canvas
+        Your tool inventory: costs, stock on hand, and photos. Group tools into kits
+        for organization, and toggle which services a tool applies to — the canvas
         picks tools for a zone automatically from these, no manual selection needed
         there.
       </p>
@@ -91,10 +92,14 @@ export default async function ToolsPage() {
                           {tool.is_rental && (
                             <p className="text-xs text-muted-foreground">Rental item</p>
                           )}
+                          {tool.quantity === 0 && (
+                            <p className="text-xs font-medium text-destructive">Out of stock</p>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <ToolQuantityInput toolId={tool.id} initialQuantity={tool.quantity} />
                       <ToolKitInput toolId={tool.id} initialKit={tool.kit} />
                       <ToolCostInput toolId={tool.id} initialCost={tool.cost} />
                       <DeactivateToolButton id={tool.id} />

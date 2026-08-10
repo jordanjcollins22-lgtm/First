@@ -48,7 +48,10 @@ export default async function MaterialsPage() {
           <CardTitle>Auto-apply rules</CardTitle>
         </CardHeader>
         <CardContent>
-          <AddMaterialRuleForm materials={materials} serviceTypes={SERVICE_TYPES} />
+          <AddMaterialRuleForm
+            materials={materials}
+            serviceTypes={SERVICE_TYPES.map(({ id, label, fields }) => ({ id, label, fields }))}
+          />
         </CardContent>
       </Card>
 

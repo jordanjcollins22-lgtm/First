@@ -7,12 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { addServiceMaterialRule } from "@/lib/actions/material-actions";
-import type { ServiceTypeDef } from "@/components/canvas/service-catalog";
+import type { ServiceFieldDef } from "@/components/canvas/service-catalog";
 import type { Material } from "@/types/domain";
+
+interface ServiceTypeOption {
+  id: string;
+  label: string;
+  fields: ServiceFieldDef[];
+}
 
 interface AddMaterialRuleFormProps {
   materials: Material[];
-  serviceTypes: ServiceTypeDef[];
+  serviceTypes: ServiceTypeOption[];
 }
 
 export function AddMaterialRuleForm({ materials, serviceTypes }: AddMaterialRuleFormProps) {
