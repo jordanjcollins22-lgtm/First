@@ -7,6 +7,7 @@ import { listProperties } from "@/lib/data/properties";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { DeletePropertyButton } from "@/components/property/delete-property-button";
 
 async function getJobsByProperty(propertyIds: string[]) {
   if (propertyIds.length === 0) return new Map<string, { id: string; name: string }[]>();
@@ -61,12 +62,15 @@ export default async function PropertiesPage() {
                       {property.customer.name}
                     </p>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {jobs.map((job) => (
-                      <Button key={job.id} asChild size="sm" variant="secondary">
-                        <Link href={`/jobs/${job.id}`}>{job.name}</Link>
-                      </Button>
-                    ))}
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end gap-1">
+                      {jobs.map((job) => (
+                        <Button key={job.id} asChild size="sm" variant="secondary">
+                          <Link href={`/jobs/${job.id}`}>{job.name}</Link>
+                        </Button>
+                      ))}
+                    </div>
+                    <DeletePropertyButton id={property.id} address={property.address} />
                   </div>
                 </CardContent>
               </Card>

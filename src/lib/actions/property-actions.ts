@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,4 +51,15 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
   if (jobError) throw jobError;
 
   redirect(`/jobs/${job.id}`);
+}
+
+/**
+ * Deletes a property along with everything under it (jobs, canvas designs)
+ * via cascading foreign keys. This is permanent — there is no undo.
+ */
+export async function deleteProperty(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("properties").delete().eq("id", id);
+  if (error) throw error;
+  revalidatePath("/properties");
 }
