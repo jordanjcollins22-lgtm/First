@@ -61,6 +61,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
               className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent"
             >
               <ImageUp className="h-4 w-4" />
+              <span className="text-[9px]">Add</span>
             </button>
           )}
           <input
