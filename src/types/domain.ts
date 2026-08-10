@@ -31,6 +31,18 @@ export interface Job {
   property_id: string;
   name: string;
   status: JobStatus;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type Role = "admin" | "crew";
+
+export interface Profile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: Role;
   created_at: string;
   updated_at: string;
 }

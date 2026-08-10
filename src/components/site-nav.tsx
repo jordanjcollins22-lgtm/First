@@ -10,6 +10,7 @@ const DATABASE_LINKS = [
   { href: "/admin/tools", label: "Tool Database" },
   { href: "/admin/materials", label: "Material Database" },
   { href: "/admin/service-pricing", label: "Services Database" },
+  { href: "/admin/team", label: "Team Database" },
 ];
 
 export function SiteNav({ userEmail }: { userEmail: string | null }) {

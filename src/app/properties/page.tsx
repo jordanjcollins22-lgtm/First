@@ -4,25 +4,33 @@ import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { listProperties } from "@/lib/data/properties";
+import { listProfiles } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DeletePropertyButton } from "@/components/property/delete-property-button";
+import { AssignJobSelect } from "@/components/property/assign-job-select";
+
+interface PropertyJob {
+  id: string;
+  name: string;
+  assigned_to: string | null;
+}
 
 async function getJobsByProperty(propertyIds: string[]) {
-  if (propertyIds.length === 0) return new Map<string, { id: string; name: string }[]>();
+  if (propertyIds.length === 0) return new Map<string, PropertyJob[]>();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, name, property_id")
+    .select("id, name, property_id, assigned_to")
     .in("property_id", propertyIds)
     .order("created_at", { ascending: false });
   if (error) throw error;
 
-  const map = new Map<string, { id: string; name: string }[]>();
+  const map = new Map<string, PropertyJob[]>();
   for (const job of data ?? []) {
     if (!map.has(job.property_id)) map.set(job.property_id, []);
-    map.get(job.property_id)!.push({ id: job.id, name: job.name });
+    map.get(job.property_id)!.push({ id: job.id, name: job.name, assigned_to: job.assigned_to });
   }
   return map;
 }
@@ -30,7 +38,7 @@ async function getJobsByProperty(propertyIds: string[]) {
 export default async function PropertiesPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
-  const properties = await listProperties();
+  const [properties, profiles] = await Promise.all([listProperties(), listProfiles()]);
   const jobsByProperty = await getJobsByProperty(properties.map((p) => p.id));
 
   return (
@@ -63,11 +71,14 @@ export default async function PropertiesPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col items-end gap-1.5">
                       {jobs.map((job) => (
-                        <Button key={job.id} asChild size="sm" variant="secondary">
-                          <Link href={`/jobs/${job.id}`}>{job.name}</Link>
-                        </Button>
+                        <div key={job.id} className="flex items-center gap-2">
+                          <AssignJobSelect jobId={job.id} initialAssignedTo={job.assigned_to} profiles={profiles} />
+                          <Button asChild size="sm" variant="secondary">
+                            <Link href={`/jobs/${job.id}`}>{job.name}</Link>
+                          </Button>
+                        </div>
                       ))}
                     </div>
                     <DeletePropertyButton id={property.id} address={property.address} />

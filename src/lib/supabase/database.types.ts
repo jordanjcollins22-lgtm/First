@@ -65,6 +65,7 @@ export interface Database {
           property_id: string;
           name: string;
           status: string;
+          assigned_to: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -80,7 +81,29 @@ export interface Database {
             referencedRelation: "properties";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "jobs_assigned_to_fkey";
+            columns: ["assigned_to"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
         ];
+      };
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          full_name: string | null;
+          role: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["profiles"]["Row"]> & {
+          id: string;
+          email: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
+        Relationships: [];
       };
       tools: {
         Row: {
