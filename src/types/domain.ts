@@ -36,7 +36,7 @@ export interface Job {
   updated_at: string;
 }
 
-export type Role = "admin" | "crew";
+export type Role = "admin" | "crew" | "evaluator";
 
 export interface Profile {
   id: string;

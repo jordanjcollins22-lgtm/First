@@ -15,12 +15,13 @@ export function RoleSelect({ profileId, initialRole, disabled }: { profileId: st
 
   return (
     <Select defaultValue={initialRole} onValueChange={handleChange} disabled={disabled || isPending}>
-      <SelectTrigger className="h-9 w-28 text-sm">
+      <SelectTrigger className="h-9 w-32 text-sm">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="admin">Admin</SelectItem>
         <SelectItem value="crew">Crew</SelectItem>
+        <SelectItem value="evaluator">Evaluator</SelectItem>
       </SelectContent>
     </Select>
   );

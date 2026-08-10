@@ -63,11 +63,12 @@ export function CreateTeamMemberForm() {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="new-member-role">Role</Label>
           <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger id="new-member-role" className="h-11 w-28">
+            <SelectTrigger id="new-member-role" className="h-11 w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="crew">Crew</SelectItem>
+              <SelectItem value="evaluator">Evaluator</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
             </SelectContent>
           </Select>

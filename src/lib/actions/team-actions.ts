@@ -33,7 +33,8 @@ export async function createTeamMember(formData: FormData) {
 
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const role: Role = formData.get("role") === "admin" ? "admin" : "crew";
+  const rawRole = formData.get("role");
+  const role: Role = rawRole === "admin" ? "admin" : rawRole === "evaluator" ? "evaluator" : "crew";
 
   if (!email || !password) {
     throw new Error("Enter an email and password.");
@@ -52,9 +53,11 @@ export async function createTeamMember(formData: FormData) {
     throw new Error(error.message || "Couldn't create that account.");
   }
 
-  if (role === "admin" && data.user) {
+  // New accounts default to "crew" (see the profiles trigger) — only need to
+  // update it when something else was picked.
+  if (role !== "crew" && data.user) {
     const supabase = await createClient();
-    const { error: roleError } = await supabase.from("profiles").update({ role: "admin" }).eq("id", data.user.id);
+    const { error: roleError } = await supabase.from("profiles").update({ role }).eq("id", data.user.id);
     if (roleError) throw roleError;
   }
 
