@@ -5,11 +5,33 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { RoleSelect } from "@/components/team/role-select";
 import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
 import { ResetPasswordControl } from "@/components/team/reset-password-control";
+import type { Profile } from "@/types/domain";
 
 export default async function TeamPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
-  const [profiles, currentProfile] = await Promise.all([listProfiles(), getCurrentProfile()]);
+  let profiles: Profile[] = [];
+  let currentProfile: Profile | null = null;
+  let migrationMissing = false;
+  try {
+    [profiles, currentProfile] = await Promise.all([listProfiles(), getCurrentProfile()]);
+  } catch {
+    migrationMissing = true;
+  }
+
+  if (migrationMissing) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <h1 className="mb-1 text-2xl font-bold">Team</h1>
+        <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
+          This page needs the roles migration run on your database first. In Supabase&apos;s SQL
+          Editor, run <code>supabase/migrations/0019_roles_and_assignment.sql</code>, then reload
+          this page.
+        </p>
+      </div>
+    );
+  }
+
   const isAdmin = currentProfile?.role === "admin";
 
   return (
@@ -18,8 +40,16 @@ export default async function TeamPage() {
       <p className="mb-6 text-muted-foreground">
         Everyone with an account and their role. {isAdmin
           ? "Jobs can be assigned to a team member from the Properties page."
-          : "Only admins can change roles."}
+          : "Your account isn't an admin, so roles here are read-only and you won't see the controls to add people or set passwords."}
       </p>
+
+      {!isAdmin && (
+        <p className="mb-6 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
+          If this should be an admin account, run this in Supabase&apos;s SQL Editor (swap in your
+          email), then reload this page:{" "}
+          <code>update profiles set role = &apos;admin&apos; where email = &apos;you@example.com&apos;;</code>
+        </p>
+      )}
 
       {isAdmin && (
         <Card className="mb-6">
