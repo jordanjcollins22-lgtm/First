@@ -21,6 +21,7 @@ import { SERVICE_TYPES, serviceTypeById } from "./service-catalog";
 import type { ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
+import { ToolImageThumb } from "@/components/tool/tool-image-thumb";
 
 function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -329,9 +330,12 @@ export function ZoneServiceDialog({
                     {autoTools.map((tool) => (
                       <span
                         key={tool.id}
-                        className="flex items-center gap-1 rounded-full border border-border bg-muted px-3 py-1 text-xs"
+                        className="flex items-center gap-1.5 rounded-full border border-border bg-muted py-1 pl-1 pr-3 text-xs"
                       >
-                        <span aria-hidden>{tool.icon}</span> {tool.name}
+                        <span className="h-5 w-5 shrink-0 overflow-hidden rounded-full">
+                          <ToolImageThumb imagePath={tool.image_path} icon={tool.icon} />
+                        </span>
+                        {tool.name}
                       </span>
                     ))}
                   </div>

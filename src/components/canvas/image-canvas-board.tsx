@@ -105,6 +105,46 @@ function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
+// Cached across a single PDF export (and reused between exports in the same
+// session) so the same tool/material photo isn't re-fetched for every zone it
+// appears in.
+const inventoryImageCache = new Map<string, Promise<HTMLImageElement | null>>();
+
+function loadInventoryImage(
+  bucket: "tool-images" | "material-images",
+  path: string | null
+): Promise<HTMLImageElement | null> {
+  if (!path) return Promise.resolve(null);
+  const key = `${bucket}:${path}`;
+  let cached = inventoryImageCache.get(key);
+  if (!cached) {
+    cached = (async () => {
+      try {
+        const supabase = createClient();
+        const url = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return await loadImageElement(await res.blob());
+      } catch {
+        return null;
+      }
+    })();
+    inventoryImageCache.set(key, cached);
+  }
+  return cached;
+}
+
+function toolImageFor(name: string, catalog: CanvasCatalog): Promise<HTMLImageElement | null> {
+  return loadInventoryImage("tool-images", catalog.tools.find((t) => t.name === name)?.image_path ?? null);
+}
+
+function materialImageFor(materialId: string, catalog: CanvasCatalog): Promise<HTMLImageElement | null> {
+  return loadInventoryImage(
+    "material-images",
+    catalog.materials.find((m) => m.id === materialId)?.image_path ?? null
+  );
+}
+
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
@@ -176,18 +216,28 @@ function drawBoxedSection(
   return y + boxHeight + 18;
 }
 
-/** Draws wrapping pill chips. Returns the next y. */
-function drawChips(ctx: CanvasRenderingContext2D, labels: string[], x: number, y: number, maxWidth: number): number {
+/** Draws wrapping pill chips, each with the tool's actual photo (or its icon as a fallback). Returns the next y. */
+async function drawToolChips(
+  ctx: CanvasRenderingContext2D,
+  toolNames: string[],
+  catalog: CanvasCatalog,
+  x: number,
+  y: number,
+  maxWidth: number
+): Promise<number> {
   const paddingX = 10;
+  const iconSize = 18;
+  const iconGap = 6;
   const chipHeight = 26;
   const gap = 8;
   ctx.font = "13px sans-serif";
   ctx.textBaseline = "middle";
   let cx = x;
   let cy = y;
-  for (const label of labels) {
-    const textWidth = ctx.measureText(label).width;
-    const chipWidth = textWidth + paddingX * 2;
+  for (const name of toolNames) {
+    const image = await toolImageFor(name, catalog);
+    const textWidth = ctx.measureText(name).width;
+    const chipWidth = textWidth + paddingX * 2 + iconSize + iconGap;
     if (cx + chipWidth > x + maxWidth && cx > x) {
       cx = x;
       cy += chipHeight + gap;
@@ -195,8 +245,20 @@ function drawChips(ctx: CanvasRenderingContext2D, labels: string[], x: number, y
     ctx.fillStyle = "#eef2f7";
     roundRect(ctx, cx, cy, chipWidth, chipHeight, chipHeight / 2);
     ctx.fill();
+    const iconY = cy + (chipHeight - iconSize) / 2;
+    if (image) {
+      ctx.save();
+      roundRect(ctx, cx + paddingX, iconY, iconSize, iconSize, 4);
+      ctx.clip();
+      ctx.drawImage(image, cx + paddingX, iconY, iconSize, iconSize);
+      ctx.restore();
+    } else {
+      ctx.font = "14px sans-serif";
+      ctx.fillText(toolIconFor(name, catalog), cx + paddingX, cy + chipHeight / 2 + 1);
+      ctx.font = "13px sans-serif";
+    }
     ctx.fillStyle = "#111827";
-    ctx.fillText(label, cx + paddingX, cy + chipHeight / 2 + 1);
+    ctx.fillText(name, cx + paddingX + iconSize + iconGap, cy + chipHeight / 2 + 1);
     cx += chipWidth + gap;
   }
   ctx.textBaseline = "top";
@@ -256,6 +318,7 @@ function allToolsAcrossZones(zones: WorkZone[]): string[] {
 
 interface MaterialLineItem {
   zoneName: string;
+  materialId: string;
   material: string;
   unit: string;
   quantity: number;
@@ -274,7 +337,14 @@ function zoneMaterialLineItems(zone: WorkZone, areaSqFt: number, catalog: Canvas
     const rawUnits = areaSqFt / material.coverage_per_unit_sqft;
     const quantity = rawUnits * (1 + material.waste_factor_pct / 100);
     const totalCost = material.cost_per_unit != null ? quantity * material.cost_per_unit : null;
-    items.push({ zoneName: zone.name, material: material.name, unit: material.unit, quantity, totalCost });
+    items.push({
+      zoneName: zone.name,
+      materialId: material.id,
+      material: material.name,
+      unit: material.unit,
+      quantity,
+      totalCost,
+    });
   }
   return items;
 }
@@ -290,7 +360,12 @@ function formatMaterialQuantity(item: MaterialLineItem): string {
   return text;
 }
 
-function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: string[], catalog: CanvasCatalog): HTMLCanvasElement {
+async function renderCoverPage(
+  planCanvas: HTMLCanvasElement,
+  address: string,
+  tools: string[],
+  catalog: CanvasCatalog
+): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = PAGE_HEIGHT;
@@ -336,11 +411,25 @@ function renderCoverPage(planCanvas: HTMLCanvasElement, address: string, tools: 
     const colWidth = (PAGE_WIDTH - PAGE_MARGIN * 2) / 2;
     const rowHeight = 26;
     const rowsPerColumn = Math.ceil(tools.length / 2);
-    tools.forEach((tool, i) => {
+    const iconSize = 18;
+    for (let i = 0; i < tools.length; i++) {
+      const tool = tools[i];
       const col = Math.floor(i / rowsPerColumn);
       const row = i % rowsPerColumn;
-      ctx.fillText(`☐ ${toolIconFor(tool, catalog)} ${tool}`, PAGE_MARGIN + col * colWidth, y + row * rowHeight);
-    });
+      const colX = PAGE_MARGIN + col * colWidth;
+      const rowY = y + row * rowHeight;
+      const image = await toolImageFor(tool, catalog);
+      ctx.font = "15px sans-serif";
+      ctx.fillStyle = "#374151";
+      ctx.fillText("☐", colX, rowY);
+      const iconX = colX + 22;
+      if (image) {
+        ctx.drawImage(image, iconX, rowY - 1, iconSize, iconSize);
+      } else {
+        ctx.fillText(toolIconFor(tool, catalog), iconX, rowY);
+      }
+      ctx.fillText(tool, iconX + iconSize + 6, rowY);
+    }
   }
 
   return canvas;
@@ -393,8 +482,7 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
       ctx.fillStyle = "#111827";
       ctx.fillText("Tools", PAGE_MARGIN, y);
       y += 24;
-      const chipLabels = service.tools.map((name) => `${toolIconFor(name, catalog)} ${name}`);
-      y = drawChips(ctx, chipLabels, PAGE_MARGIN, y, maxWidth);
+      y = await drawToolChips(ctx, service.tools, catalog, PAGE_MARGIN, y, maxWidth);
     }
 
     if (serviceType.autoScope) {
@@ -439,11 +527,11 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
   return canvas;
 }
 
-function renderMaterialsPage(
+async function renderMaterialsPage(
   zones: WorkZone[],
   address: string,
   catalog: CanvasCatalog
-): HTMLCanvasElement {
+): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = PAGE_HEIGHT;
@@ -499,12 +587,22 @@ function renderMaterialsPage(
       ctx.fillStyle = "#111827";
       ctx.fillText(item.zoneName, PAGE_MARGIN, y);
       y += 19;
+
+      const image = await materialImageFor(item.materialId, catalog);
+      const iconSize = 20;
+      const textX = PAGE_MARGIN + (image ? iconSize + 8 : 0);
       ctx.font = "14px sans-serif";
+      const lines = wrapText(
+        ctx,
+        `☐ ${item.material}: ${formatMaterialQuantity(item)}`,
+        maxWidth - (textX - PAGE_MARGIN)
+      );
+      if (image) ctx.drawImage(image, PAGE_MARGIN, y, iconSize, iconSize);
       ctx.fillStyle = "#374151";
-      for (const line of wrapText(ctx, `☐ ${item.material}: ${formatMaterialQuantity(item)}`, maxWidth)) {
-        ctx.fillText(line, PAGE_MARGIN, y);
-        y += 20;
+      for (const [i, line] of lines.entries()) {
+        ctx.fillText(line, textX, y + i * 20);
       }
+      y += Math.max(lines.length * 20, image ? iconSize + 4 : 0);
       y += 6;
     }
   }
@@ -529,8 +627,15 @@ function renderMaterialsPage(
   } else {
     ctx.font = "14px sans-serif";
     ctx.fillStyle = "#374151";
+    const iconSize = 18;
     for (const tool of rentals) {
-      ctx.fillText(`☐ ${toolIconFor(tool, catalog)} ${tool}`, PAGE_MARGIN, y);
+      const image = await toolImageFor(tool, catalog);
+      if (image) {
+        ctx.drawImage(image, PAGE_MARGIN, y - 2, iconSize, iconSize);
+        ctx.fillText(`☐ ${tool}`, PAGE_MARGIN + iconSize + 6, y);
+      } else {
+        ctx.fillText(`☐ ${toolIconFor(tool, catalog)} ${tool}`, PAGE_MARGIN, y);
+      }
       y += 22;
     }
   }
@@ -1203,7 +1308,7 @@ export function ImageCanvasBoard({
     setExporting(true);
     try {
       const tools = allToolsAcrossZones(zones);
-      const coverCanvas = renderCoverPage(planCanvas, address, tools, catalog);
+      const coverCanvas = await renderCoverPage(planCanvas, address, tools, catalog);
 
       const pdf = new jsPDF({ unit: "pt", format: "letter" });
       const pageWidthPt = pdf.internal.pageSize.getWidth();
@@ -1227,7 +1332,7 @@ export function ImageCanvasBoard({
         addPageCanvas(await renderZonePage(zone, catalog));
       }
 
-      addPageCanvas(renderMaterialsPage(zones, address, catalog));
+      addPageCanvas(await renderMaterialsPage(zones, address, catalog));
 
       for (const jobPlanCanvas of renderJobPlanPages(zones, address, catalog)) {
         addPageCanvas(jobPlanCanvas);
