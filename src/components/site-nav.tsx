@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 
+import { logout } from "@/lib/actions/auth-actions";
+
 const DATABASE_LINKS = [
   { href: "/admin/tools", label: "Tool Database" },
   { href: "/admin/materials", label: "Material Database" },
   { href: "/admin/service-pricing", label: "Services Database" },
 ];
 
-export function SiteNav() {
+export function SiteNav({ userEmail }: { userEmail: string | null }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +69,15 @@ export function SiteNav() {
       <Link href="/canvas" className="hover:text-primary">
         Canvas
       </Link>
+
+      {userEmail && (
+        <form action={logout} className="flex items-center gap-2 border-l border-border pl-4">
+          <span className="hidden text-xs text-muted-foreground sm:inline">{userEmail}</span>
+          <button type="submit" className="text-muted-foreground hover:text-primary">
+            Sign out
+          </button>
+        </form>
+      )}
     </nav>
   );
 }
