@@ -1603,7 +1603,7 @@ export function ImageCanvasBoard({
       />
 
       <Dialog open={pdfPreviewUrl !== null} onOpenChange={(next) => !next && handleClosePdfPreview()}>
-        <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col">
+        <DialogContent className="flex h-[95vh] max-h-[95vh] w-[95vw] max-w-none flex-col">
           <DialogHeader>
             <DialogTitle>Preview scope of work PDF</DialogTitle>
             <DialogDescription>
@@ -1616,7 +1616,7 @@ export function ImageCanvasBoard({
             <iframe
               src={pdfPreviewUrl}
               title="Scope of work PDF preview"
-              className="h-[65vh] w-full flex-1 rounded-md border border-border"
+              className="w-full flex-1 rounded-md border border-border"
             />
           )}
 
