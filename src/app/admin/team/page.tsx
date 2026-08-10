@@ -1,8 +1,9 @@
 import { listProfiles, getCurrentProfile } from "@/lib/data/team";
-import { isSupabaseConfigured } from "@/lib/env";
-import { Card } from "@/components/ui/card";
+import { isSupabaseConfigured, isSupabaseAdminConfigured } from "@/lib/env";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { RoleSelect } from "@/components/team/role-select";
+import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
 
 export default async function TeamPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -18,6 +19,25 @@ export default async function TeamPage() {
           ? "Jobs can be assigned to a team member from the Properties page."
           : "Only admins can change roles."}
       </p>
+
+      {isAdmin && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Add a team member</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isSupabaseAdminConfigured ? (
+              <CreateTeamMemberForm />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Add <code>SUPABASE_SERVICE_ROLE_KEY</code> to <code>.env.local</code> (from your
+                Supabase project&apos;s API settings) and restart the server to create accounts
+                from here.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <div className="overflow-x-auto">
