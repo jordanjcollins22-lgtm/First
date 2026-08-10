@@ -96,6 +96,15 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         <Label htmlFor="tool-cost">Cost</Label>
         <Input id="tool-cost" name="cost" type="number" step="0.01" min={0} placeholder="0.00" className="w-28" />
       </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="tool-storage">Stored at</Label>
+        <Input
+          id="tool-storage"
+          name="storage_location"
+          placeholder="e.g. Shop shelf 3, Truck 1"
+          className="w-40"
+        />
+      </div>
       <Button type="submit" disabled={isPending}>
         {isPending ? "Adding..." : "Add Tool"}
       </Button>

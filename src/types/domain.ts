@@ -155,6 +155,7 @@ export interface Tool {
   kits: number[];
   image_path: string | null;
   quantity: number | null;
+  storage_location: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -172,6 +173,7 @@ export interface Material {
   quantity_on_hand: number | null;
   reorder_threshold: number | null;
   on_order: boolean;
+  storage_location: string | null;
   created_at: string;
   updated_at: string;
 }

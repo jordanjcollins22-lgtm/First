@@ -9,6 +9,7 @@ import { MaterialReorderThresholdInput } from "./material-reorder-threshold-inpu
 import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
 import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
+import { MaterialStorageLocationInput } from "./material-storage-location-input";
 import { MaterialOrderStatus } from "./material-order-status";
 import { DeactivateMaterialButton } from "./deactivate-material-button";
 import { DeleteMaterialRuleButton } from "./delete-material-rule-button";
@@ -43,6 +44,9 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
           </p>
         </td>
         <td className="p-2">
+          <MaterialStorageLocationInput materialId={material.id} initialLocation={material.storage_location} />
+        </td>
+        <td className="p-2">
           <MaterialQuantityInput materialId={material.id} initialQuantity={material.quantity_on_hand} />
         </td>
         <td className="p-2">
@@ -75,7 +79,7 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
       </tr>
       {open && (
         <tr className="border-b border-border bg-muted/30">
-          <td colSpan={7} className="p-3">
+          <td colSpan={8} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>

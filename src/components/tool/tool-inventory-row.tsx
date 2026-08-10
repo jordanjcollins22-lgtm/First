@@ -9,6 +9,7 @@ import { ToolKitsInput } from "./tool-kits-input";
 import { ToolCostInput } from "./tool-cost-input";
 import { ToolQuantityInput } from "./tool-quantity-input";
 import { ToolOwnershipSelect } from "./tool-ownership-select";
+import { ToolStorageLocationInput } from "./tool-storage-location-input";
 import { ToolServiceToggles } from "./tool-service-toggles";
 import { DeactivateToolButton } from "./deactivate-tool-button";
 import type { Tool } from "@/types/domain";
@@ -62,6 +63,9 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
           </div>
         </td>
         <td className="p-2">
+          <ToolStorageLocationInput toolId={tool.id} initialLocation={tool.storage_location} />
+        </td>
+        <td className="p-2">
           <ToolOwnershipSelect toolId={tool.id} initialIsRental={tool.is_rental} />
         </td>
         <td className="p-2">
@@ -88,7 +92,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
       </tr>
       {open && (
         <tr className="border-b border-border bg-muted/30">
-          <td colSpan={7} className="p-3">
+          <td colSpan={8} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Photo</span>

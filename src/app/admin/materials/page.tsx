@@ -67,10 +67,11 @@ export default async function MaterialsPage() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse text-sm">
+          <table className="w-full min-w-[980px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="p-2 font-medium">Material</th>
+                <th className="p-2 font-medium">Stored At</th>
                 <th className="p-2 font-medium">On hand</th>
                 <th className="p-2 font-medium">Reorder at</th>
                 <th className="p-2 font-medium">Status</th>

@@ -31,8 +31,8 @@ export default async function ToolsPage() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Tool Database</h1>
       <p className="mb-6 text-muted-foreground">
-        Your tool inventory — stock on hand, cost, kits, and which services each tool
-        applies to.
+        Your tool inventory — stock on hand, where it&apos;s stored, cost, kits, and
+        which services each tool applies to.
       </p>
 
       <Card className="mb-6">
@@ -53,11 +53,12 @@ export default async function ToolsPage() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-sm">
+          <table className="w-full min-w-[940px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="p-2 font-medium">Tool</th>
                 <th className="p-2 font-medium">Kit(s)</th>
+                <th className="p-2 font-medium">Stored At</th>
                 <th className="p-2 font-medium">Own/Rent</th>
                 <th className="p-2 font-medium">Qty</th>
                 <th className="p-2 font-medium">Cost</th>

@@ -138,6 +138,15 @@ export function CreateMaterialForm() {
             className="w-24"
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="material-storage">Stored at</Label>
+          <Input
+            id="material-storage"
+            name="storage_location"
+            placeholder="e.g. Yard bin 2, Shed"
+            className="w-36"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

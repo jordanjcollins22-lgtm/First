@@ -19,6 +19,7 @@ export async function createMaterial(formData: FormData) {
   const quantityRaw = String(formData.get("quantity_on_hand") ?? "").trim();
   const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
+  const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
 
   const { error } = await supabase.from("materials").insert({
     name,
@@ -30,6 +31,7 @@ export async function createMaterial(formData: FormData) {
     quantity_on_hand: quantityRaw ? Number(quantityRaw) : null,
     reorder_threshold: reorderRaw ? Number(reorderRaw) : null,
     description,
+    storage_location: storageLocation,
   });
   if (error) throw error;
 
@@ -48,6 +50,14 @@ export async function updateMaterialCost(id: string, costPerUnit: number | null)
 export async function updateMaterialDescription(id: string, description: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("materials").update({ description }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialStorageLocation(id: string, storageLocation: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ storage_location: storageLocation }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");

@@ -28,10 +28,18 @@ export async function createTool(formData: FormData) {
   const quantityRaw = String(formData.get("quantity") ?? "").trim();
   const quantity = quantityRaw ? Number(quantityRaw) : null;
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
+  const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
 
-  const { error } = await supabase
-    .from("tools")
-    .insert({ name, icon, cost, is_rental: isRental, kits, quantity, image_path: imagePath });
+  const { error } = await supabase.from("tools").insert({
+    name,
+    icon,
+    cost,
+    is_rental: isRental,
+    kits,
+    quantity,
+    image_path: imagePath,
+    storage_location: storageLocation,
+  });
   if (error) throw error;
 
   revalidatePath("/admin/tools");
@@ -57,6 +65,14 @@ export async function updateToolQuantity(id: string, quantity: number | null) {
 export async function updateToolOwnership(id: string, isRental: boolean) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ is_rental: isRental }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolStorageLocation(id: string, storageLocation: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ storage_location: storageLocation }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");
