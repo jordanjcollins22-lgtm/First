@@ -21,6 +21,7 @@ import {
   Ruler,
   Satellite,
   Trash2,
+  Undo2,
   Unlock,
   Wrench,
 } from "lucide-react";
@@ -1313,6 +1314,17 @@ export function ImageCanvasBoard({ catalog, jobId, initialDesign, initialAddress
             <PenTool className="h-4 w-4" />
             Draw Work Zone
           </Button>
+          {(tool === "zone" || tool === "property-line") && drawingPoints.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+            >
+              <Undo2 className="h-4 w-4" />
+              Undo Point
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
