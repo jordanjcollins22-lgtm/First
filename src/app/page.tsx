@@ -48,7 +48,7 @@ export default function Home() {
 
       <div className="text-center">
         <Button variant="link" asChild>
-          <Link href="/properties">View existing properties &rarr;</Link>
+          <Link href="/attractors">View project data &rarr;</Link>
         </Button>
       </div>
     </div>

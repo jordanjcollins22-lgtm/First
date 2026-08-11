@@ -37,12 +37,8 @@ export function SiteNav({ userEmail }: { userEmail: string | null }) {
 
   return (
     <nav className="flex items-center gap-4 text-sm font-medium">
-      <Link href="/properties" className="hover:text-primary">
-        Properties
-      </Link>
-
       <Link href="/attractors" className="hover:text-primary">
-        Attractors Data
+        Project Data
       </Link>
 
       <div ref={containerRef} className="relative">

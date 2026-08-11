@@ -8,5 +8,5 @@ export async function assignJob(jobId: string, profileId: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("jobs").update({ assigned_to: profileId }).eq("id", jobId);
   if (error) throw error;
-  revalidatePath("/properties");
+  revalidatePath("/attractors");
 }

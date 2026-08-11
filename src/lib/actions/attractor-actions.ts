@@ -153,5 +153,4 @@ export async function setJobSourceAttractorWave(jobId: string, waveId: string | 
   const { error } = await supabase.from("jobs").update({ source_attractor_wave_id: waveId }).eq("id", jobId);
   if (error) throw error;
   revalidatePath(PATH);
-  revalidatePath("/properties");
 }

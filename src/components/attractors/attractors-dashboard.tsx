@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Plus, Settings2, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,11 +11,13 @@ import { isMapboxConfigured } from "@/lib/env";
 import { FilterBar } from "./filter-bar";
 import { WaveList } from "./wave-list";
 import { ProjectList } from "./project-list";
+import { PropertyList } from "./property-list";
 import { SatelliteMapView } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
+import { PropertyDetailPanel } from "./property-detail-panel";
 import { ManageAttractorTypes } from "./manage-attractor-types";
 import { ManageLocations } from "./manage-locations";
 import type {
@@ -26,11 +29,13 @@ import type {
   JobStatus,
   LatLng,
   LocationArea,
+  Profile,
 } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
+import type { PropertyWithCustomer } from "@/lib/data/properties";
 
 type ViewMode = "satellite" | "galaxy";
-type SidebarTab = "waves" | "projects";
+type SidebarTab = "waves" | "projects" | "properties";
 type DrawTarget = "wave" | "location-area";
 
 export function AttractorsDashboard({
@@ -40,6 +45,8 @@ export function AttractorsDashboard({
   jobs,
   locations,
   areas,
+  properties,
+  profiles,
 }: {
   types: AttractorType[];
   variants: AttractorVariant[];
@@ -47,6 +54,8 @@ export function AttractorsDashboard({
   jobs: JobWithLocation[];
   locations: BusinessLocation[];
   areas: LocationArea[];
+  properties: PropertyWithCustomer[];
+  profiles: Profile[];
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
@@ -64,6 +73,7 @@ export function AttractorsDashboard({
 
   const [selectedWaveId, setSelectedWaveId] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [drawMode, setDrawMode] = useState<"polygon" | "route" | null>(null);
   const [drawTarget, setDrawTarget] = useState<DrawTarget | null>(null);
@@ -94,6 +104,7 @@ export function AttractorsDashboard({
 
   const selectedWave = waves.find((w) => w.id === selectedWaveId) ?? null;
   const selectedJob = jobs.find((j) => j.id === selectedJobId) ?? null;
+  const selectedProperty = properties.find((p) => p.id === selectedPropertyId) ?? null;
 
   function toggleInSet<T>(setter: (fn: (prev: Set<T>) => Set<T>) => void, value: T) {
     setter((prev) => {
@@ -107,12 +118,21 @@ export function AttractorsDashboard({
   function selectWave(id: string | null) {
     setSelectedWaveId(id);
     setSelectedJobId(null);
+    setSelectedPropertyId(null);
     setCreating(false);
   }
 
   function selectJob(id: string | null) {
     setSelectedJobId(id);
     setSelectedWaveId(null);
+    setSelectedPropertyId(null);
+    setCreating(false);
+  }
+
+  function selectProperty(id: string | null) {
+    setSelectedPropertyId(id);
+    setSelectedWaveId(null);
+    setSelectedJobId(null);
     setCreating(false);
   }
 
@@ -120,6 +140,7 @@ export function AttractorsDashboard({
     setCreating(true);
     setSelectedWaveId(null);
     setSelectedJobId(null);
+    setSelectedPropertyId(null);
     setDrawnPoints(null);
   }
 
@@ -139,12 +160,18 @@ export function AttractorsDashboard({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Attractors Data</h1>
+          <h1 className="text-2xl font-bold">Project Data</h1>
           <p className="text-muted-foreground">
-            Marketing waves and the projects/leads they generate, on the same map.
+            Properties, projects, and the marketing waves that generate them — on the same map.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" asChild>
+            <Link href="/">
+              <Plus className="h-4 w-4" />
+              New Property
+            </Link>
+          </Button>
           <div className="flex overflow-hidden rounded-lg border border-white/60 bg-card/60 text-sm backdrop-blur-md">
             <button
               type="button"
@@ -224,6 +251,7 @@ export function AttractorsDashboard({
             <TabsList className="m-2 shrink-0">
               <TabsTrigger value="waves">Waves ({filteredWaves.length})</TabsTrigger>
               <TabsTrigger value="projects">Projects ({filteredJobs.length})</TabsTrigger>
+              <TabsTrigger value="properties">Properties ({properties.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="waves" className="mt-0 flex-1 overflow-y-auto">
               <WaveList
@@ -237,6 +265,9 @@ export function AttractorsDashboard({
             </TabsContent>
             <TabsContent value="projects" className="mt-0 flex-1 overflow-y-auto">
               <ProjectList jobs={filteredJobs} selectedJobId={selectedJobId} onSelect={selectJob} />
+            </TabsContent>
+            <TabsContent value="properties" className="mt-0 flex-1 overflow-y-auto">
+              <PropertyList properties={properties} selectedPropertyId={selectedPropertyId} onSelect={selectProperty} />
             </TabsContent>
           </Tabs>
         </Card>
@@ -288,7 +319,7 @@ export function AttractorsDashboard({
           )}
         </Card>
 
-        {(creating || selectedWave || selectedJob) && (
+        {(creating || selectedWave || selectedJob || selectedProperty) && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               {creating && (
@@ -319,6 +350,14 @@ export function AttractorsDashboard({
               )}
               {selectedJob && (
                 <JobDetailPanel job={selectedJob} waves={waves} types={types} onClose={() => setSelectedJobId(null)} />
+              )}
+              {selectedProperty && (
+                <PropertyDetailPanel
+                  property={selectedProperty}
+                  jobs={jobs}
+                  profiles={profiles}
+                  onClose={() => setSelectedPropertyId(null)}
+                />
               )}
             </CardContent>
           </Card>
