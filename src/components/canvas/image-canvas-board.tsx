@@ -1123,12 +1123,21 @@ export function ImageCanvasBoard({
     setServiceDialogZoneId(id);
   }
 
+  // Once both the house and property line are marked, expand/recenter the
+  // background so it fully covers the canvas — no gray showing at the edges.
+  function fitImageToCover() {
+    if (!image) return;
+    const coverScale = Math.max(CANVAS_WIDTH / image.element.width, CANVAS_HEIGHT / image.element.height);
+    setImage({ ...image, scale: coverScale, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 });
+  }
+
   function finalizePropertyLine() {
     if (drawingPoints.length < 3) return;
     setPropertyLine(drawingPoints);
     setDrawingPoints([]);
     setCursorPos(null);
     setTool("move");
+    if (houseOutline.length > 0) fitImageToCover();
   }
 
   function finalizeHouse() {
@@ -1137,6 +1146,7 @@ export function ImageCanvasBoard({
     setDrawingPoints([]);
     setCursorPos(null);
     setTool("move");
+    if (propertyLine.length > 0) fitImageToCover();
   }
 
   useEffect(() => {
