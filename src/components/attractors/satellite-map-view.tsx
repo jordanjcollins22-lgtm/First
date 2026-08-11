@@ -27,6 +27,8 @@ interface SatelliteMapViewProps {
   locations: BusinessLocation[];
   areas: LocationArea[];
   showLocations: boolean;
+  propertyLineOverlay: LatLng[] | null;
+  flyToTarget: LatLng | null;
   drawMode: "polygon" | "route" | null;
   onGeometryDrawn: (points: LatLng[]) => void;
 }
@@ -42,6 +44,8 @@ const AREAS_LINE_LAYER = "location-areas-line";
 const LOCATIONS_SOURCE = "business-locations";
 const LOCATIONS_LAYER = "business-locations-circle";
 const LOCATIONS_LABEL_LAYER = "business-locations-label";
+const PROPERTY_LINE_SOURCE = "property-line";
+const PROPERTY_LINE_LAYER = "property-line-layer";
 
 export function SatelliteMapView({
   waves,
@@ -54,6 +58,8 @@ export function SatelliteMapView({
   locations,
   areas,
   showLocations,
+  propertyLineOverlay,
+  flyToTarget,
   drawMode,
   onGeometryDrawn,
 }: SatelliteMapViewProps) {
@@ -173,6 +179,14 @@ export function SatelliteMapView({
         paint: { "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1.2 },
       });
 
+      map.addSource(PROPERTY_LINE_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: PROPERTY_LINE_LAYER,
+        type: "line",
+        source: PROPERTY_LINE_SOURCE,
+        paint: { "line-color": "#ef4444", "line-width": 2.5, "line-dasharray": [1, 1] },
+      });
+
       map.on("click", WAVES_FILL_LAYER, (e) => {
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectWaveRef.current(id);
@@ -277,6 +291,32 @@ export function SatelliteMapView({
     }));
     locationsSource.setData({ type: "FeatureCollection", features: locationFeatures });
   }, [locations, areas, showLocations, mapLoaded]);
+
+  // Keep the property-line overlay in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(PROPERTY_LINE_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    if (!propertyLineOverlay || propertyLineOverlay.length < 3) {
+      source.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    const coords = propertyLineOverlay.map((p) => [p.lng, p.lat]);
+    coords.push(coords[0]);
+    source.setData({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} }],
+    });
+  }, [propertyLineOverlay, mapLoaded]);
+
+  // Fly to a target location (e.g. a selected property) when requested.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current || !flyToTarget) return;
+    map.flyTo({ center: [flyToTarget.lng, flyToTarget.lat], zoom: Math.max(map.getZoom(), 18), duration: 800 });
+  }, [flyToTarget, mapLoaded]);
 
   // Enter/exit draw mode for capturing a polygon or route from the user.
   useEffect(() => {
