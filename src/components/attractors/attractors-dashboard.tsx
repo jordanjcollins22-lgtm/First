@@ -79,7 +79,6 @@ export function AttractorsDashboard({
   const [drawMode, setDrawMode] = useState<"polygon" | "route" | null>(null);
   const [drawTarget, setDrawTarget] = useState<DrawTarget | null>(null);
   const [drawnPoints, setDrawnPoints] = useState<LatLng[] | null>(null);
-  const [propertyLineOverlay, setPropertyLineOverlay] = useState<LatLng[] | null>(null);
 
   const filteredWaves = useMemo(
     () =>
@@ -295,8 +294,6 @@ export function AttractorsDashboard({
                 locations={locations}
                 areas={areas}
                 showLocations={showLocations}
-                propertyLineOverlay={propertyLineOverlay}
-                flyToTarget={selectedProperty ? { lat: selectedProperty.lat, lng: selectedProperty.lng } : null}
                 drawMode={drawMode}
                 onGeometryDrawn={(points) => {
                   setDrawnPoints(points);
@@ -372,10 +369,6 @@ export function AttractorsDashboard({
                   jobs={jobs}
                   profiles={profiles}
                   onClose={() => setSelectedPropertyId(null)}
-                  onShowPropertyLine={(points) => {
-                    setPropertyLineOverlay(points);
-                    if (points) setViewMode("satellite");
-                  }}
                 />
               )}
             </CardContent>

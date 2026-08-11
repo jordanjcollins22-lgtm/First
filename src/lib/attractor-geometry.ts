@@ -72,13 +72,3 @@ export function projectToMiles(point: LatLng, origin: LatLng): { x: number; y: n
     y: (point.lat - origin.lat) * milesPerDegLat,
   };
 }
-
-/** Inverse of projectToMiles: an x/y offset in miles from an origin back to lat/lng. */
-export function milesToLatLng(offset: { x: number; y: number }, origin: LatLng): LatLng {
-  const milesPerDegLat = 69.0;
-  const milesPerDegLng = 69.172 * Math.cos((origin.lat * Math.PI) / 180);
-  return {
-    lat: origin.lat + offset.y / milesPerDegLat,
-    lng: origin.lng + offset.x / milesPerDegLng,
-  };
-}
