@@ -4,9 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ExternalLink, X } from "lucide-react";
 
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { setJobSourceAttractorWave } from "@/lib/actions/attractor-actions";
+import { updateJobDates } from "@/lib/actions/job-actions";
 import { pointInWaveGeometry } from "@/lib/attractor-geometry";
 import { colorForAttractorType, colorForJobStatus } from "./attractor-colors";
 import type { AttractorType, AttractorWave } from "@/types/domain";
@@ -35,6 +37,8 @@ export function JobDetailPanel({
   onClose: () => void;
 }) {
   const [sourceWaveId, setSourceWaveId] = useState(job.source_attractor_wave_id ?? NONE);
+  const [evaluationDate, setEvaluationDate] = useState(job.evaluation_date ?? "");
+  const [projectStartDate, setProjectStartDate] = useState(job.project_start_date ?? "");
   const [isPending, startTransition] = useTransition();
 
   const coveringWaves = useMemo(
@@ -80,6 +84,29 @@ export function JobDetailPanel({
       >
         Open job <ExternalLink className="h-3 w-3" />
       </Link>
+
+      <div className="flex gap-2">
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Evaluation date</Label>
+          <Input
+            type="date"
+            value={evaluationDate}
+            onChange={(e) => setEvaluationDate(e.target.value)}
+            onBlur={() => startTransition(() => updateJobDates(job.id, { evaluationDate: evaluationDate || null }))}
+            className="h-9 text-sm"
+          />
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Project start date</Label>
+          <Input
+            type="date"
+            value={projectStartDate}
+            onChange={(e) => setProjectStartDate(e.target.value)}
+            onBlur={() => startTransition(() => updateJobDates(job.id, { projectStartDate: projectStartDate || null }))}
+            className="h-9 text-sm"
+          />
+        </div>
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Attractor Waves covering this location</Label>
