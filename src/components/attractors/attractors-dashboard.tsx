@@ -14,6 +14,7 @@ import { ProjectList } from "./project-list";
 import { PropertyList } from "./property-list";
 import { SatelliteMapView } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
+import { CalendarView } from "./calendar-view";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
@@ -34,7 +35,7 @@ import type {
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 
-type ViewMode = "satellite" | "galaxy";
+type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "waves" | "projects" | "properties";
 type DrawTarget = "wave" | "location-area";
 
@@ -187,6 +188,13 @@ export function AttractorsDashboard({
             >
               Galaxy View
             </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("calendar")}
+              className={`px-3 py-1.5 ${viewMode === "calendar" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+            >
+              Calendar
+            </button>
           </div>
           <Button type="button" variant="outline" onClick={() => setManagingTypes((v) => !v)}>
             <Settings2 className="h-4 w-4" />
@@ -298,7 +306,7 @@ export function AttractorsDashboard({
                 Satellite View. Galaxy View works without it.
               </div>
             )
-          ) : (
+          ) : viewMode === "galaxy" ? (
             <GalaxyView
               waves={waves}
               jobs={filteredJobs}
@@ -311,6 +319,8 @@ export function AttractorsDashboard({
               areas={areas}
               showLocations={showLocations}
             />
+          ) : (
+            <CalendarView jobs={jobs} selectedJobId={selectedJobId} onSelectJob={selectJob} />
           )}
           {drawMode && (
             <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white shadow-lg">
