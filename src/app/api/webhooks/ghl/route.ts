@@ -14,8 +14,12 @@ import { isSupabaseAdminConfigured } from "@/lib/env";
  *   name / full_name / first_name+last_name / contact.name
  *   email / contact.email
  *   phone / contact.phone
- *   address / contact.address1 / location.address
+ *   address / full_address / contact.address1 / contact.full_address
  *   startTime / appointment.startTime / calendar.startTime / date
+ *
+ * NOTE: "location" in a GHL payload is your own business/sub-account, not
+ * the customer — location.address is deliberately never used as a
+ * customer-address fallback here.
  *
  * Optional shared-secret check: set GHL_WEBHOOK_SECRET in the environment,
  * then send it back as the "x-webhook-secret" header on the GHL side.
@@ -39,7 +43,6 @@ export async function POST(request: NextRequest) {
 
   const contact = (body.contact as Record<string, unknown>) ?? {};
   const appointment = (body.appointment as Record<string, unknown>) ?? {};
-  const location = (body.location as Record<string, unknown>) ?? {};
   const calendar = (body.calendar as Record<string, unknown>) ?? {};
 
   const name =
@@ -50,8 +53,17 @@ export async function POST(request: NextRequest) {
     "GHL Lead";
   const email = (contact.email as string) || (body.email as string) || null;
   const phone = (contact.phone as string) || (body.phone as string) || null;
+  // Deliberately does NOT fall back to location.address — in a GHL payload
+  // "location" is your own business/sub-account, not the customer, and
+  // using it here previously created properties at the company's own
+  // address instead of the customer's.
   const address =
-    (body.address as string) || (contact.address1 as string) || (location.address as string) || null;
+    (body.address as string) ||
+    (body.full_address as string) ||
+    (contact.address1 as string) ||
+    (contact.full_address as string) ||
+    (contact.address as string) ||
+    null;
   const startTimeRaw =
     (body.startTime as string) ||
     (appointment.startTime as string) ||
@@ -60,7 +72,14 @@ export async function POST(request: NextRequest) {
     null;
 
   if (!address || !address.trim()) {
-    return NextResponse.json({ error: "An address is required to create a property." }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "No customer address found in the payload. Add the contact's address field to the GHL workflow.",
+        receivedKeys: Object.keys(body),
+        receivedContactKeys: Object.keys(contact),
+      },
+      { status: 400 }
+    );
   }
 
   const matches = await searchAddress(address);
