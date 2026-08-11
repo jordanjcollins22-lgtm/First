@@ -8,7 +8,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Field Estimator",
   description: "Property estimating & job-execution app",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Field Estimator" },
+  icons: {
+    apple: "/apple-touch-icon.png",
+    icon: [{ url: "/icon-192.png", sizes: "192x192" }, { url: "/icon-512.png", sizes: "512x512" }],
+  },
 };
+
+export const viewport = { themeColor: "#2f6d3c" };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   let userEmail: string | null = null;
