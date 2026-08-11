@@ -41,11 +41,19 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
   revalidatePath(`/jobs/${jobId}`);
 }
 
+// Must match CANVAS_WIDTH/CANVAS_HEIGHT in image-canvas-board.tsx — the
+// canvas the property line was drawn on. The satellite photo is fetched to
+// exactly fill that canvas, centered on the property's geocoded address,
+// so canvas-center == the property's real lat/lng and canvas-width ==
+// image_real_width_feet feet, regardless of what the boundary itself covers.
+const CANVAS_WIDTH = 1000;
+const CANVAS_HEIGHT = 625;
+
 /** Looks up any job under this property with a drawn property line and
  * converts its canvas-pixel points into approximate real lat/lng around
- * the property's own location, using the drawn line's own pixel width as
- * a stand-in for the image's real-world width (it's typically drawn edge
- * to edge). Rough by nature — good enough to sanity-check on the map. */
+ * the property's own location. Rough by nature (the app's own real-width
+ * estimate is informational, not survey-grade) — good enough to
+ * sanity-check on the map. */
 export async function getPropertyLineForProperty(
   propertyId: string,
   center: LatLng
@@ -67,16 +75,11 @@ export async function getPropertyLineForProperty(
 
   const points = design.property_line as { x: number; y: number }[];
   const widthFeet = design.image_real_width_feet as number;
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const pixelWidth = Math.max(...xs) - Math.min(...xs) || 1;
-  const feetPerPixel = widthFeet / pixelWidth;
-  const centroidX = xs.reduce((s, x) => s + x, 0) / xs.length;
-  const centroidY = ys.reduce((s, y) => s + y, 0) / ys.length;
+  const feetPerPixel = widthFeet / CANVAS_WIDTH;
 
   return points.map((p) => {
-    const dxFeet = (p.x - centroidX) * feetPerPixel;
-    const dyFeet = (centroidY - p.y) * feetPerPixel; // canvas y is down; north is up
+    const dxFeet = (p.x - CANVAS_WIDTH / 2) * feetPerPixel;
+    const dyFeet = (CANVAS_HEIGHT / 2 - p.y) * feetPerPixel; // canvas y is down; north is up
     return milesToLatLng({ x: dxFeet / 5280, y: dyFeet / 5280 }, center);
   });
 }
