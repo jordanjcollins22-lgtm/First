@@ -27,6 +27,7 @@ interface SatelliteMapViewProps {
   locations: BusinessLocation[];
   areas: LocationArea[];
   showLocations: boolean;
+  flyToTarget: LatLng | null;
   drawMode: "polygon" | "route" | null;
   onGeometryDrawn: (points: LatLng[]) => void;
 }
@@ -54,6 +55,7 @@ export function SatelliteMapView({
   locations,
   areas,
   showLocations,
+  flyToTarget,
   drawMode,
   onGeometryDrawn,
 }: SatelliteMapViewProps) {
@@ -277,6 +279,13 @@ export function SatelliteMapView({
     }));
     locationsSource.setData({ type: "FeatureCollection", features: locationFeatures });
   }, [locations, areas, showLocations, mapLoaded]);
+
+  // Fly to a target location (e.g. a selected property) when requested.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current || !flyToTarget) return;
+    map.flyTo({ center: [flyToTarget.lng, flyToTarget.lat], zoom: Math.max(map.getZoom(), 18), duration: 800 });
+  }, [flyToTarget, mapLoaded]);
 
   // Enter/exit draw mode for capturing a polygon or route from the user.
   useEffect(() => {

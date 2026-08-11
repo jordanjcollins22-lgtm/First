@@ -135,6 +135,7 @@ export function AttractorsDashboard({
     setSelectedWaveId(null);
     setSelectedJobId(null);
     setCreating(false);
+    if (id) setViewMode("satellite");
   }
 
   function startCreating() {
@@ -294,6 +295,7 @@ export function AttractorsDashboard({
                 locations={locations}
                 areas={areas}
                 showLocations={showLocations}
+                flyToTarget={selectedProperty ? { lat: selectedProperty.lat, lng: selectedProperty.lng } : null}
                 drawMode={drawMode}
                 onGeometryDrawn={(points) => {
                   setDrawnPoints(points);
