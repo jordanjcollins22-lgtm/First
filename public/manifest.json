@@ -1,6 +1,6 @@
 {
-  "name": "Field Estimator",
-  "short_name": "Field Est.",
+  "name": "Celerity",
+  "short_name": "Celerity",
   "description": "Property estimating & job-execution app",
   "start_url": "/",
   "display": "standalone",

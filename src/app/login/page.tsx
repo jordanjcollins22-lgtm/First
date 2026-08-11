@@ -19,7 +19,7 @@ export default async function LoginPage() {
     <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-16">
       <div>
         <h1 className="text-2xl font-bold">Sign in</h1>
-        <p className="text-muted-foreground">Field Estimator</p>
+        <p className="text-muted-foreground">Celerity</p>
       </div>
       <Card>
         <CardContent className="pt-6">
