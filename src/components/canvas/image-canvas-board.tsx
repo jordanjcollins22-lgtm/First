@@ -15,6 +15,8 @@ import {
   Download,
   ImageUp,
   Lock,
+  Maximize2,
+  Minimize2,
   MousePointer2,
   PenTool,
   Route,
@@ -811,6 +813,7 @@ export function ImageCanvasBoard({
   initialLng,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const loadedRef = useRef(false);
@@ -825,6 +828,23 @@ export function ImageCanvasBoard({
   const [propertyLine, setPropertyLine] = useState<Point[]>([]);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === canvasContainerRef.current);
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      canvasContainerRef.current?.requestFullscreen();
+    }
+  }
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
   const [showSatelliteSearch, setShowSatelliteSearch] = useState(false);
   const [satelliteLoading, setSatelliteLoading] = useState(false);
@@ -1476,13 +1496,20 @@ export function ImageCanvasBoard({
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-lg border border-border bg-muted">
+      <div
+        ref={canvasContainerRef}
+        className={cn(
+          "relative overflow-hidden rounded-lg border border-border bg-muted",
+          isFullscreen && "flex h-screen items-center justify-center bg-black"
+        )}
+      >
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
           className={cn(
             "block w-full",
+            isFullscreen && "h-full w-auto max-w-full",
             tool === "zone" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
           )}
           onPointerDown={handlePointerDown}
@@ -1510,6 +1537,16 @@ export function ImageCanvasBoard({
             Auto-scaled · ≈{Math.round(image.realWidthFeet).toLocaleString()} ft across
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit fullscreen" : "Expand — useful for large properties"}
+          className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/70 px-3 py-1.5 text-xs font-medium text-white hover:bg-black/85"
+        >
+          {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          {isFullscreen ? "Exit fullscreen" : "Expand"}
+        </button>
       </div>
 
       {image && propertyLine.length === 0 && tool !== "property-line" && (
