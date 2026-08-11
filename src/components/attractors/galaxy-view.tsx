@@ -197,6 +197,10 @@ export function GalaxyView({
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{ mouseX: number; mouseY: number; camX: number; camY: number } | null>(null);
   const lastDragMovedRef = useRef(false);
+  const timeRef = useRef(0);
+
+  const PLANET_ORBIT_SPEED = 0.15; // rad/sec — planets revolve around their closest star
+  const MOON_ORBIT_SPEED = 0.6; // rad/sec — moons revolve around their planet, faster
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -356,10 +360,14 @@ export function GalaxyView({
     }
     projectedWavesRef.current = projectedWaves;
 
-    // --- Clients = planets, their projects = moons orbiting them ---
+    // --- Clients = planets, revolving around their closest star (business
+    // location); their projects = moons, revolving around the planet ---
     ctx.globalCompositeOperation = "source-over";
     const projectedJobs: ProjectedJob[] = [];
     const zoomScale = Math.pow(camera.zoom, 0.85);
+    const t = timeRef.current;
+
+    const starPositions = showLocations ? locations.map((l) => toPx({ lat: l.lat, lng: l.lng })) : [];
 
     const byCustomer = new Map<string, { name: string; jobs: JobWithLocation[] }>();
     for (const job of jobs) {
@@ -368,11 +376,43 @@ export function GalaxyView({
       byCustomer.get(customerId)!.jobs.push(job);
     }
 
-    for (const { name, jobs: customerJobs } of byCustomer.values()) {
+    for (const [customerId, { name, jobs: customerJobs }] of byCustomer.entries()) {
       const positions = customerJobs.map((j) => toPx({ lat: j.property.lat, lng: j.property.lng }));
-      const planetX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
-      const planetY = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+      const baseX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+      const baseY = positions.reduce((s, p) => s + p.y, 0) / positions.length;
       const planetSize = (10 + Math.min(customerJobs.length, 6) * 1.5) * zoomScale;
+
+      // Find the closest star to revolve around.
+      let nearestStar: { x: number; y: number } | null = null;
+      let nearestDist = Infinity;
+      for (const star of starPositions) {
+        const d = Math.hypot(star.x - baseX, star.y - baseY);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestStar = star;
+        }
+      }
+
+      let planetX = baseX;
+      let planetY = baseY;
+      if (nearestStar) {
+        // Cap the orbit radius to the star's own distance from the nearest
+        // canvas edge, so the full circle — not just its center — stays
+        // onscreen no matter where the star itself sits in frame.
+        const marginToEdge = Math.min(nearestStar.x, width - nearestStar.x, nearestStar.y, height - nearestStar.y);
+        const maxRadius = Math.max(marginToEdge - 24, planetSize + 20);
+        const starOrbitRadius = Math.min(Math.max(nearestDist, planetSize + 40 * zoomScale), maxRadius);
+        const phase = noise(customerId, 0) * Math.PI * 2;
+        const angle = phase + t * PLANET_ORBIT_SPEED;
+        planetX = nearestStar.x + Math.cos(angle) * starOrbitRadius;
+        planetY = nearestStar.y + Math.sin(angle) * starOrbitRadius;
+
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(nearestStar.x, nearestStar.y, starOrbitRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       drawSphere(ctx, planetX, planetY, planetSize, CLIENT_PLANET_COLOR);
       ctx.fillStyle = "rgba(255,255,255,0.9)";
@@ -388,7 +428,8 @@ export function GalaxyView({
       ctx.stroke();
 
       customerJobs.forEach((job, i) => {
-        const angle = (i / customerJobs.length) * Math.PI * 2 - Math.PI / 2;
+        const baseAngle = (i / customerJobs.length) * Math.PI * 2 - Math.PI / 2;
+        const angle = baseAngle + t * MOON_ORBIT_SPEED;
         const x = planetX + Math.cos(angle) * orbitRadius;
         const y = planetY + Math.sin(angle) * orbitRadius;
         const size = (JOB_STATUS_SIZE[job.status] ?? 5) * zoomScale * 0.6;
@@ -461,8 +502,19 @@ export function GalaxyView({
     }
   }, [waves, jobs, visibleWaveIds, selectedWaveId, selectedJobId, locations, areas, showLocations, camera]);
 
+  // Continuously animate — planets/moons orbit over time — rather than only
+  // redrawing on prop changes.
   useEffect(() => {
-    draw();
+    let raf = 0;
+    let last = performance.now();
+    function tick(now: number) {
+      timeRef.current += (now - last) / 1000;
+      last = now;
+      draw();
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [draw]);
 
   useEffect(() => {
