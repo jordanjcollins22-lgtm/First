@@ -67,10 +67,6 @@ export function SiteNav({ userEmail }: { userEmail: string | null }) {
         )}
       </div>
 
-      <Link href="/canvas" className="hover:text-primary">
-        Canvas
-      </Link>
-
       {userEmail && (
         <form action={logout} className="flex items-center gap-2 border-l border-border pl-4">
           <span className="hidden text-xs text-muted-foreground sm:inline">{userEmail}</span>
