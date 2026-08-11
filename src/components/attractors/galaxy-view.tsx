@@ -317,7 +317,9 @@ export function GalaxyView({
     const projectedJobs: ProjectedJob[] = [];
     for (const job of jobs) {
       const { x, y } = toPx({ lat: job.property.lat, lng: job.property.lng });
-      const size = JOB_STATUS_SIZE[job.status] ?? 5;
+      // Scale with zoom (sqrt-dampened) so zooming in actually lets you see
+      // the planet up close instead of it staying a fixed pixel size.
+      const size = (JOB_STATUS_SIZE[job.status] ?? 5) * Math.sqrt(camera.zoom);
       const color = colorForJobStatus(job.status);
       const [r, g, b] = hexToRgb(color);
       const isSelected = job.id === selectedJobId;
@@ -343,6 +345,15 @@ export function GalaxyView({
       ctx.fillStyle = sphere;
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Small specular glint toward the light source, for a glossy look.
+      const glint = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, size * 0.4);
+      glint.addColorStop(0, "rgba(255,255,255,0.8)");
+      glint.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = glint;
+      ctx.beginPath();
+      ctx.arc(lightX, lightY, size * 0.4, 0, Math.PI * 2);
       ctx.fill();
 
       if (isSelected) {
@@ -433,7 +444,7 @@ export function GalaxyView({
       const cy = e.clientY - rect.top;
       setCamera((prev) => {
         const factor = Math.exp(-e.deltaY * 0.001);
-        const zoom = Math.min(8, Math.max(0.3, prev.zoom * factor));
+        const zoom = Math.min(60, Math.max(0.3, prev.zoom * factor));
         const ratio = zoom / prev.zoom;
         return {
           zoom,
