@@ -148,8 +148,8 @@ export function CalendarView({
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{job.property.customer.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{job.property.address}</span>
+                        <span className="block truncate font-medium">{job.property.address}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{job.property.customer.name}</span>
                       </span>
                     </button>
                   ))}

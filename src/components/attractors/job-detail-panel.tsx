@@ -72,9 +72,9 @@ export function JobDetailPanel({
               style={{ backgroundColor: colorForJobStatus(job.status) }}
               aria-hidden
             />
-            {job.property.customer.name}
+            {job.property.address}
           </p>
-          <p className="text-xs text-muted-foreground">{job.property.address}</p>
+          <p className="text-xs text-muted-foreground">{job.property.customer.name}</p>
         </div>
         <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
