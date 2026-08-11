@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { setJobSourceAttractorWave } from "@/lib/actions/attractor-actions";
-import { updateJobDates } from "@/lib/actions/job-actions";
+import { updateJobDates, updateJobStatus } from "@/lib/actions/job-actions";
 import { pointInWaveGeometry } from "@/lib/attractor-geometry";
 import { colorForAttractorType, colorForJobStatus } from "./attractor-colors";
-import type { AttractorType, AttractorWave } from "@/types/domain";
+import type { AttractorType, AttractorWave, JobStatus } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 const NONE = "none";
+const JOB_STATUSES: JobStatus[] = ["estimating", "quoted", "approved", "in_progress", "completed", "cancelled"];
 
 // datetime-local inputs need "YYYY-MM-DDTHH:mm" in local time, not an ISO string.
 function toLocalInputValue(iso: string | null): string {
@@ -44,6 +45,7 @@ export function JobDetailPanel({
   types: AttractorType[];
   onClose: () => void;
 }) {
+  const [status, setStatus] = useState<JobStatus>(job.status);
   const [sourceWaveId, setSourceWaveId] = useState(job.source_attractor_wave_id ?? NONE);
   const [evaluationDate, setEvaluationDate] = useState(toLocalInputValue(job.evaluation_date));
   const [projectStartDate, setProjectStartDate] = useState(job.project_start_date ?? "");
@@ -79,11 +81,28 @@ export function JobDetailPanel({
         </button>
       </div>
 
-      <p className="text-xs">
-        <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-          {JOB_STATUS_LABEL[job.status] ?? job.status}
-        </span>
-      </p>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Status</Label>
+        <Select
+          value={status}
+          onValueChange={(v) => {
+            setStatus(v as JobStatus);
+            startTransition(() => updateJobStatus(job.id, v));
+          }}
+          disabled={isPending}
+        >
+          <SelectTrigger className="h-9 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {JOB_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {JOB_STATUS_LABEL[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <Link
         href={`/jobs/${job.id}`}

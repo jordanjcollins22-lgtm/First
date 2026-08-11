@@ -77,6 +77,50 @@ function pointInPolygon(point: { x: number; y: number }, polygon: { x: number; y
   return inside;
 }
 
+/** A shaded sphere: soft glow halo, light-sourced gradient body, thin
+ * atmosphere rim, and a specular glint. Used for both client "planets"
+ * and project "moons". */
+function drawSphere(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: [number, number, number]) {
+  const [r, g, b] = color;
+
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, size * 3.2);
+  glow.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
+  glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 3.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  const lightX = x - size * 0.35;
+  const lightY = y - size * 0.35;
+  const [hr, hg, hb] = shade([r, g, b], 0.6);
+  const [dr, dg, db] = shade([r, g, b], -0.5);
+  const sphere = ctx.createRadialGradient(lightX, lightY, 0, x, y, size * 1.2);
+  sphere.addColorStop(0, `rgb(${hr},${hg},${hb})`);
+  sphere.addColorStop(0.6, `rgb(${r},${g},${b})`);
+  sphere.addColorStop(1, `rgb(${dr},${dg},${db})`);
+  ctx.fillStyle = sphere;
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(${hr},${hg},${hb},0.5)`;
+  ctx.lineWidth = Math.max(size * 0.06, 0.5);
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.97, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const glint = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, size * 0.4);
+  glint.addColorStop(0, "rgba(255,255,255,0.8)");
+  glint.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glint;
+  ctx.beginPath();
+  ctx.arc(lightX, lightY, size * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+const CLIENT_PLANET_COLOR: [number, number, number] = [56, 189, 248];
+
 function drawStar(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -312,66 +356,57 @@ export function GalaxyView({
     }
     projectedWavesRef.current = projectedWaves;
 
-    // --- Projects, forming into planets ---
+    // --- Clients = planets, their projects = moons orbiting them ---
     ctx.globalCompositeOperation = "source-over";
     const projectedJobs: ProjectedJob[] = [];
+    const zoomScale = Math.pow(camera.zoom, 0.85);
+
+    const byCustomer = new Map<string, { name: string; jobs: JobWithLocation[] }>();
     for (const job of jobs) {
-      const { x, y } = toPx({ lat: job.property.lat, lng: job.property.lng });
-      // Scale with zoom (near-linear) so zooming in makes the planet
-      // dramatically bigger instead of staying a fixed pixel size.
-      const size = (JOB_STATUS_SIZE[job.status] ?? 5) * Math.pow(camera.zoom, 0.85);
-      const color = colorForJobStatus(job.status);
-      const [r, g, b] = hexToRgb(color);
-      const isSelected = job.id === selectedJobId;
+      const customerId = job.property.customer.id;
+      if (!byCustomer.has(customerId)) byCustomer.set(customerId, { name: job.property.customer.name, jobs: [] });
+      byCustomer.get(customerId)!.jobs.push(job);
+    }
 
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, size * 3.2);
-      glow.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
-      glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(x, y, size * 3.2, 0, Math.PI * 2);
-      ctx.fill();
+    for (const { name, jobs: customerJobs } of byCustomer.values()) {
+      const positions = customerJobs.map((j) => toPx({ lat: j.property.lat, lng: j.property.lng }));
+      const planetX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+      const planetY = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+      const planetSize = (10 + Math.min(customerJobs.length, 6) * 1.5) * zoomScale;
 
-      // Sphere-shaded body: a radial gradient offset toward a fixed "light
-      // source" (upper-left) gives the flat circle real dimensionality.
-      const lightX = x - size * 0.35;
-      const lightY = y - size * 0.35;
-      const [hr, hg, hb] = shade([r, g, b], 0.6);
-      const [dr, dg, db] = shade([r, g, b], -0.5);
-      const sphere = ctx.createRadialGradient(lightX, lightY, 0, x, y, size * 1.2);
-      sphere.addColorStop(0, `rgb(${hr},${hg},${hb})`);
-      sphere.addColorStop(0.6, `rgb(${r},${g},${b})`);
-      sphere.addColorStop(1, `rgb(${dr},${dg},${db})`);
-      ctx.fillStyle = sphere;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
+      drawSphere(ctx, planetX, planetY, planetSize, CLIENT_PLANET_COLOR);
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(name, planetX, planetY + planetSize + 14);
 
-      // Thin atmospheric rim light on the opposite edge from the highlight.
-      ctx.strokeStyle = `rgba(${hr},${hg},${hb},0.5)`;
-      ctx.lineWidth = Math.max(size * 0.06, 0.5);
+      const orbitRadius = planetSize + 16 * zoomScale;
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(x, y, size * 0.97, 0, Math.PI * 2);
+      ctx.arc(planetX, planetY, orbitRadius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Small specular glint toward the light source, for a glossy look.
-      const glint = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, size * 0.4);
-      glint.addColorStop(0, "rgba(255,255,255,0.8)");
-      glint.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = glint;
-      ctx.beginPath();
-      ctx.arc(lightX, lightY, size * 0.4, 0, Math.PI * 2);
-      ctx.fill();
+      customerJobs.forEach((job, i) => {
+        const angle = (i / customerJobs.length) * Math.PI * 2 - Math.PI / 2;
+        const x = planetX + Math.cos(angle) * orbitRadius;
+        const y = planetY + Math.sin(angle) * orbitRadius;
+        const size = (JOB_STATUS_SIZE[job.status] ?? 5) * zoomScale * 0.6;
+        const color = hexToRgb(colorForJobStatus(job.status));
+        const isSelected = job.id === selectedJobId;
 
-      if (isSelected) {
-        ctx.strokeStyle = "rgba(255,255,255,0.95)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, size + 4, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+        drawSphere(ctx, x, y, size, color);
 
-      projectedJobs.push({ job, x, y });
+        if (isSelected) {
+          ctx.strokeStyle = "rgba(255,255,255,0.95)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, size + 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        projectedJobs.push({ job, x, y });
+      });
     }
     projectedJobsRef.current = projectedJobs;
 
