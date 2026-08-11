@@ -167,7 +167,7 @@ export function AttractorsDashboard({
             Properties, projects, and the marketing waves that generate them — on the same map.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-white/60 bg-card/60 text-sm backdrop-blur-md">
             <button
               type="button"

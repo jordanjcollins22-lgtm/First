@@ -16,7 +16,13 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport = { themeColor: "#2f6d3c" };
+export const viewport = {
+  themeColor: "#2f6d3c",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   let userEmail: string | null = null;
