@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Settings2 } from "lucide-react";
+import { Plus, Settings2, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,32 +16,49 @@ import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
 import { ManageAttractorTypes } from "./manage-attractor-types";
-import type { AttractorType, AttractorVariant, AttractorWave, AttractorWaveStatus, JobStatus, LatLng } from "@/types/domain";
+import { ManageLocations } from "./manage-locations";
+import type {
+  AttractorType,
+  AttractorVariant,
+  AttractorWave,
+  AttractorWaveStatus,
+  BusinessLocation,
+  JobStatus,
+  LatLng,
+  LocationArea,
+} from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 type ViewMode = "satellite" | "galaxy";
 type SidebarTab = "waves" | "projects";
+type DrawTarget = "wave" | "location-area";
 
 export function AttractorsDashboard({
   types,
   variants,
   waves,
   jobs,
+  locations,
+  areas,
 }: {
   types: AttractorType[];
   variants: AttractorVariant[];
   waves: AttractorWave[];
   jobs: JobWithLocation[];
+  locations: BusinessLocation[];
+  areas: LocationArea[];
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
   const [managingTypes, setManagingTypes] = useState(false);
+  const [managingLocations, setManagingLocations] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<Set<AttractorWaveStatus>>(new Set());
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showProjects, setShowProjects] = useState(true);
+  const [showLocations, setShowLocations] = useState(true);
   const [jobStatusFilter, setJobStatusFilter] = useState<Set<JobStatus>>(new Set());
   const [manuallyHiddenWaveIds, setManuallyHiddenWaveIds] = useState<Set<string>>(new Set());
 
@@ -49,6 +66,7 @@ export function AttractorsDashboard({
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [drawMode, setDrawMode] = useState<"polygon" | "route" | null>(null);
+  const [drawTarget, setDrawTarget] = useState<DrawTarget | null>(null);
   const [drawnPoints, setDrawnPoints] = useState<LatLng[] | null>(null);
 
   const filteredWaves = useMemo(
@@ -108,6 +126,13 @@ export function AttractorsDashboard({
   function requestDraw(geometryType: "polygon" | "route") {
     setViewMode("satellite");
     setDrawMode(geometryType);
+    setDrawTarget("wave");
+  }
+
+  function requestAreaDraw() {
+    setViewMode("satellite");
+    setDrawMode("polygon");
+    setDrawTarget("location-area");
   }
 
   return (
@@ -140,6 +165,10 @@ export function AttractorsDashboard({
             <Settings2 className="h-4 w-4" />
             Types
           </Button>
+          <Button type="button" variant="outline" onClick={() => setManagingLocations((v) => !v)}>
+            <Star className="h-4 w-4" />
+            Locations
+          </Button>
           <Button type="button" onClick={startCreating}>
             <Plus className="h-4 w-4" />
             New Wave
@@ -151,6 +180,19 @@ export function AttractorsDashboard({
         <Card>
           <CardContent className="pt-6">
             <ManageAttractorTypes types={types} variants={variants} />
+          </CardContent>
+        </Card>
+      )}
+
+      {managingLocations && (
+        <Card>
+          <CardContent className="pt-6">
+            <ManageLocations
+              locations={locations}
+              areas={areas}
+              drawnPoints={drawTarget === "location-area" ? drawnPoints : null}
+              onRequestDraw={requestAreaDraw}
+            />
           </CardContent>
         </Card>
       )}
@@ -172,6 +214,8 @@ export function AttractorsDashboard({
         jobStatusFilter={jobStatusFilter}
         onToggleJobStatus={(s) => toggleInSet(setJobStatusFilter, s)}
         onClearJobStatusFilter={() => setJobStatusFilter(new Set())}
+        showLocations={showLocations}
+        onToggleShowLocations={() => setShowLocations((v) => !v)}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_340px]">
@@ -208,6 +252,9 @@ export function AttractorsDashboard({
                 onSelectWave={selectWave}
                 selectedJobId={selectedJobId}
                 onSelectJob={selectJob}
+                locations={locations}
+                areas={areas}
+                showLocations={showLocations}
                 drawMode={drawMode}
                 onGeometryDrawn={(points) => {
                   setDrawnPoints(points);
@@ -229,6 +276,9 @@ export function AttractorsDashboard({
               onSelectWave={selectWave}
               selectedJobId={selectedJobId}
               onSelectJob={selectJob}
+              locations={locations}
+              areas={areas}
+              showLocations={showLocations}
             />
           )}
           {drawMode && (
@@ -245,7 +295,7 @@ export function AttractorsDashboard({
                 <CreateWavePanel
                   types={types}
                   variants={variants}
-                  drawnPoints={drawnPoints}
+                  drawnPoints={drawTarget === "wave" ? drawnPoints : null}
                   onRequestDraw={requestDraw}
                   onCancel={() => {
                     setCreating(false);

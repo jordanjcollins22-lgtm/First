@@ -101,6 +101,31 @@ export interface AttractorWave {
   updated_at: string;
 }
 
+export interface BusinessLocation {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A location's areas reuse the same geometry shapes as attractor waves,
+ * minus "route" — a service area isn't a path. */
+export type LocationAreaGeometryType = Exclude<AttractorGeometryType, "route">;
+
+export interface LocationArea {
+  id: string;
+  location_id: string;
+  name: string;
+  geometry_type: LocationAreaGeometryType;
+  geometry: AttractorGeometry;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Role names are freeform now — managed in the "roles" table, not a fixed union. */
 export type Role = string;
 

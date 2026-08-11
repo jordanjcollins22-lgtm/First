@@ -52,6 +52,8 @@ export function FilterBar({
   jobStatusFilter,
   onToggleJobStatus,
   onClearJobStatusFilter,
+  showLocations,
+  onToggleShowLocations,
 }: {
   types: AttractorType[];
   typeFilter: Set<string>;
@@ -69,6 +71,8 @@ export function FilterBar({
   jobStatusFilter: Set<JobStatus>;
   onToggleJobStatus: (s: JobStatus) => void;
   onClearJobStatusFilter: () => void;
+  showLocations: boolean;
+  onToggleShowLocations: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-3 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
@@ -128,6 +132,11 @@ export function FilterBar({
             ))}
           </>
         )}
+
+        <Label className="ml-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <input type="checkbox" checked={showLocations} onChange={onToggleShowLocations} className="h-3.5 w-3.5" />
+          Locations
+        </Label>
       </div>
     </div>
   );

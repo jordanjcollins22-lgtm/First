@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, type MouseEvent } from "react";
 
 import { geometryPoints, projectToMiles } from "@/lib/attractor-geometry";
-import { colorForAttractorType, colorForJobStatus } from "./attractor-colors";
-import type { AttractorWave, LatLng } from "@/types/domain";
+import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
+import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 interface GalaxyViewProps {
@@ -15,6 +15,9 @@ interface GalaxyViewProps {
   onSelectWave: (id: string | null) => void;
   selectedJobId: string | null;
   onSelectJob: (id: string | null) => void;
+  locations: BusinessLocation[];
+  areas: LocationArea[];
+  showLocations: boolean;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -66,6 +69,37 @@ function pointInPolygon(point: { x: number; y: number }, polygon: { x: number; y
   return inside;
 }
 
+function drawStar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  color: [number, number, number]
+) {
+  const [r, g, b] = color;
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, size * 4);
+  glow.addColorStop(0, `rgba(${r},${g},${b},0.7)`);
+  glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(255,255,255,0.85)`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - size * 2.2, y);
+  ctx.lineTo(x + size * 2.2, y);
+  ctx.moveTo(x, y - size * 2.2);
+  ctx.lineTo(x, y + size * 2.2);
+  ctx.stroke();
+
+  ctx.fillStyle = "#fffdf5";
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function GalaxyView({
   waves,
   jobs,
@@ -74,6 +108,9 @@ export function GalaxyView({
   onSelectWave,
   selectedJobId,
   onSelectJob,
+  locations,
+  areas,
+  showLocations,
 }: GalaxyViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,6 +161,8 @@ export function GalaxyView({
     const allPoints: LatLng[] = [
       ...waves.flatMap((w) => geometryPoints(w.geometry_type, w.geometry)),
       ...jobs.map((j) => ({ lat: j.property.lat, lng: j.property.lng })),
+      ...(showLocations ? locations.map((l) => ({ lat: l.lat, lng: l.lng })) : []),
+      ...(showLocations ? areas.flatMap((a) => geometryPoints(a.geometry_type, a.geometry)) : []),
     ];
 
     if (allPoints.length === 0) {
@@ -142,13 +181,24 @@ export function GalaxyView({
     };
 
     const projectedAll = allPoints.map((p) => projectToMiles(p, origin));
-    const radiusPad = waves.reduce((max, w) => {
-      if (w.geometry_type === "point_radius") {
-        const g = w.geometry as { radius_miles: number };
-        return Math.max(max, g.radius_miles || 0);
-      }
-      return max;
-    }, 0);
+    const radiusPad = Math.max(
+      waves.reduce((max, w) => {
+        if (w.geometry_type === "point_radius") {
+          const g = w.geometry as { radius_miles: number };
+          return Math.max(max, g.radius_miles || 0);
+        }
+        return max;
+      }, 0),
+      showLocations
+        ? areas.reduce((max, a) => {
+            if (a.geometry_type === "point_radius") {
+              const g = a.geometry as { radius_miles: number };
+              return Math.max(max, g.radius_miles || 0);
+            }
+            return max;
+          }, 0)
+        : 0
+    );
 
     const xs = projectedAll.map((p) => p.x);
     const ys = projectedAll.map((p) => p.y);
@@ -274,7 +324,57 @@ export function GalaxyView({
       projectedJobs.push({ job, x, y });
     }
     projectedJobsRef.current = projectedJobs;
-  }, [waves, jobs, visibleWaveIds, selectedWaveId, selectedJobId]);
+
+    // --- Business locations = home-base stars, with their service areas ---
+    if (showLocations) {
+      ctx.globalCompositeOperation = "source-over";
+      for (const area of areas) {
+        const points = geometryPoints(area.geometry_type, area.geometry);
+        if (points.length === 0) continue;
+
+        let centerPx: { x: number; y: number };
+        let radiusPx: number;
+        let polygonPx: { x: number; y: number }[] | null = null;
+
+        if (area.geometry_type === "point_radius") {
+          const geo = area.geometry as { lat: number; lng: number; radius_miles: number };
+          centerPx = toPx({ lat: geo.lat, lng: geo.lng });
+          radiusPx = Math.max(geo.radius_miles * scale, 18);
+        } else {
+          const polygon = points.map((p) => toPx(p));
+          polygonPx = polygon;
+          centerPx = {
+            x: polygon.reduce((s, p) => s + p.x, 0) / polygon.length,
+            y: polygon.reduce((s, p) => s + p.y, 0) / polygon.length,
+          };
+          radiusPx = Math.max(...polygon.map((p) => Math.hypot(p.x - centerPx.x, p.y - centerPx.y)), 18);
+        }
+
+        ctx.strokeStyle = "rgba(251,191,36,0.55)";
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        if (polygonPx) {
+          ctx.moveTo(polygonPx[0].x, polygonPx[0].y);
+          for (const p of polygonPx.slice(1)) ctx.lineTo(p.x, p.y);
+          ctx.closePath();
+        } else {
+          ctx.arc(centerPx.x, centerPx.y, radiusPx, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      for (const location of locations) {
+        const { x, y } = toPx({ lat: location.lat, lng: location.lng });
+        drawStar(ctx, x, y, 6, hexToRgb(LOCATION_COLOR));
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(location.name, x, y + 24);
+      }
+    }
+  }, [waves, jobs, visibleWaveIds, selectedWaveId, selectedJobId, locations, areas, showLocations]);
 
   useEffect(() => {
     draw();

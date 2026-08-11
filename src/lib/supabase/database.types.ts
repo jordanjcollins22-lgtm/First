@@ -355,6 +355,50 @@ export interface Database {
           },
         ];
       };
+      business_locations: {
+        Row: {
+          id: string;
+          name: string;
+          address: string | null;
+          lat: number;
+          lng: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["business_locations"]["Row"]> & {
+          name: string;
+          lat: number;
+          lng: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["business_locations"]["Row"]>;
+        Relationships: [];
+      };
+      location_areas: {
+        Row: {
+          id: string;
+          location_id: string;
+          name: string;
+          geometry_type: string;
+          geometry: Json;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["location_areas"]["Row"]> & {
+          location_id: string;
+          name: string;
+          geometry_type: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["location_areas"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "location_areas_location_id_fkey";
+            columns: ["location_id"];
+            referencedRelation: "business_locations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

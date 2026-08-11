@@ -7,9 +7,9 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 
 import { env } from "@/lib/env";
-import { geometryPoints, waveToPolygon } from "@/lib/attractor-geometry";
-import { colorForAttractorType, colorForJobStatus } from "./attractor-colors";
-import type { AttractorWave, LatLng } from "@/types/domain";
+import { geometryPoints, geometryToPolygon, waveToPolygon } from "@/lib/attractor-geometry";
+import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
+import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 if (env.mapboxToken) {
@@ -24,6 +24,9 @@ interface SatelliteMapViewProps {
   onSelectWave: (id: string | null) => void;
   selectedJobId: string | null;
   onSelectJob: (id: string | null) => void;
+  locations: BusinessLocation[];
+  areas: LocationArea[];
+  showLocations: boolean;
   drawMode: "polygon" | "route" | null;
   onGeometryDrawn: (points: LatLng[]) => void;
 }
@@ -33,6 +36,12 @@ const WAVES_FILL_LAYER = "attractor-waves-fill";
 const WAVES_LINE_LAYER = "attractor-waves-line";
 const JOBS_SOURCE = "attractor-jobs";
 const JOBS_LAYER = "attractor-jobs-circle";
+const AREAS_SOURCE = "location-areas";
+const AREAS_FILL_LAYER = "location-areas-fill";
+const AREAS_LINE_LAYER = "location-areas-line";
+const LOCATIONS_SOURCE = "business-locations";
+const LOCATIONS_LAYER = "business-locations-circle";
+const LOCATIONS_LABEL_LAYER = "business-locations-label";
 
 export function SatelliteMapView({
   waves,
@@ -42,6 +51,9 @@ export function SatelliteMapView({
   onSelectWave,
   selectedJobId,
   onSelectJob,
+  locations,
+  areas,
+  showLocations,
   drawMode,
   onGeometryDrawn,
 }: SatelliteMapViewProps) {
@@ -66,6 +78,8 @@ export function SatelliteMapView({
     const points: [number, number][] = [
       ...waves.flatMap((w) => geometryPoints(w.geometry_type, w.geometry).map((p) => [p.lng, p.lat] as [number, number])),
       ...jobs.map((j) => [j.property.lng, j.property.lat] as [number, number]),
+      ...locations.map((l) => [l.lng, l.lat] as [number, number]),
+      ...areas.flatMap((a) => geometryPoints(a.geometry_type, a.geometry).map((p) => [p.lng, p.lat] as [number, number])),
     ];
 
     const map = new mapboxgl.Map({
@@ -117,6 +131,45 @@ export function SatelliteMapView({
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
+      });
+
+      map.addSource(AREAS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: AREAS_FILL_LAYER,
+        type: "fill",
+        source: AREAS_SOURCE,
+        paint: { "fill-color": LOCATION_COLOR, "fill-opacity": 0.12 },
+      });
+      map.addLayer({
+        id: AREAS_LINE_LAYER,
+        type: "line",
+        source: AREAS_SOURCE,
+        paint: { "line-color": LOCATION_COLOR, "line-width": 1.5, "line-dasharray": [2, 2] },
+      });
+
+      map.addSource(LOCATIONS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: LOCATIONS_LAYER,
+        type: "circle",
+        source: LOCATIONS_SOURCE,
+        paint: {
+          "circle-radius": 9,
+          "circle-color": LOCATION_COLOR,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      map.addLayer({
+        id: LOCATIONS_LABEL_LAYER,
+        type: "symbol",
+        source: LOCATIONS_SOURCE,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-offset": [0, 1.4],
+          "text-anchor": "top",
+          "text-size": 12,
+        },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1.2 },
       });
 
       map.on("click", WAVES_FILL_LAYER, (e) => {
@@ -190,6 +243,33 @@ export function SatelliteMapView({
 
     source.setData({ type: "FeatureCollection", features });
   }, [jobs, selectedJobId]);
+
+  // Keep the business-location stars and their service-area overlays in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const areasSource = map.getSource(AREAS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    const locationsSource = map.getSource(LOCATIONS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!areasSource || !locationsSource) return;
+
+    if (!showLocations) {
+      areasSource.setData({ type: "FeatureCollection", features: [] });
+      locationsSource.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+
+    const areaFeatures = areas
+      .map((a) => geometryToPolygon(a.geometry_type, a.geometry))
+      .filter((f): f is NonNullable<typeof f> => f !== null);
+    areasSource.setData({ type: "FeatureCollection", features: areaFeatures });
+
+    const locationFeatures = locations.map((l) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [l.lng, l.lat] },
+      properties: { id: l.id, name: l.name },
+    }));
+    locationsSource.setData({ type: "FeatureCollection", features: locationFeatures });
+  }, [locations, areas, showLocations]);
 
   // Enter/exit draw mode for capturing a polygon or route from the user.
   useEffect(() => {

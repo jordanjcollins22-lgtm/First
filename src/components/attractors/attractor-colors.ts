@@ -22,3 +22,7 @@ export const JOB_STATUS_COLORS: Record<string, string> = {
 export function colorForJobStatus(status: string): string {
   return JOB_STATUS_COLORS[status] ?? "#9ca3af";
 }
+
+/** Business locations render as a distinct "home base" gold, separate from
+ * wave types and job statuses. */
+export const LOCATION_COLOR = "#fbbf24";
