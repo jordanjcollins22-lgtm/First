@@ -41,6 +41,10 @@ export function SiteNav({ userEmail }: { userEmail: string | null }) {
         Properties
       </Link>
 
+      <Link href="/attractors" className="hover:text-primary">
+        Attractors Data
+      </Link>
+
       <div ref={containerRef} className="relative">
         <button
           type="button"

@@ -32,6 +32,71 @@ export interface Job {
   name: string;
   status: JobStatus;
   assigned_to: string | null;
+  source_attractor_wave_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AttractorType {
+  id: string;
+  label: string;
+  is_system: boolean;
+}
+
+export interface AttractorVariant {
+  id: string;
+  type_id: string;
+  name: string;
+}
+
+export type AttractorWaveStatus = "planned" | "ready" | "completed";
+export type AttractorGeometryType = "point_radius" | "polygon" | "route" | "zip_list";
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+export interface AttractorGeometryPointRadius {
+  lat: number;
+  lng: number;
+  radius_miles: number;
+}
+
+export interface AttractorGeometryPolygon {
+  points: LatLng[];
+}
+
+export interface AttractorGeometryRoute {
+  points: LatLng[];
+  buffer_miles: number;
+}
+
+export interface AttractorGeometryZipList {
+  zips: string[];
+}
+
+export type AttractorGeometry =
+  | AttractorGeometryPointRadius
+  | AttractorGeometryPolygon
+  | AttractorGeometryRoute
+  | AttractorGeometryZipList;
+
+export interface AttractorWave {
+  id: string;
+  type_id: string;
+  variant_id: string | null;
+  name: string;
+  geometry_type: AttractorGeometryType;
+  geometry: AttractorGeometry;
+  date_planned: string | null;
+  date_completed: string | null;
+  quantity_deployed: number | null;
+  status: AttractorWaveStatus;
+  notes: string | null;
+  leads_generated: number | null;
+  projects_generated: number | null;
+  revenue_generated: number | null;
   created_at: string;
   updated_at: string;
 }

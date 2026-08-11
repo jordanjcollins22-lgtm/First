@@ -66,6 +66,7 @@ export interface Database {
           name: string;
           status: string;
           assigned_to: string | null;
+          source_attractor_wave_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -278,6 +279,81 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["custom_field_options"]["Row"]>;
         Relationships: [];
+      };
+      attractor_types: {
+        Row: {
+          id: string;
+          label: string;
+          is_system: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["attractor_types"]["Row"]> & {
+          id: string;
+          label: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["attractor_types"]["Row"]>;
+        Relationships: [];
+      };
+      attractor_variants: {
+        Row: {
+          id: string;
+          type_id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["attractor_variants"]["Row"]> & {
+          type_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["attractor_variants"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "attractor_variants_type_id_fkey";
+            columns: ["type_id"];
+            referencedRelation: "attractor_types";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      attractor_waves: {
+        Row: {
+          id: string;
+          type_id: string;
+          variant_id: string | null;
+          name: string;
+          geometry_type: string;
+          geometry: Json;
+          date_planned: string | null;
+          date_completed: string | null;
+          quantity_deployed: number | null;
+          status: string;
+          notes: string | null;
+          leads_generated: number | null;
+          projects_generated: number | null;
+          revenue_generated: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["attractor_waves"]["Row"]> & {
+          type_id: string;
+          name: string;
+          geometry_type: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["attractor_waves"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "attractor_waves_type_id_fkey";
+            columns: ["type_id"];
+            referencedRelation: "attractor_types";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "attractor_waves_variant_id_fkey";
+            columns: ["variant_id"];
+            referencedRelation: "attractor_variants";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;
