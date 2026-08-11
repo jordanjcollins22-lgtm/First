@@ -26,6 +26,13 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+/** Shades an rgb triple toward white (amt > 0) or black (amt < 0), for
+ * simple sphere-style highlight/shadow shading. */
+function shade([r, g, b]: [number, number, number], amt: number): [number, number, number] {
+  if (amt >= 0) return [r + (255 - r) * amt, g + (255 - g) * amt, b + (255 - b) * amt];
+  return [r * (1 + amt), g * (1 + amt), b * (1 + amt)];
+}
+
 /** Deterministic pseudo-random in [0,1) from a seed + index, so the dust
  * texture is stable between renders instead of jittering. */
 function noise(seed: string, i: number): number {
@@ -78,26 +85,50 @@ function drawStar(
   color: [number, number, number]
 ) {
   const [r, g, b] = color;
-  const glow = ctx.createRadialGradient(x, y, 0, x, y, size * 4);
-  glow.addColorStop(0, `rgba(${r},${g},${b},0.7)`);
-  glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
-  ctx.fillStyle = glow;
+
+  // Soft outer bloom.
+  const bloom = ctx.createRadialGradient(x, y, 0, x, y, size * 6.5);
+  bloom.addColorStop(0, `rgba(${r},${g},${b},0.35)`);
+  bloom.addColorStop(0.45, `rgba(${r},${g},${b},0.12)`);
+  bloom.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = bloom;
   ctx.beginPath();
-  ctx.arc(x, y, size * 4, 0, Math.PI * 2);
+  ctx.arc(x, y, size * 6.5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = `rgba(255,255,255,0.85)`;
-  ctx.lineWidth = 1;
+  // Tighter, brighter corona.
+  const corona = ctx.createRadialGradient(x, y, 0, x, y, size * 2.4);
+  corona.addColorStop(0, "rgba(255,255,255,0.95)");
+  corona.addColorStop(0.35, `rgba(${r},${g},${b},0.85)`);
+  corona.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = corona;
   ctx.beginPath();
-  ctx.moveTo(x - size * 2.2, y);
-  ctx.lineTo(x + size * 2.2, y);
-  ctx.moveTo(x, y - size * 2.2);
-  ctx.lineTo(x, y + size * 2.2);
-  ctx.stroke();
+  ctx.arc(x, y, size * 2.4, 0, Math.PI * 2);
+  ctx.fill();
 
-  ctx.fillStyle = "#fffdf5";
+  // Diffraction spikes, tapering to transparent via a linear gradient stroke.
+  const spikeLen = size * 3.8;
+  function spike(dx: number, dy: number) {
+    const grad = ctx.createLinearGradient(x - dx, y - dy, x + dx, y + dy);
+    grad.addColorStop(0, "rgba(255,255,255,0)");
+    grad.addColorStop(0.5, "rgba(255,255,255,0.9)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - dx, y - dy);
+    ctx.lineTo(x + dx, y + dy);
+    ctx.stroke();
+  }
+  spike(spikeLen, 0);
+  spike(0, spikeLen);
+  spike(spikeLen * 0.55, spikeLen * 0.55);
+  spike(spikeLen * 0.55, -spikeLen * 0.55);
+
+  // Bright core.
+  ctx.fillStyle = "#fffdf0";
   ctx.beginPath();
-  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -140,29 +171,13 @@ export function GalaxyView({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const bg = ctx.createRadialGradient(
-      width / 2,
-      height / 2,
-      0,
-      width / 2,
-      height / 2,
-      Math.max(width, height) * 0.75
-    );
-    bg.addColorStop(0, "#0b1026");
-    bg.addColorStop(1, "#02040c");
-    ctx.fillStyle = bg;
+    // A flat fill rather than a radial gradient: two very close, fully
+    // opaque colors over a large area force the canvas rasterizer into
+    // dithering the subtle transition, which shows up as a repeating
+    // diagonal dot/dash pattern. A single solid color has no transition
+    // to dither.
+    ctx.fillStyle = "#070b1e";
     ctx.fillRect(0, 0, width, height);
-
-    // Faint decorative starfield — not real data, just background texture.
-    for (let i = 0; i < 140; i++) {
-      const x = noise("star-x", i) * width;
-      const y = noise("star-y", i) * height;
-      const r = 0.4 + noise("star-r", i) * 1.1;
-      ctx.fillStyle = `rgba(255,255,255,${0.15 + noise("star-a", i) * 0.35})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
 
     const allPoints: LatLng[] = [
       ...waves.flatMap((w) => geometryPoints(w.geometry_type, w.geometry)),
@@ -315,7 +330,17 @@ export function GalaxyView({
       ctx.arc(x, y, size * 3.2, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = color;
+      // Sphere-shaded body: a radial gradient offset toward a fixed "light
+      // source" (upper-left) gives the flat circle real dimensionality.
+      const lightX = x - size * 0.35;
+      const lightY = y - size * 0.35;
+      const [hr, hg, hb] = shade([r, g, b], 0.6);
+      const [dr, dg, db] = shade([r, g, b], -0.5);
+      const sphere = ctx.createRadialGradient(lightX, lightY, 0, x, y, size * 1.2);
+      sphere.addColorStop(0, `rgb(${hr},${hg},${hb})`);
+      sphere.addColorStop(0.6, `rgb(${r},${g},${b})`);
+      sphere.addColorStop(1, `rgb(${dr},${dg},${db})`);
+      ctx.fillStyle = sphere;
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
