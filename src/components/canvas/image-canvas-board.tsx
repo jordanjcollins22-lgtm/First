@@ -1392,7 +1392,7 @@ export function ImageCanvasBoard({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-card/70 p-2 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
-        <div className="flex items-center gap-1 rounded-md bg-muted p-1">
+        <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1">
           <Button
             type="button"
             size="sm"
@@ -1434,8 +1434,8 @@ export function ImageCanvasBoard({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             <Wrench className="h-3 w-3" aria-hidden />
             <Link
               href="/admin/tools"
