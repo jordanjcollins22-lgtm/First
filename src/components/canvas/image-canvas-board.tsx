@@ -25,6 +25,8 @@ import {
   Undo2,
   Unlock,
   Wrench,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -827,6 +829,7 @@ export function ImageCanvasBoard({
   const [houseOutline, setHouseOutline] = useState<Point[]>([]);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
+  const [canvasZoom, setCanvasZoom] = useState(1);
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
   const [showSatelliteSearch, setShowSatelliteSearch] = useState(false);
   const [satelliteLoading, setSatelliteLoading] = useState(false);
@@ -1511,19 +1514,22 @@ export function ImageCanvasBoard({
       </div>
 
       <div className="relative overflow-hidden rounded-lg border border-border bg-muted">
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          className={cn(
-            "block w-full",
-            tool === "zone" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
-          )}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-        />
+        <div className="max-h-[70vh] overflow-auto">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            style={{ width: `${canvasZoom * 100}%` }}
+            className={cn(
+              "block",
+              tool === "zone" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
+            )}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          />
+        </div>
 
         {!image && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
@@ -1544,6 +1550,25 @@ export function ImageCanvasBoard({
             Auto-scaled · ≈{Math.round(image.realWidthFeet).toLocaleString()} ft across
           </div>
         )}
+
+        <div className="absolute bottom-3 right-3 flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => setCanvasZoom((z) => Math.min(4, z + 0.5))}
+            title="Zoom in — useful for drawing small areas precisely"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCanvasZoom((z) => Math.max(1, z - 0.5))}
+            title="Zoom out"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {image && houseOutline.length === 0 && tool !== "house" && (
