@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -61,6 +61,7 @@ export function SatelliteMapView({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
   const loadedRef = useRef(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const onGeometryDrawnRef = useRef(onGeometryDrawn);
   const onSelectWaveRef = useRef(onSelectWave);
   const onSelectJobRef = useRef(onSelectJob);
@@ -186,12 +187,14 @@ export function SatelliteMapView({
       map.on("mouseleave", JOBS_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       loadedRef.current = true;
+      setMapLoaded(true);
     });
 
     return () => {
       map.remove();
       mapRef.current = null;
       loadedRef.current = false;
+      setMapLoaded(false);
     };
     // Runs once on mount — later prop changes update the map's data sources
     // via the effects below instead of remounting the whole map.
@@ -222,7 +225,7 @@ export function SatelliteMapView({
       .filter((f): f is NonNullable<typeof f> => f !== null);
 
     source.setData({ type: "FeatureCollection", features });
-  }, [waves, visibleWaveIds, selectedWaveId]);
+  }, [waves, visibleWaveIds, selectedWaveId, mapLoaded]);
 
   // Keep the job markers in sync.
   useEffect(() => {
@@ -242,7 +245,7 @@ export function SatelliteMapView({
     }));
 
     source.setData({ type: "FeatureCollection", features });
-  }, [jobs, selectedJobId]);
+  }, [jobs, selectedJobId, mapLoaded]);
 
   // Keep the business-location stars and their service-area overlays in sync.
   useEffect(() => {
@@ -269,7 +272,7 @@ export function SatelliteMapView({
       properties: { id: l.id, name: l.name },
     }));
     locationsSource.setData({ type: "FeatureCollection", features: locationFeatures });
-  }, [locations, areas, showLocations]);
+  }, [locations, areas, showLocations, mapLoaded]);
 
   // Enter/exit draw mode for capturing a polygon or route from the user.
   useEffect(() => {

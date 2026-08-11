@@ -167,12 +167,6 @@ export function AttractorsDashboard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" asChild>
-            <Link href="/">
-              <Plus className="h-4 w-4" />
-              New Property
-            </Link>
-          </Button>
           <div className="flex overflow-hidden rounded-lg border border-white/60 bg-card/60 text-sm backdrop-blur-md">
             <button
               type="button"
@@ -203,6 +197,12 @@ export function AttractorsDashboard({
           <Button type="button" variant="outline" onClick={() => setManagingLocations((v) => !v)}>
             <Star className="h-4 w-4" />
             Locations
+          </Button>
+          <Button type="button" variant="outline" asChild>
+            <Link href="/">
+              <Plus className="h-4 w-4" />
+              New Property
+            </Link>
           </Button>
           <Button type="button" onClick={startCreating}>
             <Plus className="h-4 w-4" />
