@@ -317,9 +317,9 @@ export function GalaxyView({
     const projectedJobs: ProjectedJob[] = [];
     for (const job of jobs) {
       const { x, y } = toPx({ lat: job.property.lat, lng: job.property.lng });
-      // Scale with zoom (sqrt-dampened) so zooming in actually lets you see
-      // the planet up close instead of it staying a fixed pixel size.
-      const size = (JOB_STATUS_SIZE[job.status] ?? 5) * Math.sqrt(camera.zoom);
+      // Scale with zoom (near-linear) so zooming in makes the planet
+      // dramatically bigger instead of staying a fixed pixel size.
+      const size = (JOB_STATUS_SIZE[job.status] ?? 5) * Math.pow(camera.zoom, 0.85);
       const color = colorForJobStatus(job.status);
       const [r, g, b] = hexToRgb(color);
       const isSelected = job.id === selectedJobId;
@@ -346,6 +346,13 @@ export function GalaxyView({
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
+
+      // Thin atmospheric rim light on the opposite edge from the highlight.
+      ctx.strokeStyle = `rgba(${hr},${hg},${hb},0.5)`;
+      ctx.lineWidth = Math.max(size * 0.06, 0.5);
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.97, 0, Math.PI * 2);
+      ctx.stroke();
 
       // Small specular glint toward the light source, for a glossy look.
       const glint = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, size * 0.4);
@@ -410,7 +417,7 @@ export function GalaxyView({
 
       for (const location of locations) {
         const { x, y } = toPx({ lat: location.lat, lng: location.lng });
-        drawStar(ctx, x, y, 6, hexToRgb(LOCATION_COLOR));
+        drawStar(ctx, x, y, 6 * Math.pow(camera.zoom, 0.85), hexToRgb(LOCATION_COLOR));
         ctx.fillStyle = "rgba(255,255,255,0.9)";
         ctx.font = "12px sans-serif";
         ctx.textAlign = "center";
