@@ -351,6 +351,7 @@ export function AttractorsDashboard({
               )}
               {selectedWave && (
                 <WaveDetailPanel
+                  key={selectedWave.id}
                   wave={selectedWave}
                   types={types}
                   variants={variants}
@@ -359,7 +360,7 @@ export function AttractorsDashboard({
                 />
               )}
               {selectedJob && (
-                <JobDetailPanel job={selectedJob} waves={waves} types={types} onClose={() => setSelectedJobId(null)} />
+                <JobDetailPanel key={selectedJob.id} job={selectedJob} waves={waves} types={types} onClose={() => setSelectedJobId(null)} />
               )}
               {selectedProperty && (
                 <PropertyDetailPanel

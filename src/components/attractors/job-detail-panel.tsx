@@ -16,6 +16,14 @@ import type { JobWithLocation } from "@/lib/data/jobs";
 
 const NONE = "none";
 
+// datetime-local inputs need "YYYY-MM-DDTHH:mm" in local time, not an ISO string.
+function toLocalInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const JOB_STATUS_LABEL: Record<string, string> = {
   estimating: "Estimating",
   quoted: "Quoted",
@@ -37,8 +45,9 @@ export function JobDetailPanel({
   onClose: () => void;
 }) {
   const [sourceWaveId, setSourceWaveId] = useState(job.source_attractor_wave_id ?? NONE);
-  const [evaluationDate, setEvaluationDate] = useState(job.evaluation_date ?? "");
+  const [evaluationDate, setEvaluationDate] = useState(toLocalInputValue(job.evaluation_date));
   const [projectStartDate, setProjectStartDate] = useState(job.project_start_date ?? "");
+  const [projectEndDate, setProjectEndDate] = useState(job.project_end_date ?? "");
   const [isPending, startTransition] = useTransition();
 
   const coveringWaves = useMemo(
@@ -85,17 +94,22 @@ export function JobDetailPanel({
         Open job <ExternalLink className="h-3 w-3" />
       </Link>
 
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Evaluation date &amp; time</Label>
+        <Input
+          type="datetime-local"
+          value={evaluationDate}
+          onChange={(e) => setEvaluationDate(e.target.value)}
+          onBlur={() =>
+            startTransition(() =>
+              updateJobDates(job.id, { evaluationDate: evaluationDate ? new Date(evaluationDate).toISOString() : null })
+            )
+          }
+          className="h-9 text-sm"
+        />
+      </div>
+
       <div className="flex gap-2">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label className="text-xs">Evaluation date</Label>
-          <Input
-            type="date"
-            value={evaluationDate}
-            onChange={(e) => setEvaluationDate(e.target.value)}
-            onBlur={() => startTransition(() => updateJobDates(job.id, { evaluationDate: evaluationDate || null }))}
-            className="h-9 text-sm"
-          />
-        </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <Label className="text-xs">Project start date</Label>
           <Input
@@ -103,6 +117,16 @@ export function JobDetailPanel({
             value={projectStartDate}
             onChange={(e) => setProjectStartDate(e.target.value)}
             onBlur={() => startTransition(() => updateJobDates(job.id, { projectStartDate: projectStartDate || null }))}
+            className="h-9 text-sm"
+          />
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Project end date</Label>
+          <Input
+            type="date"
+            value={projectEndDate}
+            onChange={(e) => setProjectEndDate(e.target.value)}
+            onBlur={() => startTransition(() => updateJobDates(job.id, { projectEndDate: projectEndDate || null }))}
             className="h-9 text-sm"
           />
         </div>

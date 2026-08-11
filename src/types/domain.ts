@@ -35,6 +35,7 @@ export interface Job {
   source_attractor_wave_id: string | null;
   evaluation_date: string | null;
   project_start_date: string | null;
+  project_end_date: string | null;
   created_at: string;
   updated_at: string;
 }
