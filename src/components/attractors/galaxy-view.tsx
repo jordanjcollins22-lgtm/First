@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { Locate } from "lucide-react";
 
 import { geometryPoints, projectToMiles } from "@/lib/attractor-geometry";
 import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
@@ -117,6 +118,11 @@ export function GalaxyView({
   const projectedWavesRef = useRef<ProjectedWave[]>([]);
   const projectedJobsRef = useRef<ProjectedJob[]>([]);
 
+  const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ mouseX: number; mouseY: number; camX: number; camY: number } | null>(null);
+  const lastDragMovedRef = useRef(false);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -210,9 +216,10 @@ export function GalaxyView({
     const spanY = Math.max(maxY - minY, 0.5);
 
     const padding = 60;
-    const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY);
-    const offsetX = width / 2 - ((minX + maxX) / 2) * scale;
-    const offsetY = height / 2 - ((minY + maxY) / 2) * scale;
+    const fitScale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY);
+    const scale = fitScale * camera.zoom;
+    const offsetX = width / 2 - ((minX + maxX) / 2) * scale + camera.x;
+    const offsetY = height / 2 - ((minY + maxY) / 2) * scale + camera.y;
 
     function toPx(p: LatLng): { x: number; y: number } {
       const m = projectToMiles(p, origin);
@@ -374,7 +381,7 @@ export function GalaxyView({
         ctx.fillText(location.name, x, y + 24);
       }
     }
-  }, [waves, jobs, visibleWaveIds, selectedWaveId, selectedJobId, locations, areas, showLocations]);
+  }, [waves, jobs, visibleWaveIds, selectedWaveId, selectedJobId, locations, areas, showLocations, camera]);
 
   useEffect(() => {
     draw();
@@ -388,7 +395,62 @@ export function GalaxyView({
     return () => observer.disconnect();
   }, [draw]);
 
+  // Scroll to zoom toward the cursor. Registered as a native listener (not
+  // React's onWheel) so preventDefault can actually stop page scroll.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    function handleWheel(e: WheelEvent) {
+      e.preventDefault();
+      const rect = canvas!.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      setCamera((prev) => {
+        const factor = Math.exp(-e.deltaY * 0.001);
+        const zoom = Math.min(8, Math.max(0.3, prev.zoom * factor));
+        const ratio = zoom / prev.zoom;
+        return {
+          zoom,
+          x: cx - rect.width / 2 - (cx - rect.width / 2 - prev.x) * ratio,
+          y: cy - rect.height / 2 - (cy - rect.height / 2 - prev.y) * ratio,
+        };
+      });
+    }
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  function handleMouseDown(e: MouseEvent<HTMLCanvasElement>) {
+    dragRef.current = { mouseX: e.clientX, mouseY: e.clientY, camX: camera.x, camY: camera.y };
+    lastDragMovedRef.current = false;
+    setIsDragging(true);
+  }
+
+  function handleMouseMove(e: MouseEvent<HTMLCanvasElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = e.clientX - drag.mouseX;
+    const dy = e.clientY - drag.mouseY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) lastDragMovedRef.current = true;
+    setCamera((prev) => ({ ...prev, x: drag.camX + dx, y: drag.camY + dy }));
+  }
+
+  function endDrag() {
+    dragRef.current = null;
+    setIsDragging(false);
+  }
+
+  function resetView() {
+    setCamera({ x: 0, y: 0, zoom: 1 });
+  }
+
   function handleClick(e: MouseEvent<HTMLCanvasElement>) {
+    if (lastDragMovedRef.current) {
+      lastDragMovedRef.current = false;
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -413,8 +475,27 @@ export function GalaxyView({
   }
 
   return (
-    <div ref={containerRef} className="h-full w-full">
-      <canvas ref={canvasRef} onClick={handleClick} className="h-full w-full cursor-pointer" />
+    <div ref={containerRef} className="relative h-full w-full">
+      <canvas
+        ref={canvasRef}
+        onClick={handleClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        className={`h-full w-full ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+      />
+      <button
+        type="button"
+        onClick={resetView}
+        className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white shadow-lg hover:bg-black/80"
+      >
+        <Locate className="h-3.5 w-3.5" />
+        Reset view
+      </button>
+      <p className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] text-white/70">
+        Drag to pan · Scroll to zoom
+      </p>
     </div>
   );
 }
