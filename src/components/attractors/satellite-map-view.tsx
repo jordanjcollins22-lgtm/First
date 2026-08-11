@@ -180,6 +180,10 @@ export function SatelliteMapView({
       map.on("click", JOBS_LAYER, (e) => {
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectJobRef.current(id);
+        const coords = e.features?.[0]?.geometry as GeoJSON.Point | undefined;
+        if (coords?.coordinates) {
+          map.flyTo({ center: coords.coordinates as [number, number], zoom: Math.max(map.getZoom(), 17), duration: 800 });
+        }
       });
       map.on("mouseenter", WAVES_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", WAVES_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
