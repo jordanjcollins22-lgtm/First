@@ -87,6 +87,7 @@ export default async function AttractorsPage() {
         areas={areas}
         properties={properties}
         profiles={profiles}
+        currentProfileId={profile?.id ?? null}
       />
     </div>
   );

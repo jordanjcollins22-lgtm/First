@@ -47,6 +47,7 @@ export function AttractorsDashboard({
   areas,
   properties,
   profiles,
+  currentProfileId,
 }: {
   types: AttractorType[];
   variants: AttractorVariant[];
@@ -56,6 +57,7 @@ export function AttractorsDashboard({
   areas: LocationArea[];
   properties: PropertyWithCustomer[];
   profiles: Profile[];
+  currentProfileId: string | null;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
@@ -325,7 +327,12 @@ export function AttractorsDashboard({
               showLocations={showLocations}
             />
           ) : (
-            <CalendarView jobs={jobs} selectedJobId={selectedJobId} onSelectJob={selectJob} />
+            <CalendarView
+              jobs={jobs}
+              selectedJobId={selectedJobId}
+              onSelectJob={selectJob}
+              currentProfileId={currentProfileId}
+            />
           )}
           {drawMode && (
             <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white shadow-lg">

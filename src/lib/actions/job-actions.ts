@@ -3,6 +3,15 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import type { EvaluationStatus } from "@/types/domain";
+
+export async function updateEvaluationStatus(jobId: string, status: EvaluationStatus) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("jobs").update({ evaluation_status: status }).eq("id", jobId);
+  if (error) throw error;
+  revalidatePath("/attractors");
+  revalidatePath(`/jobs/${jobId}`);
+}
 
 export async function updateJobStatus(jobId: string, status: string) {
   const supabase = await createClient();

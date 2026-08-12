@@ -12,6 +12,7 @@ import { v4 as uuid } from "uuid";
 import jsPDF from "jspdf";
 import Link from "next/link";
 import {
+  CheckCircle2,
   Download,
   Home,
   ImageUp,
@@ -48,7 +49,8 @@ import { ZoneServiceDialog } from "./zone-service-dialog";
 import { serviceTypeById, type ServiceFieldDef } from "./service-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
-import type { CanvasDesignRow } from "@/types/domain";
+import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
+import { updateEvaluationStatus } from "@/lib/actions/job-actions";
 
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 800;
@@ -795,6 +797,7 @@ interface ImageCanvasBoardProps {
    * auto-load the same satellite photo here instead of making the user search again. */
   initialLat?: number;
   initialLng?: number;
+  initialEvaluationStatus?: EvaluationStatus;
 }
 
 export function ImageCanvasBoard({
@@ -804,6 +807,7 @@ export function ImageCanvasBoard({
   initialAddress,
   initialLat,
   initialLng,
+  initialEvaluationStatus,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -828,6 +832,8 @@ export function ImageCanvasBoard({
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [submittingEval, setSubmittingEval] = useState(false);
+  const [evalSubmitted, setEvalSubmitted] = useState(initialEvaluationStatus === "completed");
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1339,6 +1345,19 @@ export function ImageCanvasBoard({
     imageDirtyRef.current = true;
   }
 
+  async function handleSubmitEvaluation() {
+    if (!jobId) return;
+    setSubmittingEval(true);
+    try {
+      await updateEvaluationStatus(jobId, "completed");
+      setEvalSubmitted(true);
+    } catch {
+      // Best-effort — the evaluator can retry the button if this failed.
+    } finally {
+      setSubmittingEval(false);
+    }
+  }
+
   async function handleExportPdf() {
     const planCanvas = canvasRef.current;
     if (!planCanvas) return;
@@ -1558,6 +1577,17 @@ export function ImageCanvasBoard({
               <Download className="h-4 w-4" />
               {exporting ? "Building PDF..." : "Preview PDF"}
             </Button>
+            {jobId && (
+              <Button
+                type="button"
+                size="sm"
+                disabled={submittingEval || evalSubmitted}
+                onClick={handleSubmitEvaluation}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {evalSubmitted ? "Evaluation Submitted" : submittingEval ? "Submitting..." : "Submit Evaluation"}
+              </Button>
+            )}
             {lastSavedAt && (
               <span className="text-xs text-muted-foreground">
                 {jobId ? "Saved to this job" : "Autosaved in this browser"}

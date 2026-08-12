@@ -28,6 +28,9 @@ export interface Property {
 
 export type JobStatus = "estimating" | "quoted" | "approved" | "in_progress" | "completed" | "cancelled";
 
+/** The evaluator's progress on a scheduled evaluation appointment — separate from JobStatus. */
+export type EvaluationStatus = "scheduled" | "on_way" | "arrived" | "completed";
+
 export interface Job {
   id: string;
   property_id: string;
@@ -36,6 +39,7 @@ export interface Job {
   assigned_to: string | null;
   source_attractor_wave_id: string | null;
   evaluation_date: string | null;
+  evaluation_status: EvaluationStatus;
   project_start_date: string | null;
   project_end_date: string | null;
   created_at: string;

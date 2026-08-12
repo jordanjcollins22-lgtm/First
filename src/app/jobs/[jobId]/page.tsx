@@ -8,6 +8,7 @@ import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { isSupabaseConfigured } from "@/lib/env";
+import type { EvaluationStatus } from "@/types/domain";
 
 export default async function JobPage({
   params,
@@ -30,6 +31,7 @@ export default async function JobPage({
   const job = jobRow as unknown as {
     id: string;
     name: string;
+    evaluation_status: EvaluationStatus;
     property: { address: string; lat: number; lng: number } | null;
   };
 
@@ -56,6 +58,7 @@ export default async function JobPage({
         initialAddress={job.property?.address ?? ""}
         initialLat={job.property?.lat}
         initialLng={job.property?.lng}
+        initialEvaluationStatus={job.evaluation_status}
       />
     </div>
   );

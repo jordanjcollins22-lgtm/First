@@ -70,6 +70,7 @@ export interface Database {
           assigned_to: string | null;
           source_attractor_wave_id: string | null;
           evaluation_date: string | null;
+          evaluation_status: string;
           project_start_date: string | null;
           project_end_date: string | null;
           created_at: string;
