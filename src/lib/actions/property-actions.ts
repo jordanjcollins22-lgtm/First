@@ -4,6 +4,20 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { lookupPropertyDetails } from "@/lib/rentcast";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
+
+/** Best-effort — a property-data miss shouldn't block adding the property. */
+async function attachPropertyDetails(
+  supabase: SupabaseClient<Database>,
+  propertyId: string,
+  address: string
+) {
+  const details = await lookupPropertyDetails(address);
+  if (!details) return;
+  await supabase.from("properties").update({ sqft: details.sqft, acreage: details.acreage }).eq("id", propertyId);
+}
 
 export interface CreatePropertyInput {
   customerName: string;
@@ -39,6 +53,8 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
     .select()
     .single();
   if (propertyError) throw propertyError;
+
+  await attachPropertyDetails(supabase, property.id, input.address);
 
   const { data: job, error: jobError } = await supabase
     .from("jobs")
@@ -114,9 +130,14 @@ export async function addPropertyForCustomer(
   input: { address: string; lat: number; lng: number }
 ) {
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: property, error } = await supabase
     .from("properties")
-    .insert({ customer_id: customerId, address: input.address, lat: input.lat, lng: input.lng });
+    .insert({ customer_id: customerId, address: input.address, lat: input.lat, lng: input.lng })
+    .select()
+    .single();
   if (error) throw error;
+
+  await attachPropertyDetails(supabase, property.id, input.address);
+
   revalidatePath("/attractors");
 }

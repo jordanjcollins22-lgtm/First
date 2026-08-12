@@ -104,6 +104,13 @@ export function PropertyDetailPanel({
               </button>
             </p>
           )}
+          {(property.sqft != null || property.acreage != null) && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {property.sqft != null && `${property.sqft.toLocaleString()} sq ft`}
+              {property.sqft != null && property.acreage != null && " · "}
+              {property.acreage != null && `${property.acreage.toLocaleString()} acres`}
+            </p>
+          )}
         </div>
         <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />

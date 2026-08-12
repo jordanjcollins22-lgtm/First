@@ -40,6 +40,8 @@ export interface Database {
           lat: number;
           lng: number;
           notes: string | null;
+          sqft: number | null;
+          acreage: number | null;
           created_at: string;
           updated_at: string;
         };
