@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/data/team";
 import { isSupabaseConfigured } from "@/lib/env";
 import "./globals.css";
 
@@ -26,12 +27,17 @@ export const viewport = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   let userEmail: string | null = null;
+  let roles: string[] = [];
   if (isSupabaseConfigured) {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     userEmail = user?.email ?? null;
+    if (user) {
+      const profile = await getCurrentProfile();
+      roles = profile?.roles ?? [];
+    }
   }
 
   return (
@@ -48,7 +54,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-lg font-bold text-primary">
               Celerity
             </Link>
-            <SiteNav userEmail={userEmail} />
+            <SiteNav userEmail={userEmail} roles={roles} />
           </div>
         </header>
         <main className="flex-1">{children}</main>

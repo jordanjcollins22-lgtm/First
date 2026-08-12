@@ -2,7 +2,7 @@ import { listProfiles, listRoles, getCurrentProfile } from "@/lib/data/team";
 import { isSupabaseConfigured, isSupabaseAdminConfigured } from "@/lib/env";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { RoleSelect } from "@/components/team/role-select";
+import { RoleCheckboxes } from "@/components/team/role-checkboxes";
 import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
 import { ResetPasswordControl } from "@/components/team/reset-password-control";
 import { ManageRoles } from "@/components/team/manage-roles";
@@ -35,7 +35,7 @@ export default async function TeamPage() {
     );
   }
 
-  const isAdmin = currentProfile?.role === "admin";
+  const isAdmin = currentProfile?.roles.includes("admin") ?? false;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -50,7 +50,10 @@ export default async function TeamPage() {
         <p className="mb-6 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
           If this should be an admin account, run this in Supabase&apos;s SQL Editor (swap in your
           email), then reload this page:{" "}
-          <code>update profiles set role = &apos;admin&apos; where email = &apos;you@example.com&apos;;</code>
+          <code>
+            insert into profile_roles (profile_id, role_name) select id, &apos;admin&apos; from profiles where
+            email = &apos;you@example.com&apos;;
+          </code>
         </p>
       )}
 
@@ -103,14 +106,14 @@ export default async function TeamPage() {
                   </td>
                   <td className="p-2">
                     {isAdmin ? (
-                      <RoleSelect
+                      <RoleCheckboxes
                         profileId={profile.id}
-                        initialRole={profile.role}
+                        initialRoles={profile.roles}
                         roles={roles}
                         disabled={profile.id === currentProfile?.id}
                       />
                     ) : (
-                      <span className="capitalize">{profile.role}</span>
+                      <span className="capitalize">{profile.roles.join(", ") || "—"}</span>
                     )}
                   </td>
                   {isAdmin && isSupabaseAdminConfigured && (

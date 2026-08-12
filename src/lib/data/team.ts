@@ -15,10 +15,21 @@ export async function listRoles(): Promise<CustomRole[]> {
 
 export async function listProfiles(): Promise<Profile[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("profiles").select("*").order("email");
+  const [{ data: profiles, error: profilesError }, { data: profileRoles, error: rolesError }] = await Promise.all([
+    supabase.from("profiles").select("*").order("email"),
+    supabase.from("profile_roles").select("*"),
+  ]);
+  if (profilesError) throw profilesError;
+  if (rolesError) throw rolesError;
 
-  if (error) throw error;
-  return (data ?? []) as unknown as Profile[];
+  const rolesByProfile = new Map<string, string[]>();
+  for (const pr of profileRoles ?? []) {
+    const list = rolesByProfile.get(pr.profile_id) ?? [];
+    list.push(pr.role_name);
+    rolesByProfile.set(pr.profile_id, list);
+  }
+
+  return (profiles ?? []).map((p) => ({ ...p, roles: rolesByProfile.get(p.id) ?? [] })) as unknown as Profile[];
 }
 
 export async function getCurrentProfile(): Promise<Profile | null> {
@@ -28,7 +39,13 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  if (error) throw error;
-  return data as unknown as Profile | null;
+  const [{ data: profile, error: profileError }, { data: profileRoles, error: rolesError }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase.from("profile_roles").select("role_name").eq("profile_id", user.id),
+  ]);
+  if (profileError) throw profileError;
+  if (!profile) return null;
+  if (rolesError) throw rolesError;
+
+  return { ...profile, roles: (profileRoles ?? []).map((r) => r.role_name) } as unknown as Profile;
 }

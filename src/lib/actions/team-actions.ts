@@ -8,21 +8,37 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import type { Role } from "@/types/domain";
 
-export async function updateProfileRole(profileId: string, role: Role) {
+export async function addProfileRole(profileId: string, role: Role) {
   const caller = await getCurrentProfile();
-  if (caller?.role !== "admin") {
+  if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can change roles.");
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("profiles").update({ role }).eq("id", profileId);
+  const { error } = await supabase.from("profile_roles").insert({ profile_id: profileId, role_name: role });
+  if (error && error.code !== "23505") throw error;
+  revalidatePath("/admin/team");
+}
+
+export async function removeProfileRole(profileId: string, role: Role) {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    throw new Error("Only admins can change roles.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profile_roles")
+    .delete()
+    .eq("profile_id", profileId)
+    .eq("role_name", role);
   if (error) throw error;
   revalidatePath("/admin/team");
 }
 
 export async function createTeamMember(formData: FormData) {
   const caller = await getCurrentProfile();
-  if (caller?.role !== "admin") {
+  if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can add team members.");
   }
   if (!isSupabaseAdminConfigured) {
@@ -56,7 +72,9 @@ export async function createTeamMember(formData: FormData) {
   // update it when something else was picked.
   if (role !== "crew" && data.user) {
     const supabase = await createClient();
-    const { error: roleError } = await supabase.from("profiles").update({ role }).eq("id", data.user.id);
+    const { error: roleError } = await supabase
+      .from("profile_roles")
+      .insert({ profile_id: data.user.id, role_name: role });
     if (roleError) throw roleError;
   }
 
@@ -65,7 +83,7 @@ export async function createTeamMember(formData: FormData) {
 
 export async function setTeamMemberPassword(profileId: string, password: string) {
   const caller = await getCurrentProfile();
-  if (caller?.role !== "admin") {
+  if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can set passwords.");
   }
   if (!isSupabaseAdminConfigured) {
@@ -86,7 +104,7 @@ export async function setTeamMemberPassword(profileId: string, password: string)
 
 export async function addRole(name: string) {
   const caller = await getCurrentProfile();
-  if (caller?.role !== "admin") {
+  if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can add roles.");
   }
 
@@ -107,7 +125,7 @@ export async function addRole(name: string) {
 
 export async function deleteRole(name: string) {
   const caller = await getCurrentProfile();
-  if (caller?.role !== "admin") {
+  if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can remove roles.");
   }
 

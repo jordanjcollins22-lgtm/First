@@ -98,7 +98,6 @@ export interface Database {
           id: string;
           email: string;
           full_name: string | null;
-          role: string;
           created_at: string;
           updated_at: string;
         };
@@ -107,14 +106,7 @@ export interface Database {
           email: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
-        Relationships: [
-          {
-            foreignKeyName: "profiles_role_fkey";
-            columns: ["role"];
-            referencedRelation: "roles";
-            referencedColumns: ["name"];
-          },
-        ];
+        Relationships: [];
       };
       roles: {
         Row: {
@@ -127,6 +119,32 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["roles"]["Row"]>;
         Relationships: [];
+      };
+      profile_roles: {
+        Row: {
+          profile_id: string;
+          role_name: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["profile_roles"]["Row"]> & {
+          profile_id: string;
+          role_name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["profile_roles"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "profile_roles_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "profile_roles_role_name_fkey";
+            columns: ["role_name"];
+            referencedRelation: "roles";
+            referencedColumns: ["name"];
+          },
+        ];
       };
       overhead_expenses: {
         Row: {

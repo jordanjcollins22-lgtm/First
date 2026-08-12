@@ -6,8 +6,6 @@ import { ChevronDown } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
 
-const JORDAN_EMAIL = "jordanjcollins22@gmail.com";
-
 const DATABASE_LINKS = [
   { href: "/admin/tools", label: "Tool Database" },
   { href: "/admin/materials", label: "Material Database" },
@@ -15,10 +13,10 @@ const DATABASE_LINKS = [
   { href: "/admin/team", label: "Team Database" },
 ];
 
-export function SiteNav({ userEmail }: { userEmail: string | null }) {
+export function SiteNav({ userEmail, roles }: { userEmail: string | null; roles: string[] }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const links = userEmail === JORDAN_EMAIL ? [...DATABASE_LINKS, { href: "/admin/overhead", label: "Overhead" }] : DATABASE_LINKS;
+  const links = roles.includes("overhead") ? [...DATABASE_LINKS, { href: "/admin/overhead", label: "Overhead" }] : DATABASE_LINKS;
 
   useEffect(() => {
     if (!open) return;
