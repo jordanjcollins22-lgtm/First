@@ -41,7 +41,9 @@ export default async function PermissionsPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Permissions</h1>
       <p className="mb-6 text-muted-foreground">
-        Which tabs each role can see. A person sees a tab if any of their roles grants it here.
+        Which tabs each role can see, including Admin — uncheck anything to see what a restricted view
+        looks like. This page itself always stays reachable to Admins no matter what&apos;s checked
+        here, so you can&apos;t lock yourself out.
       </p>
       <PermissionsMatrix roles={roles} permissions={permissions} />
     </div>

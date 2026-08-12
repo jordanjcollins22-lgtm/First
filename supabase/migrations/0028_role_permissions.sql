@@ -1,8 +1,9 @@
 -- Lets admins control which tabs/pages each role can see, instead of every
 -- signed-in account reaching every page. A tab is visible if ANY of a
--- person's roles grants it. Admins always see everything regardless of
--- what's configured here, so misconfiguring this table can't lock an admin
--- out of fixing it.
+-- person's roles grants it — including the admin role, which is editable
+-- here like any other. The safety net against locking an admin out lives in
+-- application code: /admin/permissions is gated on the "admin" role
+-- directly, not on this table, so there's always a way back in.
 
 create table if not exists role_permissions (
   role_name text not null references roles(name) on delete cascade on update cascade,

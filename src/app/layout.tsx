@@ -4,7 +4,7 @@ import { SiteNav } from "@/components/site-nav";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
-import { TABS, tabsAllowedForRoles } from "@/lib/permissions";
+import { tabsAllowedForRoles } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/env";
 import "./globals.css";
 
@@ -40,12 +40,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     if (user) {
       const profile = await getCurrentProfile();
       roles = profile?.roles ?? [];
-      if (roles.includes("admin")) {
-        allowedTabs = TABS.map((t) => t.key);
-      } else {
-        const permissions = await listRolePermissions().catch(() => []);
-        allowedTabs = Array.from(tabsAllowedForRoles(roles, permissions));
-      }
+      // Not auto-granted for admins — see the note in lib/data/access.ts.
+      // The Permissions nav link itself stays role-gated below, independent
+      // of this list, so there's always a way back in.
+      const permissions = await listRolePermissions().catch(() => []);
+      allowedTabs = Array.from(tabsAllowedForRoles(roles, permissions));
     }
   }
 

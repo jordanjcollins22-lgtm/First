@@ -35,30 +35,22 @@ export function PermissionsMatrix({ roles, permissions }: { roles: CustomRole[];
           </tr>
         </thead>
         <tbody>
-          {roles.map((role) => {
-            const isAdminRow = role.name === "admin";
-            return (
-              <tr key={role.name} className="border-b border-border align-middle">
-                <td className="p-2 font-medium capitalize">
-                  {role.name}
-                  {isAdminRow && (
-                    <span className="ml-1 text-xs font-normal text-muted-foreground">(always full access)</span>
-                  )}
+          {roles.map((role) => (
+            <tr key={role.name} className="border-b border-border align-middle">
+              <td className="p-2 font-medium capitalize">{role.name}</td>
+              {TABS.map((tab) => (
+                <td key={tab.key} className="p-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={grants.has(`${role.name}:${tab.key}`)}
+                    disabled={isPending}
+                    onChange={(e) => toggle(role.name, tab.key, e.target.checked)}
+                    className="h-4 w-4"
+                  />
                 </td>
-                {TABS.map((tab) => (
-                  <td key={tab.key} className="p-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={isAdminRow || grants.has(`${role.name}:${tab.key}`)}
-                      disabled={isAdminRow || isPending}
-                      onChange={(e) => toggle(role.name, tab.key, e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
