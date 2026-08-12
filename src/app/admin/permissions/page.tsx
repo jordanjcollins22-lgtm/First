@@ -16,7 +16,26 @@ export default async function PermissionsPage() {
     redirect("/attractors");
   }
 
-  const [roles, permissions] = await Promise.all([listRoles(), listRolePermissions()]);
+  let roles: Awaited<ReturnType<typeof listRoles>> = [];
+  let permissions: Awaited<ReturnType<typeof listRolePermissions>> = [];
+  let migrationMissing = false;
+  try {
+    [roles, permissions] = await Promise.all([listRoles(), listRolePermissions()]);
+  } catch {
+    migrationMissing = true;
+  }
+
+  if (migrationMissing) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <h1 className="mb-1 text-2xl font-bold">Permissions</h1>
+        <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
+          This page needs its database migration run first. In Supabase&apos;s SQL Editor, run{" "}
+          <code>supabase/migrations/0028_role_permissions.sql</code>, then reload this page.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">

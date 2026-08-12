@@ -10,7 +10,7 @@ async function resolveTabAccess(tab: TabKey): Promise<{ allowed: boolean; profil
   if (!profile) return { allowed: false, profile: null };
   if (profile.roles.includes("admin")) return { allowed: true, profile };
 
-  const permissions = await listRolePermissions();
+  const permissions = await listRolePermissions().catch(() => []);
   return { allowed: tabsAllowedForRoles(profile.roles, permissions).has(tab), profile };
 }
 
