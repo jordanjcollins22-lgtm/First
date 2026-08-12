@@ -66,11 +66,43 @@ export async function deleteProperty(id: string) {
 
 export async function updatePropertyAddress(id: string, input: { address: string; lat: number; lng: number }) {
   const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("properties")
+    .select("address")
+    .eq("id", id)
+    .single();
+  if (fetchError) throw fetchError;
+
   const { error } = await supabase
     .from("properties")
     .update({ address: input.address, lat: input.lat, lng: input.lng })
     .eq("id", id);
   if (error) throw error;
+
+  // Job names are generated as "{address} — Estimate/Evaluation" at creation
+  // time — keep them in sync when the address changes, but leave any job
+  // whose name no longer starts with the old address (i.e. manually renamed)
+  // alone.
+  if (existing.address && existing.address !== input.address) {
+    const { data: jobsToRename, error: jobsError } = await supabase
+      .from("jobs")
+      .select("id, name")
+      .eq("property_id", id);
+    if (jobsError) throw jobsError;
+
+    for (const job of jobsToRename ?? []) {
+      if (job.name?.startsWith(existing.address)) {
+        const suffix = job.name.slice(existing.address.length);
+        const { error: renameError } = await supabase
+          .from("jobs")
+          .update({ name: `${input.address}${suffix}` })
+          .eq("id", job.id);
+        if (renameError) throw renameError;
+      }
+    }
+  }
+
   revalidatePath("/attractors");
 }
 
