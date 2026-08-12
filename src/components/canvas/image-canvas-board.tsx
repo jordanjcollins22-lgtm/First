@@ -864,16 +864,30 @@ export function ImageCanvasBoard({
       ctx.restore();
     }
 
-    if (houseOutline.length >= 2) {
+    if (houseOutline.length > 0) {
+      const point = houseOutline[0];
+      const r = 11;
+      const headCx = point.x;
+      const headCy = point.y - r * 1.8;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetY = 2;
       ctx.beginPath();
-      ctx.moveTo(houseOutline[0].x, houseOutline[0].y);
-      for (const point of houseOutline.slice(1)) ctx.lineTo(point.x, point.y);
+      ctx.arc(headCx, headCy, r, Math.PI * 1.1, Math.PI * 1.9, false);
+      ctx.lineTo(point.x, point.y);
       ctx.closePath();
-      ctx.strokeStyle = "#dc2626";
+      ctx.fillStyle = "#dc2626";
+      ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "#ffffff";
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(headCx, headCy, r * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.restore();
     }
 
     if (propertyLine.length >= 2) {
@@ -912,7 +926,7 @@ export function ImageCanvasBoard({
       ctx.fillText(zone.name, cx, cy);
     }
 
-    if ((tool === "zone" || tool === "property-line" || tool === "house") && drawingPoints.length > 0) {
+    if ((tool === "zone" || tool === "property-line") && drawingPoints.length > 0) {
       ctx.beginPath();
       ctx.moveTo(drawingPoints[0].x, drawingPoints[0].y);
       for (const point of drawingPoints.slice(1)) ctx.lineTo(point.x, point.y);
@@ -1149,24 +1163,21 @@ export function ImageCanvasBoard({
     if (houseOutline.length > 0) fitImageToCover();
   }
 
-  function finalizeHouse() {
-    if (drawingPoints.length < 3) return;
-    setHouseOutline(drawingPoints);
-    setDrawingPoints([]);
-    setCursorPos(null);
+  /** A single click drops a pin — the house doesn't need a traced outline, just its location. */
+  function placeHouseMarker(point: Point) {
+    setHouseOutline([point]);
     setTool("move");
     if (propertyLine.length > 0) fitImageToCover();
   }
 
   useEffect(() => {
-    if (tool !== "zone" && tool !== "property-line" && tool !== "house") return;
+    if (tool !== "zone" && tool !== "property-line") return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setDrawingPoints([]);
         setCursorPos(null);
       } else if (e.key === "Enter") {
         if (tool === "zone") finalizeZone();
-        else if (tool === "house") finalizeHouse();
         else finalizePropertyLine();
       } else if (e.key === "Backspace") {
         setDrawingPoints((prev) => prev.slice(0, -1));
@@ -1294,10 +1305,14 @@ export function ImageCanvasBoard({
     const canvas = e.currentTarget;
     const point = toCanvasPoint(e.clientX, e.clientY, canvas);
 
-    if (tool === "zone" || tool === "property-line" || tool === "house") {
+    if (tool === "house") {
+      placeHouseMarker(point);
+      return;
+    }
+
+    if (tool === "zone" || tool === "property-line") {
       if (drawingPoints.length >= 3 && distance(point, drawingPoints[0]) <= CLOSE_POINT_RADIUS) {
         if (tool === "zone") finalizeZone();
-        else if (tool === "house") finalizeHouse();
         else finalizePropertyLine();
       } else {
         setDrawingPoints((prev) => [...prev, point]);
@@ -1313,7 +1328,9 @@ export function ImageCanvasBoard({
   function handlePointerMove(e: PointerEvent<HTMLCanvasElement>) {
     const point = toCanvasPoint(e.clientX, e.clientY, e.currentTarget);
 
-    if (tool === "zone" || tool === "property-line" || tool === "house") {
+    if (tool === "house") return;
+
+    if (tool === "zone" || tool === "property-line") {
       if (drawingPoints.length > 0) setCursorPos(point);
       return;
     }
@@ -1471,7 +1488,7 @@ export function ImageCanvasBoard({
 
       {guidedStep === "house" && !isDrawingNow && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          <span>Mark the house — it helps judge the property&apos;s scale.</span>
+          <span>Mark the house — tap once on the map to drop a pin on it.</span>
           <Button type="button" size="sm" onClick={() => selectTool("house")}>
             <Home className="h-4 w-4" />
             Mark House
@@ -1530,7 +1547,7 @@ export function ImageCanvasBoard({
               <PenTool className="h-4 w-4" />
               Draw Work Zone
             </Button>
-            {(tool === "zone" || tool === "property-line" || tool === "house") && drawingPoints.length > 0 && (
+            {(tool === "zone" || tool === "property-line") && drawingPoints.length > 0 && (
               <Button
                 type="button"
                 size="sm"
@@ -1646,9 +1663,11 @@ export function ImageCanvasBoard({
 
       {isDrawingNow && (
         <p className="text-xs text-muted-foreground">
-          {`Click to add points. Click the first point (or press Enter) to close the ${
-            tool === "property-line" ? "property line" : tool === "house" ? "house outline" : "zone"
-          }. Backspace undoes a point, Escape cancels.`}
+          {tool === "house"
+            ? "Click once on the map to drop a pin on the house."
+            : `Click to add points. Click the first point (or press Enter) to close the ${
+                tool === "property-line" ? "property line" : "zone"
+              }. Backspace undoes a point, Escape cancels.`}
         </p>
       )}
 
