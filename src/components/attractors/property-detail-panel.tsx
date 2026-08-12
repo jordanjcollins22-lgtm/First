@@ -1,13 +1,18 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ExternalLink, MapPin, X } from "lucide-react";
+import { ExternalLink, MapPin, Pencil, Plus, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { AssignJobSelect } from "@/components/property/assign-job-select";
 import { DeletePropertyButton } from "@/components/property/delete-property-button";
+import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
+import { addPropertyForCustomer, updatePropertyAddress } from "@/lib/actions/property-actions";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
+import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 
 export function PropertyDetailPanel({
   property,
@@ -21,21 +26,72 @@ export function PropertyDetailPanel({
   onClose: () => void;
 }) {
   const propertyJobs = jobs.filter((j) => j.property_id === property.id);
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [addingProperty, setAddingProperty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleAddressPicked(suggestion: GeocodeSuggestion) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updatePropertyAddress(property.id, { address: suggestion.fullAddress, lat: suggestion.lat, lng: suggestion.lng });
+        setEditingAddress(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
+    });
+  }
+
+  function handleNewPropertyPicked(suggestion: GeocodeSuggestion) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await addPropertyForCustomer(property.customer_id, {
+          address: suggestion.fullAddress,
+          lat: suggestion.lat,
+          lng: suggestion.lng,
+        });
+        setAddingProperty(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
+    });
+  }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="flex items-center gap-1.5 font-semibold">
-            <MapPin className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-            {property.address}
-          </p>
-          <p className="text-xs text-muted-foreground">{property.customer.name}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{property.customer.name}</p>
+          {editingAddress ? (
+            <div className="mt-1.5 flex flex-col gap-1.5">
+              <SatelliteAddressSearch onSelect={handleAddressPicked} disabled={isPending} />
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEditingAddress(false)} disabled={isPending}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+              {property.address}
+              <button
+                type="button"
+                onClick={() => setEditingAddress(true)}
+                title="Edit address"
+                className="text-muted-foreground hover:text-primary"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            </p>
+          )}
         </div>
         <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-2">
         <p className="text-xs font-medium text-muted-foreground">Jobs</p>
@@ -55,6 +111,23 @@ export function PropertyDetailPanel({
               <AssignJobSelect jobId={job.id} initialAssignedTo={job.assigned_to} profiles={profiles} />
             </div>
           ))
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+        {addingProperty ? (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-muted-foreground">New address for {property.customer.name}</p>
+            <SatelliteAddressSearch onSelect={handleNewPropertyPicked} disabled={isPending} />
+            <Button type="button" size="sm" variant="ghost" onClick={() => setAddingProperty(false)} disabled={isPending}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" size="sm" variant="outline" onClick={() => setAddingProperty(true)} className="self-start">
+            <Plus className="h-3.5 w-3.5" />
+            Add another property for this client
+          </Button>
         )}
       </div>
 

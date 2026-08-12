@@ -260,7 +260,7 @@ export function AttractorsDashboard({
             <TabsList className="m-2 shrink-0">
               <TabsTrigger value="waves">Waves ({filteredWaves.length})</TabsTrigger>
               <TabsTrigger value="projects">Projects ({filteredJobs.length})</TabsTrigger>
-              <TabsTrigger value="properties">Properties ({properties.length})</TabsTrigger>
+              <TabsTrigger value="properties">Clients ({properties.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="waves" className="mt-0 flex-1 overflow-y-auto">
               <WaveList

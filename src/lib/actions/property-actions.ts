@@ -63,3 +63,28 @@ export async function deleteProperty(id: string) {
   if (error) throw error;
   revalidatePath("/attractors");
 }
+
+export async function updatePropertyAddress(id: string, input: { address: string; lat: number; lng: number }) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("properties")
+    .update({ address: input.address, lat: input.lat, lng: input.lng })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/attractors");
+}
+
+/** Adds another property (address) under an existing client, instead of
+ * creating a duplicate customer the way the standalone "New Property" form
+ * does. */
+export async function addPropertyForCustomer(
+  customerId: string,
+  input: { address: string; lat: number; lng: number }
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("properties")
+    .insert({ customer_id: customerId, address: input.address, lat: input.lat, lng: input.lng });
+  if (error) throw error;
+  revalidatePath("/attractors");
+}
