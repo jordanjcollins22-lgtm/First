@@ -5,6 +5,13 @@ export interface ServiceFieldDef {
   label: string;
   type: ServiceFieldType;
   options?: string[];
+  /**
+   * Marks this field as an optional work item: shown as a checkbox on the
+   * checklist step ("would they like this done?") instead of a select
+   * question, with a quantity follow-up ("how many <unit>?") asked only when
+   * checked.
+   */
+  checklistItem?: { question: string; unit: string };
 }
 
 export interface ServiceTypeDef {
@@ -26,11 +33,41 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
       { key: "existingMaterialCondition", label: "Existing material condition", type: "select", options: ["Normal", "Excessive", "Needs Removal"] },
       { key: "weedLevel", label: "Weed level", type: "select", options: ["None", "Light", "Moderate", "Heavy"] },
       { key: "edge", label: "Edge", type: "select", options: ["Existing Good Edge", "Existing Edge Needs Redone", "No Edge"] },
-      { key: "bushTrimming", label: "Bush trimming", type: "select", options: ["None", "Select Bushes", "All Bushes"] },
-      { key: "bushRemoval", label: "Bush removal", type: "select", options: ["None", "Select Bushes", "All Bushes"] },
-      { key: "plantRemoval", label: "Plant removal", type: "select", options: ["None", "Select Plants", "All Plants"] },
-      { key: "plantRelocation", label: "Plant relocation", type: "select", options: ["None", "Select Plants"] },
-      { key: "newPlantInstallation", label: "New plant installation", type: "select", options: ["None", "Select Plants"] },
+      {
+        key: "bushTrimming",
+        label: "Bush trimming",
+        type: "select",
+        options: ["None", "Select Bushes", "All Bushes"],
+        checklistItem: { question: "Trim bushes", unit: "bushes" },
+      },
+      {
+        key: "bushRemoval",
+        label: "Bush removal",
+        type: "select",
+        options: ["None", "Select Bushes", "All Bushes"],
+        checklistItem: { question: "Remove bushes", unit: "bushes" },
+      },
+      {
+        key: "plantRemoval",
+        label: "Plant removal",
+        type: "select",
+        options: ["None", "Select Plants", "All Plants"],
+        checklistItem: { question: "Remove plants", unit: "plants" },
+      },
+      {
+        key: "plantRelocation",
+        label: "Plant relocation",
+        type: "select",
+        options: ["None", "Select Plants"],
+        checklistItem: { question: "Relocate plants", unit: "plants" },
+      },
+      {
+        key: "newPlantInstallation",
+        label: "New plant installation",
+        type: "select",
+        options: ["None", "Select Plants"],
+        checklistItem: { question: "Install new plants", unit: "plants" },
+      },
     ],
     autoScope: () =>
       "Bed cleanup, weed removal, removal of excessive material, proper bed preparation, digging/redefining natural edges, debris disposal, correct material installation, and final cleanup.",

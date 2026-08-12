@@ -47,7 +47,7 @@ import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
-import { serviceTypeById } from "./service-catalog";
+import { serviceTypeById, type ServiceFieldDef } from "./service-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { CanvasDesignRow } from "@/types/domain";
@@ -289,10 +289,14 @@ function zoneServiceSummary(service: ZoneServiceData): string {
   return serviceTypeById(service.typeId)?.label ?? "Details added";
 }
 
-function displayFieldValue(values: Record<string, string>, key: string): string {
-  const value = values[key];
+function displayFieldValue(values: Record<string, string>, field: ServiceFieldDef): string {
+  if (field.checklistItem) {
+    const qty = values[`${field.key}__qty`];
+    return qty ? `${field.checklistItem.question} — Qty: ${qty}` : field.checklistItem.question;
+  }
+  const value = values[field.key];
   if (value === "Other") {
-    const explanation = values[`${key}__other`];
+    const explanation = values[`${field.key}__other`];
     return explanation ? `Other — ${explanation}` : "Other";
   }
   return value;
@@ -475,7 +479,9 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
 
     const fieldLines = serviceType.fields
       .filter((field) => service.values[field.key])
-      .map((field) => `${field.label}: ${displayFieldValue(service.values, field.key)}`);
+      .map((field) =>
+        field.checklistItem ? displayFieldValue(service.values, field) : `${field.label}: ${displayFieldValue(service.values, field)}`
+      );
     if (fieldLines.length > 0) {
       y = drawBoxedSection(ctx, "Details", fieldLines, y);
     }
