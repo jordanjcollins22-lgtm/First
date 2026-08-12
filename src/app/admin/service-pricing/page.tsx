@@ -1,5 +1,6 @@
 import { listServicePricing } from "@/lib/data/service-pricing";
 import { isSupabaseConfigured } from "@/lib/env";
+import { requireTab } from "@/lib/data/access";
 import { SERVICE_TYPES } from "@/components/canvas/service-catalog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -7,6 +8,7 @@ import { ServicePricingRow } from "@/components/service-pricing/service-pricing-
 
 export default async function ServicePricingPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("services", "/attractors");
 
   const pricing = await listServicePricing();
   const pricingByType = new Map(pricing.map((p) => [p.service_type_id, p]));

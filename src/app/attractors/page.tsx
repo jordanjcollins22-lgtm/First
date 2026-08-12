@@ -3,6 +3,7 @@ import { listJobsWithLocation } from "@/lib/data/jobs";
 import { listBusinessLocations, listLocationAreas } from "@/lib/data/locations";
 import { listProperties } from "@/lib/data/properties";
 import { listProfiles } from "@/lib/data/team";
+import { checkTabAccess } from "@/lib/data/access";
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { AttractorsDashboard } from "@/components/attractors/attractors-dashboard";
@@ -11,6 +12,19 @@ import type { JobWithLocation } from "@/lib/data/jobs";
 
 export default async function AttractorsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+
+  const { allowed, profile } = await checkTabAccess("project-data");
+  if (profile && !allowed) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <h1 className="mb-1 text-2xl font-bold">Project Data</h1>
+        <p className="text-sm text-muted-foreground">
+          Your account doesn&apos;t have access to this page. Ask an admin to grant it under Databases &rarr;
+          Permissions.
+        </p>
+      </div>
+    );
+  }
 
   let types: AttractorType[] = [];
   let variants: AttractorVariant[] = [];

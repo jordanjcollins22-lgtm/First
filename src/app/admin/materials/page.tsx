@@ -1,6 +1,7 @@
 import { listMaterials } from "@/lib/data/materials";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
+import { requireTab } from "@/lib/data/access";
 import { SERVICE_TYPES } from "@/components/canvas/service-catalog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -10,6 +11,7 @@ import { MaterialInventoryRow } from "@/components/material/material-inventory-r
 
 export default async function MaterialsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("materials", "/attractors");
 
   const supabase = await createClient();
   const [materials, rulesRes] = await Promise.all([

@@ -146,6 +146,26 @@ export interface Database {
           },
         ];
       };
+      role_permissions: {
+        Row: {
+          role_name: string;
+          tab_key: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]> & {
+          role_name: string;
+          tab_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_role_name_fkey";
+            columns: ["role_name"];
+            referencedRelation: "roles";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
       overhead_expenses: {
         Row: {
           id: string;

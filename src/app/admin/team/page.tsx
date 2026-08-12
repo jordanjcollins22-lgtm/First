@@ -1,4 +1,5 @@
 import { listProfiles, listRoles, getCurrentProfile } from "@/lib/data/team";
+import { requireTab } from "@/lib/data/access";
 import { isSupabaseConfigured, isSupabaseAdminConfigured } from "@/lib/env";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -10,6 +11,7 @@ import type { CustomRole, Profile } from "@/types/domain";
 
 export default async function TeamPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("team", "/attractors");
 
   let profiles: Profile[] = [];
   let roles: CustomRole[] = [];

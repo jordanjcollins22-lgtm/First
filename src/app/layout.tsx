@@ -3,6 +3,8 @@ import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
+import { listRolePermissions } from "@/lib/data/permissions";
+import { TABS, tabsAllowedForRoles } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/env";
 import "./globals.css";
 
@@ -28,6 +30,7 @@ export const viewport = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   let userEmail: string | null = null;
   let roles: string[] = [];
+  let allowedTabs: string[] = [];
   if (isSupabaseConfigured) {
     const supabase = await createClient();
     const {
@@ -37,6 +40,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     if (user) {
       const profile = await getCurrentProfile();
       roles = profile?.roles ?? [];
+      if (roles.includes("admin")) {
+        allowedTabs = TABS.map((t) => t.key);
+      } else {
+        const permissions = await listRolePermissions().catch(() => []);
+        allowedTabs = Array.from(tabsAllowedForRoles(roles, permissions));
+      }
     }
   }
 
@@ -54,7 +63,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-lg font-bold text-primary">
               Celerity
             </Link>
-            <SiteNav userEmail={userEmail} roles={roles} />
+            <SiteNav userEmail={userEmail} roles={roles} allowedTabs={allowedTabs} />
           </div>
         </header>
         <main className="flex-1">{children}</main>

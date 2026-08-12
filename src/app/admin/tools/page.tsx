@@ -1,6 +1,7 @@
 import { listTools } from "@/lib/data/tools";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
+import { requireTab } from "@/lib/data/access";
 import { SERVICE_TYPES } from "@/components/canvas/service-catalog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -9,6 +10,7 @@ import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 
 export default async function ToolsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("tools", "/attractors");
 
   const supabase = await createClient();
   const [tools, linksRes] = await Promise.all([

@@ -146,6 +146,11 @@ export interface CustomRole {
   is_system: boolean;
 }
 
+export interface RolePermission {
+  role_name: string;
+  tab_key: string;
+}
+
 export interface Tool {
   id: string;
   name: string;
