@@ -14,6 +14,7 @@ export interface SaveCanvasDesignInput {
   imageRealWidthFeet: number | null;
   locked: boolean;
   propertyLine: { x: number; y: number }[];
+  houseOutline: { x: number; y: number }[];
   zones: unknown[];
 }
 
@@ -31,6 +32,7 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
       image_real_width_feet: input.imageRealWidthFeet,
       locked: input.locked,
       property_line: input.propertyLine,
+      house_outline: input.houseOutline,
       zones: input.zones,
     },
     { onConflict: "job_id" }

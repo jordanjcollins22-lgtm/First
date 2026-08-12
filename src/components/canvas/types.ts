@@ -37,4 +37,6 @@ export interface StoredDesign {
   zones: WorkZone[];
   /** A rough property boundary drawn once, up front, before work zones. */
   propertyLine: Point[];
+  /** A single pin marking the house, drawn before the property line. */
+  houseOutline: Point[];
 }

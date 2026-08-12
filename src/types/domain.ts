@@ -243,6 +243,7 @@ export interface CanvasDesignRow {
   image_real_width_feet: number | null;
   locked: boolean;
   property_line: { x: number; y: number }[];
+  house_outline: { x: number; y: number }[];
   zones: unknown[];
   created_at: string;
   updated_at: string;

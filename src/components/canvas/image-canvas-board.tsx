@@ -957,6 +957,7 @@ export function ImageCanvasBoard({
           setAddress(initialAddress || initialDesign.address || "");
           setZones(initialDesign.zones as unknown as WorkZone[]);
           setPropertyLine(initialDesign.property_line ?? []);
+          setHouseOutline(initialDesign.house_outline ?? []);
           if (initialDesign.image_path) {
             const supabase = createClient();
             const url = supabase.storage.from("canvas-images").getPublicUrl(initialDesign.image_path).data
@@ -1034,6 +1035,7 @@ export function ImageCanvasBoard({
             setAddress(design.address ?? "");
             setZones(design.zones);
             setPropertyLine(design.propertyLine ?? []);
+            setHouseOutline(design.houseOutline ?? []);
           }
         }
       } catch {
@@ -1065,12 +1067,13 @@ export function ImageCanvasBoard({
         address,
         zones,
         propertyLine,
+        houseOutline,
       })
         .then(() => setLastSavedAt(Date.now()))
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline]);
 
   // Debounced autosave to the database for job-scoped canvases. Zone photos
   // are uploaded to storage as soon as they're picked (see ZoneServiceDialog)
@@ -1104,6 +1107,7 @@ export function ImageCanvasBoard({
             imageRealWidthFeet: image?.realWidthFeet ?? null,
             locked,
             propertyLine,
+            houseOutline,
             zones,
           });
           setLastSavedAt(Date.now());
@@ -1113,7 +1117,7 @@ export function ImageCanvasBoard({
       })();
     }, 800);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;

@@ -307,6 +307,7 @@ export interface Database {
           image_real_width_feet: number | null;
           locked: boolean;
           property_line: Json;
+          house_outline: Json;
           zones: Json;
           created_at: string;
           updated_at: string;
