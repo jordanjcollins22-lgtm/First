@@ -940,7 +940,10 @@ export function ImageCanvasBoard({
         uploadedImagePathRef.current = initialDesign?.image_path ?? null;
         if (initialDesign) {
           setLocked(initialDesign.locked);
-          setAddress(initialDesign.address || initialAddress || "");
+          // Prefer the live property address over whatever was saved with this
+          // design snapshot — the property address can be corrected later
+          // (e.g. from a bad webhook value) and the canvas/PDF should follow it.
+          setAddress(initialAddress || initialDesign.address || "");
           setZones(initialDesign.zones as unknown as WorkZone[]);
           setPropertyLine(initialDesign.property_line ?? []);
           if (initialDesign.image_path) {
