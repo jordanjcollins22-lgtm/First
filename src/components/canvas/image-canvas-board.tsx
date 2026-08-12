@@ -13,10 +13,14 @@ import jsPDF from "jspdf";
 import Link from "next/link";
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Home,
   ImageUp,
   Lock,
+  Maximize2,
+  Minimize2,
   MousePointer2,
   PenTool,
   Route,
@@ -834,6 +838,25 @@ export function ImageCanvasBoard({
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [submittingEval, setSubmittingEval] = useState(false);
   const [evalSubmitted, setEvalSubmitted] = useState(initialEvaluationStatus === "completed");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [sideToolbarOpen, setSideToolbarOpen] = useState(true);
+
+  // Lock background scroll while fullscreen, and let Escape back out of it.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function handleEscape(e: KeyboardEvent) {
+      // If a zone/property line is mid-draw, the other Escape handler cancels
+      // that first — don't also drop out of fullscreen in the same keypress.
+      if (e.key === "Escape" && drawingPoints.length === 0) setIsFullscreen(false);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isFullscreen, drawingPoints.length]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1601,8 +1624,13 @@ export function ImageCanvasBoard({
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-lg border border-border bg-muted">
-        <div className="max-h-[70vh] overflow-auto">
+      <div
+        className={cn(
+          "relative overflow-hidden border-border bg-muted",
+          isFullscreen ? "fixed inset-0 z-50 border-0" : "rounded-lg border"
+        )}
+      >
+        <div className={isFullscreen ? "h-full overflow-auto" : "max-h-[70vh] overflow-auto"}>
           <canvas
             ref={canvasRef}
             width={CANVAS_WIDTH}
@@ -1638,6 +1666,95 @@ export function ImageCanvasBoard({
           </div>
         )}
 
+        {image && (
+          <button
+            type="button"
+            onClick={() => setIsFullscreen((v) => !v)}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+        )}
+
+        {isFullscreen && guidedStep === "editing" && (
+          <div className="absolute right-3 top-3 flex items-start gap-1">
+            {sideToolbarOpen && (
+              <div className="flex flex-col gap-1 rounded-xl bg-black/70 p-1.5 backdrop-blur-md">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tool === "move" ? "secondary" : "ghost"}
+                  className="justify-start text-white hover:text-white"
+                  onClick={() => selectTool("move")}
+                >
+                  <MousePointer2 className="h-4 w-4" />
+                  Move
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tool === "house" ? "secondary" : "ghost"}
+                  className="justify-start text-white hover:text-white"
+                  onClick={() => selectTool("house")}
+                >
+                  <Home className="h-4 w-4" />
+                  {houseOutline.length > 0 ? "Redraw House" : "Mark House"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tool === "property-line" ? "secondary" : "ghost"}
+                  className="justify-start text-white hover:text-white"
+                  onClick={() => selectTool("property-line")}
+                >
+                  <Route className="h-4 w-4" />
+                  {propertyLine.length > 0 ? "Redraw Line" : "Draw Line"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tool === "zone" ? "secondary" : "ghost"}
+                  className="justify-start text-white hover:text-white"
+                  onClick={() => selectTool("zone")}
+                >
+                  <PenTool className="h-4 w-4" />
+                  Draw Zone
+                </Button>
+                {tool !== "house" && drawingPoints.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="justify-start text-white hover:text-white"
+                    onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Undo Point
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="justify-start text-white hover:text-white"
+                  onClick={() => setLocked((prev) => !prev)}
+                >
+                  {locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                  {locked ? "Unlock" : "Lock"}
+                </Button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setSideToolbarOpen((v) => !v)}
+              title={sideToolbarOpen ? "Collapse toolbar" : "Expand toolbar"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
+            >
+              {sideToolbarOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          </div>
+        )}
       </div>
 
       {isDrawingNow && (
