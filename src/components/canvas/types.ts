@@ -7,7 +7,8 @@ export interface ZoneServiceData {
   typeId: string;
   values: Record<string, string>;
   notes: string;
-  photos: Blob[];
+  /** Storage paths in the "canvas-images" bucket, uploaded as soon as they're picked. */
+  photos: string[];
   tools: string[];
 }
 

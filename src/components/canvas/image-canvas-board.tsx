@@ -112,7 +112,7 @@ function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
 const inventoryImageCache = new Map<string, Promise<HTMLImageElement | null>>();
 
 function loadInventoryImage(
-  bucket: "tool-images" | "material-images",
+  bucket: "tool-images" | "material-images" | "canvas-images",
   path: string | null
 ): Promise<HTMLImageElement | null> {
   if (!path) return Promise.resolve(null);
@@ -507,14 +507,12 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
       const maxPhotos = Math.min(service.photos.length, 3);
       let x = PAGE_MARGIN;
       for (let i = 0; i < maxPhotos; i++) {
-        try {
-          const photoElement = await loadImageElement(service.photos[i]);
+        const photoElement = await loadInventoryImage("canvas-images", service.photos[i]);
+        if (photoElement) {
           ctx.drawImage(photoElement, x, y, photoSize, photoSize);
           ctx.strokeStyle = "#e5e7eb";
           ctx.lineWidth = 1;
           ctx.strokeRect(x, y, photoSize, photoSize);
-        } catch {
-          // Skip a photo that fails to load rather than blocking the whole page.
         }
         x += photoSize + gap;
       }
@@ -780,19 +778,9 @@ function renderJobPlanPages(
   return [fallback];
 }
 
-function ZonePhotoThumbnail({ blob }: { blob: Blob }) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Object URLs must be created/revoked alongside the blob's lifecycle, so this
-    // is a real external-system sync, not derivable state.
-    const objectUrl = URL.createObjectURL(blob);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [blob]);
-
-  if (!url) return null;
+function ZonePhotoThumbnail({ path }: { path: string }) {
+  const supabase = createClient();
+  const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />;
 }
@@ -1078,10 +1066,10 @@ export function ImageCanvasBoard({
     return () => clearTimeout(timer);
   }, [jobId, image, locked, address, zones, propertyLine]);
 
-  // Debounced autosave to the database for job-scoped canvases. Zone photos are
-  // kept in memory for this session (and still make it into an exported PDF)
-  // but are not persisted to the database yet — only the background image,
-  // zones' shapes/service data, property line, and address are saved.
+  // Debounced autosave to the database for job-scoped canvases. Zone photos
+  // are uploaded to storage as soon as they're picked (see ZoneServiceDialog)
+  // and only their storage paths live in zone state, so they're small enough
+  // to persist here along with everything else.
   useEffect(() => {
     if (!jobId || !loadedRef.current) return;
     const timer = setTimeout(() => {
@@ -1110,7 +1098,7 @@ export function ImageCanvasBoard({
             imageRealWidthFeet: image?.realWidthFeet ?? null,
             locked,
             propertyLine,
-            zones: zones.map((zone) => (zone.service ? { ...zone, service: { ...zone.service, photos: [] } } : zone)),
+            zones,
           });
           setLastSavedAt(Date.now());
         } catch {
@@ -1782,7 +1770,7 @@ export function ImageCanvasBoard({
                       style={{ backgroundColor: zone.color }}
                       aria-hidden
                     />
-                    {zone.service?.photos?.[0] && <ZonePhotoThumbnail blob={zone.service.photos[0]} />}
+                    {zone.service?.photos?.[0] && <ZonePhotoThumbnail path={zone.service.photos[0]} />}
                     <span className="flex flex-col">
                       <span className="font-medium">{zone.name}</span>
                       {zone.location && (
@@ -1819,6 +1807,7 @@ export function ImageCanvasBoard({
         key={serviceDialogZoneId ?? "none"}
         open={dialogZone !== null}
         zoneName={dialogZone?.name ?? ""}
+        jobId={jobId}
         catalog={catalog}
         initialLocation={dialogZone?.location ?? ""}
         initialService={dialogZone?.service ?? null}

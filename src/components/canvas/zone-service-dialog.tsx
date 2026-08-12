@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import Link from "next/link";
-import { Camera, Check, Pencil, X } from "lucide-react";
+import { Camera, Check, Loader2, Pencil, X } from "lucide-react";
 
 import {
   Dialog,
@@ -20,21 +20,12 @@ import type { ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
 import { ToolImageThumb } from "@/components/tool/tool-image-thumb";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Object URLs must be created/revoked alongside the blob's lifecycle, so this
-    // is a real external-system sync, not derivable state.
-    const objectUrl = URL.createObjectURL(blob);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [blob]);
-
-  if (!url) return null;
+function PhotoThumb({ path, onRemove }: { path: string; onRemove: () => void }) {
+  const supabase = createClient();
+  const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
   return (
     <div className="relative h-16 w-16 shrink-0">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -189,6 +180,8 @@ function OptionButtons({
 interface ZoneServiceDialogProps {
   open: boolean;
   zoneName: string;
+  /** Storage prefix for uploaded zone photos — required to actually save them. */
+  jobId?: string;
   catalog: CanvasCatalog;
   initialLocation: string;
   initialService: ZoneServiceData | null;
@@ -206,6 +199,7 @@ interface ZoneServiceDialogProps {
 export function ZoneServiceDialog({
   open,
   zoneName,
+  jobId,
   catalog,
   initialLocation,
   initialService,
@@ -218,7 +212,9 @@ export function ZoneServiceDialog({
   const [typeId, setTypeId] = useState(initialService?.typeId ?? "");
   const [values, setValues] = useState<Record<string, string>>(initialService?.values ?? {});
   const [notes, setNotes] = useState(initialService?.notes ?? "");
-  const [photos, setPhotos] = useState<Blob[]>(initialService?.photos ?? []);
+  const [photos, setPhotos] = useState<string[]>(initialService?.photos ?? []);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [customTool, setCustomTool] = useState("");
   const [areaSqFt, setAreaSqFt] = useState(initialAreaSqFt?.toString() ?? "");
   const [perimeterFt, setPerimeterFt] = useState(initialPerimeterFt?.toString() ?? "");
@@ -312,12 +308,34 @@ export function ZoneServiceDialog({
     setExtraTools((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setPhotos((prev) => [...prev, ...Array.from(files)]);
-    }
+  async function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
+    if (files.length === 0) return;
+
+    if (!jobId) {
+      setPhotoError("This job hasn't finished saving yet — wait a moment and try again.");
+      return;
+    }
+
+    setPhotoError(null);
+    setPhotoUploading(true);
+    try {
+      const supabase = createClient();
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const extension = file.name.split(".").pop() || "jpg";
+        const path = `${jobId}/zone-photos/${crypto.randomUUID()}.${extension}`;
+        const { error } = await supabase.storage.from("canvas-images").upload(path, file);
+        if (error) throw error;
+        uploaded.push(path);
+      }
+      setPhotos((prev) => [...prev, ...uploaded]);
+    } catch {
+      setPhotoError("Couldn't upload one or more photos — check your connection and try again.");
+    } finally {
+      setPhotoUploading(false);
+    }
   }
 
   function handleRemovePhoto(index: number) {
@@ -597,15 +615,31 @@ export function ZoneServiceDialog({
   } else if (currentStep === "photos") {
     body = (
       <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Any photos for this zone?">
-        <div className="flex flex-wrap gap-2">
-          {photos.map((photo, index) => (
-            <PhotoThumb key={index} blob={photo} onRemove={() => handleRemovePhoto(index)} />
-          ))}
-          <label className="flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent">
-            <Camera className="h-4 w-4" />
-            <span className="text-[10px]">Add</span>
-            <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotosChange} />
-          </label>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {photos.map((photo, index) => (
+              <PhotoThumb key={photo} path={photo} onRemove={() => handleRemovePhoto(index)} />
+            ))}
+            <label
+              className={cn(
+                "flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent",
+                photoUploading ? "pointer-events-none opacity-60" : "cursor-pointer"
+              )}
+            >
+              {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              <span className="text-[10px]">{photoUploading ? "Uploading..." : "Add"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                disabled={photoUploading}
+                className="hidden"
+                onChange={handlePhotosChange}
+              />
+            </label>
+          </div>
+          {photoError && <p className="text-xs text-destructive">{photoError}</p>}
         </div>
       </StepShell>
     );
