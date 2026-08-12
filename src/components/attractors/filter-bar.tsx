@@ -2,7 +2,10 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { AttractorType, AttractorWaveStatus, JobStatus } from "@/types/domain";
+
+const ALL = "all";
 
 const WAVE_STATUSES: { value: AttractorWaveStatus; label: string }[] = [
   { value: "planned", label: "Planned" },
@@ -41,8 +44,7 @@ export function FilterBar({
   onToggleType,
   onClearTypeFilter,
   statusFilter,
-  onToggleStatus,
-  onClearStatusFilter,
+  onStatusChange,
   dateFrom,
   dateTo,
   onDateFromChange,
@@ -50,8 +52,7 @@ export function FilterBar({
   showProjects,
   onToggleShowProjects,
   jobStatusFilter,
-  onToggleJobStatus,
-  onClearJobStatusFilter,
+  onJobStatusChange,
   showLocations,
   onToggleShowLocations,
 }: {
@@ -60,8 +61,7 @@ export function FilterBar({
   onToggleType: (id: string) => void;
   onClearTypeFilter: () => void;
   statusFilter: Set<AttractorWaveStatus>;
-  onToggleStatus: (s: AttractorWaveStatus) => void;
-  onClearStatusFilter: () => void;
+  onStatusChange: (status: AttractorWaveStatus | null) => void;
   dateFrom: string;
   dateTo: string;
   onDateFromChange: (v: string) => void;
@@ -69,11 +69,13 @@ export function FilterBar({
   showProjects: boolean;
   onToggleShowProjects: () => void;
   jobStatusFilter: Set<JobStatus>;
-  onToggleJobStatus: (s: JobStatus) => void;
-  onClearJobStatusFilter: () => void;
+  onJobStatusChange: (status: JobStatus | null) => void;
   showLocations: boolean;
   onToggleShowLocations: () => void;
 }) {
+  const currentStatus = statusFilter.size === 1 ? [...statusFilter][0] : ALL;
+  const currentJobStatus = jobStatusFilter.size === 1 ? [...jobStatusFilter][0] : ALL;
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-3 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -88,16 +90,21 @@ export function FilterBar({
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-xs font-medium text-muted-foreground">Wave status</span>
-        <Chip active={statusFilter.size === 0} onClick={onClearStatusFilter}>
-          All
-        </Chip>
-        {WAVE_STATUSES.map((s) => (
-          <Chip key={s.value} active={statusFilter.has(s.value)} onClick={() => onToggleStatus(s.value)}>
-            {s.label}
-          </Chip>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Wave status</span>
+        <Select value={currentStatus} onValueChange={(v) => onStatusChange(v === ALL ? null : (v as AttractorWaveStatus))}>
+          <SelectTrigger className="h-8 w-36 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All</SelectItem>
+            {WAVE_STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <span className="ml-3 mr-1 text-xs font-medium text-muted-foreground">Date range</span>
         <Input
@@ -115,22 +122,28 @@ export function FilterBar({
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Label className="mr-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2">
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <input type="checkbox" checked={showProjects} onChange={onToggleShowProjects} className="h-3.5 w-3.5" />
           Projects
         </Label>
         {showProjects && (
-          <>
-            <Chip active={jobStatusFilter.size === 0} onClick={onClearJobStatusFilter}>
-              All statuses
-            </Chip>
-            {JOB_STATUSES.map((s) => (
-              <Chip key={s.value} active={jobStatusFilter.has(s.value)} onClick={() => onToggleJobStatus(s.value)}>
-                {s.label}
-              </Chip>
-            ))}
-          </>
+          <Select
+            value={currentJobStatus}
+            onValueChange={(v) => onJobStatusChange(v === ALL ? null : (v as JobStatus))}
+          >
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All statuses</SelectItem>
+              {JOB_STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         <Label className="ml-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

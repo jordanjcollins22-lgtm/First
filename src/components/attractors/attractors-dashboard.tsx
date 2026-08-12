@@ -239,8 +239,7 @@ export function AttractorsDashboard({
         onToggleType={(id) => toggleInSet(setTypeFilter, id)}
         onClearTypeFilter={() => setTypeFilter(new Set())}
         statusFilter={statusFilter}
-        onToggleStatus={(s) => toggleInSet(setStatusFilter, s)}
-        onClearStatusFilter={() => setStatusFilter(new Set())}
+        onStatusChange={(s) => setStatusFilter(s ? new Set([s]) : new Set())}
         dateFrom={dateFrom}
         dateTo={dateTo}
         onDateFromChange={setDateFrom}
@@ -248,8 +247,7 @@ export function AttractorsDashboard({
         showProjects={showProjects}
         onToggleShowProjects={() => setShowProjects((v) => !v)}
         jobStatusFilter={jobStatusFilter}
-        onToggleJobStatus={(s) => toggleInSet(setJobStatusFilter, s)}
-        onClearJobStatusFilter={() => setJobStatusFilter(new Set())}
+        onJobStatusChange={(s) => setJobStatusFilter(s ? new Set([s]) : new Set())}
         showLocations={showLocations}
         onToggleShowLocations={() => setShowLocations((v) => !v)}
       />
