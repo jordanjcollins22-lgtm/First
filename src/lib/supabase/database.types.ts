@@ -128,6 +128,22 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["roles"]["Row"]>;
         Relationships: [];
       };
+      overhead_expenses: {
+        Row: {
+          id: string;
+          name: string;
+          amount: number;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["overhead_expenses"]["Row"]> & {
+          name: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["overhead_expenses"]["Row"]>;
+        Relationships: [];
+      };
       tools: {
         Row: {
           id: string;

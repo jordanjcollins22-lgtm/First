@@ -203,6 +203,15 @@ export interface ServiceMaterialRule {
   created_at: string;
 }
 
+export interface OverheadExpense {
+  id: string;
+  name: string;
+  amount: number;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ServicePricing {
   service_type_id: string;
   cost: number | null;
