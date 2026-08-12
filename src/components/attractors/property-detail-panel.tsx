@@ -5,10 +5,13 @@ import Link from "next/link";
 import { ExternalLink, MapPin, Pencil, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AssignJobSelect } from "@/components/property/assign-job-select";
 import { DeletePropertyButton } from "@/components/property/delete-property-button";
 import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
 import { addPropertyForCustomer, updatePropertyAddress } from "@/lib/actions/property-actions";
+import { updateCustomerContact } from "@/lib/actions/customer-actions";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
@@ -28,8 +31,24 @@ export function PropertyDetailPanel({
   const propertyJobs = jobs.filter((j) => j.property_id === property.id);
   const [editingAddress, setEditingAddress] = useState(false);
   const [addingProperty, setAddingProperty] = useState(false);
+  const [email, setEmail] = useState(property.customer.email ?? "");
+  const [phone, setPhone] = useState(property.customer.phone ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function saveContact(next: { email?: string; phone?: string }) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateCustomerContact(property.customer_id, {
+          email: (next.email ?? email).trim() || null,
+          phone: (next.phone ?? phone).trim() || null,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
+    });
+  }
 
   function handleAddressPicked(suggestion: GeocodeSuggestion) {
     setError(null);
@@ -92,6 +111,33 @@ export function PropertyDetailPanel({
       </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <div className="flex gap-2">
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Email</Label>
+          <Input
+            type="email"
+            value={email}
+            placeholder="client@example.com"
+            disabled={isPending}
+            onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => saveContact({ email })}
+            className="h-9 text-sm"
+          />
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Phone</Label>
+          <Input
+            type="tel"
+            value={phone}
+            placeholder="(555) 555-5555"
+            disabled={isPending}
+            onChange={(e) => setPhone(e.target.value)}
+            onBlur={() => saveContact({ phone })}
+            className="h-9 text-sm"
+          />
+        </div>
+      </div>
 
       <div className="flex flex-col gap-2">
         <p className="text-xs font-medium text-muted-foreground">Jobs</p>
