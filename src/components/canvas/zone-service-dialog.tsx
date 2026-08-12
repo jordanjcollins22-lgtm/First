@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import Link from "next/link";
-import { Camera, Check, X } from "lucide-react";
+import { Camera, Check, Pencil, X } from "lucide-react";
 
 import {
   Dialog,
@@ -46,6 +46,29 @@ function PhotoThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) {
       >
         <X className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+function ReviewRow({
+  label,
+  onEdit,
+  children,
+}: {
+  label: string;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-2.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <button type="button" onClick={onEdit} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+          <Pencil className="h-3 w-3" />
+          Edit
+        </button>
+      </div>
+      {children}
     </div>
   );
 }
@@ -607,20 +630,17 @@ export function ZoneServiceDialog({
         </div>
 
         <div className="flex flex-col gap-2 text-sm">
-          <div className="rounded-lg border border-border p-2.5">
-            <p className="text-xs text-muted-foreground">Location</p>
+          <ReviewRow label="Location" onEdit={() => setStepKey("location")}>
             <p>{location || "—"}</p>
-          </div>
-          {(areaSqFt || perimeterFt) && (
-            <div className="rounded-lg border border-border p-2.5">
-              <p className="text-xs text-muted-foreground">Measurements</p>
-              <p>
-                {areaSqFt ? `${areaSqFt} sq ft` : "—"} · {perimeterFt ? `${perimeterFt} ft perimeter` : "—"}
-              </p>
-            </div>
-          )}
-          <div className="rounded-lg border border-border p-2.5">
-            <p className="text-xs text-muted-foreground">Service</p>
+          </ReviewRow>
+
+          <ReviewRow label="Measurements" onEdit={() => setStepKey("measurements")}>
+            <p>
+              {areaSqFt ? `${areaSqFt} sq ft` : "—"} · {perimeterFt ? `${perimeterFt} ft perimeter` : "—"}
+            </p>
+          </ReviewRow>
+
+          <ReviewRow label="Service" onEdit={() => setStepKey("service")}>
             <p>{serviceType?.label ?? "None selected"}</p>
             {fieldLines.length > 0 && (
               <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
@@ -629,25 +649,23 @@ export function ZoneServiceDialog({
                 ))}
               </ul>
             )}
-          </div>
-          {(autoTools.length > 0 || extraTools.length > 0) && (
-            <div className="rounded-lg border border-border p-2.5">
-              <p className="text-xs text-muted-foreground">Tools</p>
-              <p>{[...autoTools.map((t) => t.name), ...extraTools].join(", ")}</p>
-            </div>
+          </ReviewRow>
+
+          {serviceType && (
+            <ReviewRow label="Tools" onEdit={() => setStepKey("tools")}>
+              <p>
+                {[...autoTools.map((t) => t.name), ...extraTools].join(", ") || "None yet"}
+              </p>
+            </ReviewRow>
           )}
-          {photos.length > 0 && (
-            <div className="rounded-lg border border-border p-2.5">
-              <p className="text-xs text-muted-foreground">Photos</p>
-              <p>{photos.length} attached</p>
-            </div>
-          )}
-          {notes.trim() && (
-            <div className="rounded-lg border border-border p-2.5">
-              <p className="text-xs text-muted-foreground">Notes</p>
-              <p>{notes}</p>
-            </div>
-          )}
+
+          <ReviewRow label="Photos" onEdit={() => setStepKey("photos")}>
+            <p>{photos.length > 0 ? `${photos.length} attached` : "No photos yet"}</p>
+          </ReviewRow>
+
+          <ReviewRow label="Notes" onEdit={() => setStepKey("notes")}>
+            <p>{notes.trim() || "None yet"}</p>
+          </ReviewRow>
         </div>
 
         <div className="flex items-center justify-between border-t border-border pt-3">
