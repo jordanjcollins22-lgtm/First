@@ -1547,17 +1547,6 @@ export function ImageCanvasBoard({
               <PenTool className="h-4 w-4" />
               Draw Work Zone
             </Button>
-            {(tool === "zone" || tool === "property-line") && drawingPoints.length > 0 && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
-              >
-                <Undo2 className="h-4 w-4" />
-                Undo Point
-              </Button>
-            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1662,13 +1651,26 @@ export function ImageCanvasBoard({
       </div>
 
       {isDrawingNow && (
-        <p className="text-xs text-muted-foreground">
-          {tool === "house"
-            ? "Click once on the map to drop a pin on the house."
-            : `Click to add points. Click the first point (or press Enter) to close the ${
-                tool === "property-line" ? "property line" : "zone"
-              }. Backspace undoes a point, Escape cancels.`}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {tool === "house"
+              ? "Click once on the map to drop a pin on the house."
+              : `Click to add points. Click the first point (or press Enter) to close the ${
+                  tool === "property-line" ? "property line" : "zone"
+                }. Backspace undoes a point, Escape cancels.`}
+          </p>
+          {tool !== "house" && drawingPoints.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+            >
+              <Undo2 className="h-4 w-4" />
+              Undo Point
+            </Button>
+          )}
+        </div>
       )}
 
       {guidedStep === "editing" && !isDrawingNow && (
