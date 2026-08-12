@@ -18,7 +18,6 @@ import { CalendarView } from "./calendar-view";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
-import { PropertyDetailPanel } from "./property-detail-panel";
 import { ManageAttractorTypes } from "./manage-attractor-types";
 import { ManageLocations } from "./manage-locations";
 import type {
@@ -274,7 +273,13 @@ export function AttractorsDashboard({
               <ProjectList jobs={filteredJobs} selectedJobId={selectedJobId} onSelect={selectJob} />
             </TabsContent>
             <TabsContent value="properties" className="mt-0 flex-1 overflow-y-auto">
-              <PropertyList properties={properties} selectedPropertyId={selectedPropertyId} onSelect={selectProperty} />
+              <PropertyList
+                properties={properties}
+                jobs={jobs}
+                profiles={profiles}
+                selectedPropertyId={selectedPropertyId}
+                onSelect={selectProperty}
+              />
             </TabsContent>
           </Tabs>
         </Card>
@@ -329,7 +334,7 @@ export function AttractorsDashboard({
           )}
         </Card>
 
-        {(creating || selectedWave || selectedJob || selectedProperty) && (
+        {(creating || selectedWave || selectedJob) && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               {creating && (
@@ -361,15 +366,6 @@ export function AttractorsDashboard({
               )}
               {selectedJob && (
                 <JobDetailPanel key={selectedJob.id} job={selectedJob} waves={waves} types={types} onClose={() => setSelectedJobId(null)} />
-              )}
-              {selectedProperty && (
-                <PropertyDetailPanel
-                  key={selectedProperty.id}
-                  property={selectedProperty}
-                  jobs={jobs}
-                  profiles={profiles}
-                  onClose={() => setSelectedPropertyId(null)}
-                />
               )}
             </CardContent>
           </Card>
