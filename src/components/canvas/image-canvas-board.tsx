@@ -1417,6 +1417,19 @@ export function ImageCanvasBoard({
   const maxScale = image ? Math.max(1, Math.min(4, (CANVAS_WIDTH * 2) / image.element.width)) : 1;
   const dialogZone = zones.find((zone) => zone.id === serviceDialogZoneId) ?? null;
 
+  // Guided, one-thing-at-a-time setup flow: image -> house -> property line,
+  // each shown as the only prompt on screen. Once both are marked, the full
+  // toolbar takes over — locking/rescaling/zones aren't single yes/no
+  // questions, so that phase keeps the richer controls.
+  const guidedStep: "image" | "house" | "property-line" | "editing" = !image
+    ? "image"
+    : houseOutline.length === 0
+      ? "house"
+      : propertyLine.length === 0
+        ? "property-line"
+        : "editing";
+  const isDrawingNow = tool === "house" || tool === "property-line" || tool === "zone";
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -1428,100 +1441,141 @@ export function ImageCanvasBoard({
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-card/70 p-2 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
-        <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={tool === "move" ? "default" : "ghost"}
-            onClick={() => selectTool("move")}
-          >
-            <MousePointer2 className="h-4 w-4" />
-            Move
+      {guidedStep === "image" && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
+          <p className="text-sm font-medium">What&apos;s the property address?</p>
+          <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
+          {satelliteLoading && <p className="text-xs text-muted-foreground">Loading satellite photo...</p>}
+          {satelliteError && <p className="text-xs text-destructive">{satelliteError}</p>}
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()} className="self-start">
+            <ImageUp className="h-4 w-4" />
+            Upload an image instead
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={tool === "house" ? "default" : "ghost"}
-            disabled={!image}
-            onClick={() => selectTool("house")}
-          >
+        </div>
+      )}
+
+      {guidedStep === "house" && !isDrawingNow && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span>Mark the house — it helps judge the property&apos;s scale.</span>
+          <Button type="button" size="sm" onClick={() => selectTool("house")}>
             <Home className="h-4 w-4" />
-            {houseOutline.length > 0 ? "Redraw House" : "Mark House"}
+            Mark House
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={tool === "property-line" ? "default" : "ghost"}
-            disabled={!image}
-            onClick={() => selectTool("property-line")}
-          >
+        </div>
+      )}
+
+      {guidedStep === "property-line" && !isDrawingNow && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span>Now draw the property line.</span>
+          <Button type="button" size="sm" onClick={() => selectTool("property-line")}>
             <Route className="h-4 w-4" />
-            {propertyLine.length > 0 ? "Redraw Property Line" : "Draw Property Line"}
+            Draw Property Line
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={tool === "zone" ? "default" : "ghost"}
-            onClick={() => selectTool("zone")}
-          >
-            <PenTool className="h-4 w-4" />
-            Draw Work Zone
-          </Button>
-          {(tool === "zone" || tool === "property-line" || tool === "house") && drawingPoints.length > 0 && (
+        </div>
+      )}
+
+      {guidedStep === "editing" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-card/70 p-2 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
+          <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1">
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+              variant={tool === "move" ? "default" : "ghost"}
+              onClick={() => selectTool("move")}
             >
-              <Undo2 className="h-4 w-4" />
-              Undo Point
+              <MousePointer2 className="h-4 w-4" />
+              Move
             </Button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            <Wrench className="h-3 w-3" aria-hidden />
-            <Link
-              href="/admin/tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline-offset-2 hover:text-primary hover:underline"
+            <Button
+              type="button"
+              size="sm"
+              variant={tool === "house" ? "default" : "ghost"}
+              disabled={!image}
+              onClick={() => selectTool("house")}
             >
-              Tools
-            </Link>
-            <span aria-hidden>·</span>
-            <Link
-              href="/admin/materials"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline-offset-2 hover:text-primary hover:underline"
+              <Home className="h-4 w-4" />
+              {houseOutline.length > 0 ? "Redraw House" : "Mark House"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={tool === "property-line" ? "default" : "ghost"}
+              disabled={!image}
+              onClick={() => selectTool("property-line")}
             >
-              Material Database
-            </Link>
-            <span aria-hidden>·</span>
-            <Link
-              href="/admin/service-pricing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline-offset-2 hover:text-primary hover:underline"
+              <Route className="h-4 w-4" />
+              {propertyLine.length > 0 ? "Redraw Property Line" : "Draw Property Line"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={tool === "zone" ? "default" : "ghost"}
+              onClick={() => selectTool("zone")}
             >
-              Services
-            </Link>
+              <PenTool className="h-4 w-4" />
+              Draw Work Zone
+            </Button>
+            {(tool === "zone" || tool === "property-line" || tool === "house") && drawingPoints.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+              >
+                <Undo2 className="h-4 w-4" />
+                Undo Point
+              </Button>
+            )}
           </div>
-          <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
-            <Download className="h-4 w-4" />
-            {exporting ? "Building PDF..." : "Preview PDF"}
-          </Button>
-          {lastSavedAt && (
-            <span className="text-xs text-muted-foreground">
-              {jobId ? "Saved to this job" : "Autosaved in this browser"}
-            </span>
-          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+              <Wrench className="h-3 w-3" aria-hidden />
+              <Link
+                href="/admin/tools"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-2 hover:text-primary hover:underline"
+              >
+                Tools
+              </Link>
+              <span aria-hidden>·</span>
+              <Link
+                href="/admin/materials"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-2 hover:text-primary hover:underline"
+              >
+                Material Database
+              </Link>
+              <span aria-hidden>·</span>
+              <Link
+                href="/admin/service-pricing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-2 hover:text-primary hover:underline"
+              >
+                Services
+              </Link>
+            </div>
+            <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
+              <Download className="h-4 w-4" />
+              {exporting ? "Building PDF..." : "Preview PDF"}
+            </Button>
+            {lastSavedAt && (
+              <span className="text-xs text-muted-foreground">
+                {jobId ? "Saved to this job" : "Autosaved in this browser"}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="relative overflow-hidden rounded-lg border border-border bg-muted">
         <div className="max-h-[70vh] overflow-auto">
@@ -1581,43 +1635,23 @@ export function ImageCanvasBoard({
         </div>
       </div>
 
-      {image && houseOutline.length === 0 && tool !== "house" && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          <span>1. Mark the house first — it helps you judge the property&apos;s scale.</span>
-          <Button type="button" size="sm" onClick={() => selectTool("house")}>
-            <Home className="h-4 w-4" />
-            Mark House
-          </Button>
-        </div>
+      {isDrawingNow && (
+        <p className="text-xs text-muted-foreground">
+          {`Click to add points. Click the first point (or press Enter) to close the ${
+            tool === "property-line" ? "property line" : tool === "house" ? "house outline" : "zone"
+          }. Backspace undoes a point, Escape cancels.`}
+        </p>
       )}
 
-      {image && houseOutline.length > 0 && propertyLine.length === 0 && tool !== "property-line" && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          <span>2. Now draw a rough outline of the property line, so zones stay in context.</span>
-          <Button type="button" size="sm" onClick={() => selectTool("property-line")}>
-            <Route className="h-4 w-4" />
-            Draw Property Line
-          </Button>
-        </div>
-      )}
-
-      {image && houseOutline.length > 0 && propertyLine.length > 0 && !locked && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          3. Use the scale slider below to size the image against what you just marked, then lock it before drawing zones.
-        </div>
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        {tool === "zone" || tool === "property-line" || tool === "house"
-          ? `Click to add points. Click the first point (or press Enter) to close the ${
-              tool === "property-line" ? "property line" : tool === "house" ? "house outline" : "zone"
-            }. Backspace undoes a point, Escape cancels.`
-          : locked
+      {guidedStep === "editing" && !isDrawingNow && (
+        <p className="text-xs text-muted-foreground">
+          {locked
             ? "The background is locked in place. Unlock it to reposition, rescale, or replace it."
             : "Drag the image to reposition it, use the scale slider to resize, then lock it in place before drawing zones."}
-      </p>
+        </p>
+      )}
 
-      {image && !locked && tool === "move" && (
+      {guidedStep === "editing" && image && !locked && tool === "move" && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <span className="w-14 shrink-0 text-sm text-muted-foreground">Scale</span>
@@ -1649,72 +1683,74 @@ export function ImageCanvasBoard({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={locked}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImageUp className="h-4 w-4" />
-          {image ? "Replace Image" : "Upload Image"}
-        </Button>
-
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={locked}
-          onClick={() => setShowSatelliteSearch((prev) => !prev)}
-        >
-          <Satellite className="h-4 w-4" />
-          From Address
-        </Button>
-
-        {image && (
-          <Button type="button" variant={locked ? "outline" : "default"} onClick={() => setLocked((prev) => !prev)}>
-            {locked ? (
-              <>
-                <Unlock className="h-4 w-4" />
-                Unlock
-              </>
-            ) : (
-              <>
-                <Lock className="h-4 w-4" />
-                Lock Background
-              </>
-            )}
+      {guidedStep === "editing" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={locked}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImageUp className="h-4 w-4" />
+            {image ? "Replace Image" : "Upload Image"}
           </Button>
-        )}
 
-        {image && !locked && (
-          <Button type="button" variant="ghost" onClick={handleRemoveImage}>
-            <Trash2 className="h-4 w-4" />
-            Remove
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={locked}
+            onClick={() => setShowSatelliteSearch((prev) => !prev)}
+          >
+            <Satellite className="h-4 w-4" />
+            From Address
           </Button>
-        )}
 
-        {(image || zones.length > 0) && (
-          <Button type="button" variant="ghost" onClick={handleClearSavedDesign}>
-            <Trash2 className="h-4 w-4" />
-            Clear Saved Design
-          </Button>
-        )}
-      </div>
+          {image && (
+            <Button type="button" variant={locked ? "outline" : "default"} onClick={() => setLocked((prev) => !prev)}>
+              {locked ? (
+                <>
+                  <Unlock className="h-4 w-4" />
+                  Unlock
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4" />
+                  Lock Background
+                </>
+              )}
+            </Button>
+          )}
 
-      {!showSatelliteSearch && (satelliteLoading || satelliteError) && (
+          {image && !locked && (
+            <Button type="button" variant="ghost" onClick={handleRemoveImage}>
+              <Trash2 className="h-4 w-4" />
+              Remove
+            </Button>
+          )}
+
+          {(image || zones.length > 0) && (
+            <Button type="button" variant="ghost" onClick={handleClearSavedDesign}>
+              <Trash2 className="h-4 w-4" />
+              Clear Saved Design
+            </Button>
+          )}
+        </div>
+      )}
+
+      {guidedStep === "editing" && !showSatelliteSearch && (satelliteLoading || satelliteError) && (
         <p className={`text-xs ${satelliteError ? "text-destructive" : "text-muted-foreground"}`}>
           {satelliteError ?? "Loading the satellite photo you confirmed..."}
         </p>
       )}
 
-      {showSatelliteSearch && !locked && (
+      {guidedStep === "editing" && showSatelliteSearch && !locked && (
         <div className="flex flex-col gap-1 rounded-2xl border border-white/60 bg-card/70 p-3 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
           <SatelliteAddressSearch onSelect={handleSelectSatelliteLocation} disabled={satelliteLoading} />
           {satelliteLoading && <p className="text-xs text-muted-foreground">Loading satellite photo...</p>}
@@ -1722,6 +1758,7 @@ export function ImageCanvasBoard({
         </div>
       )}
 
+      {guidedStep === "editing" && (
       <div className="rounded-2xl border border-white/60 bg-card/70 p-3 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <h2 className="text-sm font-semibold">Work Zones</h2>
         {zones.length === 0 ? (
@@ -1778,6 +1815,7 @@ export function ImageCanvasBoard({
           </ul>
         )}
       </div>
+      )}
 
       <ZoneServiceDialog
         key={serviceDialogZoneId ?? "none"}
