@@ -159,8 +159,15 @@ export function PropertyDetailPanel({
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-sm font-medium text-primary underline-offset-2 hover:underline"
               >
-                {job.name} <ExternalLink className="h-3 w-3" />
+                {new Date(job.evaluation_date ?? job.created_at).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}{" "}
+                Evaluation
+                <ExternalLink className="h-3 w-3" />
               </Link>
+              <span className="text-xs capitalize text-muted-foreground">{job.status.replace("_", " ")}</span>
               <AssignJobSelect jobId={job.id} initialAssignedTo={job.assigned_to} profiles={profiles} />
             </div>
           ))
