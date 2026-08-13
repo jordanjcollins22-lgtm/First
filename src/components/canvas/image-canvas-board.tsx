@@ -827,6 +827,7 @@ export function ImageCanvasBoard({
   const [zones, setZones] = useState<WorkZone[]>([]);
   const [propertyLine, setPropertyLine] = useState<Point[]>([]);
   const [houseOutline, setHouseOutline] = useState<Point[]>([]);
+  const [houseNeedsConfirmation, setHouseNeedsConfirmation] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
@@ -1175,7 +1176,14 @@ export function ImageCanvasBoard({
   /** A single click drops a pin — the house doesn't need a traced outline, just its location. */
   function placeHouseMarker(point: Point) {
     setHouseOutline([point]);
+    setHouseNeedsConfirmation(false);
     setTool("move");
+  }
+
+  function handleHouseNotCorrect() {
+    setHouseOutline([]);
+    setHouseNeedsConfirmation(false);
+    setTool("house");
   }
 
   useEffect(() => {
@@ -1278,6 +1286,12 @@ export function ImageCanvasBoard({
       await loadImageBlob(blob, realWidthFeet);
       setAddress(suggestion.fullAddress);
       setShowSatelliteSearch(false);
+      // The satellite photo is centered on the geocoded address, which for a
+      // residential lookup is almost always the house itself — pre-mark it
+      // there and just ask the evaluator to confirm instead of making them
+      // tap it manually every time.
+      setHouseOutline([{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }]);
+      setHouseNeedsConfirmation(true);
     } catch (err) {
       setSatelliteError(err instanceof Error ? err.message : "Couldn't load a satellite photo.");
     } finally {
@@ -1507,7 +1521,21 @@ export function ImageCanvasBoard({
         </div>
       )}
 
-      {guidedStep === "house" && !isDrawingNow && (
+      {houseNeedsConfirmation && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span>Is this the correct house?</span>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={handleHouseNotCorrect}>
+              No
+            </Button>
+            <Button type="button" size="sm" onClick={() => setHouseNeedsConfirmation(false)}>
+              Yes
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {guidedStep === "house" && !isDrawingNow && !houseNeedsConfirmation && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span>Mark the house — tap once on the map to drop a pin on it.</span>
           <Button type="button" size="sm" onClick={() => selectTool("house")}>
@@ -1517,7 +1545,7 @@ export function ImageCanvasBoard({
         </div>
       )}
 
-      {guidedStep === "property-line" && !isDrawingNow && (
+      {guidedStep === "property-line" && !isDrawingNow && !houseNeedsConfirmation && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span>Now draw the property line.</span>
           <Button type="button" size="sm" onClick={() => selectTool("property-line")}>

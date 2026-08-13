@@ -96,18 +96,18 @@ export async function updatePropertyAddress(id: string, input: { address: string
     .eq("id", id);
   if (error) throw error;
 
+  const { data: jobsForProperty, error: jobsError } = await supabase
+    .from("jobs")
+    .select("id, name")
+    .eq("property_id", id);
+  if (jobsError) throw jobsError;
+
   // Job names are generated as "{address} — Estimate/Evaluation" at creation
   // time — keep them in sync when the address changes, but leave any job
   // whose name no longer starts with the old address (i.e. manually renamed)
   // alone.
   if (existing.address && existing.address !== input.address) {
-    const { data: jobsToRename, error: jobsError } = await supabase
-      .from("jobs")
-      .select("id, name")
-      .eq("property_id", id);
-    if (jobsError) throw jobsError;
-
-    for (const job of jobsToRename ?? []) {
+    for (const job of jobsForProperty ?? []) {
       if (job.name?.startsWith(existing.address)) {
         const suffix = job.name.slice(existing.address.length);
         const { error: renameError } = await supabase
@@ -120,6 +120,13 @@ export async function updatePropertyAddress(id: string, input: { address: string
   }
 
   revalidatePath("/attractors");
+  // Each job's site map page reads the property address server-side on
+  // every load, but its cached route needs to be told to refetch too —
+  // otherwise a corrected address (e.g. from a bad webhook value) can keep
+  // showing the old one there even though it's already fixed everywhere else.
+  for (const job of jobsForProperty ?? []) {
+    revalidatePath(`/jobs/${job.id}`);
+  }
 }
 
 /** Adds another property (address) under an existing client, instead of
