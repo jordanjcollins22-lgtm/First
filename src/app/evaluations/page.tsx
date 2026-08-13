@@ -30,8 +30,15 @@ export default async function EvaluationsPage() {
     evaluatorNamesById = Object.fromEntries(profiles.map((p) => [p.id, p.full_name || p.email]));
   }
 
-  const upcoming = relevantJobs
-    .filter((j) => j.evaluation_status !== "completed")
+  const now = new Date().toISOString();
+  const notCompleted = relevantJobs.filter((j) => j.evaluation_status !== "completed");
+
+  const overdue = notCompleted
+    .filter((j) => j.evaluation_date! < now)
+    .sort((a, b) => a.evaluation_date!.localeCompare(b.evaluation_date!));
+
+  const upcoming = notCompleted
+    .filter((j) => j.evaluation_date! >= now)
     .sort((a, b) => a.evaluation_date!.localeCompare(b.evaluation_date!));
 
   const past = relevantJobs
@@ -47,6 +54,7 @@ export default async function EvaluationsPage() {
           : "Evaluations assigned to you — where to go, when, and your progress on each one."}
       </p>
       <EvaluationList
+        overdue={overdue}
         upcoming={upcoming}
         past={past}
         currentProfileId={profile?.id ?? null}

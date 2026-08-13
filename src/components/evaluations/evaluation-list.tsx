@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { Navigation } from "lucide-react";
+import { AlertTriangle, Navigation } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { updateEvaluationStatus } from "@/lib/actions/job-actions";
@@ -74,20 +74,34 @@ function UpcomingCard({
   job,
   currentProfileId,
   evaluatorNamesById,
+  overdue = false,
 }: {
   job: JobWithLocation;
   currentProfileId: string | null;
   evaluatorNamesById?: Record<string, string>;
+  overdue?: boolean;
 }) {
   const isMine = job.assigned_to === currentProfileId;
   const name = evaluatorName(job, evaluatorNamesById);
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
+    <div
+      className={
+        overdue
+          ? "flex flex-col gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150"
+          : "flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150"
+      }
+    >
       <div>
         <p className="font-semibold">{job.property.address}</p>
         <p className="text-sm text-muted-foreground">{job.property.customer.name}</p>
       </div>
+      {overdue && (
+        <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
+          <AlertTriangle className="h-4 w-4" />
+          Evaluation date passed and it still hasn&apos;t been submitted
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         <span>{formatWhen(job.evaluation_date!)}</span>
         <span aria-hidden>·</span>
@@ -146,11 +160,13 @@ function PastCard({
 }
 
 export function EvaluationList({
+  overdue = [],
   upcoming,
   past,
   currentProfileId = null,
   evaluatorNamesById,
 }: {
+  overdue?: JobWithLocation[];
   upcoming: JobWithLocation[];
   past: JobWithLocation[];
   currentProfileId?: string | null;
@@ -158,6 +174,24 @@ export function EvaluationList({
 }) {
   return (
     <div className="flex flex-col gap-8">
+      {overdue.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            Overdue
+          </h2>
+          {overdue.map((job) => (
+            <UpcomingCard
+              key={job.id}
+              job={job}
+              currentProfileId={currentProfileId}
+              evaluatorNamesById={evaluatorNamesById}
+              overdue
+            />
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Upcoming</h2>
         {upcoming.length === 0 ? (
