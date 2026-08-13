@@ -140,6 +140,34 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
     autoScope: () => "Surface preparation, topsoil as required, grading, seed installation, and cleanup.",
   },
   {
+    id: "lawn-care",
+    label: "Lawn Care",
+    fields: [
+      {
+        key: "serviceType",
+        label: "Service type",
+        type: "select",
+        options: ["Mowing", "Edging", "Fertilization", "Weed Control", "Aeration", "Overseeding", "Full Maintenance"],
+      },
+      { key: "frequency", label: "Frequency", type: "select", options: ["One-time", "Weekly", "Bi-weekly", "Monthly", "Seasonal"] },
+      { key: "lawnCondition", label: "Lawn condition", type: "select", options: ["Good", "Fair", "Poor"] },
+      { key: "specialInstructions", label: "Special instructions", type: "text" },
+    ],
+    autoScope: (values) => {
+      if (values.serviceType === "Fertilization")
+        return "Application of the appropriate fertilizer for the season and lawn condition, watered in as needed.";
+      if (values.serviceType === "Weed Control")
+        return "Targeted or broadcast weed treatment appropriate for the lawn's weed pressure, applied per label instructions.";
+      if (values.serviceType === "Aeration")
+        return "Core aeration to relieve soil compaction and improve water/nutrient penetration.";
+      if (values.serviceType === "Overseeding")
+        return "Overseeding of thin/bare areas with grass seed appropriate for the lawn type.";
+      if (values.serviceType === "Full Maintenance")
+        return "Mowing, edging, trimming, and blow-off on a recurring schedule to keep the lawn consistently maintained.";
+      return "Routine lawn maintenance performed to a consistent standard, with clippings/debris cleared and edges tidied.";
+    },
+  },
+  {
     id: "grading",
     label: "Grading",
     fields: [
