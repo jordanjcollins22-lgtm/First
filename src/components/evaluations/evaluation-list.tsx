@@ -65,7 +65,23 @@ function ActionButton({ jobId, status }: { jobId: string; status: EvaluationStat
   return null;
 }
 
-function UpcomingCard({ job }: { job: JobWithLocation }) {
+function evaluatorName(job: JobWithLocation, evaluatorNamesById?: Record<string, string>): string | null {
+  if (!evaluatorNamesById || !job.assigned_to) return null;
+  return evaluatorNamesById[job.assigned_to] ?? null;
+}
+
+function UpcomingCard({
+  job,
+  currentProfileId,
+  evaluatorNamesById,
+}: {
+  job: JobWithLocation;
+  currentProfileId: string | null;
+  evaluatorNamesById?: Record<string, string>;
+}) {
+  const isMine = job.assigned_to === currentProfileId;
+  const name = evaluatorName(job, evaluatorNamesById);
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
       <div>
@@ -76,6 +92,12 @@ function UpcomingCard({ job }: { job: JobWithLocation }) {
         <span>{formatWhen(job.evaluation_date!)}</span>
         <span aria-hidden>·</span>
         <span>{STATUS_LABELS[job.evaluation_status]}</span>
+        {name && (
+          <>
+            <span aria-hidden>·</span>
+            <span>{name}</span>
+          </>
+        )}
         <a
           href={directionsUrl(job.property.lat, job.property.lng)}
           target="_blank"
@@ -86,14 +108,24 @@ function UpcomingCard({ job }: { job: JobWithLocation }) {
           Directions
         </a>
       </div>
-      <div className="flex justify-end">
-        <ActionButton jobId={job.id} status={job.evaluation_status} />
-      </div>
+      {isMine && (
+        <div className="flex justify-end">
+          <ActionButton jobId={job.id} status={job.evaluation_status} />
+        </div>
+      )}
     </div>
   );
 }
 
-function PastCard({ job }: { job: JobWithLocation }) {
+function PastCard({
+  job,
+  evaluatorNamesById,
+}: {
+  job: JobWithLocation;
+  evaluatorNamesById?: Record<string, string>;
+}) {
+  const name = evaluatorName(job, evaluatorNamesById);
+
   return (
     <Link
       href={`/jobs/${job.id}`}
@@ -101,7 +133,10 @@ function PastCard({ job }: { job: JobWithLocation }) {
     >
       <div className="min-w-0">
         <p className="truncate font-medium">{job.property.address}</p>
-        <p className="truncate text-xs text-muted-foreground">{job.property.customer.name}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {job.property.customer.name}
+          {name && ` · ${name}`}
+        </p>
       </div>
       <span className="shrink-0 text-xs text-muted-foreground">
         {job.evaluation_date ? formatWhen(job.evaluation_date) : ""}
@@ -110,15 +145,32 @@ function PastCard({ job }: { job: JobWithLocation }) {
   );
 }
 
-export function EvaluationList({ upcoming, past }: { upcoming: JobWithLocation[]; past: JobWithLocation[] }) {
+export function EvaluationList({
+  upcoming,
+  past,
+  currentProfileId = null,
+  evaluatorNamesById,
+}: {
+  upcoming: JobWithLocation[];
+  past: JobWithLocation[];
+  currentProfileId?: string | null;
+  evaluatorNamesById?: Record<string, string>;
+}) {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Upcoming</h2>
         {upcoming.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No evaluations scheduled for you right now.</p>
+          <p className="text-sm text-muted-foreground">No evaluations scheduled right now.</p>
         ) : (
-          upcoming.map((job) => <UpcomingCard key={job.id} job={job} />)
+          upcoming.map((job) => (
+            <UpcomingCard
+              key={job.id}
+              job={job}
+              currentProfileId={currentProfileId}
+              evaluatorNamesById={evaluatorNamesById}
+            />
+          ))
         )}
       </div>
 
@@ -127,7 +179,7 @@ export function EvaluationList({ upcoming, past }: { upcoming: JobWithLocation[]
         {past.length === 0 ? (
           <p className="text-sm text-muted-foreground">No submitted evaluations yet.</p>
         ) : (
-          past.map((job) => <PastCard key={job.id} job={job} />)
+          past.map((job) => <PastCard key={job.id} job={job} evaluatorNamesById={evaluatorNamesById} />)
         )}
       </div>
     </div>
