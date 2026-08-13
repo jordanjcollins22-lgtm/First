@@ -19,6 +19,7 @@ export function SiteNav({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const showProjectData = allowedTabs.includes("project-data");
+  const showEvaluations = allowedTabs.includes("evaluations");
   const links = [
     ...(allowedTabs.includes("tools") ? [{ href: "/admin/tools", label: "Tool Database" }] : []),
     ...(allowedTabs.includes("materials") ? [{ href: "/admin/materials", label: "Material Database" }] : []),
@@ -51,6 +52,12 @@ export function SiteNav({
       {showProjectData && (
         <Link href="/attractors" className="hover:text-primary">
           Project Data
+        </Link>
+      )}
+
+      {showEvaluations && (
+        <Link href="/evaluations" className="hover:text-primary">
+          My Evaluations
         </Link>
       )}
 

@@ -1,6 +1,7 @@
 export const TABS = [
   { key: "new-property", label: "New Property (Home)" },
   { key: "project-data", label: "Project Data" },
+  { key: "evaluations", label: "My Evaluations" },
   { key: "tools", label: "Tool Database" },
   { key: "materials", label: "Material Database" },
   { key: "services", label: "Services Database" },
