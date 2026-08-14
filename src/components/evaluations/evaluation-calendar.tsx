@@ -7,9 +7,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { addDayOff, removeDayOff, setWeeklyOff } from "@/lib/actions/availability-actions";
+import { addDayOff, removeDayOff } from "@/lib/actions/availability-actions";
+import { WeeklyAvailabilityEditor } from "@/components/evaluations/weekly-availability";
 import type { JobWithLocation } from "@/lib/data/jobs";
-import type { DayOff, EvaluationStatus, WeeklyOff } from "@/types/domain";
+import type { DayOff, EvaluationStatus, WeeklyAvailability } from "@/types/domain";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -74,7 +75,7 @@ export function EvaluationCalendar({
   jobs,
   currentProfileId,
   evaluatorNamesById,
-  allWeeklyOff,
+  allWeeklyAvailability,
   allDaysOff,
   rangeStart,
   rangeEnd,
@@ -82,7 +83,7 @@ export function EvaluationCalendar({
   jobs: JobWithLocation[];
   currentProfileId: string;
   evaluatorNamesById?: Record<string, string>;
-  allWeeklyOff: WeeklyOff[];
+  allWeeklyAvailability: WeeklyAvailability[];
   allDaysOff: DayOff[];
   rangeStart: string;
   rangeEnd: string;
@@ -99,10 +100,12 @@ export function EvaluationCalendar({
   const [endTimeDraft, setEndTimeDraft] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const myWeeklyOff = useMemo(
-    () => new Set(allWeeklyOff.filter((w) => w.profile_id === currentProfileId).map((w) => w.day_of_week)),
-    [allWeeklyOff, currentProfileId]
+  const myAvailability = useMemo(
+    () => allWeeklyAvailability.filter((w) => w.profile_id === currentProfileId),
+    [allWeeklyAvailability, currentProfileId]
   );
+  const myAvailableDays = useMemo(() => new Set(myAvailability.map((w) => w.day_of_week)), [myAvailability]);
+  const hasSetUpAvailability = myAvailability.length > 0;
 
   const daysOffByDate = useMemo(() => {
     const map = new Map<string, DayOff[]>();
@@ -188,40 +191,9 @@ export function EvaluationCalendar({
     });
   }
 
-  function toggleWeeklyOff(day: number) {
-    startTransition(async () => {
-      await setWeeklyOff(day, !myWeeklyOff.has(day));
-    });
-  }
-
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <p className="mb-1 text-sm font-semibold text-muted-foreground">Your weekly availability</p>
-        <p className="mb-2 text-xs text-muted-foreground">Set once — this is what your calendar assumes every week until you change it.</p>
-        <div className="flex flex-wrap gap-1.5">
-          {WEEKDAY_LABELS.map((label, day) => {
-            const isOff = myWeeklyOff.has(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                disabled={isPending}
-                onClick={() => toggleWeeklyOff(day)}
-                title={isOff ? "You don't normally work this day — click to mark available" : "Click to mark as a day you don't normally work"}
-                className={cn(
-                  "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                  isOff
-                    ? "border-destructive/40 bg-destructive/10 text-destructive"
-                    : "border-border bg-card/60 hover:bg-accent"
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <WeeklyAvailabilityEditor myAvailability={myAvailability} />
 
       <div className="rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -276,7 +248,7 @@ export function EvaluationCalendar({
                 const dayJobs = jobsByDate.get(key) ?? [];
                 const dayOffs = daysOffByDate.get(key) ?? [];
                 const mine = dayOffs.find((d) => d.profile_id === currentProfileId);
-                const isWeeklyOff = myWeeklyOff.has(date.getDay());
+                const isWeeklyOff = hasSetUpAvailability && !myAvailableDays.has(date.getDay());
                 const isSelected = key === selectedDate;
                 const isToday = key === toDateKey(today);
 
@@ -318,7 +290,7 @@ export function EvaluationCalendar({
               const dayJobs = jobsByDate.get(key) ?? [];
               const dayOffs = daysOffByDate.get(key) ?? [];
               const mine = dayOffs.find((d) => d.profile_id === currentProfileId);
-              const isWeeklyOff = myWeeklyOff.has(date.getDay());
+              const isWeeklyOff = hasSetUpAvailability && !myAvailableDays.has(date.getDay());
               const isSelected = key === selectedDate;
               const isToday = key === toDateKey(today);
 

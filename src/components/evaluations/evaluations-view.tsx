@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EvaluationList } from "@/components/evaluations/evaluation-list";
 import { EvaluationCalendar } from "@/components/evaluations/evaluation-calendar";
 import type { JobWithLocation } from "@/lib/data/jobs";
-import type { DayOff, WeeklyOff } from "@/types/domain";
+import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
 export function EvaluationsView({
   overdue,
@@ -13,7 +13,7 @@ export function EvaluationsView({
   allRelevantJobs,
   currentProfileId,
   evaluatorNamesById,
-  allWeeklyOff,
+  allWeeklyAvailability,
   allDaysOff,
   rangeStart,
   rangeEnd,
@@ -24,7 +24,7 @@ export function EvaluationsView({
   allRelevantJobs: JobWithLocation[];
   currentProfileId: string;
   evaluatorNamesById?: Record<string, string>;
-  allWeeklyOff: WeeklyOff[];
+  allWeeklyAvailability: WeeklyAvailability[];
   allDaysOff: DayOff[];
   rangeStart: string;
   rangeEnd: string;
@@ -49,7 +49,7 @@ export function EvaluationsView({
           jobs={allRelevantJobs}
           currentProfileId={currentProfileId}
           evaluatorNamesById={evaluatorNamesById}
-          allWeeklyOff={allWeeklyOff}
+          allWeeklyAvailability={allWeeklyAvailability}
           allDaysOff={allDaysOff}
           rangeStart={rangeStart}
           rangeEnd={rangeEnd}

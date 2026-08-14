@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import type { DayOff, WeeklyOff } from "@/types/domain";
+import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
-/** Every weekly-off row in the org — small table, cheap to fetch in full. */
-export async function listWeeklyOff(): Promise<WeeklyOff[]> {
+/** Every weekly-availability row in the org — small table, cheap to fetch in full. */
+export async function listWeeklyAvailability(): Promise<WeeklyAvailability[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("availability_weekly_off").select("*");
+  const { data, error } = await supabase.from("availability_weekly").select("*");
   if (error) throw error;
-  return (data ?? []) as unknown as WeeklyOff[];
+  return (data ?? []) as unknown as WeeklyAvailability[];
 }
 
 /** Days off within [startDate, endDate] (inclusive, "YYYY-MM-DD"), across the whole org. */

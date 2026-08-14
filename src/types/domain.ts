@@ -335,13 +335,17 @@ export interface JourneyStep {
   updated_at: string;
 }
 
-/** A day of the week (0 = Sunday .. 6 = Saturday) someone doesn't normally work. */
-export interface WeeklyOff {
+/** A day of the week (0 = Sunday .. 6 = Saturday) someone works, and the hours
+ * they're available that day. No row for a day = not available that day. */
+export interface WeeklyAvailability {
   id: string;
   organization_id: string;
   profile_id: string;
   day_of_week: number;
+  start_time: string;
+  end_time: string;
   created_at: string;
+  updated_at: string;
 }
 
 /** A specific date someone is off (vacation, sick, etc). start_time/end_time both

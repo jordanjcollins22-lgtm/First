@@ -2,7 +2,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { requireTab } from "@/lib/data/access";
 import { listJobsWithLocation } from "@/lib/data/jobs";
-import { listDaysOff, listWeeklyOff } from "@/lib/data/availability";
+import { listDaysOff, listWeeklyAvailability } from "@/lib/data/availability";
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
 
 function dateKey(d: Date): string {
@@ -41,7 +41,10 @@ export default async function EvaluationsPage() {
   const rangeStart = dateKey(rangeStartDate);
   const rangeEnd = dateKey(rangeEndDate);
 
-  const [allWeeklyOff, allDaysOff] = await Promise.all([listWeeklyOff(), listDaysOff(rangeStart, rangeEnd)]);
+  const [allWeeklyAvailability, allDaysOff] = await Promise.all([
+    listWeeklyAvailability(),
+    listDaysOff(rangeStart, rangeEnd),
+  ]);
 
   const now = new Date().toISOString();
   const notCompleted = relevantJobs.filter((j) => j.evaluation_status !== "completed");
@@ -74,7 +77,7 @@ export default async function EvaluationsPage() {
           allRelevantJobs={relevantJobs}
           currentProfileId={profile.id}
           evaluatorNamesById={evaluatorNamesById}
-          allWeeklyOff={allWeeklyOff}
+          allWeeklyAvailability={allWeeklyAvailability}
           allDaysOff={allDaysOff}
           rangeStart={rangeStart}
           rangeEnd={rangeEnd}

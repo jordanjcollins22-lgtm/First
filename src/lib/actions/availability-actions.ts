@@ -6,27 +6,46 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
-export async function setWeeklyOff(dayOfWeek: number, off: boolean) {
+export interface WeeklyAvailabilityDayInput {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+/** Replaces the caller's whole weekly availability in one go — set deliberately, not
+ * a live per-click toggle. Days not included in `days` are treated as not available. */
+export async function saveWeeklyAvailability(days: WeeklyAvailabilityDayInput[]) {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
-  if (dayOfWeek < 0 || dayOfWeek > 6) throw new Error("Invalid day of week.");
+
+  const seen = new Set<number>();
+  for (const d of days) {
+    if (d.dayOfWeek < 0 || d.dayOfWeek > 6) throw new Error("Invalid day of week.");
+    if (seen.has(d.dayOfWeek)) throw new Error("Each day can only be set once.");
+    seen.add(d.dayOfWeek);
+    if (!d.startTime || !d.endTime) throw new Error("Set a start and end time for every available day.");
+    if (d.startTime >= d.endTime) throw new Error("End time must be after start time.");
+  }
 
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
 
-  if (off) {
-    const { error } = await supabase
-      .from("availability_weekly_off")
-      .insert({ organization_id: organizationId, profile_id: profile.id, day_of_week: dayOfWeek });
-    if (error && error.code !== "23505") throw error;
-  } else {
-    const { error } = await supabase
-      .from("availability_weekly_off")
-      .delete()
-      .eq("profile_id", profile.id)
-      .eq("day_of_week", dayOfWeek);
-    if (error) throw error;
+  const { error: deleteError } = await supabase.from("availability_weekly").delete().eq("profile_id", profile.id);
+  if (deleteError) throw deleteError;
+
+  if (days.length > 0) {
+    const { error: insertError } = await supabase.from("availability_weekly").insert(
+      days.map((d) => ({
+        organization_id: organizationId,
+        profile_id: profile.id,
+        day_of_week: d.dayOfWeek,
+        start_time: d.startTime,
+        end_time: d.endTime,
+      }))
+    );
+    if (insertError) throw insertError;
   }
+
   revalidatePath("/evaluations");
 }
 

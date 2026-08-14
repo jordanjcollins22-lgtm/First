@@ -586,23 +586,28 @@ export interface Database {
           },
         ];
       };
-      availability_weekly_off: {
+      availability_weekly: {
         Row: {
           id: string;
           organization_id: string;
           profile_id: string;
           day_of_week: number;
+          start_time: string;
+          end_time: string;
           created_at: string;
+          updated_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["availability_weekly_off"]["Row"]> & {
+        Insert: Partial<Database["public"]["Tables"]["availability_weekly"]["Row"]> & {
           organization_id: string;
           profile_id: string;
           day_of_week: number;
+          start_time: string;
+          end_time: string;
         };
-        Update: Partial<Database["public"]["Tables"]["availability_weekly_off"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["availability_weekly"]["Row"]>;
         Relationships: [
           {
-            foreignKeyName: "availability_weekly_off_profile_id_fkey";
+            foreignKeyName: "availability_weekly_profile_id_fkey";
             columns: ["profile_id"];
             referencedRelation: "profiles";
             referencedColumns: ["id"];
