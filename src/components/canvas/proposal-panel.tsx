@@ -57,6 +57,8 @@ export function ProposalPanel({
   const [editing, setEditing] = useState(false);
   const [draftTotal, setDraftTotal] = useState("");
   const [draftZones, setDraftZones] = useState<ProposalZoneSnapshot[]>([]);
+  const [draftDiscount, setDraftDiscount] = useState("");
+  const [draftDiscountReason, setDraftDiscountReason] = useState("");
 
   const link = proposal ? `${baseUrl}/proposal/${proposal.token}` : null;
 
@@ -76,6 +78,8 @@ export function ProposalPanel({
     if (!proposal) return;
     setDraftTotal(String(Math.round(proposal.total_cost ?? 0)));
     setDraftZones(proposal.scope_snapshot.map((z) => ({ ...z })));
+    setDraftDiscount(proposal.discount_amount ? String(proposal.discount_amount) : "");
+    setDraftDiscountReason(proposal.discount_reason ?? "");
     setError(null);
     setEditing(true);
   }
@@ -84,7 +88,12 @@ export function ProposalPanel({
     setError(null);
     startTransition(async () => {
       try {
-        await updateProposalDraft(jobId, { totalCost: Number(draftTotal) || 0, scopeSnapshot: draftZones });
+        await updateProposalDraft(jobId, {
+          totalCost: Number(draftTotal) || 0,
+          scopeSnapshot: draftZones,
+          discountAmount: Number(draftDiscount) || 0,
+          discountReason: draftDiscountReason,
+        });
         setEditing(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't save those changes.");
@@ -152,7 +161,7 @@ export function ProposalPanel({
           {editing ? (
             <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Total the client sees</label>
+                <label className="text-xs font-medium text-muted-foreground">Subtotal</label>
                 <Input
                   type="number"
                   value={draftTotal}
@@ -160,6 +169,30 @@ export function ProposalPanel({
                   className="h-9 w-32 text-sm"
                 />
               </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Discount ($)</label>
+                  <Input
+                    type="number"
+                    value={draftDiscount}
+                    onChange={(e) => setDraftDiscount(e.target.value)}
+                    placeholder="0"
+                    className="h-9 w-28 text-sm"
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Discount reason (shown to client)</label>
+                  <Input
+                    value={draftDiscountReason}
+                    onChange={(e) => setDraftDiscountReason(e.target.value)}
+                    placeholder="e.g. Spring special"
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Client sees: ${Math.max(0, (Number(draftTotal) || 0) - (Number(draftDiscount) || 0)).toLocaleString()}
+              </p>
               {draftZones.map((zone, i) => (
                 <div key={i} className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
@@ -187,8 +220,23 @@ export function ProposalPanel({
           ) : (
             <div className="flex items-center justify-between border-t border-border pt-3">
               <div>
-                <p className="text-xs text-muted-foreground">Client sees one total</p>
-                <p className="text-lg font-semibold">${Math.round(proposal.total_cost ?? 0).toLocaleString()}</p>
+                {proposal.discount_amount > 0 ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Subtotal ${Math.round(proposal.total_cost ?? 0).toLocaleString()} — discount $
+                      {Math.round(proposal.discount_amount).toLocaleString()}
+                      {proposal.discount_reason && ` (${proposal.discount_reason})`}
+                    </p>
+                    <p className="text-lg font-semibold">
+                      ${Math.max(0, Math.round((proposal.total_cost ?? 0) - proposal.discount_amount)).toLocaleString()}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">Client sees one total</p>
+                    <p className="text-lg font-semibold">${Math.round(proposal.total_cost ?? 0).toLocaleString()}</p>
+                  </>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <button

@@ -106,8 +106,23 @@ export function ProposalView({ data, token, messages }: { data: PublicProposal; 
       </div>
 
       <div className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-6 text-center">
-        <p className="text-sm font-medium text-muted-foreground">Total investment</p>
-        <p className="text-4xl font-bold text-primary">{formatTotal(proposal.total_cost)}</p>
+        {proposal.discount_amount > 0 && proposal.total_cost != null ? (
+          <>
+            <p className="text-sm text-muted-foreground line-through">{formatTotal(proposal.total_cost)}</p>
+            <p className="text-sm font-medium text-muted-foreground">
+              You save {formatTotal(proposal.discount_amount)}
+              {proposal.discount_reason && ` — ${proposal.discount_reason}`}
+            </p>
+            <p className="text-4xl font-bold text-primary">
+              {formatTotal(Math.max(0, proposal.total_cost - proposal.discount_amount))}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-muted-foreground">Total investment</p>
+            <p className="text-4xl font-bold text-primary">{formatTotal(proposal.total_cost)}</p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-3">

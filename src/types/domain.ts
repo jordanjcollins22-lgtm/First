@@ -419,6 +419,8 @@ export interface JobProposal {
   token: string;
   status: ProposalStatus;
   total_cost: number | null;
+  discount_amount: number;
+  discount_reason: string | null;
   scope_snapshot: ProposalZoneSnapshot[];
   site_image_path: string | null;
   site_image_transform: ProposalSiteImageTransform | null;

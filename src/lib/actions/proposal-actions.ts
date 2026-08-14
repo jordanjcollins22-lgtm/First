@@ -13,6 +13,7 @@ import { computeProposalTotal } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
+import type { Database } from "@/lib/supabase/database.types";
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -105,21 +106,32 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
   return { token };
 }
 
-/** An account manager's edits before approving — price and/or per-zone
- * scope wording. Doesn't touch status, so it works whether they're
- * adjusting a draft still awaiting approval or correcting one already sent. */
+/** An account manager's edits before approving — price, per-zone scope
+ * wording, and/or a discount. Discount fields are optional so a quick price
+ * tweak (e.g. from the Proposals tab) doesn't have to touch them. Doesn't
+ * touch status, so it works whether they're adjusting a draft still
+ * awaiting approval or correcting one already sent. */
 export async function updateProposalDraft(
   jobId: string,
-  input: { totalCost: number; scopeSnapshot: ProposalZoneSnapshot[] }
+  input: {
+    totalCost: number;
+    scopeSnapshot: ProposalZoneSnapshot[];
+    discountAmount?: number;
+    discountReason?: string | null;
+  }
 ) {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
 
+  const patch: Database["public"]["Tables"]["job_proposals"]["Update"] = {
+    total_cost: input.totalCost,
+    scope_snapshot: input.scopeSnapshot,
+  };
+  if (input.discountAmount !== undefined) patch.discount_amount = input.discountAmount;
+  if (input.discountReason !== undefined) patch.discount_reason = input.discountReason?.trim() || null;
+
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("job_proposals")
-    .update({ total_cost: input.totalCost, scope_snapshot: input.scopeSnapshot })
-    .eq("job_id", jobId);
+  const { error } = await supabase.from("job_proposals").update(patch).eq("job_id", jobId);
   if (error) throw error;
 
   revalidatePath(`/jobs/${jobId}`);

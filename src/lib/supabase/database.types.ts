@@ -677,6 +677,8 @@ export interface Database {
           token: string;
           status: string;
           total_cost: number | null;
+          discount_amount: number;
+          discount_reason: string | null;
           scope_snapshot: unknown;
           site_image_path: string | null;
           site_image_transform: unknown;
