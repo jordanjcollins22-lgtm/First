@@ -374,6 +374,21 @@ export interface ProposalZoneSnapshot {
   serviceLabel: string;
   scopeText: string;
   photoPaths: string[];
+  /** Outline in the same fixed canvas coordinate space as site_image_transform. */
+  points: { x: number; y: number }[];
+  color: string;
+}
+
+/** How the reference photo sits under the drawn zones — same transform the
+ * live canvas board uses (translate to x/y, rotate, then draw centered at
+ * the image's own natural size x scale). */
+export interface ProposalSiteImageTransform {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  canvasWidth: number;
+  canvasHeight: number;
 }
 
 /** A client-facing proposal generated from a job's site map — price and scope
@@ -387,6 +402,7 @@ export interface JobProposal {
   total_cost: number | null;
   scope_snapshot: ProposalZoneSnapshot[];
   site_image_path: string | null;
+  site_image_transform: ProposalSiteImageTransform | null;
   generated_at: string;
   responded_at: string | null;
   client_response_note: string | null;

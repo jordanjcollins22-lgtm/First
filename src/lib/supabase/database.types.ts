@@ -677,6 +677,7 @@ export interface Database {
           total_cost: number | null;
           scope_snapshot: unknown;
           site_image_path: string | null;
+          site_image_transform: unknown;
           generated_at: string;
           responded_at: string | null;
           client_response_note: string | null;

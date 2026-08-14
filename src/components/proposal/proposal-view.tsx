@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
+import { SiteMapImage } from "./site-map-image";
 import type { PublicProposal } from "@/lib/data/public-proposal";
 import type { ProposalStatus } from "@/types/domain";
 
@@ -51,10 +52,14 @@ export function ProposalView({ data, token }: { data: PublicProposal; token: str
         </p>
       </div>
 
-      {proposal.site_image_path && (
-        <div className="overflow-hidden rounded-2xl border border-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={canvasImageUrl(proposal.site_image_path)} alt="Your property" className="w-full object-cover" />
+      {proposal.site_image_path && proposal.site_image_transform && (
+        <div>
+          <h2 className="mb-2 text-lg font-semibold">Your property</h2>
+          <SiteMapImage
+            imagePath={proposal.site_image_path}
+            transform={proposal.site_image_transform}
+            zones={proposal.scope_snapshot}
+          />
         </div>
       )}
 

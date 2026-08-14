@@ -63,9 +63,8 @@ import {
   zoneMeasurements,
   type MaterialLineItem,
 } from "@/lib/proposal-pricing";
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 
-const CANVAS_WIDTH = 1280;
-const CANVAS_HEIGHT = 800;
 const CLOSE_POINT_RADIUS = 12;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;

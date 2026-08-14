@@ -10,8 +10,9 @@ import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { computeProposalTotal } from "@/lib/proposal-pricing";
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
-import type { ProposalZoneSnapshot } from "@/types/domain";
+import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -46,8 +47,21 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
       serviceLabel: def?.label ?? zone.service?.typeId ?? "Service",
       scopeText: (def?.autoScope?.(zone.service?.values ?? {}) || zone.service?.notes || "").trim(),
       photoPaths: zone.service?.photos ?? [],
+      points: zone.points,
+      color: zone.color,
     };
   });
+
+  const siteImageTransform: ProposalSiteImageTransform | null = design.image_path
+    ? {
+        x: design.image_x,
+        y: design.image_y,
+        scale: design.image_scale,
+        rotation: design.image_rotation,
+        canvasWidth: CANVAS_WIDTH,
+        canvasHeight: CANVAS_HEIGHT,
+      }
+    : null;
 
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
@@ -67,6 +81,7 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
       total_cost: total,
       scope_snapshot: scopeSnapshot,
       site_image_path: design.image_path,
+      site_image_transform: siteImageTransform,
       generated_at: new Date().toISOString(),
       responded_at: null,
       client_response_note: null,
