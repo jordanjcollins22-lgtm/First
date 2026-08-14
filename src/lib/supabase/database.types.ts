@@ -615,6 +615,8 @@ export interface Database {
           organization_id: string;
           profile_id: string;
           date: string;
+          start_time: string | null;
+          end_time: string | null;
           reason: string | null;
           created_at: string;
         };

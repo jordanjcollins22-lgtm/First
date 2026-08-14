@@ -33,12 +33,41 @@ function formatMonth(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+function formatShortDate(d: Date): string {
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function formatDayHeader(key: string): string {
   return parseDateKey(key).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** Postgres `time` comes back as "HH:MM:SS" — render it like "9:00 AM". */
+function formatTimeOfDay(t: string): string {
+  const [h, m] = t.split(":").map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** Compact form for tight calendar cells, e.g. "9a" or "2:30p". */
+function formatTimeCompact(t: string): string {
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "p" : "a";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return m === 0 ? `${h12}${period}` : `${h12}:${String(m).padStart(2, "0")}${period}`;
+}
+
+function startOfWeek(d: Date): Date {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
+function offSummary(off: DayOff): string {
+  if (off.start_time && off.end_time) return `Off ${formatTimeCompact(off.start_time)}–${formatTimeCompact(off.end_time)}`;
+  return "Off all day";
 }
 
 export function EvaluationCalendar({
@@ -59,12 +88,15 @@ export function EvaluationCalendar({
   rangeEnd: string;
 }) {
   const today = new Date();
-  const rangeStartMonth = new Date(parseDateKey(rangeStart).getFullYear(), parseDateKey(rangeStart).getMonth(), 1);
-  const rangeEndMonth = new Date(parseDateKey(rangeEnd).getFullYear(), parseDateKey(rangeEnd).getMonth(), 1);
+  const rangeStartDate = parseDateKey(rangeStart);
+  const rangeEndDate = parseDateKey(rangeEnd);
 
-  const [monthCursor, setMonthCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [viewMode, setViewMode] = useState<"month" | "week">("month");
+  const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [selectedDate, setSelectedDate] = useState(toDateKey(today));
   const [reasonDraft, setReasonDraft] = useState("");
+  const [startTimeDraft, setStartTimeDraft] = useState("");
+  const [endTimeDraft, setEndTimeDraft] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const myWeeklyOff = useMemo(
@@ -91,28 +123,62 @@ export function EvaluationCalendar({
       list.push(j);
       map.set(key, list);
     }
+    for (const list of map.values()) list.sort((a, b) => a.evaluation_date!.localeCompare(b.evaluation_date!));
     return map;
   }, [jobs]);
 
-  const firstOfMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
-  const daysInMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).getDate();
-  const leadingBlanks = firstOfMonth.getDay();
-  const cells: (Date | null)[] = [
-    ...Array.from({ length: leadingBlanks }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => new Date(monthCursor.getFullYear(), monthCursor.getMonth(), i + 1)),
-  ];
+  const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const weekStart = startOfWeek(cursor);
 
-  const canGoPrev = monthCursor > rangeStartMonth;
-  const canGoNext = monthCursor < rangeEndMonth;
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const leadingBlanks = monthStart.getDay();
+  const monthCells: (Date | null)[] = [
+    ...Array.from({ length: leadingBlanks }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(monthStart.getFullYear(), monthStart.getMonth(), i + 1)),
+  ];
+  const weekCells: Date[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return d;
+  });
+
+  const canGoPrev =
+    viewMode === "month"
+      ? monthStart > new Date(rangeStartDate.getFullYear(), rangeStartDate.getMonth(), 1)
+      : weekStart > rangeStartDate;
+  const canGoNext = viewMode === "month" ? monthStart < new Date(rangeEndDate.getFullYear(), rangeEndDate.getMonth(), 1) : weekStart < rangeEndDate;
+
+  function goPrev() {
+    setCursor(
+      viewMode === "month"
+        ? new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)
+        : new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 7)
+    );
+  }
+  function goNext() {
+    setCursor(
+      viewMode === "month"
+        ? new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+        : new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7)
+    );
+  }
+
+  const headerLabel =
+    viewMode === "month"
+      ? formatMonth(monthStart)
+      : `${formatShortDate(weekStart)} – ${formatShortDate(weekCells[6])}`;
 
   const selectedJobs = jobsByDate.get(selectedDate) ?? [];
   const selectedDaysOff = daysOffByDate.get(selectedDate) ?? [];
   const myDayOff = selectedDaysOff.find((d) => d.profile_id === currentProfileId) ?? null;
+  const timesMismatched = Boolean(startTimeDraft) !== Boolean(endTimeDraft);
 
   function handleMarkOff() {
     startTransition(async () => {
-      await addDayOff(selectedDate, reasonDraft || null);
+      await addDayOff(selectedDate, reasonDraft || null, startTimeDraft || null, endTimeDraft || null);
       setReasonDraft("");
+      setStartTimeDraft("");
+      setEndTimeDraft("");
     });
   }
 
@@ -131,7 +197,8 @@ export function EvaluationCalendar({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="mb-2 text-sm font-semibold text-muted-foreground">Your weekly availability</p>
+        <p className="mb-1 text-sm font-semibold text-muted-foreground">Your weekly availability</p>
+        <p className="mb-2 text-xs text-muted-foreground">Set once — this is what your calendar assumes every week until you change it.</p>
         <div className="flex flex-wrap gap-1.5">
           {WEEKDAY_LABELS.map((label, day) => {
             const isOff = myWeeklyOff.has(day);
@@ -157,74 +224,141 @@ export function EvaluationCalendar({
       </div>
 
       <div className="rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <button
             type="button"
             disabled={!canGoPrev}
-            onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
+            onClick={goPrev}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-30"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <p className="font-semibold">{formatMonth(monthCursor)}</p>
+          <p className="font-semibold">{headerLabel}</p>
           <button
             type="button"
             disabled={!canGoNext}
-            onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
+            onClick={goNext}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-30"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
-          {WEEKDAY_LABELS.map((label) => (
-            <div key={label} className="py-1">
-              {label}
-            </div>
+        <div className="mb-3 flex justify-center gap-1 rounded-lg bg-secondary/70 p-1 text-xs font-medium">
+          {(["month", "week"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={cn(
+                "rounded-md px-3 py-1 capitalize transition-colors",
+                viewMode === mode ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {mode}
+            </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((date, i) => {
-            if (!date) return <div key={`blank-${i}`} />;
-            const key = toDateKey(date);
-            const dayJobs = jobsByDate.get(key) ?? [];
-            const dayOffs = daysOffByDate.get(key) ?? [];
-            const isWeeklyOff = myWeeklyOff.has(date.getDay());
-            const isSelected = key === selectedDate;
-            const isToday = key === toDateKey(today);
+        {viewMode === "month" ? (
+          <>
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+              {WEEKDAY_LABELS.map((label) => (
+                <div key={label} className="py-1">
+                  {label}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {monthCells.map((date, i) => {
+                if (!date) return <div key={`blank-${i}`} />;
+                const key = toDateKey(date);
+                const dayJobs = jobsByDate.get(key) ?? [];
+                const dayOffs = daysOffByDate.get(key) ?? [];
+                const mine = dayOffs.find((d) => d.profile_id === currentProfileId);
+                const isWeeklyOff = myWeeklyOff.has(date.getDay());
+                const isSelected = key === selectedDate;
+                const isToday = key === toDateKey(today);
 
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSelectedDate(key)}
-                className={cn(
-                  "flex min-h-16 flex-col items-start gap-0.5 rounded-lg border p-1.5 text-left transition-colors",
-                  isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
-                  isWeeklyOff && !isSelected && "bg-muted/40"
-                )}
-              >
-                <span className={cn("text-xs", isToday && "font-bold text-primary")}>{date.getDate()}</span>
-                {dayJobs.length > 0 && (
-                  <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[9px] font-medium text-primary">
-                    {dayJobs.length} eval{dayJobs.length === 1 ? "" : "s"}
-                  </span>
-                )}
-                {dayOffs.length > 0 && (
-                  <span className="rounded-full bg-destructive/10 px-1.5 py-0 text-[9px] font-medium text-destructive">
-                    {dayOffs.some((d) => d.profile_id === currentProfileId)
-                      ? "You're off"
-                      : evaluatorNamesById
-                        ? dayOffs.map((d) => evaluatorNamesById[d.profile_id] ?? "Off").join(", ")
-                        : `${dayOffs.length} off`}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSelectedDate(key)}
+                    className={cn(
+                      "flex min-h-16 flex-col items-start gap-0.5 rounded-lg border p-1.5 text-left transition-colors",
+                      isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
+                      isWeeklyOff && !isSelected && "bg-muted/40"
+                    )}
+                  >
+                    <span className={cn("text-xs", isToday && "font-bold text-primary")}>{date.getDate()}</span>
+                    {dayJobs.length > 0 && (
+                      <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[9px] font-medium text-primary">
+                        {dayJobs.length} eval{dayJobs.length === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    {dayOffs.length > 0 && (
+                      <span className="rounded-full bg-destructive/10 px-1.5 py-0 text-[9px] font-medium text-destructive">
+                        {mine
+                          ? offSummary(mine)
+                          : evaluatorNamesById
+                            ? dayOffs.map((d) => evaluatorNamesById[d.profile_id] ?? "Off").join(", ")
+                            : `${dayOffs.length} off`}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-7 gap-1.5">
+            {weekCells.map((date) => {
+              const key = toDateKey(date);
+              const dayJobs = jobsByDate.get(key) ?? [];
+              const dayOffs = daysOffByDate.get(key) ?? [];
+              const mine = dayOffs.find((d) => d.profile_id === currentProfileId);
+              const isWeeklyOff = myWeeklyOff.has(date.getDay());
+              const isSelected = key === selectedDate;
+              const isToday = key === toDateKey(today);
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedDate(key)}
+                  className={cn(
+                    "flex min-h-40 flex-col items-stretch gap-1 rounded-lg border p-1.5 text-left align-top transition-colors",
+                    isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
+                    isWeeklyOff && !isSelected && "bg-muted/40"
+                  )}
+                >
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[10px] font-medium text-muted-foreground">{WEEKDAY_LABELS[date.getDay()]}</span>
+                    <span className={cn("text-xs", isToday && "font-bold text-primary")}>{date.getDate()}</span>
+                  </div>
+                  {mine && (
+                    <span className="rounded bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive">
+                      {offSummary(mine)}
+                    </span>
+                  )}
+                  {dayOffs
+                    .filter((d) => d.profile_id !== currentProfileId)
+                    .map((d) => (
+                      <span key={d.id} className="truncate rounded bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive">
+                        {evaluatorNamesById?.[d.profile_id] ?? "Off"} · {offSummary(d)}
+                      </span>
+                    ))}
+                  {dayJobs.map((job) => (
+                    <span key={job.id} className="truncate rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
+                      {formatTime(job.evaluation_date!)} {job.property.address}
+                    </span>
+                  ))}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
@@ -259,23 +393,43 @@ export function EvaluationCalendar({
           {myDayOff ? (
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
-                You&apos;re marked off this day{myDayOff.reason && ` — ${myDayOff.reason}`}.
+                {myDayOff.start_time && myDayOff.end_time
+                  ? `You're off ${formatTimeOfDay(myDayOff.start_time)}–${formatTimeOfDay(myDayOff.end_time)} this day`
+                  : "You're off all day"}
+                {myDayOff.reason && ` — ${myDayOff.reason}`}.
               </p>
               <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleRemoveOff}>
                 Remove
               </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                value={reasonDraft}
-                onChange={(e) => setReasonDraft(e.target.value)}
-                placeholder="Reason (optional)"
-                className="h-9 w-48"
-              />
-              <Button type="button" size="sm" disabled={isPending} onClick={handleMarkOff}>
-                Mark this day off
-              </Button>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={reasonDraft}
+                  onChange={(e) => setReasonDraft(e.target.value)}
+                  placeholder="Reason (optional)"
+                  className="h-9 w-40"
+                />
+                <Input
+                  type="time"
+                  value={startTimeDraft}
+                  onChange={(e) => setStartTimeDraft(e.target.value)}
+                  className="h-9 w-28"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="time"
+                  value={endTimeDraft}
+                  onChange={(e) => setEndTimeDraft(e.target.value)}
+                  className="h-9 w-28"
+                />
+                <Button type="button" size="sm" disabled={isPending || timesMismatched} onClick={handleMarkOff}>
+                  Mark off
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Leave both times blank to mark the whole day off.</p>
+              {timesMismatched && <p className="text-xs text-destructive">Set both a start and end time, or leave both blank.</p>}
             </div>
           )}
         </div>

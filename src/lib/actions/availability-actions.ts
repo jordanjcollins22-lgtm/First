@@ -30,20 +30,38 @@ export async function setWeeklyOff(dayOfWeek: number, off: boolean) {
   revalidatePath("/evaluations");
 }
 
-export async function addDayOff(date: string, reason: string | null) {
+export async function addDayOff(
+  date: string,
+  reason: string | null,
+  startTime: string | null,
+  endTime: string | null
+) {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid date.");
+  if (Boolean(startTime) !== Boolean(endTime)) {
+    throw new Error("Set both a start and end time, or leave both blank for the whole day.");
+  }
+  if (startTime && endTime && startTime >= endTime) {
+    throw new Error("End time must be after start time.");
+  }
 
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
-  const { error } = await supabase.from("availability_days_off").insert({
-    organization_id: organizationId,
-    profile_id: profile.id,
-    date,
-    reason: reason?.trim() || null,
-  });
-  if (error && error.code !== "23505") throw error;
+  const { error } = await supabase
+    .from("availability_days_off")
+    .upsert(
+      {
+        organization_id: organizationId,
+        profile_id: profile.id,
+        date,
+        start_time: startTime || null,
+        end_time: endTime || null,
+        reason: reason?.trim() || null,
+      },
+      { onConflict: "profile_id,date" }
+    );
+  if (error) throw error;
   revalidatePath("/evaluations");
 }
 

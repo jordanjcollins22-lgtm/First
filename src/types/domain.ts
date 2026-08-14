@@ -344,12 +344,15 @@ export interface WeeklyOff {
   created_at: string;
 }
 
-/** A specific date someone is off (vacation, sick, etc). */
+/** A specific date someone is off (vacation, sick, etc). start_time/end_time both
+ * null means the whole day; both set means only that window is blocked. */
 export interface DayOff {
   id: string;
   organization_id: string;
   profile_id: string;
   date: string;
+  start_time: string | null;
+  end_time: string | null;
   reason: string | null;
   created_at: string;
 }
