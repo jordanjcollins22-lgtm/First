@@ -13,6 +13,7 @@ export const env = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "",
   rentcastApiKey: process.env.RENTCAST_API_KEY ?? "",
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -28,3 +29,4 @@ export const isSupabaseConfigured = Boolean(env.supabaseUrl && env.supabaseAnonK
 export const isSupabaseAdminConfigured = Boolean(env.supabaseUrl && env.supabaseServiceRoleKey);
 export const isMapboxConfigured = Boolean(env.mapboxToken);
 export const isRentcastConfigured = Boolean(env.rentcastApiKey);
+export const isAnthropicConfigured = Boolean(env.anthropicApiKey);

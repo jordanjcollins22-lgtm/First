@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
+import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
@@ -66,6 +67,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
         <main className="flex-1">{children}</main>
+        {roles.includes("admin") && <AdminChatWidget />}
       </body>
     </html>
   );
