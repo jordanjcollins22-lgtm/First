@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 
 import { listProfiles, listRoles, getCurrentProfile } from "@/lib/data/team";
 import { listServicePricing } from "@/lib/data/service-pricing";
+import { listMaterials } from "@/lib/data/materials";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 import { checkTabAccess } from "@/lib/data/access";
+import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured, isSupabaseAdminConfigured } from "@/lib/env";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -14,7 +17,8 @@ import { TeamServicesToggle } from "@/components/team/team-services-toggle";
 import { ServicePricingRow } from "@/components/service-pricing/service-pricing-row";
 import { CreateServiceTypeForm } from "@/components/service-pricing/create-service-type-form";
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
-import type { CustomRole, Profile } from "@/types/domain";
+import { CrewCostSetting } from "@/components/service-pricing/crew-cost-setting";
+import type { CustomRole, Profile, ServiceMaterialRule } from "@/types/domain";
 
 export default async function TeamServicesPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -52,7 +56,23 @@ export default async function TeamServicesPage() {
   const isAdmin = currentProfile?.roles.includes("admin") ?? false;
   const emailByProfileId = new Map(profiles.map((p) => [p.id, p.email]));
 
-  const services = servicesAllowed ? await listServicePricing() : [];
+  let services: Awaited<ReturnType<typeof listServicePricing>> = [];
+  let materials: Awaited<ReturnType<typeof listMaterials>> = [];
+  let materialRules: ServiceMaterialRule[] = [];
+  let crewCostPerHour: number | null = null;
+  if (servicesAllowed) {
+    const supabase = await createClient();
+    const [servicesRes, materialsRes, rulesRes, orgRes] = await Promise.all([
+      listServicePricing(),
+      listMaterials(),
+      supabase.from("service_materials").select("*"),
+      getCurrentOrganization(),
+    ]);
+    services = servicesRes;
+    materials = materialsRes;
+    materialRules = (rulesRes.data ?? []) as unknown as ServiceMaterialRule[];
+    crewCostPerHour = orgRes.crew_cost_per_hour;
+  }
   const activeServices = services.filter((s) => s.status === "active");
   const pendingServices = services.filter((s) => s.status === "pending");
   const deniedServices = services.filter((s) => s.status === "denied");
@@ -165,6 +185,8 @@ export default async function TeamServicesPage() {
               mid-quote — it shows up below as Pending until you price it or decline it.
             </p>
 
+            <CrewCostSetting initialRate={crewCostPerHour} />
+
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Add a service</CardTitle>
@@ -207,6 +229,10 @@ export default async function TeamServicesPage() {
                     initialCost={s.cost}
                     initialCostUnit={s.cost_unit}
                     initialEstimatedHours={s.estimated_hours}
+                    initialMinutesPerSqft={s.minutes_per_sqft}
+                    materials={materials}
+                    materialRules={materialRules}
+                    crewCostPerHour={crewCostPerHour}
                   />
                 ))}
                 {activeServices.length === 0 && (

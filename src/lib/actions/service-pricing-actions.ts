@@ -29,11 +29,28 @@ export async function updateServicePricing(
 }
 
 /** COGS x 2 (50% gross margin) + 10% buffer — recalculates and saves the sale price from a COGS entry. */
-export async function updateServiceCogs(serviceTypeId: string, cogs: number | null) {
+export async function updateServiceCogs(serviceTypeId: string, cogs: number | null, costUnit?: string) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("services")
-    .update({ cogs, cost: cogs != null ? priceFromCogs(cogs) : null })
+    .update({
+      cogs,
+      cost: cogs != null ? priceFromCogs(cogs) : null,
+      ...(costUnit ? { cost_unit: costUnit } : {}),
+    })
+    .eq("service_type_id", serviceTypeId);
+  if (error) throw error;
+
+  revalidatePath("/admin/team");
+  revalidatePath("/canvas");
+}
+
+/** How long one sq ft of this service takes — the labor half of the COGS calculator. */
+export async function updateServiceMinutesPerSqft(serviceTypeId: string, minutesPerSqft: number | null) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({ minutes_per_sqft: minutesPerSqft })
     .eq("service_type_id", serviceTypeId);
   if (error) throw error;
 

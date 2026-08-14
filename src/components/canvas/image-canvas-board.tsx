@@ -744,12 +744,18 @@ function computeJobTotals(
     const service = zone.service;
     if (!service) continue;
     const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
-    if (!pricing) continue;
+    if (!pricing || pricing.status !== "active") continue;
+    const isPerSqFt = pricing.cost_unit.trim().toLowerCase() === "per sq ft";
+    const areaSqFt = zoneMeasurements(zone)?.areaSqFt ?? 0;
     if (pricing.cost != null) {
-      totalCost += pricing.cost;
-      if (pricing.cost_unit.trim().toLowerCase() !== "flat rate") hasNonFlatRate = true;
+      totalCost += isPerSqFt ? pricing.cost * areaSqFt : pricing.cost;
+      if (!isPerSqFt && pricing.cost_unit.trim().toLowerCase() !== "flat rate") hasNonFlatRate = true;
     }
-    if (pricing.estimated_hours != null) totalHours += pricing.estimated_hours;
+    if (isPerSqFt && pricing.minutes_per_sqft != null) {
+      totalHours += (pricing.minutes_per_sqft / 60) * areaSqFt;
+    } else if (pricing.estimated_hours != null) {
+      totalHours += pricing.estimated_hours;
+    }
   }
   return { totalCost, totalHours, hasNonFlatRate };
 }

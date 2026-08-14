@@ -16,3 +16,11 @@ export async function listOrganizations(): Promise<Organization[]> {
   if (error) throw error;
   return (data ?? []) as unknown as Organization[];
 }
+
+export async function getCurrentOrganization(): Promise<Organization> {
+  const organizationId = await getCurrentOrganizationId();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("organizations").select("*").eq("id", organizationId).single();
+  if (error) throw error;
+  return data as unknown as Organization;
+}

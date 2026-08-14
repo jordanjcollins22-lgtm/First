@@ -20,6 +20,7 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          crew_cost_per_hour: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -330,6 +331,7 @@ export interface Database {
           cost: number | null;
           cost_unit: string;
           estimated_hours: number | null;
+          minutes_per_sqft: number | null;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["services"]["Row"]> & {

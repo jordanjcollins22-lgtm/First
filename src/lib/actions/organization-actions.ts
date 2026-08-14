@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 
 const SUPERADMIN_EMAIL = "jordan@jslandscapingmd.com";
@@ -65,4 +66,19 @@ export async function createOrganization(input: { name: string; adminEmail: stri
   }
 
   revalidatePath("/admin/organizations");
+}
+
+/** The single blended $/hour used to turn a service's minutes-per-sq-ft into a labor cost. */
+export async function updateCrewCostPerHour(rate: number | null) {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    throw new Error("Only admins can set the crew cost per hour.");
+  }
+
+  const organizationId = await getCurrentOrganizationId();
+  const supabase = await createClient();
+  const { error } = await supabase.from("organizations").update({ crew_cost_per_hour: rate }).eq("id", organizationId);
+  if (error) throw error;
+
+  revalidatePath("/admin/team");
 }
