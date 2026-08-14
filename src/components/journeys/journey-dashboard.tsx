@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { createJourney, deleteJourney } from "@/lib/actions/journey-actions";
 import { computeJourneyMetrics } from "@/lib/journey-metrics";
 import { JourneyStepCard } from "./journey-step-card";
+import { JourneyTree } from "./journey-tree";
 import { AddJourneyStepForm } from "./add-journey-step-form";
 import type { Journey, JourneyStep } from "@/types/domain";
 
@@ -87,6 +88,7 @@ export function JourneyDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(journeys[0]?.id ?? null);
   const codeManaged = new Set(codeManagedRoleKeys);
   const [isPending, startTransition] = useTransition();
+  const [openStepKey, setOpenStepKey] = useState<string | null>(null);
   const highlightRef = useRef<Record<string, HTMLDivElement | null>>({});
 
   const selected = journeys.find((j) => j.id === selectedId) ?? null;
@@ -94,6 +96,7 @@ export function JourneyDashboard({
   const metrics = useMemo(() => computeJourneyMetrics(steps), [steps]);
 
   function handleGoToStep(stepKey: string) {
+    setOpenStepKey(stepKey);
     const el = highlightRef.current[stepKey];
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -116,7 +119,10 @@ export function JourneyDashboard({
           <button
             key={journey.id}
             type="button"
-            onClick={() => setSelectedId(journey.id)}
+            onClick={() => {
+              setSelectedId(journey.id);
+              setOpenStepKey(null);
+            }}
             className={cn(
               "rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors",
               selected?.id === journey.id
@@ -198,6 +204,10 @@ export function JourneyDashboard({
             </Card>
           )}
 
+          {steps.length > 0 && (
+            <JourneyTree steps={steps} selectedKey={openStepKey} onSelectStep={handleGoToStep} />
+          )}
+
           <div className="flex flex-col gap-2">
             {steps.map((step) => (
               <div key={step.id} ref={(el) => { highlightRef.current[step.step_key] = el; }}>
@@ -206,6 +216,10 @@ export function JourneyDashboard({
                   allSteps={steps}
                   onGoToStep={handleGoToStep}
                   structureLocked={isCodeManaged}
+                  open={openStepKey === step.step_key}
+                  onToggleOpen={() =>
+                    setOpenStepKey((prev) => (prev === step.step_key ? null : step.step_key))
+                  }
                 />
               </div>
             ))}

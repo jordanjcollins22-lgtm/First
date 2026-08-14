@@ -50,14 +50,17 @@ export function JourneyStepCard({
   allSteps,
   onGoToStep,
   structureLocked = false,
+  open,
+  onToggleOpen,
 }: {
   step: JourneyStep;
   allSteps: JourneyStep[];
   onGoToStep: (stepKey: string) => void;
   /** True for a code-managed journey — structure (type, connections, is_built) follows the app and would just get overwritten on the next sync, so those fields are read-only here; numbers and notes stay editable. */
   structureLocked?: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [notes, setNotes] = useState(step.notes ?? "");
 
@@ -81,7 +84,7 @@ export function JourneyStepCard({
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <button type="button" onClick={() => setOpen((v) => !v)} className="flex flex-1 items-start gap-2 text-left">
+        <button type="button" onClick={onToggleOpen} className="flex flex-1 items-start gap-2 text-left">
           {open ? (
             <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           ) : (
