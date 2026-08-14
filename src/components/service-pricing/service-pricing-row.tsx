@@ -17,7 +17,7 @@ import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/
 import { setServiceToolLink } from "@/lib/actions/tool-actions";
 import { ToolVideoLinkInput } from "./tool-video-link-input";
 import { priceFromCogs, materialsCostPerSqFt, laborCostPerSqFt } from "@/lib/pricing";
-import type { MeasurementUnit, Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
+import type { Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
 
 interface ServicePricingRowProps {
   serviceTypeId: string;
@@ -34,7 +34,7 @@ interface ServicePricingRowProps {
   tools: Tool[];
   serviceTools: ServiceToolLink[];
   crewCostPerHour: number | null;
-  measurementUnit: MeasurementUnit;
+  measurementUnit: string;
 }
 
 export function ServicePricingRow({

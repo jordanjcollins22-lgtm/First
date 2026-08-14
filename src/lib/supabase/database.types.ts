@@ -22,6 +22,7 @@ export interface Database {
           name: string;
           crew_cost_per_hour: number | null;
           measurement_unit: string;
+          measurement_basis: string;
           created_at: string;
           updated_at: string;
         };

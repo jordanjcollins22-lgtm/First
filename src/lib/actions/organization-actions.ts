@@ -67,17 +67,25 @@ export async function createOrganization(input: { name: string; adminEmail: stri
   revalidatePath("/admin/organizations");
 }
 
-/** The unit this business prices and estimates by — drives which zone measurement a per-unit price multiplies. */
-export async function updateMeasurementUnit(unit: "sq ft" | "linear ft") {
+/**
+ * The unit this business prices and estimates by, plus what a per-unit price
+ * multiplies by on a zone (its measured area, its perimeter, or nothing at
+ * all for a flat per-zone charge).
+ */
+export async function updateMeasurementUnit(unit: string, basis: "area" | "perimeter" | "flat") {
   const caller = await getCurrentProfile();
   if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can change the measurement unit.");
   }
 
+  const trimmed = unit.trim();
+  if (!trimmed) throw new Error("Enter a unit name.");
+  if (trimmed.length > 24) throw new Error("Keep the unit name short — 24 characters or less.");
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("organizations")
-    .update({ measurement_unit: unit })
+    .update({ measurement_unit: trimmed, measurement_basis: basis })
     .eq("id", caller.organization_id);
   if (error) throw error;
 

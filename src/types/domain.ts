@@ -3,13 +3,15 @@
  * supabase/migrations. Keep in sync manually (no codegen for MVP).
  */
 
-export type MeasurementUnit = "sq ft" | "linear ft";
+/** What a per-unit price multiplies by on a zone. */
+export type MeasurementBasis = "area" | "perimeter" | "flat";
 
 export interface Organization {
   id: string;
   name: string;
   crew_cost_per_hour: number | null;
-  measurement_unit: MeasurementUnit;
+  measurement_unit: string;
+  measurement_basis: MeasurementBasis;
   created_at: string;
   updated_at: string;
 }

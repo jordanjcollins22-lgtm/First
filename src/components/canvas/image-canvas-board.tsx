@@ -745,12 +745,19 @@ function computeJobTotals(
     if (!service) continue;
     const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
     if (!pricing || pricing.status !== "active") continue;
-    // A per-unit price multiplies by whichever measurement matches its unit:
-    // area for sq ft, perimeter for linear ft. Anything else is a flat charge.
+    // A price in the business's own unit ("per sq ft", "per plant", ...)
+    // multiplies by whatever that unit is based on; a flat rate, or a unit
+    // from some other business, is charged once for the zone.
     const unit = pricing.cost_unit.trim().toLowerCase();
     const measurements = zoneMeasurements(zone);
-    const quantity =
-      unit === "per sq ft" ? measurements?.areaSqFt ?? 0 : unit === "per linear ft" ? measurements?.perimeterFt ?? 0 : null;
+    const isPerUnit = unit === `per ${catalog.measurementUnit.trim().toLowerCase()}`;
+    const quantity = !isPerUnit
+      ? null
+      : catalog.measurementBasis === "area"
+        ? measurements?.areaSqFt ?? 0
+        : catalog.measurementBasis === "perimeter"
+          ? measurements?.perimeterFt ?? 0
+          : null;
 
     if (pricing.cost != null) {
       totalCost += quantity != null ? pricing.cost * quantity : pricing.cost;

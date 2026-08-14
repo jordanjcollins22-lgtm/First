@@ -22,7 +22,7 @@ import { PayRateInput } from "@/components/team/pay-rate-input";
 import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
 import type {
   CustomRole,
-  MeasurementUnit,
+  MeasurementBasis,
   Profile,
   ServiceMaterialRule,
   ServiceToolLink,
@@ -81,7 +81,8 @@ export default async function TeamServicesPage() {
   let tools: Tool[] = [];
   let serviceTools: ServiceToolLink[] = [];
   let crewCostPerHour: number | null = null;
-  let measurementUnit: MeasurementUnit = "sq ft";
+  let measurementUnit = "sq ft";
+  let measurementBasis: MeasurementBasis = "area";
   if (servicesAllowed) {
     const supabase = await createClient();
     const [servicesRes, materialsRes, toolsRes, rulesRes, serviceToolsRes, orgRes] = await Promise.all([
@@ -97,7 +98,11 @@ export default async function TeamServicesPage() {
     tools = toolsRes;
     materialRules = (rulesRes.data ?? []) as unknown as ServiceMaterialRule[];
     serviceTools = (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[];
-    measurementUnit = orgRes.measurement_unit === "linear ft" ? "linear ft" : "sq ft";
+    measurementUnit = orgRes.measurement_unit || "sq ft";
+    measurementBasis =
+      orgRes.measurement_basis === "perimeter" || orgRes.measurement_basis === "flat"
+        ? orgRes.measurement_basis
+        : "area";
 
     // Blended crew cost = average of the HOURLY team's set pay rates —
     // commission pay is a % of the sale, not a per-hour labor cost. The
@@ -251,7 +256,9 @@ export default async function TeamServicesPage() {
             </p>
 
             <div className="mb-6 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              {isAdmin && <MeasurementUnitSetting initialUnit={measurementUnit} />}
+              {isAdmin && (
+                <MeasurementUnitSetting initialUnit={measurementUnit} initialBasis={measurementBasis} />
+              )}
               {crewCostPerHour != null ? (
                 <p>
                   Crew cost per hour: <span className="font-semibold">${crewCostPerHour.toFixed(2)}</span>
