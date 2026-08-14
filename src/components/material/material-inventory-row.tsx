@@ -10,6 +10,7 @@ import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
 import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
 import { MaterialStorageLocationInput } from "./material-storage-location-input";
+import { MaterialShopLocationInput } from "./material-shop-location-input";
 import { MaterialCanStoreSelect } from "./material-can-store-select";
 import { MaterialStorageAlternativeInput } from "./material-storage-alternative-input";
 import { MaterialStorageRequirementsInput } from "./material-storage-requirements-input";
@@ -101,6 +102,10 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>
                 <MaterialPurchaseLinkInput materialId={material.id} initialUrl={material.purchase_url} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Where in the shop</span>
+                <MaterialShopLocationInput materialId={material.id} initialValue={material.shop_location} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Description</span>

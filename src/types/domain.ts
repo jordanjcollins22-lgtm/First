@@ -180,6 +180,7 @@ export interface Tool {
   image_path: string | null;
   quantity: number | null;
   storage_location: string | null;
+  shop_location: string | null;
   purchase_url: string | null;
   reorder_threshold: number | null;
   on_order: boolean;
@@ -204,6 +205,7 @@ export interface Material {
   reorder_threshold: number | null;
   on_order: boolean;
   storage_location: string | null;
+  shop_location: string | null;
   image_path: string | null;
   can_store: boolean;
   storage_alternative: string | null;

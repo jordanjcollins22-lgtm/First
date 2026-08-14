@@ -23,9 +23,13 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [ownership, setOwnership] = useState<"own" | "rent">("own");
   const [kits, setKits] = useState<number[]>([]);
+  const [quantityValue, setQuantityValue] = useState("");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const locationRequired = Number(quantityValue) > 0;
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -34,22 +38,30 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
   }
 
   function handleSubmit(formData: FormData) {
+    setError(null);
     startTransition(async () => {
-      if (file) {
-        const supabase = createClient();
-        const path = `${uuid()}/${file.name}`;
-        const { error } = await supabase.storage.from("tool-images").upload(path, file, { upsert: false });
-        if (!error) formData.set("image_path", path);
+      try {
+        if (file) {
+          const supabase = createClient();
+          const path = `${uuid()}/${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from("tool-images")
+            .upload(path, file, { upsert: false });
+          if (!uploadError) formData.set("image_path", path);
+        }
+        formData.set("is_rental", ownership === "rent" ? "on" : "");
+        formData.set("kits", kits.join(","));
+        await createTool(formData);
+        formRef.current?.reset();
+        setFile(null);
+        setPreviewUrl(null);
+        setOwnership("own");
+        setKits([]);
+        setQuantityValue("");
+        setFetchMessage(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
       }
-      formData.set("is_rental", ownership === "rent" ? "on" : "");
-      formData.set("kits", kits.join(","));
-      await createTool(formData);
-      formRef.current?.reset();
-      setFile(null);
-      setPreviewUrl(null);
-      setOwnership("own");
-      setKits([]);
-      setFetchMessage(null);
     });
   }
 
@@ -146,17 +158,37 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="tool-storage">Stored at</Label>
+          <Label htmlFor="tool-storage">Stored at{locationRequired && " *"}</Label>
           <Input
             id="tool-storage"
             name="storage_location"
-            placeholder="e.g. Shop shelf 3, Truck 1"
+            required={locationRequired}
+            placeholder="e.g. Shop, Truck 1"
+            className="w-40"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tool-shop-location">Where in the shop</Label>
+          <Input
+            id="tool-shop-location"
+            name="shop_location"
+            placeholder="e.g. Shelf 3, Bin B"
             className="w-40"
           />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="tool-quantity">On hand</Label>
-          <Input id="tool-quantity" name="quantity" type="number" step="1" min={0} placeholder="0" className="w-20" />
+          <Input
+            id="tool-quantity"
+            name="quantity"
+            type="number"
+            step="1"
+            min={0}
+            placeholder="0"
+            value={quantityValue}
+            onChange={(e) => setQuantityValue(e.target.value)}
+            className="w-20"
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="tool-reorder">Reorder at</Label>
@@ -195,6 +227,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         </Button>
       </div>
       {fetchMessage && <p className="text-xs text-muted-foreground">{fetchMessage}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </form>
   );
 }

@@ -21,8 +21,9 @@ export function SiteNav({
   const showProjectData = allowedTabs.includes("project-data");
   const showEvaluations = allowedTabs.includes("evaluations");
   const links = [
-    ...(allowedTabs.includes("tools") ? [{ href: "/admin/tools", label: "Tool Database" }] : []),
-    ...(allowedTabs.includes("materials") ? [{ href: "/admin/materials", label: "Material Database" }] : []),
+    ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
+      ? [{ href: "/admin/tools", label: "Inventory" }]
+      : []),
     ...(allowedTabs.includes("services") ? [{ href: "/admin/service-pricing", label: "Services Database" }] : []),
     ...(allowedTabs.includes("team") ? [{ href: "/admin/team", label: "Team Database" }] : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),

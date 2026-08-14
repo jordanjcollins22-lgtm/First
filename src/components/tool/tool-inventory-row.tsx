@@ -12,6 +12,7 @@ import { ToolReorderThresholdInput } from "./tool-reorder-threshold-input";
 import { ToolOrderStatus } from "./tool-order-status";
 import { ToolOwnershipSelect } from "./tool-ownership-select";
 import { ToolStorageLocationInput } from "./tool-storage-location-input";
+import { ToolShopLocationInput } from "./tool-shop-location-input";
 import { ToolPurchaseLinkInput } from "./tool-purchase-link-input";
 import { ToolNotOwnedReasonInput } from "./tool-not-owned-reason-input";
 import { ToolCostToOwnInput } from "./tool-cost-to-own-input";
@@ -110,6 +111,10 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>
                 <ToolPurchaseLinkInput toolId={tool.id} initialUrl={tool.purchase_url} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Where in the shop</span>
+                <ToolShopLocationInput toolId={tool.id} initialValue={tool.shop_location} />
               </div>
               {tool.is_rental && (
                 <>

@@ -22,7 +22,13 @@ export async function createMaterial(formData: FormData) {
   const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
   const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
+  const shopLocation = String(formData.get("shop_location") ?? "").trim() || null;
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
+  const quantityOnHand = quantityRaw ? Number(quantityRaw) : null;
+
+  if (quantityOnHand != null && quantityOnHand > 0 && !storageLocation) {
+    throw new Error("Enter where it's stored — required for materials you're adding in stock.");
+  }
 
   const { error } = await supabase.from("materials").insert({
     organization_id: organizationId,
@@ -32,10 +38,11 @@ export async function createMaterial(formData: FormData) {
     cost_per_unit: costRaw ? Number(costRaw) : null,
     waste_factor_pct: wasteRaw ? Number(wasteRaw) : 10,
     purchase_url: purchaseUrl,
-    quantity_on_hand: quantityRaw ? Number(quantityRaw) : null,
+    quantity_on_hand: quantityOnHand,
     reorder_threshold: reorderRaw ? Number(reorderRaw) : null,
     description,
     storage_location: storageLocation,
+    shop_location: shopLocation,
     image_path: imagePath,
   });
   if (error) throw error;
@@ -63,6 +70,14 @@ export async function updateMaterialDescription(id: string, description: string 
 export async function updateMaterialStorageLocation(id: string, storageLocation: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("materials").update({ storage_location: storageLocation }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialShopLocation(id: string, shopLocation: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ shop_location: shopLocation }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");

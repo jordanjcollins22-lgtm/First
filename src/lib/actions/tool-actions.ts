@@ -31,9 +31,14 @@ export async function createTool(formData: FormData) {
   const quantity = quantityRaw ? Number(quantityRaw) : null;
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
   const storageLocation = String(formData.get("storage_location") ?? "").trim() || null;
+  const shopLocation = String(formData.get("shop_location") ?? "").trim() || null;
   const purchaseUrl = String(formData.get("purchase_url") ?? "").trim() || null;
   const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
   const reorderThreshold = reorderRaw ? Number(reorderRaw) : null;
+
+  if (quantity != null && quantity > 0 && !storageLocation) {
+    throw new Error("Enter where it's stored — required for tools you're adding in stock.");
+  }
 
   const { error } = await supabase.from("tools").insert({
     organization_id: organizationId,
@@ -45,6 +50,7 @@ export async function createTool(formData: FormData) {
     quantity,
     image_path: imagePath,
     storage_location: storageLocation,
+    shop_location: shopLocation,
     purchase_url: purchaseUrl,
     reorder_threshold: reorderThreshold,
   });
@@ -81,6 +87,14 @@ export async function updateToolOwnership(id: string, isRental: boolean) {
 export async function updateToolStorageLocation(id: string, storageLocation: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ storage_location: storageLocation }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolShopLocation(id: string, shopLocation: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ shop_location: shopLocation }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");

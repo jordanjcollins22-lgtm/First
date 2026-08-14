@@ -21,9 +21,13 @@ export function CreateMaterialForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [quantityValue, setQuantityValue] = useState("");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const locationRequired = Number(quantityValue) > 0;
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -32,18 +36,26 @@ export function CreateMaterialForm() {
   }
 
   function handleSubmit(formData: FormData) {
+    setError(null);
     startTransition(async () => {
-      if (file) {
-        const supabase = createClient();
-        const path = `${uuid()}/${file.name}`;
-        const { error } = await supabase.storage.from("material-images").upload(path, file, { upsert: false });
-        if (!error) formData.set("image_path", path);
+      try {
+        if (file) {
+          const supabase = createClient();
+          const path = `${uuid()}/${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from("material-images")
+            .upload(path, file, { upsert: false });
+          if (!uploadError) formData.set("image_path", path);
+        }
+        await createMaterial(formData);
+        formRef.current?.reset();
+        setFile(null);
+        setPreviewUrl(null);
+        setQuantityValue("");
+        setFetchMessage(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
       }
-      await createMaterial(formData);
-      formRef.current?.reset();
-      setFile(null);
-      setPreviewUrl(null);
-      setFetchMessage(null);
     });
   }
 
@@ -167,6 +179,8 @@ export function CreateMaterialForm() {
             step="0.1"
             min={0}
             placeholder="0"
+            value={quantityValue}
+            onChange={(e) => setQuantityValue(e.target.value)}
             className="w-24"
           />
         </div>
@@ -183,11 +197,21 @@ export function CreateMaterialForm() {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="material-storage">Stored at</Label>
+          <Label htmlFor="material-storage">Stored at{locationRequired && " *"}</Label>
           <Input
             id="material-storage"
             name="storage_location"
+            required={locationRequired}
             placeholder="e.g. Yard bin 2, Shed"
+            className="w-36"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="material-shop-location">Where in the shop</Label>
+          <Input
+            id="material-shop-location"
+            name="shop_location"
+            placeholder="e.g. Yard shelf 2"
             className="w-36"
           />
         </div>
@@ -226,6 +250,7 @@ export function CreateMaterialForm() {
         </Button>
       </div>
       {fetchMessage && <p className="text-xs text-muted-foreground">{fetchMessage}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </form>
   );
 }
