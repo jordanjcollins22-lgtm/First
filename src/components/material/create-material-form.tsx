@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { createMaterial } from "@/lib/actions/material-actions";
 import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
@@ -22,12 +23,13 @@ export function CreateMaterialForm() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [quantityValue, setQuantityValue] = useState("");
+  const [stockMethod, setStockMethod] = useState<"in_stock" | "order_as_needed">("in_stock");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const locationRequired = Number(quantityValue) > 0;
+  const locationRequired = stockMethod === "in_stock";
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -47,11 +49,13 @@ export function CreateMaterialForm() {
             .upload(path, file, { upsert: false });
           if (!uploadError) formData.set("image_path", path);
         }
+        formData.set("stock_method", stockMethod);
         await createMaterial(formData);
         formRef.current?.reset();
         setFile(null);
         setPreviewUrl(null);
         setQuantityValue("");
+        setStockMethod("in_stock");
         setFetchMessage(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -197,6 +201,18 @@ export function CreateMaterialForm() {
           />
         </div>
         <div className="flex flex-col gap-1.5">
+          <Label htmlFor="material-stock-method">In stock or order it?</Label>
+          <Select value={stockMethod} onValueChange={(v) => setStockMethod(v as "in_stock" | "order_as_needed")}>
+            <SelectTrigger id="material-stock-method" className="h-11 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="in_stock">In stock at warehouse</SelectItem>
+              <SelectItem value="order_as_needed">Order as needed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="material-storage">Stored at{locationRequired && " *"}</Label>
           <Input
             id="material-storage"
@@ -245,6 +261,10 @@ export function CreateMaterialForm() {
             className="h-11 w-72"
           />
         </div>
+        <label className="flex items-center gap-1.5 pb-2 text-sm">
+          <input type="checkbox" name="is_delivered" className="h-4 w-4" />
+          Delivered to us?
+        </label>
         <Button type="submit" disabled={isPending}>
           {isPending ? "Adding..." : "Add Material"}
         </Button>

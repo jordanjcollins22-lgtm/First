@@ -24,12 +24,13 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
   const [ownership, setOwnership] = useState<"own" | "rent">("own");
   const [kits, setKits] = useState<number[]>([]);
   const [quantityValue, setQuantityValue] = useState("");
+  const [stockMethod, setStockMethod] = useState<"in_stock" | "order_as_needed">("in_stock");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const locationRequired = Number(quantityValue) > 0;
+  const locationRequired = stockMethod === "in_stock";
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -51,6 +52,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         }
         formData.set("is_rental", ownership === "rent" ? "on" : "");
         formData.set("kits", kits.join(","));
+        formData.set("stock_method", stockMethod);
         await createTool(formData);
         formRef.current?.reset();
         setFile(null);
@@ -58,6 +60,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         setOwnership("own");
         setKits([]);
         setQuantityValue("");
+        setStockMethod("in_stock");
         setFetchMessage(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -158,6 +161,18 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tool-stock-method">In stock or order it?</Label>
+          <Select value={stockMethod} onValueChange={(v) => setStockMethod(v as "in_stock" | "order_as_needed")}>
+            <SelectTrigger id="tool-stock-method" className="h-11 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="in_stock">In stock at warehouse</SelectItem>
+              <SelectItem value="order_as_needed">Order as needed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="tool-storage">Stored at{locationRequired && " *"}</Label>
           <Input
             id="tool-storage"
@@ -222,6 +237,10 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
             </Button>
           </div>
         </div>
+        <label className="flex items-center gap-1.5 pb-2 text-sm">
+          <input type="checkbox" name="is_delivered" className="h-4 w-4" />
+          Delivered to us?
+        </label>
         <Button type="submit" disabled={isPending}>
           {isPending ? "Adding..." : "Add Tool"}
         </Button>

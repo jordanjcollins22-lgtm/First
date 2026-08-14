@@ -35,29 +35,40 @@ export async function createTool(formData: FormData) {
   const purchaseUrl = String(formData.get("purchase_url") ?? "").trim() || null;
   const reorderRaw = String(formData.get("reorder_threshold") ?? "").trim();
   const reorderThreshold = reorderRaw ? Number(reorderRaw) : null;
+  const stockMethod = String(formData.get("stock_method") ?? "in_stock").trim() === "order_as_needed"
+    ? "order_as_needed"
+    : "in_stock";
+  const isDelivered = formData.get("is_delivered") === "on" || formData.get("is_delivered") === "true";
 
-  if (quantity != null && quantity > 0 && !storageLocation) {
-    throw new Error("Enter where it's stored — required for tools you're adding in stock.");
+  if (stockMethod === "in_stock" && !storageLocation) {
+    throw new Error("Enter where it's stored — required for tools kept in stock.");
   }
 
-  const { error } = await supabase.from("tools").insert({
-    organization_id: organizationId,
-    name,
-    icon,
-    cost,
-    is_rental: isRental,
-    kits,
-    quantity,
-    image_path: imagePath,
-    storage_location: storageLocation,
-    shop_location: shopLocation,
-    purchase_url: purchaseUrl,
-    reorder_threshold: reorderThreshold,
-  });
+  const { data, error } = await supabase
+    .from("tools")
+    .insert({
+      organization_id: organizationId,
+      name,
+      icon,
+      cost,
+      is_rental: isRental,
+      kits,
+      quantity,
+      image_path: imagePath,
+      storage_location: storageLocation,
+      shop_location: shopLocation,
+      purchase_url: purchaseUrl,
+      reorder_threshold: reorderThreshold,
+      stock_method: stockMethod,
+      is_delivered: isDelivered,
+    })
+    .select()
+    .single();
   if (error) throw error;
 
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");
+  return { id: data.id as string, name: data.name as string };
 }
 
 export async function updateToolCost(id: string, cost: number | null) {
@@ -87,6 +98,22 @@ export async function updateToolOwnership(id: string, isRental: boolean) {
 export async function updateToolStorageLocation(id: string, storageLocation: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ storage_location: storageLocation }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolStockMethod(id: string, stockMethod: "in_stock" | "order_as_needed") {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ stock_method: stockMethod }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
+export async function updateToolDelivered(id: string, isDelivered: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ is_delivered: isDelivered }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");

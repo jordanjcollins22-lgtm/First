@@ -25,30 +25,41 @@ export async function createMaterial(formData: FormData) {
   const shopLocation = String(formData.get("shop_location") ?? "").trim() || null;
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
   const quantityOnHand = quantityRaw ? Number(quantityRaw) : null;
+  const stockMethod = String(formData.get("stock_method") ?? "in_stock").trim() === "order_as_needed"
+    ? "order_as_needed"
+    : "in_stock";
+  const isDelivered = formData.get("is_delivered") === "on" || formData.get("is_delivered") === "true";
 
-  if (quantityOnHand != null && quantityOnHand > 0 && !storageLocation) {
-    throw new Error("Enter where it's stored — required for materials you're adding in stock.");
+  if (stockMethod === "in_stock" && !storageLocation) {
+    throw new Error("Enter where it's stored — required for materials kept in stock.");
   }
 
-  const { error } = await supabase.from("materials").insert({
-    organization_id: organizationId,
-    name,
-    unit,
-    coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,
-    cost_per_unit: costRaw ? Number(costRaw) : null,
-    waste_factor_pct: wasteRaw ? Number(wasteRaw) : 10,
-    purchase_url: purchaseUrl,
-    quantity_on_hand: quantityOnHand,
-    reorder_threshold: reorderRaw ? Number(reorderRaw) : null,
-    description,
-    storage_location: storageLocation,
-    shop_location: shopLocation,
-    image_path: imagePath,
-  });
+  const { data, error } = await supabase
+    .from("materials")
+    .insert({
+      organization_id: organizationId,
+      name,
+      unit,
+      coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,
+      cost_per_unit: costRaw ? Number(costRaw) : null,
+      waste_factor_pct: wasteRaw ? Number(wasteRaw) : 10,
+      purchase_url: purchaseUrl,
+      quantity_on_hand: quantityOnHand,
+      reorder_threshold: reorderRaw ? Number(reorderRaw) : null,
+      description,
+      storage_location: storageLocation,
+      shop_location: shopLocation,
+      stock_method: stockMethod,
+      is_delivered: isDelivered,
+      image_path: imagePath,
+    })
+    .select()
+    .single();
   if (error) throw error;
 
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");
+  return { id: data.id as string, name: data.name as string };
 }
 
 export async function updateMaterialCost(id: string, costPerUnit: number | null) {
@@ -70,6 +81,22 @@ export async function updateMaterialDescription(id: string, description: string 
 export async function updateMaterialStorageLocation(id: string, storageLocation: string | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("materials").update({ storage_location: storageLocation }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialStockMethod(id: string, stockMethod: "in_stock" | "order_as_needed") {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ stock_method: stockMethod }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
+}
+
+export async function updateMaterialDelivered(id: string, isDelivered: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("materials").update({ is_delivered: isDelivered }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");

@@ -10,6 +10,8 @@ export interface ZoneServiceData {
   /** Storage paths in the "canvas-images" bucket, uploaded as soon as they're picked. */
   photos: string[];
   tools: string[];
+  /** Manually added extra materials for this zone, beyond what auto-apply rules compute from sq ft. */
+  materials?: string[];
 }
 
 export interface WorkZone {

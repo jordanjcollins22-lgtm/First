@@ -229,6 +229,8 @@ export interface Database {
           quantity: number | null;
           storage_location: string | null;
           shop_location: string | null;
+          stock_method: string;
+          is_delivered: boolean;
           purchase_url: string | null;
           reorder_threshold: number | null;
           on_order: boolean;
@@ -260,6 +262,8 @@ export interface Database {
           on_order: boolean;
           storage_location: string | null;
           shop_location: string | null;
+          stock_method: string;
+          is_delivered: boolean;
           image_path: string | null;
           can_store: boolean;
           storage_alternative: string | null;

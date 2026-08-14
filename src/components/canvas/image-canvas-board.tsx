@@ -334,6 +334,8 @@ interface MaterialLineItem {
   unit: string;
   quantity: number;
   totalCost: number | null;
+  /** Manually added for this zone rather than computed from a sq-ft rule — no reliable quantity to show. */
+  manual?: boolean;
 }
 
 function zoneMaterialLineItems(zone: WorkZone, areaSqFt: number, catalog: CanvasCatalog): MaterialLineItem[] {
@@ -357,10 +359,28 @@ function zoneMaterialLineItems(zone: WorkZone, areaSqFt: number, catalog: Canvas
       totalCost,
     });
   }
+  const ruleMaterialNames = new Set(items.map((item) => item.material));
+  for (const name of service.materials ?? []) {
+    if (ruleMaterialNames.has(name)) continue;
+    const material = catalog.materials.find((m) => m.name === name);
+    if (!material) continue;
+    items.push({
+      zoneName: zone.name,
+      materialId: material.id,
+      material: material.name,
+      unit: material.unit,
+      quantity: 1,
+      totalCost: material.cost_per_unit,
+      manual: true,
+    });
+  }
   return items;
 }
 
 function formatMaterialQuantity(item: MaterialLineItem): string {
+  if (item.manual) {
+    return item.totalCost != null ? `As needed · $${item.totalCost.toFixed(2)}` : "As needed";
+  }
   const qty = item.quantity < 10 ? item.quantity.toFixed(1) : Math.round(item.quantity).toLocaleString();
   let text = `${qty} ${item.unit}`;
   if (item.unit === "cubic yards") {

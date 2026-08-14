@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { listTools } from "@/lib/data/tools";
 import { listMaterials } from "@/lib/data/materials";
@@ -60,12 +61,41 @@ export default async function InventoryPage() {
       m.quantity_on_hand <= m.reorder_threshold
   ).length;
 
+  const isEmpty = tools.length === 0 && materials.length === 0;
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">Inventory</h1>
-      <p className="mb-6 text-muted-foreground">
-        Tools and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
-      </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="mb-1 text-2xl font-bold">Inventory</h1>
+          <p className="text-muted-foreground">
+            Tools and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
+          </p>
+        </div>
+        <Link
+          href="/admin/inventory-setup"
+          className="shrink-0 whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+        >
+          Quick setup
+        </Link>
+      </div>
+
+      {isEmpty && (
+        <Card className="mb-6 border-primary/40 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+            <p className="text-sm">
+              Starting fresh? Use quick setup to rapid-add your current tools and materials — anything new gets
+              added automatically the first time you quote it.
+            </p>
+            <Link
+              href="/admin/inventory-setup"
+              className="shrink-0 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Set up your inventory →
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       <InventoryViewToggle
         showTools={toolsAllowed}

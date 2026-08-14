@@ -181,6 +181,8 @@ export interface Tool {
   quantity: number | null;
   storage_location: string | null;
   shop_location: string | null;
+  stock_method: "in_stock" | "order_as_needed";
+  is_delivered: boolean;
   purchase_url: string | null;
   reorder_threshold: number | null;
   on_order: boolean;
@@ -206,6 +208,8 @@ export interface Material {
   on_order: boolean;
   storage_location: string | null;
   shop_location: string | null;
+  stock_method: "in_stock" | "order_as_needed";
+  is_delivered: boolean;
   image_path: string | null;
   can_store: boolean;
   storage_alternative: string | null;
