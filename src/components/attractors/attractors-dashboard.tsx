@@ -10,8 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isMapboxConfigured } from "@/lib/env";
 import { FilterBar } from "./filter-bar";
 import { WaveList } from "./wave-list";
-import { ProjectList } from "./project-list";
-import { PropertyList } from "./property-list";
+import { ClientList } from "./client-list";
 import { SatelliteMapView } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
@@ -35,7 +34,7 @@ import type { JobWithLocation } from "@/lib/data/jobs";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
-type SidebarTab = "waves" | "projects" | "properties";
+type SidebarTab = "waves" | "clients";
 type DrawTarget = "wave" | "location-area";
 
 export function AttractorsDashboard({
@@ -75,7 +74,7 @@ export function AttractorsDashboard({
 
   const [selectedWaveId, setSelectedWaveId] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [drawMode, setDrawMode] = useState<"polygon" | "route" | null>(null);
   const [drawTarget, setDrawTarget] = useState<DrawTarget | null>(null);
@@ -104,9 +103,12 @@ export function AttractorsDashboard({
     [jobs, showProjects, jobStatusFilter]
   );
 
+  const clientCount = useMemo(() => new Set(properties.map((p) => p.customer_id)).size, [properties]);
+
   const selectedWave = waves.find((w) => w.id === selectedWaveId) ?? null;
   const selectedJob = jobs.find((j) => j.id === selectedJobId) ?? null;
-  const selectedProperty = properties.find((p) => p.id === selectedPropertyId) ?? null;
+  // First property on file for the selected client — enough to fly the map there.
+  const selectedClientProperty = properties.find((p) => p.customer_id === selectedClientId) ?? null;
 
   function toggleInSet<T>(setter: (fn: (prev: Set<T>) => Set<T>) => void, value: T) {
     setter((prev) => {
@@ -120,19 +122,19 @@ export function AttractorsDashboard({
   function selectWave(id: string | null) {
     setSelectedWaveId(id);
     setSelectedJobId(null);
-    setSelectedPropertyId(null);
+    setSelectedClientId(null);
     setCreating(false);
   }
 
   function selectJob(id: string | null) {
     setSelectedJobId(id);
     setSelectedWaveId(null);
-    setSelectedPropertyId(null);
+    setSelectedClientId(null);
     setCreating(false);
   }
 
-  function selectProperty(id: string | null) {
-    setSelectedPropertyId(id);
+  function selectClient(id: string | null) {
+    setSelectedClientId(id);
     setSelectedWaveId(null);
     setSelectedJobId(null);
     setCreating(false);
@@ -143,7 +145,7 @@ export function AttractorsDashboard({
     setCreating(true);
     setSelectedWaveId(null);
     setSelectedJobId(null);
-    setSelectedPropertyId(null);
+    setSelectedClientId(null);
     setDrawnPoints(null);
   }
 
@@ -165,7 +167,7 @@ export function AttractorsDashboard({
         <div>
           <h1 className="text-2xl font-bold">Project Data</h1>
           <p className="text-muted-foreground">
-            Properties, projects, and the marketing waves that generate them — on the same map.
+            Clients and the marketing waves that generate them — on the same map.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -258,8 +260,7 @@ export function AttractorsDashboard({
           <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as SidebarTab)} className="flex flex-1 flex-col overflow-hidden">
             <TabsList className="m-2 shrink-0">
               <TabsTrigger value="waves">Waves ({filteredWaves.length})</TabsTrigger>
-              <TabsTrigger value="projects">Projects ({filteredJobs.length})</TabsTrigger>
-              <TabsTrigger value="properties">Clients ({properties.length})</TabsTrigger>
+              <TabsTrigger value="clients">Clients ({clientCount})</TabsTrigger>
             </TabsList>
             <TabsContent value="waves" className="mt-0 flex-1 overflow-y-auto">
               <WaveList
@@ -271,16 +272,13 @@ export function AttractorsDashboard({
                 onSelect={selectWave}
               />
             </TabsContent>
-            <TabsContent value="projects" className="mt-0 flex-1 overflow-y-auto">
-              <ProjectList jobs={filteredJobs} selectedJobId={selectedJobId} onSelect={selectJob} />
-            </TabsContent>
-            <TabsContent value="properties" className="mt-0 flex-1 overflow-y-auto">
-              <PropertyList
+            <TabsContent value="clients" className="mt-0 flex-1 overflow-y-auto">
+              <ClientList
                 properties={properties}
                 jobs={jobs}
                 profiles={profiles}
-                selectedPropertyId={selectedPropertyId}
-                onSelect={selectProperty}
+                selectedClientId={selectedClientId}
+                onSelect={selectClient}
               />
             </TabsContent>
           </Tabs>
@@ -300,7 +298,7 @@ export function AttractorsDashboard({
                 locations={locations}
                 areas={areas}
                 showLocations={showLocations}
-                flyToTarget={selectedProperty ? { lat: selectedProperty.lat, lng: selectedProperty.lng } : null}
+                flyToTarget={selectedClientProperty ? { lat: selectedClientProperty.lat, lng: selectedClientProperty.lng } : null}
                 drawMode={drawMode}
                 onGeometryDrawn={(points) => {
                   setDrawnPoints(points);
