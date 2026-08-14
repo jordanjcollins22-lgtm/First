@@ -65,7 +65,7 @@ export function SiteNav({
 
       {showEvaluations && (
         <Link href="/evaluations" className="hover:text-primary">
-          My Evaluations
+          My Schedule
         </Link>
       )}
 

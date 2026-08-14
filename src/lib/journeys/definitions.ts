@@ -58,7 +58,7 @@ const evaluatorJourney: JourneyTemplate = {
       nextSteps: ["on_my_way"],
       clicks: 1,
       estMinutes: 0.5,
-      notes: "My Evaluations page — lists every evaluation assigned to this person.",
+      notes: "My Schedule page — lists every evaluation assigned to this person.",
     },
     {
       stepKey: "on_my_way",
