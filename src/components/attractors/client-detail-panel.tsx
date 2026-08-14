@@ -13,8 +13,10 @@ import { DeletePropertyButton } from "@/components/property/delete-property-butt
 import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
 import { addPropertyForCustomer, updatePropertyAddress } from "@/lib/actions/property-actions";
 import { updateCustomerContact } from "@/lib/actions/customer-actions";
+import { isAccountManager } from "@/lib/affiliate-roles";
+import { cn } from "@/lib/utils";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
-import type { Customer, Profile } from "@/types/domain";
+import type { Customer, JobProposal, Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 
@@ -27,6 +29,18 @@ const JOB_STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+const PROPOSAL_STATUS_LABEL: Record<string, string> = {
+  pending: "Proposal sent",
+  accepted: "Proposal accepted",
+  declined: "Proposal declined",
+};
+
+const PROPOSAL_STATUS_STYLE: Record<string, string> = {
+  pending: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  accepted: "border-primary/40 bg-primary/10 text-primary",
+  declined: "border-destructive/40 bg-destructive/10 text-destructive",
+};
+
 /** The full account view for a client — every property they have, and every
  * job/evaluation on each one, with all the info from how the lead came in. */
 export function ClientDetailPanel({
@@ -34,13 +48,15 @@ export function ClientDetailPanel({
   clientProperties,
   jobs,
   profiles,
+  proposalsByJobId,
   onClose,
 }: {
   customer: Customer;
   clientProperties: PropertyWithCustomer[];
   jobs: JobWithLocation[];
   profiles: Profile[];
-  onClose: () => void;
+  proposalsByJobId?: Record<string, JobProposal>;
+  onClose?: () => void;
 }) {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addingProperty, setAddingProperty] = useState(false);
@@ -52,6 +68,7 @@ export function ClientDetailPanel({
   const profileNamesById = new Map(profiles.map((p) => [p.id, p.full_name || p.email]));
   const propertyIds = new Set(clientProperties.map((p) => p.id));
   const clientJobs = jobs.filter((j) => propertyIds.has(j.property_id));
+  const accountManagerProfiles = profiles.filter((p) => isAccountManager(p.roles));
 
   function saveContact(next: { email?: string; phone?: string }) {
     setError(null);
@@ -103,9 +120,11 @@ export function ClientDetailPanel({
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold">{customer.name}</p>
-        <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X className="h-4 w-4" />
-        </button>
+        {onClose && (
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
@@ -139,7 +158,11 @@ export function ClientDetailPanel({
 
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Account manager</Label>
-        <AssignAccountManagerSelect customerId={customer.id} initialAccountManagerId={customer.account_manager_id} profiles={profiles} />
+        <AssignAccountManagerSelect
+          customerId={customer.id}
+          initialAccountManagerId={customer.account_manager_id}
+          profiles={accountManagerProfiles}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -202,9 +225,21 @@ export function ClientDetailPanel({
                         Evaluation
                         <ExternalLink className="h-3 w-3" />
                       </Link>
-                      <span className="text-xs capitalize text-muted-foreground">
-                        {JOB_STATUS_LABEL[job.status] ?? job.status.replace("_", " ")}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs capitalize text-muted-foreground">
+                          {JOB_STATUS_LABEL[job.status] ?? job.status.replace("_", " ")}
+                        </span>
+                        {proposalsByJobId?.[job.id] && (
+                          <span
+                            className={cn(
+                              "rounded-full border px-1.5 py-0 text-[10px] font-semibold",
+                              PROPOSAL_STATUS_STYLE[proposalsByJobId[job.id].status]
+                            )}
+                          >
+                            {PROPOSAL_STATUS_LABEL[proposalsByJobId[job.id].status]}
+                          </span>
+                        )}
+                      </div>
                       {job.budget_range && (
                         <span className="text-xs text-muted-foreground">Budget: {job.budget_range}</span>
                       )}
