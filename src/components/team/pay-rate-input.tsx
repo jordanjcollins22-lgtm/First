@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { updateProfilePay } from "@/lib/actions/team-actions";
 
+type PayType = "hourly" | "commission" | "both";
+
 export function PayRateInput({
   profileId,
   initialPayType,
@@ -13,32 +15,35 @@ export function PayRateInput({
   initialCommissionPct,
 }: {
   profileId: string;
-  initialPayType: "hourly" | "commission";
+  initialPayType: PayType;
   initialRate: number | null;
   initialCommissionPct: number | null;
 }) {
-  const [payType, setPayType] = useState<"hourly" | "commission">(initialPayType);
+  const [payType, setPayType] = useState<PayType>(initialPayType);
   const [rate, setRate] = useState(initialRate?.toString() ?? "");
   const [commission, setCommission] = useState(initialCommissionPct?.toString() ?? "");
   const [isPending, startTransition] = useTransition();
 
-  function save(nextPayType: "hourly" | "commission", nextRate: string, nextCommission: string) {
+  function save(nextPayType: PayType, nextRate: string, nextCommission: string) {
     startTransition(() =>
       updateProfilePay(
         profileId,
         nextPayType,
-        nextRate.trim() ? Number(nextRate) : null,
-        nextCommission.trim() ? Number(nextCommission) : null
+        nextPayType !== "commission" && nextRate.trim() ? Number(nextRate) : null,
+        nextPayType !== "hourly" && nextCommission.trim() ? Number(nextCommission) : null
       )
     );
   }
 
+  const showHourly = payType === "hourly" || payType === "both";
+  const showCommission = payType === "commission" || payType === "both";
+
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <Select
         value={payType}
         onValueChange={(v) => {
-          const next = v as "hourly" | "commission";
+          const next = v as PayType;
           setPayType(next);
           save(next, rate, commission);
         }}
@@ -49,9 +54,10 @@ export function PayRateInput({
         <SelectContent>
           <SelectItem value="hourly">Hourly</SelectItem>
           <SelectItem value="commission">Commission</SelectItem>
+          <SelectItem value="both">Both</SelectItem>
         </SelectContent>
       </Select>
-      {payType === "hourly" ? (
+      {showHourly && (
         <Input
           type="number"
           step="0.01"
@@ -63,7 +69,8 @@ export function PayRateInput({
           onBlur={() => save(payType, rate, commission)}
           className="h-9 w-24 text-sm"
         />
-      ) : (
+      )}
+      {showCommission && (
         <div className="flex items-center gap-1">
           <Input
             type="number"

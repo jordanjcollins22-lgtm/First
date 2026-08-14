@@ -155,7 +155,7 @@ export interface Profile {
   full_name: string | null;
   roles: Role[];
   organization_id: string;
-  pay_type: "hourly" | "commission";
+  pay_type: "hourly" | "commission" | "both";
   pay_rate_per_hour: number | null;
   commission_pct: number | null;
   created_at: string;

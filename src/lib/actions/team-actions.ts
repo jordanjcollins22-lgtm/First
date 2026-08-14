@@ -50,6 +50,10 @@ export async function createTeamMember(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const role = String(formData.get("role") ?? "").trim() || "crew";
+  const payTypeRaw = String(formData.get("pay_type") ?? "hourly").trim();
+  const payType = payTypeRaw === "commission" || payTypeRaw === "both" ? payTypeRaw : "hourly";
+  const payRateRaw = String(formData.get("pay_rate_per_hour") ?? "").trim();
+  const commissionRaw = String(formData.get("commission_pct") ?? "").trim();
 
   if (!email || !password) {
     throw new Error("Enter an email and password.");
@@ -69,14 +73,27 @@ export async function createTeamMember(formData: FormData) {
     throw new Error(error.message || "Couldn't create that account.");
   }
 
-  // New accounts default to "crew" (see the profiles trigger) — only need to
-  // update it when something else was picked.
-  if (role !== "crew" && data.user) {
+  if (data.user) {
     const supabase = await createClient();
-    const { error: roleError } = await supabase
-      .from("profile_roles")
-      .insert({ profile_id: data.user.id, role_name: role });
-    if (roleError) throw roleError;
+
+    // New accounts default to "crew" (see the profiles trigger) — only need to
+    // update it when something else was picked.
+    if (role !== "crew") {
+      const { error: roleError } = await supabase
+        .from("profile_roles")
+        .insert({ profile_id: data.user.id, role_name: role });
+      if (roleError) throw roleError;
+    }
+
+    const { error: payError } = await supabase
+      .from("profiles")
+      .update({
+        pay_type: payType,
+        pay_rate_per_hour: payType !== "commission" && payRateRaw ? Number(payRateRaw) : null,
+        commission_pct: payType !== "hourly" && commissionRaw ? Number(commissionRaw) : null,
+      })
+      .eq("id", data.user.id);
+    if (payError) throw payError;
   }
 
   revalidatePath("/admin/team");
@@ -89,7 +106,7 @@ export async function createTeamMember(formData: FormData) {
  */
 export async function updateProfilePay(
   profileId: string,
-  payType: "hourly" | "commission",
+  payType: "hourly" | "commission" | "both",
   payRatePerHour: number | null,
   commissionPct: number | null
 ) {
@@ -147,6 +164,44 @@ export async function addRole(name: string) {
     throw error;
   }
   revalidatePath("/admin/team");
+}
+
+/**
+ * Renames an existing role. Every table pointing at roles(name) is declared
+ * `on update cascade`, so assignments and tab permissions follow the rename
+ * automatically. System roles (admin/crew) keep their names — code checks
+ * for "admin" by name in a few places, so renaming one would lock people out.
+ */
+export async function renameRole(currentName: string, nextName: string) {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    throw new Error("Only admins can rename roles.");
+  }
+
+  const trimmed = nextName.trim().toLowerCase();
+  if (!trimmed) throw new Error("Enter a role name.");
+  if (!/^[a-z][a-z0-9 _-]*$/.test(trimmed)) {
+    throw new Error("Start with a letter — letters, numbers, spaces, - and _ only.");
+  }
+  if (trimmed === currentName) return;
+
+  const supabase = await createClient();
+  const { data: existing, error: lookupError } = await supabase
+    .from("roles")
+    .select("is_system")
+    .eq("name", currentName)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!existing) throw new Error("That role no longer exists.");
+  if (existing.is_system) throw new Error("Built-in roles can't be renamed.");
+
+  const { error } = await supabase.from("roles").update({ name: trimmed }).eq("name", currentName);
+  if (error) {
+    if (error.code === "23505") throw new Error("That role already exists.");
+    throw error;
+  }
+  revalidatePath("/admin/team");
+  revalidatePath("/admin/permissions");
 }
 
 export async function deleteRole(name: string) {

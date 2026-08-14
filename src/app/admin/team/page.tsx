@@ -180,7 +180,11 @@ export default async function TeamServicesPage() {
                           <td className="p-2">
                             <PayRateInput
                               profileId={profile.id}
-                              initialPayType={profile.pay_type === "commission" ? "commission" : "hourly"}
+                              initialPayType={
+                                profile.pay_type === "commission" || profile.pay_type === "both"
+                                  ? profile.pay_type
+                                  : "hourly"
+                              }
                               initialRate={profile.pay_rate_per_hour}
                               initialCommissionPct={profile.commission_pct}
                             />
