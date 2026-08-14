@@ -27,6 +27,7 @@ export function MessageThread({
   onNameChange,
   placeholder = "Write a message...",
   emptyLabel = "No messages yet.",
+  footnote,
 }: {
   title: string;
   messages: JobMessage[];
@@ -37,6 +38,7 @@ export function MessageThread({
   onNameChange?: (value: string) => void;
   placeholder?: string;
   emptyLabel?: string;
+  footnote?: string;
 }) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -92,9 +94,12 @@ export function MessageThread({
           />
         )}
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} rows={2} />
-        <Button type="button" size="sm" className="self-end" disabled={isPending || !body.trim()} onClick={handleSend}>
-          Send
-        </Button>
+        <div className="flex items-center justify-between gap-2">
+          {footnote ? <p className="text-[10px] text-muted-foreground">{footnote}</p> : <span />}
+          <Button type="button" size="sm" disabled={isPending || !body.trim()} onClick={handleSend}>
+            Send
+          </Button>
+        </div>
       </div>
     </div>
   );

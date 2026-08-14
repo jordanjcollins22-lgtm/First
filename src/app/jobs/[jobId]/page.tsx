@@ -15,7 +15,7 @@ import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MessageThread } from "@/components/job/message-thread";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus } from "@/types/domain";
 
@@ -149,6 +149,7 @@ export default async function JobPage({
           viewerAuthorType="team"
           placeholder="Message the client..."
           emptyLabel="No messages with the client yet."
+          footnote={isTwilioConfigured ? "Also sent as a text message." : "Add Twilio to also send this as a text."}
         />
       </div>
 

@@ -14,6 +14,9 @@ export const env = {
   mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "",
   rentcastApiKey: process.env.RENTCAST_API_KEY ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? "",
+  twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
+  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -30,3 +33,4 @@ export const isSupabaseAdminConfigured = Boolean(env.supabaseUrl && env.supabase
 export const isMapboxConfigured = Boolean(env.mapboxToken);
 export const isRentcastConfigured = Boolean(env.rentcastApiKey);
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
+export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
