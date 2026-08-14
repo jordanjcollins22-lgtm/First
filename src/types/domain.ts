@@ -3,10 +3,13 @@
  * supabase/migrations. Keep in sync manually (no codegen for MVP).
  */
 
+export type MeasurementUnit = "sq ft" | "linear ft";
+
 export interface Organization {
   id: string;
   name: string;
   crew_cost_per_hour: number | null;
+  measurement_unit: MeasurementUnit;
   created_at: string;
   updated_at: string;
 }

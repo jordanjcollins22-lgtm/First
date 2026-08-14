@@ -86,8 +86,17 @@ export async function createServiceType(formData: FormData) {
   const cogsRaw = String(formData.get("cogs") ?? "").trim();
   const cogs = cogsRaw ? Number(cogsRaw) : null;
   const costRaw = String(formData.get("cost") ?? "").trim();
-  const costUnit = String(formData.get("cost_unit") ?? "").trim() || "flat rate";
   const hoursRaw = String(formData.get("estimated_hours") ?? "").trim();
+
+  // Default to the business's own measurement unit rather than a flat rate —
+  // per-unit pricing is the point of the COGS calculator.
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("measurement_unit")
+    .eq("id", organizationId)
+    .maybeSingle();
+  const costUnit =
+    String(formData.get("cost_unit") ?? "").trim() || `per ${org?.measurement_unit ?? "sq ft"}`;
 
   const { error } = await supabase.from("services").insert({
     organization_id: organizationId,

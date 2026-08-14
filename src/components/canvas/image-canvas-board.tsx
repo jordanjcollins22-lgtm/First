@@ -745,15 +745,20 @@ function computeJobTotals(
     if (!service) continue;
     const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
     if (!pricing || pricing.status !== "active") continue;
-    const isPerSqFt = pricing.cost_unit.trim().toLowerCase() === "per sq ft";
-    const areaSqFt = zoneMeasurements(zone)?.areaSqFt ?? 0;
+    // A per-unit price multiplies by whichever measurement matches its unit:
+    // area for sq ft, perimeter for linear ft. Anything else is a flat charge.
+    const unit = pricing.cost_unit.trim().toLowerCase();
+    const measurements = zoneMeasurements(zone);
+    const quantity =
+      unit === "per sq ft" ? measurements?.areaSqFt ?? 0 : unit === "per linear ft" ? measurements?.perimeterFt ?? 0 : null;
+
     if (pricing.cost != null) {
-      totalCost += isPerSqFt ? pricing.cost * areaSqFt : pricing.cost;
-      if (!isPerSqFt && pricing.cost_unit.trim().toLowerCase() !== "flat rate") hasNonFlatRate = true;
+      totalCost += quantity != null ? pricing.cost * quantity : pricing.cost;
+      if (quantity == null && unit !== "flat rate") hasNonFlatRate = true;
     }
-    if (isPerSqFt && pricing.minutes_per_sqft != null) {
+    if (quantity != null && pricing.minutes_per_sqft != null) {
       // Crew-hours, not clock-hours — a 3-person crew burns 3x the paid time.
-      totalHours += (pricing.minutes_per_sqft / 60) * areaSqFt * (pricing.crew_size ?? 1);
+      totalHours += (pricing.minutes_per_sqft / 60) * quantity * (pricing.crew_size ?? 1);
     } else if (pricing.estimated_hours != null) {
       totalHours += pricing.estimated_hours;
     }

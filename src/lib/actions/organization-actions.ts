@@ -66,3 +66,21 @@ export async function createOrganization(input: { name: string; adminEmail: stri
 
   revalidatePath("/admin/organizations");
 }
+
+/** The unit this business prices and estimates by — drives which zone measurement a per-unit price multiplies. */
+export async function updateMeasurementUnit(unit: "sq ft" | "linear ft") {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    throw new Error("Only admins can change the measurement unit.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ measurement_unit: unit })
+    .eq("id", caller.organization_id);
+  if (error) throw error;
+
+  revalidatePath("/admin/team");
+  revalidatePath("/canvas");
+}

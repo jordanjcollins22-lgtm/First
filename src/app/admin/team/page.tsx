@@ -19,7 +19,15 @@ import { ServicePricingRow } from "@/components/service-pricing/service-pricing-
 import { CreateServiceTypeForm } from "@/components/service-pricing/create-service-type-form";
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
 import { PayRateInput } from "@/components/team/pay-rate-input";
-import type { CustomRole, Profile, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
+import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
+import type {
+  CustomRole,
+  MeasurementUnit,
+  Profile,
+  ServiceMaterialRule,
+  ServiceToolLink,
+  Tool,
+} from "@/types/domain";
 
 export default async function TeamServicesPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -73,6 +81,7 @@ export default async function TeamServicesPage() {
   let tools: Tool[] = [];
   let serviceTools: ServiceToolLink[] = [];
   let crewCostPerHour: number | null = null;
+  let measurementUnit: MeasurementUnit = "sq ft";
   if (servicesAllowed) {
     const supabase = await createClient();
     const [servicesRes, materialsRes, toolsRes, rulesRes, serviceToolsRes, orgRes] = await Promise.all([
@@ -88,6 +97,7 @@ export default async function TeamServicesPage() {
     tools = toolsRes;
     materialRules = (rulesRes.data ?? []) as unknown as ServiceMaterialRule[];
     serviceTools = (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[];
+    measurementUnit = orgRes.measurement_unit === "linear ft" ? "linear ft" : "sq ft";
 
     // Blended crew cost = average of the HOURLY team's set pay rates —
     // commission pay is a % of the sale, not a per-hour labor cost. The
@@ -240,7 +250,8 @@ export default async function TeamServicesPage() {
               mid-quote — it shows up below as Pending until you price it or decline it.
             </p>
 
-            <div className="mb-6 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <div className="mb-6 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              {isAdmin && <MeasurementUnitSetting initialUnit={measurementUnit} />}
               {crewCostPerHour != null ? (
                 <p>
                   Crew cost per hour: <span className="font-semibold">${crewCostPerHour.toFixed(2)}</span>
@@ -308,6 +319,7 @@ export default async function TeamServicesPage() {
                     tools={tools}
                     serviceTools={serviceTools}
                     crewCostPerHour={crewCostPerHour}
+                    measurementUnit={measurementUnit}
                   />
                 ))}
                 {activeServices.length === 0 && (

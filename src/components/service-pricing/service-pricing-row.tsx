@@ -17,7 +17,7 @@ import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/
 import { setServiceToolLink } from "@/lib/actions/tool-actions";
 import { ToolVideoLinkInput } from "./tool-video-link-input";
 import { priceFromCogs, materialsCostPerSqFt, laborCostPerSqFt } from "@/lib/pricing";
-import type { Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
+import type { MeasurementUnit, Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
 
 interface ServicePricingRowProps {
   serviceTypeId: string;
@@ -34,6 +34,7 @@ interface ServicePricingRowProps {
   tools: Tool[];
   serviceTools: ServiceToolLink[];
   crewCostPerHour: number | null;
+  measurementUnit: MeasurementUnit;
 }
 
 export function ServicePricingRow({
@@ -51,6 +52,7 @@ export function ServicePricingRow({
   tools,
   serviceTools,
   crewCostPerHour,
+  measurementUnit,
 }: ServicePricingRowProps) {
   const [cogs, setCogs] = useState(initialCogs?.toString() ?? "");
   const [cost, setCost] = useState(initialCost?.toString() ?? "");
@@ -115,7 +117,7 @@ export function ServicePricingRow({
   function handleUseCalculated() {
     const rounded = Math.round(calculatedCogsPerSqFt * 100) / 100;
     setCogs(rounded.toString());
-    saveCogs(rounded.toString(), "per sq ft");
+    saveCogs(rounded.toString(), `per ${measurementUnit}`);
     startTransition(() => updateServiceLabor(serviceTypeId, minutesValue || null, crewSizeValue));
   }
 
@@ -278,7 +280,7 @@ export function ServicePricingRow({
                   >
                     {material.name}
                     {material.cost_per_unit != null && material.coverage_per_unit_sqft
-                      ? ` — $${((material.cost_per_unit / material.coverage_per_unit_sqft) * (1 + material.waste_factor_pct / 100)).toFixed(2)}/sq ft`
+                      ? ` — $${((material.cost_per_unit / material.coverage_per_unit_sqft) * (1 + material.waste_factor_pct / 100)).toFixed(2)}/${measurementUnit}`
                       : " — no cost/coverage set"}
                     <button type="button" onClick={() => handleRemoveMaterial(rule.id)} disabled={isPending}>
                       <X className="h-3 w-3" />
@@ -315,7 +317,7 @@ export function ServicePricingRow({
 
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs text-muted-foreground">Minutes to do 1 sq ft</Label>
+              <Label className="text-xs text-muted-foreground">Minutes to do 1 {measurementUnit}</Label>
               <Input
                 type="number"
                 step="0.1"
@@ -347,9 +349,11 @@ export function ServicePricingRow({
           </div>
 
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span>Materials: ${materialsPerSqFt.toFixed(2)}/sq ft</span>
             <span>
-              Labor: ${laborPerSqFt.toFixed(2)}/sq ft
+              Materials: ${materialsPerSqFt.toFixed(2)}/{measurementUnit}
+            </span>
+            <span>
+              Labor: ${laborPerSqFt.toFixed(2)}/{measurementUnit}
               {crewCostPerHour != null && minutesValue > 0 && (
                 <span className="ml-1">
                   ({minutesValue} min × {crewSizeValue} {crewSizeValue === 1 ? "person" : "people"} ={" "}
@@ -357,7 +361,9 @@ export function ServicePricingRow({
                 </span>
               )}
             </span>
-            <span className="font-medium text-foreground">COGS: ${calculatedCogsPerSqFt.toFixed(2)}/sq ft</span>
+            <span className="font-medium text-foreground">
+              COGS: ${calculatedCogsPerSqFt.toFixed(2)}/{measurementUnit}
+            </span>
           </div>
 
           <Button type="button" size="sm" disabled={isPending} onClick={handleUseCalculated} className="self-start">
