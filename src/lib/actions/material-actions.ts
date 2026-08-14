@@ -201,6 +201,19 @@ export async function deactivateMaterial(id: string) {
   revalidatePath("/canvas");
 }
 
+/** The types/colors this material comes in — drives whether the evaluator gets asked at all. */
+export async function updateMaterialOptions(id: string, key: "type_options" | "color_options", options: string[]) {
+  const supabase = await createClient();
+  const cleaned = Array.from(new Set(options.map((o) => o.trim()).filter(Boolean)));
+  const { error } = await supabase
+    .from("materials")
+    .update(key === "type_options" ? { type_options: cleaned } : { color_options: cleaned })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
+}
+
 /** Links a material to a service, picked directly from the service's own COGS calculator. */
 export async function linkMaterialToService(serviceTypeId: string, materialId: string) {
   const supabase = await createClient();

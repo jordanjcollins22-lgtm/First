@@ -11,6 +11,7 @@ import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
 import { MaterialStorageLocationInput } from "./material-storage-location-input";
 import { MaterialShopLocationInput } from "./material-shop-location-input";
+import { MaterialOptionsInput } from "./material-options-input";
 import { MaterialCanStoreSelect } from "./material-can-store-select";
 import { MaterialStorageAlternativeInput } from "./material-storage-alternative-input";
 import { MaterialStorageRequirementsInput } from "./material-storage-requirements-input";
@@ -104,6 +105,24 @@ export function MaterialInventoryRow({ material }: MaterialInventoryRowProps) {
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Description</span>
                 <MaterialDescriptionInput materialId={material.id} initialDescription={material.description} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Types it comes in</span>
+                <MaterialOptionsInput
+                  materialId={material.id}
+                  optionKey="type_options"
+                  initialOptions={material.type_options ?? []}
+                  placeholder="Add a type, press Enter"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Colors it comes in</span>
+                <MaterialOptionsInput
+                  materialId={material.id}
+                  optionKey="color_options"
+                  initialOptions={material.color_options ?? []}
+                  placeholder="Add a color, press Enter"
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Can we store it?</span>

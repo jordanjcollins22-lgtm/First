@@ -225,6 +225,9 @@ export interface Material {
   storage_alternative: string | null;
   storage_requirements: string | null;
   storage_cost: number | null;
+  /** What this material comes in — the evaluator is only asked when these exist. */
+  type_options: string[];
+  color_options: string[];
   created_at: string;
   updated_at: string;
 }

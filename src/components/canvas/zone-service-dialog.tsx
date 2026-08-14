@@ -285,10 +285,22 @@ export function ZoneServiceDialog({
     }));
   }
 
-  /** Previously-typed values for this material's type/color, so they get easier to pick over time. */
-  function materialSuggestions(materialName: string, key: "type" | "color"): string[] {
-    return catalog.customFieldOptions[typeId]?.[`material:${materialName}:${key}`] ?? [];
+  /**
+   * The choices a material actually offers, set on the material in Inventory,
+   * plus anything typed under "Other" before. Empty means don't ask — no
+   * point asking what color a bag of concrete should be.
+   */
+  function materialOptions(materialName: string, key: "type" | "color"): string[] {
+    const material = catalog.materials.find((m) => m.name === materialName);
+    const defined = (key === "type" ? material?.type_options : material?.color_options) ?? [];
+    const previouslyTyped = catalog.customFieldOptions[typeId]?.[`material:${materialName}:${key}`] ?? [];
+    return Array.from(new Set([...defined, ...previouslyTyped]));
   }
+
+  /** Materials that actually have something to ask about. */
+  const materialsToAsk = zoneMaterialNames.filter(
+    (name) => materialOptions(name, "type").length > 0 || materialOptions(name, "color").length > 0
+  );
 
   const steps = buildSteps(Boolean(typeId), checklistFields, otherFields, values);
   const currentIndex = Math.max(0, steps.indexOf(stepKey));
@@ -420,8 +432,18 @@ export function ZoneServiceDialog({
     // Tools come straight from the service's checklist — the evaluator never
     // picks them, they just travel with the zone for the crew.
     const tools = autoTools.map((tool) => tool.name);
+
+    // Drop the blank placeholder an unfilled "Other" leaves behind.
+    const cleanedChoices: Record<string, { type?: string; color?: string }> = {};
+    for (const [name, choice] of Object.entries(materialChoices)) {
+      const entry: { type?: string; color?: string } = {};
+      if (choice.type?.trim()) entry.type = choice.type.trim();
+      if (choice.color?.trim()) entry.color = choice.color.trim();
+      if (entry.type || entry.color) cleanedChoices[name] = entry;
+    }
+
     const service: ZoneServiceData | null = typeId
-      ? { typeId, values, notes, photos, tools, materials: extraMaterials, materialChoices }
+      ? { typeId, values, notes, photos, tools, materials: extraMaterials, materialChoices: cleanedChoices }
       : null;
 
     if (serviceType) {
@@ -432,13 +454,12 @@ export function ZoneServiceDialog({
       }
     }
 
-    // Remember each type/color typed here so it's a one-tap choice next time.
+    // Remember anything typed under "Other" so it's a one-tap choice next time.
     if (typeId) {
-      for (const [materialName, choice] of Object.entries(materialChoices)) {
+      for (const [materialName, choice] of Object.entries(cleanedChoices)) {
         for (const key of ["type", "color"] as const) {
-          const value = choice[key]?.trim();
-          if (!value) continue;
-          if (materialSuggestions(materialName, key).includes(value)) continue;
+          const value = choice[key];
+          if (!value || materialOptions(materialName, key).includes(value)) continue;
           addCustomFieldOption(typeId, `material:${materialName}:${key}`, value).catch(() => {});
         }
       }
@@ -688,16 +709,19 @@ export function ZoneServiceDialog({
     body = (
       <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What material would they like?" subtitle="Ask the customer their preferred type and color. Tools are handled automatically.">
         <div className="flex flex-col gap-3">
-          {zoneMaterialNames.length === 0 && (
+          {zoneMaterialNames.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               No materials on this service yet — search below to add one for this zone.
             </p>
-          )}
+          ) : materialsToAsk.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nothing to choose — {zoneMaterialNames.join(", ")} only come one way. Add the types or colors a
+              material comes in on its Inventory row if that&apos;s not right.
+            </p>
+          ) : null}
 
-          {zoneMaterialNames.map((materialName) => {
+          {materialsToAsk.map((materialName) => {
             const extraIndex = extraMaterials.indexOf(materialName);
-            const typeSuggestions = materialSuggestions(materialName, "type");
-            const colorSuggestions = materialSuggestions(materialName, "color");
             return (
               <div key={materialName} className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
                 <div className="flex items-center justify-between">
@@ -715,34 +739,50 @@ export function ZoneServiceDialog({
                 </div>
 
                 {(["type", "color"] as const).map((key) => {
-                  const suggestions = key === "type" ? typeSuggestions : colorSuggestions;
+                  const options = materialOptions(materialName, key);
+                  if (options.length === 0) return null;
+                  const chosen = materialChoices[materialName]?.[key] ?? "";
+                  const isOther = Boolean(chosen) && !options.includes(chosen);
                   return (
                     <div key={key} className="flex flex-col gap-1">
                       <Label className="text-xs capitalize text-muted-foreground">{key}</Label>
-                      {suggestions.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {suggestions.map((option) => (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() => setMaterialChoice(materialName, key, option)}
-                              className={cn(
-                                "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                                materialChoices[materialName]?.[key] === option
-                                  ? "border-primary bg-primary text-primary-foreground"
-                                  : "border-border bg-card/60 hover:bg-accent"
-                              )}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {options.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => setMaterialChoice(materialName, key, option)}
+                            className={cn(
+                              "rounded-lg border px-2.5 py-1 text-xs transition-colors",
+                              chosen === option
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-card/60 hover:bg-accent"
+                            )}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setMaterialChoice(materialName, key, isOther ? chosen : " ")}
+                          className={cn(
+                            "rounded-lg border px-2.5 py-1 text-xs transition-colors",
+                            isOther
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-card/60 hover:bg-accent"
+                          )}
+                        >
+                          Other
+                        </button>
+                      </div>
+                      {isOther && (
+                        <Input
+                          placeholder="Please specify"
+                          value={chosen.trim()}
+                          autoFocus
+                          onChange={(e) => setMaterialChoice(materialName, key, e.target.value || " ")}
+                        />
                       )}
-                      <Input
-                        placeholder={key === "type" ? "e.g. Hardwood, Double-shredded" : "e.g. Brown, Black, Red"}
-                        value={materialChoices[materialName]?.[key] ?? ""}
-                        onChange={(e) => setMaterialChoice(materialName, key, e.target.value)}
-                      />
                     </div>
                   );
                 })}
