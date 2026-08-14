@@ -289,8 +289,12 @@ function splitScopeIntoSteps(scope: string): string[] {
   return steps;
 }
 
-function zoneServiceSummary(service: ZoneServiceData): string {
-  return serviceTypeById(service.typeId)?.label ?? "Details added";
+function zoneServiceSummary(service: ZoneServiceData, catalog: CanvasCatalog): string {
+  return (
+    catalog.servicePricing.find((p) => p.service_type_id === service.typeId)?.name ??
+    serviceTypeById(service.typeId)?.label ??
+    "Details added"
+  );
 }
 
 function displayFieldValue(values: Record<string, string>, field: ServiceFieldDef): string {
@@ -494,14 +498,22 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
   let y = HEADER_HEIGHT + 28;
   const service = zone.service;
   const serviceType = service ? serviceTypeById(service.typeId) : undefined;
+  const serviceRow = service ? catalog.servicePricing.find((p) => p.service_type_id === service.typeId) : undefined;
+  const serviceName = serviceRow?.name ?? serviceType?.label ?? "Service";
 
-  if (service && serviceType) {
+  if (service) {
     ctx.font = "700 22px sans-serif";
     ctx.fillStyle = "#111827";
-    ctx.fillText(serviceType.label, PAGE_MARGIN, y);
+    ctx.fillText(serviceName, PAGE_MARGIN, y);
     y += 36;
 
-    const fieldLines = serviceType.fields
+    if (serviceRow?.status === "pending") {
+      y = drawBoxedSection(ctx, "Status", ["⏳ Pending pricing review"], y, "#fffbeb");
+    } else if (serviceRow?.status === "denied") {
+      y = drawBoxedSection(ctx, "Status", ["🚫 Outside our current scope — we don't offer this service"], y, "#fef2f2");
+    }
+
+    const fieldLines = (serviceType?.fields ?? [])
       .filter((field) => service.values[field.key])
       .map((field) =>
         field.checklistItem ? displayFieldValue(service.values, field) : `${field.label}: ${displayFieldValue(service.values, field)}`
@@ -518,7 +530,7 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
       y = await drawToolChips(ctx, service.tools, catalog, PAGE_MARGIN, y, maxWidth);
     }
 
-    if (serviceType.autoScope) {
+    if (serviceType?.autoScope) {
       const steps = splitScopeIntoSteps(serviceType.autoScope(service.values)).map((s) => `☐ ${s}`);
       y = drawBoxedSection(ctx, "Checklist", steps, y, "#eff6ff");
     }
@@ -681,7 +693,7 @@ interface JobPlanLine {
   indent: number;
 }
 
-function buildJobPlanTaskLines(zones: WorkZone[]): JobPlanLine[] {
+function buildJobPlanTaskLines(zones: WorkZone[], catalog: CanvasCatalog): JobPlanLine[] {
   const lines: JobPlanLine[] = [];
   let step = 1;
   for (const zone of zones) {
@@ -692,12 +704,27 @@ function buildJobPlanTaskLines(zones: WorkZone[]): JobPlanLine[] {
       indent: 0,
     });
     const service = zone.service;
+    const serviceRow = service ? catalog.servicePricing.find((p) => p.service_type_id === service.typeId) : undefined;
     const serviceType = service ? serviceTypeById(service.typeId) : undefined;
-    if (service && serviceType?.autoScope) {
+    if (service && serviceRow?.status === "denied") {
+      lines.push({
+        text: "Outside our current scope of work — we don't offer this service.",
+        font: "italic 14px sans-serif",
+        color: "#9ca3af",
+        indent: 16,
+      });
+    } else if (service && serviceRow?.status === "pending") {
+      lines.push({ text: "Pending pricing review.", font: "italic 14px sans-serif", color: "#9ca3af", indent: 16 });
+    } else if (service && serviceType?.autoScope) {
       for (const taskStep of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
         lines.push({ text: `${step}. ${taskStep}`, font: "14px sans-serif", color: "#374151", indent: 16 });
         step++;
       }
+    } else if (service) {
+      const name = serviceRow?.name ?? "Service";
+      const detail = service.notes.trim() ? `${name} — ${service.notes.trim()}` : name;
+      lines.push({ text: `${step}. ${detail}`, font: "14px sans-serif", color: "#374151", indent: 16 });
+      step++;
     } else {
       lines.push({ text: "No service details added.", font: "italic 14px sans-serif", color: "#9ca3af", indent: 16 });
     }
@@ -760,7 +787,7 @@ function renderJobPlanPages(
   ];
 
   const wrapped: JobPlanLine[] = [];
-  for (const line of [...headerLines, ...buildJobPlanTaskLines(zones)]) {
+  for (const line of [...headerLines, ...buildJobPlanTaskLines(zones, catalog)]) {
     mctx.font = line.font;
     for (const piece of wrapText(mctx, line.text, maxWidth - line.indent)) {
       wrapped.push({ ...line, text: piece });
@@ -1981,7 +2008,7 @@ export function ImageCanvasBoard({
                         </span>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {zone.service ? zoneServiceSummary(zone.service) : "Add service details"}
+                        {zone.service ? zoneServiceSummary(zone.service, catalog) : "Add service details"}
                       </span>
                     </span>
                   </button>

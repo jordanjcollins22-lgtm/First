@@ -322,6 +322,11 @@ export interface Database {
         Row: {
           organization_id: string;
           service_type_id: string;
+          name: string;
+          status: string;
+          requested_by: string | null;
+          requested_note: string | null;
+          cogs: number | null;
           cost: number | null;
           cost_unit: string;
           estimated_hours: number | null;

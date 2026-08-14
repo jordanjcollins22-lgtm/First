@@ -20,7 +20,6 @@ import { MaterialImageThumb } from "./material-image-thumb";
 import { MaterialOrderStatus } from "./material-order-status";
 import { DeactivateMaterialButton } from "./deactivate-material-button";
 import { DeleteMaterialRuleButton } from "./delete-material-rule-button";
-import { serviceTypeById } from "@/components/canvas/service-catalog";
 import type { Material } from "@/types/domain";
 
 interface MaterialRule {
@@ -33,9 +32,10 @@ interface MaterialRule {
 interface MaterialInventoryRowProps {
   material: Material;
   rules: MaterialRule[];
+  serviceTypeOptions: { id: string; label: string }[];
 }
 
-export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowProps) {
+export function MaterialInventoryRow({ material, rules, serviceTypeOptions }: MaterialInventoryRowProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -147,7 +147,7 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
                       key={rule.id}
                       className="flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-xs text-muted-foreground"
                     >
-                      {serviceTypeById(rule.service_type_id)?.label ?? rule.service_type_id}
+                      {serviceTypeOptions.find((t) => t.id === rule.service_type_id)?.label ?? rule.service_type_id}
                       {rule.match_field && ` · ${rule.match_field}=${rule.match_value}`}
                       <DeleteMaterialRuleButton id={rule.id} />
                     </span>

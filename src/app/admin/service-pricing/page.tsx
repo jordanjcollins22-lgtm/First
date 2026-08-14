@@ -1,46 +1,7 @@
-import { listServicePricing } from "@/lib/data/service-pricing";
-import { isSupabaseConfigured } from "@/lib/env";
-import { requireTab } from "@/lib/data/access";
-import { SERVICE_TYPES } from "@/components/canvas/service-catalog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { ServicePricingRow } from "@/components/service-pricing/service-pricing-row";
+import { redirect } from "next/navigation";
 
-export default async function ServicePricingPage() {
-  if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("services", "/attractors");
-
-  const pricing = await listServicePricing();
-  const pricingByType = new Map(pricing.map((p) => [p.service_type_id, p]));
-
-  return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">Services</h1>
-      <p className="mb-6 text-muted-foreground">
-        Every service type, with its cost and time estimate. These appear automatically
-        once a zone uses that service, and roll up into the Job Plan&apos;s total estimate.
-      </p>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Services</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col">
-          {SERVICE_TYPES.map((type) => {
-            const p = pricingByType.get(type.id);
-            return (
-              <ServicePricingRow
-                key={type.id}
-                serviceTypeId={type.id}
-                label={type.label}
-                initialCost={p?.cost ?? null}
-                initialCostUnit={p?.cost_unit ?? "flat rate"}
-                initialEstimatedHours={p?.estimated_hours ?? null}
-              />
-            );
-          })}
-        </CardContent>
-      </Card>
-    </div>
-  );
+// Team and Services were merged into one page with a Team/Services toggle —
+// keep this route working for old links/bookmarks.
+export default function ServicePricingRedirect() {
+  redirect("/admin/team");
 }

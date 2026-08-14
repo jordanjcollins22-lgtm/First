@@ -15,10 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { SERVICE_TYPES, serviceTypeById, type ServiceFieldDef } from "./service-catalog";
+import { serviceTypeById, type ServiceFieldDef } from "./service-catalog";
 import type { ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
+import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
 import { ToolImageThumb } from "@/components/tool/tool-image-thumb";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -226,6 +227,12 @@ export function ZoneServiceDialog({
   const [stepKey, setStepKey] = useState<StepKey>(initialService ? "review" : "location");
 
   const serviceType = serviceTypeById(typeId);
+  const activeServices = catalog.servicePricing.filter((s) => s.status === "active");
+  const selectedServiceRow = catalog.servicePricing.find((s) => s.service_type_id === typeId);
+  const [proposeName, setProposeName] = useState("");
+  const [proposeNote, setProposeNote] = useState("");
+  const [proposing, setProposing] = useState(false);
+  const [proposeError, setProposeError] = useState<string | null>(null);
 
   const checklistFields = useMemo(
     () => serviceType?.fields.filter((f) => f.checklistItem) ?? [],
@@ -256,7 +263,7 @@ export function ZoneServiceDialog({
   });
   const [extraMaterials, setExtraMaterials] = useState<string[]>(initialService?.materials ?? []);
 
-  const steps = buildSteps(Boolean(serviceType), checklistFields, otherFields, values);
+  const steps = buildSteps(Boolean(typeId), checklistFields, otherFields, values);
   const currentIndex = Math.max(0, steps.indexOf(stepKey));
   const currentStep = steps[currentIndex] ?? "location";
 
@@ -280,8 +287,27 @@ export function ZoneServiceDialog({
     const nextOther = nextType?.fields.filter((f) => !f.checklistItem) ?? [];
     if (nextChecklist.length > 0) setStepKey("checklist");
     else if (nextOther.length > 0) setStepKey(`field:${nextOther[0].key}`);
-    else if (nextType) setStepKey("tools");
-    else setStepKey("photos");
+    else setStepKey("tools");
+  }
+
+  async function handlePropose() {
+    const trimmed = proposeName.trim();
+    if (!trimmed) {
+      setProposeError("Enter a service name.");
+      return;
+    }
+    setProposeError(null);
+    setProposing(true);
+    try {
+      const created = await proposeServiceType(trimmed, proposeNote);
+      setProposeName("");
+      setProposeNote("");
+      handleTypeChange(created.serviceTypeId);
+    } catch (err) {
+      setProposeError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setProposing(false);
+    }
   }
 
   function handleFieldChange(key: string, value: string) {
@@ -472,33 +498,71 @@ export function ZoneServiceDialog({
     body = (
       <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What service is getting done in this area?" subtitle="Tap Next to skip — you can save with just a location.">
         <div className="flex flex-col gap-2">
-          {SERVICE_TYPES.map((type) => {
-            const typePricing = catalog.servicePricing.find((p) => p.service_type_id === type.id);
-            return (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => handleTypeChange(type.id)}
-                className={cn(
-                  "flex items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
-                  typeId === type.id
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card/60 hover:bg-accent"
-                )}
-              >
-                <span className="font-medium">{type.label}</span>
-                {typePricing && (typePricing.cost != null || typePricing.estimated_hours != null) && (
-                  <span className={cn("text-xs", typeId === type.id ? "text-primary-foreground/80" : "text-muted-foreground")}>
-                    {typePricing.cost != null && `$${typePricing.cost.toFixed(2)} (${typePricing.cost_unit})`}
-                    {typePricing.cost != null && typePricing.estimated_hours != null && " · "}
-                    {typePricing.estimated_hours != null && `Est. ${typePricing.estimated_hours} hrs`}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {activeServices.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No services set up yet —{" "}
+              <Link href="/admin/service-pricing" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
+                add one
+              </Link>{" "}
+              or propose one below.
+            </p>
+          )}
+          {activeServices.map((service) => (
+            <button
+              key={service.service_type_id}
+              type="button"
+              onClick={() => handleTypeChange(service.service_type_id)}
+              className={cn(
+                "flex items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                typeId === service.service_type_id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card/60 hover:bg-accent"
+              )}
+            >
+              <span className="font-medium">{service.name}</span>
+              {(service.cost != null || service.estimated_hours != null) && (
+                <span className={cn("text-xs", typeId === service.service_type_id ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                  {service.cost != null && `$${service.cost.toFixed(2)} (${service.cost_unit})`}
+                  {service.cost != null && service.estimated_hours != null && " · "}
+                  {service.estimated_hours != null && `Est. ${service.estimated_hours} hrs`}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-        {typeId && (
+
+        <div className="mt-3 flex flex-col gap-1.5 rounded-lg border border-dashed border-border p-2.5">
+          <p className="text-xs font-medium text-muted-foreground">Don&apos;t see it? Propose a new service</p>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              placeholder="Service name"
+              value={proposeName}
+              onChange={(e) => setProposeName(e.target.value)}
+              className="w-40"
+            />
+            <Input
+              placeholder="Note for pricing (optional)"
+              value={proposeNote}
+              onChange={(e) => setProposeNote(e.target.value)}
+              className="w-48"
+            />
+            <Button type="button" variant="secondary" disabled={proposing} onClick={handlePropose}>
+              {proposing ? "Sending..." : "Propose"}
+            </Button>
+          </div>
+          {proposeError && <p className="text-xs text-destructive">{proposeError}</p>}
+        </div>
+
+        {selectedServiceRow?.status === "pending" && (
+          <p className="mt-2 text-xs text-amber-600">⏳ Pending pricing review — an admin needs to price this before it&apos;s final.</p>
+        )}
+        {selectedServiceRow?.status === "denied" && (
+          <p className="mt-2 text-xs text-destructive">
+            🚫 We don&apos;t offer this service — it&apos;ll show as outside our scope of work.
+          </p>
+        )}
+
+        {typeId && selectedServiceRow?.status === "active" && (
           <p className="mt-2 text-xs text-muted-foreground">
             Need to add or fix a price?{" "}
             <Link href="/admin/service-pricing" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
@@ -746,7 +810,13 @@ export function ZoneServiceDialog({
           </ReviewRow>
 
           <ReviewRow label="Service" onEdit={() => setStepKey("service")}>
-            <p>{serviceType?.label ?? "None selected"}</p>
+            <p>{selectedServiceRow?.name ?? serviceType?.label ?? "None selected"}</p>
+            {selectedServiceRow?.status === "pending" && (
+              <p className="mt-1 text-xs text-amber-600">⏳ Pending pricing review</p>
+            )}
+            {selectedServiceRow?.status === "denied" && (
+              <p className="mt-1 text-xs text-destructive">🚫 Outside our scope of work</p>
+            )}
             {fieldLines.length > 0 && (
               <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
                 {fieldLines.map((line, i) => (
@@ -756,7 +826,7 @@ export function ZoneServiceDialog({
             )}
           </ReviewRow>
 
-          {serviceType && (
+          {typeId && (
             <ReviewRow label="Tools & Materials" onEdit={() => setStepKey("tools")}>
               <p>
                 {[...autoTools.map((t) => t.name), ...extraTools, ...extraMaterials].join(", ") || "None yet"}

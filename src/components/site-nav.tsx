@@ -24,8 +24,9 @@ export function SiteNav({
     ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
       ? [{ href: "/admin/tools", label: "Inventory" }]
       : []),
-    ...(allowedTabs.includes("services") ? [{ href: "/admin/service-pricing", label: "Services Database" }] : []),
-    ...(allowedTabs.includes("team") ? [{ href: "/admin/team", label: "Team Database" }] : []),
+    ...(allowedTabs.includes("services") || allowedTabs.includes("team")
+      ? [{ href: "/admin/team", label: "Team & Services" }]
+      : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
     ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"

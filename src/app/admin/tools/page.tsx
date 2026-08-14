@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { listTools } from "@/lib/data/tools";
 import { listMaterials } from "@/lib/data/materials";
+import { listServicePricing } from "@/lib/data/service-pricing";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { checkTabAccess } from "@/lib/data/access";
@@ -26,9 +27,10 @@ export default async function InventoryPage() {
   if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
 
   const supabase = await createClient();
-  const [tools, materials, linksRes, rulesRes] = await Promise.all([
+  const [tools, materials, services, linksRes, rulesRes] = await Promise.all([
     listTools(),
     listMaterials(),
+    listServicePricing(),
     supabase.from("service_tools").select("*"),
     supabase.from("service_materials").select("*"),
   ]);
@@ -47,7 +49,11 @@ export default async function InventoryPage() {
     rulesByMaterial.set(rule.material_id, arr);
   }
 
-  const serviceTypeOptions = SERVICE_TYPES.map((t) => ({ id: t.id, label: t.label }));
+  const customActiveServices = services.filter((s) => s.status === "active" && !SERVICE_TYPES.some((t) => t.id === s.service_type_id));
+  const serviceTypeOptions = [
+    ...SERVICE_TYPES.map((t) => ({ id: t.id, label: t.label })),
+    ...customActiveServices.map((s) => ({ id: s.service_type_id, label: s.name })),
+  ];
   const toolsToOrderCount = tools.filter(
     (t) => !t.on_order && t.quantity != null && t.reorder_threshold != null && t.quantity <= t.reorder_threshold
   ).length;
@@ -172,7 +178,10 @@ export default async function InventoryPage() {
               <CardContent>
                 <AddMaterialRuleForm
                   materials={materials}
-                  serviceTypes={SERVICE_TYPES.map(({ id, label, fields }) => ({ id, label, fields }))}
+                  serviceTypes={[
+                    ...SERVICE_TYPES.map(({ id, label, fields }) => ({ id, label, fields })),
+                    ...customActiveServices.map((s) => ({ id: s.service_type_id, label: s.name, fields: [] })),
+                  ]}
                 />
               </CardContent>
             </Card>
@@ -205,6 +214,7 @@ export default async function InventoryPage() {
                         key={material.id}
                         material={material}
                         rules={rulesByMaterial.get(material.id) ?? []}
+                        serviceTypeOptions={serviceTypeOptions}
                       />
                     ))}
                   </tbody>
