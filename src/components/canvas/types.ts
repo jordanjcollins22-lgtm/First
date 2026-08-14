@@ -9,9 +9,12 @@ export interface ZoneServiceData {
   notes: string;
   /** Storage paths in the "canvas-images" bucket, uploaded as soon as they're picked. */
   photos: string[];
+  /** Auto-attached from the service's tool checklist — the evaluator doesn't pick these. */
   tools: string[];
-  /** Manually added extra materials for this zone, beyond what auto-apply rules compute from sq ft. */
+  /** Manually added extra materials for this zone, beyond what the service already uses. */
   materials?: string[];
+  /** What the customer wants for each material, keyed by material name: type and color. */
+  materialChoices?: Record<string, { type?: string; color?: string }>;
 }
 
 export interface WorkZone {

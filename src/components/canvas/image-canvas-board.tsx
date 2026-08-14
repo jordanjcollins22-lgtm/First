@@ -522,6 +522,17 @@ async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<H
       y = drawBoxedSection(ctx, "Details", fieldLines, y);
     }
 
+    // What the customer picked on site, so the crew buys the right thing.
+    const materialLines = Object.entries(service.materialChoices ?? {})
+      .map(([name, choice]) => {
+        const detail = [choice?.type?.trim(), choice?.color?.trim()].filter(Boolean).join(" · ");
+        return detail ? `${name}: ${detail}` : null;
+      })
+      .filter((line): line is string => Boolean(line));
+    if (materialLines.length > 0) {
+      y = drawBoxedSection(ctx, "Material choice", materialLines, y, "#f0fdf4");
+    }
+
     if (service.tools.length > 0) {
       ctx.font = "700 15px sans-serif";
       ctx.fillStyle = "#111827";

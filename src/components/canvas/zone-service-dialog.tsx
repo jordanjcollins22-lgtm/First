@@ -20,7 +20,6 @@ import type { ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
 import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
-import { ToolImageThumb } from "@/components/tool/tool-image-thumb";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { AddInventoryItemForm, type CreatedInventoryItem } from "@/components/inventory/add-inventory-item-form";
@@ -77,7 +76,7 @@ type StepKey =
   | "checklist"
   | `detail:${string}`
   | `field:${string}`
-  | "tools"
+  | "materials"
   | "photos"
   | "notes"
   | "review";
@@ -95,7 +94,7 @@ function buildSteps(
       if (isChecklistChecked(values, field.key)) steps.push(`detail:${field.key}`);
     }
     for (const field of otherFields) steps.push(`field:${field.key}`);
-    steps.push("tools");
+    steps.push("materials");
   }
   steps.push("photos", "notes", "review");
   return steps;
@@ -258,25 +257,38 @@ export function ZoneServiceDialog({
     [serviceType]
   );
 
+  // Tools come from the service's own checklist; the evaluator never picks
+  // them, they just ride along with the zone for the crew's plan.
   const autoTools = catalog.tools.filter((tool) =>
     catalog.serviceTools.some((link) => link.service_type_id === typeId && link.tool_id === tool.id)
   );
-  const autoToolNames = new Set(autoTools.map((tool) => tool.name));
 
-  const [extraTools, setExtraTools] = useState<string[]>(() => {
-    if (!initialService) return [];
-    const initialAutoNames = new Set(
-      catalog.tools
-        .filter((tool) =>
-          catalog.serviceTools.some(
-            (link) => link.service_type_id === initialService.typeId && link.tool_id === tool.id
-          )
-        )
-        .map((tool) => tool.name)
-    );
-    return initialService.tools.filter((name) => !initialAutoNames.has(name));
-  });
   const [extraMaterials, setExtraMaterials] = useState<string[]>(initialService?.materials ?? []);
+  const [materialChoices, setMaterialChoices] = useState<Record<string, { type?: string; color?: string }>>(
+    initialService?.materialChoices ?? {}
+  );
+
+  // Materials the chosen service already uses, plus anything added here.
+  const autoMaterials = catalog.materials.filter((material) =>
+    catalog.serviceMaterialRules.some(
+      (rule) => rule.service_type_id === typeId && rule.material_id === material.id
+    )
+  );
+  const zoneMaterialNames = Array.from(
+    new Set([...autoMaterials.map((m) => m.name), ...extraMaterials])
+  );
+
+  function setMaterialChoice(materialName: string, key: "type" | "color", value: string) {
+    setMaterialChoices((prev) => ({
+      ...prev,
+      [materialName]: { ...prev[materialName], [key]: value },
+    }));
+  }
+
+  /** Previously-typed values for this material's type/color, so they get easier to pick over time. */
+  function materialSuggestions(materialName: string, key: "type" | "color"): string[] {
+    return catalog.customFieldOptions[typeId]?.[`material:${materialName}:${key}`] ?? [];
+  }
 
   const steps = buildSteps(Boolean(typeId), checklistFields, otherFields, values);
   const currentIndex = Math.max(0, steps.indexOf(stepKey));
@@ -295,14 +307,14 @@ export function ZoneServiceDialog({
   function handleTypeChange(nextTypeId: string) {
     setTypeId(nextTypeId);
     setValues({});
-    setExtraTools([]);
     setExtraMaterials([]);
+    setMaterialChoices({});
     const nextType = serviceTypeById(nextTypeId);
     const nextChecklist = nextType?.fields.filter((f) => f.checklistItem) ?? [];
     const nextOther = nextType?.fields.filter((f) => !f.checklistItem) ?? [];
     if (nextChecklist.length > 0) setStepKey("checklist");
     else if (nextOther.length > 0) setStepKey(`field:${nextOther[0].key}`);
-    else setStepKey("tools");
+    else setStepKey("materials");
   }
 
   async function handlePropose() {
@@ -342,20 +354,10 @@ export function ZoneServiceDialog({
     });
   }
 
-  function handleAddExtraTool(name: string) {
-    if (autoToolNames.has(name) || extraTools.includes(name)) return;
-    setExtraTools((prev) => [...prev, name]);
-    setItemSearch("");
-  }
-
   function handleAddExtraMaterial(name: string) {
-    if (extraMaterials.includes(name)) return;
+    if (zoneMaterialNames.includes(name)) return;
     setExtraMaterials((prev) => [...prev, name]);
     setItemSearch("");
-  }
-
-  function handleRemoveExtraTool(index: number) {
-    setExtraTools((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleRemoveExtraMaterial(index: number) {
@@ -363,29 +365,21 @@ export function ZoneServiceDialog({
   }
 
   function handleNewItemCreated(item: CreatedInventoryItem) {
-    if (item.kind === "tool") handleAddExtraTool(item.name);
-    else handleAddExtraMaterial(item.name);
+    // Tools created here still join the business's inventory; they just
+    // aren't something the evaluator attaches to a zone by hand.
+    if (item.kind === "material") handleAddExtraMaterial(item.name);
     setShowAddNewItem(false);
   }
 
   const searchResults =
     itemSearch.trim().length > 0
-      ? [
-          ...catalog.tools
-            .filter(
-              (t) =>
-                t.name.toLowerCase().includes(itemSearch.trim().toLowerCase()) &&
-                !autoToolNames.has(t.name) &&
-                !extraTools.includes(t.name)
-            )
-            .map((t) => ({ kind: "tool" as const, name: t.name })),
-          ...catalog.materials
-            .filter(
-              (m) =>
-                m.name.toLowerCase().includes(itemSearch.trim().toLowerCase()) && !extraMaterials.includes(m.name)
-            )
-            .map((m) => ({ kind: "material" as const, name: m.name })),
-        ].slice(0, 8)
+      ? catalog.materials
+          .filter(
+            (m) =>
+              m.name.toLowerCase().includes(itemSearch.trim().toLowerCase()) && !zoneMaterialNames.includes(m.name)
+          )
+          .slice(0, 8)
+          .map((m) => ({ name: m.name }))
       : [];
 
   async function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
@@ -423,9 +417,11 @@ export function ZoneServiceDialog({
   }
 
   function handleSave() {
-    const tools = [...autoTools.map((tool) => tool.name), ...extraTools];
+    // Tools come straight from the service's checklist — the evaluator never
+    // picks them, they just travel with the zone for the crew.
+    const tools = autoTools.map((tool) => tool.name);
     const service: ZoneServiceData | null = typeId
-      ? { typeId, values, notes, photos, tools, materials: extraMaterials }
+      ? { typeId, values, notes, photos, tools, materials: extraMaterials, materialChoices }
       : null;
 
     if (serviceType) {
@@ -433,6 +429,18 @@ export function ZoneServiceDialog({
         if (field.type !== "select" || values[field.key] !== "Other") continue;
         const explanation = values[`${field.key}__other`];
         if (explanation?.trim()) addCustomFieldOption(typeId, field.key, explanation).catch(() => {});
+      }
+    }
+
+    // Remember each type/color typed here so it's a one-tap choice next time.
+    if (typeId) {
+      for (const [materialName, choice] of Object.entries(materialChoices)) {
+        for (const key of ["type", "color"] as const) {
+          const value = choice[key]?.trim();
+          if (!value) continue;
+          if (materialSuggestions(materialName, key).includes(value)) continue;
+          addCustomFieldOption(typeId, `material:${materialName}:${key}`, value).catch(() => {});
+        }
       }
     }
 
@@ -676,79 +684,75 @@ export function ZoneServiceDialog({
         )}
       </StepShell>
     ) : null;
-  } else if (currentStep === "tools") {
+  } else if (currentStep === "materials") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Tools & materials for this zone" subtitle="Selected automatically for this service — search to add more, or add something new.">
-        <div className="flex flex-col gap-2">
-          {selectedServiceRow?.how_to && (
-            <div className="rounded-lg border border-border bg-muted/40 p-2.5">
-              <p className="text-xs font-medium text-muted-foreground">How we do it</p>
-              <p className="mt-0.5 whitespace-pre-wrap text-xs">{selectedServiceRow.how_to}</p>
-            </div>
-          )}
-          {autoTools.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {autoTools.map((tool) => (
-                <span
-                  key={tool.id}
-                  className="flex items-center gap-1.5 rounded-full border border-border bg-muted py-1 pl-1 pr-3 text-xs"
-                >
-                  <span className="h-5 w-5 shrink-0 overflow-hidden rounded-full">
-                    <ToolImageThumb imagePath={tool.image_path} icon={tool.icon} />
-                  </span>
-                  {tool.name}
-                  {tool.how_to_url && (
-                    <a
-                      href={tool.how_to_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline-offset-2 hover:underline"
-                    >
-                      ▶ How-to
-                    </a>
-                  )}
-                </span>
-              ))}
-            </div>
-          ) : (
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What material would they like?" subtitle="Ask the customer their preferred type and color. Tools are handled automatically.">
+        <div className="flex flex-col gap-3">
+          {zoneMaterialNames.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              No tools configured for this service yet —{" "}
-              <Link href="/admin/tools" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
-                add some
-              </Link>
-              .
+              No materials on this service yet — search below to add one for this zone.
             </p>
           )}
-          {(extraTools.length > 0 || extraMaterials.length > 0) && (
-            <div className="flex flex-wrap gap-2">
-              {extraTools.map((tool, index) => (
-                <span
-                  key={`tool-${index}`}
-                  className="flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary"
-                >
-                  {tool}
-                  <button type="button" onClick={() => handleRemoveExtraTool(index)}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-              {extraMaterials.map((material, index) => (
-                <span
-                  key={`material-${index}`}
-                  className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-700"
-                >
-                  {material}
-                  <button type="button" onClick={() => handleRemoveExtraMaterial(index)}>
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+
+          {zoneMaterialNames.map((materialName) => {
+            const extraIndex = extraMaterials.indexOf(materialName);
+            const typeSuggestions = materialSuggestions(materialName, "type");
+            const colorSuggestions = materialSuggestions(materialName, "color");
+            return (
+              <div key={materialName} className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">{materialName}</p>
+                  {extraIndex >= 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveExtraMaterial(extraIndex)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Remove ${materialName}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {(["type", "color"] as const).map((key) => {
+                  const suggestions = key === "type" ? typeSuggestions : colorSuggestions;
+                  return (
+                    <div key={key} className="flex flex-col gap-1">
+                      <Label className="text-xs capitalize text-muted-foreground">{key}</Label>
+                      {suggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {suggestions.map((option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => setMaterialChoice(materialName, key, option)}
+                              className={cn(
+                                "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                                materialChoices[materialName]?.[key] === option
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border bg-card/60 hover:bg-accent"
+                              )}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <Input
+                        placeholder={key === "type" ? "e.g. Hardwood, Double-shredded" : "e.g. Brown, Black, Red"}
+                        value={materialChoices[materialName]?.[key] ?? ""}
+                        onChange={(e) => setMaterialChoice(materialName, key, e.target.value)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
 
           <div className="flex flex-col gap-1.5">
             <Input
-              placeholder="Search tools & materials..."
+              placeholder="Search materials to add..."
               value={itemSearch}
               onChange={(e) => setItemSearch(e.target.value)}
             />
@@ -756,17 +760,12 @@ export function ZoneServiceDialog({
               <div className="flex flex-col overflow-hidden rounded-lg border border-border">
                 {searchResults.map((result) => (
                   <button
-                    key={`${result.kind}-${result.name}`}
+                    key={result.name}
                     type="button"
-                    onClick={() =>
-                      result.kind === "tool" ? handleAddExtraTool(result.name) : handleAddExtraMaterial(result.name)
-                    }
-                    className="flex items-center justify-between border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent"
+                    onClick={() => handleAddExtraMaterial(result.name)}
+                    className="border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent"
                   >
-                    <span>{result.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {result.kind === "tool" ? "Tool" : "Material"}
-                    </span>
+                    {result.name}
                   </button>
                 ))}
               </div>
@@ -777,7 +776,7 @@ export function ZoneServiceDialog({
             <AddInventoryItemForm onCreated={handleNewItemCreated} onCancel={() => setShowAddNewItem(false)} />
           ) : (
             <Button type="button" variant="secondary" onClick={() => setShowAddNewItem(true)}>
-              + Add new tool or material
+              + Add new material
             </Button>
           )}
         </div>
@@ -879,10 +878,28 @@ export function ZoneServiceDialog({
           </ReviewRow>
 
           {typeId && (
-            <ReviewRow label="Tools & Materials" onEdit={() => setStepKey("tools")}>
-              <p>
-                {[...autoTools.map((t) => t.name), ...extraTools, ...extraMaterials].join(", ") || "None yet"}
-              </p>
+            <ReviewRow label="Materials" onEdit={() => setStepKey("materials")}>
+              {zoneMaterialNames.length > 0 ? (
+                <ul className="flex flex-col gap-0.5">
+                  {zoneMaterialNames.map((name) => {
+                    const choice = materialChoices[name];
+                    const detail = [choice?.type?.trim(), choice?.color?.trim()].filter(Boolean).join(" · ");
+                    return (
+                      <li key={name}>
+                        {name}
+                        {detail && <span className="text-xs text-muted-foreground"> — {detail}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p>None yet</p>
+              )}
+              {autoTools.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tools: {autoTools.map((t) => t.name).join(", ")}
+                </p>
+              )}
             </ReviewRow>
           )}
 
