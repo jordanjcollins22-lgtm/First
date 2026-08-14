@@ -40,16 +40,19 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    if (!file) {
+      setError("Add a photo of the tool.");
+      return;
+    }
     startTransition(async () => {
       try {
-        if (file) {
-          const supabase = createClient();
-          const path = `${uuid()}/${file.name}`;
-          const { error: uploadError } = await supabase.storage
-            .from("tool-images")
-            .upload(path, file, { upsert: false });
-          if (!uploadError) formData.set("image_path", path);
-        }
+        const supabase = createClient();
+        const path = `${uuid()}/${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("tool-images")
+          .upload(path, file, { upsert: false });
+        if (uploadError) throw new Error("Couldn't upload the photo — try again.");
+        formData.set("image_path", path);
         formData.set("is_rental", ownership === "rent" ? "on" : "");
         formData.set("kits", kits.join(","));
         formData.set("stock_method", stockMethod);
@@ -103,7 +106,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
     <form ref={formRef} action={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label>Image</Label>
+          <Label>Image *</Label>
           <div className="flex items-center gap-2">
             {previewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -112,7 +115,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent"
+                className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-destructive/50 text-muted-foreground hover:bg-accent"
               >
                 <ImageUp className="h-4 w-4" />
                 <span className="text-[9px]">Add</span>

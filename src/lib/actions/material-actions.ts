@@ -33,6 +33,9 @@ export async function createMaterial(formData: FormData) {
   if (stockMethod === "in_stock" && !storageLocation) {
     throw new Error("Enter where it's stored — required for materials kept in stock.");
   }
+  if (!imagePath) {
+    throw new Error("Add a photo of the material.");
+  }
 
   const { data, error } = await supabase
     .from("materials")

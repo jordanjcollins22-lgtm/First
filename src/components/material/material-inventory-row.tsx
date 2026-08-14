@@ -58,7 +58,11 @@ export function MaterialInventoryRow({ material, rules }: MaterialInventoryRowPr
           </div>
         </td>
         <td className="p-2">
-          <MaterialStorageLocationInput materialId={material.id} initialLocation={material.storage_location} />
+          <MaterialStorageLocationInput
+            materialId={material.id}
+            initialLocation={material.storage_location}
+            stockMethod={material.stock_method}
+          />
         </td>
         <td className="p-2">
           <MaterialQuantityInput materialId={material.id} initialQuantity={material.quantity_on_hand} />

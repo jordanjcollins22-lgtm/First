@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { v4 as uuid } from "uuid";
+import { Camera } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 import { createTool } from "@/lib/actions/tool-actions";
 import { createMaterial } from "@/lib/actions/material-actions";
 
@@ -30,10 +33,19 @@ export function AddInventoryItemForm({
   const [storageLocation, setStorageLocation] = useState("");
   const [shopLocation, setShopLocation] = useState("");
   const [isDelivered, setIsDelivered] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const locationRequired = stockMethod === "in_stock";
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0] ?? null;
+    setFile(picked);
+    setPreviewUrl(picked ? URL.createObjectURL(picked) : null);
+  }
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -48,10 +60,20 @@ export function AddInventoryItemForm({
       setError("Enter where it's stored — required for items kept in stock.");
       return;
     }
+    if (!file) {
+      setError("Add a photo of it.");
+      return;
+    }
 
     setError(null);
     setSaving(true);
     try {
+      const supabase = createClient();
+      const bucket = kind === "tool" ? "tool-images" : "material-images";
+      const path = `${uuid()}/${file.name}`;
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+      if (uploadError) throw new Error("Couldn't upload the photo — try again.");
+
       const formData = new FormData();
       formData.set("name", name.trim());
       formData.set("cost", cost.trim());
@@ -59,6 +81,7 @@ export function AddInventoryItemForm({
       formData.set("storage_location", storageLocation.trim());
       formData.set("shop_location", shopLocation.trim());
       formData.set("is_delivered", isDelivered ? "on" : "");
+      formData.set("image_path", path);
 
       if (kind === "tool") {
         formData.set("is_rental", ownership === "rent" ? "on" : "");
@@ -97,6 +120,32 @@ export function AddInventoryItemForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label>Photo *</Label>
+          <div className="flex items-center gap-2">
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="" className="h-12 w-12 rounded-md border border-border object-cover" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-destructive/50 text-muted-foreground hover:bg-accent"
+              >
+                <Camera className="h-4 w-4" />
+                <span className="text-[9px]">Add</span>
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+        </div>
         <div className="flex flex-col gap-1.5">
           <Label>Name</Label>
           <Input

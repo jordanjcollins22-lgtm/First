@@ -43,6 +43,9 @@ export async function createTool(formData: FormData) {
   if (stockMethod === "in_stock" && !storageLocation) {
     throw new Error("Enter where it's stored — required for tools kept in stock.");
   }
+  if (!imagePath) {
+    throw new Error("Add a photo of the tool.");
+  }
 
   const { data, error } = await supabase
     .from("tools")

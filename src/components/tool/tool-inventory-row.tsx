@@ -63,7 +63,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
           </div>
         </td>
         <td className="p-2">
-          <ToolStorageLocationInput toolId={tool.id} initialLocation={tool.storage_location} />
+          <ToolStorageLocationInput toolId={tool.id} initialLocation={tool.storage_location} stockMethod={tool.stock_method} />
         </td>
         <td className="p-2">
           <ToolOwnershipSelect toolId={tool.id} initialIsRental={tool.is_rental} />
