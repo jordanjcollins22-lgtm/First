@@ -667,6 +667,37 @@ export interface Database {
           },
         ];
       };
+      job_proposals: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          token: string;
+          status: string;
+          total_cost: number | null;
+          scope_snapshot: unknown;
+          site_image_path: string | null;
+          generated_at: string;
+          responded_at: string | null;
+          client_response_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_proposals"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          token: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_proposals"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_proposals_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

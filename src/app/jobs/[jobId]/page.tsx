@@ -1,13 +1,19 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
+import { getProposalForJob } from "@/lib/data/proposals";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
+import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
+import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured } from "@/lib/env";
+import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus } from "@/types/domain";
 
 export default async function JobPage({
@@ -37,16 +43,42 @@ export default async function JobPage({
     property: { address: string; lat: number; lng: number } | null;
   };
 
-  const [catalog, design, requestedServicesRes] = await Promise.all([
+  const [catalog, design, requestedServicesRes, proposal, headersList] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
     supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
+    getProposalForJob(jobId),
+    headers(),
   ]);
   const requestedServiceIds = (requestedServicesRes.data ?? []).map((r) => r.service_type_id);
   const requestedServiceNames = requestedServiceIds.map(
     (id) => catalog.servicePricing.find((s) => s.service_type_id === id)?.name ?? id
   );
   const hasClientRequest = requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
+
+  const zones = design ? ((design.zones as unknown as WorkZone[]).filter((z) => z.service)) : [];
+  const { totalCost: serviceCost } = computeJobTotals(zones, catalog);
+  const materialItems = allMaterialLineItems(zones, catalog);
+  const materialsCost = materialItems.reduce((sum, item) => sum + (item.totalCost ?? 0), 0);
+  const zoneBreakdowns: InternalZoneBreakdown[] = zones.map((zone) => {
+    const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
+    const checklistAnswers = (def?.fields ?? [])
+      .filter((field) => zone.service?.values[field.key])
+      .map((field) => ({ label: field.label, value: zone.service!.values[field.key] }));
+    return {
+      zoneName: zone.name,
+      serviceLabel: def?.label ?? zone.service?.typeId ?? "Service",
+      notes: zone.service?.notes ?? "",
+      checklistAnswers,
+      materialLineItems: materialItems
+        .filter((item) => item.zoneName === zone.name)
+        .map((item) => ({ material: item.material, quantityLabel: formatMaterialQuantity(item), cost: item.totalCost })),
+    };
+  });
+
+  const host = headersList.get("host") ?? "";
+  const proto = headersList.get("x-forwarded-proto") ?? "https";
+  const baseUrl = host ? `${proto}://${host}` : "";
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10">
@@ -85,6 +117,15 @@ export default async function JobPage({
           )}
         </div>
       )}
+
+      <ProposalPanel
+        jobId={jobId}
+        proposal={proposal}
+        baseUrl={baseUrl}
+        serviceCost={serviceCost}
+        materialsCost={materialsCost}
+        zones={zoneBreakdowns}
+      />
 
       <ImageCanvasBoard
         catalog={catalog}

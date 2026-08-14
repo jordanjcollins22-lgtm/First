@@ -365,3 +365,31 @@ export interface DayOff {
   reason: string | null;
   created_at: string;
 }
+
+export type ProposalStatus = "pending" | "accepted" | "declined";
+
+/** One work area as it appeared on the proposal at the moment it was generated. */
+export interface ProposalZoneSnapshot {
+  zoneName: string;
+  serviceLabel: string;
+  scopeText: string;
+  photoPaths: string[];
+}
+
+/** A client-facing proposal generated from a job's site map — price and scope
+ * are frozen at generate time (see the migration for why). */
+export interface JobProposal {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  token: string;
+  status: ProposalStatus;
+  total_cost: number | null;
+  scope_snapshot: ProposalZoneSnapshot[];
+  site_image_path: string | null;
+  generated_at: string;
+  responded_at: string | null;
+  client_response_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
