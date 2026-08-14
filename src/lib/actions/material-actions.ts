@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
 export async function createMaterial(formData: FormData) {
+  const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
 
   const name = String(formData.get("name") ?? "").trim();
@@ -23,6 +25,7 @@ export async function createMaterial(formData: FormData) {
   const imagePath = String(formData.get("image_path") ?? "").trim() || null;
 
   const { error } = await supabase.from("materials").insert({
+    organization_id: organizationId,
     name,
     unit,
     coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,

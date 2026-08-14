@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { AttractorGeometry, LocationAreaGeometryType } from "@/types/domain";
 
 const PATH = "/attractors";
@@ -11,8 +12,10 @@ export async function createBusinessLocation(input: { name: string; address: str
   if (!input.name.trim()) throw new Error("Name the location.");
   if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) throw new Error("Pick a location on the map.");
 
+  const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
   const { error } = await supabase.from("business_locations").insert({
+    organization_id: organizationId,
     name: input.name.trim(),
     address: input.address,
     lat: input.lat,

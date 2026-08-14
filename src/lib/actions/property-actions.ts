@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { lookupPropertyDetails } from "@/lib/rentcast";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -39,6 +40,7 @@ export interface CreatePropertyInput {
  * like three separate "Amy Willig" records for the same house.
  */
 export async function createPropertyAndJob(input: CreatePropertyInput) {
+  const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
   const trimmedName = input.customerName.trim();
 
@@ -55,7 +57,7 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
   } else {
     const { data: customer, error: customerError } = await supabase
       .from("customers")
-      .insert({ name: trimmedName })
+      .insert({ name: trimmedName, organization_id: organizationId })
       .select()
       .single();
     if (customerError) throw customerError;

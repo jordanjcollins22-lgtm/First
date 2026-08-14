@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
 export async function createTool(formData: FormData) {
+  const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
 
   const name = String(formData.get("name") ?? "").trim();
@@ -34,6 +36,7 @@ export async function createTool(formData: FormData) {
   const reorderThreshold = reorderRaw ? Number(reorderRaw) : null;
 
   const { error } = await supabase.from("tools").insert({
+    organization_id: organizationId,
     name,
     icon,
     cost,

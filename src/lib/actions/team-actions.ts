@@ -63,6 +63,7 @@ export async function createTeamMember(formData: FormData) {
     email,
     password,
     email_confirm: true,
+    user_metadata: { organization_id: caller.organization_id },
   });
   if (error) {
     throw new Error(error.message || "Couldn't create that account.");

@@ -16,9 +16,23 @@ type Json = any;
 export interface Database {
   public: {
     Tables: {
+      organizations: {
+        Row: {
+          id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> & {
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["organizations"]["Row"]>;
+        Relationships: [];
+      };
       customers: {
         Row: {
           id: string;
+          organization_id: string;
           name: string;
           email: string | null;
           phone: string | null;
@@ -30,7 +44,14 @@ export interface Database {
           name: string;
         };
         Update: Partial<Database["public"]["Tables"]["customers"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "customers_organization_id_fkey";
+            columns: ["organization_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       properties: {
         Row: {
@@ -101,6 +122,7 @@ export interface Database {
           id: string;
           email: string;
           full_name: string | null;
+          organization_id: string;
           created_at: string;
           updated_at: string;
         };
@@ -109,7 +131,14 @@ export interface Database {
           email: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey";
+            columns: ["organization_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       roles: {
         Row: {
@@ -172,6 +201,7 @@ export interface Database {
       overhead_expenses: {
         Row: {
           id: string;
+          organization_id: string;
           name: string;
           amount: number;
           note: string | null;
@@ -188,6 +218,7 @@ export interface Database {
       tools: {
         Row: {
           id: string;
+          organization_id: string;
           name: string;
           icon: string;
           cost: number | null;
@@ -214,6 +245,7 @@ export interface Database {
       materials: {
         Row: {
           id: string;
+          organization_id: string;
           name: string;
           unit: string;
           coverage_per_unit_sqft: number | null;
@@ -282,6 +314,7 @@ export interface Database {
       };
       services: {
         Row: {
+          organization_id: string;
           service_type_id: string;
           cost: number | null;
           cost_unit: string;
@@ -289,6 +322,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["services"]["Row"]> & {
+          organization_id: string;
           service_type_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["services"]["Row"]>;
@@ -328,6 +362,7 @@ export interface Database {
       custom_field_options: {
         Row: {
           id: string;
+          organization_id: string;
           service_type_id: string;
           field_key: string;
           value: string;
@@ -379,6 +414,7 @@ export interface Database {
       attractor_waves: {
         Row: {
           id: string;
+          organization_id: string;
           type_id: string;
           variant_id: string | null;
           name: string;
@@ -419,6 +455,7 @@ export interface Database {
       business_locations: {
         Row: {
           id: string;
+          organization_id: string;
           name: string;
           address: string | null;
           lat: number;

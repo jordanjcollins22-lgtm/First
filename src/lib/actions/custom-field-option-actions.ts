@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
 /**
  * Remembers a value typed into an "Other" field so it shows up as a normal
@@ -12,12 +13,13 @@ export async function addCustomFieldOption(serviceTypeId: string, fieldKey: stri
   const trimmed = value.trim();
   if (!trimmed) return;
 
+  const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
   const { error } = await supabase
     .from("custom_field_options")
     .upsert(
-      { service_type_id: serviceTypeId, field_key: fieldKey, value: trimmed },
-      { onConflict: "service_type_id,field_key,value", ignoreDuplicates: true }
+      { organization_id: organizationId, service_type_id: serviceTypeId, field_key: fieldKey, value: trimmed },
+      { onConflict: "organization_id,service_type_id,field_key,value", ignoreDuplicates: true }
     );
   if (error) throw error;
   revalidatePath("/canvas");

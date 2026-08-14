@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { AttractorGeometry, AttractorGeometryType, AttractorWaveStatus } from "@/types/domain";
 
 const PATH = "/attractors";
@@ -73,8 +74,10 @@ export interface CreateAttractorWaveInput {
 export async function createAttractorWave(input: CreateAttractorWaveInput) {
   if (!input.name.trim()) throw new Error("Name the wave.");
 
+  const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
   const { error } = await supabase.from("attractor_waves").insert({
+    organization_id: organizationId,
     type_id: input.typeId,
     variant_id: input.variantId,
     name: input.name.trim(),

@@ -3,8 +3,16 @@
  * supabase/migrations. Keep in sync manually (no codegen for MVP).
  */
 
+export interface Organization {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Customer {
   id: string;
+  organization_id: string;
   name: string;
   email: string | null;
   phone: string | null;
@@ -93,6 +101,7 @@ export type AttractorGeometry =
 
 export interface AttractorWave {
   id: string;
+  organization_id: string;
   type_id: string;
   variant_id: string | null;
   name: string;
@@ -112,6 +121,7 @@ export interface AttractorWave {
 
 export interface BusinessLocation {
   id: string;
+  organization_id: string;
   name: string;
   address: string | null;
   lat: number;
@@ -143,6 +153,7 @@ export interface Profile {
   email: string;
   full_name: string | null;
   roles: Role[];
+  organization_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -159,6 +170,7 @@ export interface RolePermission {
 
 export interface Tool {
   id: string;
+  organization_id: string;
   name: string;
   icon: string;
   cost: number | null;
@@ -179,6 +191,7 @@ export interface Tool {
 
 export interface Material {
   id: string;
+  organization_id: string;
   name: string;
   unit: string;
   coverage_per_unit_sqft: number | null;
@@ -216,6 +229,7 @@ export interface ServiceMaterialRule {
 
 export interface OverheadExpense {
   id: string;
+  organization_id: string;
   name: string;
   amount: number;
   note: string | null;
@@ -224,6 +238,7 @@ export interface OverheadExpense {
 }
 
 export interface ServicePricing {
+  organization_id: string;
   service_type_id: string;
   cost: number | null;
   cost_unit: string;

@@ -27,6 +27,9 @@ export function SiteNav({
     ...(allowedTabs.includes("team") ? [{ href: "/admin/team", label: "Team Database" }] : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
+    ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
+      ? [{ href: "/admin/organizations", label: "Organizations" }]
+      : []),
   ];
 
   useEffect(() => {
