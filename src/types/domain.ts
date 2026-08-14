@@ -334,3 +334,22 @@ export interface JourneyStep {
   created_at: string;
   updated_at: string;
 }
+
+/** A day of the week (0 = Sunday .. 6 = Saturday) someone doesn't normally work. */
+export interface WeeklyOff {
+  id: string;
+  organization_id: string;
+  profile_id: string;
+  day_of_week: number;
+  created_at: string;
+}
+
+/** A specific date someone is off (vacation, sick, etc). */
+export interface DayOff {
+  id: string;
+  organization_id: string;
+  profile_id: string;
+  date: string;
+  reason: string | null;
+  created_at: string;
+}

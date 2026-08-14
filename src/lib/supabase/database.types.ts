@@ -586,6 +586,53 @@ export interface Database {
           },
         ];
       };
+      availability_weekly_off: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          day_of_week: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["availability_weekly_off"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          day_of_week: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["availability_weekly_off"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "availability_weekly_off_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      availability_days_off: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          date: string;
+          reason: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["availability_days_off"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          date: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["availability_days_off"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "availability_days_off_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

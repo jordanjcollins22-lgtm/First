@@ -2,7 +2,12 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { requireTab } from "@/lib/data/access";
 import { listJobsWithLocation } from "@/lib/data/jobs";
-import { EvaluationList } from "@/components/evaluations/evaluation-list";
+import { listDaysOff, listWeeklyOff } from "@/lib/data/availability";
+import { EvaluationsView } from "@/components/evaluations/evaluations-view";
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default async function EvaluationsPage() {
   if (!isSupabaseConfigured) {
@@ -30,6 +35,14 @@ export default async function EvaluationsPage() {
     evaluatorNamesById = Object.fromEntries(profiles.map((p) => [p.id, p.full_name || p.email]));
   }
 
+  const today = new Date();
+  const rangeStartDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  const rangeEndDate = new Date(today.getFullYear(), today.getMonth() + 6, 0);
+  const rangeStart = dateKey(rangeStartDate);
+  const rangeEnd = dateKey(rangeEndDate);
+
+  const [allWeeklyOff, allDaysOff] = await Promise.all([listWeeklyOff(), listDaysOff(rangeStart, rangeEnd)]);
+
   const now = new Date().toISOString();
   const notCompleted = relevantJobs.filter((j) => j.evaluation_status !== "completed");
 
@@ -53,13 +66,20 @@ export default async function EvaluationsPage() {
           ? "Every evaluation across the team — who, where, when, and status."
           : "Evaluations assigned to you — where to go, when, and your progress on each one."}
       </p>
-      <EvaluationList
-        overdue={overdue}
-        upcoming={upcoming}
-        past={past}
-        currentProfileId={profile?.id ?? null}
-        evaluatorNamesById={evaluatorNamesById}
-      />
+      {profile && (
+        <EvaluationsView
+          overdue={overdue}
+          upcoming={upcoming}
+          past={past}
+          allRelevantJobs={relevantJobs}
+          currentProfileId={profile.id}
+          evaluatorNamesById={evaluatorNamesById}
+          allWeeklyOff={allWeeklyOff}
+          allDaysOff={allDaysOff}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+        />
+      )}
     </div>
   );
 }
