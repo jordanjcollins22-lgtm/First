@@ -1,5 +1,6 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { getProposalByToken } from "@/lib/data/public-proposal";
+import { listPublicExternalMessages } from "@/lib/data/public-job-messages";
 import { ProposalView } from "@/components/proposal/proposal-view";
 
 export default async function ProposalPage({ params }: { params: Promise<{ token: string }> }) {
@@ -23,5 +24,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ token
     );
   }
 
-  return <ProposalView data={data} token={token} />;
+  const messages = await listPublicExternalMessages(token);
+
+  return <ProposalView data={data} token={token} messages={messages} />;
 }

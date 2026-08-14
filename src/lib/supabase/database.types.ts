@@ -699,6 +699,36 @@ export interface Database {
           },
         ];
       };
+      job_messages: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          channel: string;
+          author_type: string;
+          author_profile_id: string | null;
+          author_name: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_messages"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          channel: string;
+          author_type: string;
+          author_name: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_messages"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_messages_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

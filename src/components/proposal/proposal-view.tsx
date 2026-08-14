@@ -7,16 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
+import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
 import { SiteMapImage } from "./site-map-image";
+import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
-import type { ProposalStatus } from "@/types/domain";
+import type { JobMessage, ProposalStatus } from "@/types/domain";
 
 function formatTotal(total: number | null): string {
   if (total == null) return "Contact us for pricing";
   return `$${Math.round(total).toLocaleString()}`;
 }
 
-export function ProposalView({ data, token }: { data: PublicProposal; token: string }) {
+export function ProposalView({ data, token, messages }: { data: PublicProposal; token: string; messages: JobMessage[] }) {
   const { proposal, propertyAddress, customerName, organizationName } = data;
   const [status, setStatus] = useState<ProposalStatus>(proposal.status);
   const [respondedAt, setRespondedAt] = useState(proposal.responded_at);
@@ -24,6 +26,7 @@ export function ProposalView({ data, token }: { data: PublicProposal; token: str
   const [showDeclineForm, setShowDeclineForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [senderName, setSenderName] = useState(customerName);
 
   function respond(response: "accepted" | "declined", note = "") {
     setError(null);
@@ -160,6 +163,18 @@ export function ProposalView({ data, token }: { data: PublicProposal; token: str
           </div>
         )}
       </div>
+
+      <MessageThread
+        title="Questions? Send us a message"
+        messages={messages}
+        onSend={(body) => postPublicClientMessage(token, senderName, body)}
+        viewerAuthorType="client"
+        showNameField
+        nameValue={senderName}
+        onNameChange={setSenderName}
+        placeholder="Ask us anything about this proposal..."
+        emptyLabel="No messages yet — ask us anything."
+      />
     </div>
   );
 }

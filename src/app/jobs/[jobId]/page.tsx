@@ -7,10 +7,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
+import { listJobMessages } from "@/lib/data/job-messages";
+import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { MessageThread } from "@/components/job/message-thread";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -43,13 +46,16 @@ export default async function JobPage({
     property: { address: string; lat: number; lng: number } | null;
   };
 
-  const [catalog, design, requestedServicesRes, proposal, headersList] = await Promise.all([
-    getCanvasCatalog(),
-    getCanvasDesignForJob(jobId),
-    supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
-    getProposalForJob(jobId),
-    headers(),
-  ]);
+  const [catalog, design, requestedServicesRes, proposal, headersList, internalMessages, externalMessages] =
+    await Promise.all([
+      getCanvasCatalog(),
+      getCanvasDesignForJob(jobId),
+      supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
+      getProposalForJob(jobId),
+      headers(),
+      listJobMessages(jobId, "internal"),
+      listJobMessages(jobId, "external"),
+    ]);
   const requestedServiceIds = (requestedServicesRes.data ?? []).map((r) => r.service_type_id);
   const requestedServiceNames = requestedServiceIds.map(
     (id) => catalog.servicePricing.find((s) => s.service_type_id === id)?.name ?? id
@@ -126,6 +132,25 @@ export default async function JobPage({
         materialsCost={materialsCost}
         zones={zoneBreakdowns}
       />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <MessageThread
+          title="Internal Notes"
+          messages={internalMessages}
+          onSend={postJobMessage.bind(null, jobId, "internal")}
+          viewerAuthorType="team"
+          placeholder="Note for the team..."
+          emptyLabel="No internal notes yet."
+        />
+        <MessageThread
+          title="Client Conversation"
+          messages={externalMessages}
+          onSend={postJobMessage.bind(null, jobId, "external")}
+          viewerAuthorType="team"
+          placeholder="Message the client..."
+          emptyLabel="No messages with the client yet."
+        />
+      </div>
 
       <ImageCanvasBoard
         catalog={catalog}

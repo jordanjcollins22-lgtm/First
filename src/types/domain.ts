@@ -391,6 +391,23 @@ export interface ProposalSiteImageTransform {
   canvasHeight: number;
 }
 
+export type MessageChannel = "internal" | "external";
+export type MessageAuthorType = "team" | "client";
+
+/** One message in a job's conversation — "internal" is team-only, "external"
+ * is shared with the client on the proposal page too. */
+export interface JobMessage {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  channel: MessageChannel;
+  author_type: MessageAuthorType;
+  author_profile_id: string | null;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
 /** A client-facing proposal generated from a job's site map — price and scope
  * are frozen at generate time (see the migration for why). */
 export interface JobProposal {
