@@ -187,11 +187,15 @@ interface ZoneServiceDialogProps {
   catalog: CanvasCatalog;
   initialLocation: string;
   initialService: ZoneServiceData | null;
+  initialLengthFt: number | null;
+  initialWidthFt: number | null;
   initialAreaSqFt: number | null;
   initialPerimeterFt: number | null;
   onSave: (
     location: string,
     service: ZoneServiceData | null,
+    lengthFt: number | null,
+    widthFt: number | null,
     areaSqFt: number | null,
     perimeterFt: number | null
   ) => void;
@@ -205,6 +209,8 @@ export function ZoneServiceDialog({
   catalog,
   initialLocation,
   initialService,
+  initialLengthFt,
+  initialWidthFt,
   initialAreaSqFt,
   initialPerimeterFt,
   onSave,
@@ -219,12 +225,21 @@ export function ZoneServiceDialog({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [showAddNewItem, setShowAddNewItem] = useState(false);
-  const [areaSqFt, setAreaSqFt] = useState(initialAreaSqFt?.toString() ?? "");
-  const [perimeterFt, setPerimeterFt] = useState(initialPerimeterFt?.toString() ?? "");
+  const [lengthFt, setLengthFt] = useState(initialLengthFt?.toString() ?? "");
+  const [widthFt, setWidthFt] = useState(initialWidthFt?.toString() ?? "");
   // Answering everything already on file would mean re-clicking through
   // questions that were already answered, so jump straight to the summary
   // for a zone that's been filled in before; walk fresh zones one at a time.
   const [stepKey, setStepKey] = useState<StepKey>(initialService ? "review" : "location");
+
+  // Area and perimeter come from length x width. A zone measured before this
+  // (length/width blank) keeps whatever was entered directly back then.
+  const lengthValue = lengthFt.trim() ? Number(lengthFt) : null;
+  const widthValue = widthFt.trim() ? Number(widthFt) : null;
+  const derivedAreaSqFt =
+    lengthValue != null && widthValue != null ? lengthValue * widthValue : initialAreaSqFt;
+  const derivedPerimeterFt =
+    lengthValue != null && widthValue != null ? 2 * (lengthValue + widthValue) : initialPerimeterFt;
 
   const serviceType = serviceTypeById(typeId);
   const activeServices = catalog.servicePricing.filter((s) => s.status === "active");
@@ -421,12 +436,7 @@ export function ZoneServiceDialog({
       }
     }
 
-    onSave(
-      location,
-      service,
-      areaSqFt.trim() ? Number(areaSqFt) : null,
-      perimeterFt.trim() ? Number(perimeterFt) : null
-    );
+    onSave(location, service, lengthValue, widthValue, derivedAreaSqFt, derivedPerimeterFt);
   }
 
   function fieldOptionsFor(field: ServiceFieldDef): string[] {
@@ -467,30 +477,40 @@ export function ZoneServiceDialog({
     );
   } else if (currentStep === "measurements") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What are the measurements?" subtitle="Measure on site and enter here.">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="zone-area">Area (sq ft)</Label>
-            <Input
-              id="zone-area"
-              type="number"
-              step="0.1"
-              min={0}
-              value={areaSqFt}
-              onChange={(e) => setAreaSqFt(e.target.value)}
-            />
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What are the measurements?" subtitle="Measure on site — length x width, in feet.">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="zone-length">Length (ft)</Label>
+              <Input
+                id="zone-length"
+                type="number"
+                step="0.1"
+                min={0}
+                value={lengthFt}
+                onChange={(e) => setLengthFt(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <span className="pb-2.5 text-muted-foreground">×</span>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="zone-width">Width (ft)</Label>
+              <Input
+                id="zone-width"
+                type="number"
+                step="0.1"
+                min={0}
+                value={widthFt}
+                onChange={(e) => setWidthFt(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="zone-perimeter">Perimeter (ft)</Label>
-            <Input
-              id="zone-perimeter"
-              type="number"
-              step="0.1"
-              min={0}
-              value={perimeterFt}
-              onChange={(e) => setPerimeterFt(e.target.value)}
-            />
-          </div>
+          {derivedAreaSqFt != null && derivedPerimeterFt != null && (
+            <p className="text-xs text-muted-foreground">
+              = {Math.round(derivedAreaSqFt).toLocaleString()} sq ft ·{" "}
+              {Math.round(derivedPerimeterFt).toLocaleString()} ft perimeter
+            </p>
+          )}
         </div>
       </StepShell>
     );
@@ -820,9 +840,25 @@ export function ZoneServiceDialog({
           </ReviewRow>
 
           <ReviewRow label="Measurements" onEdit={() => setStepKey("measurements")}>
-            <p>
-              {areaSqFt ? `${areaSqFt} sq ft` : "—"} · {perimeterFt ? `${perimeterFt} ft perimeter` : "—"}
-            </p>
+            {lengthValue != null && widthValue != null ? (
+              <p>
+                {lengthValue} × {widthValue} ft
+                <span className="text-xs text-muted-foreground">
+                  {" "}
+                  = {Math.round(lengthValue * widthValue).toLocaleString()} sq ft ·{" "}
+                  {Math.round(2 * (lengthValue + widthValue)).toLocaleString()} ft perimeter
+                </span>
+              </p>
+            ) : derivedAreaSqFt != null || derivedPerimeterFt != null ? (
+              <p>
+                {derivedAreaSqFt != null ? `${Math.round(derivedAreaSqFt).toLocaleString()} sq ft` : "—"} ·{" "}
+                {derivedPerimeterFt != null
+                  ? `${Math.round(derivedPerimeterFt).toLocaleString()} ft perimeter`
+                  : "—"}
+              </p>
+            ) : (
+              <p>—</p>
+            )}
           </ReviewRow>
 
           <ReviewRow label="Service" onEdit={() => setStepKey("service")}>

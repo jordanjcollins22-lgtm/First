@@ -21,7 +21,13 @@ export interface WorkZone {
   points: Point[];
   location: string;
   service: ZoneServiceData | null;
-  /** Manually entered — on-screen pixel measurements weren't reliable enough to trust. */
+  /**
+   * Measured on site as length x width; area and perimeter are derived from
+   * them. On-screen pixel measurements weren't reliable enough to trust.
+   * Older zones may have area/perimeter with no length/width behind them.
+   */
+  lengthFt?: number | null;
+  widthFt?: number | null;
   areaSqFt: number | null;
   perimeterFt: number | null;
 }

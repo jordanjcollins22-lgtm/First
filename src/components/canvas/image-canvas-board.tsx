@@ -1222,6 +1222,8 @@ export function ImageCanvasBoard({
         points,
         location: "",
         service: null,
+        lengthFt: null,
+        widthFt: null,
         areaSqFt: null,
         perimeterFt: null,
       },
@@ -1378,12 +1380,16 @@ export function ImageCanvasBoard({
   function handleSaveZoneService(
     location: string,
     service: ZoneServiceData | null,
+    lengthFt: number | null,
+    widthFt: number | null,
     areaSqFt: number | null,
     perimeterFt: number | null
   ) {
     setZones((prev) =>
       prev.map((zone) =>
-        zone.id === serviceDialogZoneId ? { ...zone, location, service, areaSqFt, perimeterFt } : zone
+        zone.id === serviceDialogZoneId
+          ? { ...zone, location, service, lengthFt, widthFt, areaSqFt, perimeterFt }
+          : zone
       )
     );
     setServiceDialogZoneId(null);
@@ -2023,6 +2029,7 @@ export function ImageCanvasBoard({
                       )}
                       {measurements && (
                         <span className="text-xs text-muted-foreground">
+                          {zone.lengthFt != null && zone.widthFt != null && `${zone.lengthFt} × ${zone.widthFt} ft · `}
                           {formatMeasurements(measurements)}
                         </span>
                       )}
@@ -2056,6 +2063,8 @@ export function ImageCanvasBoard({
         catalog={catalog}
         initialLocation={dialogZone?.location ?? ""}
         initialService={dialogZone?.service ?? null}
+        initialLengthFt={dialogZone?.lengthFt ?? null}
+        initialWidthFt={dialogZone?.widthFt ?? null}
         initialAreaSqFt={dialogZone?.areaSqFt ?? null}
         initialPerimeterFt={dialogZone?.perimeterFt ?? null}
         onSave={handleSaveZoneService}
