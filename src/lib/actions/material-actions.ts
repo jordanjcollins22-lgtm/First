@@ -201,25 +201,16 @@ export async function deactivateMaterial(id: string) {
   revalidatePath("/canvas");
 }
 
-export async function addServiceMaterialRule(formData: FormData) {
+/** Links a material to a service, picked directly from the service's own COGS calculator. */
+export async function linkMaterialToService(serviceTypeId: string, materialId: string) {
   const supabase = await createClient();
-
-  const materialId = String(formData.get("material_id") ?? "");
-  const serviceTypeId = String(formData.get("service_type_id") ?? "").trim();
-  if (!materialId || !serviceTypeId) throw new Error("Material and service are required");
-
-  const matchField = String(formData.get("match_field") ?? "").trim() || null;
-  const matchValue = String(formData.get("match_value") ?? "").trim() || null;
-
   const { error } = await supabase.from("service_materials").insert({
     material_id: materialId,
     service_type_id: serviceTypeId,
-    match_field: matchField,
-    match_value: matchValue,
   });
   if (error) throw error;
 
-  revalidatePath("/admin/materials");
+  revalidatePath("/admin/team");
   revalidatePath("/canvas");
 }
 
@@ -227,6 +218,6 @@ export async function deleteServiceMaterialRule(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("service_materials").delete().eq("id", id);
   if (error) throw error;
-  revalidatePath("/admin/materials");
+  revalidatePath("/admin/team");
   revalidatePath("/canvas");
 }

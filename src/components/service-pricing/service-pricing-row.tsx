@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
   updateServiceCogs,
   updateServiceMinutesPerSqft,
 } from "@/lib/actions/service-pricing-actions";
+import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/material-actions";
 import { priceFromCogs, materialsCostPerSqFt, laborCostPerSqFt } from "@/lib/pricing";
 import type { Material, ServiceMaterialRule } from "@/types/domain";
 
@@ -45,12 +46,20 @@ export function ServicePricingRow({
   const [hours, setHours] = useState(initialEstimatedHours?.toString() ?? "");
   const [minutesPerSqft, setMinutesPerSqft] = useState(initialMinutesPerSqft?.toString() ?? "");
   const [showCalculator, setShowCalculator] = useState(false);
+  const [materialSearch, setMaterialSearch] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const linkedMaterials = materialRules
+  const linkedRules = materialRules
     .filter((r) => r.service_type_id === serviceTypeId)
-    .map((r) => materials.find((m) => m.id === r.material_id))
-    .filter((m): m is Material => Boolean(m));
+    .map((r) => ({ rule: r, material: materials.find((m) => m.id === r.material_id) }))
+    .filter((x): x is { rule: ServiceMaterialRule; material: Material } => Boolean(x.material));
+  const linkedMaterialIds = new Set(linkedRules.map((x) => x.material.id));
+  const materialResults =
+    materialSearch.trim().length > 0
+      ? materials
+          .filter((m) => !linkedMaterialIds.has(m.id) && m.name.toLowerCase().includes(materialSearch.trim().toLowerCase()))
+          .slice(0, 6)
+      : [];
   const materialsPerSqFt = materialsCostPerSqFt(serviceTypeId, materialRules, materials);
   const minutesValue = minutesPerSqft.trim() ? Number(minutesPerSqft) : 0;
   const laborPerSqFt = crewCostPerHour != null ? laborCostPerSqFt(minutesValue, crewCostPerHour) : 0;
@@ -79,6 +88,15 @@ export function ServicePricingRow({
     setCogs(rounded.toString());
     saveCogs(rounded.toString(), "per sq ft");
     startTransition(() => updateServiceMinutesPerSqft(serviceTypeId, minutesValue || null));
+  }
+
+  function handleAddMaterial(materialId: string) {
+    setMaterialSearch("");
+    startTransition(() => linkMaterialToService(serviceTypeId, materialId));
+  }
+
+  function handleRemoveMaterial(ruleId: string) {
+    startTransition(() => deleteServiceMaterialRule(ruleId));
   }
 
   return (
@@ -153,23 +171,49 @@ export function ServicePricingRow({
       {showCalculator && (
         <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">
-              Materials linked to this service (edit on Inventory &gt; Materials &gt; Auto-apply rules):
-            </p>
-            {linkedMaterials.length > 0 ? (
+            <p className="text-xs text-muted-foreground">Materials this service uses (pick as many as needed):</p>
+            {linkedRules.length > 0 ? (
               <ul className="mt-1 flex flex-wrap gap-1.5">
-                {linkedMaterials.map((m) => (
-                  <li key={m.id} className="rounded-full border border-border px-2 py-0.5 text-xs">
-                    {m.name}
-                    {m.cost_per_unit != null && m.coverage_per_unit_sqft
-                      ? ` — $${((m.cost_per_unit / m.coverage_per_unit_sqft) * (1 + m.waste_factor_pct / 100)).toFixed(2)}/sq ft`
+                {linkedRules.map(({ rule, material }) => (
+                  <li
+                    key={rule.id}
+                    className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs"
+                  >
+                    {material.name}
+                    {material.cost_per_unit != null && material.coverage_per_unit_sqft
+                      ? ` — $${((material.cost_per_unit / material.coverage_per_unit_sqft) * (1 + material.waste_factor_pct / 100)).toFixed(2)}/sq ft`
                       : " — no cost/coverage set"}
+                    <button type="button" onClick={() => handleRemoveMaterial(rule.id)} disabled={isPending}>
+                      <X className="h-3 w-3" />
+                    </button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-1 text-xs text-muted-foreground">None linked yet.</p>
+              <p className="mt-1 text-xs text-muted-foreground">None yet.</p>
             )}
+            <div className="mt-1.5 flex flex-col gap-1">
+              <Input
+                placeholder="Search materials to add..."
+                value={materialSearch}
+                onChange={(e) => setMaterialSearch(e.target.value)}
+                className="h-9 w-56 text-sm"
+              />
+              {materialResults.length > 0 && (
+                <div className="flex w-56 flex-col overflow-hidden rounded-lg border border-border bg-card">
+                  {materialResults.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleAddMaterial(m.id)}
+                      className="px-3 py-1.5 text-left text-xs hover:bg-accent"
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">

@@ -19,23 +19,13 @@ import { MaterialImageUpload } from "./material-image-upload";
 import { MaterialImageThumb } from "./material-image-thumb";
 import { MaterialOrderStatus } from "./material-order-status";
 import { DeactivateMaterialButton } from "./deactivate-material-button";
-import { DeleteMaterialRuleButton } from "./delete-material-rule-button";
 import type { Material } from "@/types/domain";
-
-interface MaterialRule {
-  id: string;
-  service_type_id: string;
-  match_field: string | null;
-  match_value: string | null;
-}
 
 interface MaterialInventoryRowProps {
   material: Material;
-  rules: MaterialRule[];
-  serviceTypeOptions: { id: string; label: string }[];
 }
 
-export function MaterialInventoryRow({ material, rules, serviceTypeOptions }: MaterialInventoryRowProps) {
+export function MaterialInventoryRow({ material }: MaterialInventoryRowProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -138,22 +128,6 @@ export function MaterialInventoryRow({ material, rules, serviceTypeOptions }: Ma
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Cost to store</span>
                 <MaterialStorageCostInput materialId={material.id} initialCost={material.storage_cost} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">Applies to services</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {rules.map((rule) => (
-                    <span
-                      key={rule.id}
-                      className="flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {serviceTypeOptions.find((t) => t.id === rule.service_type_id)?.label ?? rule.service_type_id}
-                      {rule.match_field && ` · ${rule.match_field}=${rule.match_value}`}
-                      <DeleteMaterialRuleButton id={rule.id} />
-                    </span>
-                  ))}
-                  {rules.length === 0 && <span className="text-xs text-muted-foreground">No rules yet.</span>}
-                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Remove</span>

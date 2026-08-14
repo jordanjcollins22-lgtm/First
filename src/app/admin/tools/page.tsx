@@ -13,7 +13,6 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { CreateToolForm } from "@/components/tool/create-tool-form";
 import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { CreateMaterialForm } from "@/components/material/create-material-form";
-import { AddMaterialRuleForm } from "@/components/material/add-material-rule-form";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
 
@@ -27,12 +26,11 @@ export default async function InventoryPage() {
   if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
 
   const supabase = await createClient();
-  const [tools, materials, services, linksRes, rulesRes] = await Promise.all([
+  const [tools, materials, services, linksRes] = await Promise.all([
     listTools(),
     listMaterials(),
     listServicePricing(),
     supabase.from("service_tools").select("*"),
-    supabase.from("service_materials").select("*"),
   ]);
 
   const linksByTool = new Map<string, string[]>();
@@ -40,13 +38,6 @@ export default async function InventoryPage() {
     const arr = linksByTool.get(link.tool_id) ?? [];
     arr.push(link.service_type_id);
     linksByTool.set(link.tool_id, arr);
-  }
-
-  const rulesByMaterial = new Map<string, typeof rulesRes.data>();
-  for (const rule of rulesRes.data ?? []) {
-    const arr = rulesByMaterial.get(rule.material_id) ?? [];
-    arr.push(rule);
-    rulesByMaterial.set(rule.material_id, arr);
   }
 
   const customActiveServices = services.filter((s) => s.status === "active" && !SERVICE_TYPES.some((t) => t.id === s.service_type_id));
@@ -171,21 +162,6 @@ export default async function InventoryPage() {
               </CardContent>
             </Card>
 
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Auto-apply rules</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AddMaterialRuleForm
-                  materials={materials}
-                  serviceTypes={[
-                    ...SERVICE_TYPES.map(({ id, label, fields }) => ({ id, label, fields })),
-                    ...customActiveServices.map((s) => ({ id: s.service_type_id, label: s.name, fields: [] })),
-                  ]}
-                />
-              </CardContent>
-            </Card>
-
             <div className="mb-3 flex items-center gap-4 text-sm text-muted-foreground">
               <span>{materials.length} materials</span>
               {materialsToOrderCount > 0 && (
@@ -210,12 +186,7 @@ export default async function InventoryPage() {
                   </thead>
                   <tbody>
                     {materials.map((material) => (
-                      <MaterialInventoryRow
-                        key={material.id}
-                        material={material}
-                        rules={rulesByMaterial.get(material.id) ?? []}
-                        serviceTypeOptions={serviceTypeOptions}
-                      />
+                      <MaterialInventoryRow key={material.id} material={material} />
                     ))}
                   </tbody>
                 </table>
