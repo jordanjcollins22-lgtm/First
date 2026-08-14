@@ -9,6 +9,7 @@ export type MeasurementBasis = "area" | "perimeter" | "flat";
 export interface Organization {
   id: string;
   name: string;
+  slug: string | null;
   crew_cost_per_hour: number | null;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
@@ -56,6 +57,9 @@ export interface Job {
   evaluation_status: EvaluationStatus;
   project_start_date: string | null;
   project_end_date: string | null;
+  client_notes: string | null;
+  budget_range: string | null;
+  referred_by_profile_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -163,6 +167,7 @@ export interface Profile {
   pay_type: "hourly" | "commission" | "both";
   pay_rate_per_hour: number | null;
   commission_pct: number | null;
+  affiliate_slug: string | null;
   created_at: string;
   updated_at: string;
 }

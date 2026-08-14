@@ -32,10 +32,21 @@ export default async function JobPage({
     id: string;
     name: string;
     evaluation_status: EvaluationStatus;
+    client_notes: string | null;
+    budget_range: string | null;
     property: { address: string; lat: number; lng: number } | null;
   };
 
-  const [catalog, design] = await Promise.all([getCanvasCatalog(), getCanvasDesignForJob(jobId)]);
+  const [catalog, design, requestedServicesRes] = await Promise.all([
+    getCanvasCatalog(),
+    getCanvasDesignForJob(jobId),
+    supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
+  ]);
+  const requestedServiceIds = (requestedServicesRes.data ?? []).map((r) => r.service_type_id);
+  const requestedServiceNames = requestedServiceIds.map(
+    (id) => catalog.servicePricing.find((s) => s.service_type_id === id)?.name ?? id
+  );
+  const hasClientRequest = requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10">
@@ -50,6 +61,30 @@ export default async function JobPage({
           Draw work zones and fill in the service details to build a scope of work for this job.
         </p>
       </div>
+
+      {hasClientRequest && (
+        <div className="rounded-lg border border-white/60 bg-card/60 px-4 py-3 text-sm backdrop-blur-md">
+          <p className="mb-1.5 font-semibold">What the client asked for</p>
+          {requestedServiceNames.length > 0 && (
+            <p>
+              <span className="text-muted-foreground">Services: </span>
+              {requestedServiceNames.join(", ")}
+            </p>
+          )}
+          {job.budget_range && (
+            <p>
+              <span className="text-muted-foreground">Budget: </span>
+              {job.budget_range}
+            </p>
+          )}
+          {job.client_notes && (
+            <p>
+              <span className="text-muted-foreground">Notes: </span>
+              {job.client_notes}
+            </p>
+          )}
+        </div>
+      )}
 
       <ImageCanvasBoard
         catalog={catalog}

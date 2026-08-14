@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
+import { qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
 
 export function SiteNav({
   userEmail,
@@ -20,6 +21,7 @@ export function SiteNav({
 
   const showProjectData = allowedTabs.includes("project-data");
   const showEvaluations = allowedTabs.includes("evaluations");
+  const showBookingLinks = roles.includes("admin") || qualifiesForAffiliateLink(roles);
   const links = [
     ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
       ? [{ href: "/admin/tools", label: "Inventory" }]
@@ -64,6 +66,12 @@ export function SiteNav({
       {showEvaluations && (
         <Link href="/evaluations" className="hover:text-primary">
           My Evaluations
+        </Link>
+      )}
+
+      {showBookingLinks && (
+        <Link href="/booking-links" className="hover:text-primary">
+          Booking Links
         </Link>
       )}
 

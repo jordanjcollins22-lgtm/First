@@ -20,6 +20,7 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          slug: string | null;
           crew_cost_per_hour: number | null;
           measurement_unit: string;
           measurement_basis: string;
@@ -97,6 +98,9 @@ export interface Database {
           evaluation_status: string;
           project_start_date: string | null;
           project_end_date: string | null;
+          client_notes: string | null;
+          budget_range: string | null;
+          referred_by_profile_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -120,6 +124,28 @@ export interface Database {
           },
         ];
       };
+      job_requested_services: {
+        Row: {
+          job_id: string;
+          organization_id: string;
+          service_type_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_requested_services"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          service_type_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_requested_services"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_requested_services_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           id: string;
@@ -129,6 +155,7 @@ export interface Database {
           pay_type: string;
           pay_rate_per_hour: number | null;
           commission_pct: number | null;
+          affiliate_slug: string | null;
           created_at: string;
           updated_at: string;
         };

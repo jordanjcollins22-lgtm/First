@@ -11,7 +11,7 @@ import { setJobSourceAttractorWave } from "@/lib/actions/attractor-actions";
 import { updateJobDates, updateJobStatus } from "@/lib/actions/job-actions";
 import { pointInWaveGeometry } from "@/lib/attractor-geometry";
 import { colorForAttractorType, colorForJobStatus } from "./attractor-colors";
-import type { AttractorType, AttractorWave, JobStatus } from "@/types/domain";
+import type { AttractorType, AttractorWave, JobStatus, Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 const NONE = "none";
@@ -38,13 +38,18 @@ export function JobDetailPanel({
   job,
   waves,
   types,
+  profiles,
   onClose,
 }: {
   job: JobWithLocation;
   waves: AttractorWave[];
   types: AttractorType[];
+  profiles: Profile[];
   onClose: () => void;
 }) {
+  const referredBy = job.referred_by_profile_id
+    ? profiles.find((p) => p.id === job.referred_by_profile_id)
+    : null;
   const [status, setStatus] = useState<JobStatus>(job.status);
   const [sourceWaveId, setSourceWaveId] = useState(job.source_attractor_wave_id ?? NONE);
   const [evaluationDate, setEvaluationDate] = useState(toLocalInputValue(job.evaluation_date));
@@ -112,6 +117,29 @@ export function JobDetailPanel({
       >
         Open job <ExternalLink className="h-3 w-3" />
       </Link>
+
+      {(job.budget_range || job.client_notes || referredBy) && (
+        <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 p-2.5 text-xs">
+          {referredBy && (
+            <p>
+              <span className="text-muted-foreground">Booked via: </span>
+              {referredBy.full_name || referredBy.email}&apos;s link
+            </p>
+          )}
+          {job.budget_range && (
+            <p>
+              <span className="text-muted-foreground">Budget: </span>
+              {job.budget_range}
+            </p>
+          )}
+          {job.client_notes && (
+            <p>
+              <span className="text-muted-foreground">Client notes: </span>
+              {job.client_notes}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Evaluation date &amp; time</Label>

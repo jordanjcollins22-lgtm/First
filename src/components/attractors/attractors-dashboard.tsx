@@ -372,7 +372,14 @@ export function AttractorsDashboard({
                 />
               )}
               {selectedJob && (
-                <JobDetailPanel key={selectedJob.id} job={selectedJob} waves={waves} types={types} onClose={() => setSelectedJobId(null)} />
+                <JobDetailPanel
+                  key={selectedJob.id}
+                  job={selectedJob}
+                  waves={waves}
+                  types={types}
+                  profiles={profiles}
+                  onClose={() => setSelectedJobId(null)}
+                />
               )}
             </CardContent>
           </Card>
