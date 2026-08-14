@@ -185,6 +185,7 @@ export interface Tool {
   stock_method: "in_stock" | "order_as_needed";
   is_delivered: boolean;
   purchase_url: string | null;
+  how_to_url: string | null;
   reorder_threshold: number | null;
   on_order: boolean;
   not_owned_reason: string | null;
@@ -256,6 +257,7 @@ export interface ServicePricing {
   cost_unit: string;
   estimated_hours: number | null;
   minutes_per_sqft: number | null;
+  how_to: string | null;
   updated_at: string;
 }
 

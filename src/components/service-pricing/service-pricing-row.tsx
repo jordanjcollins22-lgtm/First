@@ -6,14 +6,18 @@ import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   updateServicePricing,
   updateServiceCogs,
   updateServiceMinutesPerSqft,
+  updateServiceHowTo,
 } from "@/lib/actions/service-pricing-actions";
 import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/material-actions";
+import { setServiceToolLink } from "@/lib/actions/tool-actions";
+import { ToolVideoLinkInput } from "./tool-video-link-input";
 import { priceFromCogs, materialsCostPerSqFt, laborCostPerSqFt } from "@/lib/pricing";
-import type { Material, ServiceMaterialRule } from "@/types/domain";
+import type { Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
 
 interface ServicePricingRowProps {
   serviceTypeId: string;
@@ -23,8 +27,11 @@ interface ServicePricingRowProps {
   initialCostUnit: string;
   initialEstimatedHours: number | null;
   initialMinutesPerSqft: number | null;
+  initialHowTo: string | null;
   materials: Material[];
   materialRules: ServiceMaterialRule[];
+  tools: Tool[];
+  serviceTools: ServiceToolLink[];
   crewCostPerHour: number | null;
 }
 
@@ -36,8 +43,11 @@ export function ServicePricingRow({
   initialCostUnit,
   initialEstimatedHours,
   initialMinutesPerSqft,
+  initialHowTo,
   materials,
   materialRules,
+  tools,
+  serviceTools,
   crewCostPerHour,
 }: ServicePricingRowProps) {
   const [cogs, setCogs] = useState(initialCogs?.toString() ?? "");
@@ -45,9 +55,23 @@ export function ServicePricingRow({
   const [costUnit, setCostUnit] = useState(initialCostUnit);
   const [hours, setHours] = useState(initialEstimatedHours?.toString() ?? "");
   const [minutesPerSqft, setMinutesPerSqft] = useState(initialMinutesPerSqft?.toString() ?? "");
+  const [howTo, setHowTo] = useState(initialHowTo ?? "");
   const [showCalculator, setShowCalculator] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
+  const [toolSearch, setToolSearch] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const linkedTools = serviceTools
+    .filter((link) => link.service_type_id === serviceTypeId)
+    .map((link) => tools.find((t) => t.id === link.tool_id))
+    .filter((t): t is Tool => Boolean(t));
+  const linkedToolIds = new Set(linkedTools.map((t) => t.id));
+  const toolResults =
+    toolSearch.trim().length > 0
+      ? tools
+          .filter((t) => !linkedToolIds.has(t.id) && t.name.toLowerCase().includes(toolSearch.trim().toLowerCase()))
+          .slice(0, 6)
+      : [];
 
   const linkedRules = materialRules
     .filter((r) => r.service_type_id === serviceTypeId)
@@ -97,6 +121,19 @@ export function ServicePricingRow({
 
   function handleRemoveMaterial(ruleId: string) {
     startTransition(() => deleteServiceMaterialRule(ruleId));
+  }
+
+  function handleAddTool(toolId: string) {
+    setToolSearch("");
+    startTransition(() => setServiceToolLink(serviceTypeId, toolId, true));
+  }
+
+  function handleRemoveTool(toolId: string) {
+    startTransition(() => setServiceToolLink(serviceTypeId, toolId, false));
+  }
+
+  function saveHowTo() {
+    startTransition(() => updateServiceHowTo(serviceTypeId, howTo.trim() || null));
   }
 
   return (
@@ -164,12 +201,67 @@ export function ServicePricingRow({
           className="flex items-center gap-1 pb-2 text-xs text-muted-foreground hover:text-primary"
         >
           {showCalculator ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          Calculate from materials &amp; time
+          Tools, materials &amp; how-to
         </button>
       </div>
 
       {showCalculator && (
-        <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+        <div className="mt-2 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Tool checklist — what the crew grabs for this service:</p>
+            {linkedTools.length > 0 ? (
+              <ul className="mt-1 flex flex-col gap-1.5">
+                {linkedTools.map((tool) => (
+                  <li key={tool.id} className="flex flex-wrap items-center gap-2">
+                    <span className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
+                      {tool.icon} {tool.name}
+                      <button type="button" onClick={() => handleRemoveTool(tool.id)} disabled={isPending}>
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                    <ToolVideoLinkInput toolId={tool.id} initialUrl={tool.how_to_url} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">None yet.</p>
+            )}
+            <div className="mt-1.5 flex flex-col gap-1">
+              <Input
+                placeholder="Search tools to add..."
+                value={toolSearch}
+                onChange={(e) => setToolSearch(e.target.value)}
+                className="h-9 w-56 text-sm"
+              />
+              {toolResults.length > 0 && (
+                <div className="flex w-56 flex-col overflow-hidden rounded-lg border border-border bg-card">
+                  {toolResults.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleAddTool(t.id)}
+                      className="px-3 py-1.5 text-left text-xs hover:bg-accent"
+                    >
+                      {t.icon} {t.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <p className="text-xs text-muted-foreground">How we do it — general steps the crew follows:</p>
+            <Textarea
+              placeholder="e.g. Edge the bed first, clear debris, lay fabric, spread material 2–3 in deep, water in..."
+              value={howTo}
+              disabled={isPending}
+              onChange={(e) => setHowTo(e.target.value)}
+              onBlur={saveHowTo}
+              className="min-h-20 text-sm"
+            />
+          </div>
+
           <div>
             <p className="text-xs text-muted-foreground">Materials this service uses (pick as many as needed):</p>
             {linkedRules.length > 0 ? (

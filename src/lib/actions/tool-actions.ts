@@ -152,6 +152,16 @@ export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | nu
   revalidatePath("/canvas");
 }
 
+/** YouTube (or any) link showing how to use this tool — surfaces on services and job checklists. */
+export async function updateToolHowToUrl(id: string, howToUrl: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ how_to_url: howToUrl }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/admin/team");
+  revalidatePath("/canvas");
+}
+
 export async function updateToolReorderThreshold(id: string, threshold: number | null) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ reorder_threshold: threshold }).eq("id", id);
@@ -214,5 +224,6 @@ export async function setServiceToolLink(serviceTypeId: string, toolId: string, 
     if (error) throw error;
   }
   revalidatePath("/admin/tools");
+  revalidatePath("/admin/team");
   revalidatePath("/canvas");
 }

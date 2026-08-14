@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { listProfiles, listRoles, getCurrentProfile } from "@/lib/data/team";
 import { listServicePricing } from "@/lib/data/service-pricing";
 import { listMaterials } from "@/lib/data/materials";
+import { listTools } from "@/lib/data/tools";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { checkTabAccess } from "@/lib/data/access";
 import { createClient } from "@/lib/supabase/server";
@@ -18,7 +19,7 @@ import { ServicePricingRow } from "@/components/service-pricing/service-pricing-
 import { CreateServiceTypeForm } from "@/components/service-pricing/create-service-type-form";
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
 import { CrewCostSetting } from "@/components/service-pricing/crew-cost-setting";
-import type { CustomRole, Profile, ServiceMaterialRule } from "@/types/domain";
+import type { CustomRole, Profile, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
 
 export default async function TeamServicesPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -59,18 +60,24 @@ export default async function TeamServicesPage() {
   let services: Awaited<ReturnType<typeof listServicePricing>> = [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   let materialRules: ServiceMaterialRule[] = [];
+  let tools: Tool[] = [];
+  let serviceTools: ServiceToolLink[] = [];
   let crewCostPerHour: number | null = null;
   if (servicesAllowed) {
     const supabase = await createClient();
-    const [servicesRes, materialsRes, rulesRes, orgRes] = await Promise.all([
+    const [servicesRes, materialsRes, toolsRes, rulesRes, serviceToolsRes, orgRes] = await Promise.all([
       listServicePricing(),
       listMaterials(),
+      listTools(),
       supabase.from("service_materials").select("*"),
+      supabase.from("service_tools").select("*"),
       getCurrentOrganization(),
     ]);
     services = servicesRes;
     materials = materialsRes;
+    tools = toolsRes;
     materialRules = (rulesRes.data ?? []) as unknown as ServiceMaterialRule[];
+    serviceTools = (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[];
     crewCostPerHour = orgRes.crew_cost_per_hour;
   }
   const activeServices = services.filter((s) => s.status === "active");
@@ -230,8 +237,11 @@ export default async function TeamServicesPage() {
                     initialCostUnit={s.cost_unit}
                     initialEstimatedHours={s.estimated_hours}
                     initialMinutesPerSqft={s.minutes_per_sqft}
+                    initialHowTo={s.how_to}
                     materials={materials}
                     materialRules={materialRules}
+                    tools={tools}
+                    serviceTools={serviceTools}
                     crewCostPerHour={crewCostPerHour}
                   />
                 ))}

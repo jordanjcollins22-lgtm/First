@@ -660,6 +660,12 @@ export function ZoneServiceDialog({
     body = (
       <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Tools & materials for this zone" subtitle="Selected automatically for this service — search to add more, or add something new.">
         <div className="flex flex-col gap-2">
+          {selectedServiceRow?.how_to && (
+            <div className="rounded-lg border border-border bg-muted/40 p-2.5">
+              <p className="text-xs font-medium text-muted-foreground">How we do it</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-xs">{selectedServiceRow.how_to}</p>
+            </div>
+          )}
           {autoTools.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {autoTools.map((tool) => (
@@ -671,6 +677,16 @@ export function ZoneServiceDialog({
                     <ToolImageThumb imagePath={tool.image_path} icon={tool.icon} />
                   </span>
                   {tool.name}
+                  {tool.how_to_url && (
+                    <a
+                      href={tool.how_to_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      ▶ How-to
+                    </a>
+                  )}
                 </span>
               ))}
             </div>

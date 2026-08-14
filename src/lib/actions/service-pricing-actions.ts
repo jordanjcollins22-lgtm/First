@@ -45,6 +45,16 @@ export async function updateServiceCogs(serviceTypeId: string, cogs: number | nu
   revalidatePath("/canvas");
 }
 
+/** General "how we do this service" writeup, shown to the crew alongside the tool checklist. */
+export async function updateServiceHowTo(serviceTypeId: string, howTo: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("services").update({ how_to: howTo }).eq("service_type_id", serviceTypeId);
+  if (error) throw error;
+
+  revalidatePath("/admin/team");
+  revalidatePath("/canvas");
+}
+
 /** How long one sq ft of this service takes — the labor half of the COGS calculator. */
 export async function updateServiceMinutesPerSqft(serviceTypeId: string, minutesPerSqft: number | null) {
   const supabase = await createClient();
