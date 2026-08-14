@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { CheckCircle2, Loader2, MapPin, Search } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,11 +16,24 @@ import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
 
-const STEP_LABELS = ["Your info", "Confirm home", "What you need", "Budget", "Schedule"];
+const STEP_LABELS = ["Schedule", "Your info", "Confirm home", "What you need", "Budget"];
+const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
 
 function formatDateHeader(dateKey: string): string {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return parseDateKey(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatMonth(d: Date): string {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
 function formatTimeLabel(time: string): string {
@@ -46,6 +59,11 @@ export function BookingWizard({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const today = new Date();
+  const [monthCursor, setMonthCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<AvailableSlotGroup | null>(null);
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -59,7 +77,6 @@ export function BookingWizard({
   const [selectedServiceIds, setSelectedServiceIds] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
   const [budgetRange, setBudgetRange] = useState("");
-  const [selectedSlot, setSelectedSlot] = useState<AvailableSlotGroup | null>(null);
 
   function handleAddressQueryChange(value: string) {
     setAddressQuery(value);
@@ -81,13 +98,13 @@ export function BookingWizard({
     }, 300);
   }
 
-  function goToStep1Details() {
+  function handleContactNext() {
     setError(null);
     if (!firstName.trim() || !lastName.trim()) return setError("Enter your first and last name.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Enter a valid email address.");
     if (!phone.trim()) return setError("Enter a phone number.");
     if (!selectedAddress) return setError("Select your address from the search results.");
-    setStep(2);
+    setStep(3);
   }
 
   function toggleService(id: string) {
@@ -152,9 +169,24 @@ export function BookingWizard({
     list.push(slot);
     slotsByDate.set(slot.date, list);
   }
+  const slotDateKeys = Array.from(slotsByDate.keys()).sort();
+  const earliestSlotMonth = slotDateKeys[0] ? parseDateKey(slotDateKeys[0]) : today;
+  const latestSlotMonth = slotDateKeys[slotDateKeys.length - 1] ? parseDateKey(slotDateKeys[slotDateKeys.length - 1]) : today;
+
+  const monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const leadingBlanks = monthStart.getDay();
+  const monthCells: (Date | null)[] = [
+    ...Array.from({ length: leadingBlanks }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(monthStart.getFullYear(), monthStart.getMonth(), i + 1)),
+  ];
+  const canGoPrev = monthStart > new Date(earliestSlotMonth.getFullYear(), earliestSlotMonth.getMonth(), 1);
+  const canGoNext = monthStart < new Date(latestSlotMonth.getFullYear(), latestSlotMonth.getMonth(), 1);
+
+  const timesForSelectedDate = selectedDate ? slotsByDate.get(selectedDate) ?? [] : [];
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-10">
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       <div>
         <h1 className="text-xl font-bold">{organizationName}</h1>
         <p className="text-sm text-muted-foreground">Book your free property evaluation.</p>
@@ -163,12 +195,7 @@ export function BookingWizard({
       <div className="flex items-center gap-1">
         {STEP_LABELS.map((label, i) => (
           <div key={label} className="flex flex-1 flex-col items-center gap-1">
-            <div
-              className={cn(
-                "h-1.5 w-full rounded-full",
-                i + 1 <= step ? "bg-primary" : "bg-muted"
-              )}
-            />
+            <div className={cn("h-1.5 w-full rounded-full", i + 1 <= step ? "bg-primary" : "bg-muted")} />
             <span className={cn("text-[10px]", i + 1 === step ? "font-semibold text-primary" : "text-muted-foreground")}>
               {label}
             </span>
@@ -178,6 +205,101 @@ export function BookingWizard({
 
       {step === 1 && (
         <div className="flex flex-col gap-4">
+          <p className="font-medium">Pick a date and time</p>
+          {slotsByDate.size === 0 ? (
+            <p className="text-sm text-muted-foreground">No openings in the next two weeks — please contact us directly.</p>
+          ) : (
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <div className="sm:w-64 sm:shrink-0">
+                <div className="mb-2 flex items-center justify-between">
+                  <button
+                    type="button"
+                    disabled={!canGoPrev}
+                    onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <p className="text-sm font-semibold">{formatMonth(monthStart)}</p>
+                  <button
+                    type="button"
+                    disabled={!canGoNext}
+                    onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+                  {WEEKDAY_LABELS.map((label, i) => (
+                    <div key={i}>{label}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {monthCells.map((date, i) => {
+                    if (!date) return <div key={`blank-${i}`} />;
+                    const key = toDateKey(date);
+                    const hasSlots = slotsByDate.has(key);
+                    const isSelected = key === selectedDate;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={!hasSlots}
+                        onClick={() => {
+                          setSelectedDate(key);
+                          setSelectedSlot(null);
+                        }}
+                        className={cn(
+                          "flex aspect-square items-center justify-center rounded-md text-xs",
+                          !hasSlots && "text-muted-foreground/30",
+                          hasSlots && !isSelected && "font-medium text-primary hover:bg-accent",
+                          isSelected && "bg-primary font-semibold text-primary-foreground"
+                        )}
+                      >
+                        {date.getDate()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex-1">
+                <p className="mb-2 text-sm font-semibold">
+                  {selectedDate ? formatDateHeader(selectedDate) : "Select a day with open times"}
+                </p>
+                {selectedDate && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {timesForSelectedDate.map((slot) => (
+                      <button
+                        key={`${slot.date}T${slot.time}`}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSlot(slot);
+                          setError(null);
+                          setStep(2);
+                        }}
+                        className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-primary hover:bg-accent"
+                      >
+                        {formatTimeLabel(slot.time)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="flex flex-col gap-4">
+          {selectedSlot && (
+            <button type="button" onClick={() => setStep(1)} className="self-start text-xs text-primary hover:underline">
+              {formatDateHeader(selectedSlot.date)} at {formatTimeLabel(selectedSlot.time)} — change
+            </button>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="firstName">First name</Label>
@@ -237,13 +359,18 @@ export function BookingWizard({
             )}
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="button" size="xl" onClick={goToStep1Details}>
-            Next
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
+              Back
+            </Button>
+            <Button type="button" className="flex-1" onClick={handleContactNext}>
+              Next
+            </Button>
+          </div>
         </div>
       )}
 
-      {step === 2 && selectedAddress && (
+      {step === 3 && selectedAddress && (
         <div className="flex flex-col gap-4">
           <p className="font-medium">Is this your home?</p>
           {imageUrl && (
@@ -254,17 +381,17 @@ export function BookingWizard({
           )}
           <p className="text-sm text-muted-foreground">{selectedAddress.fullAddress}</p>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(2)}>
               No, let me fix it
             </Button>
-            <Button type="button" className="flex-1" onClick={() => setStep(3)}>
+            <Button type="button" className="flex-1" onClick={() => setStep(4)}>
               Yes, that&apos;s it
             </Button>
           </div>
         </div>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <div className="flex flex-col gap-4">
           <p className="font-medium">What would you like done?</p>
           <div className="flex flex-col gap-2">
@@ -288,7 +415,7 @@ export function BookingWizard({
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(2)}>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(3)}>
               Back
             </Button>
             <Button
@@ -300,7 +427,7 @@ export function BookingWizard({
                   return;
                 }
                 setError(null);
-                setStep(4);
+                setStep(5);
               }}
             >
               Next
@@ -309,7 +436,7 @@ export function BookingWizard({
         </div>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="flex flex-col gap-4">
           <p className="font-medium">What&apos;s your budget range?</p>
           <div className="flex flex-col gap-2">
@@ -334,61 +461,18 @@ export function BookingWizard({
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(3)}>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(4)} disabled={isPending}>
               Back
             </Button>
             <Button
               type="button"
               className="flex-1"
+              disabled={isPending}
               onClick={() => {
                 if (!budgetRange) return setError("Select a budget range.");
-                setError(null);
-                setStep(5);
+                handleSubmit();
               }}
             >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 5 && (
-        <div className="flex flex-col gap-4">
-          <p className="font-medium">Pick a date and time</p>
-          {slotsByDate.size === 0 ? (
-            <p className="text-sm text-muted-foreground">No openings in the next two weeks — please contact us directly.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {Array.from(slotsByDate.entries()).map(([date, daySlots]) => (
-                <div key={date}>
-                  <p className="mb-1.5 text-xs font-semibold text-muted-foreground">{formatDateHeader(date)}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {daySlots.map((slot) => (
-                      <button
-                        key={`${slot.date}T${slot.time}`}
-                        type="button"
-                        onClick={() => setSelectedSlot(slot)}
-                        className={cn(
-                          "rounded-lg border px-3 py-1.5 text-xs font-medium",
-                          selectedSlot?.date === slot.date && selectedSlot?.time === slot.time
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-card hover:bg-accent"
-                        )}
-                      >
-                        {formatTimeLabel(slot.time)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(4)} disabled={isPending}>
-              Back
-            </Button>
-            <Button type="button" className="flex-1" disabled={!selectedSlot || isPending} onClick={handleSubmit}>
               {isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Booking...
