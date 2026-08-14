@@ -20,7 +20,14 @@ export default async function OrganizationsPage() {
     redirect("/attractors");
   }
 
-  const organizations = await listOrganizations();
+  let organizations: Awaited<ReturnType<typeof listOrganizations>> = [];
+  let loadError: string | null = null;
+  try {
+    organizations = await listOrganizations();
+  } catch {
+    loadError =
+      "Couldn't load businesses — the database migration for this feature hasn't been run yet. Paste supabase/migrations/0034_multi_tenant_organizations.sql into Supabase's SQL editor and run it, then reload this page.";
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -29,6 +36,12 @@ export default async function OrganizationsPage() {
         Every separate business running on this app. Each one is fully isolated — its own customers, jobs,
         tools, pricing, and overhead, with no connection to any other.
       </p>
+
+      {loadError && (
+        <Card className="mb-6 border-destructive/50">
+          <CardContent className="pt-6 text-sm text-destructive">{loadError}</CardContent>
+        </Card>
+      )}
 
       <Card className="mb-6">
         <CardHeader>
