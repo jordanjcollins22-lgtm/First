@@ -79,9 +79,13 @@ export default async function TeamServicesPage() {
     materialRules = (rulesRes.data ?? []) as unknown as ServiceMaterialRule[];
     serviceTools = (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[];
 
-    // Blended crew cost = average of the team's set pay rates; the org-level
-    // manual rate only fills in until pay has been entered on the Team side.
-    const payRates = profiles.map((p) => p.pay_rate_per_hour).filter((r): r is number => r != null);
+    // Blended crew cost = average of the HOURLY team's set pay rates —
+    // commission pay is a % of the sale, not a per-hour labor cost. The
+    // org-level manual rate only fills in until pay has been entered.
+    const payRates = profiles
+      .filter((p) => p.pay_type !== "commission")
+      .map((p) => p.pay_rate_per_hour)
+      .filter((r): r is number => r != null);
     crewCostPerHour =
       payRates.length > 0
         ? Math.round((payRates.reduce((sum, r) => sum + r, 0) / payRates.length) * 100) / 100
@@ -174,7 +178,12 @@ export default async function TeamServicesPage() {
                         </td>
                         {isAdmin && (
                           <td className="p-2">
-                            <PayRateInput profileId={profile.id} initialRate={profile.pay_rate_per_hour} />
+                            <PayRateInput
+                              profileId={profile.id}
+                              initialPayType={profile.pay_type === "commission" ? "commission" : "hourly"}
+                              initialRate={profile.pay_rate_per_hour}
+                              initialCommissionPct={profile.commission_pct}
+                            />
                           </td>
                         )}
                         {isAdmin && isSupabaseAdminConfigured && (
@@ -211,12 +220,13 @@ export default async function TeamServicesPage() {
                   Crew cost per hour: <span className="font-semibold">${crewCostPerHour.toFixed(2)}</span>
                   <span className="text-xs text-muted-foreground">
                     {" "}
-                    — the average of the pay rates set on the Team side. Update pay there and this follows.
+                    — the average of the hourly pay rates set on the Team side (commission-based people
+                    aren&apos;t counted). Update pay there and this follows.
                   </span>
                 </p>
               ) : (
                 <p className="text-xs text-destructive">
-                  No crew cost per hour yet — set each person&apos;s Pay / hour on the Team side so labor cost can
+                  No crew cost per hour yet — set hourly pay for your crew on the Team side so labor cost can
                   be calculated.
                 </p>
               )}

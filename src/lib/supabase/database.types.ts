@@ -124,7 +124,9 @@ export interface Database {
           email: string;
           full_name: string | null;
           organization_id: string;
+          pay_type: string;
           pay_rate_per_hour: number | null;
+          commission_pct: number | null;
           created_at: string;
           updated_at: string;
         };

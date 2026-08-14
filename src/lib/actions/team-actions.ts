@@ -82,8 +82,17 @@ export async function createTeamMember(formData: FormData) {
   revalidatePath("/admin/team");
 }
 
-/** Feeds the blended crew cost per hour used by the service COGS calculator. */
-export async function updateProfilePayRate(profileId: string, payRatePerHour: number | null) {
+/**
+ * Hourly pay feeds the blended crew cost per hour used by the service COGS
+ * calculator; commission pay (a % of the sale) doesn't — it's not a per-hour
+ * labor cost.
+ */
+export async function updateProfilePay(
+  profileId: string,
+  payType: "hourly" | "commission",
+  payRatePerHour: number | null,
+  commissionPct: number | null
+) {
   const caller = await getCurrentProfile();
   if (!caller?.roles.includes("admin")) {
     throw new Error("Only admins can set pay.");
@@ -92,7 +101,7 @@ export async function updateProfilePayRate(profileId: string, payRatePerHour: nu
   const supabase = await createClient();
   const { error } = await supabase
     .from("profiles")
-    .update({ pay_rate_per_hour: payRatePerHour })
+    .update({ pay_type: payType, pay_rate_per_hour: payRatePerHour, commission_pct: commissionPct })
     .eq("id", profileId);
   if (error) throw error;
   revalidatePath("/admin/team");
