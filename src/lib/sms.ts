@@ -1,7 +1,7 @@
 import Twilio from "twilio";
 
 import { env, isTwilioConfigured } from "@/lib/env";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getJobCustomerContact } from "@/lib/job-customer";
 
 /** Assumes a US number when given a bare 10-digit phone — good enough for
  * a single-country landscaping business. Returns null if it can't tell. */
@@ -33,17 +33,10 @@ export async function sendSms(to: string, body: string): Promise<void> {
 export async function notifyCustomerBySms(jobId: string, body: string): Promise<void> {
   if (!isTwilioConfigured) return;
 
-  const admin = createAdminClient();
-  const { data: job } = await admin.from("jobs").select("property_id").eq("id", jobId).maybeSingle();
-  if (!job) return;
+  const contact = await getJobCustomerContact(jobId);
+  if (!contact?.phone) return;
 
-  const { data: property } = await admin.from("properties").select("customer_id").eq("id", job.property_id).maybeSingle();
-  if (!property) return;
-
-  const { data: customer } = await admin.from("customers").select("phone").eq("id", property.customer_id).maybeSingle();
-  if (!customer?.phone) return;
-
-  const e164 = toE164(customer.phone);
+  const e164 = toE164(contact.phone);
   if (!e164) return;
 
   await sendSms(e164, body);

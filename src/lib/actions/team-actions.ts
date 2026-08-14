@@ -124,6 +124,20 @@ export async function updateProfilePay(
   revalidatePath("/admin/team");
 }
 
+/** The number click-to-call rings first before bridging to the client, and
+ * where inbound calls for their jobs get routed. */
+export async function updateProfilePhone(profileId: string, phone: string) {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    throw new Error("Only admins can set phone numbers.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ phone: phone.trim() || null }).eq("id", profileId);
+  if (error) throw error;
+  revalidatePath("/admin/team");
+}
+
 export async function setTeamMemberPassword(profileId: string, password: string) {
   const caller = await getCurrentProfile();
   if (!caller?.roles.includes("admin")) {

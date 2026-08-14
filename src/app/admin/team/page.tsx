@@ -19,6 +19,7 @@ import { ServicePricingRow } from "@/components/service-pricing/service-pricing-
 import { CreateServiceTypeForm } from "@/components/service-pricing/create-service-type-form";
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
 import { PayRateInput } from "@/components/team/pay-rate-input";
+import { PhoneInput } from "@/components/team/phone-input";
 import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
 import { startImpersonation } from "@/lib/actions/impersonation-actions";
 import type {
@@ -74,7 +75,7 @@ export default async function TeamServicesPage() {
   const unassigned = profiles.filter((p) => p.roles.length === 0);
   if (unassigned.length > 0) groups.push({ role: "No role yet", members: unassigned });
 
-  const teamColumnCount = 2 + (isAdmin ? 2 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
+  const teamColumnCount = 2 + (isAdmin ? 3 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
 
   let services: Awaited<ReturnType<typeof listServicePricing>> = [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
@@ -180,6 +181,7 @@ export default async function TeamServicesPage() {
                       <th className="p-2 font-medium">Email</th>
                       <th className="p-2 font-medium">Role</th>
                       {isAdmin && <th className="p-2 font-medium">Pay</th>}
+                      {isAdmin && <th className="p-2 font-medium">Phone</th>}
                       {isAdmin && isSupabaseAdminConfigured && <th className="p-2 font-medium">Password</th>}
                       {isAdmin && <th className="p-2 font-medium">Account</th>}
                     </tr>
@@ -226,6 +228,11 @@ export default async function TeamServicesPage() {
                               initialRate={profile.pay_rate_per_hour}
                               initialCommissionPct={profile.commission_pct}
                             />
+                          </td>
+                        )}
+                        {isAdmin && (
+                          <td className="p-2">
+                            <PhoneInput profileId={profile.id} initialPhone={profile.phone} />
                           </td>
                         )}
                         {isAdmin && isSupabaseAdminConfigured && (

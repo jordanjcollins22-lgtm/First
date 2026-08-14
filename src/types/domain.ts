@@ -168,6 +168,7 @@ export interface Profile {
   pay_rate_per_hour: number | null;
   commission_pct: number | null;
   affiliate_slug: string | null;
+  phone: string | null;
   created_at: string;
   updated_at: string;
 }

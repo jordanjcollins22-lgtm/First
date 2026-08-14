@@ -14,6 +14,7 @@ import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/p
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MessageThread } from "@/components/job/message-thread";
+import { CallClientButton } from "@/components/job/call-client-button";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -132,6 +133,8 @@ export default async function JobPage({
         materialsCost={materialsCost}
         zones={zoneBreakdowns}
       />
+
+      {isTwilioConfigured && <CallClientButton jobId={jobId} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <MessageThread
