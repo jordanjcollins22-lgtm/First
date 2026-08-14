@@ -78,11 +78,14 @@ function AddJourneyForm() {
 export function JourneyDashboard({
   journeys,
   stepsByJourney,
+  codeManagedRoleKeys,
 }: {
   journeys: Journey[];
   stepsByJourney: Record<string, JourneyStep[]>;
+  codeManagedRoleKeys: string[];
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(journeys[0]?.id ?? null);
+  const codeManaged = new Set(codeManagedRoleKeys);
   const [isPending, startTransition] = useTransition();
   const highlightRef = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -129,22 +132,39 @@ export function JourneyDashboard({
 
       {!selected && <p className="text-sm text-muted-foreground">No journeys yet — add one above.</p>}
 
-      {selected && (
+      {selected && (() => {
+        const isCodeManaged = codeManaged.has(selected.role_key);
+        return (
         <>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">{selected.name}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">{selected.name}</h2>
+                {isCodeManaged && (
+                  <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    SYNCED WITH THE APP
+                  </span>
+                )}
+              </div>
               {selected.description && <p className="text-sm text-muted-foreground">{selected.description}</p>}
+              {isCodeManaged && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Steps, order, and connections follow the app automatically — you can still tune the numbers
+                  and notes below, but steps can&apos;t be added or removed here.
+                </p>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => handleDeleteJourney(selected.id)}
-              disabled={isPending}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete journey
-            </button>
+            {!isCodeManaged && (
+              <button
+                type="button"
+                onClick={() => handleDeleteJourney(selected.id)}
+                disabled={isPending}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete journey
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
@@ -181,15 +201,21 @@ export function JourneyDashboard({
           <div className="flex flex-col gap-2">
             {steps.map((step) => (
               <div key={step.id} ref={(el) => { highlightRef.current[step.step_key] = el; }}>
-                <JourneyStepCard step={step} allSteps={steps} onGoToStep={handleGoToStep} />
+                <JourneyStepCard
+                  step={step}
+                  allSteps={steps}
+                  onGoToStep={handleGoToStep}
+                  structureLocked={isCodeManaged}
+                />
               </div>
             ))}
             {steps.length === 0 && <p className="text-sm text-muted-foreground">No steps yet — add one below.</p>}
           </div>
 
-          <AddJourneyStepForm journeyId={selected.id} />
+          {!isCodeManaged && <AddJourneyStepForm journeyId={selected.id} />}
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }

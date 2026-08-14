@@ -49,10 +49,13 @@ export function JourneyStepCard({
   step,
   allSteps,
   onGoToStep,
+  structureLocked = false,
 }: {
   step: JourneyStep;
   allSteps: JourneyStep[];
   onGoToStep: (stepKey: string) => void;
+  /** True for a code-managed journey — structure (type, connections, is_built) follows the app and would just get overwritten on the next sync, so those fields are read-only here; numbers and notes stay editable. */
+  structureLocked?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -113,15 +116,17 @@ export function JourneyStepCard({
             </p>
           </div>
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={isPending}
-          className="text-muted-foreground hover:text-destructive"
-          aria-label={`Delete ${step.label}`}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {!structureLocked && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isPending}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label={`Delete ${step.label}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {open && (
@@ -172,24 +177,31 @@ export function JourneyStepCard({
           </div>
 
           <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Type</Label>
-              <Select
-                value={step.step_type}
-                onValueChange={(v) => save({ stepType: v as JourneyStepType })}
-              >
-                <SelectTrigger className="h-8 w-40 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="human">Human</SelectItem>
-                  <SelectItem value="automated">Automated</SelectItem>
-                  <SelectItem value="human_approval">Human Approval</SelectItem>
-                  <SelectItem value="customer_action">Customer Action</SelectItem>
-                  <SelectItem value="system_action">System Action</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {structureLocked ? (
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">Type</Label>
+                <p className="flex h-8 items-center text-sm text-muted-foreground">{STEP_TYPE_LABELS[step.step_type]}</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">Type</Label>
+                <Select
+                  value={step.step_type}
+                  onValueChange={(v) => save({ stepType: v as JourneyStepType })}
+                >
+                  <SelectTrigger className="h-8 w-40 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="human">Human</SelectItem>
+                    <SelectItem value="automated">Automated</SelectItem>
+                    <SelectItem value="human_approval">Human Approval</SelectItem>
+                    <SelectItem value="customer_action">Customer Action</SelectItem>
+                    <SelectItem value="system_action">System Action</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <NumberField label="Clicks" value={step.clicks} onCommit={(clicks) => save({ clicks })} />
             <NumberField
               label="Manual inputs"
@@ -220,55 +232,61 @@ export function JourneyStepCard({
                 className="h-8 w-24 text-sm"
               />
             </div>
-            <label className="flex items-center gap-1.5 pb-1.5 text-xs">
-              <input
-                type="checkbox"
-                checked={step.is_built}
-                onChange={(e) => save({ isBuilt: e.target.checked })}
-                className="h-4 w-4"
-              />
-              Built today
-            </label>
+            {!structureLocked && (
+              <label className="flex items-center gap-1.5 pb-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={step.is_built}
+                  onChange={(e) => save({ isBuilt: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                Built today
+              </label>
+            )}
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Inputs (comma-separated)</Label>
-              <Input
-                defaultValue={step.inputs.join(", ")}
-                onBlur={(e) => save({ inputs: splitList(e.target.value) })}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Outputs (comma-separated)</Label>
-              <Input
-                defaultValue={step.outputs.join(", ")}
-                onBlur={(e) => save({ outputs: splitList(e.target.value) })}
-                className="h-8 text-sm"
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Automations (comma-separated)</Label>
-              <Input
-                defaultValue={step.automations.join(", ")}
-                onBlur={(e) => save({ automations: splitList(e.target.value) })}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">
-                Next step keys (comma-separated — use another step&apos;s key)
-              </Label>
-              <Input
-                defaultValue={step.next_steps.join(", ")}
-                onBlur={(e) => save({ nextSteps: splitList(e.target.value) })}
-                className="h-8 text-sm"
-              />
-            </div>
-          </div>
+          {!structureLocked && (
+            <>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">Inputs (comma-separated)</Label>
+                  <Input
+                    defaultValue={step.inputs.join(", ")}
+                    onBlur={(e) => save({ inputs: splitList(e.target.value) })}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">Outputs (comma-separated)</Label>
+                  <Input
+                    defaultValue={step.outputs.join(", ")}
+                    onBlur={(e) => save({ outputs: splitList(e.target.value) })}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">Automations (comma-separated)</Label>
+                  <Input
+                    defaultValue={step.automations.join(", ")}
+                    onBlur={(e) => save({ automations: splitList(e.target.value) })}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">
+                    Next step keys (comma-separated — use another step&apos;s key)
+                  </Label>
+                  <Input
+                    defaultValue={step.next_steps.join(", ")}
+                    onBlur={(e) => save({ nextSteps: splitList(e.target.value) })}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Notes</Label>

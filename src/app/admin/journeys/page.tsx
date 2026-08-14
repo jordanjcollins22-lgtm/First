@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
 import { listJourneys, listJourneySteps } from "@/lib/data/journeys";
+import { syncCodeManagedJourneys } from "@/lib/journeys/sync";
+import { CODE_MANAGED_ROLE_KEYS } from "@/lib/journeys/definitions";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { JourneyDashboard } from "@/components/journeys/journey-dashboard";
 
@@ -21,6 +23,9 @@ export default async function JourneysPage() {
   let journeys: Awaited<ReturnType<typeof listJourneys>> = [];
   let migrationMissing = false;
   try {
+    // Evaluator/Client are code-defined — this brings the DB back in line
+    // with the app every time an admin opens the dashboard, before reading.
+    await syncCodeManagedJourneys();
     journeys = await listJourneys();
   } catch {
     migrationMissing = true;
@@ -52,7 +57,11 @@ export default async function JourneysPage() {
         How every role moves through Celerity, step by step — where the clicks go, what&apos;s automated
         already, and what still needs a human.
       </p>
-      <JourneyDashboard journeys={journeys} stepsByJourney={stepsByJourney} />
+      <JourneyDashboard
+        journeys={journeys}
+        stepsByJourney={stepsByJourney}
+        codeManagedRoleKeys={Array.from(CODE_MANAGED_ROLE_KEYS)}
+      />
     </div>
   );
 }
