@@ -34,7 +34,10 @@ export function materialsCostPerSqFt(
   return total;
 }
 
-/** Minutes to do one sq ft, turned into a labor cost using the business's blended crew $/hour. */
-export function laborCostPerSqFt(minutesPerSqft: number, crewCostPerHour: number): number {
-  return (minutesPerSqft / 60) * crewCostPerHour;
+/**
+ * Labor cost for one sq ft. Minutes-per-sq-ft is wall-clock time, so a crew
+ * of 3 burns 3x that in paid crew-hours — hence the crewSize multiplier.
+ */
+export function laborCostPerSqFt(minutesPerSqft: number, crewCostPerHour: number, crewSize = 1): number {
+  return (minutesPerSqft / 60) * crewCostPerHour * crewSize;
 }

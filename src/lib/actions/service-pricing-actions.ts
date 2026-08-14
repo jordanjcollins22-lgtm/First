@@ -55,12 +55,19 @@ export async function updateServiceHowTo(serviceTypeId: string, howTo: string | 
   revalidatePath("/canvas");
 }
 
-/** How long one sq ft of this service takes — the labor half of the COGS calculator. */
-export async function updateServiceMinutesPerSqft(serviceTypeId: string, minutesPerSqft: number | null) {
+/**
+ * How long one sq ft takes and how many people work it — together the labor
+ * half of the COGS calculator (minutes x crew size = paid crew-minutes).
+ */
+export async function updateServiceLabor(
+  serviceTypeId: string,
+  minutesPerSqft: number | null,
+  crewSize: number
+) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("services")
-    .update({ minutes_per_sqft: minutesPerSqft })
+    .update({ minutes_per_sqft: minutesPerSqft, crew_size: Math.max(1, Math.round(crewSize)) })
     .eq("service_type_id", serviceTypeId);
   if (error) throw error;
 

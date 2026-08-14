@@ -336,6 +336,7 @@ export interface Database {
           cost_unit: string;
           estimated_hours: number | null;
           minutes_per_sqft: number | null;
+          crew_size: number;
           how_to: string | null;
           updated_at: string;
         };

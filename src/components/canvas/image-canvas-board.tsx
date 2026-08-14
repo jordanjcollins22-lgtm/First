@@ -752,7 +752,8 @@ function computeJobTotals(
       if (!isPerSqFt && pricing.cost_unit.trim().toLowerCase() !== "flat rate") hasNonFlatRate = true;
     }
     if (isPerSqFt && pricing.minutes_per_sqft != null) {
-      totalHours += (pricing.minutes_per_sqft / 60) * areaSqFt;
+      // Crew-hours, not clock-hours — a 3-person crew burns 3x the paid time.
+      totalHours += (pricing.minutes_per_sqft / 60) * areaSqFt * (pricing.crew_size ?? 1);
     } else if (pricing.estimated_hours != null) {
       totalHours += pricing.estimated_hours;
     }
@@ -780,7 +781,7 @@ function renderJobPlanPages(
   if (totals.totalCost > 0) {
     totalsParts.push(`Est. cost: $${totals.totalCost.toFixed(2)}${totals.hasNonFlatRate ? " (includes per-unit rates — verify)" : ""}`);
   }
-  if (totals.totalHours > 0) totalsParts.push(`Est. time: ${totals.totalHours} hrs`);
+  if (totals.totalHours > 0) totalsParts.push(`Est. time: ${totals.totalHours.toFixed(1)} crew hrs`);
 
   const headerLines: JobPlanLine[] = [
     { text: "Job Plan", font: "700 28px sans-serif", color: "#111827", indent: 0 },

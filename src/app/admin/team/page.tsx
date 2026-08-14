@@ -57,6 +57,16 @@ export default async function TeamServicesPage() {
   const isAdmin = currentProfile?.roles.includes("admin") ?? false;
   const emailByProfileId = new Map(profiles.map((p) => [p.id, p.email]));
 
+  // Grouped by role, in the roles table's own order. Someone holding several
+  // roles shows under each one; anybody with none lands in "No role yet".
+  const groups: { role: string; members: Profile[] }[] = roles
+    .map((r) => ({ role: r.name, members: profiles.filter((p) => p.roles.includes(r.name)) }))
+    .filter((g) => g.members.length > 0);
+  const unassigned = profiles.filter((p) => p.roles.length === 0);
+  if (unassigned.length > 0) groups.push({ role: "No role yet", members: unassigned });
+
+  const teamColumnCount = 2 + (isAdmin ? 1 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
+
   let services: Awaited<ReturnType<typeof listServicePricing>> = [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   let materialRules: ServiceMaterialRule[] = [];
@@ -153,13 +163,24 @@ export default async function TeamServicesPage() {
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="p-2 font-medium">Email</th>
                       <th className="p-2 font-medium">Role</th>
-                      {isAdmin && <th className="p-2 font-medium">Pay / hour</th>}
+                      {isAdmin && <th className="p-2 font-medium">Pay</th>}
                       {isAdmin && isSupabaseAdminConfigured && <th className="p-2 font-medium">Password</th>}
                     </tr>
                   </thead>
-                  <tbody>
-                    {profiles.map((profile) => (
-                      <tr key={profile.id} className="border-b border-border align-middle">
+                  {groups.map((group) => (
+                  <tbody key={group.role}>
+                    <tr className="border-b border-border bg-muted/40">
+                      <td colSpan={teamColumnCount} className="px-2 py-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide capitalize">
+                          {group.role}
+                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {group.members.length} {group.members.length === 1 ? "person" : "people"}
+                        </span>
+                      </td>
+                    </tr>
+                    {group.members.map((profile) => (
+                      <tr key={`${group.role}-${profile.id}`} className="border-b border-border align-middle">
                         <td className="p-2">
                           <p className="font-medium">{profile.full_name || profile.email}</p>
                           {profile.full_name && <p className="text-xs text-muted-foreground">{profile.email}</p>}
@@ -198,6 +219,7 @@ export default async function TeamServicesPage() {
                       </tr>
                     ))}
                   </tbody>
+                  ))}
                 </table>
               </div>
               {profiles.length === 0 && <p className="p-4 text-sm text-muted-foreground">No accounts yet.</p>}
@@ -279,6 +301,7 @@ export default async function TeamServicesPage() {
                     initialCostUnit={s.cost_unit}
                     initialEstimatedHours={s.estimated_hours}
                     initialMinutesPerSqft={s.minutes_per_sqft}
+                    initialCrewSize={s.crew_size ?? 1}
                     initialHowTo={s.how_to}
                     materials={materials}
                     materialRules={materialRules}

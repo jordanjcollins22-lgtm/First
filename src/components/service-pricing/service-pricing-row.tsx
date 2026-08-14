@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   updateServicePricing,
   updateServiceCogs,
-  updateServiceMinutesPerSqft,
+  updateServiceLabor,
   updateServiceHowTo,
 } from "@/lib/actions/service-pricing-actions";
 import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/material-actions";
@@ -27,6 +27,7 @@ interface ServicePricingRowProps {
   initialCostUnit: string;
   initialEstimatedHours: number | null;
   initialMinutesPerSqft: number | null;
+  initialCrewSize: number;
   initialHowTo: string | null;
   materials: Material[];
   materialRules: ServiceMaterialRule[];
@@ -43,6 +44,7 @@ export function ServicePricingRow({
   initialCostUnit,
   initialEstimatedHours,
   initialMinutesPerSqft,
+  initialCrewSize,
   initialHowTo,
   materials,
   materialRules,
@@ -55,6 +57,7 @@ export function ServicePricingRow({
   const [costUnit, setCostUnit] = useState(initialCostUnit);
   const [hours, setHours] = useState(initialEstimatedHours?.toString() ?? "");
   const [minutesPerSqft, setMinutesPerSqft] = useState(initialMinutesPerSqft?.toString() ?? "");
+  const [crewSize, setCrewSize] = useState(initialCrewSize.toString());
   const [howTo, setHowTo] = useState(initialHowTo ?? "");
   const [showCalculator, setShowCalculator] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
@@ -86,7 +89,9 @@ export function ServicePricingRow({
       : [];
   const materialsPerSqFt = materialsCostPerSqFt(serviceTypeId, materialRules, materials);
   const minutesValue = minutesPerSqft.trim() ? Number(minutesPerSqft) : 0;
-  const laborPerSqFt = crewCostPerHour != null ? laborCostPerSqFt(minutesValue, crewCostPerHour) : 0;
+  const crewSizeValue = Math.max(1, Math.round(Number(crewSize) || 1));
+  const laborPerSqFt =
+    crewCostPerHour != null ? laborCostPerSqFt(minutesValue, crewCostPerHour, crewSizeValue) : 0;
   const calculatedCogsPerSqFt = materialsPerSqFt + laborPerSqFt;
 
   function saveCogs(nextCogs: string, unit?: string) {
@@ -111,7 +116,7 @@ export function ServicePricingRow({
     const rounded = Math.round(calculatedCogsPerSqFt * 100) / 100;
     setCogs(rounded.toString());
     saveCogs(rounded.toString(), "per sq ft");
-    startTransition(() => updateServiceMinutesPerSqft(serviceTypeId, minutesValue || null));
+    startTransition(() => updateServiceLabor(serviceTypeId, minutesValue || null, crewSizeValue));
   }
 
   function handleAddMaterial(materialId: string) {
@@ -321,16 +326,37 @@ export function ServicePricingRow({
                 className="h-9 w-24 text-sm"
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">Crew size</Label>
+              <Input
+                type="number"
+                step="1"
+                min={1}
+                placeholder="1"
+                value={crewSize}
+                onChange={(e) => setCrewSize(e.target.value)}
+                className="h-9 w-20 text-sm"
+              />
+            </div>
             {crewCostPerHour == null && (
               <p className="text-xs text-destructive">
-                Set your crew cost per hour above first — labor cost can&apos;t be calculated without it.
+                Set hourly pay for your crew on the Team side first — labor cost can&apos;t be calculated
+                without it.
               </p>
             )}
           </div>
 
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
             <span>Materials: ${materialsPerSqFt.toFixed(2)}/sq ft</span>
-            <span>Labor: ${laborPerSqFt.toFixed(2)}/sq ft</span>
+            <span>
+              Labor: ${laborPerSqFt.toFixed(2)}/sq ft
+              {crewCostPerHour != null && minutesValue > 0 && (
+                <span className="ml-1">
+                  ({minutesValue} min × {crewSizeValue} {crewSizeValue === 1 ? "person" : "people"} ={" "}
+                  {(minutesValue * crewSizeValue).toFixed(1)} crew-min @ ${crewCostPerHour.toFixed(2)}/hr)
+                </span>
+              )}
+            </span>
             <span className="font-medium text-foreground">COGS: ${calculatedCogsPerSqFt.toFixed(2)}/sq ft</span>
           </div>
 
