@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getViewAsProfileId } from "@/lib/impersonation";
 import type { CustomRole, Profile } from "@/types/domain";
 
 export async function listRoles(): Promise<CustomRole[]> {
@@ -32,20 +33,46 @@ export async function listProfiles(): Promise<Profile[]> {
   return (profiles ?? []).map((p) => ({ ...p, roles: rolesByProfile.get(p.id) ?? [] })) as unknown as Profile[];
 }
 
-export async function getCurrentProfile(): Promise<Profile | null> {
+async function fetchProfileById(id: string): Promise<Profile | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
   const [{ data: profile, error: profileError }, { data: profileRoles, error: rolesError }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    supabase.from("profile_roles").select("role_name").eq("profile_id", user.id),
+    supabase.from("profiles").select("*").eq("id", id).maybeSingle(),
+    supabase.from("profile_roles").select("role_name").eq("profile_id", id),
   ]);
   if (profileError) throw profileError;
   if (!profile) return null;
   if (rolesError) throw rolesError;
 
   return { ...profile, roles: (profileRoles ?? []).map((r) => r.role_name) } as unknown as Profile;
+}
+
+/** The actually-signed-in account, ignoring any "view as" switch — use this for
+ * anything auth-sensitive (granting/revoking the switch itself, audit trails). */
+export async function getRealProfile(): Promise<Profile | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  return fetchProfileById(user.id);
+}
+
+/**
+ * The profile the app should behave as. Normally the signed-in account, but
+ * if an admin has switched into another team member's account (see
+ * lib/actions/impersonation-actions.ts), everything reads/writes as that
+ * person instead — same tabs, same "my evaluations", same everything —
+ * until they switch back. Only ever swaps for admins, and only within their
+ * own organization, checked fresh on every call.
+ */
+export async function getCurrentProfile(): Promise<Profile | null> {
+  const real = await getRealProfile();
+  if (!real || !real.roles.includes("admin")) return real;
+
+  const viewAsId = await getViewAsProfileId();
+  if (!viewAsId || viewAsId === real.id) return real;
+
+  const target = await fetchProfileById(viewAsId);
+  if (!target || target.organization_id !== real.organization_id) return real;
+  return target;
 }

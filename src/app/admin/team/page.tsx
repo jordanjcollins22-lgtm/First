@@ -20,6 +20,7 @@ import { CreateServiceTypeForm } from "@/components/service-pricing/create-servi
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
 import { PayRateInput } from "@/components/team/pay-rate-input";
 import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
+import { startImpersonation } from "@/lib/actions/impersonation-actions";
 import type {
   CustomRole,
   MeasurementBasis,
@@ -73,7 +74,7 @@ export default async function TeamServicesPage() {
   const unassigned = profiles.filter((p) => p.roles.length === 0);
   if (unassigned.length > 0) groups.push({ role: "No role yet", members: unassigned });
 
-  const teamColumnCount = 2 + (isAdmin ? 1 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
+  const teamColumnCount = 2 + (isAdmin ? 2 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
 
   let services: Awaited<ReturnType<typeof listServicePricing>> = [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
@@ -180,6 +181,7 @@ export default async function TeamServicesPage() {
                       <th className="p-2 font-medium">Role</th>
                       {isAdmin && <th className="p-2 font-medium">Pay</th>}
                       {isAdmin && isSupabaseAdminConfigured && <th className="p-2 font-medium">Password</th>}
+                      {isAdmin && <th className="p-2 font-medium">Account</th>}
                     </tr>
                   </thead>
                   {groups.map((group) => (
@@ -229,6 +231,17 @@ export default async function TeamServicesPage() {
                         {isAdmin && isSupabaseAdminConfigured && (
                           <td className="p-2">
                             <ResetPasswordControl profileId={profile.id} />
+                          </td>
+                        )}
+                        {isAdmin && (
+                          <td className="p-2">
+                            {profile.id !== currentProfile?.id && (
+                              <form action={startImpersonation.bind(null, profile.id)}>
+                                <button type="submit" className="text-xs text-primary underline-offset-2 hover:underline">
+                                  View as
+                                </button>
+                              </form>
+                            )}
                           </td>
                         )}
                       </tr>

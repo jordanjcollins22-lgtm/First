@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -32,6 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   let userEmail: string | null = null;
   let roles: string[] = [];
   let allowedTabs: string[] = [];
+  let impersonatingName: string | null = null;
   if (isSupabaseConfigured) {
     const supabase = await createClient();
     const {
@@ -39,8 +41,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     } = await supabase.auth.getUser();
     userEmail = user?.email ?? null;
     if (user) {
-      const profile = await getCurrentProfile();
+      const [profile, realProfile] = await Promise.all([getCurrentProfile(), getRealProfile()]);
       roles = profile?.roles ?? [];
+      if (profile && realProfile && profile.id !== realProfile.id) {
+        impersonatingName = profile.full_name || profile.email;
+      }
       // Not auto-granted for admins — see the note in lib/data/access.ts.
       // The Permissions nav link itself stays role-gated below, independent
       // of this list, so there's always a way back in.
@@ -58,6 +63,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <div className="absolute bottom-0 left-1/4 h-80 w-80 rounded-full bg-teal-400/25 blur-3xl" />
           <div className="absolute bottom-[-6rem] right-1/4 h-72 w-72 rounded-full bg-lime-300/25 blur-3xl" />
         </div>
+        {impersonatingName && <ImpersonationBanner name={impersonatingName} />}
         <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-bold text-primary">
