@@ -3,12 +3,19 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { generateProposal } from "@/lib/actions/proposal-actions";
 import type { EvaluationStatus } from "@/types/domain";
 
 export async function updateEvaluationStatus(jobId: string, status: EvaluationStatus) {
   const supabase = await createClient();
   const { error } = await supabase.from("jobs").update({ evaluation_status: status }).eq("id", jobId);
   if (error) throw error;
+
+  if (status === "completed") {
+    // Best-effort — an evaluation with nothing on it yet shouldn't block submission.
+    await generateProposal(jobId).catch(() => {});
+  }
+
   revalidatePath("/attractors");
   revalidatePath(`/jobs/${jobId}`);
 }

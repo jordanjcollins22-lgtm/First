@@ -368,7 +368,7 @@ export interface DayOff {
   created_at: string;
 }
 
-export type ProposalStatus = "pending" | "accepted" | "declined";
+export type ProposalStatus = "needs_approval" | "sent" | "accepted" | "declined";
 
 /** One work area as it appeared on the proposal at the moment it was generated. */
 export interface ProposalZoneSnapshot {
@@ -423,6 +423,7 @@ export interface JobProposal {
   site_image_path: string | null;
   site_image_transform: ProposalSiteImageTransform | null;
   generated_at: string;
+  approved_at: string | null;
   responded_at: string | null;
   client_response_note: string | null;
   created_at: string;

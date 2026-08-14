@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { generateProposal } from "@/lib/actions/proposal-actions";
-import type { JobProposal } from "@/types/domain";
+import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
+import type { JobProposal, ProposalZoneSnapshot } from "@/types/domain";
 
 export interface InternalZoneBreakdown {
   zoneName: string;
@@ -17,13 +19,15 @@ export interface InternalZoneBreakdown {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "Awaiting response",
+  needs_approval: "Needs approval",
+  sent: "Sent — awaiting response",
   accepted: "Accepted",
   declined: "Declined",
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  needs_approval: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  sent: "border-blue-400/40 bg-blue-400/10 text-blue-700",
   accepted: "border-primary/40 bg-primary/10 text-primary",
   declined: "border-destructive/40 bg-destructive/10 text-destructive",
 };
@@ -50,16 +54,51 @@ export function ProposalPanel({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftTotal, setDraftTotal] = useState("");
+  const [draftZones, setDraftZones] = useState<ProposalZoneSnapshot[]>([]);
 
   const link = proposal ? `${baseUrl}/proposal/${proposal.token}` : null;
 
   function handleGenerate() {
     setError(null);
+    setEditing(false);
     startTransition(async () => {
       try {
         await generateProposal(jobId);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't generate the proposal.");
+      }
+    });
+  }
+
+  function startEditing() {
+    if (!proposal) return;
+    setDraftTotal(String(Math.round(proposal.total_cost ?? 0)));
+    setDraftZones(proposal.scope_snapshot.map((z) => ({ ...z })));
+    setError(null);
+    setEditing(true);
+  }
+
+  function handleSaveDraft() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateProposalDraft(jobId, { totalCost: Number(draftTotal) || 0, scopeSnapshot: draftZones });
+        setEditing(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't save those changes.");
+      }
+    });
+  }
+
+  function handleApprove() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await approveProposal(jobId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't approve the proposal.");
       }
     });
   }
@@ -83,9 +122,15 @@ export function ProposalPanel({
           )}
         </div>
         <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={handleGenerate}>
-          {proposal ? "Regenerate" : "Generate Proposal"}
+          {proposal ? "Regenerate from site map" : "Generate now"}
         </Button>
       </div>
+
+      {!proposal && (
+        <p className="text-xs text-muted-foreground">
+          A proposal will be generated automatically once the evaluation is submitted.
+        </p>
+      )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -104,22 +149,75 @@ export function ProposalPanel({
             </p>
           )}
 
-          <div className="flex items-center justify-between border-t border-border pt-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Client sees one total</p>
-              <p className="text-lg font-semibold">${Math.round(serviceCost + materialsCost).toLocaleString()}</p>
+          {editing ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Total the client sees</label>
+                <Input
+                  type="number"
+                  value={draftTotal}
+                  onChange={(e) => setDraftTotal(e.target.value)}
+                  className="h-9 w-32 text-sm"
+                />
+              </div>
+              {draftZones.map((zone, i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {zone.zoneName} — {zone.serviceLabel}
+                  </label>
+                  <Textarea
+                    value={zone.scopeText}
+                    onChange={(e) =>
+                      setDraftZones((prev) => prev.map((z, j) => (j === i ? { ...z, scopeText: e.target.value } : z)))
+                    }
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={isPending}>
+                  Cancel
+                </Button>
+                <Button type="button" size="sm" onClick={handleSaveDraft} disabled={isPending}>
+                  Save changes
+                </Button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowBreakdown((v) => !v)}
-              className="flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              Internal breakdown
-              {showBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between border-t border-border pt-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Client sees one total</p>
+                <p className="text-lg font-semibold">${Math.round(proposal.total_cost ?? 0).toLocaleString()}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBreakdown((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  Internal breakdown
+                  {showBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
+          )}
 
-          {showBreakdown && (
+          {proposal.status === "needs_approval" && !editing && (
+            <Button type="button" className="self-start" disabled={isPending} onClick={handleApprove}>
+              Approve &amp; send to client
+            </Button>
+          )}
+
+          {showBreakdown && !editing && (
             <div className="flex flex-col gap-3 rounded-lg border border-dashed border-border p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Internal only — the client never sees this

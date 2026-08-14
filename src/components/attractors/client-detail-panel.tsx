@@ -30,13 +30,15 @@ const JOB_STATUS_LABEL: Record<string, string> = {
 };
 
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
-  pending: "Proposal sent",
+  needs_approval: "Needs approval",
+  sent: "Proposal sent",
   accepted: "Proposal accepted",
   declined: "Proposal declined",
 };
 
 const PROPOSAL_STATUS_STYLE: Record<string, string> = {
-  pending: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  needs_approval: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  sent: "border-blue-400/40 bg-blue-400/10 text-blue-700",
   accepted: "border-primary/40 bg-primary/10 text-primary",
   declined: "border-destructive/40 bg-destructive/10 text-destructive",
 };

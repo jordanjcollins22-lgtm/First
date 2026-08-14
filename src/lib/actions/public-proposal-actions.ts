@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -19,7 +21,8 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     .maybeSingle();
   if (error) throw error;
   if (!proposal) throw new Error("This proposal link isn't valid.");
-  if (proposal.status !== "pending") throw new Error("This proposal has already been responded to.");
+  if (proposal.status === "needs_approval") throw new Error("This proposal isn't ready yet — check back soon.");
+  if (proposal.status !== "sent") throw new Error("This proposal has already been responded to.");
 
   const { error: updateError } = await admin
     .from("job_proposals")
@@ -35,4 +38,7 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     const { error: jobError } = await admin.from("jobs").update({ status: "approved" }).eq("id", proposal.job_id);
     if (jobError) throw jobError;
   }
+
+  revalidatePath(`/jobs/${proposal.job_id}`);
+  revalidatePath("/proposals");
 }

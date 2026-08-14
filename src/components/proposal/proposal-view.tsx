@@ -41,6 +41,15 @@ export function ProposalView({ data, token, messages }: { data: PublicProposal; 
     });
   }
 
+  if (status === "needs_approval") {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center gap-2 px-4 py-16 text-center">
+        <p className="text-lg font-semibold">Your proposal is being finalized.</p>
+        <p className="text-sm text-muted-foreground">Check back soon, or reach out if you have questions.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
@@ -102,7 +111,7 @@ export function ProposalView({ data, token, messages }: { data: PublicProposal; 
       </div>
 
       <div className="flex flex-col items-center gap-3">
-        {status === "pending" ? (
+        {status === "sent" ? (
           <>
             {!showDeclineForm ? (
               <div className="flex w-full gap-3">

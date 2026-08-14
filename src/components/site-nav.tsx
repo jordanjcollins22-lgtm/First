@@ -64,6 +64,12 @@ export function SiteNav({
       )}
 
       {showProjectData && (
+        <Link href="/proposals" className="hover:text-primary">
+          Proposals
+        </Link>
+      )}
+
+      {showProjectData && (
         <Link href="/conversations" className="hover:text-primary">
           Conversations
         </Link>
