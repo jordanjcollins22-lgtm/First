@@ -155,6 +155,7 @@ export interface Profile {
   full_name: string | null;
   roles: Role[];
   organization_id: string;
+  pay_rate_per_hour: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -82,6 +82,22 @@ export async function createTeamMember(formData: FormData) {
   revalidatePath("/admin/team");
 }
 
+/** Feeds the blended crew cost per hour used by the service COGS calculator. */
+export async function updateProfilePayRate(profileId: string, payRatePerHour: number | null) {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    throw new Error("Only admins can set pay.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ pay_rate_per_hour: payRatePerHour })
+    .eq("id", profileId);
+  if (error) throw error;
+  revalidatePath("/admin/team");
+}
+
 export async function setTeamMemberPassword(profileId: string, password: string) {
   const caller = await getCurrentProfile();
   if (!caller?.roles.includes("admin")) {

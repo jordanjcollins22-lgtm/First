@@ -18,7 +18,7 @@ import { TeamServicesToggle } from "@/components/team/team-services-toggle";
 import { ServicePricingRow } from "@/components/service-pricing/service-pricing-row";
 import { CreateServiceTypeForm } from "@/components/service-pricing/create-service-type-form";
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
-import { CrewCostSetting } from "@/components/service-pricing/crew-cost-setting";
+import { PayRateInput } from "@/components/team/pay-rate-input";
 import type { CustomRole, Profile, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
 
 export default async function TeamServicesPage() {
@@ -78,7 +78,14 @@ export default async function TeamServicesPage() {
     tools = toolsRes;
     materialRules = (rulesRes.data ?? []) as unknown as ServiceMaterialRule[];
     serviceTools = (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[];
-    crewCostPerHour = orgRes.crew_cost_per_hour;
+
+    // Blended crew cost = average of the team's set pay rates; the org-level
+    // manual rate only fills in until pay has been entered on the Team side.
+    const payRates = profiles.map((p) => p.pay_rate_per_hour).filter((r): r is number => r != null);
+    crewCostPerHour =
+      payRates.length > 0
+        ? Math.round((payRates.reduce((sum, r) => sum + r, 0) / payRates.length) * 100) / 100
+        : orgRes.crew_cost_per_hour;
   }
   const activeServices = services.filter((s) => s.status === "active");
   const pendingServices = services.filter((s) => s.status === "pending");
@@ -142,6 +149,7 @@ export default async function TeamServicesPage() {
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="p-2 font-medium">Email</th>
                       <th className="p-2 font-medium">Role</th>
+                      {isAdmin && <th className="p-2 font-medium">Pay / hour</th>}
                       {isAdmin && isSupabaseAdminConfigured && <th className="p-2 font-medium">Password</th>}
                     </tr>
                   </thead>
@@ -164,6 +172,11 @@ export default async function TeamServicesPage() {
                             <span className="capitalize">{profile.roles.join(", ") || "—"}</span>
                           )}
                         </td>
+                        {isAdmin && (
+                          <td className="p-2">
+                            <PayRateInput profileId={profile.id} initialRate={profile.pay_rate_per_hour} />
+                          </td>
+                        )}
                         {isAdmin && isSupabaseAdminConfigured && (
                           <td className="p-2">
                             <ResetPasswordControl profileId={profile.id} />
@@ -192,7 +205,22 @@ export default async function TeamServicesPage() {
               mid-quote — it shows up below as Pending until you price it or decline it.
             </p>
 
-            <CrewCostSetting initialRate={crewCostPerHour} />
+            <div className="mb-6 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              {crewCostPerHour != null ? (
+                <p>
+                  Crew cost per hour: <span className="font-semibold">${crewCostPerHour.toFixed(2)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {" "}
+                    — the average of the pay rates set on the Team side. Update pay there and this follows.
+                  </span>
+                </p>
+              ) : (
+                <p className="text-xs text-destructive">
+                  No crew cost per hour yet — set each person&apos;s Pay / hour on the Team side so labor cost can
+                  be calculated.
+                </p>
+              )}
+            </div>
 
             <Card className="mb-6">
               <CardHeader>
