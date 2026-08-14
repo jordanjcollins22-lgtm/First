@@ -29,6 +29,7 @@ export function SiteNav({
       : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
+    ...(roles.includes("admin") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
     ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
       ? [{ href: "/admin/organizations", label: "Organizations" }]
       : []),

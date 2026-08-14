@@ -290,3 +290,47 @@ export interface CanvasDesignRow {
   created_at: string;
   updated_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Journey Dashboard — admin-only map of how each role (or the client) moves
+// through the system. Steps are data so new roles/branches can be added
+// without touching code; see supabase/migrations/0047_journey_dashboard.sql.
+// ---------------------------------------------------------------------------
+
+export type JourneyStepType = "human" | "automated" | "human_approval" | "customer_action" | "system_action";
+
+export interface Journey {
+  id: string;
+  organization_id: string;
+  role_key: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JourneyStep {
+  id: string;
+  journey_id: string;
+  step_key: string;
+  order_index: number;
+  label: string;
+  step_type: JourneyStepType;
+  role_label: string | null;
+  inputs: string[];
+  outputs: string[];
+  automations: string[];
+  next_steps: string[];
+  clicks: number;
+  manual_inputs: number;
+  customer_comms: number;
+  internal_comms: number;
+  texts: number;
+  emails: number;
+  calls: number;
+  est_minutes: number | null;
+  is_built: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}

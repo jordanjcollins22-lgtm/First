@@ -520,6 +520,72 @@ export interface Database {
           },
         ];
       };
+      journeys: {
+        Row: {
+          id: string;
+          organization_id: string;
+          role_key: string;
+          name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["journeys"]["Row"]> & {
+          organization_id: string;
+          role_key: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["journeys"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "journeys_organization_id_fkey";
+            columns: ["organization_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      journey_steps: {
+        Row: {
+          id: string;
+          journey_id: string;
+          step_key: string;
+          order_index: number;
+          label: string;
+          step_type: string;
+          role_label: string | null;
+          inputs: string[];
+          outputs: string[];
+          automations: string[];
+          next_steps: string[];
+          clicks: number;
+          manual_inputs: number;
+          customer_comms: number;
+          internal_comms: number;
+          texts: number;
+          emails: number;
+          calls: number;
+          est_minutes: number | null;
+          is_built: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["journey_steps"]["Row"]> & {
+          journey_id: string;
+          step_key: string;
+          label: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["journey_steps"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "journey_steps_journey_id_fkey";
+            columns: ["journey_id"];
+            referencedRelation: "journeys";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
