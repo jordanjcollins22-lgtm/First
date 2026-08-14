@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AssignJobSelect } from "@/components/property/assign-job-select";
+import { AssignAccountManagerSelect } from "@/components/property/assign-account-manager-select";
 import { DeletePropertyButton } from "@/components/property/delete-property-button";
 import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
 import { addPropertyForCustomer, updatePropertyAddress } from "@/lib/actions/property-actions";
@@ -134,6 +135,11 @@ export function ClientDetailPanel({
             className="h-9 text-sm"
           />
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Account manager</Label>
+        <AssignAccountManagerSelect customerId={customer.id} initialAccountManagerId={customer.account_manager_id} profiles={profiles} />
       </div>
 
       <div className="flex flex-col gap-2">

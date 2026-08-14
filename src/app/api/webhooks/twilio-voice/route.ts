@@ -19,9 +19,10 @@ function dialResponse(numbers: string[]): NextResponse {
  * Twilio's inbound-call webhook — set this URL (https://yourdomain/api/webhooks/twilio-voice)
  * as the number's "A call comes in" webhook in the Twilio console.
  *
- * Routes to the evaluator/AM assigned to the caller's most recent job if
- * their phone is on file; otherwise rings every evaluator/account manager
- * with a phone on file simultaneously (first to answer gets it).
+ * Routes to the caller's assigned account manager first (set per-client on
+ * Project Data -> Clients), then the evaluator assigned to their most
+ * recent job, then rings every evaluator/account manager with a phone on
+ * file simultaneously (first to answer gets it).
  */
 export async function POST(request: NextRequest) {
   if (!isTwilioConfigured) {
@@ -50,16 +51,17 @@ export async function POST(request: NextRequest) {
   const from = params.From ?? "";
   const admin = createAdminClient();
 
-  let assignedProfileId: string | null = null;
+  let routeProfileIds: (string | null)[] = [];
   if (from) {
     const senderDigits = last10Digits(from);
     const { data: customers } = await admin
       .from("customers")
-      .select("id, name, phone, organization_id")
+      .select("id, name, phone, organization_id, account_manager_id")
       .not("phone", "is", null);
     const customer = (customers ?? []).find((c) => c.phone && last10Digits(c.phone) === senderDigits);
 
     if (customer) {
+      let assignedEvaluatorId: string | null = null;
       const { data: properties } = await admin.from("properties").select("id").eq("customer_id", customer.id);
       const propertyIds = (properties ?? []).map((p) => p.id);
       if (propertyIds.length > 0) {
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
           .order("created_at", { ascending: false })
           .limit(1);
         const job = jobs?.[0];
-        assignedProfileId = job?.assigned_to ?? null;
+        assignedEvaluatorId = job?.assigned_to ?? null;
 
         if (job) {
           await admin.from("job_messages").insert({
@@ -83,12 +85,16 @@ export async function POST(request: NextRequest) {
           });
         }
       }
+
+      // Account manager first, evaluator as the fallback if there isn't one.
+      routeProfileIds = [customer.account_manager_id, assignedEvaluatorId];
     }
   }
 
-  if (assignedProfileId) {
-    const { data: assignedProfile } = await admin.from("profiles").select("phone").eq("id", assignedProfileId).maybeSingle();
-    const e164 = assignedProfile?.phone ? toE164(assignedProfile.phone) : null;
+  for (const profileId of routeProfileIds) {
+    if (!profileId) continue;
+    const { data: routedProfile } = await admin.from("profiles").select("phone").eq("id", profileId).maybeSingle();
+    const e164 = routedProfile?.phone ? toE164(routedProfile.phone) : null;
     if (e164) return dialResponse([e164]);
   }
 
