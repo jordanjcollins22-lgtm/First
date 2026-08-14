@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NewPropertyForm } from "@/components/property/new-property-form";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { EvaluationCalendar } from "@/components/evaluations/evaluation-calendar";
 import { checkTabAccess } from "@/lib/data/access";
+import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
 
 export default async function Home() {
@@ -13,6 +15,28 @@ export default async function Home() {
   const { allowed, profile } = await checkTabAccess("new-property");
 
   if (profile && !allowed) {
+    const { allowed: canSeeEvaluations } = await checkTabAccess("evaluations");
+    if (canSeeEvaluations) {
+      const schedule = await getMyScheduleData();
+      if (schedule) {
+        return (
+          <div className="mx-auto max-w-2xl px-4 py-8">
+            <h1 className="mb-1 text-2xl font-bold">Your Schedule</h1>
+            <p className="mb-6 text-muted-foreground">Your evaluations and availability, at a glance.</p>
+            <EvaluationCalendar
+              jobs={schedule.relevantJobs}
+              currentProfileId={schedule.profile.id}
+              evaluatorNamesById={schedule.evaluatorNamesById}
+              allWeeklyAvailability={schedule.allWeeklyAvailability}
+              allDaysOff={schedule.allDaysOff}
+              rangeStart={schedule.rangeStart}
+              rangeEnd={schedule.rangeEnd}
+            />
+          </div>
+        );
+      }
+    }
+
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-10">
         <h1 className="text-2xl font-bold">New Property Estimate</h1>
