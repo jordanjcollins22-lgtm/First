@@ -22,6 +22,48 @@ interface TeamMember {
   name: string;
 }
 
+/** Browsers disagree on what MediaRecorder produces — Chrome and Firefox do
+ * webm/opus, Safari (including iOS) does mp4. Recording in one container and
+ * naming the file as another leaves it served under the wrong content type,
+ * which is why a memo could upload fine and then refuse to play. */
+function pickAudioFormat(): { mimeType: string; extension: string } | null {
+  const candidates: { mimeType: string; extension: string }[] = [
+    { mimeType: "audio/webm;codecs=opus", extension: "webm" },
+    { mimeType: "audio/webm", extension: "webm" },
+    { mimeType: "audio/mp4", extension: "m4a" },
+    { mimeType: "audio/mpeg", extension: "mp3" },
+  ];
+  if (typeof MediaRecorder === "undefined") return null;
+  return candidates.find((c) => MediaRecorder.isTypeSupported(c.mimeType)) ?? null;
+}
+
+/** Bars that follow the mic so it's obvious sound is actually going in. */
+function LevelMeter({ level }: { level: number }) {
+  const bars = 12;
+  return (
+    <div className="flex h-6 items-end gap-0.5">
+      {Array.from({ length: bars }, (_, i) => {
+        // Middle bars react most, so it reads like a meter rather than a row.
+        const weight = 1 - Math.abs(i - (bars - 1) / 2) / bars;
+        const height = Math.max(0.15, Math.min(1, level * (0.5 + weight * 1.5)));
+        return (
+          <span
+            key={i}
+            style={{ height: `${height * 100}%` }}
+            className="w-1 rounded-full bg-destructive transition-[height] duration-75"
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -36,11 +78,15 @@ export function TeamChannelThread({
   messages: initialMessages,
   currentProfileId,
   teamMembers,
+  transcriptionEnabled = false,
 }: {
   channel: TeamChannelWithMembers;
   messages: TeamMessage[];
   currentProfileId: string;
   teamMembers: TeamMember[];
+  /** Without it a memo still records and plays — it just isn't transcribed,
+   * so the thread shouldn't claim one is on the way. */
+  transcriptionEnabled?: boolean;
 }) {
   // Messages that landed since this page was rendered — from Realtime, or
   // from this person's own send. Kept separate from the server's list and
@@ -69,7 +115,10 @@ export function TeamChannelThread({
   const [pendingFile, setPendingFile] = useState<{ file: File; kind: AttachmentKind } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [level, setLevel] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const meterCleanupRef = useRef<(() => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [memberIds, setMemberIds] = useState<string[]>(channel.memberIds);
@@ -162,7 +211,9 @@ export function TeamChannelThread({
     const supabase = createClient();
     const extension = file.name.split(".").pop() || (kind === "audio" ? "webm" : "bin");
     const path = `${channel.id}/${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await supabase.storage.from("message-attachments").upload(path, file);
+    const { error: uploadError } = await supabase.storage
+      .from("message-attachments")
+      .upload(path, file, { contentType: file.type || undefined });
     if (uploadError) {
       setError("Couldn't upload that — check your connection and try again.");
       return null;
@@ -197,7 +248,7 @@ export function TeamChannelThread({
 
       // Transcribe after the memo is already in the thread, then swap the
       // message for the transcribed copy. A failure leaves a playable memo.
-      if (attachment?.kind === "audio") {
+      if (attachment?.kind === "audio" && transcriptionEnabled) {
         const transcribed = await transcribeVoiceMemo(result.message.id);
         if (transcribed.ok) {
           setLiveMessages((prev) =>
@@ -210,17 +261,61 @@ export function TeamChannelThread({
 
   async function startRecording() {
     setError(null);
+    const format = pickAudioFormat();
+    if (!format) {
+      setError("This browser can't record audio — try Chrome or Safari.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, { mimeType: format.mimeType });
       const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => chunks.push(e.data);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
-        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-        const file = new File([blob], `voice-memo-${Date.now()}.webm`, { type: blob.type });
+        // Name and type both follow the container actually recorded.
+        const blob = new Blob(chunks, { type: format.mimeType });
+        const file = new File([blob], `voice-memo-${Date.now()}.${format.extension}`, {
+          type: format.mimeType,
+        });
         setPendingFile({ file, kind: "audio" });
       };
+
+      // Live level, so it's visibly picking something up.
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      let frame = 0;
+
+      function tick() {
+        analyser.getByteTimeDomainData(data);
+        // Distance from silence (128), scaled so normal speech fills the bars.
+        let peak = 0;
+        for (const value of data) peak = Math.max(peak, Math.abs(value - 128));
+        setLevel(Math.min(1, peak / 60));
+        frame = requestAnimationFrame(tick);
+      }
+      tick();
+
+      const startedAt = Date.now();
+      const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 500);
+
+      meterCleanupRef.current = () => {
+        cancelAnimationFrame(frame);
+        clearInterval(timer);
+        source.disconnect();
+        audioContext.close().catch(() => {});
+        setLevel(0);
+        setElapsed(0);
+      };
+
       recorderRef.current = recorder;
       recorder.start();
       setRecording(true);
@@ -232,8 +327,18 @@ export function TeamChannelThread({
   function stopRecording() {
     recorderRef.current?.stop();
     recorderRef.current = null;
+    meterCleanupRef.current?.();
+    meterCleanupRef.current = null;
     setRecording(false);
   }
+
+  // Releases the mic if they navigate away mid-recording.
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop();
+      meterCleanupRef.current?.();
+    };
+  }, []);
 
   function toggleMember(profileId: string) {
     const nextIsMember = !memberIds.includes(profileId);
@@ -317,7 +422,9 @@ export function TeamChannelThread({
                 )}
               >
                 {m.body && <p className="whitespace-pre-wrap">{m.body}</p>}
-                {m.attachment_path && <MessageAttachment message={m} />}
+                {m.attachment_path && (
+                  <MessageAttachment message={m} transcriptionEnabled={transcriptionEnabled} />
+                )}
                 <p className="text-[10px] text-muted-foreground">
                   {m.author_name} · {formatTimestamp(m.created_at)}
                 </p>
@@ -329,6 +436,17 @@ export function TeamChannelThread({
         {error && <p className="text-xs text-destructive">{error}</p>}
 
         <div className="flex flex-col gap-2">
+          {recording && (
+            <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-2.5">
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-destructive" />
+              <LevelMeter level={level} />
+              <span className="text-xs tabular-nums text-muted-foreground">{formatDuration(elapsed)}</span>
+              <span className="text-xs text-muted-foreground">
+                {level > 0.08 ? "Picking you up" : "Not hearing much"}
+              </span>
+            </div>
+          )}
+
           {pendingFile && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-2">
               <p className="min-w-0 truncate text-xs">

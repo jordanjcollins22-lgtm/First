@@ -8,7 +8,13 @@ import type { TeamMessage } from "@/types/domain";
 
 /** Renders one message's attachment. The bucket is private, so the URL is
  * signed on demand — storage re-checks group membership when it's minted. */
-export function MessageAttachment({ message }: { message: TeamMessage }) {
+export function MessageAttachment({
+  message,
+  transcriptionEnabled = false,
+}: {
+  message: TeamMessage;
+  transcriptionEnabled?: boolean;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -84,7 +90,7 @@ export function MessageAttachment({ message }: { message: TeamMessage }) {
           )}
         </>
       ) : (
-        <p className="text-[10px] text-muted-foreground">Transcribing...</p>
+        transcriptionEnabled && <p className="text-[10px] text-muted-foreground">Transcribing...</p>
       )}
     </div>
   );

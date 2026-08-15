@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured, isTranscriptionConfigured } from "@/lib/env";
 import { getTeamChannel } from "@/lib/data/team-channels";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { TeamChannelThread } from "@/components/conversations/team-channel-thread";
@@ -47,6 +47,7 @@ export default async function TeamChannelPage({ params }: { params: Promise<{ ch
         messages={data.messages}
         currentProfileId={profile.id}
         teamMembers={teamMembers}
+        transcriptionEnabled={isTranscriptionConfigured}
       />
     </div>
   );
