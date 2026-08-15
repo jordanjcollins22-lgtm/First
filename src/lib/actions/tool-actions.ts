@@ -67,7 +67,13 @@ export async function createTool(formData: FormData) {
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    // Throwing the raw Postgres error object (rather than a plain Error)
+    // from a Server Action can fail to serialize back to the client at all,
+    // surfacing as an opaque React error instead of any real message.
+    if (error.code === "23505") throw new Error(`A tool named "${name}" already exists.`);
+    throw new Error(error.message || "Couldn't add that tool — try again.");
+  }
 
   revalidatePath("/admin/tools");
   revalidatePath("/canvas");
