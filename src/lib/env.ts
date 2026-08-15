@@ -23,6 +23,7 @@ export const env = {
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
   livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
   livekitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "",
+  openaiApiKey: process.env.OPENAI_API_KEY ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -42,3 +43,5 @@ export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
 export const isLivekitConfigured = Boolean(env.livekitApiKey && env.livekitApiSecret && env.livekitUrl);
+/** Transcribes voice memos. Without it a memo still records and plays, just untranscribed. */
+export const isTranscriptionConfigured = Boolean(env.openaiApiKey);

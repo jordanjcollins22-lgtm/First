@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { notifyTeamMember } from "@/lib/notifications";
-import type { TeamMessage } from "@/types/domain";
+import type { AttachmentKind, TeamMessage } from "@/types/domain";
+import { env, isTranscriptionConfigured } from "@/lib/env";
 
 export type ChannelResult = { ok: true; id?: string } | { ok: false; message: string };
 
@@ -92,13 +93,24 @@ export async function setTeamChannelMember(
   }
 }
 
-export async function postTeamMessage(channelId: string, body: string): Promise<PostMessageResult> {
+export interface MessageAttachment {
+  path: string;
+  kind: AttachmentKind;
+  name: string;
+}
+
+export async function postTeamMessage(
+  channelId: string,
+  body: string,
+  attachment?: MessageAttachment
+): Promise<PostMessageResult> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Not signed in." };
 
     const trimmed = body.trim();
-    if (!trimmed) return { ok: false, message: "Write a message first." };
+    // An attachment is a message on its own — a photo needs no caption.
+    if (!trimmed && !attachment) return { ok: false, message: "Write a message first." };
 
     const organizationId = await getCurrentOrganizationId();
     const supabase = await createClient();
@@ -109,7 +121,10 @@ export async function postTeamMessage(channelId: string, body: string): Promise<
         organization_id: organizationId,
         author_profile_id: profile.id,
         author_name: profile.full_name || profile.email,
-        body: trimmed,
+        body: trimmed || null,
+        attachment_path: attachment?.path ?? null,
+        attachment_kind: attachment?.kind ?? null,
+        attachment_name: attachment?.name ?? null,
       })
       .select()
       .single();
@@ -130,7 +145,9 @@ export async function postTeamMessage(channelId: string, body: string): Promise<
           notifyTeamMember(
             m.profile_id,
             "team_messages",
-            `${profile.full_name || profile.email} in ${channel?.name ?? "a group"}: ${trimmed.slice(0, 120)}`
+            `${profile.full_name || profile.email} in ${channel?.name ?? "a group"}: ${
+              trimmed.slice(0, 120) || `sent ${attachment?.kind === "audio" ? "a voice memo" : `a ${attachment?.kind ?? "message"}`}`
+            }`
           ).catch(() => false)
         )
     );
@@ -164,5 +181,83 @@ export async function deleteTeamChannel(channelId: string): Promise<ChannelResul
   } catch (err) {
     console.error("deleteTeamChannel failed:", err);
     return { ok: false, message: describe(err) };
+  }
+}
+
+/** A signed URL for one attachment. Storage enforces group membership on
+ * read, so a non-member's request comes back empty rather than working. */
+export async function getAttachmentUrl(path: string): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.storage
+      .from("message-attachments")
+      .createSignedUrl(path, 60 * 60);
+    if (error) return null;
+    return data?.signedUrl ?? null;
+  } catch (err) {
+    console.error("getAttachmentUrl failed:", err);
+    return null;
+  }
+}
+
+export type TranscribeResult = { ok: true; transcript: string } | { ok: false; message: string };
+
+/**
+ * Transcribes a voice memo and saves it onto the message, so it's readable
+ * without playing it. Called right after the memo is sent; the memo is
+ * already usable either way, so a failure here is reported but doesn't undo
+ * anything.
+ */
+export async function transcribeVoiceMemo(messageId: string): Promise<TranscribeResult> {
+  try {
+    if (!isTranscriptionConfigured) {
+      return { ok: false, message: "Transcription isn't set up on the server yet." };
+    }
+
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Not signed in." };
+
+    const supabase = await createClient();
+    // RLS means this only returns a message from a group they're in.
+    const { data: message } = await supabase
+      .from("team_messages")
+      .select("attachment_path, attachment_kind, attachment_name")
+      .eq("id", messageId)
+      .maybeSingle();
+    if (!message?.attachment_path || message.attachment_kind !== "audio") {
+      return { ok: false, message: "That message has no voice memo." };
+    }
+
+    const { data: file, error: downloadError } = await supabase.storage
+      .from("message-attachments")
+      .download(message.attachment_path);
+    if (downloadError || !file) return { ok: false, message: "Couldn't read that recording." };
+
+    const form = new FormData();
+    form.append("file", file, message.attachment_name || "memo.webm");
+    form.append("model", "whisper-1");
+
+    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.openaiApiKey}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error("transcribeVoiceMemo: OpenAI returned", res.status, detail);
+      return { ok: false, message: "Transcription failed — the memo is still playable." };
+    }
+
+    const json = (await res.json()) as { text?: string };
+    const transcript = (json.text ?? "").trim();
+    if (!transcript) return { ok: false, message: "Nothing was said in that recording." };
+
+    const { error } = await supabase.from("team_messages").update({ transcript }).eq("id", messageId);
+    if (error) return { ok: false, message: error.message };
+
+    return { ok: true, transcript };
+  } catch (err) {
+    console.error("transcribeVoiceMemo failed:", err);
+    return { ok: false, message: err instanceof Error ? err.message : "Transcription failed." };
   }
 }

@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Video } from "lucide-react";
+import { ImagePlus, Loader2, Mic, Square, Video, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { postTeamMessage, setTeamChannelMember } from "@/lib/actions/team-channel-actions";
+import {
+  postTeamMessage,
+  setTeamChannelMember,
+  transcribeVoiceMemo,
+  type MessageAttachment as MessageAttachmentInput,
+} from "@/lib/actions/team-channel-actions";
+import { MessageAttachment } from "@/components/conversations/message-attachment";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { TeamChannelWithMembers, TeamMessage } from "@/types/domain";
+import type { AttachmentKind, TeamChannelWithMembers, TeamMessage } from "@/types/domain";
 
 interface TeamMember {
   id: string;
@@ -60,6 +66,11 @@ export function TeamChannelThread({
     latestAtRef.current = messages.length > 0 ? messages[messages.length - 1].created_at : "";
   }, [messages]);
   const [body, setBody] = useState("");
+  const [pendingFile, setPendingFile] = useState<{ file: File; kind: AttachmentKind } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [memberIds, setMemberIds] = useState<string[]>(channel.memberIds);
   const [showMembers, setShowMembers] = useState(false);
@@ -145,11 +156,36 @@ export function TeamChannelThread({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
+  /** Uploads to the group's folder — storage checks membership against that
+   * first path segment, so the path is what enforces access. */
+  async function uploadAttachment(file: File, kind: AttachmentKind): Promise<MessageAttachmentInput | null> {
+    const supabase = createClient();
+    const extension = file.name.split(".").pop() || (kind === "audio" ? "webm" : "bin");
+    const path = `${channel.id}/${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from("message-attachments").upload(path, file);
+    if (uploadError) {
+      setError("Couldn't upload that — check your connection and try again.");
+      return null;
+    }
+    return { path, kind, name: file.name };
+  }
+
   function handleSend() {
-    if (!body.trim()) return;
+    if (!body.trim() && !pendingFile) return;
     setError(null);
+    const outgoing = pendingFile;
+
     startTransition(async () => {
-      const result = await postTeamMessage(channel.id, body);
+      let attachment: MessageAttachmentInput | undefined;
+      if (outgoing) {
+        setUploading(true);
+        const uploaded = await uploadAttachment(outgoing.file, outgoing.kind);
+        setUploading(false);
+        if (!uploaded) return;
+        attachment = uploaded;
+      }
+
+      const result = await postTeamMessage(channel.id, body, attachment);
       if (!result.ok) {
         setError(result.message);
         return;
@@ -157,7 +193,46 @@ export function TeamChannelThread({
       // Don't wait on Realtime to echo it back.
       addLiveMessage(result.message);
       setBody("");
+      setPendingFile(null);
+
+      // Transcribe after the memo is already in the thread, then swap the
+      // message for the transcribed copy. A failure leaves a playable memo.
+      if (attachment?.kind === "audio") {
+        const transcribed = await transcribeVoiceMemo(result.message.id);
+        if (transcribed.ok) {
+          setLiveMessages((prev) =>
+            prev.map((m) => (m.id === result.message.id ? { ...m, transcript: transcribed.transcript } : m))
+          );
+        }
+      }
     });
+  }
+
+  async function startRecording() {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        const file = new File([blob], `voice-memo-${Date.now()}.webm`, { type: blob.type });
+        setPendingFile({ file, kind: "audio" });
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setError("Couldn't reach your microphone — check the browser's permission.");
+    }
+  }
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
   }
 
   function toggleMember(profileId: string) {
@@ -241,7 +316,8 @@ export function TeamChannelThread({
                   m.author_profile_id === currentProfileId ? "self-end bg-primary/10" : "self-start bg-muted/40"
                 )}
               >
-                <p className="whitespace-pre-wrap">{m.body}</p>
+                {m.body && <p className="whitespace-pre-wrap">{m.body}</p>}
+                {m.attachment_path && <MessageAttachment message={m} />}
                 <p className="text-[10px] text-muted-foreground">
                   {m.author_name} · {formatTimestamp(m.created_at)}
                 </p>
@@ -253,6 +329,23 @@ export function TeamChannelThread({
         {error && <p className="text-xs text-destructive">{error}</p>}
 
         <div className="flex flex-col gap-2">
+          {pendingFile && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-2">
+              <p className="min-w-0 truncate text-xs">
+                {pendingFile.kind === "audio" ? "Voice memo ready to send" : pendingFile.file.name}
+              </p>
+              <button
+                type="button"
+                onClick={() => setPendingFile(null)}
+                disabled={isPending}
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                aria-label="Remove attachment"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -260,12 +353,72 @@ export function TeamChannelThread({
             rows={2}
             disabled={!isMember}
           />
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] text-muted-foreground">Team only — the client never sees this.</p>
-            <Button type="button" size="sm" disabled={isPending || !isMember || !body.trim()} onClick={handleSend}>
-              Send
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  setPendingFile({ file, kind: file.type.startsWith("video/") ? "video" : "image" });
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={!isMember || isPending || recording}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className="h-4 w-4" />
+                Photo or video
+              </Button>
+              {recording ? (
+                <Button type="button" size="sm" variant="destructive" onClick={stopRecording}>
+                  <Square className="h-4 w-4" />
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!isMember || isPending}
+                  onClick={startRecording}
+                >
+                  <Mic className="h-4 w-4" />
+                  Voice memo
+                </Button>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              disabled={isPending || !isMember || recording || (!body.trim() && !pendingFile)}
+              onClick={handleSend}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                "Send"
+              )}
             </Button>
           </div>
+
+          <p className="text-[10px] text-muted-foreground">
+            {recording
+              ? "Recording — press Stop when you're done."
+              : "Team only — the client never sees this. Voice memos are transcribed automatically."}
+          </p>
         </div>
       </div>
     </div>

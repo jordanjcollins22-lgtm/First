@@ -221,13 +221,22 @@ export interface TeamChannel {
   updated_at: string;
 }
 
+export type AttachmentKind = "image" | "video" | "audio";
+
 export interface TeamMessage {
   id: string;
   channel_id: string;
   organization_id: string;
   author_profile_id: string | null;
   author_name: string;
-  body: string;
+  /** Null when the message is only an attachment. */
+  body: string | null;
+  attachment_path: string | null;
+  attachment_kind: AttachmentKind | null;
+  attachment_name: string | null;
+  /** Filled in after the fact for voice memos. Null means not transcribed —
+   * either still running, or transcription isn't configured. */
+  transcript: string | null;
   created_at: string;
 }
 

@@ -283,14 +283,17 @@ export interface Database {
           organization_id: string;
           author_profile_id: string | null;
           author_name: string;
-          body: string;
+          body: string | null;
+          attachment_path: string | null;
+          attachment_kind: string | null;
+          attachment_name: string | null;
+          transcript: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["team_messages"]["Row"]> & {
           channel_id: string;
           organization_id: string;
           author_name: string;
-          body: string;
         };
         Update: Partial<Database["public"]["Tables"]["team_messages"]["Row"]>;
         Relationships: [
