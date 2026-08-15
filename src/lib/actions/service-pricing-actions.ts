@@ -6,12 +6,14 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { priceFromCogs } from "@/lib/pricing";
+import type { PricingBasis } from "@/types/domain";
 
 export async function updateServicePricing(
   serviceTypeId: string,
   cost: number | null,
   costUnit: string,
-  estimatedHours: number | null
+  estimatedHours: number | null,
+  pricingBasis?: PricingBasis
 ) {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
@@ -21,6 +23,7 @@ export async function updateServicePricing(
     cost,
     cost_unit: costUnit || "flat rate",
     estimated_hours: estimatedHours,
+    ...(pricingBasis ? { pricing_basis: pricingBasis } : {}),
   });
   if (error) throw error;
 

@@ -7,6 +7,7 @@ import { MaterialCostInput } from "./material-cost-input";
 import { MaterialQuantityInput } from "./material-quantity-input";
 import { MaterialReorderThresholdInput } from "./material-reorder-threshold-input";
 import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
+import { MaterialPackInput } from "./material-pack-input";
 import { MaterialDescriptionInput } from "./material-description-input";
 import { MaterialBuyLink } from "./material-buy-link";
 import { MaterialStorageLocationInput } from "./material-storage-location-input";
@@ -103,6 +104,14 @@ export function MaterialInventoryRow({ material, storageLocations }: MaterialInv
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Where in the shop</span>
                 <MaterialShopLocationInput materialId={material.id} initialValue={material.shop_location} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Bought as a pack of</span>
+                <MaterialPackInput
+                  materialId={material.id}
+                  initialPackSize={material.pack_size}
+                  initialPackCost={material.pack_cost}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Description</span>

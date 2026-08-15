@@ -288,6 +288,8 @@ export interface Database {
           name: string;
           unit: string;
           coverage_per_unit_sqft: number | null;
+          pack_size: number | null;
+          pack_cost: number | null;
           waste_factor_pct: number;
           cost_per_unit: number | null;
           active: boolean;
@@ -367,6 +369,7 @@ export interface Database {
           cogs: number | null;
           cost: number | null;
           cost_unit: string;
+          pricing_basis: string;
           estimated_hours: number | null;
           minutes_per_sqft: number | null;
           crew_size: number;

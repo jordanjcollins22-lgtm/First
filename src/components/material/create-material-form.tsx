@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { createMaterial } from "@/lib/actions/material-actions";
 import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
 import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
+import { derivedCostPerUnit } from "@/lib/pricing";
 
 export function CreateMaterialForm({ storageLocations }: { storageLocations: string[] }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -26,10 +27,19 @@ export function CreateMaterialForm({ storageLocations }: { storageLocations: str
   const [quantityValue, setQuantityValue] = useState("");
   const [stockMethod, setStockMethod] = useState<"in_stock" | "order_as_needed">("in_stock");
   const [storageLocation, setStorageLocation] = useState("");
+  const [packSize, setPackSize] = useState("");
+  const [packCost, setPackCost] = useState("");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // A pack price divides down to the per-unit number quoting actually uses.
+  const derivedPerUnit = derivedCostPerUnit(
+    packSize.trim() ? Number(packSize) : null,
+    packCost.trim() ? Number(packCost) : null,
+    null
+  );
 
   const locationRequired = stockMethod === "in_stock";
 
@@ -62,6 +72,8 @@ export function CreateMaterialForm({ storageLocations }: { storageLocations: str
         setQuantityValue("");
         setStockMethod("in_stock");
         setStorageLocation("");
+        setPackSize("");
+        setPackCost("");
         setFetchMessage(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -168,17 +180,52 @@ export function CreateMaterialForm({ storageLocations }: { storageLocations: str
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="material-cost">Cost / unit</Label>
+          <Label htmlFor="material-pack-size">Bought as a pack of</Label>
           <Input
-            id="material-cost"
-            name="cost_per_unit"
-            ref={costRef}
+            id="material-pack-size"
+            name="pack_size"
+            type="number"
+            step="1"
+            min={0}
+            placeholder="25"
+            value={packSize}
+            onChange={(e) => setPackSize(e.target.value)}
+            className="w-28"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="material-pack-cost">Pack cost</Label>
+          <Input
+            id="material-pack-cost"
+            name="pack_cost"
             type="number"
             step="0.01"
             min={0}
             placeholder="0.00"
+            value={packCost}
+            onChange={(e) => setPackCost(e.target.value)}
             className="w-28"
           />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="material-cost">Cost / unit</Label>
+          {derivedPerUnit != null ? (
+            <div className="flex h-11 w-28 items-center rounded-md border border-input bg-muted/50 px-3 text-base">
+              ${derivedPerUnit.toFixed(2)}
+            </div>
+          ) : (
+            <Input
+              id="material-cost"
+              name="cost_per_unit"
+              ref={costRef}
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="0.00"
+              className="w-28"
+            />
+          )}
+          {derivedPerUnit != null && <span className="text-[10px] text-muted-foreground">From the pack price</span>}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="material-quantity">On hand</Label>

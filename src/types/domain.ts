@@ -217,6 +217,10 @@ export interface Material {
   coverage_per_unit_sqft: number | null;
   waste_factor_pct: number;
   cost_per_unit: number | null;
+  /** What a purchase looks like — pack_size units for pack_cost dollars.
+   * cost_per_unit is derived from these whenever both are set. */
+  pack_size: number | null;
+  pack_cost: number | null;
   active: boolean;
   description: string | null;
   purchase_url: string | null;
@@ -263,6 +267,10 @@ export interface OverheadExpense {
   updated_at: string;
 }
 
+/** What a service's price multiplies by. "count" uses the Quantity the
+ * evaluator enters on the zone (how many bushes), "flat" charges once. */
+export type PricingBasis = "area" | "perimeter" | "count" | "flat";
+
 export interface ServicePricing {
   organization_id: string;
   service_type_id: string;
@@ -273,6 +281,7 @@ export interface ServicePricing {
   cogs: number | null;
   cost: number | null;
   cost_unit: string;
+  pricing_basis: PricingBasis;
   estimated_hours: number | null;
   minutes_per_sqft: number | null;
   crew_size: number;

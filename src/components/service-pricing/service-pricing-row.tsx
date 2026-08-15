@@ -17,7 +17,8 @@ import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/
 import { setServiceToolLink } from "@/lib/actions/tool-actions";
 import { ToolVideoLinkInput } from "./tool-video-link-input";
 import { priceFromCogs, materialsCostPerSqFt, laborCostPerSqFt } from "@/lib/pricing";
-import type { Material, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Material, PricingBasis, ServiceMaterialRule, ServiceToolLink, Tool } from "@/types/domain";
 
 interface ServicePricingRowProps {
   serviceTypeId: string;
@@ -25,6 +26,7 @@ interface ServicePricingRowProps {
   initialCogs: number | null;
   initialCost: number | null;
   initialCostUnit: string;
+  initialPricingBasis: PricingBasis;
   initialEstimatedHours: number | null;
   initialMinutesPerSqft: number | null;
   initialCrewSize: number;
@@ -43,6 +45,7 @@ export function ServicePricingRow({
   initialCogs,
   initialCost,
   initialCostUnit,
+  initialPricingBasis,
   initialEstimatedHours,
   initialMinutesPerSqft,
   initialCrewSize,
@@ -57,6 +60,7 @@ export function ServicePricingRow({
   const [cogs, setCogs] = useState(initialCogs?.toString() ?? "");
   const [cost, setCost] = useState(initialCost?.toString() ?? "");
   const [costUnit, setCostUnit] = useState(initialCostUnit);
+  const [pricingBasis, setPricingBasis] = useState<PricingBasis>(initialPricingBasis);
   const [hours, setHours] = useState(initialEstimatedHours?.toString() ?? "");
   const [minutesPerSqft, setMinutesPerSqft] = useState(initialMinutesPerSqft?.toString() ?? "");
   const [crewSize, setCrewSize] = useState(initialCrewSize.toString());
@@ -103,15 +107,32 @@ export function ServicePricingRow({
     startTransition(() => updateServiceCogs(serviceTypeId, parsed, unit));
   }
 
-  function savePricing() {
+  function savePricing(nextBasis: PricingBasis = pricingBasis, nextUnit: string = costUnit) {
     startTransition(() =>
       updateServicePricing(
         serviceTypeId,
         cost.trim() ? Number(cost) : null,
-        costUnit,
-        hours.trim() ? Number(hours) : null
+        nextUnit,
+        hours.trim() ? Number(hours) : null,
+        nextBasis
       )
     );
+  }
+
+  /** Changing what the price multiplies by also relabels it, unless the
+   * business has written its own label. */
+  function handleBasisChange(next: PricingBasis) {
+    const autoLabels: Record<PricingBasis, string> = {
+      area: `per ${measurementUnit}`,
+      perimeter: "per linear ft",
+      count: "per each",
+      flat: "flat rate",
+    };
+    const wasAuto = Object.values(autoLabels).includes(costUnit.trim());
+    const nextUnit = wasAuto || !costUnit.trim() ? autoLabels[next] : costUnit;
+    setPricingBasis(next);
+    setCostUnit(nextUnit);
+    savePricing(next, nextUnit);
   }
 
   function handleUseCalculated() {
@@ -173,19 +194,33 @@ export function ServicePricingRow({
             value={cost}
             disabled={isPending}
             onChange={(e) => setCost(e.target.value)}
-            onBlur={savePricing}
+            onBlur={() => savePricing()}
             className="h-9 w-24 text-sm"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label className="text-xs text-muted-foreground">Unit</Label>
+          <Label className="text-xs text-muted-foreground">Priced per</Label>
+          <Select value={pricingBasis} onValueChange={(v) => handleBasisChange(v as PricingBasis)} disabled={isPending}>
+            <SelectTrigger className="h-9 w-36 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="area">{measurementUnit}</SelectItem>
+              <SelectItem value="perimeter">Linear ft</SelectItem>
+              <SelectItem value="count">Each (quantity)</SelectItem>
+              <SelectItem value="flat">Flat rate</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Unit label</Label>
           <Input
             placeholder="flat rate"
             value={costUnit}
             disabled={isPending}
             onChange={(e) => setCostUnit(e.target.value)}
-            onBlur={savePricing}
-            className="h-9 w-32 text-sm"
+            onBlur={() => savePricing()}
+            className="h-9 w-28 text-sm"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -198,7 +233,7 @@ export function ServicePricingRow({
             value={hours}
             disabled={isPending}
             onChange={(e) => setHours(e.target.value)}
-            onBlur={savePricing}
+            onBlur={() => savePricing()}
             className="h-9 w-24 text-sm"
           />
         </div>

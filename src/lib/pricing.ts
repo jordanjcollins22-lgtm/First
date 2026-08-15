@@ -41,3 +41,18 @@ export function materialsCostPerSqFt(
 export function laborCostPerSqFt(minutesPerSqft: number, crewCostPerHour: number, crewSize = 1): number {
   return (minutesPerSqft / 60) * crewCostPerHour * crewSize;
 }
+
+/** Buying a 25-pack for $18 means each unit costs $0.72 — that per-unit
+ * number is what quoting multiplies by, so it's derived here rather than
+ * asked for twice. A material priced directly (bulk mulch by the yard) has
+ * no pack and keeps whatever was entered. */
+export function derivedCostPerUnit(
+  packSize: number | null,
+  packCost: number | null,
+  enteredCostPerUnit: number | null
+): number | null {
+  if (packSize != null && packCost != null && packSize > 0) {
+    return Math.round((packCost / packSize) * 10000) / 10000;
+  }
+  return enteredCostPerUnit;
+}

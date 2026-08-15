@@ -337,6 +337,7 @@ export default async function TeamServicesPage() {
                     initialCogs={s.cogs}
                     initialCost={s.cost}
                     initialCostUnit={s.cost_unit}
+                    initialPricingBasis={s.pricing_basis ?? "flat"}
                     initialEstimatedHours={s.estimated_hours}
                     initialMinutesPerSqft={s.minutes_per_sqft}
                     initialCrewSize={s.crew_size ?? 1}

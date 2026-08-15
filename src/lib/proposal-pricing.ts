@@ -10,6 +10,16 @@ export function zoneMeasurements(zone: WorkZone): { areaSqFt: number; perimeterF
   return { areaSqFt: zone.areaSqFt ?? 0, perimeterFt: zone.perimeterFt ?? 0 };
 }
 
+/** How many of the thing this zone covers, for count-priced services — the
+ * "Quantity" field those service types already ask for. A zone exists
+ * because there's at least one thing in it, so a blank counts as 1 rather
+ * than making the service free. */
+export function zoneServiceCount(zone: WorkZone): number {
+  const raw = zone.service?.values?.quantity;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export function formatMeasurements(m: { areaSqFt: number; perimeterFt: number }): string {
   return `${Math.round(m.areaSqFt).toLocaleString()} sq ft · ${Math.round(m.perimeterFt).toLocaleString()} ft perimeter`;
 }
@@ -27,23 +37,21 @@ export function computeJobTotals(
     if (!service) continue;
     const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
     if (!pricing || pricing.status !== "active") continue;
-    // A price in the business's own unit ("per sq ft", "per plant", ...)
-    // multiplies by whatever that unit is based on; a flat rate, or a unit
-    // from some other business, is charged once for the zone.
-    const unit = pricing.cost_unit.trim().toLowerCase();
+    // What the price multiplies by. "count" reads the Quantity the evaluator
+    // entered on the zone (how many bushes); "flat" charges once.
     const measurements = zoneMeasurements(zone);
-    const isPerUnit = unit === `per ${catalog.measurementUnit.trim().toLowerCase()}`;
-    const quantity = !isPerUnit
-      ? null
-      : catalog.measurementBasis === "area"
+    const quantity =
+      pricing.pricing_basis === "area"
         ? measurements?.areaSqFt ?? 0
-        : catalog.measurementBasis === "perimeter"
+        : pricing.pricing_basis === "perimeter"
           ? measurements?.perimeterFt ?? 0
-          : null;
+          : pricing.pricing_basis === "count"
+            ? zoneServiceCount(zone)
+            : null;
 
     if (pricing.cost != null) {
       totalCost += quantity != null ? pricing.cost * quantity : pricing.cost;
-      if (quantity == null && unit !== "flat rate") hasNonFlatRate = true;
+      if (quantity == null && pricing.pricing_basis !== "flat") hasNonFlatRate = true;
     }
     if (quantity != null && pricing.minutes_per_sqft != null) {
       // Crew-hours, not clock-hours — a 3-person crew burns 3x the paid time.

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { derivedCostPerUnit } from "@/lib/pricing";
 
 export async function createMaterial(formData: FormData) {
   const organizationId = await getCurrentOrganizationId();
@@ -16,6 +17,10 @@ export async function createMaterial(formData: FormData) {
 
   const coverageRaw = String(formData.get("coverage_per_unit_sqft") ?? "").trim();
   const costRaw = String(formData.get("cost_per_unit") ?? "").trim();
+  const packSizeRaw = String(formData.get("pack_size") ?? "").trim();
+  const packCostRaw = String(formData.get("pack_cost") ?? "").trim();
+  const packSize = packSizeRaw ? Number(packSizeRaw) : null;
+  const packCost = packCostRaw ? Number(packCostRaw) : null;
   const wasteRaw = String(formData.get("waste_factor_pct") ?? "").trim();
   const purchaseUrl = String(formData.get("purchase_url") ?? "").trim() || null;
   const quantityRaw = String(formData.get("quantity_on_hand") ?? "").trim();
@@ -44,7 +49,9 @@ export async function createMaterial(formData: FormData) {
       name,
       unit,
       coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,
-      cost_per_unit: costRaw ? Number(costRaw) : null,
+      cost_per_unit: derivedCostPerUnit(packSize, packCost, costRaw ? Number(costRaw) : null),
+      pack_size: packSize,
+      pack_cost: packCost,
       waste_factor_pct: wasteRaw ? Number(wasteRaw) : 10,
       purchase_url: purchaseUrl,
       quantity_on_hand: quantityOnHand,
@@ -63,6 +70,24 @@ export async function createMaterial(formData: FormData) {
   revalidatePath("/admin/materials");
   revalidatePath("/canvas");
   return { id: data.id as string, name: data.name as string };
+}
+
+/** Saves what a pack costs and recomputes the per-unit price from it. */
+export async function updateMaterialPack(id: string, packSize: number | null, packCost: number | null) {
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("materials").select("cost_per_unit").eq("id", id).maybeSingle();
+  const { error } = await supabase
+    .from("materials")
+    .update({
+      pack_size: packSize,
+      pack_cost: packCost,
+      cost_per_unit: derivedCostPerUnit(packSize, packCost, existing?.cost_per_unit ?? null),
+    })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/admin/materials");
+  revalidatePath("/canvas");
 }
 
 export async function updateMaterialCost(id: string, costPerUnit: number | null) {
