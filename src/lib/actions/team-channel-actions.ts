@@ -1,0 +1,137 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
+
+export type ChannelResult = { ok: true; id?: string } | { ok: false; message: string };
+
+function fail(error: { message: string; code?: string }): ChannelResult {
+  return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
+}
+
+function describe(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : "Something went wrong.";
+}
+
+/** Whoever creates a group is added to it — a group you can't read the
+ * moment you make it would be useless. */
+export async function createTeamChannel(name: string, description: string): Promise<ChannelResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Not signed in." };
+
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, message: "Name this group." };
+
+    const organizationId = await getCurrentOrganizationId();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("team_channels")
+      .insert({
+        organization_id: organizationId,
+        name: trimmed,
+        description: description.trim() || null,
+        created_by: profile.id,
+      })
+      .select("id")
+      .single();
+    if (error) return fail(error);
+
+    const { error: memberError } = await supabase
+      .from("team_channel_members")
+      .insert({ channel_id: data.id, profile_id: profile.id });
+    if (memberError) return fail(memberError);
+
+    revalidatePath("/conversations");
+    return { ok: true, id: data.id as string };
+  } catch (err) {
+    console.error("createTeamChannel failed:", err);
+    return { ok: false, message: describe(err) };
+  }
+}
+
+export async function setTeamChannelMember(
+  channelId: string,
+  profileId: string,
+  isMember: boolean
+): Promise<ChannelResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Not signed in." };
+
+    const supabase = await createClient();
+    if (isMember) {
+      const { error } = await supabase
+        .from("team_channel_members")
+        .upsert({ channel_id: channelId, profile_id: profileId }, { onConflict: "channel_id,profile_id" });
+      if (error) return fail(error);
+    } else {
+      const { error } = await supabase
+        .from("team_channel_members")
+        .delete()
+        .eq("channel_id", channelId)
+        .eq("profile_id", profileId);
+      if (error) return fail(error);
+    }
+
+    revalidatePath("/conversations");
+    revalidatePath(`/conversations/${channelId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("setTeamChannelMember failed:", err);
+    return { ok: false, message: describe(err) };
+  }
+}
+
+export async function postTeamMessage(channelId: string, body: string): Promise<ChannelResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Not signed in." };
+
+    const trimmed = body.trim();
+    if (!trimmed) return { ok: false, message: "Write a message first." };
+
+    const organizationId = await getCurrentOrganizationId();
+    const supabase = await createClient();
+    const { error } = await supabase.from("team_messages").insert({
+      channel_id: channelId,
+      organization_id: organizationId,
+      author_profile_id: profile.id,
+      author_name: profile.full_name || profile.email,
+      body: trimmed,
+    });
+    // RLS blocks posting to a group you're not in, which surfaces here rather
+    // than as a silent no-op.
+    if (error) return fail(error);
+
+    revalidatePath("/conversations");
+    revalidatePath(`/conversations/${channelId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("postTeamMessage failed:", err);
+    return { ok: false, message: describe(err) };
+  }
+}
+
+export async function deleteTeamChannel(channelId: string): Promise<ChannelResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Not signed in." };
+    if (!profile.roles.includes("admin")) {
+      return { ok: false, message: "Only admins can delete a group." };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("team_channels").delete().eq("id", channelId);
+    if (error) return fail(error);
+
+    revalidatePath("/conversations");
+    return { ok: true };
+  } catch (err) {
+    console.error("deleteTeamChannel failed:", err);
+    return { ok: false, message: describe(err) };
+  }
+}

@@ -220,6 +220,76 @@ export interface Database {
           },
         ];
       };
+      team_channels: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          description: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_channels"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_channels"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "team_channels_organization_id_fkey";
+            columns: ["organization_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      team_channel_members: {
+        Row: {
+          channel_id: string;
+          profile_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_channel_members"]["Row"]> & {
+          channel_id: string;
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_channel_members"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "team_channel_members_channel_id_fkey";
+            columns: ["channel_id"];
+            referencedRelation: "team_channels";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      team_messages: {
+        Row: {
+          id: string;
+          channel_id: string;
+          organization_id: string;
+          author_profile_id: string | null;
+          author_name: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_messages"]["Row"]> & {
+          channel_id: string;
+          organization_id: string;
+          author_name: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_messages"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "team_messages_channel_id_fkey";
+            columns: ["channel_id"];
+            referencedRelation: "team_channels";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       roles: {
         Row: {
           name: string;

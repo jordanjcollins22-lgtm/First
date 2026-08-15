@@ -193,6 +193,33 @@ export interface CalendarWithMembers extends Calendar {
   memberIds: string[];
 }
 
+/** A group the team messages in, not attached to any job. */
+export interface TeamChannel {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamMessage {
+  id: string;
+  channel_id: string;
+  organization_id: string;
+  author_profile_id: string | null;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
+export interface TeamChannelWithMembers extends TeamChannel {
+  memberIds: string[];
+  lastMessage: TeamMessage | null;
+  messageCount: number;
+}
+
 export interface CustomRole {
   name: string;
   is_system: boolean;
