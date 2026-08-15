@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { postTeamMessage, setTeamChannelMember } from "@/lib/actions/team-channel-actions";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { TeamChannelWithMembers, TeamMessage } from "@/types/domain";
 
@@ -26,7 +27,7 @@ function formatTimestamp(iso: string): string {
 
 export function TeamChannelThread({
   channel,
-  messages,
+  messages: initialMessages,
   currentProfileId,
   teamMembers,
 }: {
@@ -35,13 +36,49 @@ export function TeamChannelThread({
   currentProfileId: string;
   teamMembers: TeamMember[];
 }) {
+  const [messages, setMessages] = useState<TeamMessage[]>(initialMessages);
   const [body, setBody] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [memberIds, setMemberIds] = useState<string[]>(channel.memberIds);
   const [showMembers, setShowMembers] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const isMember = memberIds.includes(currentProfileId);
+
+  // Live updates instead of waiting for a refresh. Realtime applies the same
+  // members-only RLS policy, so a non-member's subscription simply never
+  // fires. Guarded against duplicates because the sender's own insert comes
+  // back over the socket too.
+  useEffect(() => {
+    const supabase = createClient();
+    const subscription = supabase
+      .channel(`team_messages:${channel.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "team_messages",
+          filter: `channel_id=eq.${channel.id}`,
+        },
+        (payload) => {
+          const message = payload.new as TeamMessage;
+          setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [channel.id]);
+
+  // Follow the conversation as it grows.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
 
   function handleSend() {
     if (!body.trim()) return;
@@ -123,7 +160,7 @@ export function TeamChannelThread({
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
-        <div className="flex max-h-96 flex-col gap-2 overflow-y-auto">
+        <div ref={scrollRef} className="flex max-h-96 flex-col gap-2 overflow-y-auto">
           {messages.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {isMember ? "No messages yet — say something." : "Add yourself as a member to see and post messages."}
