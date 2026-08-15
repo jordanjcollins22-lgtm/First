@@ -86,6 +86,10 @@ export function AddInventoryItemForm({
       if (kind === "tool") {
         formData.set("is_rental", ownership === "rent" ? "on" : "");
         const created = await createTool(formData);
+        if (!created.ok) {
+          setError(created.message);
+          return;
+        }
         onCreated({ kind: "tool", id: created.id, name: created.name });
       } else {
         formData.set("unit", unit.trim());

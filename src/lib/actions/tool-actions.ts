@@ -5,26 +5,33 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
-export async function createTool(formData: FormData) {
+export type CreateToolResult =
+  | { ok: true; id: string; name: string }
+  | { ok: false; message: string };
+
+/**
+ * Returns a result object rather than throwing. An Error thrown out of a
+ * Server Action gets its message stripped in production builds and reaches
+ * the browser as an opaque "Server Components render" error, which makes a
+ * plain "you're missing a field" impossible to tell from a real bug. A
+ * returned value is ordinary data, so the real reason always survives.
+ */
+export async function createTool(formData: FormData): Promise<CreateToolResult> {
   try {
     return await createToolInner(formData);
   } catch (err) {
-    // Belt-and-suspenders: whatever went wrong, make sure a real Error with
-    // a real message crosses back to the client — logged here too since a
-    // thrown Server Action error's message can otherwise get replaced with
-    // an opaque one on the client with no way to tell what actually failed.
     console.error("createTool failed:", err);
-    if (err instanceof Error && err.message) throw err;
-    throw new Error("Couldn't add that tool — try again.");
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    return { ok: false, message: message || "Couldn't add that tool — try again." };
   }
 }
 
-async function createToolInner(formData: FormData) {
+async function createToolInner(formData: FormData): Promise<CreateToolResult> {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
 
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Tool name is required");
+  if (!name) return { ok: false, message: "Enter a tool name." };
 
   const icon = String(formData.get("icon") ?? "").trim() || "🧰";
   const costRaw = String(formData.get("cost") ?? "").trim();
@@ -55,10 +62,10 @@ async function createToolInner(formData: FormData) {
   const isDelivered = formData.get("is_delivered") === "on" || formData.get("is_delivered") === "true";
 
   if (stockMethod === "in_stock" && !storageLocation) {
-    throw new Error("Enter where it's stored — required for tools kept in stock.");
+    return { ok: false, message: "Enter where it's stored — required for tools kept in stock." };
   }
   if (!imagePath) {
-    throw new Error("Add a photo of the tool.");
+    return { ok: false, message: "Add a photo of the tool." };
   }
 
   const { data, error } = await supabase
@@ -82,16 +89,15 @@ async function createToolInner(formData: FormData) {
     .select()
     .single();
   if (error) {
-    // Throwing the raw Postgres error object (rather than a plain Error)
-    // from a Server Action can fail to serialize back to the client at all,
-    // surfacing as an opaque React error instead of any real message.
-    if (error.code === "23505") throw new Error(`A tool named "${name}" already exists.`);
-    throw new Error(error.message || "Couldn't add that tool — try again.");
+    if (error.code === "23505") return { ok: false, message: `A tool named "${name}" already exists.` };
+    return {
+      ok: false,
+      message: error.message ? `${error.message}${error.code ? ` (${error.code})` : ""}` : "Couldn't add that tool.",
+    };
   }
 
   revalidatePath("/admin/tools");
-  revalidatePath("/canvas");
-  return { id: data.id as string, name: data.name as string };
+  return { ok: true, id: data.id as string, name: data.name as string };
 }
 
 export async function updateToolCost(id: string, cost: number | null) {

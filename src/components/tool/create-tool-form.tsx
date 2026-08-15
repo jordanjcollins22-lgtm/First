@@ -74,7 +74,11 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         formData.set("is_rental", ownership === "rent" ? "on" : "");
         formData.set("kits", kits.join(","));
         formData.set("stock_method", stockMethod);
-        await createTool(formData);
+        const result = await createTool(formData);
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
         formRef.current?.reset();
         setFile(null);
         setPreviewUrl(null);
@@ -84,12 +88,8 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         setStockMethod("in_stock");
         setFetchMessage(null);
       } catch (err) {
-        // A thrown Server Action error's message is redacted to a generic
-        // React digest in production builds — the checks above catch the
-        // common cases before they ever reach the server, so this is only
-        // hit for something genuinely unexpected.
         const message = err instanceof Error ? err.message : "";
-        setError(message && !message.includes("omitted in production") ? message : "Couldn't add that tool — try again.");
+        setError(message || "Couldn't add that tool — try again.");
       }
     });
   }
