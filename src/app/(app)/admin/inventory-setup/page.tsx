@@ -2,9 +2,7 @@ import { redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
-import { listTools } from "@/lib/data/tools";
-import { listMaterials } from "@/lib/data/materials";
-import { storageLocationOptions } from "@/lib/storage-locations";
+import { listBusinessLocations } from "@/lib/data/locations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { InventorySetupFlow } from "@/components/inventory/inventory-setup-flow";
 
@@ -17,8 +15,8 @@ export default async function InventorySetupPage() {
   ]);
   if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
 
-  const [tools, materials] = await Promise.all([listTools(), listMaterials()]);
-  const storageLocations = storageLocationOptions([...tools, ...materials]);
+  const businessLocations = await listBusinessLocations().catch(() => []);
+  const storageLocations = businessLocations.map((location) => location.name);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">

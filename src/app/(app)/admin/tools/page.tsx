@@ -15,7 +15,7 @@ import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { CreateMaterialForm } from "@/components/material/create-material-form";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
-import { storageLocationOptions } from "@/lib/storage-locations";
+import { listBusinessLocations } from "@/lib/data/locations";
 
 export default async function InventoryPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -27,11 +27,13 @@ export default async function InventoryPage() {
   if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
 
   const supabase = await createClient();
-  const [tools, materials, services, linksRes] = await Promise.all([
+  const [tools, materials, services, linksRes, businessLocations] = await Promise.all([
     listTools(),
     listMaterials(),
     listServicePricing(),
     supabase.from("service_tools").select("*"),
+    // Same places as the Project Data map — one list, not two.
+    listBusinessLocations().catch(() => []),
   ]);
 
   const linksByTool = new Map<string, string[]>();
@@ -50,9 +52,7 @@ export default async function InventoryPage() {
     (t) => !t.on_order && t.quantity != null && t.reorder_threshold != null && t.quantity <= t.reorder_threshold
   ).length;
   const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
-  // Tools and materials share one pool of places — a shelf that holds a
-  // chainsaw is the same shelf that holds a bag of mulch.
-  const storageLocations = storageLocationOptions([...tools, ...materials]);
+  const storageLocations = businessLocations.map((location) => location.name);
 
   const materialsToOrderCount = materials.filter(
     (m) =>

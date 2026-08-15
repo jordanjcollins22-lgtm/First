@@ -23,6 +23,9 @@ export async function createBusinessLocation(input: { name: string; address: str
   });
   if (error) throw error;
   revalidatePath(PATH);
+  // Inventory's "Stored at" picker reads the same locations.
+  revalidatePath("/admin/tools");
+  revalidatePath("/admin/inventory-setup");
 }
 
 export async function updateBusinessLocation(id: string, input: { name?: string; address?: string | null }) {
