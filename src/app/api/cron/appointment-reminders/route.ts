@@ -7,8 +7,13 @@ import { env, isSupabaseAdminConfigured } from "@/lib/env";
 /**
  * Texts each person an "evaluation coming up" reminder, however many hours
  * ahead they asked for. Meant to be hit on a schedule (Vercel Cron, or any
- * scheduler that can send a header) — roughly hourly is right, since the
- * per-person lead time is only accurate to the run interval.
+ * scheduler that can send a header).
+ *
+ * vercel.json runs this once a day, because Vercel's Hobby plan rejects any
+ * deployment whose cron runs more often than that. A lead time is therefore
+ * only as precise as the run interval: on a daily schedule, anything under
+ * ~24 hours won't reliably fire. On a paid plan, change the schedule to
+ * "0 * * * *" for hourly and short lead times start working.
  *
  * Sends are recorded in notification_log keyed by job, so running more often
  * than needed — or twice at once — still only texts a person once per
