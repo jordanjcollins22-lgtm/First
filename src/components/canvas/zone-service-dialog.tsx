@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ChangeEvent } from "react";
 import Link from "next/link";
-import { Camera, Check, Loader2, Pencil, X } from "lucide-react";
+import { Camera, Check, ImagePlus, Loader2, Pencil, X } from "lucide-react";
 
 import {
   Dialog,
@@ -837,7 +837,7 @@ export function ZoneServiceDialog({
               )}
             >
               {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-              <span className="text-[10px]">{photoUploading ? "Uploading..." : "Add"}</span>
+              <span className="text-[10px]">{photoUploading ? "Uploading..." : "Take"}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -848,8 +848,28 @@ export function ZoneServiceDialog({
                 onChange={handlePhotosChange}
               />
             </label>
+            <label
+              className={cn(
+                "flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent",
+                photoUploading ? "pointer-events-none opacity-60" : "cursor-pointer"
+              )}
+            >
+              {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+              <span className="text-[10px]">{photoUploading ? "Uploading..." : "Upload"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={photoUploading}
+                className="hidden"
+                onChange={handlePhotosChange}
+              />
+            </label>
           </div>
           {photoError && <p className="text-xs text-destructive">{photoError}</p>}
+          <p className="text-[10px] text-muted-foreground">
+            Photos already on your phone work too — no signal needed until you&apos;re back online to save.
+          </p>
         </div>
       </StepShell>
     );
