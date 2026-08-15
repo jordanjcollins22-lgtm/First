@@ -397,14 +397,22 @@ export function ZoneServiceDialog({
   const currentIndex = Math.max(0, steps.indexOf(stepKey));
   const currentStep = steps[currentIndex] ?? "location";
 
+  // Nothing to choose means nothing to ask — the materials step still exists
+  // (reachable from Review, to add an extra material by hand) but the guided
+  // click-through skips straight past it when no material has type/color
+  // options configured.
   function goNext() {
     const idx = steps.indexOf(stepKey);
-    setStepKey(steps[idx + 1] ?? "review");
+    let next = idx + 1;
+    if (steps[next] === "materials" && materialsToAsk.length === 0) next += 1;
+    setStepKey(steps[next] ?? "review");
   }
 
   function goBack() {
     const idx = steps.indexOf(stepKey);
-    setStepKey(steps[Math.max(idx - 1, 0)] ?? "location");
+    let prev = Math.max(idx - 1, 0);
+    if (steps[prev] === "materials" && materialsToAsk.length === 0) prev = Math.max(prev - 1, 0);
+    setStepKey(steps[prev] ?? "location");
   }
 
   function handleTypeChange(nextTypeId: string) {
@@ -417,7 +425,17 @@ export function ZoneServiceDialog({
     const nextOther = nextType?.fields.filter((f) => !f.checklistItem) ?? [];
     if (nextChecklist.length > 0) setStepKey("checklist");
     else if (nextOther.length > 0) setStepKey(`field:${nextOther[0].key}`);
-    else setStepKey("materials");
+    else {
+      const nextAutoMaterials = catalog.materials.filter((material) =>
+        catalog.serviceMaterialRules.some(
+          (rule) => rule.service_type_id === nextTypeId && rule.material_id === material.id
+        )
+      );
+      const nextHasOptions = nextAutoMaterials.some(
+        (m) => (m.type_options?.length ?? 0) > 0 || (m.color_options?.length ?? 0) > 0
+      );
+      setStepKey(nextHasOptions ? "materials" : "photos");
+    }
   }
 
   async function handlePropose() {
