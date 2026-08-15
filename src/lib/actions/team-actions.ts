@@ -278,3 +278,91 @@ export async function deleteRole(name: string) {
   }
   revalidatePath("/admin/team");
 }
+
+export interface TeamMemberDetailsInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  drivesForCompany: boolean;
+  licenseNumber: string;
+  licenseState: string;
+  licenseClass: string;
+  licenseExpires: string;
+}
+
+export type UpdateTeamMemberResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * Admin edit of a team member's details. Goes through the service-role
+ * client because RLS won't let one profile update another's row, gated on an
+ * app-level admin check plus a same-organization check so an admin can't
+ * reach into another business's people.
+ *
+ * Changing the email also changes their sign-in, so it updates the auth user
+ * as well — leaving the two out of step would lock them out.
+ */
+export async function updateTeamMemberDetails(
+  profileId: string,
+  input: TeamMemberDetailsInput
+): Promise<UpdateTeamMemberResult> {
+  try {
+    const caller = await getCurrentProfile();
+    if (!caller?.roles.includes("admin")) {
+      return { ok: false, message: "Only admins can edit team members." };
+    }
+
+    const firstName = input.firstName.trim();
+    const lastName = input.lastName.trim();
+    const email = input.email.trim();
+    const phone = input.phone.trim();
+
+    if (!firstName || !lastName) return { ok: false, message: "Enter a first and last name." };
+    if (!email) return { ok: false, message: "Enter an email." };
+    if (phone && !toE164(phone)) return { ok: false, message: "That doesn't look like a valid phone number." };
+
+    const admin = createAdminClient();
+    const { data: existing } = await admin
+      .from("profiles")
+      .select("email, organization_id")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (!existing) return { ok: false, message: "That team member no longer exists." };
+    if (existing.organization_id !== caller.organization_id) {
+      return { ok: false, message: "That team member isn't in your organization." };
+    }
+
+    if (email.toLowerCase() !== existing.email.toLowerCase()) {
+      if (!isSupabaseAdminConfigured) {
+        return { ok: false, message: "Changing an email needs SUPABASE_SERVICE_ROLE_KEY set on the server." };
+      }
+      const { error: authError } = await admin.auth.admin.updateUserById(profileId, { email });
+      if (authError) {
+        return { ok: false, message: authError.message || "Couldn't change that email." };
+      }
+    }
+
+    const { error } = await admin
+      .from("profiles")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`,
+        email,
+        phone: phone || null,
+        drives_for_company: input.drivesForCompany,
+        license_number: input.drivesForCompany ? input.licenseNumber.trim() || null : null,
+        license_state: input.drivesForCompany ? input.licenseState.trim() || null : null,
+        license_class: input.drivesForCompany ? input.licenseClass.trim() || null : null,
+        license_expires: input.drivesForCompany && input.licenseExpires ? input.licenseExpires : null,
+      })
+      .eq("id", profileId);
+    if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
+
+    revalidatePath("/admin/team");
+    return { ok: true };
+  } catch (err) {
+    console.error("updateTeamMemberDetails failed:", err);
+    return { ok: false, message: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}

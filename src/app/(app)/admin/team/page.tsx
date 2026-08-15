@@ -20,6 +20,7 @@ import { CreateServiceTypeForm } from "@/components/service-pricing/create-servi
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
 import { PayRateInput } from "@/components/team/pay-rate-input";
 import { PhoneInput } from "@/components/team/phone-input";
+import { EditTeamMember } from "@/components/team/edit-team-member";
 import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
 import { startImpersonation } from "@/lib/actions/impersonation-actions";
 import type {
@@ -211,6 +212,7 @@ export default async function TeamServicesPage() {
                               {profile.license_expires && ` · exp ${profile.license_expires}`}
                             </p>
                           )}
+                          {isAdmin && <EditTeamMember profile={profile} />}
                         </td>
                         <td className="p-2">
                           {isAdmin ? (
