@@ -52,6 +52,13 @@ export function TeamChannelThread({
   const addLiveMessage = useCallback((incoming: TeamMessage) => {
     setLiveMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]));
   }, []);
+
+  // Read by the catch-up poll below, which must not re-run every time a
+  // message lands or it would restart its own timer.
+  const latestAtRef = useRef<string>("");
+  useEffect(() => {
+    latestAtRef.current = messages.length > 0 ? messages[messages.length - 1].created_at : "";
+  }, [messages]);
   const [body, setBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [memberIds, setMemberIds] = useState<string[]>(channel.memberIds);
@@ -61,30 +68,74 @@ export function TeamChannelThread({
 
   const isMember = memberIds.includes(currentProfileId);
 
-  // Live updates instead of waiting for a refresh. Realtime applies the same
-  // members-only RLS policy, so a non-member's subscription simply never
-  // fires. Guarded against duplicates because the sender's own insert comes
-  // back over the socket too.
+  // Live updates instead of waiting for a refresh.
+  //
+  // Realtime runs the members-only RLS policy against whatever token the
+  // socket is carrying when the channel joins. The session is read from
+  // cookies asynchronously, so subscribing straight away can join as anon —
+  // the policy then matches nothing and no events ever arrive. Hence
+  // resolving the session and calling setAuth before subscribing.
   useEffect(() => {
     const supabase = createClient();
-    const subscription = supabase
-      .channel(`team_messages:${channel.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "team_messages",
-          filter: `channel_id=eq.${channel.id}`,
-        },
-        (payload) => {
-          addLiveMessage(payload.new as TeamMessage);
-        }
-      )
-      .subscribe();
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      await supabase.realtime.setAuth(data.session?.access_token ?? null);
+      if (cancelled) return;
+
+      channelRef = supabase
+        .channel(`team_messages:${channel.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "team_messages",
+            filter: `channel_id=eq.${channel.id}`,
+          },
+          (payload) => {
+            addLiveMessage(payload.new as TeamMessage);
+          }
+        )
+        .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(subscription);
+      cancelled = true;
+      if (channelRef) supabase.removeChannel(channelRef);
+    };
+  }, [channel.id, addLiveMessage]);
+
+  // A backstop for the socket: sockets drop on sleep, network changes, and
+  // flaky mobile connections, and a dropped one fails silently. This asks for
+  // anything newer than the last message seen — a narrow indexed query — so a
+  // thread left open still catches up within a few seconds. Realtime is what
+  // makes it feel instant; this is what makes it correct.
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function catchUp() {
+      if (cancelled || !latestAtRef.current) return;
+      const { data } = await supabase
+        .from("team_messages")
+        .select("*")
+        .eq("channel_id", channel.id)
+        .gt("created_at", latestAtRef.current)
+        .order("created_at");
+      if (cancelled || !data) return;
+      for (const row of data) addLiveMessage(row as unknown as TeamMessage);
+    }
+
+    const timer = setInterval(catchUp, 10_000);
+    window.addEventListener("focus", catchUp);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener("focus", catchUp);
     };
   }, [channel.id, addLiveMessage]);
 
