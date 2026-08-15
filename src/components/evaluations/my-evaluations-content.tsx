@@ -1,5 +1,6 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
-import { CalendarSettings } from "@/components/calendars/calendar-settings";
+import { CalendarSettings, type BookingLinksData } from "@/components/calendars/calendar-settings";
+import { MyBookingLink } from "@/components/booking/booking-links-panel";
 import type { MyScheduleData } from "@/lib/data/my-schedule";
 import type { CalendarWithMembers } from "@/types/domain";
 
@@ -10,11 +11,16 @@ export function MyEvaluationsContent({
   schedule,
   calendars,
   teamMembers,
+  bookingLinks,
+  myBookingLink,
 }: {
   schedule: MyScheduleData;
   /** Admin-only calendar management, shown inline under the schedule. */
   calendars?: CalendarWithMembers[];
   teamMembers?: { id: string; name: string }[];
+  bookingLinks?: BookingLinksData;
+  /** The viewer's own affiliate link, if they have one. */
+  myBookingLink?: string | null;
 }) {
   const { profile, isAdmin, relevantJobs, evaluatorNamesById, allWeeklyAvailability, allDaysOff, rangeStart, rangeEnd } =
     schedule;
@@ -54,8 +60,9 @@ export function MyEvaluationsContent({
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
       />
+      {myBookingLink && <MyBookingLink link={myBookingLink} />}
       {isAdmin && calendars && teamMembers && (
-        <CalendarSettings calendars={calendars} teamMembers={teamMembers} />
+        <CalendarSettings calendars={calendars} teamMembers={teamMembers} bookingLinks={bookingLinks} />
       )}
     </div>
   );

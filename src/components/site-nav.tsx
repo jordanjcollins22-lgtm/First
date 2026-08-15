@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
-import { qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
 
 export function SiteNav({
   userEmail,
@@ -21,14 +20,12 @@ export function SiteNav({
 
   const showProjectData = allowedTabs.includes("project-data");
   const showEvaluations = allowedTabs.includes("evaluations");
-  const showBookingLinks = roles.includes("admin") || qualifiesForAffiliateLink(roles);
   // Project Data is the only tab kept in the bar; everything else lives in
   // the menu so the header stays readable as tabs get added.
   const links = [
     ...(showProjectData ? [{ href: "/proposals", label: "Proposals" }] : []),
     ...(showProjectData ? [{ href: "/conversations", label: "Conversations" }] : []),
     ...(showEvaluations ? [{ href: "/evaluations", label: "Calendar" }] : []),
-    ...(showBookingLinks ? [{ href: "/booking-links", label: "Booking Links" }] : []),
     ...(userEmail ? [{ href: "/notifications", label: "Notifications" }] : []),
     ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
       ? [{ href: "/admin/tools", label: "Inventory" }]

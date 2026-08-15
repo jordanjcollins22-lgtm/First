@@ -14,6 +14,7 @@ import {
   setCalendarMember,
   updateCalendar,
 } from "@/lib/actions/calendar-actions";
+import { BookingLinksPanel, type AffiliateRow } from "@/components/booking/booking-links-panel";
 import type { CalendarWithMembers } from "@/types/domain";
 
 interface TeamMember {
@@ -229,12 +230,20 @@ function CalendarCard({ calendar, teamMembers }: { calendar: CalendarWithMembers
 
 /** Lives inside the Calendar page, collapsed by default so it stays out of
  * the way of the schedule itself. Admin-only — the page decides that. */
+export interface BookingLinksData {
+  generalLink: string | null;
+  affiliates: AffiliateRow[];
+  candidates: TeamMember[];
+}
+
 export function CalendarSettings({
   calendars,
   teamMembers,
+  bookingLinks,
 }: {
   calendars: CalendarWithMembers[];
   teamMembers: TeamMember[];
+  bookingLinks?: BookingLinksData;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -250,7 +259,9 @@ export function CalendarSettings({
         Calendar settings
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
-      {open && <CalendarSettingsBody calendars={calendars} teamMembers={teamMembers} />}
+      {open && (
+        <CalendarSettingsBody calendars={calendars} teamMembers={teamMembers} bookingLinks={bookingLinks} />
+      )}
     </div>
   );
 }
@@ -258,9 +269,11 @@ export function CalendarSettings({
 function CalendarSettingsBody({
   calendars,
   teamMembers,
+  bookingLinks,
 }: {
   calendars: CalendarWithMembers[];
   teamMembers: TeamMember[];
+  bookingLinks?: BookingLinksData;
 }) {
   return (
     <div className="mt-4 flex flex-col gap-6">
@@ -283,6 +296,21 @@ function CalendarSettingsBody({
             <CalendarCard key={calendar.id} calendar={calendar} teamMembers={teamMembers} />
           ))}
         </div>
+      )}
+
+      {bookingLinks && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Booking links</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BookingLinksPanel
+              generalLink={bookingLinks.generalLink}
+              affiliates={bookingLinks.affiliates}
+              candidates={bookingLinks.candidates}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
