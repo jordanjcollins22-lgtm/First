@@ -34,6 +34,9 @@ export function SiteNav({
       ? [{ href: "/admin/team", label: "Team & Services" }]
       : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
+    ...(roles.some((r) => ["admin", "overhead", "owner"].includes(r))
+      ? [{ href: "/admin/payments", label: "Payments" }]
+      : []),
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
     ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"

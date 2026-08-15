@@ -584,3 +584,42 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
 }
+
+export type TeamPaymentStatus = "pending" | "paid";
+export type TeamPaymentMethod = "cash" | "check" | "transfer" | "other";
+
+/** One payment to one team member. A ledger of money already handed over (or
+ * owed), recorded by hand — the app doesn't move funds. Pay *rates* live on
+ * the profile; this is the history, so changing a rate never rewrites it. */
+export interface TeamPayment {
+  id: string;
+  organization_id: string;
+  profile_id: string;
+  amount: number;
+  status: TeamPaymentStatus;
+  method: TeamPaymentMethod | null;
+  period_start: string | null;
+  period_end: string | null;
+  hours: number | null;
+  paid_at: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A payment plus the payee's display name, so the tracker doesn't have to
+ * join profiles in the client. */
+export interface TeamPaymentWithPayee extends TeamPayment {
+  payeeName: string;
+}
+
+/** Everyone who can be paid, with their configured rate for context when
+ * entering an amount. */
+export interface PayablePerson {
+  id: string;
+  name: string;
+  payType: Profile["pay_type"];
+  ratePerHour: number | null;
+  commissionPct: number | null;
+}
