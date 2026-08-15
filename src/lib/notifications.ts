@@ -18,7 +18,13 @@ export async function notifyTeamMember(
   profileId: string,
   kind: NotificationKind,
   body: string,
-  options?: { dedupeKey?: string }
+  options?: {
+    dedupeKey?: string;
+    /** The person opted into this specific thing (e.g. one group), so the
+     * general per-kind toggle shouldn't veto it. The master switch and a
+     * usable phone number still apply. */
+    overridesKindPreference?: boolean;
+  }
 ): Promise<boolean> {
   if (!isTwilioConfigured) return false;
 
@@ -30,7 +36,7 @@ export async function notifyTeamMember(
     .eq("profile_id", profileId)
     .maybeSingle();
   if (!prefs?.sms_enabled) return false;
-  if (!prefs[kind]) return false;
+  if (!prefs[kind] && !options?.overridesKindPreference) return false;
 
   const { data: profile } = await admin.from("profiles").select("phone").eq("id", profileId).maybeSingle();
   const e164 = profile?.phone ? toE164(profile.phone) : null;

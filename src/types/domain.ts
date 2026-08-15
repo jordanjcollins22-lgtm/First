@@ -263,6 +263,16 @@ export interface NotificationPreferences {
 
 export type NotificationKind = "appointment_reminders" | "client_messages" | "proposal_responses" | "team_messages";
 
+/** How one person wants to hear about one group. "default" follows their
+ * general Team group messages setting. */
+export type ChannelNotifyChoice = "default" | "always" | "muted";
+
+export interface ChannelNotificationSetting {
+  channelId: string;
+  channelName: string;
+  choice: ChannelNotifyChoice;
+}
+
 export interface CustomRole {
   name: string;
   is_system: boolean;

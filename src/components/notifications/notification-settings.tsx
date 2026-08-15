@@ -13,7 +13,8 @@ import {
   type NotificationPreferencesInput,
 } from "@/lib/actions/notification-actions";
 import { cn } from "@/lib/utils";
-import type { NotificationPreferences } from "@/types/domain";
+import { setChannelNotifyChoice } from "@/lib/actions/team-channel-actions";
+import type { ChannelNotificationSetting, ChannelNotifyChoice, NotificationPreferences } from "@/types/domain";
 
 function Toggle({
   label,
@@ -55,15 +56,76 @@ function Toggle({
   );
 }
 
+const CHOICES: { value: ChannelNotifyChoice; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "always", label: "Always" },
+  { value: "muted", label: "Muted" },
+];
+
+/** One group's own setting. "Default" follows the general toggle above, so a
+ * person can leave most groups alone and only single out the noisy or the
+ * important ones. */
+function ChannelRow({ channel, generalOn }: { channel: ChannelNotificationSetting; generalOn: boolean }) {
+  const [choice, setChoice] = useState<ChannelNotifyChoice>(channel.choice);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function pick(next: ChannelNotifyChoice) {
+    const previous = choice;
+    setChoice(next);
+    setError(null);
+    startTransition(async () => {
+      const result = await setChannelNotifyChoice(channel.channelId, next);
+      if (!result.ok) {
+        setChoice(previous);
+        setError(result.message);
+      }
+    });
+  }
+
+  const effective =
+    choice === "always" ? "On" : choice === "muted" ? "Off" : generalOn ? "On (from default)" : "Off (from default)";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-2.5">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{channel.channelName}</p>
+        <p className="text-[10px] text-muted-foreground">{effective}</p>
+        {error && <p className="text-[10px] text-destructive">{error}</p>}
+      </div>
+      <div className="flex shrink-0 gap-1">
+        {CHOICES.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => pick(option.value)}
+            disabled={isPending}
+            className={cn(
+              "rounded-lg border px-2.5 py-1 text-xs transition-colors",
+              choice === option.value
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card/60 hover:bg-accent"
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function NotificationSettings({
   preferences,
   phone,
   smsConfigured,
+  channels,
 }: {
   preferences: NotificationPreferences | null;
   phone: string | null;
   /** Twilio isn't set up on the server — texts won't actually send. */
   smsConfigured: boolean;
+  channels: ChannelNotificationSetting[];
 }) {
   const [phoneValue, setPhoneValue] = useState(phone ?? "");
   const [savedPhone, setSavedPhone] = useState(phone ?? "");
@@ -176,8 +238,8 @@ export function NotificationSettings({
               disabled={isPending || !form.smsEnabled}
             />
             <Toggle
-              label="Team group messages"
-              hint="When someone posts in a group you're in. Off by default — these can be chatty."
+              label="Internal group messages"
+              hint="The default for every group you're in. Set individual ones below."
               checked={form.teamMessages}
               onChange={(next) => update({ teamMessages: next })}
               disabled={isPending || !form.smsEnabled}
@@ -191,6 +253,30 @@ export function NotificationSettings({
 
           {error && <p className="text-xs text-destructive">{error}</p>}
           {saved && <p className="text-xs text-primary">Saved.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3 pt-6">
+          <div>
+            <p className="text-sm font-semibold">Individual conversations</p>
+            <p className="text-xs text-muted-foreground">
+              Leave a group on Default to follow the setting above, or single one out — mute a chatty group, or
+              stay on top of an important one even with the default off.
+            </p>
+          </div>
+
+          {channels.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              You&apos;re not in any internal groups yet. Join or create one under Conversations.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {channels.map((channel) => (
+                <ChannelRow key={channel.channelId} channel={channel} generalOn={form.teamMessages} />
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

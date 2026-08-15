@@ -51,6 +51,7 @@ export default async function NotificationsPage() {
         preferences={settings.preferences}
         phone={settings.phone}
         smsConfigured={isTwilioConfigured}
+        channels={settings.channels}
       />
     </div>
   );

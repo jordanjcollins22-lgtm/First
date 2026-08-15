@@ -260,6 +260,7 @@ export interface Database {
         Row: {
           channel_id: string;
           profile_id: string;
+          notify_override: boolean | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["team_channel_members"]["Row"]> & {

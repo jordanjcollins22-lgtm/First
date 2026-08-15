@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { notifyTeamMember } from "@/lib/notifications";
-import type { AttachmentKind, TeamMessage } from "@/types/domain";
+import type { AttachmentKind, ChannelNotifyChoice, TeamMessage } from "@/types/domain";
 import { env, isTranscriptionConfigured } from "@/lib/env";
 
 export type ChannelResult = { ok: true; id?: string } | { ok: false; message: string };
@@ -135,19 +135,25 @@ export async function postTeamMessage(
     const { data: channel } = await supabase.from("team_channels").select("name").eq("id", channelId).maybeSingle();
     const { data: members } = await supabase
       .from("team_channel_members")
-      .select("profile_id")
+      .select("profile_id, notify_override")
       .eq("channel_id", channelId);
-    // Everyone but the sender, best-effort.
+
+    const summary =
+      trimmed.slice(0, 120) ||
+      `sent ${attachment?.kind === "audio" ? "a voice memo" : `a ${attachment?.kind ?? "message"}`}`;
+
+    // Everyone but the sender, best-effort, honouring each person's choice
+    // for this particular group: muted skips them outright, always overrides
+    // their general Team group messages toggle, null follows it.
     await Promise.all(
       (members ?? [])
-        .filter((m) => m.profile_id !== profile.id)
+        .filter((m) => m.profile_id !== profile.id && m.notify_override !== false)
         .map((m) =>
           notifyTeamMember(
             m.profile_id,
             "team_messages",
-            `${profile.full_name || profile.email} in ${channel?.name ?? "a group"}: ${
-              trimmed.slice(0, 120) || `sent ${attachment?.kind === "audio" ? "a voice memo" : `a ${attachment?.kind ?? "message"}`}`
-            }`
+            `${profile.full_name || profile.email} in ${channel?.name ?? "a group"}: ${summary}`,
+            { overridesKindPreference: m.notify_override === true }
           ).catch(() => false)
         )
     );
@@ -259,5 +265,34 @@ export async function transcribeVoiceMemo(messageId: string): Promise<Transcribe
   } catch (err) {
     console.error("transcribeVoiceMemo failed:", err);
     return { ok: false, message: err instanceof Error ? err.message : "Transcription failed." };
+  }
+}
+
+/** Someone's own choice for one group. Muting a group they're not in makes
+ * no sense, so this only touches their own membership row. */
+export async function setChannelNotifyChoice(
+  channelId: string,
+  choice: ChannelNotifyChoice
+): Promise<ChannelResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Not signed in." };
+
+    const override = choice === "always" ? true : choice === "muted" ? false : null;
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("team_channel_members")
+      .update({ notify_override: override })
+      .eq("channel_id", channelId)
+      .eq("profile_id", profile.id);
+    if (error) return fail(error);
+
+    revalidatePath("/notifications");
+    revalidatePath(`/conversations/${channelId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("setChannelNotifyChoice failed:", err);
+    return { ok: false, message: describe(err) };
   }
 }
