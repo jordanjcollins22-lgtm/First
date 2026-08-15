@@ -152,7 +152,14 @@ export interface Database {
           id: string;
           email: string;
           full_name: string | null;
+          first_name: string | null;
+          last_name: string | null;
           organization_id: string;
+          drives_for_company: boolean;
+          license_number: string | null;
+          license_state: string | null;
+          license_class: string | null;
+          license_expires: string | null;
           pay_type: string;
           pay_rate_per_hour: number | null;
           commission_pct: number | null;

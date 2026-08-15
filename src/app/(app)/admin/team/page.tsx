@@ -203,6 +203,14 @@ export default async function TeamServicesPage() {
                         <td className="p-2">
                           <p className="font-medium">{profile.full_name || profile.email}</p>
                           {profile.full_name && <p className="text-xs text-muted-foreground">{profile.email}</p>}
+                          {profile.drives_for_company && (
+                            <p className="text-xs text-muted-foreground">
+                              Driver
+                              {profile.license_number && ` · ${profile.license_state ?? ""} ${profile.license_number}`}
+                              {profile.license_class && ` (Class ${profile.license_class})`}
+                              {profile.license_expires && ` · exp ${profile.license_expires}`}
+                            </p>
+                          )}
                         </td>
                         <td className="p-2">
                           {isAdmin ? (

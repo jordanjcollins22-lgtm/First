@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
+import { toE164 } from "@/lib/sms";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import type { Role } from "@/types/domain";
 
@@ -36,15 +37,34 @@ export async function removeProfileRole(profileId: string, role: Role) {
   revalidatePath("/admin/team");
 }
 
-export async function createTeamMember(formData: FormData) {
+export type CreateTeamMemberResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * Returns a result rather than throwing — an Error thrown out of a Server
+ * Action has its message stripped in production, which would turn "enter a
+ * first and last name" into an unreadable page error.
+ */
+export async function createTeamMember(formData: FormData): Promise<CreateTeamMemberResult> {
+  try {
+    return await createTeamMemberInner(formData);
+  } catch (err) {
+    console.error("createTeamMember failed:", err);
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    return { ok: false, message: message || "Couldn't create that account." };
+  }
+}
+
+async function createTeamMemberInner(formData: FormData): Promise<CreateTeamMemberResult> {
   const caller = await getCurrentProfile();
   if (!caller?.roles.includes("admin")) {
-    throw new Error("Only admins can add team members.");
+    return { ok: false, message: "Only admins can add team members." };
   }
   if (!isSupabaseAdminConfigured) {
-    throw new Error(
-      "The server isn't set up to create accounts yet — add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart."
-    );
+    return {
+      ok: false,
+      message:
+        "The server isn't set up to create accounts yet — add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart.",
+    };
   }
 
   const email = String(formData.get("email") ?? "").trim();
@@ -55,11 +75,26 @@ export async function createTeamMember(formData: FormData) {
   const payRateRaw = String(formData.get("pay_rate_per_hour") ?? "").trim();
   const commissionRaw = String(formData.get("commission_pct") ?? "").trim();
 
+  const firstName = String(formData.get("first_name") ?? "").trim();
+  const lastName = String(formData.get("last_name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const drivesForCompany = formData.get("drives_for_company") === "on";
+  const licenseNumber = String(formData.get("license_number") ?? "").trim();
+  const licenseState = String(formData.get("license_state") ?? "").trim();
+  const licenseClass = String(formData.get("license_class") ?? "").trim();
+  const licenseExpires = String(formData.get("license_expires") ?? "").trim();
+
   if (!email || !password) {
-    throw new Error("Enter an email and password.");
+    return { ok: false, message: "Enter an email and password." };
+  }
+  if (!firstName || !lastName) {
+    return { ok: false, message: "Enter a first and last name." };
+  }
+  if (phone && !toE164(phone)) {
+    return { ok: false, message: "That doesn't look like a valid phone number." };
   }
   if (password.length < 6) {
-    throw new Error("Password must be at least 6 characters.");
+    return { ok: false, message: "Password must be at least 6 characters." };
   }
 
   const admin = createAdminClient();
@@ -70,7 +105,7 @@ export async function createTeamMember(formData: FormData) {
     user_metadata: { organization_id: caller.organization_id },
   });
   if (error) {
-    throw new Error(error.message || "Couldn't create that account.");
+    return { ok: false, message: error.message || "Couldn't create that account." };
   }
 
   if (data.user) {
@@ -82,21 +117,32 @@ export async function createTeamMember(formData: FormData) {
       const { error: roleError } = await supabase
         .from("profile_roles")
         .insert({ profile_id: data.user.id, role_name: role });
-      if (roleError) throw roleError;
+      if (roleError) return { ok: false, message: roleError.message };
     }
 
     const { error: payError } = await supabase
       .from("profiles")
       .update({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`,
+        phone: phone || null,
         pay_type: payType,
         pay_rate_per_hour: payType !== "commission" && payRateRaw ? Number(payRateRaw) : null,
         commission_pct: payType !== "hourly" && commissionRaw ? Number(commissionRaw) : null,
+        // Licence details are only kept for people who actually drive.
+        drives_for_company: drivesForCompany,
+        license_number: drivesForCompany ? licenseNumber || null : null,
+        license_state: drivesForCompany ? licenseState || null : null,
+        license_class: drivesForCompany ? licenseClass || null : null,
+        license_expires: drivesForCompany && licenseExpires ? licenseExpires : null,
       })
       .eq("id", data.user.id);
-    if (payError) throw payError;
+    if (payError) return { ok: false, message: payError.message };
   }
 
   revalidatePath("/admin/team");
+  return { ok: true };
 }
 
 /**

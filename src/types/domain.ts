@@ -162,7 +162,10 @@ export type Role = string;
 export interface Profile {
   id: string;
   email: string;
+  /** Display name, kept in sync from first/last — what the rest of the app reads. */
   full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   roles: Role[];
   organization_id: string;
   pay_type: "hourly" | "commission" | "both";
@@ -170,6 +173,12 @@ export interface Profile {
   commission_pct: number | null;
   affiliate_slug: string | null;
   phone: string | null;
+  /** Licence details only matter for people who drive for the business. */
+  drives_for_company: boolean;
+  license_number: string | null;
+  license_state: string | null;
+  license_class: string | null;
+  license_expires: string | null;
   created_at: string;
   updated_at: string;
 }
