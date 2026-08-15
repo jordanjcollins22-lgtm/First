@@ -1,7 +1,7 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
 import type { MyScheduleData } from "@/lib/data/my-schedule";
 
-/** The full My/Team Schedule page content — shared by /evaluations and the
+/** The full Calendar page content — shared by /evaluations and the
  * homepage (for team members without New Property access) so they're always
  * exactly the same page, not two things that can drift apart. */
 export function MyEvaluationsContent({ schedule }: { schedule: MyScheduleData }) {
@@ -25,7 +25,7 @@ export function MyEvaluationsContent({ schedule }: { schedule: MyScheduleData })
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">{isAdmin ? "Team Schedule" : "My Schedule"}</h1>
+      <h1 className="mb-1 text-2xl font-bold">{isAdmin ? "Team Calendar" : "My Calendar"}</h1>
       <p className="mb-6 text-muted-foreground">
         {isAdmin
           ? "Every evaluation across the team — who, where, when, and status."

@@ -174,6 +174,22 @@ export interface Profile {
   updated_at: string;
 }
 
+/** A named calendar an admin manages, with people assigned to it. */
+export interface Calendar {
+  id: string;
+  organization_id: string;
+  name: string;
+  color: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A calendar plus who's on it, for the settings screen. */
+export interface CalendarWithMembers extends Calendar {
+  memberIds: string[];
+}
+
 export interface CustomRole {
   name: string;
   is_system: boolean;

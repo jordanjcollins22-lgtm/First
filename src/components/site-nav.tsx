@@ -27,7 +27,7 @@ export function SiteNav({
   const links = [
     ...(showProjectData ? [{ href: "/proposals", label: "Proposals" }] : []),
     ...(showProjectData ? [{ href: "/conversations", label: "Conversations" }] : []),
-    ...(showEvaluations ? [{ href: "/evaluations", label: "My Schedule" }] : []),
+    ...(showEvaluations ? [{ href: "/evaluations", label: "Calendar" }] : []),
     ...(showBookingLinks ? [{ href: "/booking-links", label: "Booking Links" }] : []),
     ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
       ? [{ href: "/admin/tools", label: "Inventory" }]
@@ -36,6 +36,7 @@ export function SiteNav({
       ? [{ href: "/admin/team", label: "Team & Services" }]
       : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
+    ...(roles.includes("admin") ? [{ href: "/admin/calendars", label: "Calendar Settings" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
     ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"

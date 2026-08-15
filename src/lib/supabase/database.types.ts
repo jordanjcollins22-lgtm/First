@@ -175,6 +175,50 @@ export interface Database {
           },
         ];
       };
+      calendars: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          color: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["calendars"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["calendars"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "calendars_organization_id_fkey";
+            columns: ["organization_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      calendar_members: {
+        Row: {
+          calendar_id: string;
+          profile_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["calendar_members"]["Row"]> & {
+          calendar_id: string;
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["calendar_members"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "calendar_members_calendar_id_fkey";
+            columns: ["calendar_id"];
+            referencedRelation: "calendars";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       roles: {
         Row: {
           name: string;
