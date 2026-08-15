@@ -5,6 +5,7 @@ import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -34,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let roles: string[] = [];
   let allowedTabs: string[] = [];
   let impersonatingName: string | null = null;
+  let orgName: string | null = null;
   if (isSupabaseConfigured) {
     const supabase = await createClient();
     const {
@@ -41,8 +43,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     } = await supabase.auth.getUser();
     userEmail = user?.email ?? null;
     if (user) {
-      const [profile, realProfile] = await Promise.all([getCurrentProfile(), getRealProfile()]);
+      const [profile, realProfile, org] = await Promise.all([
+        getCurrentProfile(),
+        getRealProfile(),
+        getCurrentOrganization().catch(() => null),
+      ]);
       roles = profile?.roles ?? [];
+      orgName = org?.name ?? null;
       if (profile && realProfile && profile.id !== realProfile.id) {
         impersonatingName = profile.full_name || profile.email;
       }
@@ -67,7 +74,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-bold text-primary">
-              Celerity
+              {orgName ?? "Celerity"}
             </Link>
             <SiteNav userEmail={userEmail} roles={roles} allowedTabs={allowedTabs} />
           </div>
