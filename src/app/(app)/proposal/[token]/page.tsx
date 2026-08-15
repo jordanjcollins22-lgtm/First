@@ -3,7 +3,13 @@ import { getProposalByToken } from "@/lib/data/public-proposal";
 import { listPublicExternalMessages } from "@/lib/data/public-job-messages";
 import { ProposalView } from "@/components/proposal/proposal-view";
 
-export default async function ProposalPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function ProposalPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center text-muted-foreground">
@@ -13,6 +19,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ token
   }
 
   const { token } = await params;
+  const { preview } = await searchParams;
   const data = await getProposalByToken(token);
 
   if (!data) {
@@ -26,5 +33,5 @@ export default async function ProposalPage({ params }: { params: Promise<{ token
 
   const messages = await listPublicExternalMessages(token);
 
-  return <ProposalView data={data} token={token} messages={messages} />;
+  return <ProposalView data={data} token={token} messages={messages} preview={preview === "1"} />;
 }

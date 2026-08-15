@@ -76,6 +76,11 @@ function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove
           </>
         )}
         <Button type="button" size="sm" variant="ghost" asChild>
+          <a href={`/proposal/${proposal.token}?preview=1`} target="_blank" rel="noreferrer">
+            Preview
+          </a>
+        </Button>
+        <Button type="button" size="sm" variant="ghost" asChild>
           <Link href={`/jobs/${job.id}`}>Open job</Link>
         </Button>
       </div>

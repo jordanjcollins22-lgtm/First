@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, Pencil } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,10 +148,18 @@ export function ProposalPanel({
         <>
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background/60 p-2.5">
             <p className="min-w-0 truncate text-xs text-muted-foreground">{link}</p>
-            <Button type="button" variant="outline" size="sm" onClick={handleCopy} className="shrink-0">
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy link"}
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" variant="outline" size="sm" asChild>
+                <a href={`${link}?preview=1`} target="_blank" rel="noreferrer">
+                  <Eye className="h-3.5 w-3.5" />
+                  Preview
+                </a>
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? "Copied" : "Copy link"}
+              </Button>
+            </div>
           </div>
           {proposal.client_response_note && (
             <p className="text-xs text-muted-foreground">
