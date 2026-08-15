@@ -6,6 +6,20 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
 export async function createTool(formData: FormData) {
+  try {
+    return await createToolInner(formData);
+  } catch (err) {
+    // Belt-and-suspenders: whatever went wrong, make sure a real Error with
+    // a real message crosses back to the client — logged here too since a
+    // thrown Server Action error's message can otherwise get replaced with
+    // an opaque one on the client with no way to tell what actually failed.
+    console.error("createTool failed:", err);
+    if (err instanceof Error && err.message) throw err;
+    throw new Error("Couldn't add that tool — try again.");
+  }
+}
+
+async function createToolInner(formData: FormData) {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
 
