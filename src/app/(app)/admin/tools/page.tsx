@@ -15,7 +15,7 @@ import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { CreateMaterialForm } from "@/components/material/create-material-form";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
-import { storageLocationOptions } from "@/components/inventory/storage-location-select";
+import { storageLocationOptions } from "@/lib/storage-locations";
 
 export default async function InventoryPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;

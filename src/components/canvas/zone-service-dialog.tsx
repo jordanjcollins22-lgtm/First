@@ -23,7 +23,7 @@ import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { AddInventoryItemForm, type CreatedInventoryItem } from "@/components/inventory/add-inventory-item-form";
-import { storageLocationOptions } from "@/components/inventory/storage-location-select";
+import { storageLocationOptions } from "@/lib/storage-locations";
 
 function PhotoThumb({
   path,

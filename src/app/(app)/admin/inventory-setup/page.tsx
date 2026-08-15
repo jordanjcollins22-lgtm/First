@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import { listTools } from "@/lib/data/tools";
 import { listMaterials } from "@/lib/data/materials";
-import { storageLocationOptions } from "@/components/inventory/storage-location-select";
+import { storageLocationOptions } from "@/lib/storage-locations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { InventorySetupFlow } from "@/components/inventory/inventory-setup-flow";
 

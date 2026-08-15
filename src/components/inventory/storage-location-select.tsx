@@ -10,15 +10,6 @@ import { cn } from "@/lib/utils";
 const NONE = "__none__";
 const ADD_NEW = "__add_new__";
 
-/** Distinct storage locations already in use, for the picker's option list.
- * There's no locations table — a storage location is just text on the tool
- * or material, so the list is whatever the business has already typed. */
-export function storageLocationOptions(items: { storage_location: string | null }[]): string[] {
-  return Array.from(
-    new Set(items.map((item) => item.storage_location?.trim()).filter((value): value is string => Boolean(value)))
-  ).sort((a, b) => a.localeCompare(b));
-}
-
 /** Pick from the locations already in use rather than retyping one (and
  * risking "Truck 1" / "truck 1" / "Truck1" all becoming separate places),
  * with an inline field for the first time a new location comes up. */
