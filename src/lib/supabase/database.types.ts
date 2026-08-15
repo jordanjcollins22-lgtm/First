@@ -191,6 +191,10 @@ export interface Database {
           color: string;
           description: string | null;
           is_system: boolean;
+          reminders_enabled: boolean;
+          reminder_hours_before: number;
+          notify_on_booking: boolean;
+          notify_on_change: boolean;
           created_at: string;
           updated_at: string;
         };

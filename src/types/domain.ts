@@ -195,6 +195,12 @@ export interface Calendar {
   /** Built in rather than added by the business — the Evaluations calendar
    * the schedule depends on. Editable and staffable, but not deletable. */
   is_system: boolean;
+  /** What this calendar sends. Whether a person receives it is still their
+   * own choice under Notifications — both have to be on. */
+  reminders_enabled: boolean;
+  reminder_hours_before: number;
+  notify_on_booking: boolean;
+  notify_on_change: boolean;
   created_at: string;
   updated_at: string;
 }

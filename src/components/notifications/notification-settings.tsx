@@ -184,20 +184,10 @@ export function NotificationSettings({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5 border-t border-border pt-3">
-            <Label htmlFor="notify-hours">Remind me this many hours ahead</Label>
-            <Input
-              id="notify-hours"
-              type="number"
-              min={1}
-              max={168}
-              value={form.reminderHoursBefore}
-              onChange={(e) => setForm({ ...form, reminderHoursBefore: Number(e.target.value) || 24 })}
-              onBlur={() => update({ reminderHoursBefore: form.reminderHoursBefore })}
-              disabled={isPending || !form.smsEnabled || !form.appointmentReminders}
-              className="w-24"
-            />
-          </div>
+          <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+            How far ahead a reminder goes out is set on the calendar itself, under Calendar settings — so each
+            calendar can have its own lead time.
+          </p>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
           {saved && <p className="text-xs text-primary">Saved.</p>}

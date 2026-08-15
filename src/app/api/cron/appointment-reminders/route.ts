@@ -34,17 +34,42 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
+  // Who has opted in to receiving reminders at all.
   const { data: prefs } = await admin
     .from("notification_preferences")
-    .select("profile_id, reminder_hours_before")
+    .select("profile_id")
     .eq("sms_enabled", true)
     .eq("appointment_reminders", true);
   if (!prefs || prefs.length === 0) return NextResponse.json({ sent: 0 });
 
+  // How far ahead to remind is the calendar's call, not the person's.
+  // Evaluations live on each org's built-in Evaluations calendar, so that
+  // calendar's settings govern these reminders.
+  const { data: profiles } = await admin
+    .from("profiles")
+    .select("id, organization_id")
+    .in("id", prefs.map((p) => p.profile_id));
+  const orgByProfile = new Map((profiles ?? []).map((p) => [p.id, p.organization_id]));
+
+  const { data: calendars } = await admin
+    .from("calendars")
+    .select("organization_id, reminders_enabled, reminder_hours_before")
+    .eq("is_system", true);
+  const calendarByOrg = new Map((calendars ?? []).map((c) => [c.organization_id, c]));
+
+  const leadHoursByProfile = new Map<string, number>();
+  for (const pref of prefs) {
+    const calendar = calendarByOrg.get(orgByProfile.get(pref.profile_id) ?? "");
+    // No Evaluations calendar yet (migration 0065 not run) falls back to 24h.
+    if (calendar && !calendar.reminders_enabled) continue;
+    leadHoursByProfile.set(pref.profile_id, calendar?.reminder_hours_before ?? 24);
+  }
+  if (leadHoursByProfile.size === 0) return NextResponse.json({ sent: 0 });
+
   const now = Date.now();
-  // One window wide enough to cover everybody's lead time, then filtered
+  // One window wide enough to cover every calendar's lead time, then filtered
   // per person below — cheaper than a query each.
-  const maxHours = Math.max(...prefs.map((p) => p.reminder_hours_before));
+  const maxHours = Math.max(...leadHoursByProfile.values());
   const { data: jobs } = await admin
     .from("jobs")
     .select("id, name, assigned_to, evaluation_date, evaluation_status, property_id")
@@ -62,11 +87,11 @@ export async function GET(request: NextRequest) {
   let sent = 0;
   for (const job of jobs) {
     if (!job.assigned_to || !job.evaluation_date) continue;
-    const pref = prefs.find((p) => p.profile_id === job.assigned_to);
-    if (!pref) continue;
+    const leadHours = leadHoursByProfile.get(job.assigned_to);
+    if (leadHours == null) continue;
 
     const hoursAway = (new Date(job.evaluation_date).getTime() - now) / 3600_000;
-    if (hoursAway > pref.reminder_hours_before) continue;
+    if (hoursAway > leadHours) continue;
 
     const when = new Date(job.evaluation_date).toLocaleString(undefined, {
       weekday: "short",

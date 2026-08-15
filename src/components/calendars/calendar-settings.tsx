@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, ChevronUp, Plus, Settings as SettingsIcon, Trash2 } from "lucide-react";
+import { Bell, ChevronDown, ChevronUp, Plus, Settings as SettingsIcon, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import {
   deleteCalendar,
   setCalendarMember,
   updateCalendar,
+  updateCalendarNotifications,
+  type CalendarNotificationInput,
 } from "@/lib/actions/calendar-actions";
 import { BookingLinksPanel, type AffiliateRow } from "@/components/booking/booking-links-panel";
 import type { CalendarWithMembers } from "@/types/domain";
@@ -82,6 +84,110 @@ function NewCalendarForm() {
         </Button>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function CalendarNotifications({ calendar }: { calendar: CalendarWithMembers }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<CalendarNotificationInput>({
+    remindersEnabled: calendar.reminders_enabled,
+    reminderHoursBefore: calendar.reminder_hours_before,
+    notifyOnBooking: calendar.notify_on_booking,
+    notifyOnChange: calendar.notify_on_change,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  function save(next: CalendarNotificationInput) {
+    const previous = form;
+    setForm(next);
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      const result = await updateCalendarNotifications(calendar.id, next);
+      if (!result.ok) {
+        setForm(previous);
+        setError(result.message);
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary"
+        aria-expanded={open}
+      >
+        <Bell className="h-3.5 w-3.5" />
+        Notifications for this calendar
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-[10px] text-muted-foreground">
+            These set what <span className="font-medium">{calendar.name}</span> sends. Each person still chooses
+            whether they get texts at all, under Notifications.
+          </p>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.remindersEnabled}
+              disabled={isPending}
+              onChange={(e) => save({ ...form, remindersEnabled: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Send appointment reminders
+          </label>
+
+          <div className="flex items-center gap-2 pl-6">
+            <Label className="text-xs text-muted-foreground">Hours ahead</Label>
+            <Input
+              type="number"
+              min={1}
+              max={168}
+              value={form.reminderHoursBefore}
+              disabled={isPending || !form.remindersEnabled}
+              onChange={(e) => setForm({ ...form, reminderHoursBefore: Number(e.target.value) || 24 })}
+              onBlur={() => save(form)}
+              className="h-8 w-20 text-sm"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.notifyOnBooking}
+              disabled={isPending}
+              onChange={(e) => save({ ...form, notifyOnBooking: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Tell the assignee when something is booked
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.notifyOnChange}
+              disabled={isPending}
+              onChange={(e) => save({ ...form, notifyOnChange: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Tell them when it&apos;s rescheduled or cancelled
+          </label>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          {saved && <p className="text-xs text-primary">Saved.</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -221,6 +327,8 @@ function CalendarCard({ calendar, teamMembers }: { calendar: CalendarWithMembers
             </div>
           )}
         </div>
+
+        <CalendarNotifications calendar={calendar} />
 
         {error && <p className="text-xs text-destructive">{error}</p>}
       </CardContent>

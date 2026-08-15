@@ -138,3 +138,41 @@ export async function setCalendarMember(
     return { ok: false, message: describe(err) };
   }
 }
+
+export interface CalendarNotificationInput {
+  remindersEnabled: boolean;
+  reminderHoursBefore: number;
+  notifyOnBooking: boolean;
+  notifyOnChange: boolean;
+}
+
+/** Per-calendar notification rules. These decide what the calendar sends;
+ * each person still controls whether they receive anything at all. */
+export async function updateCalendarNotifications(
+  id: string,
+  input: CalendarNotificationInput
+): Promise<CalendarResult> {
+  try {
+    const denied = await requireAdmin();
+    if (denied) return { ok: false, message: denied };
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("calendars")
+      .update({
+        reminders_enabled: input.remindersEnabled,
+        reminder_hours_before: Math.min(168, Math.max(1, Math.round(input.reminderHoursBefore) || 24)),
+        notify_on_booking: input.notifyOnBooking,
+        notify_on_change: input.notifyOnChange,
+      })
+      .eq("id", id);
+    if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
+
+    revalidatePath(PATH);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (err) {
+    console.error("updateCalendarNotifications failed:", err);
+    return { ok: false, message: describe(err) };
+  }
+}
