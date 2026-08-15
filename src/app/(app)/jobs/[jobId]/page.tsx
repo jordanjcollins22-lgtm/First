@@ -65,7 +65,9 @@ export default async function JobPage({
     getCanvasDesignForJob(jobId),
     supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
     getProposalForJob(jobId),
-    getInvoiceForJob(jobId),
+    // Falls back to null if migration 0060 (the invoices table) hasn't been
+    // run yet — the rest of the job page shouldn't 500 for a missing panel.
+    getInvoiceForJob(jobId).catch(() => null),
     headers(),
     listJobMessages(jobId, "internal"),
     listJobMessages(jobId, "external"),
