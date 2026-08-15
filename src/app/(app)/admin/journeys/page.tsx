@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listJourneys, listJourneySteps } from "@/lib/data/journeys";
 import { syncCodeManagedJourneys } from "@/lib/journeys/sync";
 import { CODE_MANAGED_ROLE_KEYS } from "@/lib/journeys/definitions";
@@ -19,6 +20,9 @@ export default async function JourneysPage() {
   if (!profile?.roles.includes("admin")) {
     redirect("/attractors");
   }
+
+  const org = await getCurrentOrganization().catch(() => null);
+  const orgName = org?.name ?? "the app";
 
   let journeys: Awaited<ReturnType<typeof listJourneys>> = [];
   let migrationMissing = false;
@@ -54,7 +58,7 @@ export default async function JourneysPage() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Journey Dashboard</h1>
       <p className="mb-6 text-muted-foreground">
-        How every role moves through Celerity, step by step — where the clicks go, what&apos;s automated
+        How every role moves through {orgName}, step by step — where the clicks go, what&apos;s automated
         already, and what still needs a human.
       </p>
       <JourneyDashboard

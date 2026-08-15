@@ -1,6 +1,6 @@
 {
-  "name": "Celerity",
-  "short_name": "Celerity",
+  "name": "JS Landscaping",
+  "short_name": "JS Landscaping",
   "description": "Property estimating & job-execution app",
   "start_url": "/",
   "display": "standalone",

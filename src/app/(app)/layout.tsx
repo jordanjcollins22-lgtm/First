@@ -12,10 +12,10 @@ import { isSupabaseConfigured } from "@/lib/env";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "Celerity",
+  title: "JS Landscaping",
   description: "Property estimating & job-execution app",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "Celerity" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "JS Landscaping" },
   icons: {
     apple: "/apple-touch-icon.png",
     icon: [{ url: "/icon-192.png", sizes: "192x192" }, { url: "/icon-512.png", sizes: "512x512" }],
@@ -74,7 +74,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-bold text-primary">
-              {orgName ?? "Celerity"}
+              {orgName ?? "JS Landscaping"}
             </Link>
             <SiteNav userEmail={userEmail} roles={roles} allowedTabs={allowedTabs} />
           </div>
