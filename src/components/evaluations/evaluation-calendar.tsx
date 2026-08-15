@@ -258,18 +258,30 @@ export function EvaluationCalendar({
                     type="button"
                     onClick={() => setSelectedDate(key)}
                     className={cn(
-                      "flex min-h-16 flex-col items-start gap-0.5 rounded-lg border p-1.5 text-left transition-colors",
+                      "relative flex min-h-16 flex-col items-start gap-0.5 rounded-lg border p-1.5 text-left transition-colors",
                       isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
-                      isWeeklyOff && !isSelected && "bg-muted/40"
+                      // Not a working day at all, and nothing booked — mute the
+                      // whole cell so non-working days read at a glance across
+                      // the month rather than needing to be read one by one.
+                      isWeeklyOff && !isSelected && "border-dashed bg-muted/70",
+                      dayOffs.length > 0 && !isSelected && "border-destructive/40 bg-destructive/5"
                     )}
                   >
-                    <span className={cn("text-xs", isToday && "font-bold text-primary")}>{date.getDate()}</span>
+                    <span
+                      className={cn(
+                        "text-xs",
+                        isToday && "font-bold text-primary",
+                        isWeeklyOff && !isToday && "text-muted-foreground"
+                      )}
+                    >
+                      {date.getDate()}
+                    </span>
                     {dayJobs.length > 0 && (
                       <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[9px] font-medium text-primary">
                         {dayJobs.length} eval{dayJobs.length === 1 ? "" : "s"}
                       </span>
                     )}
-                    {dayOffs.length > 0 && (
+                    {dayOffs.length > 0 ? (
                       <span className="rounded-full bg-destructive/10 px-1.5 py-0 text-[9px] font-medium text-destructive">
                         {mine
                           ? offSummary(mine)
@@ -277,10 +289,30 @@ export function EvaluationCalendar({
                             ? dayOffs.map((d) => evaluatorNamesById[d.profile_id] ?? "Off").join(", ")
                             : `${dayOffs.length} off`}
                       </span>
+                    ) : (
+                      isWeeklyOff && (
+                        <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0 text-[9px] font-medium text-muted-foreground">
+                          Not working
+                        </span>
+                      )
                     )}
                   </button>
                 );
               })}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded border border-dashed border-border bg-muted/70" />
+                Not a working day
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded border border-destructive/40 bg-destructive/5" />
+                Time off
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded-full bg-primary/15" />
+                Evaluations booked
+              </span>
             </div>
           </>
         ) : (
@@ -302,13 +334,19 @@ export function EvaluationCalendar({
                   className={cn(
                     "flex min-h-40 flex-col items-stretch gap-1 rounded-lg border p-1.5 text-left align-top transition-colors",
                     isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
-                    isWeeklyOff && !isSelected && "bg-muted/40"
+                    isWeeklyOff && !isSelected && "border-dashed bg-muted/70",
+                    dayOffs.length > 0 && !isSelected && "border-destructive/40 bg-destructive/5"
                   )}
                 >
                   <div className="flex items-baseline justify-between">
                     <span className="text-[10px] font-medium text-muted-foreground">{WEEKDAY_LABELS[date.getDay()]}</span>
                     <span className={cn("text-xs", isToday && "font-bold text-primary")}>{date.getDate()}</span>
                   </div>
+                  {isWeeklyOff && dayOffs.length === 0 && (
+                    <span className="rounded bg-muted-foreground/15 px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
+                      Not working
+                    </span>
+                  )}
                   {mine && (
                     <span className="rounded bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive">
                       {offSummary(mine)}

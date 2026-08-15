@@ -30,10 +30,10 @@ export function EvaluationsView({
   rangeEnd: string;
 }) {
   return (
-    <Tabs defaultValue="list">
+    <Tabs defaultValue="calendar">
       <TabsList>
-        <TabsTrigger value="list">List</TabsTrigger>
         <TabsTrigger value="calendar">Calendar</TabsTrigger>
+        <TabsTrigger value="list">List</TabsTrigger>
       </TabsList>
       <TabsContent value="list">
         <EvaluationList
