@@ -22,7 +22,13 @@ export function SiteNav({
   const showProjectData = allowedTabs.includes("project-data");
   const showEvaluations = allowedTabs.includes("evaluations");
   const showBookingLinks = roles.includes("admin") || qualifiesForAffiliateLink(roles);
+  // Project Data is the only tab kept in the bar; everything else lives in
+  // the menu so the header stays readable as tabs get added.
   const links = [
+    ...(showProjectData ? [{ href: "/proposals", label: "Proposals" }] : []),
+    ...(showProjectData ? [{ href: "/conversations", label: "Conversations" }] : []),
+    ...(showEvaluations ? [{ href: "/evaluations", label: "My Schedule" }] : []),
+    ...(showBookingLinks ? [{ href: "/booking-links", label: "Booking Links" }] : []),
     ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
       ? [{ href: "/admin/tools", label: "Inventory" }]
       : []),
@@ -63,30 +69,6 @@ export function SiteNav({
         </Link>
       )}
 
-      {showProjectData && (
-        <Link href="/proposals" className="hover:text-primary">
-          Proposals
-        </Link>
-      )}
-
-      {showProjectData && (
-        <Link href="/conversations" className="hover:text-primary">
-          Conversations
-        </Link>
-      )}
-
-      {showEvaluations && (
-        <Link href="/evaluations" className="hover:text-primary">
-          My Schedule
-        </Link>
-      )}
-
-      {showBookingLinks && (
-        <Link href="/booking-links" className="hover:text-primary">
-          Booking Links
-        </Link>
-      )}
-
       {links.length > 0 && (
         <div ref={containerRef} className="relative">
           <button
@@ -95,7 +77,7 @@ export function SiteNav({
             className="flex items-center gap-1 hover:text-primary"
             aria-expanded={open}
           >
-            Databases
+            Menu
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
           {open && (
