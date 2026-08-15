@@ -6,8 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { notifyTeamMember } from "@/lib/notifications";
+import type { TeamMessage } from "@/types/domain";
 
 export type ChannelResult = { ok: true; id?: string } | { ok: false; message: string };
+
+/** Carries the row back so the sender can show their own message straight
+ * away rather than waiting on a refresh or a Realtime round trip. */
+export type PostMessageResult = { ok: true; message: TeamMessage } | { ok: false; message: string };
 
 function fail(error: { message: string; code?: string }): ChannelResult {
   return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
@@ -87,7 +92,7 @@ export async function setTeamChannelMember(
   }
 }
 
-export async function postTeamMessage(channelId: string, body: string): Promise<ChannelResult> {
+export async function postTeamMessage(channelId: string, body: string): Promise<PostMessageResult> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Not signed in." };
@@ -97,16 +102,20 @@ export async function postTeamMessage(channelId: string, body: string): Promise<
 
     const organizationId = await getCurrentOrganizationId();
     const supabase = await createClient();
-    const { error } = await supabase.from("team_messages").insert({
-      channel_id: channelId,
-      organization_id: organizationId,
-      author_profile_id: profile.id,
-      author_name: profile.full_name || profile.email,
-      body: trimmed,
-    });
+    const { data: created, error } = await supabase
+      .from("team_messages")
+      .insert({
+        channel_id: channelId,
+        organization_id: organizationId,
+        author_profile_id: profile.id,
+        author_name: profile.full_name || profile.email,
+        body: trimmed,
+      })
+      .select()
+      .single();
     // RLS blocks posting to a group you're not in, which surfaces here rather
     // than as a silent no-op.
-    if (error) return fail(error);
+    if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
 
     const { data: channel } = await supabase.from("team_channels").select("name").eq("id", channelId).maybeSingle();
     const { data: members } = await supabase
@@ -126,9 +135,12 @@ export async function postTeamMessage(channelId: string, body: string): Promise<
         )
     );
 
+    // Only the list of conversations needs rebuilding; the thread itself
+    // updates from the returned row and Realtime. Revalidating the thread
+    // too would replace the component's state mid-send, which is what made
+    // a sender's own message vanish until they reopened the app.
     revalidatePath("/conversations");
-    revalidatePath(`/conversations/${channelId}`);
-    return { ok: true };
+    return { ok: true, message: created as unknown as TeamMessage };
   } catch (err) {
     console.error("postTeamMessage failed:", err);
     return { ok: false, message: describe(err) };

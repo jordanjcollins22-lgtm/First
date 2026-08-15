@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Video } from "lucide-react";
 
@@ -36,7 +36,22 @@ export function TeamChannelThread({
   currentProfileId: string;
   teamMembers: TeamMember[];
 }) {
-  const [messages, setMessages] = useState<TeamMessage[]>(initialMessages);
+  // Messages that landed since this page was rendered — from Realtime, or
+  // from this person's own send. Kept separate from the server's list and
+  // merged at render time rather than copied into state, so a fresh server
+  // render can never replace what has already arrived.
+  const [liveMessages, setLiveMessages] = useState<TeamMessage[]>([]);
+
+  const messages = useMemo(() => {
+    const fromServer = new Set(initialMessages.map((m) => m.id));
+    const extra = liveMessages.filter((m) => !fromServer.has(m.id));
+    if (extra.length === 0) return initialMessages;
+    return [...initialMessages, ...extra].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }, [initialMessages, liveMessages]);
+
+  const addLiveMessage = useCallback((incoming: TeamMessage) => {
+    setLiveMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]));
+  }, []);
   const [body, setBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [memberIds, setMemberIds] = useState<string[]>(channel.memberIds);
@@ -63,8 +78,7 @@ export function TeamChannelThread({
           filter: `channel_id=eq.${channel.id}`,
         },
         (payload) => {
-          const message = payload.new as TeamMessage;
-          setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+          addLiveMessage(payload.new as TeamMessage);
         }
       )
       .subscribe();
@@ -72,7 +86,7 @@ export function TeamChannelThread({
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [channel.id]);
+  }, [channel.id, addLiveMessage]);
 
   // Follow the conversation as it grows.
   useEffect(() => {
@@ -89,6 +103,8 @@ export function TeamChannelThread({
         setError(result.message);
         return;
       }
+      // Don't wait on Realtime to echo it back.
+      addLiveMessage(result.message);
       setBody("");
     });
   }
