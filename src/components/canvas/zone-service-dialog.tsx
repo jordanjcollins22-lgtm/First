@@ -23,6 +23,7 @@ import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { AddInventoryItemForm, type CreatedInventoryItem } from "@/components/inventory/add-inventory-item-form";
+import { storageLocationOptions } from "@/components/inventory/storage-location-select";
 
 function PhotoThumb({
   path,
@@ -952,7 +953,11 @@ export function ZoneServiceDialog({
           </div>
 
           {showAddNewItem ? (
-            <AddInventoryItemForm onCreated={handleNewItemCreated} onCancel={() => setShowAddNewItem(false)} />
+            <AddInventoryItemForm
+              onCreated={handleNewItemCreated}
+              onCancel={() => setShowAddNewItem(false)}
+              storageLocations={storageLocationOptions([...catalog.tools, ...catalog.materials])}
+            />
           ) : (
             <Button type="button" variant="secondary" onClick={() => setShowAddNewItem(true)}>
               + Add new material

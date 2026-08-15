@@ -15,6 +15,7 @@ import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { CreateMaterialForm } from "@/components/material/create-material-form";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
+import { storageLocationOptions } from "@/components/inventory/storage-location-select";
 
 export default async function InventoryPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -49,6 +50,9 @@ export default async function InventoryPage() {
     (t) => !t.on_order && t.quantity != null && t.reorder_threshold != null && t.quantity <= t.reorder_threshold
   ).length;
   const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
+  // Tools and materials share one pool of places — a shelf that holds a
+  // chainsaw is the same shelf that holds a bag of mulch.
+  const storageLocations = storageLocationOptions([...tools, ...materials]);
 
   const materialsToOrderCount = materials.filter(
     (m) =>
@@ -104,7 +108,7 @@ export default async function InventoryPage() {
                 <CardTitle>Add a tool</CardTitle>
               </CardHeader>
               <CardContent>
-                <CreateToolForm availableKits={availableKits} />
+                <CreateToolForm availableKits={availableKits} storageLocations={storageLocations} />
               </CardContent>
             </Card>
 
@@ -140,6 +144,7 @@ export default async function InventoryPage() {
                         serviceTypes={serviceTypeOptions}
                         linkedServiceTypeIds={linksByTool.get(tool.id) ?? []}
                         availableKits={availableKits}
+                        storageLocations={storageLocations}
                       />
                     ))}
                   </tbody>
@@ -158,7 +163,7 @@ export default async function InventoryPage() {
                 <CardTitle>Add a material</CardTitle>
               </CardHeader>
               <CardContent>
-                <CreateMaterialForm />
+                <CreateMaterialForm storageLocations={storageLocations} />
               </CardContent>
             </Card>
 
@@ -186,7 +191,7 @@ export default async function InventoryPage() {
                   </thead>
                   <tbody>
                     {materials.map((material) => (
-                      <MaterialInventoryRow key={material.id} material={material} />
+                      <MaterialInventoryRow key={material.id} material={material} storageLocations={storageLocations} />
                     ))}
                   </tbody>
                 </table>

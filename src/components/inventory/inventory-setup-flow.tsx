@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { AddInventoryItemForm, type CreatedInventoryItem } from "./add-inventory-item-form";
 
-export function InventorySetupFlow() {
+export function InventorySetupFlow({ storageLocations }: { storageLocations: string[] }) {
   const [added, setAdded] = useState<CreatedInventoryItem[]>([]);
   const [formKey, setFormKey] = useState(0);
 
@@ -29,7 +29,7 @@ export function InventorySetupFlow() {
         </div>
       )}
 
-      <AddInventoryItemForm key={formKey} onCreated={handleCreated} />
+      <AddInventoryItemForm key={formKey} onCreated={handleCreated} storageLocations={storageLocations} />
 
       <Link
         href="/admin/tools"

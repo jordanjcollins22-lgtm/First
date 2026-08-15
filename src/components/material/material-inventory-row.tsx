@@ -24,9 +24,10 @@ import type { Material } from "@/types/domain";
 
 interface MaterialInventoryRowProps {
   material: Material;
+  storageLocations: string[];
 }
 
-export function MaterialInventoryRow({ material }: MaterialInventoryRowProps) {
+export function MaterialInventoryRow({ material, storageLocations }: MaterialInventoryRowProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -53,6 +54,7 @@ export function MaterialInventoryRow({ material }: MaterialInventoryRowProps) {
             materialId={material.id}
             initialLocation={material.storage_location}
             stockMethod={material.stock_method}
+            locations={storageLocations}
           />
         </td>
         <td className="p-2">

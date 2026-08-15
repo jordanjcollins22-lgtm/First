@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { createTool } from "@/lib/actions/tool-actions";
 import { createMaterial } from "@/lib/actions/material-actions";
+import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
 
 export interface CreatedInventoryItem {
   kind: "tool" | "material";
@@ -20,9 +21,11 @@ export interface CreatedInventoryItem {
 export function AddInventoryItemForm({
   onCreated,
   onCancel,
+  storageLocations = [],
 }: {
   onCreated: (item: CreatedInventoryItem) => void;
   onCancel?: () => void;
+  storageLocations?: string[];
 }) {
   const [kind, setKind] = useState<"tool" | "material">("tool");
   const [name, setName] = useState("");
@@ -219,10 +222,10 @@ export function AddInventoryItemForm({
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
             <Label>Stored at *</Label>
-            <Input
+            <StorageLocationSelect
+              locations={storageLocations}
               value={storageLocation}
-              onChange={(e) => setStorageLocation(e.target.value)}
-              placeholder="e.g. Shop, Truck 1"
+              onChange={setStorageLocation}
               className="w-40"
             />
           </div>

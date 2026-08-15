@@ -26,9 +26,16 @@ interface ToolInventoryRowProps {
   serviceTypes: { id: string; label: string }[];
   linkedServiceTypeIds: string[];
   availableKits: number[];
+  storageLocations: string[];
 }
 
-export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, availableKits }: ToolInventoryRowProps) {
+export function ToolInventoryRow({
+  tool,
+  serviceTypes,
+  linkedServiceTypeIds,
+  availableKits,
+  storageLocations,
+}: ToolInventoryRowProps) {
   const [open, setOpen] = useState(false);
   // Lifted here (rather than left inside ToolOwnershipSelect) so flipping
   // Own/Rent updates the cost label and order-status wording in this same
@@ -67,7 +74,12 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
           </div>
         </td>
         <td className="p-2">
-          <ToolStorageLocationInput toolId={tool.id} initialLocation={tool.storage_location} stockMethod={tool.stock_method} />
+          <ToolStorageLocationInput
+            toolId={tool.id}
+            initialLocation={tool.storage_location}
+            stockMethod={tool.stock_method}
+            locations={storageLocations}
+          />
         </td>
         <td className="p-2">
           <ToolOwnershipSelect toolId={tool.id} isRental={isRental} onChange={setIsRental} />

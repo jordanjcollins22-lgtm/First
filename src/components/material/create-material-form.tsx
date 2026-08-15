@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client";
 import { createMaterial } from "@/lib/actions/material-actions";
 import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
+import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
 
-export function CreateMaterialForm() {
+export function CreateMaterialForm({ storageLocations }: { storageLocations: string[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const costRef = useRef<HTMLInputElement>(null);
@@ -24,6 +25,7 @@ export function CreateMaterialForm() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [quantityValue, setQuantityValue] = useState("");
   const [stockMethod, setStockMethod] = useState<"in_stock" | "order_as_needed">("in_stock");
+  const [storageLocation, setStorageLocation] = useState("");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
@@ -59,6 +61,7 @@ export function CreateMaterialForm() {
         setPreviewUrl(null);
         setQuantityValue("");
         setStockMethod("in_stock");
+        setStorageLocation("");
         setFetchMessage(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -216,12 +219,12 @@ export function CreateMaterialForm() {
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="material-storage">Stored at{locationRequired && " *"}</Label>
-          <Input
-            id="material-storage"
-            name="storage_location"
-            required={locationRequired}
-            placeholder="e.g. Yard bin 2, Shed"
+          <Label>Stored at{locationRequired && " *"}</Label>
+          <input type="hidden" name="storage_location" value={storageLocation} />
+          <StorageLocationSelect
+            locations={storageLocations}
+            value={storageLocation}
+            onChange={setStorageLocation}
             className="w-36"
           />
         </div>

@@ -2,36 +2,38 @@
 
 import { useState, useTransition } from "react";
 
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
 import { updateToolStorageLocation } from "@/lib/actions/tool-actions";
 
 export function ToolStorageLocationInput({
   toolId,
   initialLocation,
   stockMethod,
+  locations,
 }: {
   toolId: string;
   initialLocation: string | null;
   stockMethod: "in_stock" | "order_as_needed";
+  locations: string[];
 }) {
   const [value, setValue] = useState(initialLocation ?? "");
   const [isPending, startTransition] = useTransition();
 
   const missing = stockMethod === "in_stock" && !value.trim();
 
-  function handleBlur() {
-    startTransition(() => updateToolStorageLocation(toolId, value.trim() || null));
+  function handleChange(next: string) {
+    setValue(next);
+    startTransition(() => updateToolStorageLocation(toolId, next.trim() || null));
   }
 
   return (
-    <Input
-      placeholder={missing ? "⚠ Add location" : "e.g. Shop shelf 3, Truck 1"}
+    <StorageLocationSelect
+      locations={locations}
       value={value}
+      onChange={handleChange}
+      invalid={missing}
       disabled={isPending}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={handleBlur}
-      className={cn("h-9 w-36 text-sm", missing && "border-destructive text-destructive placeholder:text-destructive")}
+      className="w-36"
     />
   );
 }

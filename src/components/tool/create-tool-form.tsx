@@ -9,11 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KitPicker } from "./kit-picker";
+import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
 import { createClient } from "@/lib/supabase/client";
 import { createTool } from "@/lib/actions/tool-actions";
 import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
 
-export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
+export function CreateToolForm({
+  availableKits,
+  storageLocations,
+}: {
+  availableKits: number[];
+  storageLocations: string[];
+}) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -25,6 +32,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
   const [kits, setKits] = useState<number[]>([]);
   const [quantityValue, setQuantityValue] = useState("");
   const [stockMethod, setStockMethod] = useState<"in_stock" | "order_as_needed">("in_stock");
+  const [storageLocation, setStorageLocation] = useState("");
   const [isPending, startTransition] = useTransition();
   const [fetching, setFetching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<string | null>(null);
@@ -86,6 +94,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         setKits([]);
         setQuantityValue("");
         setStockMethod("in_stock");
+        setStorageLocation("");
         setFetchMessage(null);
       } catch (err) {
         const message = err instanceof Error ? err.message : "";
@@ -201,12 +210,12 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="tool-storage">Stored at{locationRequired && " *"}</Label>
-          <Input
-            id="tool-storage"
-            name="storage_location"
-            required={locationRequired}
-            placeholder="e.g. Shop, Truck 1"
+          <Label>Stored at{locationRequired && " *"}</Label>
+          <input type="hidden" name="storage_location" value={storageLocation} />
+          <StorageLocationSelect
+            locations={storageLocations}
+            value={storageLocation}
+            onChange={setStorageLocation}
             className="w-40"
           />
         </div>
