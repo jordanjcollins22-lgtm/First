@@ -17,6 +17,8 @@ export const env = {
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? "",
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -34,3 +36,4 @@ export const isMapboxConfigured = Boolean(env.mapboxToken);
 export const isRentcastConfigured = Boolean(env.rentcastApiKey);
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
+export const isStripeConfigured = Boolean(env.stripeSecretKey);

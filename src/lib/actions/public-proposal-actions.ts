@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAndSendInvoice } from "@/lib/invoicing";
 
 /**
  * The client's Accept/Decline click — no logged-in user exists, so this runs
  * entirely on the service-role client (same pattern as /book). Accepting
- * moves the underlying job to "approved" directly; nothing else touches
- * that transition today, so this is the one real conversion action.
+ * moves the underlying job to "approved" directly and sends the invoice;
+ * nothing else touches that transition today, so this is the one real
+ * conversion action.
  */
 export async function respondToProposal(token: string, response: "accepted" | "declined", note: string) {
   if (response !== "accepted" && response !== "declined") throw new Error("Invalid response.");
@@ -16,7 +18,7 @@ export async function respondToProposal(token: string, response: "accepted" | "d
   const admin = createAdminClient();
   const { data: proposal, error } = await admin
     .from("job_proposals")
-    .select("id, job_id, status")
+    .select("id, job_id, status, total_cost, discount_amount")
     .eq("token", token)
     .maybeSingle();
   if (error) throw error;
@@ -37,6 +39,11 @@ export async function respondToProposal(token: string, response: "accepted" | "d
   if (response === "accepted") {
     const { error: jobError } = await admin.from("jobs").update({ status: "approved" }).eq("id", proposal.job_id);
     if (jobError) throw jobError;
+
+    const amountDue = Math.max(0, Math.round((proposal.total_cost ?? 0) - proposal.discount_amount));
+    createAndSendInvoice(proposal.job_id, proposal.id, amountDue).catch(() => {
+      // Best-effort — the acceptance itself already succeeded either way.
+    });
   }
 
   revalidatePath(`/jobs/${proposal.job_id}`);

@@ -733,6 +733,38 @@ export interface Database {
           },
         ];
       };
+      invoices: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          proposal_id: string | null;
+          amount: number;
+          status: string;
+          stripe_customer_id: string | null;
+          stripe_invoice_id: string | null;
+          hosted_invoice_url: string | null;
+          invoice_pdf: string | null;
+          sent_at: string | null;
+          paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["invoices"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["invoices"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "invoices_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       job_messages: {
         Row: {
           id: string;

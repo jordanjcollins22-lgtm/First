@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
+import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
@@ -16,6 +17,7 @@ import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
+import { InvoicePanel } from "@/components/job/invoice-panel";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -48,17 +50,27 @@ export default async function JobPage({
     property: { address: string; lat: number; lng: number } | null;
   };
 
-  const [catalog, design, requestedServicesRes, proposal, headersList, internalMessages, externalMessages, discounts] =
-    await Promise.all([
-      getCanvasCatalog(),
-      getCanvasDesignForJob(jobId),
-      supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
-      getProposalForJob(jobId),
-      headers(),
-      listJobMessages(jobId, "internal"),
-      listJobMessages(jobId, "external"),
-      listDiscounts(),
-    ]);
+  const [
+    catalog,
+    design,
+    requestedServicesRes,
+    proposal,
+    invoice,
+    headersList,
+    internalMessages,
+    externalMessages,
+    discounts,
+  ] = await Promise.all([
+    getCanvasCatalog(),
+    getCanvasDesignForJob(jobId),
+    supabase.from("job_requested_services").select("service_type_id").eq("job_id", jobId),
+    getProposalForJob(jobId),
+    getInvoiceForJob(jobId),
+    headers(),
+    listJobMessages(jobId, "internal"),
+    listJobMessages(jobId, "external"),
+    listDiscounts(),
+  ]);
   const requestedServiceIds = (requestedServicesRes.data ?? []).map((r) => r.service_type_id);
   const requestedServiceNames = requestedServiceIds.map(
     (id) => catalog.servicePricing.find((s) => s.service_type_id === id)?.name ?? id
@@ -136,6 +148,8 @@ export default async function JobPage({
         zones={zoneBreakdowns}
         discounts={discounts}
       />
+
+      <InvoicePanel invoice={invoice} />
 
       {isTwilioConfigured && <CallClientButton jobId={jobId} />}
 

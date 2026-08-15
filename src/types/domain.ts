@@ -448,3 +448,25 @@ export interface JobProposal {
   created_at: string;
   updated_at: string;
 }
+
+export type InvoiceStatus = "open" | "paid" | "void" | "uncollectible";
+
+/** A real Stripe invoice, sent automatically the moment a client accepts a
+ * proposal — Stripe hosts the payment page and PDF; this is our record of
+ * it plus paid/void status kept in sync by the Stripe webhook. */
+export interface Invoice {
+  id: string;
+  organization_id: string;
+  job_id: string;
+  proposal_id: string | null;
+  amount: number;
+  status: InvoiceStatus;
+  stripe_customer_id: string | null;
+  stripe_invoice_id: string | null;
+  hosted_invoice_url: string | null;
+  invoice_pdf: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
