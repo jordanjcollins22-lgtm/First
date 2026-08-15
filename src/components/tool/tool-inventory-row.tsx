@@ -84,7 +84,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
           />
         </td>
         <td className="p-2">
-          <ToolCostInput toolId={tool.id} initialCost={tool.cost} />
+          <ToolCostInput toolId={tool.id} initialCost={tool.cost} isRental={tool.is_rental} />
         </td>
         <td className="p-2">
           <ToolBuyLink url={tool.purchase_url} />

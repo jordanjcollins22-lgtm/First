@@ -127,7 +127,7 @@ export default async function InventoryPage() {
                       <th className="p-2 font-medium">Qty</th>
                       <th className="p-2 font-medium">Reorder at</th>
                       <th className="p-2 font-medium">Status</th>
-                      <th className="p-2 font-medium">Cost</th>
+                      <th className="p-2 font-medium">Cost (/day if rented)</th>
                       <th className="p-2 font-medium">Buy</th>
                       <th className="p-2" />
                     </tr>
