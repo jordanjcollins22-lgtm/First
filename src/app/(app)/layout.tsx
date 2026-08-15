@@ -8,7 +8,7 @@ import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/env";
-import "./globals.css";
+import "../globals.css";
 
 export const metadata: Metadata = {
   title: "Celerity",
@@ -29,7 +29,7 @@ export const viewport = {
   userScalable: false,
 };
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let userEmail: string | null = null;
   let roles: string[] = [];
   let allowedTabs: string[] = [];
