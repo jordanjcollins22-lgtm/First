@@ -106,31 +106,55 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
   return { token };
 }
 
-/** An account manager's edits before approving — price, per-zone scope
- * wording, and/or a discount. Discount fields are optional so a quick price
- * tweak (e.g. from the Proposals tab) doesn't have to touch them. Doesn't
- * touch status, so it works whether they're adjusting a draft still
- * awaiting approval or correcting one already sent. */
+/**
+ * An account manager's edits before approving — price, per-zone scope
+ * wording, and/or a discount picked from the org's discount catalog.
+ * `discountId` is optional so a quick price tweak (e.g. from the Proposals
+ * tab) doesn't have to touch it; pass `null` to clear an existing discount.
+ * The resolved dollar amount is computed here (percentage-of-subtotal or a
+ * flat figure) so display code never has to. Doesn't touch status, so it
+ * works whether they're adjusting a draft still awaiting approval or
+ * correcting one already sent.
+ */
 export async function updateProposalDraft(
   jobId: string,
   input: {
     totalCost: number;
     scopeSnapshot: ProposalZoneSnapshot[];
-    discountAmount?: number;
-    discountReason?: string | null;
+    discountId?: string | null;
   }
 ) {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
 
+  const supabase = await createClient();
   const patch: Database["public"]["Tables"]["job_proposals"]["Update"] = {
     total_cost: input.totalCost,
     scope_snapshot: input.scopeSnapshot,
   };
-  if (input.discountAmount !== undefined) patch.discount_amount = input.discountAmount;
-  if (input.discountReason !== undefined) patch.discount_reason = input.discountReason?.trim() || null;
 
-  const supabase = await createClient();
+  if (input.discountId === null) {
+    patch.discount_id = null;
+    patch.discount_kind = null;
+    patch.discount_value = null;
+    patch.discount_amount = 0;
+    patch.discount_reason = null;
+  } else if (input.discountId !== undefined) {
+    const { data: discount, error: discountError } = await supabase
+      .from("discounts")
+      .select("id, name, kind, value")
+      .eq("id", input.discountId)
+      .maybeSingle();
+    if (discountError) throw discountError;
+    if (!discount) throw new Error("That discount no longer exists.");
+
+    patch.discount_id = discount.id;
+    patch.discount_kind = discount.kind;
+    patch.discount_value = discount.value;
+    patch.discount_amount = discount.kind === "percentage" ? (input.totalCost * discount.value) / 100 : discount.value;
+    patch.discount_reason = discount.name;
+  }
+
   const { error } = await supabase.from("job_proposals").update(patch).eq("job_id", jobId);
   if (error) throw error;
 

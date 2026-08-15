@@ -677,6 +677,9 @@ export interface Database {
           token: string;
           status: string;
           total_cost: number | null;
+          discount_id: string | null;
+          discount_kind: string | null;
+          discount_value: number | null;
           discount_amount: number;
           discount_reason: string | null;
           scope_snapshot: unknown;
@@ -700,6 +703,32 @@ export interface Database {
             foreignKeyName: "job_proposals_job_id_fkey";
             columns: ["job_id"];
             referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      discounts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          kind: string;
+          value: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["discounts"]["Row"]> & {
+          organization_id: string;
+          name: string;
+          kind: string;
+          value: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["discounts"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "discounts_organization_id_fkey";
+            columns: ["organization_id"];
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];

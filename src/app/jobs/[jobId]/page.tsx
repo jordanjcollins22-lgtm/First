@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
+import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
@@ -47,7 +48,7 @@ export default async function JobPage({
     property: { address: string; lat: number; lng: number } | null;
   };
 
-  const [catalog, design, requestedServicesRes, proposal, headersList, internalMessages, externalMessages] =
+  const [catalog, design, requestedServicesRes, proposal, headersList, internalMessages, externalMessages, discounts] =
     await Promise.all([
       getCanvasCatalog(),
       getCanvasDesignForJob(jobId),
@@ -56,6 +57,7 @@ export default async function JobPage({
       headers(),
       listJobMessages(jobId, "internal"),
       listJobMessages(jobId, "external"),
+      listDiscounts(),
     ]);
   const requestedServiceIds = (requestedServicesRes.data ?? []).map((r) => r.service_type_id);
   const requestedServiceNames = requestedServiceIds.map(
@@ -132,6 +134,7 @@ export default async function JobPage({
         serviceCost={serviceCost}
         materialsCost={materialsCost}
         zones={zoneBreakdowns}
+        discounts={discounts}
       />
 
       {isTwilioConfigured && <CallClientButton jobId={jobId} />}

@@ -410,6 +410,20 @@ export interface JobMessage {
   created_at: string;
 }
 
+export type DiscountKind = "percentage" | "amount";
+
+/** A reusable discount an account manager can apply to a proposal — picked
+ * from a list instead of typed by hand each time. */
+export interface Discount {
+  id: string;
+  organization_id: string;
+  name: string;
+  kind: DiscountKind;
+  value: number;
+  created_at: string;
+  updated_at: string;
+}
+
 /** A client-facing proposal generated from a job's site map — price and scope
  * are frozen at generate time (see the migration for why). */
 export interface JobProposal {
@@ -419,6 +433,9 @@ export interface JobProposal {
   token: string;
   status: ProposalStatus;
   total_cost: number | null;
+  discount_id: string | null;
+  discount_kind: DiscountKind | null;
+  discount_value: number | null;
   discount_amount: number;
   discount_reason: string | null;
   scope_snapshot: ProposalZoneSnapshot[];

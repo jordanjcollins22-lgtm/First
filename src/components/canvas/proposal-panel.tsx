@@ -6,9 +6,10 @@ import { Check, ChevronDown, ChevronUp, Copy, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DiscountSelect } from "@/components/canvas/discount-select";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
-import type { JobProposal, ProposalZoneSnapshot } from "@/types/domain";
+import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
 
 export interface InternalZoneBreakdown {
   zoneName: string;
@@ -42,6 +43,7 @@ export function ProposalPanel({
   serviceCost,
   materialsCost,
   zones,
+  discounts,
 }: {
   jobId: string;
   proposal: JobProposal | null;
@@ -49,6 +51,7 @@ export function ProposalPanel({
   serviceCost: number;
   materialsCost: number;
   zones: InternalZoneBreakdown[];
+  discounts: Discount[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -57,8 +60,8 @@ export function ProposalPanel({
   const [editing, setEditing] = useState(false);
   const [draftTotal, setDraftTotal] = useState("");
   const [draftZones, setDraftZones] = useState<ProposalZoneSnapshot[]>([]);
-  const [draftDiscount, setDraftDiscount] = useState("");
-  const [draftDiscountReason, setDraftDiscountReason] = useState("");
+  const [draftDiscountId, setDraftDiscountId] = useState<string | null>(null);
+  const [localDiscounts, setLocalDiscounts] = useState<Discount[]>(discounts);
 
   const link = proposal ? `${baseUrl}/proposal/${proposal.token}` : null;
 
@@ -78,8 +81,7 @@ export function ProposalPanel({
     if (!proposal) return;
     setDraftTotal(String(Math.round(proposal.total_cost ?? 0)));
     setDraftZones(proposal.scope_snapshot.map((z) => ({ ...z })));
-    setDraftDiscount(proposal.discount_amount ? String(proposal.discount_amount) : "");
-    setDraftDiscountReason(proposal.discount_reason ?? "");
+    setDraftDiscountId(proposal.discount_id);
     setError(null);
     setEditing(true);
   }
@@ -91,8 +93,7 @@ export function ProposalPanel({
         await updateProposalDraft(jobId, {
           totalCost: Number(draftTotal) || 0,
           scopeSnapshot: draftZones,
-          discountAmount: Number(draftDiscount) || 0,
-          discountReason: draftDiscountReason,
+          discountId: draftDiscountId,
         });
         setEditing(false);
       } catch (err) {
@@ -169,29 +170,23 @@ export function ProposalPanel({
                   className="h-9 w-32 text-sm"
                 />
               </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Discount ($)</label>
-                  <Input
-                    type="number"
-                    value={draftDiscount}
-                    onChange={(e) => setDraftDiscount(e.target.value)}
-                    placeholder="0"
-                    className="h-9 w-28 text-sm"
-                  />
-                </div>
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Discount reason (shown to client)</label>
-                  <Input
-                    value={draftDiscountReason}
-                    onChange={(e) => setDraftDiscountReason(e.target.value)}
-                    placeholder="e.g. Spring special"
-                    className="h-9 text-sm"
-                  />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Discount</label>
+                <DiscountSelect
+                  discounts={localDiscounts}
+                  selectedId={draftDiscountId}
+                  onChange={setDraftDiscountId}
+                  onCreated={(d) => setLocalDiscounts((prev) => [...prev, d])}
+                />
               </div>
               <p className="text-xs text-muted-foreground">
-                Client sees: ${Math.max(0, (Number(draftTotal) || 0) - (Number(draftDiscount) || 0)).toLocaleString()}
+                Client sees: $
+                {(() => {
+                  const selected = localDiscounts.find((d) => d.id === draftDiscountId);
+                  const subtotal = Number(draftTotal) || 0;
+                  const discountAmount = !selected ? 0 : selected.kind === "percentage" ? (subtotal * selected.value) / 100 : selected.value;
+                  return Math.max(0, Math.round(subtotal - discountAmount)).toLocaleString();
+                })()}
               </p>
               {draftZones.map((zone, i) => (
                 <div key={i} className="flex flex-col gap-1.5">
