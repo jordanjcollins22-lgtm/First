@@ -68,6 +68,7 @@ export function ServicePricingRow({
   const [showCalculator, setShowCalculator] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
   const [toolSearch, setToolSearch] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const linkedTools = serviceTools
@@ -108,15 +109,17 @@ export function ServicePricingRow({
   }
 
   function savePricing(nextBasis: PricingBasis = pricingBasis, nextUnit: string = costUnit) {
-    startTransition(() =>
-      updateServicePricing(
+    setSaveError(null);
+    startTransition(async () => {
+      const result = await updateServicePricing(
         serviceTypeId,
         cost.trim() ? Number(cost) : null,
         nextUnit,
         hours.trim() ? Number(hours) : null,
         nextBasis
-      )
-    );
+      );
+      if (!result.ok) setSaveError(result.message);
+    });
   }
 
   /** Changing what the price multiplies by also relabels it, unless the
@@ -198,6 +201,11 @@ export function ServicePricingRow({
             className="h-9 w-24 text-sm"
           />
         </div>
+        {saveError && (
+          <p className="w-full text-xs text-destructive">
+            Couldn&apos;t save: {saveError}
+          </p>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-muted-foreground">Priced per</Label>
           <Select value={pricingBasis} onValueChange={(v) => handleBasisChange(v as PricingBasis)} disabled={isPending}>

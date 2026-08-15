@@ -8,27 +8,42 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { priceFromCogs } from "@/lib/pricing";
 import type { PricingBasis } from "@/types/domain";
 
+/**
+ * Returns a result rather than throwing. This is called from inline
+ * onChange/onBlur handlers inside startTransition — an error thrown there is
+ * unhandled and takes the whole page down with a reload prompt, and its
+ * message is stripped in production anyway.
+ */
 export async function updateServicePricing(
   serviceTypeId: string,
   cost: number | null,
   costUnit: string,
   estimatedHours: number | null,
   pricingBasis?: PricingBasis
-) {
-  const organizationId = await getCurrentOrganizationId();
-  const supabase = await createClient();
-  const { error } = await supabase.from("services").upsert({
-    organization_id: organizationId,
-    service_type_id: serviceTypeId,
-    cost,
-    cost_unit: costUnit || "flat rate",
-    estimated_hours: estimatedHours,
-    ...(pricingBasis ? { pricing_basis: pricingBasis } : {}),
-  });
-  if (error) throw error;
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const organizationId = await getCurrentOrganizationId();
+    const supabase = await createClient();
+    const { error } = await supabase.from("services").upsert({
+      organization_id: organizationId,
+      service_type_id: serviceTypeId,
+      cost,
+      cost_unit: costUnit || "flat rate",
+      estimated_hours: estimatedHours,
+      ...(pricingBasis ? { pricing_basis: pricingBasis } : {}),
+    });
+    if (error) {
+      return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
+    }
 
-  revalidatePath("/admin/team");
-  revalidatePath("/canvas");
+    revalidatePath("/admin/team");
+    revalidatePath("/canvas");
+    return { ok: true };
+  } catch (err) {
+    console.error("updateServicePricing failed:", err);
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    return { ok: false, message: message || "Couldn't save that pricing change." };
+  }
 }
 
 /** COGS x 2 (50% gross margin) + 10% buffer — recalculates and saves the sale price from a COGS entry. */
