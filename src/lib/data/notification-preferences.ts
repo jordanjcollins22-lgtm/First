@@ -25,12 +25,23 @@ export async function getMyNotificationSettings(): Promise<MyNotificationSetting
 
   // Only the groups they're actually in — there's nothing to tune for a
   // group that can't notify them in the first place.
+  // Before migration 0073 there's no notify_override column, so this select
+  // errors and we simply show every group on "Default" rather than breaking
+  // the whole page.
   const { data: memberships } = await supabase
     .from("team_channel_members")
     .select("channel_id, notify_override, team_channels(name)")
     .eq("profile_id", profile.id);
+  const membershipRows =
+    memberships ??
+    (
+      await supabase
+        .from("team_channel_members")
+        .select("channel_id, team_channels(name)")
+        .eq("profile_id", profile.id)
+    ).data;
 
-  const channels: ChannelNotificationSetting[] = ((memberships ?? []) as unknown as {
+  const channels: ChannelNotificationSetting[] = ((membershipRows ?? []) as unknown as {
     channel_id: string;
     notify_override: boolean | null;
     team_channels: { name: string } | null;

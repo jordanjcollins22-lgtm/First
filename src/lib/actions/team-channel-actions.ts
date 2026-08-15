@@ -133,10 +133,23 @@ export async function postTeamMessage(
     if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
 
     const { data: channel } = await supabase.from("team_channels").select("name").eq("id", channelId).maybeSingle();
-    const { data: members } = await supabase
+    // Falls back to the plain membership list if notify_override isn't there
+    // yet (migration 0073). Without this the select errors, members comes back
+    // null, and nobody gets texted at all — worse than ignoring the setting.
+    let members: { profile_id: string; notify_override: boolean | null }[] = [];
+    const withOverride = await supabase
       .from("team_channel_members")
       .select("profile_id, notify_override")
       .eq("channel_id", channelId);
+    if (withOverride.error) {
+      const { data: plain } = await supabase
+        .from("team_channel_members")
+        .select("profile_id")
+        .eq("channel_id", channelId);
+      members = (plain ?? []).map((m) => ({ profile_id: m.profile_id, notify_override: null }));
+    } else {
+      members = (withOverride.data ?? []) as typeof members;
+    }
 
     const summary =
       trimmed.slice(0, 120) ||
@@ -146,7 +159,7 @@ export async function postTeamMessage(
     // for this particular group: muted skips them outright, always overrides
     // their general Team group messages toggle, null follows it.
     await Promise.all(
-      (members ?? [])
+      members
         .filter((m) => m.profile_id !== profile.id && m.notify_override !== false)
         .map((m) =>
           notifyTeamMember(
