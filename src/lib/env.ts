@@ -20,6 +20,9 @@ export const env = {
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
+  livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
+  livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
+  livekitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -38,3 +41,4 @@ export const isRentcastConfigured = Boolean(env.rentcastApiKey);
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
+export const isLivekitConfigured = Boolean(env.livekitApiKey && env.livekitApiSecret && env.livekitUrl);

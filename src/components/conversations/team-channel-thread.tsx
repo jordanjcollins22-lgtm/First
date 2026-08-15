@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
+import { Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,9 +76,19 @@ export function TeamChannelThread({
           <p className="text-sm font-semibold">
             {memberIds.length} member{memberIds.length === 1 ? "" : "s"}
           </p>
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowMembers((v) => !v)}>
-            {showMembers ? "Done" : "Manage members"}
-          </Button>
+          <div className="flex gap-2">
+            {isMember && (
+              <Button type="button" size="sm" asChild>
+                <Link href={`/conversations/${channel.id}/call`}>
+                  <Video className="h-3.5 w-3.5" />
+                  Start call
+                </Link>
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowMembers((v) => !v)}>
+              {showMembers ? "Done" : "Manage members"}
+            </Button>
+          </div>
         </div>
         {showMembers ? (
           <div className="flex flex-wrap gap-2">
