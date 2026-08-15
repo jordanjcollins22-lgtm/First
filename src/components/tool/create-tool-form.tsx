@@ -151,7 +151,9 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="tool-cost">Cost</Label>
+          <Label htmlFor="tool-cost">
+            {ownership === "rent" ? <span className="text-primary">Cost (per day)</span> : "Cost"}
+          </Label>
           <Input
             id="tool-cost"
             name="cost"
@@ -159,7 +161,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
             type="number"
             step="0.01"
             min={0}
-            placeholder="0.00"
+            placeholder={ownership === "rent" ? "0.00 / day" : "0.00"}
             className="w-28"
           />
         </div>
