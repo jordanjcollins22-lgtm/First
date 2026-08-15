@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import type { ToolCategory } from "@/types/domain";
 
 export type CreateToolResult =
   | { ok: true; id: string; name: string }
@@ -60,6 +61,7 @@ async function createToolInner(formData: FormData): Promise<CreateToolResult> {
     ? "order_as_needed"
     : "in_stock";
   const isDelivered = formData.get("is_delivered") === "on" || formData.get("is_delivered") === "true";
+  const category = String(formData.get("category") ?? "tool").trim() === "gear" ? "gear" : "tool";
 
   if (stockMethod === "in_stock" && !storageLocation) {
     return { ok: false, message: "Enter where it's stored — required for tools kept in stock." };
@@ -73,6 +75,7 @@ async function createToolInner(formData: FormData): Promise<CreateToolResult> {
     .insert({
       organization_id: organizationId,
       name,
+      category,
       icon,
       cost,
       is_rental: isRental,
@@ -98,6 +101,17 @@ async function createToolInner(formData: FormData): Promise<CreateToolResult> {
 
   revalidatePath("/admin/tools");
   return { ok: true, id: data.id as string, name: data.name as string };
+}
+
+/** Moves an item between Tools and Crew Gear. Everything else about it —
+ * stock, storage, reorder point, cost — carries over untouched, which is the
+ * point of keeping both in one table. */
+export async function updateToolCategory(id: string, category: ToolCategory) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tools").update({ category }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/canvas");
 }
 
 export async function updateToolCost(id: string, cost: number | null) {

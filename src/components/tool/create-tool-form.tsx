@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KitPicker } from "./kit-picker";
 import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
+import type { ToolCategory } from "@/types/domain";
 import { createClient } from "@/lib/supabase/client";
 import { createTool } from "@/lib/actions/tool-actions";
 import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
@@ -17,9 +18,12 @@ import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
 export function CreateToolForm({
   availableKits,
   storageLocations,
+  category = "tool",
 }: {
   availableKits: number[];
   storageLocations: string[];
+  /** Which tab this form feeds — gear and tools share one table. */
+  category?: ToolCategory;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +140,7 @@ export function CreateToolForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <input type="hidden" name="category" value={category} />
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Image *</Label>
@@ -164,7 +169,7 @@ export function CreateToolForm({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="tool-name">Name</Label>
-          <Input id="tool-name" name="name" ref={nameRef} required placeholder="Chainsaw" className="w-44" />
+          <Input id="tool-name" name="name" ref={nameRef} required placeholder={category === "gear" ? "Safety glasses" : "Chainsaw"} className="w-44" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Kit(s)</Label>
@@ -279,7 +284,7 @@ export function CreateToolForm({
           Delivered to us?
         </label>
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Adding..." : "Add Tool"}
+          {isPending ? "Adding..." : category === "gear" ? "Add Gear" : "Add Tool"}
         </Button>
       </div>
       {fetchMessage && <p className="text-xs text-muted-foreground">{fetchMessage}</p>}

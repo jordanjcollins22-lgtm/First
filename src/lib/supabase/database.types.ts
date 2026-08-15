@@ -258,6 +258,7 @@ export interface Database {
           icon: string;
           cost: number | null;
           is_rental: boolean;
+          category: string;
           active: boolean;
           kits: number[];
           image_path: string | null;

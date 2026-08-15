@@ -184,10 +184,16 @@ export interface RolePermission {
   tab_key: string;
 }
 
+/** Tools are equipment used to do the work; gear is what the crew wears,
+ * lays down, or consumes — PPE, tarps, plywood, water, electrolytes. Both
+ * are stocked and reordered identically, so they share one table. */
+export type ToolCategory = "tool" | "gear";
+
 export interface Tool {
   id: string;
   organization_id: string;
   name: string;
+  category: ToolCategory;
   icon: string;
   cost: number | null;
   is_rental: boolean;

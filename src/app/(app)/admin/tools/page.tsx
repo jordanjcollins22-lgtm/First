@@ -48,10 +48,15 @@ export default async function InventoryPage() {
     ...SERVICE_TYPES.map((t) => ({ id: t.id, label: t.label })),
     ...customActiveServices.map((s) => ({ id: s.service_type_id, label: s.name })),
   ];
-  const toolsToOrderCount = tools.filter(
-    (t) => !t.on_order && t.quantity != null && t.reorder_threshold != null && t.quantity <= t.reorder_threshold
-  ).length;
+  const needsOrdering = (items: typeof tools) =>
+    items.filter(
+      (t) => !t.on_order && t.quantity != null && t.reorder_threshold != null && t.quantity <= t.reorder_threshold
+    ).length;
   const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
+  // Gear (PPE, tarps, water) lives in the same table as tools under a
+  // category, so moving an item between the two is a one-field change.
+  const equipment = tools.filter((t) => t.category !== "gear");
+  const gear = tools.filter((t) => t.category === "gear");
   const storageLocations = businessLocations.map((location) => location.name);
 
   const materialsToOrderCount = materials.filter(
@@ -70,7 +75,7 @@ export default async function InventoryPage() {
         <div>
           <h1 className="mb-1 text-2xl font-bold">Inventory</h1>
           <p className="text-muted-foreground">
-            Tools and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
+            Tools, crew gear, and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
           </p>
         </div>
         <Link
@@ -113,9 +118,9 @@ export default async function InventoryPage() {
             </Card>
 
             <div className="mb-3 flex items-center gap-4 text-sm text-muted-foreground">
-              <span>{tools.length} tools</span>
-              {toolsToOrderCount > 0 && (
-                <span className="font-medium text-destructive">{toolsToOrderCount} need buying or renting</span>
+              <span>{equipment.length} tools</span>
+              {needsOrdering(equipment) > 0 && (
+                <span className="font-medium text-destructive">{needsOrdering(equipment)} need buying or renting</span>
               )}
             </div>
 
@@ -137,7 +142,7 @@ export default async function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {tools.map((tool) => (
+                    {equipment.map((tool) => (
                       <ToolInventoryRow
                         key={tool.id}
                         tool={tool}
@@ -150,8 +155,70 @@ export default async function InventoryPage() {
                   </tbody>
                 </table>
               </div>
-              {tools.length === 0 && (
+              {equipment.length === 0 && (
                 <p className="p-4 text-sm text-muted-foreground">No tools yet — add one above.</p>
+              )}
+            </Card>
+          </>
+        }
+        gearContent={
+          <>
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Add crew gear</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CreateToolForm
+                  availableKits={availableKits}
+                  storageLocations={storageLocations}
+                  category="gear"
+                />
+              </CardContent>
+            </Card>
+
+            <div className="mb-3 flex items-center gap-4 text-sm text-muted-foreground">
+              <span>{gear.length} gear items</span>
+              {needsOrdering(gear) > 0 && (
+                <span className="font-medium text-destructive">{needsOrdering(gear)} need restocking</span>
+              )}
+            </div>
+
+            <Card>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1160px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="p-2 font-medium">Gear</th>
+                      <th className="p-2 font-medium">Kit(s)</th>
+                      <th className="p-2 font-medium">Stored At</th>
+                      <th className="p-2 font-medium">Own/Rent</th>
+                      <th className="p-2 font-medium">Qty</th>
+                      <th className="p-2 font-medium">Reorder at</th>
+                      <th className="p-2 font-medium">Status</th>
+                      <th className="p-2 font-medium">Cost (/day if rented)</th>
+                      <th className="p-2 font-medium">Buy</th>
+                      <th className="p-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gear.map((tool) => (
+                      <ToolInventoryRow
+                        key={tool.id}
+                        tool={tool}
+                        serviceTypes={serviceTypeOptions}
+                        linkedServiceTypeIds={linksByTool.get(tool.id) ?? []}
+                        availableKits={availableKits}
+                        storageLocations={storageLocations}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {gear.length === 0 && (
+                <p className="p-4 text-sm text-muted-foreground">
+                  No crew gear yet — add gloves, masks, tarps, plywood, water, electrolytes above. Already entered
+                  something as a tool? Expand its row on the Tools tab and switch &ldquo;Tracked as&rdquo; to Crew gear.
+                </p>
               )}
             </Card>
           </>

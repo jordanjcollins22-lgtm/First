@@ -11,6 +11,7 @@ import { ToolQuantityInput } from "./tool-quantity-input";
 import { ToolReorderThresholdInput } from "./tool-reorder-threshold-input";
 import { ToolOrderStatus } from "./tool-order-status";
 import { ToolOwnershipSelect } from "./tool-ownership-select";
+import { ToolCategorySelect } from "./tool-category-select";
 import { ToolStorageLocationInput } from "./tool-storage-location-input";
 import { ToolShopLocationInput } from "./tool-shop-location-input";
 import { ToolPurchaseLinkInput } from "./tool-purchase-link-input";
@@ -123,6 +124,10 @@ export function ToolInventoryRow({
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Photo</span>
                 <ToolImageUpload toolId={tool.id} imagePath={tool.image_path} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Tracked as</span>
+                <ToolCategorySelect toolId={tool.id} category={tool.category} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>
