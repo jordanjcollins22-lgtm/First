@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice } from "@/lib/invoicing";
+import { notifyJobTeam } from "@/lib/notifications";
 
 /**
  * The client's Accept/Decline click — no logged-in user exists, so this runs
@@ -35,6 +36,15 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     })
     .eq("id", proposal.id);
   if (updateError) throw updateError;
+
+  notifyJobTeam(
+    proposal.job_id,
+    "proposal_responses",
+    `A client ${response} their proposal.`,
+    { dedupeKey: proposal.id }
+  ).catch(() => {
+    // Best-effort — the client's response is already recorded.
+  });
 
   if (response === "accepted") {
     const { error: jobError } = await admin.from("jobs").update({ status: "approved" }).eq("id", proposal.job_id);

@@ -19,6 +19,7 @@ export const env = {
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+  cronSecret: process.env.CRON_SECRET ?? "",
 };
 
 export function assertSupabaseConfigured() {

@@ -220,6 +220,23 @@ export interface TeamChannelWithMembers extends TeamChannel {
   messageCount: number;
 }
 
+/** What a person has opted into being texted about. Everyone manages their
+ * own — nothing here is set for them by an admin. */
+export interface NotificationPreferences {
+  profile_id: string;
+  organization_id: string;
+  sms_enabled: boolean;
+  appointment_reminders: boolean;
+  client_messages: boolean;
+  proposal_responses: boolean;
+  team_messages: boolean;
+  reminder_hours_before: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NotificationKind = "appointment_reminders" | "client_messages" | "proposal_responses" | "team_messages";
+
 export interface CustomRole {
   name: string;
   is_system: boolean;

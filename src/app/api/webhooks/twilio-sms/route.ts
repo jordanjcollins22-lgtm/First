@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { last10Digits } from "@/lib/sms";
+import { notifyJobTeam } from "@/lib/notifications";
 import { env, isTwilioConfigured } from "@/lib/env";
 
 const EMPTY_TWIML = new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
@@ -72,6 +73,13 @@ export async function POST(request: NextRequest) {
     author_name: customer.name,
     body,
   });
+
+  // Best-effort — the message is already saved either way.
+  await notifyJobTeam(
+    job.id,
+    "client_messages",
+    `${customer.name} replied: ${body.slice(0, 120)}`
+  ).catch(() => {});
 
   return EMPTY_TWIML;
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { notifyTeamMember } from "@/lib/notifications";
 
 export type ChannelResult = { ok: true; id?: string } | { ok: false; message: string };
 
@@ -106,6 +107,24 @@ export async function postTeamMessage(channelId: string, body: string): Promise<
     // RLS blocks posting to a group you're not in, which surfaces here rather
     // than as a silent no-op.
     if (error) return fail(error);
+
+    const { data: channel } = await supabase.from("team_channels").select("name").eq("id", channelId).maybeSingle();
+    const { data: members } = await supabase
+      .from("team_channel_members")
+      .select("profile_id")
+      .eq("channel_id", channelId);
+    // Everyone but the sender, best-effort.
+    await Promise.all(
+      (members ?? [])
+        .filter((m) => m.profile_id !== profile.id)
+        .map((m) =>
+          notifyTeamMember(
+            m.profile_id,
+            "team_messages",
+            `${profile.full_name || profile.email} in ${channel?.name ?? "a group"}: ${trimmed.slice(0, 120)}`
+          ).catch(() => false)
+        )
+    );
 
     revalidatePath("/conversations");
     revalidatePath(`/conversations/${channelId}`);

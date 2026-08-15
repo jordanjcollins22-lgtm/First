@@ -290,6 +290,56 @@ export interface Database {
           },
         ];
       };
+      notification_preferences: {
+        Row: {
+          profile_id: string;
+          organization_id: string;
+          sms_enabled: boolean;
+          appointment_reminders: boolean;
+          client_messages: boolean;
+          proposal_responses: boolean;
+          team_messages: boolean;
+          reminder_hours_before: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notification_preferences"]["Row"]> & {
+          profile_id: string;
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["notification_preferences"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notification_log: {
+        Row: {
+          id: string;
+          profile_id: string;
+          kind: string;
+          reference_id: string;
+          sent_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notification_log"]["Row"]> & {
+          profile_id: string;
+          kind: string;
+          reference_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["notification_log"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "notification_log_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       roles: {
         Row: {
           name: string;
