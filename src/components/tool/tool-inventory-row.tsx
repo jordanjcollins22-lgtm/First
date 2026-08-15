@@ -30,6 +30,10 @@ interface ToolInventoryRowProps {
 
 export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, availableKits }: ToolInventoryRowProps) {
   const [open, setOpen] = useState(false);
+  // Lifted here (rather than left inside ToolOwnershipSelect) so flipping
+  // Own/Rent updates the cost label and order-status wording in this same
+  // row immediately, instead of waiting on the server round trip to revalidate.
+  const [isRental, setIsRental] = useState(tool.is_rental);
 
   return (
     <>
@@ -66,7 +70,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
           <ToolStorageLocationInput toolId={tool.id} initialLocation={tool.storage_location} stockMethod={tool.stock_method} />
         </td>
         <td className="p-2">
-          <ToolOwnershipSelect toolId={tool.id} initialIsRental={tool.is_rental} />
+          <ToolOwnershipSelect toolId={tool.id} isRental={isRental} onChange={setIsRental} />
         </td>
         <td className="p-2">
           <ToolQuantityInput toolId={tool.id} initialQuantity={tool.quantity} />
@@ -80,11 +84,11 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
             quantity={tool.quantity}
             reorderThreshold={tool.reorder_threshold}
             onOrder={tool.on_order}
-            isRental={tool.is_rental}
+            isRental={isRental}
           />
         </td>
         <td className="p-2">
-          <ToolCostInput toolId={tool.id} initialCost={tool.cost} isRental={tool.is_rental} />
+          <ToolCostInput toolId={tool.id} initialCost={tool.cost} isRental={isRental} />
         </td>
         <td className="p-2">
           <ToolBuyLink url={tool.purchase_url} />
@@ -116,7 +120,7 @@ export function ToolInventoryRow({ tool, serviceTypes, linkedServiceTypeIds, ava
                 <span className="text-xs text-muted-foreground">Where in the shop</span>
                 <ToolShopLocationInput toolId={tool.id} initialValue={tool.shop_location} />
               </div>
-              {tool.is_rental && (
+              {isRental && (
                 <>
                   <div className="flex flex-col gap-1.5">
                     <span className="text-xs text-muted-foreground">Why don&apos;t we own it?</span>
