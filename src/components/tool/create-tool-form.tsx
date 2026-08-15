@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, type ChangeEvent } from "react";
+import { useRef, useState, useTransition, type ChangeEvent, type FormEvent } from "react";
 import { v4 as uuid } from "uuid";
 import { ImageUp, Search } from "lucide-react";
 
@@ -38,12 +38,30 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
     setPreviewUrl(picked ? URL.createObjectURL(picked) : null);
   }
 
-  function handleSubmit(formData: FormData) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    // A plain onSubmit rather than the <form action> prop — React resets a
+    // form's uncontrolled fields the instant an action-bound submit starts,
+    // before this function even runs, which was wiping everything the
+    // evaluator typed the moment they hit a validation problem (missing
+    // photo, missing name, etc.) instead of just showing the error.
+    e.preventDefault();
     setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const name = String(formData.get("name") ?? "").trim();
+    if (!name) {
+      setError("Enter a tool name.");
+      return;
+    }
+    if (locationRequired && !String(formData.get("storage_location") ?? "").trim()) {
+      setError("Enter where it's stored — required for tools kept in stock.");
+      return;
+    }
     if (!file) {
       setError("Add a photo of the tool.");
       return;
     }
+
     startTransition(async () => {
       try {
         const supabase = createClient();
@@ -66,7 +84,12 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
         setStockMethod("in_stock");
         setFetchMessage(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        // A thrown Server Action error's message is redacted to a generic
+        // React digest in production builds — the checks above catch the
+        // common cases before they ever reach the server, so this is only
+        // hit for something genuinely unexpected.
+        const message = err instanceof Error ? err.message : "";
+        setError(message && !message.includes("omitted in production") ? message : "Couldn't add that tool — try again.");
       }
     });
   }
@@ -103,7 +126,7 @@ export function CreateToolForm({ availableKits }: { availableKits: number[] }) {
   }
 
   return (
-    <form ref={formRef} action={handleSubmit} className="flex flex-col gap-3">
+    <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Image *</Label>
