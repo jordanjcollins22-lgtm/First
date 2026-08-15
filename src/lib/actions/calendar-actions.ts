@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 
-const PATH = "/admin/calendars";
+const PATH = "/evaluations";
 
 export type CalendarResult = { ok: true } | { ok: false; message: string };
 
@@ -43,6 +43,7 @@ export async function createCalendar(name: string, color: string, description: s
     if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
 
     revalidatePath(PATH);
+    revalidatePath("/");
     return { ok: true };
   } catch (err) {
     console.error("createCalendar failed:", err);
@@ -73,6 +74,7 @@ export async function updateCalendar(
     if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
 
     revalidatePath(PATH);
+    revalidatePath("/");
     return { ok: true };
   } catch (err) {
     console.error("updateCalendar failed:", err);
@@ -87,10 +89,16 @@ export async function deleteCalendar(id: string): Promise<CalendarResult> {
     if (denied) return { ok: false, message: denied };
 
     const supabase = await createClient();
+    const { data: existing } = await supabase.from("calendars").select("is_system").eq("id", id).maybeSingle();
+    if (existing?.is_system) {
+      return { ok: false, message: "The Evaluations calendar is built in and can't be removed." };
+    }
+
     const { error } = await supabase.from("calendars").delete().eq("id", id);
     if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
 
     revalidatePath(PATH);
+    revalidatePath("/");
     return { ok: true };
   } catch (err) {
     console.error("deleteCalendar failed:", err);
@@ -123,6 +131,7 @@ export async function setCalendarMember(
     }
 
     revalidatePath(PATH);
+    revalidatePath("/");
     return { ok: true };
   } catch (err) {
     console.error("setCalendarMember failed:", err);

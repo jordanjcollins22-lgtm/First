@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NewPropertyForm } from "@/components/property/new-property-form";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MyEvaluationsContent } from "@/components/evaluations/my-evaluations-content";
+import { listCalendars } from "@/lib/data/calendars";
+import { listProfiles } from "@/lib/data/team";
 import { checkTabAccess } from "@/lib/data/access";
 import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
@@ -18,7 +20,18 @@ export default async function Home() {
     const { allowed: canSeeEvaluations } = await checkTabAccess("evaluations");
     if (canSeeEvaluations) {
       const schedule = await getMyScheduleData();
-      if (schedule) return <MyEvaluationsContent schedule={schedule} />;
+      if (schedule) {
+        const calendarData = schedule.isAdmin
+          ? await Promise.all([listCalendars().catch(() => []), listProfiles().catch(() => [])])
+          : null;
+        return (
+          <MyEvaluationsContent
+            schedule={schedule}
+            calendars={calendarData?.[0]}
+            teamMembers={calendarData?.[1].map((p) => ({ id: p.id, name: p.full_name || p.email }))}
+          />
+        );
+      }
     }
 
     return (

@@ -181,6 +181,9 @@ export interface Calendar {
   name: string;
   color: string;
   description: string | null;
+  /** Built in rather than added by the business — the Evaluations calendar
+   * the schedule depends on. Editable and staffable, but not deletable. */
+  is_system: boolean;
   created_at: string;
   updated_at: string;
 }

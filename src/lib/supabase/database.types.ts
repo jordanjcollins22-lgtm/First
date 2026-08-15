@@ -182,6 +182,7 @@ export interface Database {
           name: string;
           color: string;
           description: string | null;
+          is_system: boolean;
           created_at: string;
           updated_at: string;
         };

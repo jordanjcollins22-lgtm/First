@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Settings as SettingsIcon, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -164,7 +164,11 @@ function CalendarCard({ calendar, teamMembers }: { calendar: CalendarWithMembers
               className="text-sm"
             />
           </div>
-          {confirmingDelete ? (
+          {calendar.is_system ? (
+            <span className="rounded-full border border-border px-2 py-1 text-[10px] text-muted-foreground">
+              Built in
+            </span>
+          ) : confirmingDelete ? (
             <div className="flex items-center gap-2">
               <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={isPending}>
                 Delete
@@ -223,6 +227,8 @@ function CalendarCard({ calendar, teamMembers }: { calendar: CalendarWithMembers
   );
 }
 
+/** Lives inside the Calendar page, collapsed by default so it stays out of
+ * the way of the schedule itself. Admin-only — the page decides that. */
 export function CalendarSettings({
   calendars,
   teamMembers,
@@ -230,8 +236,34 @@ export function CalendarSettings({
   calendars: CalendarWithMembers[];
   teamMembers: TeamMember[];
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mt-8 border-t border-border pt-6">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary"
+        aria-expanded={open}
+      >
+        <SettingsIcon className="h-4 w-4" />
+        Calendar settings
+        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+      {open && <CalendarSettingsBody calendars={calendars} teamMembers={teamMembers} />}
+    </div>
+  );
+}
+
+function CalendarSettingsBody({
+  calendars,
+  teamMembers,
+}: {
+  calendars: CalendarWithMembers[];
+  teamMembers: TeamMember[];
+}) {
+  return (
+    <div className="mt-4 flex flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle>Add a calendar</CardTitle>

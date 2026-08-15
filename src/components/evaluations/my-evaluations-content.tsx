@@ -1,10 +1,21 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
+import { CalendarSettings } from "@/components/calendars/calendar-settings";
 import type { MyScheduleData } from "@/lib/data/my-schedule";
+import type { CalendarWithMembers } from "@/types/domain";
 
 /** The full Calendar page content — shared by /evaluations and the
  * homepage (for team members without New Property access) so they're always
  * exactly the same page, not two things that can drift apart. */
-export function MyEvaluationsContent({ schedule }: { schedule: MyScheduleData }) {
+export function MyEvaluationsContent({
+  schedule,
+  calendars,
+  teamMembers,
+}: {
+  schedule: MyScheduleData;
+  /** Admin-only calendar management, shown inline under the schedule. */
+  calendars?: CalendarWithMembers[];
+  teamMembers?: { id: string; name: string }[];
+}) {
   const { profile, isAdmin, relevantJobs, evaluatorNamesById, allWeeklyAvailability, allDaysOff, rangeStart, rangeEnd } =
     schedule;
 
@@ -43,6 +54,9 @@ export function MyEvaluationsContent({ schedule }: { schedule: MyScheduleData })
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
       />
+      {isAdmin && calendars && teamMembers && (
+        <CalendarSettings calendars={calendars} teamMembers={teamMembers} />
+      )}
     </div>
   );
 }

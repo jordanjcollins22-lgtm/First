@@ -7,7 +7,7 @@ import type { CalendarWithMembers } from "@/types/domain";
 export async function listCalendars(): Promise<CalendarWithMembers[]> {
   const supabase = await createClient();
 
-  const { data: calendars, error } = await supabase.from("calendars").select("*").order("name");
+  const { data: calendars, error } = await supabase.from("calendars").select("*").order("is_system", { ascending: false }).order("name");
   if (error) throw error;
   if (!calendars || calendars.length === 0) return [];
 
