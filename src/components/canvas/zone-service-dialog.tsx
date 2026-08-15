@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { Camera, Check, ImagePlus, Loader2, Pencil, X } from "lucide-react";
 
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { serviceTypeById, type ServiceFieldDef } from "./service-catalog";
-import type { ZoneServiceData } from "./types";
+import type { Point, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
 import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
@@ -24,13 +24,30 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { AddInventoryItemForm, type CreatedInventoryItem } from "@/components/inventory/add-inventory-item-form";
 
-function PhotoThumb({ path, onRemove }: { path: string; onRemove: () => void }) {
+function PhotoThumb({
+  path,
+  markerCount,
+  onMark,
+  onRemove,
+}: {
+  path: string;
+  markerCount: number;
+  onMark: () => void;
+  onRemove: () => void;
+}) {
   const supabase = createClient();
   const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
   return (
     <div className="relative h-16 w-16 shrink-0">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />
+      <button type="button" onClick={onMark} className="block h-16 w-16">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />
+      </button>
+      {markerCount > 0 && (
+        <span className="absolute -bottom-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
+          {markerCount}
+        </span>
+      )}
       <button
         type="button"
         onClick={onRemove}
@@ -39,6 +56,76 @@ function PhotoThumb({ path, onRemove }: { path: string; onRemove: () => void }) 
         <X className="h-3 w-3" />
       </button>
     </div>
+  );
+}
+
+/** Full-size photo view where the evaluator taps to drop pins on areas that
+ * need attention. Points are stored as 0–1 fractions of the image so they
+ * stay put no matter how the photo is later displayed. */
+function PhotoMarkerEditor({
+  path,
+  initialMarkers,
+  onDone,
+}: {
+  path: string;
+  initialMarkers: Point[];
+  onDone: (markers: Point[]) => void;
+}) {
+  const supabase = createClient();
+  const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
+  const [markers, setMarkers] = useState<Point[]>(initialMarkers);
+
+  function handleTap(e: ReactMouseEvent<HTMLImageElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    setMarkers((prev) => [...prev, { x, y }]);
+  }
+
+  function removeMarker(index: number) {
+    setMarkers((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onDone(markers)}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Mark areas on this photo</DialogTitle>
+          <DialogDescription>Tap the photo to drop a pin. Tap a pin to remove it.</DialogDescription>
+        </DialogHeader>
+        <div className="relative select-none">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt=""
+            onClick={handleTap}
+            className="w-full cursor-crosshair rounded-lg border border-border"
+          />
+          {markers.map((marker, index) => (
+            <button
+              key={index}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeMarker(index);
+              }}
+              style={{ left: `${marker.x * 100}%`, top: `${marker.y * 100}%` }}
+              className="absolute -translate-x-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-destructive text-[10px] font-bold text-white shadow-md"
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            {markers.length === 0 ? "No pins yet" : `${markers.length} pin${markers.length === 1 ? "" : "s"}`}
+          </p>
+          <Button type="button" size="sm" onClick={() => onDone(markers)}>
+            Done
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -222,6 +309,10 @@ export function ZoneServiceDialog({
   const [photos, setPhotos] = useState<string[]>(initialService?.photos ?? []);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoMarkers, setPhotoMarkers] = useState<Record<string, Point[]>>(initialService?.photoMarkers ?? {});
+  // Freshly-uploaded photos wait here for a yes/no on marking, one at a time.
+  const [markPromptQueue, setMarkPromptQueue] = useState<string[]>([]);
+  const [markingPath, setMarkingPath] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [showAddNewItem, setShowAddNewItem] = useState(false);
   const [lengthFt, setLengthFt] = useState(initialLengthFt?.toString() ?? "");
@@ -417,6 +508,7 @@ export function ZoneServiceDialog({
         uploaded.push(path);
       }
       setPhotos((prev) => [...prev, ...uploaded]);
+      setMarkPromptQueue((prev) => [...prev, ...uploaded]);
     } catch {
       setPhotoError("Couldn't upload one or more photos — check your connection and try again.");
     } finally {
@@ -425,7 +517,36 @@ export function ZoneServiceDialog({
   }
 
   function handleRemovePhoto(index: number) {
+    const path = photos[index];
     setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setPhotoMarkers((prev) => {
+      const next = { ...prev };
+      delete next[path];
+      return next;
+    });
+    setMarkPromptQueue((prev) => prev.filter((p) => p !== path));
+  }
+
+  function dismissMarkPrompt() {
+    setMarkPromptQueue((prev) => prev.slice(1));
+  }
+
+  function startMarking(path: string) {
+    setMarkPromptQueue((prev) => prev.filter((p) => p !== path));
+    setMarkingPath(path);
+  }
+
+  function finishMarking(markers: Point[]) {
+    if (!markingPath) return;
+    setPhotoMarkers((prev) => {
+      if (markers.length === 0) {
+        const next = { ...prev };
+        delete next[markingPath];
+        return next;
+      }
+      return { ...prev, [markingPath]: markers };
+    });
+    setMarkingPath(null);
   }
 
   function handleSave() {
@@ -443,7 +564,7 @@ export function ZoneServiceDialog({
     }
 
     const service: ZoneServiceData | null = typeId
-      ? { typeId, values, notes, photos, tools, materials: extraMaterials, materialChoices: cleanedChoices }
+      ? { typeId, values, notes, photos, photoMarkers, tools, materials: extraMaterials, materialChoices: cleanedChoices }
       : null;
 
     if (serviceType) {
@@ -828,7 +949,13 @@ export function ZoneServiceDialog({
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
             {photos.map((photo, index) => (
-              <PhotoThumb key={photo} path={photo} onRemove={() => handleRemovePhoto(index)} />
+              <PhotoThumb
+                key={photo}
+                path={photo}
+                markerCount={photoMarkers[photo]?.length ?? 0}
+                onMark={() => startMarking(photo)}
+                onRemove={() => handleRemovePhoto(index)}
+              />
             ))}
             <label
               className={cn(
@@ -870,6 +997,26 @@ export function ZoneServiceDialog({
           <p className="text-[10px] text-muted-foreground">
             Photos already on your phone work too — no signal needed until you&apos;re back online to save.
           </p>
+          {markPromptQueue.length > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+              <p className="text-xs">Mark the areas that need attention on that photo?</p>
+              <div className="flex shrink-0 gap-2">
+                <Button type="button" size="sm" variant="ghost" onClick={dismissMarkPrompt}>
+                  Skip
+                </Button>
+                <Button type="button" size="sm" onClick={() => startMarking(markPromptQueue[0])}>
+                  Mark it
+                </Button>
+              </div>
+            </div>
+          )}
+          {markingPath && (
+            <PhotoMarkerEditor
+              path={markingPath}
+              initialMarkers={photoMarkers[markingPath] ?? []}
+              onDone={finishMarking}
+            />
+          )}
         </div>
       </StepShell>
     );

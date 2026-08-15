@@ -9,6 +9,13 @@ export interface ZoneServiceData {
   notes: string;
   /** Storage paths in the "canvas-images" bucket, uploaded as soon as they're picked. */
   photos: string[];
+  /**
+   * Tap-placed markers on individual photos, keyed by the photo's storage
+   * path. Each point is a fraction (0–1) of the image's width/height, not a
+   * pixel coordinate, so markers stay put regardless of how large the photo
+   * is displayed.
+   */
+  photoMarkers?: Record<string, Point[]>;
   /** Auto-attached from the service's tool checklist — the evaluator doesn't pick these. */
   tools: string[];
   /** Manually added extra materials for this zone, beyond what the service already uses. */
