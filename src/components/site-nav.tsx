@@ -26,6 +26,7 @@ export function SiteNav({
     ...(showProjectData ? [{ href: "/proposals", label: "Proposals" }] : []),
     ...(showProjectData ? [{ href: "/conversations", label: "Conversations" }] : []),
     ...(showEvaluations ? [{ href: "/evaluations", label: "Calendar" }] : []),
+    ...(userEmail ? [{ href: "/weather", label: "Weather" }] : []),
     ...(userEmail ? [{ href: "/notifications", label: "Notifications" }] : []),
     ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
       ? [{ href: "/admin/tools", label: "Inventory" }]
