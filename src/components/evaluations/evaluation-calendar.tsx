@@ -10,16 +10,18 @@ import { cn } from "@/lib/utils";
 import { addDayOff, removeDayOff } from "@/lib/actions/availability-actions";
 import { WeeklyAvailabilityEditor } from "@/components/evaluations/weekly-availability";
 import type { JobWithLocation } from "@/lib/data/jobs";
-import type { DayOff, EvaluationStatus, WeeklyAvailability } from "@/types/domain";
+import {
+  evaluationEvents,
+  eventsByDate,
+  jobWorkEvents,
+  LAYER_COLORS,
+  LAYER_LABELS,
+  type CalendarLayer,
+} from "@/lib/calendar-events";
+import { CalendarMap } from "@/components/evaluations/calendar-map";
+import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const STATUS_LABELS: Record<EvaluationStatus, string> = {
-  scheduled: "Scheduled",
-  on_way: "On the way",
-  arrived: "Arrived",
-  completed: "Completed",
-};
 
 function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -73,6 +75,7 @@ function offSummary(off: DayOff): string {
 
 export function EvaluationCalendar({
   jobs,
+  scheduledJobs,
   currentProfileId,
   evaluatorNamesById,
   allWeeklyAvailability,
@@ -81,6 +84,8 @@ export function EvaluationCalendar({
   rangeEnd,
 }: {
   jobs: JobWithLocation[];
+  /** Jobs with work days — the second layer on the same grid. */
+  scheduledJobs: JobWithLocation[];
   currentProfileId: string;
   evaluatorNamesById?: Record<string, string>;
   allWeeklyAvailability: WeeklyAvailability[];
@@ -92,6 +97,10 @@ export function EvaluationCalendar({
   const rangeStartDate = parseDateKey(rangeStart);
   const rangeEndDate = parseDateKey(rangeEnd);
 
+  const [activeLayers, setActiveLayers] = useState<Record<CalendarLayer, boolean>>({
+    evaluations: true,
+    jobs: true,
+  });
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [selectedDate, setSelectedDate] = useState(toDateKey(today));
@@ -117,18 +126,28 @@ export function EvaluationCalendar({
     return map;
   }, [allDaysOff]);
 
-  const jobsByDate = useMemo(() => {
-    const map = new Map<string, JobWithLocation[]>();
-    for (const j of jobs) {
-      if (!j.evaluation_date) continue;
-      const key = toDateKey(new Date(j.evaluation_date));
-      const list = map.get(key) ?? [];
-      list.push(j);
-      map.set(key, list);
-    }
-    for (const list of map.values()) list.sort((a, b) => a.evaluation_date!.localeCompare(b.evaluation_date!));
-    return map;
-  }, [jobs]);
+  // Both calendars are one overlay: the checkboxes decide what's on the grid,
+  // the day list, and the map at the same time, so there's never a version of
+  // the schedule that's only true in one of the three.
+  const allEvents = useMemo(
+    () => [...evaluationEvents(jobs), ...jobWorkEvents(scheduledJobs)],
+    [jobs, scheduledJobs]
+  );
+
+  const visibleEvents = useMemo(
+    () => allEvents.filter((e) => activeLayers[e.layer]),
+    [allEvents, activeLayers]
+  );
+
+  const eventsForDate = useMemo(() => eventsByDate(visibleEvents), [visibleEvents]);
+
+  const layerCounts = useMemo(
+    () => ({
+      evaluations: allEvents.filter((e) => e.layer === "evaluations").length,
+      jobs: allEvents.filter((e) => e.layer === "jobs").length,
+    }),
+    [allEvents]
+  );
 
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const weekStart = startOfWeek(cursor);
@@ -171,7 +190,7 @@ export function EvaluationCalendar({
       ? formatMonth(monthStart)
       : `${formatShortDate(weekStart)} – ${formatShortDate(weekCells[6])}`;
 
-  const selectedJobs = jobsByDate.get(selectedDate) ?? [];
+  const selectedEvents = eventsForDate.get(selectedDate) ?? [];
   const selectedDaysOff = daysOffByDate.get(selectedDate) ?? [];
   const myDayOff = selectedDaysOff.find((d) => d.profile_id === currentProfileId) ?? null;
   const timesMismatched = Boolean(startTimeDraft) !== Boolean(endTimeDraft);
@@ -232,6 +251,28 @@ export function EvaluationCalendar({
           ))}
         </div>
 
+        {/* One overlay, two layers. Unchecking hides a layer everywhere at
+            once — grid, day list, and map — rather than per view. */}
+        <div className="flex flex-wrap items-center gap-4">
+          {(["evaluations", "jobs"] as const).map((layer) => (
+            <label key={layer} className="flex cursor-pointer items-center gap-1.5 text-xs font-medium">
+              <input
+                type="checkbox"
+                checked={activeLayers[layer]}
+                onChange={() => setActiveLayers((prev) => ({ ...prev, [layer]: !prev[layer] }))}
+                className="h-3.5 w-3.5 cursor-pointer accent-primary"
+              />
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: LAYER_COLORS[layer] }}
+                aria-hidden
+              />
+              {LAYER_LABELS[layer]}
+              <span className="text-muted-foreground">({layerCounts[layer]})</span>
+            </label>
+          ))}
+        </div>
+
         {viewMode === "month" ? (
           <>
             <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
@@ -245,7 +286,7 @@ export function EvaluationCalendar({
               {monthCells.map((date, i) => {
                 if (!date) return <div key={`blank-${i}`} />;
                 const key = toDateKey(date);
-                const dayJobs = jobsByDate.get(key) ?? [];
+                const dayEvents = eventsForDate.get(key) ?? [];
                 const dayOffs = daysOffByDate.get(key) ?? [];
                 const mine = dayOffs.find((d) => d.profile_id === currentProfileId);
                 const isWeeklyOff = hasSetUpAvailability && !myAvailableDays.has(date.getDay());
@@ -276,11 +317,23 @@ export function EvaluationCalendar({
                     >
                       {date.getDate()}
                     </span>
-                    {dayJobs.length > 0 && (
-                      <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[9px] font-medium text-primary">
-                        {dayJobs.length} eval{dayJobs.length === 1 ? "" : "s"}
-                      </span>
-                    )}
+                    {/* One count per active layer, coloured to match, so a day
+                        with both reads as two chips rather than one total. */}
+                    {(["evaluations", "jobs"] as const)
+                      .filter((layer) => dayEvents.some((e) => e.layer === layer))
+                      .map((layer) => {
+                        const count = dayEvents.filter((e) => e.layer === layer).length;
+                        return (
+                          <span
+                            key={layer}
+                            className="rounded-full px-1.5 py-0 text-[9px] font-medium"
+                            style={{ backgroundColor: `${LAYER_COLORS[layer]}26`, color: LAYER_COLORS[layer] }}
+                          >
+                            {count} {layer === "evaluations" ? "eval" : "job"}
+                            {count === 1 ? "" : "s"}
+                          </span>
+                        );
+                      })}
                     {dayOffs.length > 0 ? (
                       <span className="rounded-full bg-destructive/10 px-1.5 py-0 text-[9px] font-medium text-destructive">
                         {mine
@@ -309,17 +362,22 @@ export function EvaluationCalendar({
                 <span className="h-3 w-3 rounded border border-destructive/40 bg-destructive/5" />
                 Time off
               </span>
-              <span className="flex items-center gap-1">
-                <span className="h-3 w-3 rounded-full bg-primary/15" />
-                Evaluations booked
-              </span>
+              {(["evaluations", "jobs"] as const).map((layer) => (
+                <span key={layer} className="flex items-center gap-1">
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: `${LAYER_COLORS[layer]}40` }}
+                  />
+                  {LAYER_LABELS[layer]}
+                </span>
+              ))}
             </div>
           </>
         ) : (
           <div className="grid grid-cols-7 gap-1.5">
             {weekCells.map((date) => {
               const key = toDateKey(date);
-              const dayJobs = jobsByDate.get(key) ?? [];
+              const dayEvents = eventsForDate.get(key) ?? [];
               const dayOffs = daysOffByDate.get(key) ?? [];
               const mine = dayOffs.find((d) => d.profile_id === currentProfileId);
               const isWeeklyOff = hasSetUpAvailability && !myAvailableDays.has(date.getDay());
@@ -359,9 +417,14 @@ export function EvaluationCalendar({
                         {evaluatorNamesById?.[d.profile_id] ?? "Off"} · {offSummary(d)}
                       </span>
                     ))}
-                  {dayJobs.map((job) => (
-                    <span key={job.id} className="truncate rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
-                      {formatTime(job.evaluation_date!)} {job.property.address}
+                  {dayEvents.map((event) => (
+                    <span
+                      key={event.id}
+                      className="truncate rounded px-1 py-0.5 text-[9px] font-medium"
+                      style={{ backgroundColor: `${LAYER_COLORS[event.layer]}1a`, color: LAYER_COLORS[event.layer] }}
+                    >
+                      {event.at ? `${formatTime(event.at)} ` : ""}
+                      {event.address}
                     </span>
                   ))}
                 </button>
@@ -374,25 +437,36 @@ export function EvaluationCalendar({
       <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <p className="font-semibold">{formatDayHeader(selectedDate)}</p>
 
-        {selectedJobs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No evaluations this day.</p>
+        <CalendarMap events={selectedEvents} dayLabel={formatDayHeader(selectedDate)} />
+
+        {selectedEvents.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing scheduled this day.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {selectedJobs.map((job) => (
+            {selectedEvents.map((event) => (
               <Link
-                key={job.id}
-                href={`/jobs/${job.id}`}
+                key={event.id}
+                href={`/jobs/${event.jobId}`}
                 className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5 text-sm hover:bg-accent/50"
               >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{job.property.address}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {job.property.customer.name}
-                    {evaluatorNamesById?.[job.assigned_to ?? ""] && ` · ${evaluatorNamesById[job.assigned_to ?? ""]}`}
-                  </p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: LAYER_COLORS[event.layer] }}
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{event.address}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {event.customerName}
+                      {evaluatorNamesById?.[event.assignedTo ?? ""] &&
+                        ` · ${evaluatorNamesById[event.assignedTo ?? ""]}`}
+                    </p>
+                  </div>
                 </div>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatTime(job.evaluation_date!)} · {STATUS_LABELS[job.evaluation_status]}
+                  {event.at ? `${formatTime(event.at)} · ` : ""}
+                  {event.detail}
                 </span>
               </Link>
             ))}

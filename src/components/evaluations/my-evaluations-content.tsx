@@ -1,5 +1,4 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
-import { JobSchedulePanel } from "@/components/evaluations/job-schedule-panel";
 import { CalendarSettings, type BookingLinksData } from "@/components/calendars/calendar-settings";
 import { MyBookingLink } from "@/components/booking/booking-links-panel";
 import type { MyScheduleData } from "@/lib/data/my-schedule";
@@ -58,12 +57,12 @@ export function MyEvaluationsContent({
           ? "Every evaluation across the team — who, where, when, and status."
           : "Evaluations assigned to you — where to go, when, and your progress on each one."}
       </p>
-      <JobSchedulePanel jobs={scheduledJobs} />
       <EvaluationsView
         overdue={overdue}
         upcoming={upcoming}
         past={past}
         allRelevantJobs={relevantJobs}
+        scheduledJobs={scheduledJobs}
         currentProfileId={profile.id}
         evaluatorNamesById={evaluatorNamesById}
         allWeeklyAvailability={allWeeklyAvailability}
