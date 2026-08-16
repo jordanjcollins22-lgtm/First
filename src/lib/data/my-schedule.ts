@@ -11,6 +11,9 @@ export interface MyScheduleData {
   profile: Profile;
   isAdmin: boolean;
   relevantJobs: JobWithLocation[];
+  /** Jobs with work days set — what the crew's Jobs calendar shows. Kept
+   * separate from relevantJobs, which is evaluations only. */
+  scheduledJobs: JobWithLocation[];
   evaluatorNamesById?: Record<string, string>;
   allWeeklyAvailability: WeeklyAvailability[];
   allDaysOff: DayOff[];
@@ -32,6 +35,12 @@ export async function getMyScheduleData(): Promise<MyScheduleData | null> {
     (j) => j.evaluation_date
   );
 
+  // Same visibility rule as evaluations: admins see the whole crew's work,
+  // everyone else sees what's theirs.
+  const scheduledJobs = (isAdmin ? jobs : jobs.filter((j) => j.assigned_to === profile.id)).filter(
+    (j) => j.project_start_date || j.project_end_date
+  );
+
   let evaluatorNamesById: Record<string, string> | undefined;
   if (isAdmin) {
     const profiles = await listProfiles();
@@ -49,5 +58,15 @@ export async function getMyScheduleData(): Promise<MyScheduleData | null> {
     listDaysOff(rangeStart, rangeEnd),
   ]);
 
-  return { profile, isAdmin, relevantJobs, evaluatorNamesById, allWeeklyAvailability, allDaysOff, rangeStart, rangeEnd };
+  return {
+    profile,
+    isAdmin,
+    relevantJobs,
+    scheduledJobs,
+    evaluatorNamesById,
+    allWeeklyAvailability,
+    allDaysOff,
+    rangeStart,
+    rangeEnd,
+  };
 }
