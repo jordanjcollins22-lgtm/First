@@ -11,6 +11,7 @@
  * page and the client calendar import from it.
  */
 
+import { EVALUATION_STATUS_LABELS, JOB_STATUS_LABELS } from "@/lib/job-lifecycle";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 export type CalendarLayer = "evaluations" | "jobs";
@@ -67,26 +68,12 @@ function daysBetween(startKey: string, endKey: string): string[] {
   return out;
 }
 
-const EVALUATION_STATUS_LABELS: Record<string, string> = {
-  scheduled: "Scheduled",
-  on_way: "On the way",
-  arrived: "Arrived",
-  completed: "Completed",
-};
-
-const JOB_STATUS_LABELS: Record<string, string> = {
-  estimating: "Estimating",
-  quoted: "Quoted",
-  approved: "Approved",
-  in_progress: "In progress",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
 /** Evaluations: one event on the day of the appointment. */
 export function evaluationEvents(jobs: JobWithLocation[]): CalendarEvent[] {
   return jobs
-    .filter((j) => j.evaluation_date)
+    // A cancelled visit keeps its date so the history survives, which means
+    // the date alone is not enough to put it on the calendar.
+    .filter((j) => j.evaluation_date && j.evaluation_status !== "cancelled" && j.status !== "cancelled")
     .map((j) => ({
       id: `eval-${j.id}`,
       layer: "evaluations" as const,

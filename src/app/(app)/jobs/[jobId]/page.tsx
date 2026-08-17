@@ -18,10 +18,11 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
 import { InvoicePanel } from "@/components/job/invoice-panel";
+import { SchedulePanel } from "@/components/job/schedule-panel";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
-import type { EvaluationStatus } from "@/types/domain";
+import type { EvaluationStatus, JobStatus } from "@/types/domain";
 import { requireTab } from "@/lib/data/access";
 
 export default async function JobPage({
@@ -46,7 +47,12 @@ export default async function JobPage({
   const job = jobRow as unknown as {
     id: string;
     name: string;
+    status: JobStatus;
     evaluation_status: EvaluationStatus;
+    evaluation_date: string | null;
+    project_start_date: string | null;
+    project_end_date: string | null;
+    cancellation_reason: string | null;
     client_notes: string | null;
     budget_range: string | null;
     property: { address: string; lat: number; lng: number } | null;
@@ -106,18 +112,28 @@ export default async function JobPage({
   const baseUrl = host ? `${proto}://${host}` : "";
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10">
+    <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:gap-6 sm:py-10">
       <Link href="/attractors" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
         <ArrowLeft className="h-4 w-4" />
         Back to Project Data
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold">{job.property?.address ?? job.name}</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-xl font-bold sm:text-2xl">{job.property?.address ?? job.name}</h1>
+        <p className="text-sm text-muted-foreground sm:text-base">
           Draw work zones and fill in the service details to build a scope of work for this job.
         </p>
       </div>
+
+      <SchedulePanel
+        jobId={jobId}
+        status={job.status}
+        evaluationStatus={job.evaluation_status}
+        evaluationDate={job.evaluation_date}
+        projectStartDate={job.project_start_date}
+        projectEndDate={job.project_end_date}
+        cancellationReason={job.cancellation_reason}
+      />
 
       {hasClientRequest && (
         <div className="rounded-lg border border-white/60 bg-card/60 px-4 py-3 text-sm backdrop-blur-md">

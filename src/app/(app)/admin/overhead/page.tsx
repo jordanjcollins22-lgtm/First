@@ -1,26 +1,12 @@
 import { redirect } from "next/navigation";
 
-import { isSupabaseConfigured } from "@/lib/env";
-import { getCurrentProfile } from "@/lib/data/team";
-import { listOverheadExpenses } from "@/lib/data/overhead";
-import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { OverheadList } from "@/components/overhead/overhead-list";
-
-export default async function OverheadPage() {
-  if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-
-  const profile = await getCurrentProfile();
-  if (!profile?.roles.includes("overhead")) {
-    redirect("/attractors");
-  }
-
-  const expenses = await listOverheadExpenses();
-
-  return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">Overhead</h1>
-      <p className="mb-6 text-muted-foreground">Recurring monthly costs — only visible to people with the Overhead role.</p>
-      <OverheadList expenses={expenses} />
-    </div>
-  );
+/**
+ * Overhead is a tab on the Money page now.
+ *
+ * Kept as a redirect rather than deleted: the link is in people's history and
+ * in the nav of anyone with an old page cached, and a dead link is a worse
+ * answer than landing on the screen that took the job over.
+ */
+export default function OverheadPage() {
+  redirect("/admin/payments");
 }

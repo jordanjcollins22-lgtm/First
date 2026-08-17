@@ -102,6 +102,8 @@ export interface Database {
           client_notes: string | null;
           budget_range: string | null;
           referred_by_profile_id: string | null;
+          cancelled_at: string | null;
+          cancellation_reason: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1017,6 +1019,38 @@ export interface Database {
             foreignKeyName: "team_payments_profile_id_fkey";
             columns: ["profile_id"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ledger_entries: {
+        Row: {
+          id: string;
+          organization_id: string;
+          direction: string;
+          category: string;
+          amount: number;
+          occurred_on: string;
+          method: string | null;
+          party: string | null;
+          job_id: string | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["ledger_entries"]["Row"]> & {
+          organization_id: string;
+          direction: string;
+          category: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["ledger_entries"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ledger_entries_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
             referencedColumns: ["id"];
           },
         ];

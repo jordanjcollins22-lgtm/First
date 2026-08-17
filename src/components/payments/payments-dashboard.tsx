@@ -13,6 +13,8 @@ import {
   markTeamPaymentPaid,
   recordTeamPayment,
 } from "@/lib/actions/payment-actions";
+import { LedgerPanel } from "@/components/payments/ledger-panel";
+import { OverheadList } from "@/components/overhead/overhead-list";
 import type { PaymentsData } from "@/lib/data/payments";
 
 const METHODS = ["cash", "check", "transfer", "other"] as const;
@@ -32,16 +34,42 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
-export function PaymentsDashboard({ data }: { data: PaymentsData }) {
-  const { internal, external, revenue, team } = data;
+/**
+ * Every direction money moves, on one screen.
+ *
+ * Overhead used to be its own page and is now a tab here: a recurring monthly
+ * cost is money going out, and keeping it one click from the total it drags
+ * down is the whole point of having a money screen at all.
+ *
+ * Summary leads, because the question somebody opens this page to answer is
+ * almost always "where are we", not "what did I pay Jeff in March".
+ */
+export function PaymentsDashboard({
+  data,
+  canSeeOverhead,
+}: {
+  data: PaymentsData;
+  canSeeOverhead: boolean;
+}) {
+  const { internal, external, ledger, ledgerTotals, overhead, revenue, team, jobOptions } = data;
 
   return (
-    <Tabs defaultValue="internal">
+    <Tabs defaultValue="summary">
       <TabsList>
+        <TabsTrigger value="summary">Summary</TabsTrigger>
+        <TabsTrigger value="ledger">In &amp; Out</TabsTrigger>
         <TabsTrigger value="internal">Team</TabsTrigger>
-        <TabsTrigger value="external">Clients</TabsTrigger>
-        <TabsTrigger value="revenue">Revenue</TabsTrigger>
+        <TabsTrigger value="external">Invoices</TabsTrigger>
+        {canSeeOverhead && <TabsTrigger value="overhead">Overhead</TabsTrigger>}
       </TabsList>
+
+      <TabsContent value="summary">
+        <RevenuePanel revenue={revenue} />
+      </TabsContent>
+
+      <TabsContent value="ledger">
+        <LedgerPanel entries={ledger} totals={ledgerTotals} jobOptions={jobOptions} />
+      </TabsContent>
 
       <TabsContent value="internal">
         <InternalPayments payments={internal} team={team} />
@@ -51,9 +79,11 @@ export function PaymentsDashboard({ data }: { data: PaymentsData }) {
         <ExternalPayments payments={external} />
       </TabsContent>
 
-      <TabsContent value="revenue">
-        <RevenuePanel revenue={revenue} />
-      </TabsContent>
+      {canSeeOverhead && (
+        <TabsContent value="overhead">
+          <OverheadList expenses={overhead} />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }
@@ -461,18 +491,20 @@ function InvoiceList({ title, invoices }: { title: string; invoices: PaymentsDat
 function RevenuePanel({ revenue }: { revenue: PaymentsData["revenue"] }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
-        <StatTile label="Collected" value={money(revenue.collected)} hint="Client invoices actually paid" />
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <StatTile label="Collected" value={money(revenue.collected)} hint="Invoices actually paid" />
+        <StatTile label="Cash & checks" value={money(revenue.ledgerIn)} hint="Taken outside Stripe" />
         <StatTile label="Outstanding" value={money(revenue.outstanding)} hint="Invoiced, not yet paid" />
-        <StatTile label="Paid to team" value={money(revenue.paidOut)} hint="Team payments settled" />
-        <StatTile label="Owed to team" value={money(revenue.owedToTeam)} hint="Recorded but not yet paid" />
+        <StatTile label="Owed to team" value={money(revenue.owedToTeam)} hint="Recorded, not yet paid" />
       </div>
 
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <h2 className="mb-2 text-sm font-semibold">What&apos;s actually left</h2>
         <dl className="flex flex-col gap-1 text-sm">
           <Line label="Collected from clients" value={revenue.collected} />
+          <Line label="Cash and checks in" value={revenue.ledgerIn} />
           <Line label="Paid to team" value={-revenue.paidOut} />
+          <Line label="Materials, subs and the rest" value={-revenue.ledgerOut} />
           <Line label="Overhead" value={-revenue.overhead} />
           <div className="mt-1 flex items-baseline justify-between border-t border-border pt-1 font-semibold">
             <dt>Net</dt>

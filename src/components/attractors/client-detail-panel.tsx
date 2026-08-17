@@ -14,20 +14,13 @@ import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-se
 import { addPropertyForCustomer, updatePropertyAddress } from "@/lib/actions/property-actions";
 import { updateCustomerContact } from "@/lib/actions/customer-actions";
 import { isAccountManager } from "@/lib/affiliate-roles";
+import { JOB_STATUS_LABELS } from "@/lib/job-lifecycle";
+import { AddJobButton } from "@/components/job/add-job-button";
 import { cn } from "@/lib/utils";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { Customer, JobProposal, Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-
-const JOB_STATUS_LABEL: Record<string, string> = {
-  estimating: "Estimating",
-  quoted: "Quoted",
-  approved: "Approved",
-  in_progress: "In progress",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
 
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   needs_approval: "Needs approval",
@@ -208,6 +201,7 @@ export function ClientDetailPanel({
               )}
 
               <div className="flex flex-col gap-1.5">
+                <AddJobButton propertyId={property.id} address={property.address} />
                 {propertyJobs.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No jobs on this property yet.</p>
                 ) : (
@@ -229,7 +223,7 @@ export function ClientDetailPanel({
                       </Link>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-xs capitalize text-muted-foreground">
-                          {JOB_STATUS_LABEL[job.status] ?? job.status.replace("_", " ")}
+                          {JOB_STATUS_LABELS[job.status] ?? job.status.replace("_", " ")}
                         </span>
                         {proposalsByJobId?.[job.id] && (
                           <span

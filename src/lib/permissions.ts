@@ -34,8 +34,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "weather", label: "Weather", href: "/weather" },
 
   // Money and admin tooling — closed until somebody says otherwise.
-  { key: "payments", label: "Payments", href: "/admin/payments" },
-  { key: "overhead", label: "Overhead", href: "/admin/overhead" },
+  { key: "payments", label: "Money", href: "/admin/payments" },
   { key: "journeys", label: "Journey Dashboard", href: "/admin/journeys" },
   { key: "gambling", label: "Gambling (test)", href: "/gambling" },
 
@@ -60,6 +59,7 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/proposal/[token]": "Opened by a client from an emailed link. They have no account at all.",
   "/admin/permissions": "This screen. Gated on the admin role directly so it can't be locked away.",
   "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
+  "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
 };
 
 /**

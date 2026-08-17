@@ -38,9 +38,9 @@ export function SiteNav({
     ...(can("notifications") ? [{ href: "/notifications", label: "Notifications" }] : []),
     ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
     ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
-    ...(can("payments") ? [{ href: "/admin/payments", label: "Payments" }] : []),
-    ...(can("overhead") || roles.includes("overhead")
-      ? [{ href: "/admin/overhead", label: "Overhead" }]
+    // Overhead folded in here as a tab, so one link covers all of it.
+    ...(can("payments") || roles.includes("overhead")
+      ? [{ href: "/admin/payments", label: "Money" }]
       : []),
     ...(can("gambling") ? [{ href: "/gambling", label: "Gambling (test)" }] : []),
     ...(can("journeys") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),

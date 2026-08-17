@@ -45,7 +45,7 @@ export interface Property {
 export type JobStatus = "estimating" | "quoted" | "approved" | "in_progress" | "completed" | "cancelled";
 
 /** The evaluator's progress on a scheduled evaluation appointment — separate from JobStatus. */
-export type EvaluationStatus = "scheduled" | "on_way" | "arrived" | "completed";
+export type EvaluationStatus = "scheduled" | "on_way" | "arrived" | "completed" | "cancelled";
 
 export interface Job {
   id: string;
@@ -61,6 +61,8 @@ export interface Job {
   client_notes: string | null;
   budget_range: string | null;
   referred_by_profile_id: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -600,6 +602,38 @@ export interface TeamPayment {
   period_end: string | null;
   hours: number | null;
   paid_at: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Money in or out that isn't a Stripe invoice or a payroll run — a cash job,
+ * a check, a materials run, a subcontractor. Both directions share one shape
+ * because the only real difference between them is the sign. */
+export type LedgerDirection = "in" | "out";
+
+export type LedgerIncomeCategory = "job_payment" | "deposit" | "other_income";
+export type LedgerExpenseCategory =
+  | "materials"
+  | "subcontractor"
+  | "fuel"
+  | "equipment"
+  | "permit"
+  | "other_expense";
+export type LedgerCategory = LedgerIncomeCategory | LedgerExpenseCategory;
+
+export interface LedgerEntry {
+  id: string;
+  organization_id: string;
+  direction: LedgerDirection;
+  category: LedgerCategory;
+  amount: number;
+  occurred_on: string;
+  method: "cash" | "check" | "transfer" | "card" | "other" | null;
+  /** Who paid or was paid. Free text — a supplier isn't a customer. */
+  party: string | null;
+  job_id: string | null;
   note: string | null;
   created_by: string | null;
   created_at: string;

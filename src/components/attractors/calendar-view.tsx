@@ -7,18 +7,12 @@ import { Button } from "@/components/ui/button";
 import { colorForJobStatus } from "./attractor-colors";
 import { updateEvaluationStatus } from "@/lib/actions/job-actions";
 import { cn } from "@/lib/utils";
+import { EVALUATION_STATUS_LABELS } from "@/lib/job-lifecycle";
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { EvaluationStatus } from "@/types/domain";
 
 type Preset = "today" | "last30" | "thisQuarter" | "lastQuarter" | "custom";
 type ViewMode = "month" | "week" | "list";
-
-const EVAL_STATUS_LABELS: Record<EvaluationStatus, string> = {
-  scheduled: "Scheduled",
-  on_way: "On the way",
-  arrived: "Arrived",
-  completed: "Completed",
-};
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -434,7 +428,7 @@ export function CalendarView({
                           </span>
                         </button>
                         <span className="shrink-0 text-xs text-muted-foreground">
-                          {EVAL_STATUS_LABELS[job.evaluation_status]}
+                          {EVALUATION_STATUS_LABELS[job.evaluation_status]}
                         </span>
                         {job.assigned_to === currentProfileId && (
                           <EvalActionButton jobId={job.id} status={job.evaluation_status} />

@@ -6,15 +6,9 @@ import { AlertTriangle, Navigation } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { updateEvaluationStatus } from "@/lib/actions/job-actions";
+import { EVALUATION_STATUS_LABELS } from "@/lib/job-lifecycle";
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { EvaluationStatus } from "@/types/domain";
-
-const STATUS_LABELS: Record<EvaluationStatus, string> = {
-  scheduled: "Scheduled",
-  on_way: "On the way",
-  arrived: "Arrived",
-  completed: "Completed",
-};
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -105,7 +99,7 @@ function UpcomingCard({
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         <span>{formatWhen(job.evaluation_date!)}</span>
         <span aria-hidden>·</span>
-        <span>{STATUS_LABELS[job.evaluation_status]}</span>
+        <span>{EVALUATION_STATUS_LABELS[job.evaluation_status]}</span>
         {name && (
           <>
             <span aria-hidden>·</span>
