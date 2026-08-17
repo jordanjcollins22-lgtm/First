@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
-import { checkTabAccess } from "@/lib/data/access";
+import { checkTabAccess, requireTab } from "@/lib/data/access";
 import { listBusinessLocations } from "@/lib/data/locations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { InventorySetupFlow } from "@/components/inventory/inventory-setup-flow";
 
 export default async function InventorySetupPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("inventory-setup", "/attractors");
 
   const [{ allowed: toolsAllowed }, { allowed: materialsAllowed }] = await Promise.all([
     checkTabAccess("tools"),

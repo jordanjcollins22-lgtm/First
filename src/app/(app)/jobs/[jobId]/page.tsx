@@ -22,6 +22,7 @@ import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus } from "@/types/domain";
+import { requireTab } from "@/lib/data/access";
 
 export default async function JobPage({
   params,
@@ -29,6 +30,7 @@ export default async function JobPage({
   params: Promise<{ jobId: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("job-detail", "/attractors");
 
   const { jobId } = await params;
   const supabase = await createClient();

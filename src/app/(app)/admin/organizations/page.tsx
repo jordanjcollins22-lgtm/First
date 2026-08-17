@@ -6,6 +6,7 @@ import { listOrganizations } from "@/lib/data/organizations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateOrganizationForm } from "@/components/organizations/create-organization-form";
+import { requireTab } from "@/lib/data/access";
 
 const SUPERADMIN_EMAIL = "jordan@jslandscapingmd.com";
 
@@ -14,6 +15,7 @@ const SUPERADMIN_EMAIL = "jordan@jslandscapingmd.com";
 // other admin (even in this same business) can reach it.
 export default async function OrganizationsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  await requireTab("organizations", "/attractors");
 
   const profile = await getCurrentProfile();
   if (!profile || profile.email.toLowerCase() !== SUPERADMIN_EMAIL) {

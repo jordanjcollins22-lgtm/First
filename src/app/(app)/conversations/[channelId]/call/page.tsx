@@ -6,6 +6,7 @@ import { isLivekitConfigured, isSupabaseConfigured } from "@/lib/env";
 import { getTeamChannel } from "@/lib/data/team-channels";
 import { getCurrentProfile } from "@/lib/data/team";
 import { GroupCall } from "@/components/calls/group-call";
+import { requireTab } from "@/lib/data/access";
 
 // Internal only — a call belongs to a team group, and nothing client-facing
 // links here.
@@ -17,6 +18,7 @@ export default async function GroupCallPage({ params }: { params: Promise<{ chan
       </div>
     );
   }
+  await requireTab("conversation-call", "/conversations");
 
   const { channelId } = await params;
   const [profile, data] = await Promise.all([getCurrentProfile(), getTeamChannel(channelId)]);

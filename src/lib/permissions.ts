@@ -49,6 +49,36 @@ export const TABS: readonly TabDefinition[] = [
   { key: "overhead", label: "Overhead", href: "/admin/overhead", defaultAccess: "admin" },
   { key: "journeys", label: "Journey Dashboard", href: "/admin/journeys", defaultAccess: "admin" },
   { key: "gambling", label: "Gambling (test)", href: "/gambling", defaultAccess: "admin" },
+
+  // Detail and sub-pages. They already had their own guards, so these default
+  // to "everyone" — the checkbox layers on top and only starts biting once
+  // somebody actually ticks or unticks it.
+  { key: "job-detail", label: "Job Detail", href: "/jobs/[jobId]", defaultAccess: "everyone" },
+  { key: "client-detail", label: "Client Detail", href: "/clients/[customerId]", defaultAccess: "everyone" },
+  {
+    key: "conversation-thread",
+    label: "Conversation Thread",
+    href: "/conversations/[channelId]",
+    defaultAccess: "everyone",
+  },
+  {
+    key: "conversation-call",
+    label: "Video Call",
+    href: "/conversations/[channelId]/call",
+    defaultAccess: "everyone",
+  },
+  {
+    key: "inventory-setup",
+    label: "Inventory Setup",
+    href: "/admin/inventory-setup",
+    defaultAccess: "everyone",
+  },
+  {
+    key: "organizations",
+    label: "Organizations",
+    href: "/admin/organizations",
+    defaultAccess: "admin",
+  },
 ];
 
 export type TabKey = string;
@@ -58,16 +88,10 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
-  "/login": "Sign-in page — has to be reachable signed out.",
-  "/proposal/[token]": "Client-facing proposal, opened from an emailed link.",
-  "/jobs/[jobId]": "Detail view, reached from a governed page.",
-  "/clients/[customerId]": "Detail view, reached from a governed page.",
-  "/conversations/[channelId]": "A single conversation, inside Conversations.",
-  "/conversations/[channelId]/call": "Video call for one conversation.",
+  "/login": "Sign-in page — nobody is signed in yet, so there are no roles to check.",
+  "/proposal/[token]": "Opened by a client from an emailed link. They have no account at all.",
   "/admin/permissions": "This screen. Gated on the admin role directly so it can't be locked away.",
-  "/admin/organizations": "Superadmin only, gated by account rather than role.",
-  "/admin/inventory-setup": "Setup step inside Inventory.",
-  "/admin/service-pricing": "Sub-page of the Services database.",
+  "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
 };
 
 /**
