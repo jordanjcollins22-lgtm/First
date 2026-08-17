@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
+import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -97,20 +98,35 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
 
   const { data: existingCustomers, error: existingCustomerError } = await admin
     .from("customers")
-    .select("id")
-    .eq("organization_id", input.organizationId)
-    .ilike("email", email)
-    .limit(1);
+    .select("id, name, email, phone")
+    .eq("organization_id", input.organizationId);
   if (existingCustomerError) throw existingCustomerError;
 
+  // Same matcher the office uses, so a booking lands on the existing client
+  // record whether we know them by email, phone, or name.
+  const duplicateCustomer = findDuplicateCustomer(existingCustomers ?? [], {
+    name: `${firstName} ${lastName}`,
+    email,
+    phone,
+  });
+
   let customerId: string;
-  if (existingCustomers && existingCustomers.length > 0) {
-    customerId = existingCustomers[0].id;
-    const { error: updateError } = await admin
-      .from("customers")
-      .update({ name: `${firstName} ${lastName}`, phone })
-      .eq("id", customerId);
-    if (updateError) throw updateError;
+  if (duplicateCustomer) {
+    customerId = duplicateCustomer.id;
+    // Fills blanks only. A booking form shouldn't overwrite a phone number or
+    // spelling the office already corrected by hand.
+    const patch = mergeableFields(
+      {
+        name: duplicateCustomer.name ?? null,
+        email: duplicateCustomer.email ?? null,
+        phone: duplicateCustomer.phone ?? null,
+      },
+      { name: `${firstName} ${lastName}`, email, phone }
+    );
+    if (Object.keys(patch).length > 0) {
+      const { error: updateError } = await admin.from("customers").update(patch).eq("id", customerId);
+      if (updateError) throw updateError;
+    }
   } else {
     const { data: customer, error: customerError } = await admin
       .from("customers")
@@ -123,15 +139,15 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
 
   const { data: existingProperties, error: existingPropertyError } = await admin
     .from("properties")
-    .select("id")
-    .eq("customer_id", customerId)
-    .ilike("address", address)
-    .limit(1);
+    .select("id, address")
+    .eq("customer_id", customerId);
   if (existingPropertyError) throw existingPropertyError;
 
+  const duplicateProperty = findDuplicateProperty(existingProperties ?? [], address);
+
   let propertyId: string;
-  if (existingProperties && existingProperties.length > 0) {
-    propertyId = existingProperties[0].id;
+  if (duplicateProperty) {
+    propertyId = duplicateProperty.id;
   } else {
     const { data: property, error: propertyError } = await admin
       .from("properties")

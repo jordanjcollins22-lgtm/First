@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { mergeableFields, normalizeName } from "@/lib/dedupe";
 import type { AttractorGeometry, LocationAreaGeometryType } from "@/types/domain";
 
 const PATH = "/attractors";
@@ -14,14 +15,27 @@ export async function createBusinessLocation(input: { name: string; address: str
 
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
-  const { error } = await supabase.from("business_locations").insert({
-    organization_id: organizationId,
-    name: input.name.trim(),
-    address: input.address,
-    lat: input.lat,
-    lng: input.lng,
-  });
-  if (error) throw error;
+
+  // "The Shop" typed again from the inline picker shouldn't become a second
+  // location — reuse the existing one and fill in anything it was missing.
+  const { data: existing } = await supabase.from("business_locations").select("id, name, address");
+  const duplicate = (existing ?? []).find((l) => normalizeName(l.name) === normalizeName(input.name));
+
+  if (duplicate) {
+    const patch = mergeableFields({ address: duplicate.address ?? null }, { address: input.address ?? null });
+    if (Object.keys(patch).length > 0) {
+      await supabase.from("business_locations").update(patch).eq("id", duplicate.id);
+    }
+  } else {
+    const { error } = await supabase.from("business_locations").insert({
+      organization_id: organizationId,
+      name: input.name.trim(),
+      address: input.address,
+      lat: input.lat,
+      lng: input.lng,
+    });
+    if (error) throw error;
+  }
   revalidatePath(PATH);
   // Inventory's "Stored at" picker reads the same locations.
   revalidatePath("/admin/tools");

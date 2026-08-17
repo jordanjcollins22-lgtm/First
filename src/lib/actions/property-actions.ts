@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -26,6 +27,10 @@ export interface CreatePropertyInput {
   lat: number;
   lng: number;
   jobName?: string;
+  /** Optional, but when the form does collect them they make the duplicate
+   * check far more reliable than a name on its own. */
+  customerEmail?: string | null;
+  customerPhone?: string | null;
 }
 
 /**
@@ -44,16 +49,29 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
   const supabase = await createClient();
   const trimmedName = input.customerName.trim();
 
+  // Match against the whole book rather than an exact-text lookup, so a client
+  // who booked online by email isn't entered a second time by name.
   const { data: existingCustomers, error: existingCustomerError } = await supabase
     .from("customers")
-    .select("id")
-    .ilike("name", trimmedName)
-    .limit(1);
+    .select("id, name, email, phone");
   if (existingCustomerError) throw existingCustomerError;
 
+  const duplicateCustomer = findDuplicateCustomer(existingCustomers ?? [], {
+    name: trimmedName,
+    email: input.customerEmail,
+    phone: input.customerPhone,
+  });
+
   let customerId: string;
-  if (existingCustomers && existingCustomers.length > 0) {
-    customerId = existingCustomers[0].id;
+  if (duplicateCustomer) {
+    customerId = duplicateCustomer.id;
+    const patch = mergeableFields(
+      { email: duplicateCustomer.email ?? null, phone: duplicateCustomer.phone ?? null },
+      { email: input.customerEmail ?? null, phone: input.customerPhone ?? null }
+    );
+    if (Object.keys(patch).length > 0) {
+      await supabase.from("customers").update(patch).eq("id", customerId);
+    }
   } else {
     const { data: customer, error: customerError } = await supabase
       .from("customers")
@@ -66,15 +84,15 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
 
   const { data: existingProperties, error: existingPropertyError } = await supabase
     .from("properties")
-    .select("id")
-    .eq("customer_id", customerId)
-    .ilike("address", input.address)
-    .limit(1);
+    .select("id, address")
+    .eq("customer_id", customerId);
   if (existingPropertyError) throw existingPropertyError;
 
+  const duplicateProperty = findDuplicateProperty(existingProperties ?? [], input.address);
+
   let propertyId: string;
-  if (existingProperties && existingProperties.length > 0) {
-    propertyId = existingProperties[0].id;
+  if (duplicateProperty) {
+    propertyId = duplicateProperty.id;
   } else {
     const { data: property, error: propertyError } = await supabase
       .from("properties")
