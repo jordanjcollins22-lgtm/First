@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { isSupabaseConfigured } from "@/lib/env";
+import { TieBoard } from "@/components/gambling/tie-board";
 import {
   cashOutMultiple,
   SAMPLE_ACCOUNTS,
@@ -51,7 +52,7 @@ export default async function GamblingPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Gambling</h1>
       <p className="mb-4 text-muted-foreground">
-        Halftime cash-out positions across every account.
+        Two tie-at-halftime plays a week, plus cash-out positions across every account.
       </p>
 
       <div className="mb-6 rounded-xl border-2 border-dashed border-amber-500/70 bg-amber-50/70 px-3 py-2.5">
@@ -60,6 +61,10 @@ export default async function GamblingPage() {
           Every account, balance, game, score, and price on this page is invented for a layout test. Nothing is
           connected to FanDuel or any other book, and none of these games were played.
         </p>
+      </div>
+
+      <div className="mb-6">
+        <TieBoard />
       </div>
 
       {/* Totals */}

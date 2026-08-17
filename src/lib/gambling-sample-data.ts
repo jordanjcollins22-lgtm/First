@@ -164,3 +164,147 @@ export const SAMPLE_HALFTIME_BETS: HalftimeBet[] = [
 export function cashOutMultiple(bet: HalftimeBet): number {
   return bet.cashOutOffer / bet.stake;
 }
+
+/* ------------------------------------------------------------------ *
+ * Tie at halftime — the weekly play
+ *
+ * Still sample data. The strategy: every week, take the two games with the
+ * best-priced "tied at halftime" market.
+ * ------------------------------------------------------------------ */
+
+export interface TieCandidate {
+  id: string;
+  week: number;
+  matchup: string;
+  kickoff: string;
+  /** American odds on the game being tied at the half, e.g. +1100. */
+  tieOdds: number;
+  /** Our own estimate that this particular game ends the half level. */
+  modelPct: number;
+  /** Why this game looks more likely to sit level at the break than most. */
+  reason: string;
+}
+
+export interface TieWeekResult {
+  week: number;
+  picks: {
+    matchup: string;
+    halftimeScore: string;
+    tieOdds: number;
+    tied: boolean;
+  }[];
+  stakePerBet: number;
+}
+
+/** What the book's price says the chance is, before its margin is removed. */
+export function impliedProbability(americanOdds: number): number {
+  return americanOdds > 0
+    ? 100 / (americanOdds + 100)
+    : Math.abs(americanOdds) / (Math.abs(americanOdds) + 100);
+}
+
+/** Hit rate needed just to break even at this price — the number that decides
+ * whether the play is worth making at all. */
+export function breakEvenRate(americanOdds: number): number {
+  return impliedProbability(americanOdds);
+}
+
+/** Profit on a winning bet, stake excluded. */
+export function profitOn(stake: number, americanOdds: number): number {
+  return americanOdds > 0 ? stake * (americanOdds / 100) : stake * (100 / Math.abs(americanOdds));
+}
+
+export const CURRENT_WEEK = 4;
+
+export const SAMPLE_TIE_SLATE: TieCandidate[] = [
+  {
+    id: "t1",
+    week: 4,
+    matchup: "Steelers vs Browns",
+    kickoff: "Sun 1:00 PM",
+    tieOdds: 1400,
+    modelPct: 0.112,
+    reason: "Two run-first offenses, lowest total on the board (37.5). Low-scoring halves tie most often.",
+  },
+  {
+    id: "t2",
+    week: 4,
+    matchup: "Bears vs Vikings",
+    kickoff: "Sun 1:00 PM",
+    tieOdds: 1300,
+    modelPct: 0.104,
+    reason: "Spread inside a field goal, total under 40. Even matchup, few possessions.",
+  },
+  {
+    id: "t3",
+    week: 4,
+    matchup: "Broncos vs Raiders",
+    kickoff: "Sun 4:05 PM",
+    tieOdds: 1200,
+    modelPct: 0.095,
+    reason: "Pick'em spread, but both offenses score in the red zone rather than settling for threes.",
+  },
+  {
+    id: "t4",
+    week: 4,
+    matchup: "Giants vs Commanders",
+    kickoff: "Sun 1:00 PM",
+    tieOdds: 1100,
+    modelPct: 0.088,
+    reason: "Close spread, middling total. Nothing pushing it either way.",
+  },
+  {
+    id: "t5",
+    week: 4,
+    matchup: "Texans vs Colts",
+    kickoff: "Sun 4:25 PM",
+    tieOdds: 1000,
+    modelPct: 0.081,
+    reason: "Total up at 47.5 — more scoring means more ways to end the half apart.",
+  },
+  {
+    id: "t6",
+    week: 4,
+    matchup: "Chiefs vs Chargers",
+    kickoff: "Sun 8:20 PM",
+    tieOdds: 900,
+    modelPct: 0.07,
+    reason: "Chiefs favoured by a touchdown. Favourites that big are usually ahead at the break.",
+  },
+  {
+    id: "t7",
+    week: 4,
+    matchup: "Bills vs Jets",
+    kickoff: "Mon 8:15 PM",
+    tieOdds: 850,
+    modelPct: 0.064,
+    reason: "Widest spread of the slate. Least likely to be level.",
+  },
+];
+
+export const SAMPLE_TIE_HISTORY: TieWeekResult[] = [
+  {
+    week: 1,
+    stakePerBet: 50,
+    picks: [
+      { matchup: "Bears vs Titans", halftimeScore: "10 — 3", tieOdds: 1300, tied: false },
+      { matchup: "Steelers vs Falcons", halftimeScore: "6 — 0", tieOdds: 1200, tied: false },
+    ],
+  },
+  {
+    week: 2,
+    stakePerBet: 50,
+    picks: [
+      { matchup: "Browns vs Jaguars", halftimeScore: "7 — 7", tieOdds: 1250, tied: true },
+      { matchup: "Panthers vs Saints", halftimeScore: "13 — 3", tieOdds: 1150, tied: false },
+    ],
+  },
+  {
+    week: 3,
+    stakePerBet: 50,
+    picks: [
+      { matchup: "Raiders vs Commanders", halftimeScore: "14 — 10", tieOdds: 1300, tied: false },
+      { matchup: "Broncos vs Buccaneers", halftimeScore: "3 — 17", tieOdds: 1100, tied: false },
+    ],
+  },
+];
