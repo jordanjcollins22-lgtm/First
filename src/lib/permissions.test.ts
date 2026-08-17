@@ -64,15 +64,19 @@ describe("tabsAllowedForRoles", () => {
     expect(tabsAllowedForRoles(["crew"], grants).has("payments")).toBe(false);
   });
 
-  it("keeps an unconfigured everyone-page open, so governing it took nothing away", () => {
-    expect(tabsAllowedForRoles(["crew"], grants).has("conversations")).toBe(true);
+  it("never opens a page to the team on its own", () => {
+    // No page is open to everyone until somebody ticks it, whatever it is.
+    for (const tab of TABS) {
+      const untouched = tabsAllowedForRoles(["crew"], []);
+      expect(untouched.has(tab.key), `${tab.key} was open without a grant`).toBe(false);
+    }
   });
 
-  it("respects an explicit denial over the default", () => {
-    // Once anyone is granted the tab it counts as configured, so the default
-    // stops applying and the matrix is in charge.
-    const configured = [...grants, { role_name: "admin", tab_key: "conversations" }];
-    expect(tabsAllowedForRoles(["crew"], configured).has("conversations")).toBe(false);
+  it("stops giving admins a page once somebody else has been granted it", () => {
+    // A tab with any grant is configured, so admins follow the matrix too.
+    const configured = [{ role_name: "crew", tab_key: "conversations" }];
+    expect(tabsAllowedForRoles(["crew"], configured).has("conversations")).toBe(true);
+    expect(tabsAllowedForRoles(["admin"], configured).has("conversations")).toBe(false);
   });
 
   it("reports which tabs are still awaiting a decision", () => {

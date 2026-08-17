@@ -9,79 +9,44 @@
  * something someone has to remember.
  */
 
-export type DefaultAccess = "everyone" | "admin";
-
 export interface TabDefinition {
   key: string;
   label: string;
   href: string;
-  /**
-   * Who sees the page before an admin has ticked anything for it.
-   *
-   * A brand-new page has no rows in role_permissions, and the honest reading
-   * of that is "nobody has decided yet" rather than "denied to all" — which
-   * would hide it from the admin who needs to make the call. "admin" is the
-   * default for anything new; "everyone" is only for pages that were already
-   * open to the whole team before they were governed here, so turning this on
-   * took nothing away from anyone.
-   */
-  defaultAccess: DefaultAccess;
 }
 
 export const TABS: readonly TabDefinition[] = [
-  { key: "new-property", label: "New Property (Home)", href: "/", defaultAccess: "admin" },
-  { key: "project-data", label: "Project Data", href: "/attractors", defaultAccess: "admin" },
-  { key: "evaluations", label: "Calendar", href: "/evaluations", defaultAccess: "admin" },
-  { key: "tools", label: "Tool Database", href: "/admin/tools", defaultAccess: "admin" },
-  { key: "materials", label: "Material Database", href: "/admin/materials", defaultAccess: "admin" },
-  { key: "services", label: "Services Database", href: "/admin/team", defaultAccess: "admin" },
-  { key: "team", label: "Team Database", href: "/admin/team", defaultAccess: "admin" },
+  { key: "new-property", label: "New Property (Home)", href: "/" },
+  { key: "project-data", label: "Project Data", href: "/attractors" },
+  { key: "evaluations", label: "Calendar", href: "/evaluations" },
+  { key: "tools", label: "Tool Database", href: "/admin/tools" },
+  { key: "materials", label: "Material Database", href: "/admin/materials" },
+  { key: "services", label: "Services Database", href: "/admin/team" },
+  { key: "team", label: "Team Database", href: "/admin/team" },
 
-  // Added after the matrix existed. These were open to everyone signed in, so
-  // they default that way — governing them changed nobody's access on day one.
-  { key: "proposals", label: "Proposals", href: "/proposals", defaultAccess: "everyone" },
-  { key: "contacts", label: "Contacts", href: "/contacts", defaultAccess: "everyone" },
-  { key: "pipeline", label: "Pipeline", href: "/pipeline", defaultAccess: "everyone" },
-  { key: "leads", label: "Leads", href: "/leads", defaultAccess: "admin" },
-  { key: "conversations", label: "Conversations", href: "/conversations", defaultAccess: "everyone" },
-  { key: "notifications", label: "Notifications", href: "/notifications", defaultAccess: "everyone" },
-  { key: "weather", label: "Weather", href: "/weather", defaultAccess: "everyone" },
+  // Added after the matrix existed.
+  { key: "proposals", label: "Proposals", href: "/proposals" },
+  { key: "contacts", label: "Contacts", href: "/contacts" },
+  { key: "pipeline", label: "Pipeline", href: "/pipeline" },
+  { key: "leads", label: "Leads", href: "/leads" },
+  { key: "conversations", label: "Conversations", href: "/conversations" },
+  { key: "notifications", label: "Notifications", href: "/notifications" },
+  { key: "weather", label: "Weather", href: "/weather" },
 
   // Money and admin tooling — closed until somebody says otherwise.
-  { key: "payments", label: "Payments", href: "/admin/payments", defaultAccess: "admin" },
-  { key: "overhead", label: "Overhead", href: "/admin/overhead", defaultAccess: "admin" },
-  { key: "journeys", label: "Journey Dashboard", href: "/admin/journeys", defaultAccess: "admin" },
-  { key: "gambling", label: "Gambling (test)", href: "/gambling", defaultAccess: "admin" },
+  { key: "payments", label: "Payments", href: "/admin/payments" },
+  { key: "overhead", label: "Overhead", href: "/admin/overhead" },
+  { key: "journeys", label: "Journey Dashboard", href: "/admin/journeys" },
+  { key: "gambling", label: "Gambling (test)", href: "/gambling" },
 
-  // Detail and sub-pages. They already had their own guards, so these default
-  // to "everyone" — the checkbox layers on top and only starts biting once
-  // somebody actually ticks or unticks it.
-  { key: "job-detail", label: "Job Detail", href: "/jobs/[jobId]", defaultAccess: "everyone" },
-  { key: "client-detail", label: "Contact Detail", href: "/clients/[customerId]", defaultAccess: "everyone" },
-  {
-    key: "conversation-thread",
-    label: "Conversation Thread",
-    href: "/conversations/[channelId]",
-    defaultAccess: "everyone",
-  },
-  {
-    key: "conversation-call",
-    label: "Video Call",
-    href: "/conversations/[channelId]/call",
-    defaultAccess: "everyone",
-  },
-  {
-    key: "inventory-setup",
-    label: "Inventory Setup",
-    href: "/admin/inventory-setup",
-    defaultAccess: "everyone",
-  },
-  {
-    key: "organizations",
-    label: "Organizations",
-    href: "/admin/organizations",
-    defaultAccess: "admin",
-  },
+  // Detail and sub-pages. Each still has its own guard; the checkbox layers
+  // on top.
+  { key: "job-detail", label: "Job Detail", href: "/jobs/[jobId]" },
+  { key: "client-detail", label: "Contact Detail", href: "/clients/[customerId]" },
+  { key: "conversation-thread", label: "Conversation Thread", href: "/conversations/[channelId]" },
+  { key: "conversation-call", label: "Video Call", href: "/conversations/[channelId]/call" },
+  { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup" },
+  { key: "organizations", label: "Organizations", href: "/admin/organizations" },
 ];
 
 export type TabKey = string;
@@ -100,9 +65,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
 /**
  * Which tabs a person can see.
  *
- * A tab with no grants at all hasn't been configured yet — it falls back to
- * its declared default instead of vanishing, so a page added today is visible
- * to whoever should see it and shows up on the matrix waiting for a decision.
+ * Nothing is open to the team until an admin ticks it. A page with no grants
+ * at all is visible to admins only — that keeps a page reachable by whoever
+ * has to make the call about it, without ever handing it to the whole team on
+ * its own.
  */
 export function tabsAllowedForRoles(
   roles: string[],
@@ -115,9 +81,10 @@ export function tabsAllowedForRoles(
     if (roles.includes(p.role_name)) allowed.add(p.tab_key);
   }
 
-  for (const tab of TABS) {
-    if (configured.has(tab.key)) continue;
-    if (tab.defaultAccess === "everyone" || roles.includes("admin")) allowed.add(tab.key);
+  if (roles.includes("admin")) {
+    for (const tab of TABS) {
+      if (!configured.has(tab.key)) allowed.add(tab.key);
+    }
   }
 
   return allowed;

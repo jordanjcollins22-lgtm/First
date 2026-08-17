@@ -22,7 +22,7 @@ export function PermissionsMatrix({ roles, permissions }: { roles: CustomRole[];
   }
 
   /** One page, every role at once. Unticking clears the page back to
-   * "undecided", where it follows the default declared beside it. */
+   * "undecided", which means admins only until somebody ticks it. */
   function toggleOpenToAll(tab: string, open: boolean) {
     setGrants((prev) => {
       const next = new Set(prev);
@@ -50,7 +50,7 @@ export function PermissionsMatrix({ roles, permissions }: { roles: CustomRole[];
                 {tab.label}
                 {isUnconfigured(tab.key) && (
                   <span className="mt-0.5 block text-[9px] font-semibold normal-case text-amber-700">
-                    new · {tab.defaultAccess === "everyone" ? "open to all" : "admin only"}
+                    undecided · admin only
                   </span>
                 )}
               </th>

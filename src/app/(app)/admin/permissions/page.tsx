@@ -46,9 +46,10 @@ export default async function PermissionsPage() {
         checked here, so you can&apos;t lock yourself out.
       </p>
       <p className="mb-6 text-sm text-muted-foreground">
-        New pages show up here on their own, marked <strong>new</strong> until somebody ticks or
-        unticks a box for them. Until then each one falls back to the default under its name — most
-        are admin-only, and the ones that were already open to the whole team stay that way.
+        New pages show up here on their own, marked <strong>undecided</strong> until somebody ticks a
+        box for them. Nothing is open to the team on its own — an undecided page is visible to Admins
+        only, so it stays reachable by whoever has to make the call without being handed to everyone.
+        Use <strong>Open to all</strong> to give a page to every role in one tap.
       </p>
       <PermissionsMatrix roles={roles} permissions={permissions} />
     </div>
