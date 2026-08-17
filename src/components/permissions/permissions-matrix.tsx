@@ -3,12 +3,16 @@
 import { useState, useTransition } from "react";
 
 import { setRolePermission } from "@/lib/actions/permissions-actions";
-import { TABS } from "@/lib/permissions";
+import { TABS, unconfiguredTabKeys } from "@/lib/permissions";
 import type { CustomRole, RolePermission } from "@/types/domain";
 
 export function PermissionsMatrix({ roles, permissions }: { roles: CustomRole[]; permissions: RolePermission[] }) {
   const [grants, setGrants] = useState(() => new Set(permissions.map((p) => `${p.role_name}:${p.tab_key}`)));
   const [isPending, startTransition] = useTransition();
+
+  // Pages nobody has ticked or unticked yet. Until someone does, they fall back
+  // to the default declared alongside the page, and the header says which.
+  const pending = unconfiguredTabKeys(permissions);
 
   function toggle(role: string, tab: string, checked: boolean) {
     const key = `${role}:${tab}`;
@@ -30,6 +34,11 @@ export function PermissionsMatrix({ roles, permissions }: { roles: CustomRole[];
             {TABS.map((tab) => (
               <th key={tab.key} className="p-2 text-center font-medium">
                 {tab.label}
+                {pending.has(tab.key) && (
+                  <span className="mt-0.5 block text-[9px] font-semibold normal-case text-amber-700">
+                    new · {tab.defaultAccess === "everyone" ? "open to all" : "admin only"}
+                  </span>
+                )}
               </th>
             ))}
           </tr>

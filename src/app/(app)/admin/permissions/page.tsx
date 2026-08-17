@@ -41,9 +41,14 @@ export default async function PermissionsPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-bold">Permissions</h1>
       <p className="mb-6 text-muted-foreground">
-        Which tabs each role can see, including Admin — uncheck anything to see what a restricted view
-        looks like. This page itself always stays reachable to Admins no matter what&apos;s checked
-        here, so you can&apos;t lock yourself out.
+        Which pages each role can see, including Admin — uncheck anything to see what a restricted
+        view looks like. This page itself always stays reachable to Admins no matter what&apos;s
+        checked here, so you can&apos;t lock yourself out.
+      </p>
+      <p className="mb-6 text-sm text-muted-foreground">
+        New pages show up here on their own, marked <strong>new</strong> until somebody ticks or
+        unticks a box for them. Until then each one falls back to the default under its name — most
+        are admin-only, and the ones that were already open to the whole team stay that way.
       </p>
       <PermissionsMatrix roles={roles} permissions={permissions} />
     </div>

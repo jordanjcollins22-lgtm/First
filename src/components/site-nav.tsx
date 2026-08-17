@@ -22,25 +22,29 @@ export function SiteNav({
   const showEvaluations = allowedTabs.includes("evaluations");
   // Project Data is the only tab kept in the bar; everything else lives in
   // the menu so the header stays readable as tabs get added.
+  // Everything the matrix governs reads off allowedTabs, so unticking a box on
+  // the Permissions page actually removes the link. The two exceptions below
+  // are the ones it deliberately doesn't cover.
+  const can = (tab: string) => allowedTabs.includes(tab);
+
   const links = [
-    ...(showProjectData ? [{ href: "/proposals", label: "Proposals" }] : []),
-    ...(showProjectData ? [{ href: "/conversations", label: "Conversations" }] : []),
+    ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
+    ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
     ...(showEvaluations ? [{ href: "/evaluations", label: "Calendar" }] : []),
-    ...(userEmail ? [{ href: "/weather", label: "Weather" }] : []),
-    ...(userEmail ? [{ href: "/notifications", label: "Notifications" }] : []),
-    ...(allowedTabs.includes("tools") || allowedTabs.includes("materials")
-      ? [{ href: "/admin/tools", label: "Inventory" }]
+    ...(can("weather") ? [{ href: "/weather", label: "Weather" }] : []),
+    ...(can("notifications") ? [{ href: "/notifications", label: "Notifications" }] : []),
+    ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
+    ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
+    ...(can("payments") ? [{ href: "/admin/payments", label: "Payments" }] : []),
+    ...(can("overhead") || roles.includes("overhead")
+      ? [{ href: "/admin/overhead", label: "Overhead" }]
       : []),
-    ...(allowedTabs.includes("services") || allowedTabs.includes("team")
-      ? [{ href: "/admin/team", label: "Team & Services" }]
-      : []),
-    ...(roles.includes("admin") || roles.includes("overhead")
-      ? [{ href: "/admin/payments", label: "Payments" }]
-      : []),
-    ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
-    ...(roles.includes("admin") ? [{ href: "/gambling", label: "Gambling (test)" }] : []),
+    ...(can("gambling") ? [{ href: "/gambling", label: "Gambling (test)" }] : []),
+    ...(can("journeys") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
+    // Gated on the admin role itself, never on the table it edits — otherwise
+    // one stray uncheck would take away the way back in.
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
-    ...(roles.includes("admin") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
+    // Superadmin, decided by account rather than by role.
     ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
       ? [{ href: "/admin/organizations", label: "Organizations" }]
       : []),

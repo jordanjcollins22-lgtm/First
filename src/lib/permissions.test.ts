@@ -1,0 +1,82 @@
+import { readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import { TABS, UNGOVERNED_ROUTES, tabsAllowedForRoles, unconfiguredTabKeys } from "@/lib/permissions";
+
+const APP_DIR = join(process.cwd(), "src", "app", "(app)");
+
+/** Every route under the (app) group that renders a page. */
+function findRoutes(dir: string, prefix = ""): string[] {
+  const routes: string[] = [];
+  if (existsSync(join(dir, "page.tsx"))) routes.push(prefix === "" ? "/" : prefix);
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    // Route groups like (app) don't appear in the URL.
+    const segment = entry.name.startsWith("(") ? "" : `/${entry.name}`;
+    routes.push(...findRoutes(join(dir, entry.name), `${prefix}${segment}`));
+  }
+  return routes;
+}
+
+describe("page permissions registry", () => {
+  it("governs every page, or says why not", () => {
+    const routes = findRoutes(APP_DIR);
+    const governed = new Set(TABS.map((t) => t.href));
+    const exempt = new Set(Object.keys(UNGOVERNED_ROUTES));
+
+    const ungoverned = routes.filter((r) => !governed.has(r) && !exempt.has(r));
+
+    // If this fails you added a page. Put it in TABS so it shows up on the
+    // permissions matrix, or in UNGOVERNED_ROUTES with the reason it isn't a
+    // tab. Either way somebody decided, which is the point.
+    expect(ungoverned, `Ungoverned pages: ${ungoverned.join(", ")}`).toEqual([]);
+  });
+
+  it("does not list routes that no longer exist", () => {
+    const routes = new Set(findRoutes(APP_DIR));
+    const stale = [...Object.keys(UNGOVERNED_ROUTES), ...TABS.map((t) => t.href)].filter(
+      (href) => !routes.has(href)
+    );
+    expect(stale, `Registered but missing: ${stale.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("tabsAllowedForRoles", () => {
+  const grants = [
+    { role_name: "admin", tab_key: "tools" },
+    { role_name: "crew", tab_key: "tools" },
+  ];
+
+  it("grants a configured tab to the roles that hold it", () => {
+    expect(tabsAllowedForRoles(["crew"], grants).has("tools")).toBe(true);
+  });
+
+  it("denies a configured tab to a role without it", () => {
+    expect(tabsAllowedForRoles(["evaluator"], grants).has("tools")).toBe(false);
+  });
+
+  it("falls back to admin for an unconfigured page", () => {
+    // "payments" has no grants in this fixture — it's brand new.
+    expect(tabsAllowedForRoles(["admin"], grants).has("payments")).toBe(true);
+    expect(tabsAllowedForRoles(["crew"], grants).has("payments")).toBe(false);
+  });
+
+  it("keeps an unconfigured everyone-page open, so governing it took nothing away", () => {
+    expect(tabsAllowedForRoles(["crew"], grants).has("conversations")).toBe(true);
+  });
+
+  it("respects an explicit denial over the default", () => {
+    // Once anyone is granted the tab it counts as configured, so the default
+    // stops applying and the matrix is in charge.
+    const configured = [...grants, { role_name: "admin", tab_key: "conversations" }];
+    expect(tabsAllowedForRoles(["crew"], configured).has("conversations")).toBe(false);
+  });
+
+  it("reports which tabs are still awaiting a decision", () => {
+    expect(unconfiguredTabKeys(grants).has("tools")).toBe(false);
+    expect(unconfiguredTabKeys(grants).has("payments")).toBe(true);
+  });
+});
