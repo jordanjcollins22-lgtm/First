@@ -10,6 +10,7 @@ import { lookupPropertyDetails } from "@/lib/rentcast";
 import { isRentcastConfigured } from "@/lib/env";
 import { applyTargetFilter, dedupeDrafts, importCsv, type TargetFilter } from "@/lib/prospect-import";
 import { assessLead, calibrateFromHistory, estimateTicket, TARGET_TICKET } from "@/lib/leads";
+import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 
 export type ProspectResult =
   | { ok: true; imported: number; updated: number; skippedExisting: number; skippedRows: number; unmapped: string[] }
@@ -113,6 +114,10 @@ export async function importProspects(
       .upsert(rows, { onConflict: "organization_id,address_key" })
       .select("id");
     if (error) return { ok: false, message: error.message };
+
+    // Catches anyone the address check missed — same person, different address
+    // on file, or a name/phone/email already in the book.
+    await reconcileProspects(supabase).catch(() => null);
 
     revalidatePath("/leads");
     return {
@@ -245,5 +250,31 @@ export async function enrichProspects(limit = 20): Promise<SimpleResult> {
   } catch (err) {
     console.error("enrichProspects failed:", err);
     return { ok: false, message: "Enrichment failed." };
+  }
+}
+
+/**
+ * Runs the cross-check against the client book on demand.
+ *
+ * The same sweep happens automatically after an import, whenever a property or
+ * online booking creates a client, and once nightly on the cron. This is for
+ * when somebody wants to see it happen rather than trust that it did.
+ */
+export async function reconcileProspectsNow(): Promise<SimpleResult> {
+  try {
+    if (!(await requireAdmin())) return { ok: false, message: "Only admins can manage prospects." };
+    const supabase = await createClient();
+    const report = await reconcileProspects(supabase);
+    revalidatePath("/leads");
+    return {
+      ok: true,
+      message:
+        report.matched > 0
+          ? `Checked ${report.checked}. ${report.matched} turned out to already be clients and came off the list.`
+          : `Checked ${report.checked}. None of them are clients yet.`,
+    };
+  } catch (err) {
+    console.error("reconcileProspectsNow failed:", err);
+    return { ok: false, message: "Couldn't run the check." };
   }
 }

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
+import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -189,6 +190,10 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
     );
     if (requestedError) throw requestedError;
   }
+
+  // They've just become a client — take them off the cold-prospect list now
+  // rather than at the next nightly sweep.
+  await reconcileProspects(admin).catch(() => null);
 
   return { jobId: job.id };
 }

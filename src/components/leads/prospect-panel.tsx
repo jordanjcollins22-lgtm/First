@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Ban, Loader2, Upload, Wand2 } from "lucide-react";
+import { Ban, Loader2, Upload, UserCheck, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import {
   deleteProspectBatch,
   enrichProspects,
   importProspects,
+  reconcileProspectsNow,
   setDoNotContact,
   setProspectStatus,
 } from "@/lib/actions/prospect-actions";
@@ -158,6 +159,22 @@ function ImportForm({ batches, rentcastReady }: { batches: string[]; rentcastRea
             <Wand2 className="mr-1.5 h-3.5 w-3.5" />
             Fill in lot sizes (20)
           </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                const result = await reconcileProspectsNow();
+                setMessage(result.ok ? (result.message ?? "Done.") : result.message);
+              })
+            }
+          >
+            <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+            Check against clients
+          </Button>
         </div>
 
         {message && <p className="text-xs">{message}</p>}
@@ -239,6 +256,11 @@ function ProspectRowItem({ prospect }: { prospect: ProspectRow }) {
 
       {blocked ? (
         <p className="mt-1 text-[11px] font-semibold text-destructive">Do not contact</p>
+      ) : status === "converted" ? (
+        <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+          <UserCheck className="h-3.5 w-3.5" />
+          Already a client — off the call list
+        </p>
       ) : (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {(["new", "queued", "contacted", "converted", "rejected"] as const).map((option) => (

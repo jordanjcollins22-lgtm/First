@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyTeamMember } from "@/lib/notifications";
+import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 
 /**
@@ -110,5 +111,11 @@ export async function GET(request: NextRequest) {
     if (didSend) sent += 1;
   }
 
-  return NextResponse.json({ sent });
+  // Nightly sweep of the cold-prospect list against the client book. It rides
+  // this cron rather than its own because Vercel's Hobby plan rejects a
+  // deployment with more than one daily schedule — and the reconciliation is
+  // cheap next to the reminders it shares a run with.
+  const reconciled = await reconcileProspects(admin).catch(() => ({ checked: 0, matched: 0 }));
+
+  return NextResponse.json({ sent, reconciled });
 }

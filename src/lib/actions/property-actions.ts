@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
+import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -130,6 +131,10 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
     .select()
     .single();
   if (jobError) throw jobError;
+
+  // This address may have been sitting on the cold-prospect list. Retire it
+  // now rather than leaving them on a call sheet they've already come off.
+  await reconcileProspects(supabase).catch(() => null);
 
   redirect(`/jobs/${job.id}`);
 }
