@@ -28,6 +28,8 @@ export function SiteNav({
   const can = (tab: string) => allowedTabs.includes(tab);
 
   const links = [
+    ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
+    ...(can("contacts") ? [{ href: "/contacts", label: "Contacts" }] : []),
     ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
     ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
     ...(showEvaluations ? [{ href: "/evaluations", label: "Calendar" }] : []),

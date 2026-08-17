@@ -167,7 +167,7 @@ export function AttractorsDashboard({
         <div>
           <h1 className="text-2xl font-bold">Project Data</h1>
           <p className="text-muted-foreground">
-            Clients and the marketing waves that generate them — on the same map.
+            Contacts and the marketing waves that generate them — on the same map.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -260,7 +260,7 @@ export function AttractorsDashboard({
           <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as SidebarTab)} className="flex flex-1 flex-col overflow-hidden">
             <TabsList className="m-2 shrink-0">
               <TabsTrigger value="waves">Waves ({filteredWaves.length})</TabsTrigger>
-              <TabsTrigger value="clients">Clients ({clientCount})</TabsTrigger>
+              <TabsTrigger value="clients">Contacts ({clientCount})</TabsTrigger>
             </TabsList>
             <TabsContent value="waves" className="mt-0 flex-1 overflow-y-auto">
               <WaveList

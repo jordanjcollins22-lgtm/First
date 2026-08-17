@@ -40,6 +40,8 @@ export const TABS: readonly TabDefinition[] = [
   // Added after the matrix existed. These were open to everyone signed in, so
   // they default that way — governing them changed nobody's access on day one.
   { key: "proposals", label: "Proposals", href: "/proposals", defaultAccess: "everyone" },
+  { key: "contacts", label: "Contacts", href: "/contacts", defaultAccess: "everyone" },
+  { key: "pipeline", label: "Pipeline", href: "/pipeline", defaultAccess: "everyone" },
   { key: "conversations", label: "Conversations", href: "/conversations", defaultAccess: "everyone" },
   { key: "notifications", label: "Notifications", href: "/notifications", defaultAccess: "everyone" },
   { key: "weather", label: "Weather", href: "/weather", defaultAccess: "everyone" },
@@ -54,7 +56,7 @@ export const TABS: readonly TabDefinition[] = [
   // to "everyone" — the checkbox layers on top and only starts biting once
   // somebody actually ticks or unticks it.
   { key: "job-detail", label: "Job Detail", href: "/jobs/[jobId]", defaultAccess: "everyone" },
-  { key: "client-detail", label: "Client Detail", href: "/clients/[customerId]", defaultAccess: "everyone" },
+  { key: "client-detail", label: "Contact Detail", href: "/clients/[customerId]", defaultAccess: "everyone" },
   {
     key: "conversation-thread",
     label: "Conversation Thread",
