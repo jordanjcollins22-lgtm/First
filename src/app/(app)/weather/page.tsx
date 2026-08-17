@@ -15,7 +15,7 @@ import { WeatherMap } from "@/components/weather/weather-map";
 export default async function WeatherPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-10">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -25,7 +25,7 @@ export default async function WeatherPage() {
 
   if (locations.length === 0) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Weather</h1>
         <p className="text-muted-foreground">
           Add a business location on Project Data and its forecast will show up here.
@@ -45,7 +45,7 @@ export default async function WeatherPage() {
 
   if (!overview) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Weather</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           Couldn&apos;t reach the weather service just now. Reload in a minute.
@@ -59,7 +59,7 @@ export default async function WeatherPage() {
   const shared = summary.shared;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Weather</h1>
       <p className="mb-6 text-muted-foreground">
         {locations.length === 1

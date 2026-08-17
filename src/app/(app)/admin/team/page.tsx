@@ -53,7 +53,7 @@ export default async function TeamServicesPage() {
 
   if (migrationMissing) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Team</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           This page needs its database migrations run first. In Supabase&apos;s SQL Editor, run{" "}
@@ -124,7 +124,7 @@ export default async function TeamServicesPage() {
   const deniedServices = services.filter((s) => s.status === "denied");
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Team &amp; Services</h1>
       <p className="mb-6 text-muted-foreground">Your people and the services you quote.</p>
 

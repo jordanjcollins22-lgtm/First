@@ -30,7 +30,7 @@ export default async function PaymentsPage() {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Payments</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           Couldn&apos;t load payments. If this is a fresh setup, the team_payments table may not exist yet — run{" "}

@@ -8,7 +8,7 @@ import type { TeamChannelWithMembers } from "@/types/domain";
 export default async function ConversationsPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -17,7 +17,7 @@ export default async function ConversationsPage() {
   const profile = await getCurrentProfile();
   if (!profile) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Sign in to see conversations.</p>
       </div>
     );
@@ -31,7 +31,7 @@ export default async function ConversationsPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Conversations</h1>
       <p className="mb-6 text-muted-foreground">
         Internal team groups and notes, and every message sent to a client.

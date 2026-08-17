@@ -37,7 +37,7 @@ export default async function JourneysPage() {
 
   if (migrationMissing) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Journey Dashboard</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           This page needs its database migration run first. In Supabase&apos;s SQL Editor, run{" "}
@@ -55,7 +55,7 @@ export default async function JourneysPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Journey Dashboard</h1>
       <p className="mb-6 text-muted-foreground">
         How every role moves through {orgName}, step by step — where the clicks go, what&apos;s automated

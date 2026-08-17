@@ -146,7 +146,7 @@ function ImportForm({ batches, rentcastReady }: { batches: string[]; rentcastRea
           onChange={(e) => setCsv(e.target.value)}
           rows={4}
           placeholder="…or paste CSV here"
-          className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono"
+          className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-base sm:text-xs"
         />
 
         <div className="grid gap-3 sm:grid-cols-3">

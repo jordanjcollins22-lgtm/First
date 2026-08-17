@@ -18,7 +18,7 @@ export default async function ClientAccountPage({
 }) {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -65,7 +65,7 @@ export default async function ClientAccountPage({
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:py-10">
       <Link href="/attractors" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
         <ArrowLeft className="h-4 w-4" />
         Back to Project Data

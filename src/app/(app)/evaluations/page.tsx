@@ -9,7 +9,7 @@ import { getBookingLinksBundle, type BookingLinksBundle } from "@/lib/data/booki
 export default async function EvaluationsPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -20,7 +20,7 @@ export default async function EvaluationsPage() {
   const schedule = await getMyScheduleData();
   if (!schedule) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Sign in to see your evaluations.</p>
       </div>
     );

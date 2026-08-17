@@ -39,7 +39,7 @@ export default async function LeadsPage() {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Leads</h1>
         <p className="text-sm text-muted-foreground">Couldn&apos;t load leads. Try again in a moment.</p>
       </div>
@@ -50,7 +50,7 @@ export default async function LeadsPage() {
   const rest = data.leads.filter((l) => !l.qualifies);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Leads</h1>
       <p className="mb-4 text-muted-foreground">
         Homeowners already in the book who look worth {money(TARGET_TICKET)} or more — ranked by who to call

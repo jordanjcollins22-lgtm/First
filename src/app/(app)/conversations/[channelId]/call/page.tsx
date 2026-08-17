@@ -13,7 +13,7 @@ import { requireTab } from "@/lib/data/access";
 export default async function GroupCallPage({ params }: { params: Promise<{ channelId: string }> }) {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -24,7 +24,7 @@ export default async function GroupCallPage({ params }: { params: Promise<{ chan
   const [profile, data] = await Promise.all([getCurrentProfile(), getTeamChannel(channelId)]);
   if (!profile) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Sign in to join this call.</p>
       </div>
     );

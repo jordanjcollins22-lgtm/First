@@ -7,7 +7,7 @@ import { NotificationSettings } from "@/components/notifications/notification-se
 export default async function NotificationsPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -23,7 +23,7 @@ export default async function NotificationsPage() {
 
   if (migrationMissing) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-8">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Notifications</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           This page needs its database migration run first. In Supabase&apos;s SQL Editor, run{" "}
@@ -35,14 +35,14 @@ export default async function NotificationsPage() {
 
   if (!settings) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Sign in to manage your notifications.</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Notifications</h1>
       <p className="mb-6 text-muted-foreground">
         Choose what you want texted to you. These are your settings — nobody else&apos;s.

@@ -8,7 +8,7 @@ import { ProposalsView } from "@/components/proposal/proposals-view";
 export default async function ProposalsPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -20,7 +20,7 @@ export default async function ProposalsPage() {
   const proposals = await listAllProposals();
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Proposals</h1>
       <p className="mb-6 text-muted-foreground">
         Proposals generate automatically once an evaluation is submitted — edit the price or scope, then approve to

@@ -75,14 +75,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         {impersonatingName && <ImpersonationBanner name={impersonatingName} />}
         <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-lg font-bold text-primary">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:py-3">
+            <Link
+              href="/"
+              className="truncate text-base font-bold text-primary sm:text-lg"
+            >
               {orgName ?? "JS Landscaping"}
             </Link>
             <SiteNav userEmail={userEmail} roles={roles} allowedTabs={allowedTabs} />
           </div>
         </header>
-        <main className="flex-1">{children}</main>
+        {/* pb keeps the last row of any page clear of the iPhone home bar. */}
+        <main className="flex-1 pb-[env(safe-area-inset-bottom)]">{children}</main>
         {roles.includes("admin") && <AdminChatWidget />}
       </body>
     </html>

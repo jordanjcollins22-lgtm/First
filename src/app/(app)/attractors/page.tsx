@@ -16,7 +16,7 @@ export default async function AttractorsPage() {
   const { allowed, profile } = await checkTabAccess("project-data");
   if (profile && !allowed) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Project Data</h1>
         <p className="text-sm text-muted-foreground">
           Your account doesn&apos;t have access to this page. Ask an admin to grant it under Databases &rarr;
@@ -44,7 +44,7 @@ export default async function AttractorsPage() {
 
   if (migrationMissing) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Project Data</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           This page needs its database migration run first. In Supabase&apos;s SQL Editor, run{" "}
@@ -71,7 +71,7 @@ export default async function AttractorsPage() {
   const [properties, profiles] = await Promise.all([listProperties(), listProfiles().catch(() => [] as Profile[])]);
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-8">
+    <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
       {locationsMigrationMissing && (
         <p className="mb-4 rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           Business locations aren&apos;t set up yet. In Supabase&apos;s SQL Editor, run{" "}

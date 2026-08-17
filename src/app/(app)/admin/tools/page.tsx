@@ -70,7 +70,7 @@ export default async function InventoryPage() {
   const isEmpty = tools.length === 0 && materials.length === 0;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="mb-1 text-2xl font-bold">Inventory</h1>

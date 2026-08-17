@@ -32,7 +32,7 @@ export default async function OrganizationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Organizations</h1>
       <p className="mb-6 text-muted-foreground">
         Every separate business running on this app. Each one is fully isolated — its own customers, jobs,

@@ -11,7 +11,7 @@ import { requireTab } from "@/lib/data/access";
 export default async function TeamChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Supabase is not configured yet.</p>
       </div>
     );
@@ -22,7 +22,7 @@ export default async function TeamChannelPage({ params }: { params: Promise<{ ch
   const [profile, data] = await Promise.all([getCurrentProfile(), getTeamChannel(channelId)]);
   if (!profile) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
         <p className="text-muted-foreground">Sign in to see this group.</p>
       </div>
     );
@@ -33,7 +33,7 @@ export default async function TeamChannelPage({ params }: { params: Promise<{ ch
   const teamMembers = profiles.map((p) => ({ id: p.id, name: p.full_name || p.email }));
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-8">
+    <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6 sm:py-8">
       <Link href="/conversations" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
         <ArrowLeft className="h-4 w-4" />
         Back to Conversations
