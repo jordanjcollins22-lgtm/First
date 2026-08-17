@@ -111,13 +111,25 @@ async function createTeamMemberInner(formData: FormData): Promise<CreateTeamMemb
   if (data.user) {
     const supabase = await createClient();
 
-    // New accounts default to "crew" (see the profiles trigger) — only need to
-    // update it when something else was picked.
+    // The signup trigger gives every new account "crew". When a different role
+    // was picked, the chosen one has to *replace* that — adding it alongside
+    // left everyone holding both, which is how evaluators and office staff
+    // ended up on the crew role they were never given.
     if (role !== "crew") {
       const { error: roleError } = await supabase
         .from("profile_roles")
         .insert({ profile_id: data.user.id, role_name: role });
-      if (roleError) return { ok: false, message: roleError.message };
+      // 23505 is "already has it" — fine, the goal is that they hold it.
+      if (roleError && roleError.code !== "23505") {
+        return { ok: false, message: roleError.message };
+      }
+
+      const { error: cleanupError } = await supabase
+        .from("profile_roles")
+        .delete()
+        .eq("profile_id", data.user.id)
+        .eq("role_name", "crew");
+      if (cleanupError) return { ok: false, message: cleanupError.message };
     }
 
     const { error: payError } = await supabase
