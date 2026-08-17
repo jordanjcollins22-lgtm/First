@@ -1,4 +1,6 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
+import { JobBriefings } from "@/components/evaluations/job-briefings";
+import { getJobBriefings } from "@/lib/data/job-briefing";
 import { CalendarSettings, type BookingLinksData } from "@/components/calendars/calendar-settings";
 import { MyBookingLink } from "@/components/booking/booking-links-panel";
 import type { MyScheduleData } from "@/lib/data/my-schedule";
@@ -7,7 +9,7 @@ import type { CalendarWithMembers } from "@/types/domain";
 /** The full Calendar page content — shared by /evaluations and the
  * homepage (for team members without New Property access) so they're always
  * exactly the same page, not two things that can drift apart. */
-export function MyEvaluationsContent({
+export async function MyEvaluationsContent({
   schedule,
   calendars,
   teamMembers,
@@ -34,6 +36,10 @@ export function MyEvaluationsContent({
     rangeEnd,
   } = schedule;
 
+  // Gathered here so both the Calendar page and the homepage version get it
+  // without either having to know how a briefing is assembled.
+  const briefings = await getJobBriefings(scheduledJobs).catch(() => []);
+
   const now = new Date().toISOString();
   const notCompleted = relevantJobs.filter((j) => j.evaluation_status !== "completed");
 
@@ -57,6 +63,7 @@ export function MyEvaluationsContent({
           ? "Every evaluation across the team — who, where, when, and status."
           : "Evaluations assigned to you — where to go, when, and your progress on each one."}
       </p>
+      <JobBriefings briefings={briefings} />
       <EvaluationsView
         overdue={overdue}
         upcoming={upcoming}
