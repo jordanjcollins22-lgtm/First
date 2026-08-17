@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Ban, Loader2, Upload, UserCheck, Wand2 } from "lucide-react";
+import { Ban, Loader2, Sprout, Upload, UserCheck, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   deleteProspectBatch,
   enrichProspects,
+  growProspectsNow,
   importProspects,
   reconcileProspectsNow,
   setDoNotContact,
@@ -30,9 +31,77 @@ export function ProspectPanel({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <ImportForm batches={batches} rentcastReady={rentcastReady} />
+      <GrowthPanel rentcastReady={rentcastReady} />
       <ProspectList prospects={prospects} />
+      <details className="rounded-xl border border-white/60 bg-card/60 backdrop-blur-md">
+        <summary className="cursor-pointer p-4 text-sm font-semibold">Import a list instead</summary>
+        <div className="border-t border-border p-4 pt-3">
+          <ImportForm batches={batches} rentcastReady={rentcastReady} />
+        </div>
+      </details>
     </div>
+  );
+}
+
+
+function GrowthPanel({ rentcastReady }: { rentcastReady: boolean }) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
+      <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
+        <Sprout className="h-4 w-4" />
+        Growing itself
+      </h2>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Every night the list grows around your finished work — the houses near a job you just completed become
+        candidates, biggest and most recent jobs first. Anything already a client, already listed, or on too
+        small a lot is dropped. Nothing to upload.
+      </p>
+
+      {!rentcastReady && (
+        <p className="mb-3 rounded-lg border border-amber-400/70 bg-amber-50/60 px-3 py-2 text-xs">
+          Add <code>RENTCAST_API_KEY</code> to the server environment and this starts working. Without it the
+          list can only be filled by importing a file.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={isPending || !rentcastReady}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await growProspectsNow();
+              setMessage(result.ok ? (result.message ?? "Done.") : result.message);
+            })
+          }
+        >
+          {isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          Grow now
+        </Button>
+
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await reconcileProspectsNow();
+              setMessage(result.ok ? (result.message ?? "Done.") : result.message);
+            })
+          }
+        >
+          <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+          Check against clients
+        </Button>
+      </div>
+
+      {message && <p className="mt-2 text-xs">{message}</p>}
+    </section>
   );
 }
 

@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyTeamMember } from "@/lib/notifications";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
+import { growProspects } from "@/lib/data/prospect-growth";
+import { NIGHTLY_BUDGET } from "@/lib/prospecting";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 
 /**
@@ -117,5 +119,15 @@ export async function GET(request: NextRequest) {
   // cheap next to the reminders it shares a run with.
   const reconciled = await reconcileProspects(admin).catch(() => ({ checked: 0, matched: 0 }));
 
-  return NextResponse.json({ sent, reconciled });
+  // Grow the prospect list around finished work. Capped per run because each
+  // seed is a billed property-API call — a few good streets a night beats
+  // swallowing the county in one evening.
+  const { data: orgs } = await admin.from("organizations").select("id");
+  const grown: Record<string, number> = {};
+  for (const org of orgs ?? []) {
+    const report = await growProspects(admin, org.id, NIGHTLY_BUDGET).catch(() => null);
+    if (report) grown[org.id] = report.added;
+  }
+
+  return NextResponse.json({ sent, reconciled, grown });
 }

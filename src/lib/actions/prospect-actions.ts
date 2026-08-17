@@ -11,6 +11,8 @@ import { isRentcastConfigured } from "@/lib/env";
 import { applyTargetFilter, dedupeDrafts, importCsv, type TargetFilter } from "@/lib/prospect-import";
 import { assessLead, calibrateFromHistory, estimateTicket, TARGET_TICKET } from "@/lib/leads";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
+import { growProspects } from "@/lib/data/prospect-growth";
+import { MANUAL_BUDGET } from "@/lib/prospecting";
 
 export type ProspectResult =
   | { ok: true; imported: number; updated: number; skippedExisting: number; skippedRows: number; unmapped: string[] }
@@ -276,5 +278,37 @@ export async function reconcileProspectsNow(): Promise<SimpleResult> {
   } catch (err) {
     console.error("reconcileProspectsNow failed:", err);
     return { ok: false, message: "Couldn't run the check." };
+  }
+}
+
+/**
+ * Grows the list now, rather than waiting for tonight's run.
+ *
+ * Each seed is one billed property-API call, so the manual run is capped the
+ * same way the nightly one is.
+ */
+export async function growProspectsNow(): Promise<SimpleResult> {
+  try {
+    if (!(await requireAdmin())) return { ok: false, message: "Only admins can grow the list." };
+
+    const organizationId = await getCurrentOrganizationId();
+    const supabase = await createClient();
+    const report = await growProspects(supabase, organizationId, MANUAL_BUDGET);
+
+    if (report.note && report.added === 0) return { ok: false, message: report.note };
+
+    await reconcileProspects(supabase).catch(() => null);
+    revalidatePath("/leads");
+
+    const where = report.seedsWorked.length > 0 ? ` around ${report.seedsWorked.join(", ")}` : "";
+    return {
+      ok: true,
+      message:
+        `Added ${report.added}${where}. Looked at ${report.found} properties, ` +
+        `skipped ${report.skippedExisting} already known and ${report.skippedSmall} lots too small.`,
+    };
+  } catch (err) {
+    console.error("growProspectsNow failed:", err);
+    return { ok: false, message: "Couldn't grow the list." };
   }
 }
