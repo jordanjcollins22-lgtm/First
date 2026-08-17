@@ -950,6 +950,38 @@ export interface Database {
           },
         ];
       };
+      team_payments: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          amount: number;
+          status: string;
+          method: string | null;
+          period_start: string | null;
+          period_end: string | null;
+          hours: number | null;
+          paid_at: string | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_payments"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_payments"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "team_payments_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       job_messages: {
         Row: {
           id: string;

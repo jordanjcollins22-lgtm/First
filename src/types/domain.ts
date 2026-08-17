@@ -584,3 +584,24 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
 }
+
+/** A payment to a team member. Amount is what was actually agreed, which may
+ * differ from what their pay structure suggests — bonuses, advances, and
+ * corrections all land here. */
+export interface TeamPayment {
+  id: string;
+  organization_id: string;
+  profile_id: string;
+  amount: number;
+  status: "pending" | "paid";
+  method: "cash" | "check" | "transfer" | "other" | null;
+  /** The work period this covers, when it's for a stretch of days. */
+  period_start: string | null;
+  period_end: string | null;
+  hours: number | null;
+  paid_at: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}

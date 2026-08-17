@@ -34,6 +34,9 @@ export function SiteNav({
     ...(allowedTabs.includes("services") || allowedTabs.includes("team")
       ? [{ href: "/admin/team", label: "Team & Services" }]
       : []),
+    ...(roles.includes("admin") || roles.includes("overhead")
+      ? [{ href: "/admin/payments", label: "Payments" }]
+      : []),
     ...(roles.includes("overhead") ? [{ href: "/admin/overhead", label: "Overhead" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
     ...(roles.includes("admin") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
