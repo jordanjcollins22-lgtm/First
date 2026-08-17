@@ -5,6 +5,9 @@ import { requireTab } from "@/lib/data/access";
 import { getLeadEngine, type LeadEngineData } from "@/lib/data/leads";
 import { TARGET_TICKET } from "@/lib/leads";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { getProspects, type ProspectsData } from "@/lib/data/prospects";
+import { ProspectPanel } from "@/components/leads/prospect-panel";
+import { isRentcastConfigured } from "@/lib/env";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -25,6 +28,13 @@ export default async function LeadsPage() {
     data = await getLeadEngine();
   } catch (err) {
     console.error("Lead engine failed to load:", err);
+  }
+
+  let prospects: ProspectsData = { prospects: [], batches: [], needsEnrichment: 0, migrationMissing: false };
+  try {
+    prospects = await getProspects();
+  } catch (err) {
+    console.error("Prospects failed to load:", err);
   }
 
   if (!data) {
@@ -126,6 +136,37 @@ export default async function LeadsPage() {
       </section>
 
       <LeadList title="Everything else" leads={rest} emptyText="Nothing else on the list." />
+
+      <h2 className="mb-1 mt-8 text-lg font-bold">Cold prospects</h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Properties nobody here has worked with, imported from a list.
+      </p>
+
+      {prospects.migrationMissing ? (
+        <p className="rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
+          Run <code>supabase/migrations/0076_lead_prospects.sql</code> to turn this on.
+        </p>
+      ) : (
+        <>
+          <div className="mb-4 rounded-xl border border-amber-400/70 bg-amber-50/60 p-3">
+            <p className="text-sm font-semibold">Before you call or text this list</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              These people never asked to hear from you, so cold calls and texts fall under the federal
+              Do-Not-Call rules and the TCPA — texting in particular needs consent you don&apos;t have from a
+              parcel record. Scrub against the national registry before dialling, keep to lawful hours, and use
+              the <strong>Do not contact</strong> button the first time somebody asks. That flag survives a
+              re-import; a status change can&apos;t undo it. Door-hangers and mail don&apos;t carry the same
+              restrictions.
+            </p>
+          </div>
+
+          <ProspectPanel
+            prospects={prospects.prospects}
+            batches={prospects.batches}
+            rentcastReady={isRentcastConfigured}
+          />
+        </>
+      )}
 
       <p className="mt-4 text-xs text-muted-foreground">
         These are properties the business has already visited, quoted, or worked on. Nothing here is a bought

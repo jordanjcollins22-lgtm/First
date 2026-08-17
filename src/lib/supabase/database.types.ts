@@ -950,6 +950,45 @@ export interface Database {
           },
         ];
       };
+      lead_prospects: {
+        Row: {
+          id: string;
+          organization_id: string;
+          source: string;
+          source_batch: string | null;
+          owner_name: string | null;
+          address: string;
+          address_key: string;
+          city: string | null;
+          state: string | null;
+          zip: string | null;
+          lat: number | null;
+          lng: number | null;
+          acreage: number | null;
+          sqft: number | null;
+          year_built: number | null;
+          assessed_value: number | null;
+          phone: string | null;
+          email: string | null;
+          status: string;
+          do_not_contact: boolean;
+          do_not_contact_reason: string | null;
+          estimated_ticket: number | null;
+          score: number | null;
+          notes: string | null;
+          converted_customer_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["lead_prospects"]["Row"]> & {
+          organization_id: string;
+          source: string;
+          address: string;
+          address_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["lead_prospects"]["Row"]>;
+        Relationships: [];
+      };
       team_payments: {
         Row: {
           id: string;
