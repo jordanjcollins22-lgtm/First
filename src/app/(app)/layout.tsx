@@ -26,8 +26,11 @@ export const viewport = {
   themeColor: "#2f6d3c",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Zoom stays available on purpose. Locking it out makes the app feel more
+  // native, but it also means anyone who needs to enlarge a licence number or
+  // an address in the sun simply can't.
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {

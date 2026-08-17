@@ -105,8 +105,46 @@ export function TieBoard() {
           Edge is our estimate minus the rate the price needs. Positive is the only reason to take it.
         </p>
 
-        <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[600px] text-sm">
+        {/* Phone: one card per game, since a six-column table on a 390px
+            screen is a sideways scroll nobody performs. */}
+        <ul className="flex flex-col gap-2 sm:hidden">
+          {slate.map((game, i) => {
+            const needs = breakEvenRate(game.tieOdds);
+            const edge = game.modelPct - needs;
+            return (
+              <li key={game.id} className="rounded-lg border border-border p-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="font-medium">{game.matchup}</p>
+                  <p className="text-base font-bold tabular-nums">{odds(game.tieOdds)}</p>
+                </div>
+                <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{game.kickoff}</span>
+                  <span>
+                    needs {pct(needs)} · ours {pct(game.modelPct)}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span
+                    className={`text-xs font-semibold tabular-nums ${
+                      edge > 0 ? "text-emerald-700" : "text-destructive"
+                    }`}
+                  >
+                    {edge > 0 ? "+" : ""}
+                    {pct(edge)} edge
+                  </span>
+                  {i < 2 && (
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                      Play
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="hidden sm:block">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="py-1.5 pr-3 font-medium">Game</th>
@@ -157,7 +195,7 @@ export function TieBoard() {
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <h2 className="mb-3 text-sm font-semibold">Season so far</h2>
 
-        <div className="mb-3 grid gap-3 sm:grid-cols-4">
+        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Tile label="Bets placed" value={String(betsPlaced)} hint={`${SAMPLE_TIE_HISTORY.length} weeks`} />
           <Tile label="Hit rate" value={pct(hitRate)} hint={`${hits} of ${betsPlaced}`} />
           <Tile label="Staked" value={money(staked)} />

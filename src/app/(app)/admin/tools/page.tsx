@@ -129,7 +129,7 @@ export default async function InventoryPage() {
                 <table className="w-full min-w-[1160px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="p-2 font-medium">Tool</th>
+                      <th className="sticky left-0 z-10 bg-card p-2 font-medium">Tool</th>
                       <th className="p-2 font-medium">Kit(s)</th>
                       <th className="p-2 font-medium">Stored At</th>
                       <th className="p-2 font-medium">Own/Rent</th>
@@ -188,7 +188,7 @@ export default async function InventoryPage() {
                 <table className="w-full min-w-[1160px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="p-2 font-medium">Gear</th>
+                      <th className="sticky left-0 z-10 bg-card p-2 font-medium">Gear</th>
                       <th className="p-2 font-medium">Kit(s)</th>
                       <th className="p-2 font-medium">Stored At</th>
                       <th className="p-2 font-medium">Own/Rent</th>
@@ -246,7 +246,7 @@ export default async function InventoryPage() {
                 <table className="w-full min-w-[980px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="p-2 font-medium">Material</th>
+                      <th className="sticky left-0 z-10 bg-card p-2 font-medium">Material</th>
                       <th className="p-2 font-medium">Stored At</th>
                       <th className="p-2 font-medium">On hand</th>
                       <th className="p-2 font-medium">Reorder at</th>

@@ -326,7 +326,7 @@ export function EvaluationCalendar({
                         return (
                           <span
                             key={layer}
-                            className="rounded-full px-1.5 py-0 text-[9px] font-medium"
+                            className="max-w-full truncate rounded-full px-1.5 py-0 text-[9px] font-medium"
                             style={{ backgroundColor: `${LAYER_COLORS[layer]}26`, color: LAYER_COLORS[layer] }}
                           >
                             {count} {layer === "evaluations" ? "eval" : "job"}
@@ -335,7 +335,7 @@ export function EvaluationCalendar({
                         );
                       })}
                     {dayOffs.length > 0 ? (
-                      <span className="rounded-full bg-destructive/10 px-1.5 py-0 text-[9px] font-medium text-destructive">
+                      <span className="max-w-full truncate rounded-full bg-destructive/10 px-1.5 py-0 text-[9px] font-medium text-destructive">
                         {mine
                           ? offSummary(mine)
                           : evaluatorNamesById
@@ -344,7 +344,7 @@ export function EvaluationCalendar({
                       </span>
                     ) : (
                       isWeeklyOff && (
-                        <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0 text-[9px] font-medium text-muted-foreground">
+                        <span className="max-w-full truncate rounded-full bg-muted-foreground/15 px-1.5 py-0 text-[9px] font-medium text-muted-foreground">
                           Not working
                         </span>
                       )
@@ -374,7 +374,7 @@ export function EvaluationCalendar({
             </div>
           </>
         ) : (
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-7">
             {weekCells.map((date) => {
               const key = toDateKey(date);
               const dayEvents = eventsForDate.get(key) ?? [];
@@ -390,7 +390,7 @@ export function EvaluationCalendar({
                   type="button"
                   onClick={() => setSelectedDate(key)}
                   className={cn(
-                    "flex min-h-40 flex-col items-stretch gap-1 rounded-lg border p-1.5 text-left align-top transition-colors",
+                    "flex min-h-14 flex-col items-stretch gap-1 rounded-lg border p-2 text-left align-top transition-colors sm:min-h-40 sm:p-1.5",
                     isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
                     isWeeklyOff && !isSelected && "border-dashed bg-muted/70",
                     dayOffs.length > 0 && !isSelected && "border-destructive/40 bg-destructive/5"

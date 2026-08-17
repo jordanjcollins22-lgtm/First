@@ -68,7 +68,7 @@ export default async function GamblingPage() {
       </div>
 
       {/* Totals */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Across 10 accounts" value={money(totalBalance)} />
         <Tile
           label="Up / down"
@@ -86,8 +86,44 @@ export default async function GamblingPage() {
           Every open ticket at the half, with what the book is offering to buy it back for.
         </p>
 
-        <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[640px] text-sm">
+        {/* Phone gets cards; the seven-column table starts at sm. */}
+        <ul className="flex flex-col gap-2 sm:hidden">
+          {SAMPLE_HALFTIME_BETS.map((bet) => {
+            const multiple = cashOutMultiple(bet);
+            return (
+              <li key={bet.id} className="rounded-lg border border-border p-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="font-medium">{bet.matchup}</p>
+                  <span
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                      STATUS_STYLES[bet.status]
+                    }`}
+                  >
+                    {STATUS_LABELS[bet.status]}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">{bet.halftimeScore}</p>
+                <p className="text-xs text-muted-foreground">
+                  {bet.person} · {bet.market}
+                </p>
+                <div className="mt-1 flex items-baseline justify-between gap-2 text-sm">
+                  <span className="text-xs text-muted-foreground">
+                    {money(bet.stake)} staked
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    {money(bet.cashOutOffer)}{" "}
+                    <span className={multiple >= 1 ? "text-emerald-700" : "text-destructive"}>
+                      ({multiple.toFixed(2)}×)
+                    </span>
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="hidden sm:block">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="py-1.5 pr-3 font-medium">Game</th>

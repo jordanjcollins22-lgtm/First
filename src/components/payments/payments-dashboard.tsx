@@ -150,7 +150,7 @@ function InternalPayments({
                 setProfileId(e.target.value);
                 setAmount("");
               }}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              className="h-11 rounded-lg border border-border bg-background px-3 py-2 text-base"
             >
               <option value="">Choose someone…</option>
               {team.map((p) => (
@@ -233,7 +233,7 @@ function InternalPayments({
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value as Method | "")}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                className="h-11 rounded-lg border border-border bg-background px-3 py-2 text-base"
               >
                 <option value="">Not set</option>
                 {METHODS.map((m) => (
@@ -365,7 +365,7 @@ function PaymentRow({
                   if (!result.ok) setError(result.message);
                 })
               }
-              className="rounded-md border border-border px-2 py-1 text-[11px] font-medium capitalize hover:bg-accent"
+              className="min-h-9 rounded-md border border-border px-3 py-1.5 text-xs font-medium capitalize hover:bg-accent"
             >
               Paid by {m}
             </button>
@@ -379,7 +379,7 @@ function PaymentRow({
                 if (!result.ok) setError(result.message);
               })
             }
-            className="ml-auto rounded-md p-1 text-muted-foreground hover:text-destructive"
+            className="ml-auto rounded-md p-2 text-muted-foreground hover:text-destructive"
             aria-label="Delete"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -461,7 +461,7 @@ function InvoiceList({ title, invoices }: { title: string; invoices: PaymentsDat
 function RevenuePanel({ revenue }: { revenue: PaymentsData["revenue"] }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <StatTile label="Collected" value={money(revenue.collected)} hint="Client invoices actually paid" />
         <StatTile label="Outstanding" value={money(revenue.outstanding)} hint="Invoiced, not yet paid" />
         <StatTile label="Paid to team" value={money(revenue.paidOut)} hint="Team payments settled" />

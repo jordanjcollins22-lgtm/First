@@ -46,7 +46,7 @@ export function ToolInventoryRow({
   return (
     <>
       <tr className="border-b border-border align-middle">
-        <td className="p-2">
+        <td className="sticky left-0 z-10 bg-card p-2">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 shrink-0">
               <ToolImageThumb imagePath={tool.image_path} icon={tool.icon} />
