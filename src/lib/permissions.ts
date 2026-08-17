@@ -42,6 +42,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "proposals", label: "Proposals", href: "/proposals", defaultAccess: "everyone" },
   { key: "contacts", label: "Contacts", href: "/contacts", defaultAccess: "everyone" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline", defaultAccess: "everyone" },
+  { key: "leads", label: "Leads", href: "/leads", defaultAccess: "admin" },
   { key: "conversations", label: "Conversations", href: "/conversations", defaultAccess: "everyone" },
   { key: "notifications", label: "Notifications", href: "/notifications", defaultAccess: "everyone" },
   { key: "weather", label: "Weather", href: "/weather", defaultAccess: "everyone" },

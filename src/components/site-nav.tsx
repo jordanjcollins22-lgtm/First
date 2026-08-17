@@ -29,6 +29,7 @@ export function SiteNav({
 
   const links = [
     ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
+    ...(can("leads") ? [{ href: "/leads", label: "Leads" }] : []),
     ...(can("contacts") ? [{ href: "/contacts", label: "Contacts" }] : []),
     ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
     ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
