@@ -13,6 +13,7 @@ export function EvaluationsView({
   past,
   allRelevantJobs,
   scheduledJobs,
+  workSessions,
   currentProfileId,
   evaluatorNamesById,
   allWeeklyAvailability,
@@ -25,6 +26,8 @@ export function EvaluationsView({
   past: JobWithLocation[];
   allRelevantJobs: JobWithLocation[];
   scheduledJobs: JobWithLocation[];
+  /** Visits per job, so the work layer can show pauses as gaps. */
+  workSessions: Map<string, { starts_on: string; ends_on: string; status: string }[]>;
   currentProfileId: string;
   evaluatorNamesById?: Record<string, string>;
   allWeeklyAvailability: WeeklyAvailability[];
@@ -52,6 +55,7 @@ export function EvaluationsView({
         <EvaluationCalendar
           jobs={allRelevantJobs}
           scheduledJobs={scheduledJobs}
+          workSessions={workSessions}
           currentProfileId={currentProfileId}
           evaluatorNamesById={evaluatorNamesById}
           allWeeklyAvailability={allWeeklyAvailability}

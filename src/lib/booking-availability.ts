@@ -1,3 +1,4 @@
+import { evaluationWindow, windowsOverlap, type Window } from "@/lib/scheduling";
 import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
 export const SLOT_MINUTES = 60;
@@ -6,6 +7,15 @@ export interface BookedTime {
   evaluatorId: string;
   /** ISO timestamp of an existing evaluation already on that evaluator's calendar. */
   iso: string;
+  /**
+   * When that evaluation ends.
+   *
+   * Optional because rows written before evaluations had an end genuinely
+   * don't know; those fall back to the default visit length. Without this the
+   * check only blocked the exact matching slot, so the second hour of a
+   * two-hour visit stayed bookable.
+   */
+  endIso?: string | null;
 }
 
 export interface AvailableSlotGroup {
@@ -71,11 +81,14 @@ export function computeAvailableSlots({
     daysOffByEvaluator.set(d.profile_id, list);
   }
 
-  const bookedByEvaluator = new Map<string, Set<number>>();
+  // Windows, not instants: an appointment occupies every slot it covers.
+  const bookedByEvaluator = new Map<string, Window[]>();
   for (const b of bookedTimes) {
-    const set = bookedByEvaluator.get(b.evaluatorId) ?? new Set<number>();
-    set.add(new Date(b.iso).getTime());
-    bookedByEvaluator.set(b.evaluatorId, set);
+    const window = evaluationWindow(b.iso, b.endIso ?? null);
+    if (!window) continue;
+    const list = bookedByEvaluator.get(b.evaluatorId) ?? [];
+    list.push(window);
+    bookedByEvaluator.set(b.evaluatorId, list);
   }
 
   const earliestAllowed = addMinutes(from, minLeadMinutes);
@@ -112,7 +125,8 @@ export function computeAvailableSlots({
           const slotDateTime = addMinutes(slotDate, slotStart);
           if (slotDateTime < earliestAllowed) continue;
 
-          const isBooked = booked ? Array.from(booked).some((t) => t === slotDateTime.getTime()) : false;
+          const slotWindow = { start: slotDateTime, end: addMinutes(slotDateTime, slotMinutes) };
+          const isBooked = (booked ?? []).some((b) => windowsOverlap(b, slotWindow));
           if (isBooked) continue;
 
           const timeLabel = `${String(Math.floor(slotStart / 60)).padStart(2, "0")}:${String(slotStart % 60).padStart(2, "0")}`;

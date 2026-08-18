@@ -12,7 +12,6 @@ import {
   isClosed,
   statusAfterEstimateCancelled,
   statusAfterReopen,
-  validateDateRange,
   type JobShape,
 } from "@/lib/job-lifecycle";
 
@@ -101,28 +100,6 @@ describe("canRescheduleJob", () => {
   it("refuses on cancelled and completed jobs", () => {
     expect(canRescheduleJob(job({ status: "cancelled" })).ok).toBe(false);
     expect(canRescheduleJob(job({ status: "completed" })).ok).toBe(false);
-  });
-});
-
-describe("validateDateRange", () => {
-  it("accepts a normal range", () => {
-    expect(validateDateRange("2026-09-01", "2026-09-05").ok).toBe(true);
-  });
-
-  it("accepts a single day", () => {
-    expect(validateDateRange("2026-09-01", "2026-09-01").ok).toBe(true);
-  });
-
-  it("accepts clearing both, which takes work off the calendar", () => {
-    expect(validateDateRange(null, null).ok).toBe(true);
-  });
-
-  it("rejects an end before its start", () => {
-    expect(validateDateRange("2026-09-10", "2026-09-02").ok).toBe(false);
-  });
-
-  it("rejects an end with no start", () => {
-    expect(validateDateRange(null, "2026-09-02").ok).toBe(false);
   });
 });
 

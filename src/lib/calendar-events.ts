@@ -89,29 +89,50 @@ export function evaluationEvents(jobs: JobWithLocation[]): CalendarEvent[] {
     }));
 }
 
-/** Job work: one event per day the crew is booked, across the job's window. */
-export function jobWorkEvents(jobs: JobWithLocation[]): CalendarEvent[] {
+/**
+ * Job work: one event per day the crew is actually booked.
+ *
+ * Driven by the job's visits when it has them, so a job that pauses for a
+ * fortnight shows two blocks rather than one continuous fortnight of work
+ * nobody is doing. Falls back to the job's own window for jobs booked before
+ * visits were tracked separately.
+ */
+export function jobWorkEvents(
+  jobs: JobWithLocation[],
+  sessionsByJob: Map<string, { starts_on: string; ends_on: string; status: string }[]> = new Map()
+): CalendarEvent[] {
   const out: CalendarEvent[] = [];
   for (const j of jobs) {
     if (j.status === "completed" || j.status === "cancelled") continue;
-    const start = j.project_start_date;
-    const end = j.project_end_date;
-    if (!start && !end) continue;
 
-    for (const day of daysBetween(start ?? end!, end ?? start!)) {
-      out.push({
-        id: `job-${j.id}-${day}`,
-        layer: "jobs",
-        jobId: j.id,
-        date: day,
-        at: null,
-        address: j.property.address,
-        customerName: j.property.customer.name,
-        lat: j.property.lat,
-        lng: j.property.lng,
-        assignedTo: j.assigned_to,
-        detail: JOB_STATUS_LABELS[j.status] ?? j.status,
-      });
+    const sessions = (sessionsByJob.get(j.id) ?? []).filter((s) => s.status !== "cancelled");
+    const spans: { start: string; end: string; detail?: string }[] =
+      sessions.length > 0
+        ? sessions.map((s) => ({
+            start: s.starts_on,
+            end: s.ends_on,
+            detail: s.status === "paused" ? "Paused" : undefined,
+          }))
+        : j.project_start_date || j.project_end_date
+          ? [{ start: j.project_start_date ?? j.project_end_date!, end: j.project_end_date ?? j.project_start_date! }]
+          : [];
+
+    for (const span of spans) {
+      for (const day of daysBetween(span.start, span.end)) {
+        out.push({
+          id: `job-${j.id}-${day}`,
+          layer: "jobs",
+          jobId: j.id,
+          date: day,
+          at: null,
+          address: j.property.address,
+          customerName: j.property.customer.name,
+          lat: j.property.lat,
+          lng: j.property.lng,
+          assignedTo: j.assigned_to,
+          detail: span.detail ?? JOB_STATUS_LABELS[j.status] ?? j.status,
+        });
+      }
     }
   }
   return out;

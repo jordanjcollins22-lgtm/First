@@ -96,6 +96,7 @@ export interface Database {
           assigned_to: string | null;
           source_attractor_wave_id: string | null;
           evaluation_date: string | null;
+          evaluation_end_date: string | null;
           evaluation_status: string;
           project_start_date: string | null;
           project_end_date: string | null;
@@ -1022,6 +1023,69 @@ export interface Database {
             foreignKeyName: "team_payments_profile_id_fkey";
             columns: ["profile_id"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      job_work_sessions: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          starts_on: string;
+          ends_on: string;
+          status: string;
+          purpose: string | null;
+          pause_reason: string | null;
+          ticket_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_work_sessions"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          starts_on: string;
+          ends_on: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_work_sessions"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_work_sessions_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      job_tickets: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          title: string;
+          detail: string | null;
+          cause: string | null;
+          severity: string;
+          status: string;
+          billable: boolean;
+          resolution: string | null;
+          resolved_at: string | null;
+          opened_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_tickets"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_tickets"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_tickets_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
             referencedColumns: ["id"];
           },
         ];

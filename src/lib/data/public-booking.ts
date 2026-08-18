@@ -123,7 +123,7 @@ export async function listAvailabilityData(evaluatorIds: string[]): Promise<Avai
       admin.from("availability_days_off").select("*").in("profile_id", evaluatorIds),
       admin
         .from("jobs")
-        .select("assigned_to, evaluation_date")
+        .select("assigned_to, evaluation_date, evaluation_end_date")
         .in("assigned_to", evaluatorIds)
         .not("evaluation_date", "is", null)
         .neq("status", "cancelled"),
@@ -137,6 +137,10 @@ export async function listAvailabilityData(evaluatorIds: string[]): Promise<Avai
     daysOff: (daysOff ?? []) as unknown as DayOff[],
     bookedTimes: (jobs ?? [])
       .filter((j) => j.assigned_to && j.evaluation_date)
-      .map((j) => ({ evaluatorId: j.assigned_to as string, iso: j.evaluation_date as string })),
+      .map((j) => ({
+        evaluatorId: j.assigned_to as string,
+        iso: j.evaluation_date as string,
+        endIso: j.evaluation_end_date,
+      })),
   };
 }

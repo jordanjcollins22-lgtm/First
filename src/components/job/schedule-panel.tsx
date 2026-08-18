@@ -9,7 +9,6 @@ import {
   cancelEstimate,
   cancelJob,
   reopenJob,
-  rescheduleJob,
   scheduleEstimate,
 } from "@/lib/actions/job-actions";
 import {
@@ -17,12 +16,45 @@ import {
   canCancelJob,
   canReopenJob,
   canRescheduleEstimate,
-  canRescheduleJob,
   EVALUATION_STATUS_LABELS,
   JOB_STATUS_LABELS,
   type JobShape,
 } from "@/lib/job-lifecycle";
+import { evaluationMinutes } from "@/lib/scheduling";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
+
+/** A stored UTC instant as the local "YYYY-MM-DDTHH:mm" a datetime-local wants. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const offset = d.getTimezoneOffset() * 60_000;
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+}
+
+/** Back the other way. The browser gives local wall-clock time; new Date()
+ * reads it as local, which is exactly the intent. */
+function fromLocalInput(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** A stored date as a short readable day. */
+function formatDay(value: string): string {
+  return new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatLength(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
 
 /**
  * Booking, moving and calling off the work.
@@ -37,6 +69,7 @@ export function SchedulePanel({
   status,
   evaluationStatus,
   evaluationDate,
+  evaluationEndDate,
   projectStartDate,
   projectEndDate,
   cancellationReason,
@@ -45,13 +78,15 @@ export function SchedulePanel({
   status: JobStatus;
   evaluationStatus: EvaluationStatus;
   evaluationDate: string | null;
+  evaluationEndDate: string | null;
   projectStartDate: string | null;
   projectEndDate: string | null;
   cancellationReason: string | null;
 }) {
-  const [estimateOn, setEstimateOn] = useState(evaluationDate?.slice(0, 10) ?? "");
-  const [start, setStart] = useState(projectStartDate?.slice(0, 10) ?? "");
-  const [end, setEnd] = useState(projectEndDate?.slice(0, 10) ?? "");
+  // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, which is what the
+  // person booking is actually thinking in.
+  const [estimateStart, setEstimateStart] = useState(toLocalInput(evaluationDate));
+  const [estimateEnd, setEstimateEnd] = useState(toLocalInput(evaluationEndDate));
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState<"estimate" | "job" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -62,13 +97,20 @@ export function SchedulePanel({
     status,
     evaluationStatus,
     evaluationDate,
+    evaluationEndDate,
     projectStartDate,
     projectEndDate,
   };
 
+  // Shows the length while it is being chosen, including the assumed default
+  // when no end has been set — so nobody has to guess what blank means.
+  const plannedMinutes = evaluationMinutes(
+    fromLocalInput(estimateStart),
+    fromLocalInput(estimateEnd)
+  );
+
   const estimateMove = canRescheduleEstimate(job);
   const estimateKill = canCancelEstimate(job);
-  const jobMove = canRescheduleJob(job);
   const jobKill = canCancelJob(job);
   const jobBack = canReopenJob(job);
 
@@ -120,26 +162,53 @@ export function SchedulePanel({
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Estimate visit
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <label className="flex flex-1 flex-col gap-1 text-xs font-medium">
-              Date
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs font-medium">
+              Starts
               <Input
-                type="date"
-                value={estimateOn}
+                type="datetime-local"
+                value={estimateStart}
                 disabled={!estimateMove.ok || isPending}
-                onChange={(e) => setEstimateOn(e.target.value)}
+                onChange={(e) => setEstimateStart(e.target.value)}
               />
             </label>
+            <label className="flex flex-col gap-1 text-xs font-medium">
+              Ends
+              <Input
+                type="datetime-local"
+                value={estimateEnd}
+                disabled={!estimateMove.ok || isPending}
+                onChange={(e) => setEstimateEnd(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
               className="min-h-11 sm:min-h-9"
               disabled={!estimateMove.ok || isPending}
-              onClick={() => run(() => scheduleEstimate(jobId, estimateOn || null))}
+              onClick={() =>
+                run(() =>
+                  scheduleEstimate(
+                    jobId,
+                    fromLocalInput(estimateStart),
+                    fromLocalInput(estimateEnd)
+                  )
+                )
+              }
             >
               {isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {evaluationDate ? "Move" : "Schedule"}
             </Button>
+
+            {plannedMinutes != null && (
+              <span className="text-[11px] text-muted-foreground">
+                {formatLength(plannedMinutes)}
+                {!estimateEnd && " (assumed)"}
+              </span>
+            )}
           </div>
 
           {!estimateMove.ok && <Note>{estimateMove.reason}</Note>}
@@ -171,58 +240,22 @@ export function SchedulePanel({
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Work dates
           </p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs font-medium">
-              Start
-              <Input
-                type="date"
-                value={start}
-                disabled={!jobMove.ok || isPending}
-                onChange={(e) => setStart(e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium">
-              End
-              <Input
-                type="date"
-                value={end}
-                disabled={!jobMove.ok || isPending}
-                onChange={(e) => setEnd(e.target.value)}
-              />
-            </label>
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="min-h-11 sm:min-h-9"
-              disabled={!jobMove.ok || isPending}
-              onClick={() => run(() => rescheduleJob(jobId, start || null, end || null))}
-            >
-              {isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              {projectStartDate ? "Reschedule" : "Schedule work"}
-            </Button>
-
-            {projectStartDate && jobMove.ok && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="min-h-11 sm:min-h-9"
-                disabled={isPending}
-                onClick={() => {
-                  setStart("");
-                  setEnd("");
-                  run(() => rescheduleJob(jobId, null, null));
-                }}
-              >
-                Take off calendar
-              </Button>
-            )}
-          </div>
-
-          {!jobMove.ok && <Note>{jobMove.reason}</Note>}
+          {/* Read-only on purpose. The job's window is derived from its visits
+              by the database, so an editor here would be a second place to
+              write the same fact — and the next session change would silently
+              overwrite whatever was typed. Visits & tickets is the way in. */}
+          {projectStartDate ? (
+            <p className="text-sm">
+              {formatDay(projectStartDate)}
+              {projectEndDate && projectEndDate !== projectStartDate && ` – ${formatDay(projectEndDate)}`}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Not on the calendar yet.</p>
+          )}
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Set by the visits booked below — book, move or pause a visit in Visits &amp; tickets and
+            these follow.
+          </p>
         </div>
 
         {/* ---------------------------------------------------------- the job */}

@@ -11,6 +11,7 @@ import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
+import { getJobSchedule } from "@/lib/data/work-sessions";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -21,6 +22,7 @@ import { CallClientButton } from "@/components/job/call-client-button";
 import { InvoicePanel } from "@/components/job/invoice-panel";
 import { SchedulePanel } from "@/components/job/schedule-panel";
 import { CompletionPanel } from "@/components/job/completion-panel";
+import { VisitsPanel } from "@/components/job/visits-panel";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -52,6 +54,7 @@ export default async function JobPage({
     status: JobStatus;
     evaluation_status: EvaluationStatus;
     evaluation_date: string | null;
+    evaluation_end_date: string | null;
     project_start_date: string | null;
     project_end_date: string | null;
     cancellation_reason: string | null;
@@ -74,6 +77,7 @@ export default async function JobPage({
     externalMessages,
     discounts,
     photos,
+    schedule,
   ] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
@@ -88,6 +92,8 @@ export default async function JobPage({
     listDiscounts(),
     // Empty until migration 0078 runs, so the rest of the page still loads.
     listJobPhotos(jobId).catch(() => []),
+    // Empty until migration 0080 runs, so the page still loads without it.
+    getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [] })),
   ]);
 
   // Only worth a lookup once somebody has actually signed the job off.
@@ -159,11 +165,14 @@ export default async function JobPage({
         completionNotes={job.completion_notes}
       />
 
+      <VisitsPanel jobId={jobId} sessions={schedule.sessions} tickets={schedule.tickets} />
+
       <SchedulePanel
         jobId={jobId}
         status={job.status}
         evaluationStatus={job.evaluation_status}
         evaluationDate={job.evaluation_date}
+        evaluationEndDate={job.evaluation_end_date}
         projectStartDate={job.project_start_date}
         projectEndDate={job.project_end_date}
         cancellationReason={job.cancellation_reason}

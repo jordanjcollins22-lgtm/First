@@ -55,6 +55,9 @@ export interface Job {
   assigned_to: string | null;
   source_attractor_wave_id: string | null;
   evaluation_date: string | null;
+  /** End of the appointment. Null on rows written before visits had a length —
+   * the app falls back to the default duration rather than inventing one. */
+  evaluation_end_date: string | null;
   evaluation_status: EvaluationStatus;
   project_start_date: string | null;
   project_end_date: string | null;
@@ -672,4 +675,69 @@ export interface JobPhoto {
   caption: string | null;
   uploaded_by: string | null;
   created_at: string;
+}
+
+/**
+ * One visit to a job.
+ *
+ * A job is a list of these rather than a single start and end, because work
+ * pauses — weather, a back-ordered material, a crew pulled onto something
+ * urgent — and a job that takes three separate trips had nowhere to say so.
+ */
+export type WorkSessionStatus = "scheduled" | "in_progress" | "paused" | "done" | "cancelled";
+
+export interface JobWorkSession {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  starts_on: string;
+  ends_on: string;
+  status: WorkSessionStatus;
+  /** Why this visit exists. */
+  purpose: string | null;
+  /** Why it stopped — the thing everyone has forgotten by the following week. */
+  pause_reason: string | null;
+  /** Set when the visit exists to work a ticket. */
+  ticket_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Something to go back for: a callback, a warranty fix, a snag.
+ *
+ * Kept against the original job rather than opened as a new one, so a
+ * property's history reads as what actually happened.
+ */
+export type TicketStatus = "open" | "scheduled" | "resolved" | "closed";
+export type TicketSeverity = "low" | "normal" | "urgent";
+export type TicketCause =
+  | "workmanship"
+  | "material_failure"
+  | "design"
+  | "weather"
+  | "client_change"
+  | "unknown";
+
+export interface JobTicket {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  title: string;
+  /** What it was. */
+  detail: string | null;
+  /** Why it happened. Separate from detail because the fault and the cause are
+   * different questions, and the cause is the half that stops being recorded
+   * when they share a box. */
+  cause: TicketCause | null;
+  severity: TicketSeverity;
+  status: TicketStatus;
+  /** Whether the business ate the cost. The question every callback ends on. */
+  billable: boolean;
+  resolution: string | null;
+  resolved_at: string | null;
+  opened_by: string | null;
+  created_at: string;
+  updated_at: string;
 }

@@ -73,3 +73,49 @@ describe("jobWorkEvents", () => {
     expect(jobWorkEvents([job()])).toEqual([]);
   });
 });
+
+describe("jobWorkEvents driven by visits", () => {
+  it("splits a paused job into separate blocks instead of one long run", () => {
+    // The point of tracking visits: a fortnight's pause should not draw a
+    // fortnight of work nobody is doing.
+    const sessions = new Map([
+      [
+        "j1",
+        [
+          { starts_on: "2026-09-01", ends_on: "2026-09-02", status: "done" },
+          { starts_on: "2026-09-15", ends_on: "2026-09-16", status: "scheduled" },
+        ],
+      ],
+    ]);
+    const events = jobWorkEvents([job({ project_start_date: "2026-09-01", project_end_date: "2026-09-16" })], sessions);
+    expect(events.map((e) => e.date)).toEqual(["2026-09-01", "2026-09-02", "2026-09-15", "2026-09-16"]);
+  });
+
+  it("keeps a cancelled visit off the calendar", () => {
+    const sessions = new Map([
+      [
+        "j1",
+        [
+          { starts_on: "2026-09-01", ends_on: "2026-09-01", status: "scheduled" },
+          { starts_on: "2026-09-05", ends_on: "2026-09-05", status: "cancelled" },
+        ],
+      ],
+    ]);
+    const events = jobWorkEvents([job({ project_start_date: "2026-09-01", project_end_date: "2026-09-05" })], sessions);
+    expect(events.map((e) => e.date)).toEqual(["2026-09-01"]);
+  });
+
+  it("labels a paused block so the calendar says why nothing is happening", () => {
+    const sessions = new Map([
+      ["j1", [{ starts_on: "2026-09-01", ends_on: "2026-09-01", status: "paused" }]],
+    ]);
+    expect(jobWorkEvents([job({ project_start_date: "2026-09-01" })], sessions)[0].detail).toBe("Paused");
+  });
+
+  it("falls back to the job's own window when it has no visits", () => {
+    const events = jobWorkEvents([
+      job({ project_start_date: "2026-09-01", project_end_date: "2026-09-02" }),
+    ]);
+    expect(events.map((e) => e.date)).toEqual(["2026-09-01", "2026-09-02"]);
+  });
+});

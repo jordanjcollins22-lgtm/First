@@ -9,11 +9,10 @@ import {
   canCancelJob,
   canReopenJob,
   canRescheduleEstimate,
-  canRescheduleJob,
   statusAfterEstimateCancelled,
   statusAfterReopen,
-  validateDateRange,
 } from "@/lib/job-lifecycle";
+import { validateAppointment } from "@/lib/scheduling";
 import type { Database } from "@/lib/supabase/database.types";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
 
@@ -77,7 +76,7 @@ type JobUpdate = Database["public"]["Tables"]["jobs"]["Update"];
 async function loadJob(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string) {
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, status, evaluation_status, evaluation_date, project_start_date, project_end_date")
+    .select("id, status, evaluation_status, evaluation_date, evaluation_end_date, project_start_date, project_end_date")
     .eq("id", jobId)
     .single();
   if (error || !data) return null;
@@ -85,6 +84,7 @@ async function loadJob(supabase: Awaited<ReturnType<typeof createClient>>, jobId
     status: data.status as JobStatus,
     evaluationStatus: data.evaluation_status as EvaluationStatus,
     evaluationDate: data.evaluation_date,
+    evaluationEndDate: data.evaluation_end_date,
     projectStartDate: data.project_start_date,
     projectEndDate: data.project_end_date,
   };
@@ -134,12 +134,20 @@ export async function createJobAtProperty(propertyId: string, name: string): Pro
 }
 
 /**
- * Books or moves the estimate visit.
+ * Books or moves the estimate visit, as a window rather than an instant.
  *
- * Rebooking a cancelled visit puts it back to scheduled — cancelling an
+ * An end time is what makes a double booking detectable and what tells an
+ * evaluator how much of their day this takes. Leaving it blank is allowed —
+ * the default length fills in — but clearing the start unbooks the visit.
+ *
+ * Rebooking a cancelled visit puts it back to scheduled: cancelling an
  * appointment shouldn't be a one-way door.
  */
-export async function scheduleEstimate(jobId: string, date: string | null): Promise<JobActionResult> {
+export async function scheduleEstimate(
+  jobId: string,
+  date: string | null,
+  endDate: string | null = null
+): Promise<JobActionResult> {
   try {
     const supabase = await createClient();
     const job = await loadJob(supabase, jobId);
@@ -148,7 +156,15 @@ export async function scheduleEstimate(jobId: string, date: string | null): Prom
     const verdict = canRescheduleEstimate(job);
     if (!verdict.ok) return { ok: false, message: verdict.reason };
 
-    const patch: JobUpdate = { evaluation_date: date };
+    const window = validateAppointment(date, endDate);
+    if (!window.ok) return { ok: false, message: window.reason };
+
+    const patch: JobUpdate = {
+      evaluation_date: date,
+      // Clearing the start clears the end with it, so a stale end can never
+      // outlive the appointment it belonged to.
+      evaluation_end_date: date ? endDate : null,
+    };
     if (date && job.evaluationStatus === "cancelled") patch.evaluation_status = "scheduled";
 
     const { error } = await supabase.from("jobs").update(patch).eq("id", jobId);
@@ -201,38 +217,6 @@ export async function cancelEstimate(jobId: string, reason: string | null): Prom
   } catch (err) {
     console.error("cancelEstimate failed:", err);
     return { ok: false, message: "Couldn't cancel that estimate." };
-  }
-}
-
-/** Moves the work dates. Clearing both takes the job off the calendar without
- * cancelling it, which is what happens when a job slips with no new date yet. */
-export async function rescheduleJob(
-  jobId: string,
-  start: string | null,
-  end: string | null
-): Promise<JobActionResult> {
-  try {
-    const supabase = await createClient();
-    const job = await loadJob(supabase, jobId);
-    if (!job) return { ok: false, message: "Couldn't find that job." };
-
-    const allowed = canRescheduleJob(job);
-    if (!allowed.ok) return { ok: false, message: allowed.reason };
-
-    const range = validateDateRange(start, end);
-    if (!range.ok) return { ok: false, message: range.reason };
-
-    const { error } = await supabase
-      .from("jobs")
-      .update({ project_start_date: start, project_end_date: end })
-      .eq("id", jobId);
-    if (error) return { ok: false, message: error.message };
-
-    refresh(jobId);
-    return { ok: true, message: start ? "Job rescheduled." : "Job taken off the calendar." };
-  } catch (err) {
-    console.error("rescheduleJob failed:", err);
-    return { ok: false, message: "Couldn't reschedule that job." };
   }
 }
 

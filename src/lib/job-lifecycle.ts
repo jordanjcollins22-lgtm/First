@@ -37,6 +37,7 @@ export interface JobShape {
   status: JobStatus;
   evaluationStatus: EvaluationStatus;
   evaluationDate: string | null;
+  evaluationEndDate?: string | null;
   projectStartDate: string | null;
   projectEndDate: string | null;
 }
@@ -82,22 +83,15 @@ export function canReopenJob(job: JobShape): Verdict {
   return ALLOWED;
 }
 
-/** Whether the work dates can be moved. */
-export function canRescheduleJob(job: JobShape): Verdict {
+/**
+ * Whether the job's work can be moved at all.
+ *
+ * The dates themselves are derived from the job's visits now, so this guards
+ * booking and moving a visit rather than editing a pair of columns.
+ */
+export function canRescheduleJob(job: Pick<JobShape, "status">): Verdict {
   if (job.status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
   if (job.status === "completed") return { ok: false, reason: "This job is finished." };
-  return ALLOWED;
-}
-
-/**
- * Validates a start/end pair.
- *
- * Both blank is allowed — that's how work gets taken off the calendar without
- * cancelling it. An end before its start never is.
- */
-export function validateDateRange(start: string | null, end: string | null): Verdict {
-  if (start && end && end < start) return { ok: false, reason: "The end date is before the start date." };
-  if (!start && end) return { ok: false, reason: "Give it a start date as well as an end date." };
   return ALLOWED;
 }
 

@@ -76,6 +76,7 @@ function offSummary(off: DayOff): string {
 export function EvaluationCalendar({
   jobs,
   scheduledJobs,
+  workSessions,
   currentProfileId,
   evaluatorNamesById,
   allWeeklyAvailability,
@@ -86,6 +87,7 @@ export function EvaluationCalendar({
   jobs: JobWithLocation[];
   /** Jobs with work days — the second layer on the same grid. */
   scheduledJobs: JobWithLocation[];
+  workSessions: Map<string, { starts_on: string; ends_on: string; status: string }[]>;
   currentProfileId: string;
   evaluatorNamesById?: Record<string, string>;
   allWeeklyAvailability: WeeklyAvailability[];
@@ -130,8 +132,8 @@ export function EvaluationCalendar({
   // the day list, and the map at the same time, so there's never a version of
   // the schedule that's only true in one of the three.
   const allEvents = useMemo(
-    () => [...evaluationEvents(jobs), ...jobWorkEvents(scheduledJobs)],
-    [jobs, scheduledJobs]
+    () => [...evaluationEvents(jobs), ...jobWorkEvents(scheduledJobs, workSessions)],
+    [jobs, scheduledJobs, workSessions]
   );
 
   const visibleEvents = useMemo(

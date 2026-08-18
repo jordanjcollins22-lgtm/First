@@ -1,5 +1,6 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
 import { JobBriefings } from "@/components/evaluations/job-briefings";
+import { listWorkSessionsByJob } from "@/lib/data/work-sessions";
 import { getJobBriefings } from "@/lib/data/job-briefing";
 import { CalendarSettings, type BookingLinksData } from "@/components/calendars/calendar-settings";
 import { MyBookingLink } from "@/components/booking/booking-links-panel";
@@ -40,6 +41,10 @@ export async function MyEvaluationsContent({
   // without either having to know how a briefing is assembled.
   const briefings = await getJobBriefings(scheduledJobs).catch(() => []);
 
+  // Visits drive the work layer, so a paused job draws two blocks instead of
+  // one continuous run nobody is working.
+  const workSessions = await listWorkSessionsByJob();
+
   const now = new Date().toISOString();
   const notCompleted = relevantJobs.filter((j) => j.evaluation_status !== "completed");
 
@@ -70,6 +75,7 @@ export async function MyEvaluationsContent({
         past={past}
         allRelevantJobs={relevantJobs}
         scheduledJobs={scheduledJobs}
+        workSessions={workSessions}
         currentProfileId={profile.id}
         evaluatorNamesById={evaluatorNamesById}
         allWeeklyAvailability={allWeeklyAvailability}
