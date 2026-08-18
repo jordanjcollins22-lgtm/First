@@ -1033,6 +1033,8 @@ export interface Database {
           organization_id: string;
           path: string;
           kind: string;
+          zone_id: string | null;
+          zone_name: string | null;
           caption: string | null;
           uploaded_by: string | null;
           created_at: string;

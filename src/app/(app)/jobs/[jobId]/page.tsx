@@ -110,6 +110,11 @@ export default async function JobPage({
   const { totalCost: serviceCost } = computeJobTotals(zones, catalog);
   const materialItems = allMaterialLineItems(zones, catalog);
   const materialsCost = materialItems.reduce((sum, item) => sum + (item.totalCost ?? 0), 0);
+  // Documentation follows the priced zones — the work that was actually sold.
+  // A drawn shape with no service on it is a draft, and requiring photos of a
+  // draft would block sign-off on scratch work.
+  const photoZones = zones.map((zone) => ({ id: zone.id, name: zone.name }));
+
   const zoneBreakdowns: InternalZoneBreakdown[] = zones.map((zone) => {
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
     const checklistAnswers = (def?.fields ?? [])
@@ -148,6 +153,7 @@ export default async function JobPage({
         jobId={jobId}
         status={job.status}
         photos={photos}
+        zones={photoZones}
         completedAt={job.completed_at}
         completedByName={completedByName}
         completionNotes={job.completion_notes}

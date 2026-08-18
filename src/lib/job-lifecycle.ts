@@ -6,7 +6,8 @@
  * reasoning the action will apply when it runs.
  */
 
-import type { EvaluationStatus, JobPhotoKind, JobStatus } from "@/types/domain";
+import { REQUIRED_STAGES } from "@/types/domain";
+import type { EvaluationStatus, JobPhotoKind, JobPhotoStage, JobStatus } from "@/types/domain";
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   estimating: "Estimating",
@@ -128,44 +129,92 @@ export function statusAfterReopen(job: Pick<JobShape, "evaluationStatus" | "proj
 
 export const PHOTO_KIND_LABELS: Record<JobPhotoKind, string> = {
   before: "Before",
+  during: "During",
   after: "After",
   issue: "Issue",
 };
 
+export interface PhotoRecord {
+  kind: JobPhotoKind;
+  /** Null means the photo is about the job as a whole, not one zone. */
+  zoneId: string | null;
+}
+
+export interface ZoneRef {
+  id: string;
+  name: string;
+}
+
+export interface ZoneCoverage {
+  zoneId: string;
+  zoneName: string;
+  /** Which of the three stages this zone has at least one photo of. */
+  have: Record<JobPhotoStage, boolean>;
+  missing: JobPhotoStage[];
+  complete: boolean;
+}
+
 /**
- * How many photos a job has to carry before it can be signed off.
+ * What each zone still owes.
  *
- * One is the honest minimum: the point of the requirement is that somebody
- * stood on the finished site and looked at it, and demanding a fixed number
- * only teaches people to shoot the same hedge four times.
+ * Only photos tagged with the zone count toward it. A job-wide photo says
+ * something happened somewhere, which is exactly the ambiguity per-zone
+ * documentation exists to remove.
  */
-export const REQUIRED_COMPLETION_PHOTOS = 1;
+export function zoneCoverage(zones: ZoneRef[], photos: PhotoRecord[]): ZoneCoverage[] {
+  return zones.map((zone) => {
+    const mine = photos.filter((p) => p.zoneId === zone.id);
+    const have = {
+      before: mine.some((p) => p.kind === "before"),
+      during: mine.some((p) => p.kind === "during"),
+      after: mine.some((p) => p.kind === "after"),
+    };
+    const missing = REQUIRED_STAGES.filter((stage) => !have[stage]);
+    return { zoneId: zone.id, zoneName: zone.name, have, missing, complete: missing.length === 0 };
+  });
+}
 
 /**
  * Whether a job can be marked complete.
  *
- * The photo requirement counts 'after' shots specifically. A before photo and
- * a photo of a problem are both worth having, but neither one is evidence the
- * work got done, which is the whole thing being claimed here.
+ * Every zone needs a before, a during and an after. 'during' is the stage
+ * nobody can go back for once the ground is closed up, which is what makes it
+ * worth enforcing rather than merely encouraging.
+ *
+ * A job with no zones drawn falls back to the older rule — one 'after' photo
+ * of the job. Refusing to let somebody close a job because they never opened
+ * the canvas would make the requirement a trap rather than a record.
  */
 export function canCompleteJob(
   job: Pick<JobShape, "status">,
-  photos: { kind: JobPhotoKind }[]
+  photos: PhotoRecord[],
+  zones: ZoneRef[] = []
 ): Verdict {
   if (job.status === "completed") return { ok: false, reason: "This job is already marked complete." };
   if (job.status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
 
-  const after = photos.filter((p) => p.kind === "after").length;
-  if (after < REQUIRED_COMPLETION_PHOTOS) {
+  if (zones.length === 0) {
+    const after = photos.filter((p) => p.kind === "after").length;
+    if (after === 0) return { ok: false, reason: "Add at least one 'after' photo before signing this off." };
+    return ALLOWED;
+  }
+
+  const gaps = zoneCoverage(zones, photos).filter((z) => !z.complete);
+  if (gaps.length === 0) return ALLOWED;
+
+  // Name the specific zone when there is only one gap; past that a list is
+  // longer than the panel and the per-zone checklist is already showing it.
+  if (gaps.length === 1) {
+    const zone = gaps[0];
     return {
       ok: false,
-      reason:
-        after === 0
-          ? "Add at least one 'after' photo before signing this off."
-          : `Add ${REQUIRED_COMPLETION_PHOTOS - after} more 'after' photo.`,
+      reason: `${zone.zoneName} still needs ${zone.missing.map((m) => PHOTO_KIND_LABELS[m].toLowerCase()).join(" and ")}.`,
     };
   }
-  return ALLOWED;
+  return {
+    ok: false,
+    reason: `${gaps.length} zones still need photos.`,
+  };
 }
 
 /** Whether a completed job can be put back to in-progress, for the callback

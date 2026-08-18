@@ -643,9 +643,19 @@ export interface LedgerEntry {
   updated_at: string;
 }
 
-/** A photo taken on site. Before/after is the pair that settles a dispute;
- * 'issue' is for the thing found on site nobody wants to argue about later. */
-export type JobPhotoKind = "before" | "after" | "issue";
+/**
+ * A photo taken on site.
+ *
+ * Before/during/after are the three stages of a piece of work. 'during' is the
+ * one that cannot be recovered later — what the ground looked like once it was
+ * open, how deep the base went — which is why it counts. 'issue' is not a
+ * stage: it is the problem found on site nobody wants to argue about later.
+ */
+export type JobPhotoKind = "before" | "during" | "after" | "issue";
+
+/** The three stages every zone has to show before a job can be signed off. */
+export const REQUIRED_STAGES = ["before", "during", "after"] as const;
+export type JobPhotoStage = (typeof REQUIRED_STAGES)[number];
 
 export interface JobPhoto {
   id: string;
@@ -654,6 +664,11 @@ export interface JobPhoto {
   /** Path inside the private job-photos bucket. */
   path: string;
   kind: JobPhotoKind;
+  /** The zone this documents, or null when it is about the job as a whole. */
+  zone_id: string | null;
+  /** The zone's name when the photo was taken, so a deleted zone's photos can
+   * still say what they were of. */
+  zone_name: string | null;
   caption: string | null;
   uploaded_by: string | null;
   created_at: string;

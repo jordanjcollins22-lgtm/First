@@ -32,7 +32,8 @@ export async function attachJobPhoto(
   jobId: string,
   path: string,
   kind: JobPhotoKind,
-  caption: string | null
+  caption: string | null,
+  zone: { id: string; name: string } | null = null
 ): Promise<AttachResult> {
   try {
     const profile = await getCurrentProfile();
@@ -53,6 +54,8 @@ export async function attachJobPhoto(
         organization_id: organizationId,
         path,
         kind,
+        zone_id: zone?.id ?? null,
+        zone_name: zone?.name ?? null,
         caption: caption?.trim() || null,
         uploaded_by: profile.id,
       })
@@ -100,11 +103,16 @@ export async function deleteJobPhoto(id: string): Promise<PhotoResult> {
 /**
  * Signs the job off.
  *
- * Refuses without an 'after' photo. The photo requirement is the point of the
- * feature — a completion nobody documented is just a dropdown change, and it
- * is the thing that gets argued about when a client calls back in three weeks.
+ * Refuses until every zone has a before, a during and an after. The zones come
+ * from the caller because they live in the canvas design's jsonb rather than a
+ * table — but the rule is still checked here, not just in the UI, so a stale
+ * page cannot sign off work it has not documented.
  */
-export async function completeJob(jobId: string, notes: string | null): Promise<PhotoResult> {
+export async function completeJob(
+  jobId: string,
+  notes: string | null,
+  zones: { id: string; name: string }[] = []
+): Promise<PhotoResult> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
@@ -113,13 +121,17 @@ export async function completeJob(jobId: string, notes: string | null): Promise<
 
     const [{ data: job }, { data: photos }] = await Promise.all([
       supabase.from("jobs").select("id, status").eq("id", jobId).single(),
-      supabase.from("job_photos").select("kind").eq("job_id", jobId),
+      supabase.from("job_photos").select("kind, zone_id").eq("job_id", jobId),
     ]);
     if (!job) return { ok: false, message: "Couldn't find that job." };
 
     const verdict = canCompleteJob(
       { status: job.status as JobStatus },
-      (photos ?? []) as { kind: JobPhotoKind }[]
+      ((photos ?? []) as { kind: string; zone_id: string | null }[]).map((p) => ({
+        kind: p.kind as JobPhotoKind,
+        zoneId: p.zone_id,
+      })),
+      zones
     );
     if (!verdict.ok) return { ok: false, message: verdict.reason };
 

@@ -6,6 +6,7 @@ import {
   canCompleteJob,
   canReopenCompleted,
   canReopenJob,
+  zoneCoverage,
   canRescheduleEstimate,
   canRescheduleJob,
   isClosed,
@@ -158,42 +159,132 @@ describe("isClosed", () => {
   });
 });
 
-describe("canCompleteJob", () => {
-  const done = [{ kind: "after" as const }];
+describe("canCompleteJob with no zones drawn", () => {
+  // Falls back to the old rule. Refusing to close a job because nobody opened
+  // the canvas would make the requirement a trap rather than a record.
+  const after = [{ kind: "after" as const, zoneId: null }];
 
-  it("signs off a job that has an after photo", () => {
-    expect(canCompleteJob({ status: "in_progress" }, done).ok).toBe(true);
+  it("signs off on one after photo", () => {
+    expect(canCompleteJob({ status: "in_progress" }, after).ok).toBe(true);
   });
 
-  it("refuses with no photos at all", () => {
-    const verdict = canCompleteJob({ status: "in_progress" }, []);
-    expect(verdict.ok).toBe(false);
-    expect(verdict.ok === false && verdict.reason).toMatch(/after.*photo/i);
+  it("refuses with nothing at all", () => {
+    expect(canCompleteJob({ status: "in_progress" }, []).ok).toBe(false);
   });
 
   it("does not accept a before photo as proof the work got done", () => {
-    // A before shot is worth having and is not evidence of anything finished.
-    expect(canCompleteJob({ status: "in_progress" }, [{ kind: "before" }]).ok).toBe(false);
-  });
-
-  it("does not accept a photo of a problem as proof either", () => {
-    expect(canCompleteJob({ status: "in_progress" }, [{ kind: "issue" }]).ok).toBe(false);
-  });
-
-  it("counts the after photo among others", () => {
-    expect(
-      canCompleteJob({ status: "in_progress" }, [{ kind: "before" }, { kind: "issue" }, { kind: "after" }]).ok
-    ).toBe(true);
+    expect(canCompleteJob({ status: "in_progress" }, [{ kind: "before", zoneId: null }]).ok).toBe(false);
   });
 
   it("refuses to complete twice", () => {
-    expect(canCompleteJob({ status: "completed" }, done).ok).toBe(false);
+    expect(canCompleteJob({ status: "completed" }, after).ok).toBe(false);
   });
 
   it("refuses on a cancelled job", () => {
-    const verdict = canCompleteJob({ status: "cancelled" }, done);
+    const verdict = canCompleteJob({ status: "cancelled" }, after);
     expect(verdict.ok).toBe(false);
     expect(verdict.ok === false && verdict.reason).toMatch(/reopen/i);
+  });
+});
+
+describe("canCompleteJob per zone", () => {
+  const zones = [
+    { id: "z1", name: "Front bed" },
+    { id: "z2", name: "Back patio" },
+  ];
+
+  function allThree(zoneId: string) {
+    return [
+      { kind: "before" as const, zoneId },
+      { kind: "during" as const, zoneId },
+      { kind: "after" as const, zoneId },
+    ];
+  }
+
+  it("signs off when every zone has all three stages", () => {
+    const photos = [...allThree("z1"), ...allThree("z2")];
+    expect(canCompleteJob({ status: "in_progress" }, photos, zones).ok).toBe(true);
+  });
+
+  it("refuses when one zone is untouched, and names it", () => {
+    const verdict = canCompleteJob({ status: "in_progress" }, allThree("z1"), zones);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.reason).toContain("Back patio");
+  });
+
+  it("names the exact stages a zone is missing", () => {
+    const photos = [...allThree("z1"), { kind: "before" as const, zoneId: "z2" }];
+    const verdict = canCompleteJob({ status: "in_progress" }, photos, zones);
+    expect(verdict.ok === false && verdict.reason).toMatch(/during and after/i);
+  });
+
+  it("counts zones rather than listing them once more than one is short", () => {
+    const verdict = canCompleteJob({ status: "in_progress" }, [], zones);
+    expect(verdict.ok === false && verdict.reason).toMatch(/2 zones/);
+  });
+
+  it("does not let a job-wide photo cover a zone", () => {
+    // The ambiguity per-zone documentation exists to remove.
+    const photos = [
+      ...allThree("z1"),
+      { kind: "before" as const, zoneId: null },
+      { kind: "during" as const, zoneId: null },
+      { kind: "after" as const, zoneId: null },
+    ];
+    expect(canCompleteJob({ status: "in_progress" }, photos, zones).ok).toBe(false);
+  });
+
+  it("does not let one zone's photos cover another", () => {
+    const photos = [...allThree("z1"), ...allThree("z1")];
+    expect(canCompleteJob({ status: "in_progress" }, photos, zones).ok).toBe(false);
+  });
+
+  it("ignores an issue photo when deciding whether a stage is covered", () => {
+    const photos = [
+      { kind: "before" as const, zoneId: "z1" },
+      { kind: "during" as const, zoneId: "z1" },
+      { kind: "issue" as const, zoneId: "z1" },
+      ...allThree("z2"),
+    ];
+    const verdict = canCompleteJob({ status: "in_progress" }, photos, zones);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.reason).toMatch(/after/i);
+  });
+});
+
+describe("zoneCoverage", () => {
+  const zones = [{ id: "z1", name: "Front bed" }];
+
+  it("reports every stage missing for an untouched zone", () => {
+    const [coverage] = zoneCoverage(zones, []);
+    expect(coverage.missing).toEqual(["before", "during", "after"]);
+    expect(coverage.complete).toBe(false);
+  });
+
+  it("keeps the zone's name for display", () => {
+    expect(zoneCoverage(zones, [])[0].zoneName).toBe("Front bed");
+  });
+
+  it("marks a zone complete once all three are in", () => {
+    const [coverage] = zoneCoverage(zones, [
+      { kind: "before", zoneId: "z1" },
+      { kind: "during", zoneId: "z1" },
+      { kind: "after", zoneId: "z1" },
+    ]);
+    expect(coverage.complete).toBe(true);
+    expect(coverage.missing).toEqual([]);
+  });
+
+  it("does not double-count two photos of the same stage", () => {
+    const [coverage] = zoneCoverage(zones, [
+      { kind: "before", zoneId: "z1" },
+      { kind: "before", zoneId: "z1" },
+    ]);
+    expect(coverage.missing).toEqual(["during", "after"]);
+  });
+
+  it("returns a row per zone even when nothing has been shot", () => {
+    expect(zoneCoverage([{ id: "a", name: "A" }, { id: "b", name: "B" }], [])).toHaveLength(2);
   });
 });
 

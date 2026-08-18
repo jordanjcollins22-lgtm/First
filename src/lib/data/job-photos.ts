@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import type { JobPhoto, JobPhotoKind } from "@/types/domain";
 
 export interface JobPhotoWithUrl extends JobPhoto {
+  /** Camel-cased alias of zone_id, so the row satisfies the rules module's
+   * PhotoRecord shape without a mapping step at every call site. */
+  zoneId: string | null;
   /** Signed, because the bucket is private — these are photographs of
    * customers' homes and a public URL would be readable by anyone holding it. */
   url: string | null;
@@ -38,6 +41,7 @@ export async function listJobPhotos(jobId: string): Promise<JobPhotoWithUrl[]> {
   return rows.map((row) => ({
     ...row,
     kind: row.kind as JobPhotoKind,
+    zoneId: row.zone_id,
     url: urlByPath.get(row.path) ?? null,
     uploaderName: row.profiles?.full_name || row.profiles?.email || null,
   }));
