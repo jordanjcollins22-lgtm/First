@@ -37,6 +37,10 @@ export function CompletionPanel({
   status,
   photos,
   zones,
+  allowDuring,
+  allowAfter,
+  allowSignOff,
+  signOffLockReason,
   completedAt,
   completedByName,
   completionNotes,
@@ -45,6 +49,13 @@ export function CompletionPanel({
   status: JobStatus;
   photos: JobPhotoWithUrl[];
   zones: ZoneRef[];
+  /** Which stages this job is far enough along to accept. A during or after
+   * photo of work nobody has started is a record of something that did not
+   * happen. */
+  allowDuring: boolean;
+  allowAfter: boolean;
+  allowSignOff: boolean;
+  signOffLockReason: string | null;
   completedAt: string | null;
   completedByName: string | null;
   completionNotes: string | null;
@@ -57,7 +68,20 @@ export function CompletionPanel({
   const [isPending, startTransition] = useTransition();
 
   const isDone = status === "completed";
-  const verdict = canCompleteJob({ status }, items, zones);
+  // Only the stages this job has reached. 'issue' rides with 'during', since
+  // finding a problem means somebody is on site.
+  const offered = KINDS.filter(
+    (k) =>
+      k === "before" ||
+      (k === "during" && allowDuring) ||
+      (k === "issue" && allowDuring) ||
+      (k === "after" && allowAfter)
+  );
+
+  const coverageVerdict = canCompleteJob({ status }, items, zones);
+  const verdict = allowSignOff
+    ? coverageVerdict
+    : ({ ok: false, reason: signOffLockReason ?? "Not yet." } as const);
   const coverage = zoneCoverage(zones, items);
   const doneZones = coverage.filter((z) => z.complete).length;
 
@@ -176,6 +200,7 @@ export function CompletionPanel({
             photos={items.filter((p) => p.zoneId === zone.id)}
             editable={!isDone}
             uploading={uploading > 0}
+            offered={offered}
             onUpload={(files, kind) => upload(files, kind, zone)}
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
           />
@@ -187,6 +212,7 @@ export function CompletionPanel({
           photos={jobWide}
           editable={!isDone}
           uploading={uploading > 0}
+          offered={offered}
           onUpload={(files, kind) => upload(files, kind, null)}
           onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
         />
@@ -266,6 +292,7 @@ function ZoneSection({
   photos,
   editable,
   uploading,
+  offered,
   onUpload,
   onRemoved,
 }: {
@@ -274,11 +301,13 @@ function ZoneSection({
   photos: JobPhotoWithUrl[];
   editable: boolean;
   uploading: boolean;
+  /** The stages this job is far enough along to accept. */
+  offered: JobPhotoKind[];
   onUpload: (files: FileList | null, kind: JobPhotoKind) => void;
   onRemoved: (id: string) => void;
 }) {
   const [kind, setKind] = useState<JobPhotoKind>(
-    coverage?.missing[0] ?? (zone ? "before" : "after")
+    coverage?.missing.find((m) => offered.includes(m)) ?? offered[0] ?? "before"
   );
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
@@ -314,10 +343,14 @@ function ZoneSection({
         )}
       </div>
 
-      {editable && (
+      {editable && offered.length > 0 && (
         <>
-          <div className="mb-2 grid grid-cols-4 gap-1.5">
-            {KINDS.map((option) => (
+          <div
+            className={`mb-2 grid gap-1.5 ${
+              offered.length >= 4 ? "grid-cols-4" : offered.length === 3 ? "grid-cols-3" : "grid-cols-2"
+            }`}
+          >
+            {offered.map((option) => (
               <button
                 key={option}
                 type="button"

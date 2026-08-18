@@ -12,6 +12,7 @@ import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
 import { getJobSchedule } from "@/lib/data/work-sessions";
+import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -23,6 +24,7 @@ import { InvoicePanel } from "@/components/job/invoice-panel";
 import { SchedulePanel } from "@/components/job/schedule-panel";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { VisitsPanel } from "@/components/job/visits-panel";
+import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -137,6 +139,18 @@ export default async function JobPage({
     };
   });
 
+  // What this job can actually do right now. Everything below renders against
+  // this rather than showing every panel and hoping people know the order.
+  const stageInput = {
+    status: job.status,
+    evaluationStatus: job.evaluation_status,
+    evaluationDate: job.evaluation_date,
+    proposalStatus: proposal?.status ?? null,
+    sessions: schedule.sessions.map((s) => ({ status: s.status })),
+  };
+  const stage = deriveStage(stageInput);
+  const can = capabilities(stageInput);
+
   const host = headersList.get("host") ?? "";
   const proto = headersList.get("x-forwarded-proto") ?? "https";
   const baseUrl = host ? `${proto}://${host}` : "";
@@ -150,22 +164,46 @@ export default async function JobPage({
 
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">{job.property?.address ?? job.name}</h1>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          Draw work zones and fill in the service details to build a scope of work for this job.
-        </p>
+        <p className="text-sm text-muted-foreground sm:text-base">{job.name}</p>
       </div>
 
-      <CompletionPanel
-        jobId={jobId}
-        status={job.status}
-        photos={photos}
-        zones={photoZones}
-        completedAt={job.completed_at}
-        completedByName={completedByName}
-        completionNotes={job.completion_notes}
-      />
+      <StageHeader stage={stage} next={nextStep(stageInput)} />
 
-      <VisitsPanel jobId={jobId} sessions={schedule.sessions} tickets={schedule.tickets} />
+      {/* Photos and sign-off. Which stages are offered depends on where the
+          job is: there is no finished work to photograph before anyone has
+          been on site. Shown whenever any stage is open, or whenever photos
+          already exist, so a finished job never hides its own record. */}
+      {can.photoBefore.available || photos.length > 0 ? (
+        <CompletionPanel
+          jobId={jobId}
+          status={job.status}
+          photos={photos}
+          zones={photoZones}
+          allowDuring={can.photoDuring.available}
+          allowAfter={can.photoAfter.available}
+          allowSignOff={can.signOff.available}
+          signOffLockReason={can.signOff.available ? null : can.signOff.reason}
+          completedAt={job.completed_at}
+          completedByName={completedByName}
+          completionNotes={job.completion_notes}
+        />
+      ) : (
+        <LockedPanel
+          title="Photos"
+          reason={can.photoBefore.available ? "" : can.photoBefore.reason}
+        />
+      )}
+
+      {can.visits.available || schedule.sessions.length > 0 || schedule.tickets.length > 0 ? (
+        <VisitsPanel
+          jobId={jobId}
+          sessions={schedule.sessions}
+          tickets={schedule.tickets}
+          allowTickets={can.tickets.available}
+        />
+      ) : (
+        <LockedPanel title="Visits & tickets" reason={can.visits.available ? "" : can.visits.reason} />
+      )}
 
       <SchedulePanel
         jobId={jobId}
@@ -202,17 +240,21 @@ export default async function JobPage({
         </div>
       )}
 
-      <ProposalPanel
-        jobId={jobId}
-        proposal={proposal}
-        baseUrl={baseUrl}
-        serviceCost={serviceCost}
-        materialsCost={materialsCost}
-        zones={zoneBreakdowns}
-        discounts={discounts}
-      />
+      {can.proposal.available || proposal ? (
+        <ProposalPanel
+          jobId={jobId}
+          proposal={proposal}
+          baseUrl={baseUrl}
+          serviceCost={serviceCost}
+          materialsCost={materialsCost}
+          zones={zoneBreakdowns}
+          discounts={discounts}
+        />
+      ) : (
+        <LockedPanel title="Proposal" reason={can.proposal.available ? "" : can.proposal.reason} />
+      )}
 
-      <InvoicePanel invoice={invoice} />
+      {(can.invoice.available || invoice) && <InvoicePanel invoice={invoice} />}
 
       {isTwilioConfigured && <CallClientButton jobId={jobId} />}
 

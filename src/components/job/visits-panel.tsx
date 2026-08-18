@@ -50,10 +50,14 @@ export function VisitsPanel({
   jobId,
   sessions,
   tickets,
+  allowTickets,
 }: {
   jobId: string;
   sessions: JobWorkSession[];
   tickets: JobTicket[];
+  /** Raising a snag only makes sense once there is work to snag. Existing
+   * tickets still show either way — history doesn't disappear. */
+  allowTickets: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -93,10 +97,12 @@ export function VisitsPanel({
 
       <SessionList jobId={jobId} sessions={sessions} tickets={tickets} onResult={report} />
 
+      {(allowTickets || tickets.length > 0) && (
       <div className="mt-4 border-t border-border pt-3">
         <TicketList tickets={tickets} onResult={report} />
-        <NewTicket jobId={jobId} onResult={report} />
+        {allowTickets && <NewTicket jobId={jobId} onResult={report} />}
       </div>
+      )}
 
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       {message && <p className="mt-2 text-xs text-emerald-700">{message}</p>}
