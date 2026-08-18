@@ -30,7 +30,7 @@ import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
-import { requireAnyTab } from "@/lib/data/access";
+import { requireJobAccess } from "@/lib/data/access";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isAccountManager } from "@/lib/affiliate-roles";
 
@@ -40,11 +40,14 @@ export default async function JobPage({
   params: Promise<{ jobId: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  // Reachable from Project Data, the calendar and the pipeline. Anyone who
-  // can see the job in one of those can open it.
-  await requireAnyTab(["job-detail", "project-data", "evaluations", "pipeline"], "/attractors");
-
   const { jobId } = await params;
+
+  // Reachable from Project Data, the calendar and the pipeline — anyone who
+  // can see the job in one of those can open it. Assignment counts too: a
+  // crew member's Today screen links straight here, and being unable to open
+  // the job you are standing on would make that link a dead end.
+  await requireJobAccess(jobId, ["job-detail", "project-data", "evaluations", "pipeline"]);
+
   const supabase = await createClient();
 
   const { data: jobRow, error: jobError } = await supabase

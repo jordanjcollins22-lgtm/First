@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles, type TabKey } from "@/lib/permissions";
@@ -58,4 +59,26 @@ export async function requireAnyTab(tabs: TabKey[], fallback: string) {
 function deniedUrl(fallback: string, tab: TabKey): string {
   const separator = fallback.includes("?") ? "&" : "?";
   return `${fallback}${separator}denied=${encodeURIComponent(tab)}`;
+}
+
+/**
+ * Gate for one job's page.
+ *
+ * Granted by any of the usual tabs, or by being the person assigned to it. A
+ * crew member's Today screen links straight to the job they are standing on,
+ * and they may hold none of the office tabs — refusing them there would make
+ * their own work unreachable from their own screen.
+ */
+export async function requireJobAccess(jobId: string, tabs: TabKey[]) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect(deniedUrl("/attractors", tabs[0]));
+
+  const permissions = await listRolePermissions().catch(() => []);
+  if (tabs.some((tab) => tabsAllowedForRoles(profile.roles, permissions).has(tab))) return;
+
+  const supabase = await createClient();
+  const { data: job } = await supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle();
+  if (job?.assigned_to === profile.id) return;
+
+  redirect(deniedUrl("/attractors", tabs[0]));
 }

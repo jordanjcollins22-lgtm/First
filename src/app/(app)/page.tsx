@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -11,11 +12,16 @@ import { getBookingLinksBundle, type BookingLinksBundle } from "@/lib/data/booki
 import { checkTabAccess } from "@/lib/data/access";
 import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
+import { isFieldOnly } from "@/lib/affiliate-roles";
 
 export default async function Home() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const { allowed, profile } = await checkTabAccess("new-property");
+
+  // Anybody who only works in the field lands on their day and stays there.
+  // The office view is noise to somebody standing in a yard with a mower.
+  if (profile && isFieldOnly(profile.roles)) redirect("/today");
 
   if (profile && !allowed) {
     const { allowed: canSeeEvaluations } = await checkTabAccess("evaluations");

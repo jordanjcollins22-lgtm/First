@@ -1039,6 +1039,7 @@ export interface Database {
           purpose: string | null;
           pause_reason: string | null;
           ticket_id: string | null;
+          stop_order: number | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -1055,6 +1056,36 @@ export interface Database {
             foreignKeyName: "job_work_sessions_job_id_fkey";
             columns: ["job_id"];
             referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crew_day_events: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          day: string;
+          kind: string;
+          job_id: string | null;
+          at: string;
+          lat: number | null;
+          lng: number | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["crew_day_events"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          day: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crew_day_events"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crew_day_events_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

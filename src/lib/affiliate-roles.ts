@@ -15,3 +15,30 @@ export function isAccountManager(roles: string[]): boolean {
 export function qualifiesForAffiliateLink(roles: string[]): boolean {
   return isEvaluator(roles) || isAccountManager(roles);
 }
+
+/**
+ * Roles that run the business rather than do the work.
+ *
+ * Anybody holding one of these needs the full app. Everybody else is in a
+ * truck, and the full app is noise to them.
+ */
+const OFFICE_ROLES = ["admin", "owner", "overhead", "evaluator", "account manager", "manager"];
+
+export function isOfficeRole(role: string): boolean {
+  return OFFICE_ROLES.includes(normalizeRole(role));
+}
+
+/**
+ * Whether this person only works in the field.
+ *
+ * Decides the landing screen and how much navigation to show. Deliberately
+ * "holds no office role" rather than "holds the crew role": somebody given a
+ * custom role like "Foreman" is still in a truck, and defaulting them into the
+ * office view would be the wrong way to be wrong. Somebody with no roles at
+ * all is not field-only — they are unconfigured, and quietly locking them to
+ * one screen would hide the fact that nobody has set them up.
+ */
+export function isFieldOnly(roles: string[]): boolean {
+  if (roles.length === 0) return false;
+  return !roles.some(isOfficeRole);
+}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
+import { isFieldOnly } from "@/lib/affiliate-roles";
 
 /**
  * The whole navigation, at both sizes.
@@ -27,37 +28,43 @@ export function SiteNav({
   roles: string[];
   allowedTabs: string[];
 }) {
+  const fieldOnly = isFieldOnly(roles);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const can = (tab: string) => allowedTabs.includes(tab);
 
-  const links = [
-    ...(can("project-data") ? [{ href: "/attractors", label: "Project Data" }] : []),
-    ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
-    ...(can("leads") ? [{ href: "/leads", label: "Leads" }] : []),
-    ...(can("contacts") ? [{ href: "/contacts", label: "Contacts" }] : []),
-    ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
-    ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
-    ...(can("evaluations") ? [{ href: "/evaluations", label: "Calendar" }] : []),
-    ...(can("weather") ? [{ href: "/weather", label: "Weather" }] : []),
-    ...(can("notifications") ? [{ href: "/notifications", label: "Notifications" }] : []),
-    ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
-    ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
-    // Overhead folded in here as a tab, so one link covers all of it.
-    ...(can("payments") || roles.includes("overhead")
-      ? [{ href: "/admin/payments", label: "Money" }]
-      : []),
-    ...(can("gambling") ? [{ href: "/gambling", label: "Gambling (test)" }] : []),
-    ...(can("journeys") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
-    // Gated on the admin role itself, never on the table it edits — otherwise
-    // one stray uncheck would take away the way back in.
-    ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
-    // Superadmin, decided by account rather than by role.
-    ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
-      ? [{ href: "/admin/organizations", label: "Organizations" }]
-      : []),
-  ];
+  // Field-only people get one link. The rest of the app is for the office, and
+  // a menu of seventeen things they cannot use is worse than no menu.
+  const links = fieldOnly
+    ? [{ href: "/today", label: "Today" }]
+    : [
+        { href: "/today", label: "Today" },
+        ...(can("project-data") ? [{ href: "/attractors", label: "Project Data" }] : []),
+        ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
+        ...(can("leads") ? [{ href: "/leads", label: "Leads" }] : []),
+        ...(can("contacts") ? [{ href: "/contacts", label: "Contacts" }] : []),
+        ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
+        ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
+        ...(can("evaluations") ? [{ href: "/evaluations", label: "Calendar" }] : []),
+        ...(can("weather") ? [{ href: "/weather", label: "Weather" }] : []),
+        ...(can("notifications") ? [{ href: "/notifications", label: "Notifications" }] : []),
+        ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
+        ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
+        // Overhead folded in here as a tab, so one link covers all of it.
+        ...(can("payments") || roles.includes("overhead")
+          ? [{ href: "/admin/payments", label: "Money" }]
+          : []),
+        ...(can("gambling") ? [{ href: "/gambling", label: "Gambling (test)" }] : []),
+        ...(can("journeys") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
+        // Gated on the admin role itself, never on the table it edits —
+        // otherwise one stray uncheck would take away the way back in.
+        ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
+        // Superadmin, decided by account rather than by role.
+        ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
+          ? [{ href: "/admin/organizations", label: "Organizations" }]
+          : []),
+      ];
 
   useEffect(() => {
     if (!open) return;
@@ -82,7 +89,7 @@ export function SiteNav({
   return (
     <div ref={containerRef} className="relative flex items-center gap-3 text-sm font-medium">
       {/* One shortcut in the bar itself, and only where there's room for it. */}
-      {can("project-data") && (
+      {!fieldOnly && can("project-data") && (
         <Link href="/attractors" className="hidden hover:text-primary sm:inline">
           Project Data
         </Link>
