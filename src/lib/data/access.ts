@@ -24,8 +24,38 @@ export async function checkTabAccess(tab: TabKey) {
   return resolveTabAccess(tab);
 }
 
-/** Hard gate — bounces away entirely if this tab isn't granted. */
+/**
+ * Hard gate — bounces away entirely if this tab isn't granted.
+ *
+ * The destination is told which tab was refused so it can say so. Being
+ * silently teleported somewhere else is the worst version of this: the person
+ * clicked a link that existed, ended up on a different page, and has no idea
+ * whether they misclicked or the app is broken.
+ */
 export async function requireTab(tab: TabKey, fallback: string) {
   const { allowed } = await resolveTabAccess(tab);
-  if (!allowed) redirect(fallback);
+  if (!allowed) redirect(deniedUrl(fallback, tab));
+}
+
+/**
+ * Gate for a page you can only reach by clicking a row in a list.
+ *
+ * Granted if its own tab is ticked, or if any list that links to it is. A
+ * detail page that refuses somebody who can see the row linking to it is not
+ * protecting anything — the name, address and status are already on the screen
+ * they came from — it just breaks the link. The explicit tick still works as a
+ * standalone grant for anyone who has no list access at all.
+ */
+export async function requireAnyTab(tabs: TabKey[], fallback: string) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect(deniedUrl(fallback, tabs[0]));
+
+  const permissions = await listRolePermissions().catch(() => []);
+  const allowed = tabsAllowedForRoles(profile.roles, permissions);
+  if (!tabs.some((tab) => allowed.has(tab))) redirect(deniedUrl(fallback, tabs[0]));
+}
+
+function deniedUrl(fallback: string, tab: TabKey): string {
+  const separator = fallback.includes("?") ? "&" : "?";
+  return `${fallback}${separator}denied=${encodeURIComponent(tab)}`;
 }

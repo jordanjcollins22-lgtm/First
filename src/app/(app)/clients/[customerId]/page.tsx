@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listProfiles } from "@/lib/data/team";
 import { listJobsWithLocation } from "@/lib/data/jobs";
-import { checkTabAccess, requireTab } from "@/lib/data/access";
+import { checkTabAccess, requireAnyTab } from "@/lib/data/access";
 import { isSupabaseConfigured } from "@/lib/env";
 import { ClientDetailPanel } from "@/components/attractors/client-detail-panel";
 import type { Customer, JobProposal } from "@/types/domain";
@@ -26,7 +26,7 @@ export default async function ClientAccountPage({
 
   const { allowed } = await checkTabAccess("project-data");
   if (!allowed) redirect("/attractors");
-  await requireTab("client-detail", "/attractors");
+  await requireAnyTab(["client-detail", "contacts", "project-data", "pipeline"], "/attractors");
 
   const { customerId } = await params;
   const supabase = await createClient();

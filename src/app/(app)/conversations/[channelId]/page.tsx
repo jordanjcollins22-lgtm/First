@@ -6,7 +6,7 @@ import { isSupabaseConfigured, isTranscriptionConfigured } from "@/lib/env";
 import { getTeamChannel } from "@/lib/data/team-channels";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { TeamChannelThread } from "@/components/conversations/team-channel-thread";
-import { requireTab } from "@/lib/data/access";
+import { requireAnyTab } from "@/lib/data/access";
 
 export default async function TeamChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
   if (!isSupabaseConfigured) {
@@ -16,7 +16,7 @@ export default async function TeamChannelPage({ params }: { params: Promise<{ ch
       </div>
     );
   }
-  await requireTab("conversation-thread", "/conversations");
+  await requireAnyTab(["conversation-thread", "conversations"], "/conversations");
 
   const { channelId } = await params;
   const [profile, data] = await Promise.all([getCurrentProfile(), getTeamChannel(channelId)]);

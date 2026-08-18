@@ -25,11 +25,14 @@ import { SchedulePanel } from "@/components/job/schedule-panel";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { VisitsPanel } from "@/components/job/visits-panel";
 import { LockedPanel, StageHeader } from "@/components/job/stage-header";
+import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
-import { requireTab } from "@/lib/data/access";
+import { requireAnyTab } from "@/lib/data/access";
+import { getCurrentProfile } from "@/lib/data/team";
+import { isAccountManager } from "@/lib/affiliate-roles";
 
 export default async function JobPage({
   params,
@@ -37,7 +40,9 @@ export default async function JobPage({
   params: Promise<{ jobId: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("job-detail", "/attractors");
+  // Reachable from Project Data, the calendar and the pipeline. Anyone who
+  // can see the job in one of those can open it.
+  await requireAnyTab(["job-detail", "project-data", "evaluations", "pipeline"], "/attractors");
 
   const { jobId } = await params;
   const supabase = await createClient();
@@ -60,6 +65,7 @@ export default async function JobPage({
     project_start_date: string | null;
     project_end_date: string | null;
     cancellation_reason: string | null;
+    property_id: string;
     completed_at: string | null;
     completed_by: string | null;
     completion_notes: string | null;
@@ -95,8 +101,47 @@ export default async function JobPage({
     // Empty until migration 0078 runs, so the rest of the page still loads.
     listJobPhotos(jobId).catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
-    getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [] })),
+    getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
   ]);
+
+  // Names for whoever asked for or decided a walkthrough, plus the sign-off.
+  const walkPeople = Array.from(
+    new Set(
+      schedule.walkthroughs.flatMap((w) => [w.requested_by, w.reviewed_by]).filter(Boolean) as string[]
+    )
+  );
+  let namesById: Record<string, string> = {};
+  if (walkPeople.length > 0) {
+    const { data: people } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", walkPeople);
+    namesById = Object.fromEntries(
+      ((people ?? []) as { id: string; full_name: string | null; email: string }[]).map((p) => [
+        p.id,
+        p.full_name || p.email,
+      ])
+    );
+  }
+
+  // The manager who rules on the walk is the customer's account manager;
+  // admins can always decide, so a job never stalls because one person is out.
+  const { data: ownerRow } = await supabase
+    .from("properties")
+    .select("customers(account_manager_id)")
+    .eq("id", job.property_id)
+    .maybeSingle();
+  const accountManagerId =
+    (ownerRow as unknown as { customers: { account_manager_id: string | null } | null } | null)
+      ?.customers?.account_manager_id ?? null;
+
+  const viewer = await getCurrentProfile();
+  const canReviewWalk = Boolean(
+    viewer &&
+      (viewer.roles.includes("admin") ||
+        isAccountManager(viewer.roles) ||
+        viewer.id === accountManagerId)
+  );
 
   // Only worth a lookup once somebody has actually signed the job off.
   let completedByName: string | null = null;
@@ -147,6 +192,7 @@ export default async function JobPage({
     evaluationDate: job.evaluation_date,
     proposalStatus: proposal?.status ?? null,
     sessions: schedule.sessions.map((s) => ({ status: s.status })),
+    walkthroughs: schedule.walkthroughs,
   };
   const stage = deriveStage(stageInput);
   const can = capabilities(stageInput);
@@ -191,6 +237,19 @@ export default async function JobPage({
         <LockedPanel
           title="Photos"
           reason={can.photoBefore.available ? "" : can.photoBefore.reason}
+        />
+      )}
+
+      {/* Sits above Visits because on a live job it is the thing holding
+          everything else up. */}
+      {(can.requestWalkthrough.available || schedule.walkthroughs.length > 0) && (
+        <WalkthroughPanel
+          jobId={jobId}
+          walkthroughs={schedule.walkthroughs}
+          canRequest={can.requestWalkthrough.available}
+          requestLockReason={can.requestWalkthrough.available ? null : can.requestWalkthrough.reason}
+          canReview={canReviewWalk}
+          namesById={namesById}
         />
       )}
 

@@ -84,3 +84,36 @@ describe("tabsAllowedForRoles", () => {
     expect(unconfiguredTabKeys(grants).has("payments")).toBe(true);
   });
 });
+
+describe("detail pages reachable from a list", () => {
+  // These are the pages you can only get to by clicking a row. Gating them
+  // separately from the list that links to them breaks the link without
+  // protecting anything — the name and address are already on screen.
+  const DETAIL_INHERITS: Record<string, string[]> = {
+    "job-detail": ["project-data", "evaluations", "pipeline"],
+    "client-detail": ["contacts", "project-data", "pipeline"],
+    "conversation-thread": ["conversations"],
+    "conversation-call": ["conversation-thread", "conversations"],
+  };
+
+  it("names only tabs that actually exist", () => {
+    const keys = new Set(TABS.map((t) => t.key));
+    for (const [detail, parents] of Object.entries(DETAIL_INHERITS)) {
+      expect(keys.has(detail), `${detail} is not a registered tab`).toBe(true);
+      for (const parent of parents) {
+        expect(keys.has(parent), `${parent} is not a registered tab`).toBe(true);
+      }
+    }
+  });
+
+  it("opens a detail page to anyone granted a list that links to it", () => {
+    // A crew member who can see the calendar can open the job on it.
+    const grants = [{ role_name: "crew", tab_key: "evaluations" }];
+    const allowed = tabsAllowedForRoles(["crew"], grants);
+    expect(allowed.has("evaluations")).toBe(true);
+    // The detail tab itself stays unconfigured — inheritance is decided by
+    // requireAnyTab at the page, not by widening the grant set here.
+    expect(allowed.has("job-detail")).toBe(false);
+    expect(DETAIL_INHERITS["job-detail"]).toContain("evaluations");
+  });
+});

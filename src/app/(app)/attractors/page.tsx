@@ -9,8 +9,14 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { AttractorsDashboard } from "@/components/attractors/attractors-dashboard";
 import type { AttractorType, AttractorVariant, AttractorWave, BusinessLocation, LocationArea, Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
+import { AccessDeniedNotice } from "@/components/access-denied-notice";
 
-export default async function AttractorsPage() {
+export default async function AttractorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ denied?: string }>;
+}) {
+  const { denied } = await searchParams;
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const { allowed, profile } = await checkTabAccess("project-data");
@@ -72,6 +78,7 @@ export default async function AttractorsPage() {
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
+      <AccessDeniedNotice tab={denied} />
       {locationsMigrationMissing && (
         <p className="mb-4 rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           Business locations aren&apos;t set up yet. In Supabase&apos;s SQL Editor, run{" "}
