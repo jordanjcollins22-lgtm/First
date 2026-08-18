@@ -104,6 +104,9 @@ export interface Database {
           referred_by_profile_id: string | null;
           cancelled_at: string | null;
           cancellation_reason: string | null;
+          completed_at: string | null;
+          completed_by: string | null;
+          completion_notes: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1019,6 +1022,32 @@ export interface Database {
             foreignKeyName: "team_payments_profile_id_fkey";
             columns: ["profile_id"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      job_photos: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          path: string;
+          kind: string;
+          caption: string | null;
+          uploaded_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_photos"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          path: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_photos"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_photos_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
             referencedColumns: ["id"];
           },
         ];

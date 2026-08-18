@@ -25,7 +25,7 @@ export const STAGES: { key: PipelineStage; label: string; blurb: string }[] = [
 export const STAGE_STATUSES: Record<PipelineStage, string[]> = {
   evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated"],
   sales: ["Needs pricing", "Needs approval", "Sent", "Declined"],
-  operations: ["Won — not scheduled", "Scheduled", "In progress", "Completed"],
+  operations: ["Won — not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
 };
 
 export interface PipelineInput {
@@ -63,16 +63,38 @@ export function isOnPipeline(input: PipelineInput): boolean {
   return input.status !== "cancelled";
 }
 
-export function pipelinePosition(input: PipelineInput): PipelinePosition {
+function dateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Where a job sits.
+ *
+ * `today` is a parameter so the "work is over but nobody signed it off" case
+ * is testable without mocking the clock.
+ */
+export function pipelinePosition(input: PipelineInput, today: Date = new Date()): PipelinePosition {
   // Operations first: once it's sold, nothing earlier matters.
   if (input.status === "completed") {
     return { stage: "operations", status: "Completed", actionable: false };
   }
+  // Work whose window has passed but that nobody has signed off. This is the
+  // one that disappears in practice: the crew finished, drove away, and the
+  // job sits "in progress" forever because closing it was never anybody's
+  // next task. Surfacing it here is what makes it somebody's.
+  const overran =
+    input.projectEndDate != null && input.projectEndDate < dateKey(today);
+
   if (input.status === "in_progress") {
-    return { stage: "operations", status: "In progress", actionable: true };
+    return overran
+      ? { stage: "operations", status: "Needs sign-off", actionable: true }
+      : { stage: "operations", status: "In progress", actionable: true };
   }
   if (input.status === "approved" || input.proposalStatus === "accepted") {
     const scheduled = Boolean(input.projectStartDate || input.projectEndDate);
+    if (scheduled && overran) {
+      return { stage: "operations", status: "Needs sign-off", actionable: true };
+    }
     return {
       stage: "operations",
       status: scheduled ? "Scheduled" : "Won — not scheduled",

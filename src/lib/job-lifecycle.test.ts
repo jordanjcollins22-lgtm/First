@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   canCancelEstimate,
   canCancelJob,
+  canCompleteJob,
+  canReopenCompleted,
   canReopenJob,
   canRescheduleEstimate,
   canRescheduleJob,
@@ -153,5 +155,54 @@ describe("isClosed", () => {
     expect(isClosed("completed")).toBe(true);
     expect(isClosed("cancelled")).toBe(true);
     expect(isClosed("in_progress")).toBe(false);
+  });
+});
+
+describe("canCompleteJob", () => {
+  const done = [{ kind: "after" as const }];
+
+  it("signs off a job that has an after photo", () => {
+    expect(canCompleteJob({ status: "in_progress" }, done).ok).toBe(true);
+  });
+
+  it("refuses with no photos at all", () => {
+    const verdict = canCompleteJob({ status: "in_progress" }, []);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.reason).toMatch(/after.*photo/i);
+  });
+
+  it("does not accept a before photo as proof the work got done", () => {
+    // A before shot is worth having and is not evidence of anything finished.
+    expect(canCompleteJob({ status: "in_progress" }, [{ kind: "before" }]).ok).toBe(false);
+  });
+
+  it("does not accept a photo of a problem as proof either", () => {
+    expect(canCompleteJob({ status: "in_progress" }, [{ kind: "issue" }]).ok).toBe(false);
+  });
+
+  it("counts the after photo among others", () => {
+    expect(
+      canCompleteJob({ status: "in_progress" }, [{ kind: "before" }, { kind: "issue" }, { kind: "after" }]).ok
+    ).toBe(true);
+  });
+
+  it("refuses to complete twice", () => {
+    expect(canCompleteJob({ status: "completed" }, done).ok).toBe(false);
+  });
+
+  it("refuses on a cancelled job", () => {
+    const verdict = canCompleteJob({ status: "cancelled" }, done);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.reason).toMatch(/reopen/i);
+  });
+});
+
+describe("canReopenCompleted", () => {
+  it("reopens signed-off work for a callback", () => {
+    expect(canReopenCompleted({ status: "completed" }).ok).toBe(true);
+  });
+
+  it("refuses on work that was never signed off", () => {
+    expect(canReopenCompleted({ status: "in_progress" }).ok).toBe(false);
   });
 });

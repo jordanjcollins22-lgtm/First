@@ -6,7 +6,7 @@
  * reasoning the action will apply when it runs.
  */
 
-import type { EvaluationStatus, JobStatus } from "@/types/domain";
+import type { EvaluationStatus, JobPhotoKind, JobStatus } from "@/types/domain";
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   estimating: "Estimating",
@@ -122,4 +122,55 @@ export function statusAfterReopen(job: Pick<JobShape, "evaluationStatus" | "proj
   if (job.projectStartDate) return "approved";
   if (job.evaluationStatus === "completed") return "quoted";
   return "estimating";
+}
+
+/* -------------------------------------------------------------- completion */
+
+export const PHOTO_KIND_LABELS: Record<JobPhotoKind, string> = {
+  before: "Before",
+  after: "After",
+  issue: "Issue",
+};
+
+/**
+ * How many photos a job has to carry before it can be signed off.
+ *
+ * One is the honest minimum: the point of the requirement is that somebody
+ * stood on the finished site and looked at it, and demanding a fixed number
+ * only teaches people to shoot the same hedge four times.
+ */
+export const REQUIRED_COMPLETION_PHOTOS = 1;
+
+/**
+ * Whether a job can be marked complete.
+ *
+ * The photo requirement counts 'after' shots specifically. A before photo and
+ * a photo of a problem are both worth having, but neither one is evidence the
+ * work got done, which is the whole thing being claimed here.
+ */
+export function canCompleteJob(
+  job: Pick<JobShape, "status">,
+  photos: { kind: JobPhotoKind }[]
+): Verdict {
+  if (job.status === "completed") return { ok: false, reason: "This job is already marked complete." };
+  if (job.status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
+
+  const after = photos.filter((p) => p.kind === "after").length;
+  if (after < REQUIRED_COMPLETION_PHOTOS) {
+    return {
+      ok: false,
+      reason:
+        after === 0
+          ? "Add at least one 'after' photo before signing this off."
+          : `Add ${REQUIRED_COMPLETION_PHOTOS - after} more 'after' photo.`,
+    };
+  }
+  return ALLOWED;
+}
+
+/** Whether a completed job can be put back to in-progress, for the callback
+ * case — the work was signed off and then something needed redoing. */
+export function canReopenCompleted(job: Pick<JobShape, "status">): Verdict {
+  if (job.status !== "completed") return { ok: false, reason: "This job isn't marked complete." };
+  return ALLOWED;
 }

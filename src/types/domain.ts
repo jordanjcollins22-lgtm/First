@@ -63,6 +63,9 @@ export interface Job {
   referred_by_profile_id: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+  completed_at: string | null;
+  completed_by: string | null;
+  completion_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -638,4 +641,20 @@ export interface LedgerEntry {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A photo taken on site. Before/after is the pair that settles a dispute;
+ * 'issue' is for the thing found on site nobody wants to argue about later. */
+export type JobPhotoKind = "before" | "after" | "issue";
+
+export interface JobPhoto {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  /** Path inside the private job-photos bucket. */
+  path: string;
+  kind: JobPhotoKind;
+  caption: string | null;
+  uploaded_by: string | null;
+  created_at: string;
 }

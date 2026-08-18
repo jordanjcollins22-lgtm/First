@@ -10,6 +10,7 @@ import { getProposalForJob } from "@/lib/data/proposals";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
+import { listJobPhotos } from "@/lib/data/job-photos";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -19,6 +20,7 @@ import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
 import { InvoicePanel } from "@/components/job/invoice-panel";
 import { SchedulePanel } from "@/components/job/schedule-panel";
+import { CompletionPanel } from "@/components/job/completion-panel";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -53,6 +55,9 @@ export default async function JobPage({
     project_start_date: string | null;
     project_end_date: string | null;
     cancellation_reason: string | null;
+    completed_at: string | null;
+    completed_by: string | null;
+    completion_notes: string | null;
     client_notes: string | null;
     budget_range: string | null;
     property: { address: string; lat: number; lng: number } | null;
@@ -68,6 +73,7 @@ export default async function JobPage({
     internalMessages,
     externalMessages,
     discounts,
+    photos,
   ] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
@@ -80,7 +86,20 @@ export default async function JobPage({
     listJobMessages(jobId, "internal"),
     listJobMessages(jobId, "external"),
     listDiscounts(),
+    // Empty until migration 0078 runs, so the rest of the page still loads.
+    listJobPhotos(jobId).catch(() => []),
   ]);
+
+  // Only worth a lookup once somebody has actually signed the job off.
+  let completedByName: string | null = null;
+  if (job.completed_by) {
+    const { data: signer } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", job.completed_by)
+      .maybeSingle();
+    completedByName = signer?.full_name || signer?.email || null;
+  }
   const requestedServiceIds = (requestedServicesRes.data ?? []).map((r) => r.service_type_id);
   const requestedServiceNames = requestedServiceIds.map(
     (id) => catalog.servicePricing.find((s) => s.service_type_id === id)?.name ?? id
@@ -124,6 +143,15 @@ export default async function JobPage({
           Draw work zones and fill in the service details to build a scope of work for this job.
         </p>
       </div>
+
+      <CompletionPanel
+        jobId={jobId}
+        status={job.status}
+        photos={photos}
+        completedAt={job.completed_at}
+        completedByName={completedByName}
+        completionNotes={job.completion_notes}
+      />
 
       <SchedulePanel
         jobId={jobId}

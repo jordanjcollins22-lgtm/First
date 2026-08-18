@@ -84,3 +84,66 @@ describe("isOnPipeline", () => {
     expect(isOnPipeline(job())).toBe(true);
   });
 });
+
+describe("needs sign-off", () => {
+  const TODAY = new Date("2026-09-10T12:00:00Z");
+
+  it("flags work whose window has passed and nobody closed", () => {
+    // The case that actually goes missing: crew finished, drove away, and
+    // closing the job was never anybody's next task.
+    const p = pipelinePosition(
+      job({ status: "in_progress", projectStartDate: "2026-09-01", projectEndDate: "2026-09-05" }),
+      TODAY
+    );
+    expect(p).toEqual({ stage: "operations", status: "Needs sign-off", actionable: true });
+  });
+
+  it("leaves work still inside its window alone", () => {
+    const p = pipelinePosition(
+      job({ status: "in_progress", projectStartDate: "2026-09-08", projectEndDate: "2026-09-12" }),
+      TODAY
+    );
+    expect(p.status).toBe("In progress");
+  });
+
+  it("does not flag the last day itself", () => {
+    // A crew finishing today has not overrun anything.
+    const p = pipelinePosition(
+      job({ status: "in_progress", projectStartDate: "2026-09-09", projectEndDate: "2026-09-10" }),
+      TODAY
+    );
+    expect(p.status).toBe("In progress");
+  });
+
+  it("flags approved work that came and went", () => {
+    const p = pipelinePosition(
+      job({ status: "approved", projectStartDate: "2026-09-01", projectEndDate: "2026-09-03" }),
+      TODAY
+    );
+    expect(p.status).toBe("Needs sign-off");
+  });
+
+  it("leaves approved work still ahead as Scheduled", () => {
+    const p = pipelinePosition(
+      job({ status: "approved", projectStartDate: "2026-09-20", projectEndDate: "2026-09-22" }),
+      TODAY
+    );
+    expect(p.status).toBe("Scheduled");
+  });
+
+  it("never flags a job already signed off", () => {
+    const p = pipelinePosition(
+      job({ status: "completed", projectStartDate: "2026-09-01", projectEndDate: "2026-09-03" }),
+      TODAY
+    );
+    expect(p.status).toBe("Completed");
+  });
+
+  it("leaves unscheduled won work where it was", () => {
+    expect(pipelinePosition(job({ status: "approved" }), TODAY).status).toBe("Won — not scheduled");
+  });
+
+  it("is a status the board knows how to show", () => {
+    expect(STAGE_STATUSES.operations).toContain("Needs sign-off");
+  });
+});
