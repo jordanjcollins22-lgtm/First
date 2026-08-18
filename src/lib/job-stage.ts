@@ -13,6 +13,7 @@
  * touching it.
  */
 
+import { canRequestWalkthrough, walkthroughGate, type WalkthroughShape } from "@/lib/walkthrough";
 import type { JobStatus, WorkSessionStatus } from "@/types/domain";
 
 export type JobStage = "evaluation" | "pricing" | "scheduled" | "working" | "done" | "cancelled";
@@ -58,6 +59,7 @@ export type Capability =
   | "photoDuring"
   | "photoAfter"
   | "signOff"
+  | "requestWalkthrough"
   | "invoice"
   | "tickets";
 
@@ -67,6 +69,8 @@ export interface StageInput {
   evaluationDate: string | null;
   proposalStatus: string | null;
   sessions: { status: WorkSessionStatus }[];
+  /** Newest first. Empty means nobody has asked for the manager's walk yet. */
+  walkthroughs?: WalkthroughShape[];
 }
 
 /** Whether any visit has actually begun. Booking a visit is not the same as
@@ -94,6 +98,12 @@ export type Availability = { available: true } | { available: false; reason: str
 
 const OK: Availability = { available: true };
 
+/** The walkthrough module speaks Verdict; this page speaks Availability. Same
+ * shape, different name — converted rather than duplicated. */
+function fromVerdict(verdict: { ok: true } | { ok: false; reason: string }): Availability {
+  return verdict.ok ? OK : { available: false, reason: verdict.reason };
+}
+
 /**
  * What is open right now, and what each locked thing is waiting for.
  *
@@ -117,6 +127,7 @@ export function capabilities(input: StageInput): Record<Capability, Availability
       photoDuring: locked,
       photoAfter: locked,
       signOff: locked,
+      requestWalkthrough: locked,
       invoice: locked,
       // A cancelled job can still carry the record of why somebody went back.
       tickets: started ? OK : locked,
@@ -157,9 +168,14 @@ export function capabilities(input: StageInput): Record<Capability, Availability
       ? OK
       : { available: false, reason: "Start a visit first — there's no finished work to photograph." },
 
-    signOff: started
-      ? OK
-      : { available: false, reason: "Start a visit first. Work can't be signed off before it's been done." },
+    // Two separate gates, reported separately: "the manager hasn't been out"
+    // and "the back patio has no after photo" are different problems with
+    // different people to chase, and merging them helps nobody.
+    signOff: !started
+      ? { available: false, reason: "Start a visit first. Work can't be signed off before it's been done." }
+      : fromVerdict(walkthroughGate(input.walkthroughs ?? [])),
+
+    requestWalkthrough: fromVerdict(canRequestWalkthrough(started, input.walkthroughs ?? [])),
 
     // Invoicing before the work is done is how a business gets a reputation.
     invoice: stage === "done" || started
@@ -188,8 +204,13 @@ export function nextStep(input: StageInput): string {
         : "Price the zones and send the proposal.";
     case "scheduled":
       return "Book the crew's visits.";
-    case "working":
-      return "Document each zone, then sign the job off.";
+    case "working": {
+      const walk = walkthroughGate(input.walkthroughs ?? []);
+      if (walk.ok) return "Approved — sign the job off.";
+      return input.walkthroughs?.some((w) => w.status === "requested")
+        ? "Waiting on the account manager to walk the job. Keep the tools out."
+        : "Document each zone, then get the manager out to approve it.";
+    }
     case "done":
       return "Invoice it, or raise a ticket if you have to go back.";
   }

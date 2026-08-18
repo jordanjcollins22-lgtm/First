@@ -135,6 +135,10 @@ export function NotificationSettings({
     clientMessages: preferences?.client_messages ?? true,
     proposalResponses: preferences?.proposal_responses ?? true,
     teamMessages: preferences?.team_messages ?? false,
+    // Defaults on, unlike the rest: a walkthrough request is somebody standing
+    // on a site waiting for you, and a manager who silently never opted in is
+    // the exact failure this step exists to prevent.
+    walkthroughRequests: preferences?.walkthrough_requests ?? true,
     reminderHoursBefore: preferences?.reminder_hours_before ?? 24,
   });
   const [error, setError] = useState<string | null>(null);
@@ -235,6 +239,13 @@ export function NotificationSettings({
               hint="When a client accepts or declines a proposal."
               checked={form.proposalResponses}
               onChange={(next) => update({ proposalResponses: next })}
+              disabled={isPending || !form.smsEnabled}
+            />
+            <Toggle
+              label="Walkthrough requests"
+              hint="A crew is on site waiting for you to approve the work before they pack up."
+              checked={form.walkthroughRequests}
+              onChange={(next) => update({ walkthroughRequests: next })}
               disabled={isPending || !form.smsEnabled}
             />
             <Toggle

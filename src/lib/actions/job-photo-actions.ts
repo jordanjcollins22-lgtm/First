@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { canCompleteJob, canReopenCompleted } from "@/lib/job-lifecycle";
-import type { JobPhotoKind, JobStatus } from "@/types/domain";
+import { walkthroughGate } from "@/lib/walkthrough";
+import type { JobPhotoKind, JobStatus, WalkthroughStatus } from "@/types/domain";
 
 export type PhotoResult = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -103,10 +104,11 @@ export async function deleteJobPhoto(id: string): Promise<PhotoResult> {
 /**
  * Signs the job off.
  *
- * Refuses until every zone has a before, a during and an after. The zones come
- * from the caller because they live in the canvas design's jsonb rather than a
- * table — but the rule is still checked here, not just in the UI, so a stale
- * page cannot sign off work it has not documented.
+ * Two gates, both checked here rather than only in the UI so a stale page
+ * cannot route around either: every zone needs a before, a during and an
+ * after, and the account manager has to have walked the job and approved it.
+ * The zones come from the caller because they live in the canvas design's
+ * jsonb rather than a table.
  */
 export async function completeJob(
   jobId: string,
@@ -119,11 +121,29 @@ export async function completeJob(
 
     const supabase = await createClient();
 
-    const [{ data: job }, { data: photos }] = await Promise.all([
+    const [{ data: job }, { data: photos }, { data: walkthroughs }] = await Promise.all([
       supabase.from("jobs").select("id, status").eq("id", jobId).single(),
       supabase.from("job_photos").select("kind, zone_id").eq("job_id", jobId),
+      supabase
+        .from("job_walkthroughs")
+        .select("status, requested_at, reviewed_at, review_notes")
+        .eq("job_id", jobId)
+        .order("requested_at", { ascending: false }),
     ]);
     if (!job) return { ok: false, message: "Couldn't find that job." };
+
+    // The manager's walk, checked here and not only in the UI: the whole point
+    // is that nobody signs off work a second pair of eyes hasn't seen, and a
+    // stale page must not be able to route around that.
+    const walk = walkthroughGate(
+      (walkthroughs ?? []) as {
+        status: WalkthroughStatus;
+        requested_at: string;
+        reviewed_at: string | null;
+        review_notes: string | null;
+      }[]
+    );
+    if (!walk.ok) return { ok: false, message: walk.reason };
 
     const verdict = canCompleteJob(
       { status: job.status as JobStatus },

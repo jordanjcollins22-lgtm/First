@@ -16,6 +16,7 @@ export interface NotificationPreferencesInput {
   clientMessages: boolean;
   proposalResponses: boolean;
   teamMessages: boolean;
+  walkthroughRequests: boolean;
   reminderHoursBefore: number;
 }
 
@@ -42,6 +43,7 @@ export async function saveNotificationPreferences(
         client_messages: input.clientMessages,
         proposal_responses: input.proposalResponses,
         team_messages: input.teamMessages,
+        walkthrough_requests: input.walkthroughRequests,
         reminder_hours_before: Math.min(168, Math.max(1, Math.round(input.reminderHoursBefore) || 24)),
       },
       { onConflict: "profile_id" }

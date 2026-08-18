@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import type { JobTicket, JobWorkSession } from "@/types/domain";
+import type { JobTicket, JobWalkthrough, JobWorkSession } from "@/types/domain";
 
 export interface JobScheduleData {
   sessions: JobWorkSession[];
   tickets: JobTicket[];
+  /** Newest first — the order the walkthrough rules assume. */
+  walkthroughs: JobWalkthrough[];
 }
 
 /**
@@ -15,7 +17,7 @@ export interface JobScheduleData {
 export async function getJobSchedule(jobId: string): Promise<JobScheduleData> {
   try {
     const supabase = await createClient();
-    const [sessions, tickets] = await Promise.all([
+    const [sessions, tickets, walkthroughs] = await Promise.all([
       supabase
         .from("job_work_sessions")
         .select("*")
@@ -26,14 +28,20 @@ export async function getJobSchedule(jobId: string): Promise<JobScheduleData> {
         .select("*")
         .eq("job_id", jobId)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("job_walkthroughs")
+        .select("*")
+        .eq("job_id", jobId)
+        .order("requested_at", { ascending: false }),
     ]);
 
     return {
       sessions: (sessions.data ?? []) as unknown as JobWorkSession[],
       tickets: (tickets.data ?? []) as unknown as JobTicket[],
+      walkthroughs: (walkthroughs.data ?? []) as unknown as JobWalkthrough[],
     };
   } catch {
-    return { sessions: [], tickets: [] };
+    return { sessions: [], tickets: [], walkthroughs: [] };
   }
 }
 

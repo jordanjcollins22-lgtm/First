@@ -321,6 +321,7 @@ export interface Database {
           client_messages: boolean;
           proposal_responses: boolean;
           team_messages: boolean;
+          walkthrough_requests: boolean;
           reminder_hours_before: number;
           created_at: string;
           updated_at: string;
@@ -1052,6 +1053,35 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "job_work_sessions_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      job_walkthroughs: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          requested_by: string | null;
+          requested_at: string;
+          requested_note: string | null;
+          status: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_walkthroughs"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_walkthroughs"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_walkthroughs_job_id_fkey";
             columns: ["job_id"];
             referencedRelation: "jobs";
             referencedColumns: ["id"];

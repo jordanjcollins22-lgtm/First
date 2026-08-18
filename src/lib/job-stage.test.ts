@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { capabilities, deriveStage, nextStep, workHasStarted, type StageInput } from "@/lib/job-stage";
 
+function walk(overrides: Partial<NonNullable<StageInput["walkthroughs"]>[number]> = {}) {
+  return {
+    status: "requested" as const,
+    requested_at: "2026-09-10T14:00:00Z",
+    reviewed_at: null,
+    review_notes: null,
+    ...overrides,
+  };
+}
+
 function job(overrides: Partial<StageInput> = {}): StageInput {
   return {
     status: "estimating",
@@ -67,6 +77,41 @@ describe("capabilities", () => {
 
   it("refuses to sign off work nobody has started", () => {
     expect(capabilities(job({ status: "approved" })).signOff.available).toBe(false);
+  });
+
+  it("refuses to sign off work the account manager hasn't walked", () => {
+    // The client should never be the first person to find a problem.
+    const caps = capabilities(job({ status: "in_progress" }));
+    expect(caps.signOff.available).toBe(false);
+    expect(caps.signOff.available === false && caps.signOff.reason).toMatch(/account manager/i);
+  });
+
+  it("still refuses while the manager has been asked but not been out", () => {
+    const caps = capabilities(job({ status: "in_progress", walkthroughs: [walk()] }));
+    expect(caps.signOff.available).toBe(false);
+    expect(caps.signOff.available === false && caps.signOff.reason).toMatch(/waiting on/i);
+  });
+
+  it("opens sign-off once the manager approves", () => {
+    const caps = capabilities(
+      job({ status: "in_progress", walkthroughs: [walk({ status: "approved", reviewed_at: "x" })] })
+    );
+    expect(caps.signOff.available).toBe(true);
+  });
+
+  it("reports the punch list when the manager sent it back", () => {
+    const caps = capabilities(
+      job({
+        status: "in_progress",
+        walkthroughs: [walk({ status: "rejected", reviewed_at: "x", review_notes: "Edging loose" })],
+      })
+    );
+    expect(caps.signOff.available === false && caps.signOff.reason).toContain("Edging loose");
+  });
+
+  it("lets the crew ask for the walk once they are on site, and not before", () => {
+    expect(capabilities(job({ status: "approved" })).requestWalkthrough.available).toBe(false);
+    expect(capabilities(job({ status: "in_progress" })).requestWalkthrough.available).toBe(true);
   });
 
   it("refuses to price a job nobody has looked at", () => {
@@ -148,7 +193,17 @@ describe("nextStep", () => {
     expect(nextStep(job({ evaluationStatus: "completed", proposalStatus: "sent" }))).toMatch(/waiting on the client/i);
   });
 
-  it("tells a live job to document and sign off", () => {
-    expect(nextStep(job({ status: "in_progress" }))).toMatch(/sign the job off/i);
+  it("tells a live job to document and get the manager out", () => {
+    expect(nextStep(job({ status: "in_progress" }))).toMatch(/manager out to approve/i);
+  });
+
+  it("tells a crew waiting on the manager to keep the tools out", () => {
+    const waiting = job({ status: "in_progress", walkthroughs: [walk()] });
+    expect(nextStep(waiting)).toMatch(/keep the tools out/i);
+  });
+
+  it("tells an approved job to sign off", () => {
+    const approved = job({ status: "in_progress", walkthroughs: [walk({ status: "approved" })] });
+    expect(nextStep(approved)).toMatch(/sign the job off/i);
   });
 });

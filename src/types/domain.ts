@@ -264,12 +264,18 @@ export interface NotificationPreferences {
   client_messages: boolean;
   proposal_responses: boolean;
   team_messages: boolean;
+  walkthrough_requests: boolean;
   reminder_hours_before: number;
   created_at: string;
   updated_at: string;
 }
 
-export type NotificationKind = "appointment_reminders" | "client_messages" | "proposal_responses" | "team_messages";
+export type NotificationKind =
+  | "appointment_reminders"
+  | "client_messages"
+  | "proposal_responses"
+  | "team_messages"
+  | "walkthrough_requests";
 
 /** How one person wants to hear about one group. "default" follows their
  * general Team group messages setting. */
@@ -738,6 +744,34 @@ export interface JobTicket {
   resolution: string | null;
   resolved_at: string | null;
   opened_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * The account manager's walk of the job before the crew packs up.
+ *
+ * Sign-off used to be the crew's own call, which made the client the first
+ * person to find a problem. A snag caught while the tools are still out costs
+ * ten minutes; the same snag found next week costs a trip.
+ *
+ * A rejected walkthrough is followed by another one after the fix, so the
+ * record is a sequence rather than a single verdict.
+ */
+export type WalkthroughStatus = "requested" | "approved" | "rejected" | "cancelled";
+
+export interface JobWalkthrough {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  requested_by: string | null;
+  requested_at: string;
+  requested_note: string | null;
+  status: WalkthroughStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  /** What the manager saw. On a rejection this is the punch list. */
+  review_notes: string | null;
   created_at: string;
   updated_at: string;
 }
