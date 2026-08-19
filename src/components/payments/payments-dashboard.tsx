@@ -7,6 +7,8 @@ import { ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CommissionPanel } from "@/components/payments/commission-panel";
+import type { ManagerCommission } from "@/lib/data/commission";
 import { calculatePay, describePayStructure, hasCommissionComponent, hasHourlyComponent } from "@/lib/pay";
 import {
   deleteTeamPayment,
@@ -47,9 +49,12 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
 export function PaymentsDashboard({
   data,
   canSeeOverhead,
+  commission,
 }: {
   data: PaymentsData;
   canSeeOverhead: boolean;
+  /** Every account manager's book. Empty when nobody holds the role. */
+  commission: ManagerCommission[];
 }) {
   const { internal, external, ledger, ledgerTotals, overhead, revenue, team, jobOptions } = data;
 
@@ -59,6 +64,7 @@ export function PaymentsDashboard({
         <TabsTrigger value="summary">Summary</TabsTrigger>
         <TabsTrigger value="ledger">In &amp; Out</TabsTrigger>
         <TabsTrigger value="internal">Team</TabsTrigger>
+        {commission.length > 0 && <TabsTrigger value="commission">Commission</TabsTrigger>}
         <TabsTrigger value="external">Invoices</TabsTrigger>
         {canSeeOverhead && <TabsTrigger value="overhead">Overhead</TabsTrigger>}
       </TabsList>
@@ -74,6 +80,16 @@ export function PaymentsDashboard({
       <TabsContent value="internal">
         <InternalPayments payments={internal} team={team} />
       </TabsContent>
+
+      {commission.length > 0 && (
+        <TabsContent value="commission">
+          <div className="flex flex-col gap-3">
+            {commission.map((book) => (
+              <CommissionPanel key={book.profileId} summary={book.summary} title={book.personName} />
+            ))}
+          </div>
+        </TabsContent>
+      )}
 
       <TabsContent value="external">
         <ExternalPayments payments={external} />

@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
-import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { getPaymentsData } from "@/lib/data/payments";
+import { getCommissionByManager, type ManagerCommission } from "@/lib/data/commission";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PaymentsDashboard } from "@/components/payments/payments-dashboard";
 
@@ -28,6 +29,15 @@ export default async function PaymentsPage() {
     console.error("Payments page failed to load:", err);
   }
 
+  // Loaded separately: commission is a read across four other tables, and a
+  // problem in any of them should cost that one tab rather than the page.
+  const commission: ManagerCommission[] = await listProfiles()
+    .then(getCommissionByManager)
+    .catch((err) => {
+      console.error("Commission failed to load:", err);
+      return [];
+    });
+
   if (!data) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
@@ -46,7 +56,11 @@ export default async function PaymentsPage() {
       <p className="mb-4 text-sm text-muted-foreground sm:mb-6 sm:text-base">
         Everything in and out — cash jobs, invoices, team pay, materials and overhead.
       </p>
-      <PaymentsDashboard data={data} canSeeOverhead={!!profile?.roles.includes("overhead")} />
+      <PaymentsDashboard
+        data={data}
+        canSeeOverhead={!!profile?.roles.includes("overhead")}
+        commission={commission}
+      />
     </div>
   );
 }

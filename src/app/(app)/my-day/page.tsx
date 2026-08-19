@@ -3,9 +3,12 @@ import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getDashboard } from "@/lib/data/dashboard";
+import { getCommissionFor } from "@/lib/data/commission";
 import type { DashboardData } from "@/lib/dashboard";
+import type { CommissionSummary } from "@/lib/commission";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
+import { CommissionPanel } from "@/components/payments/commission-panel";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -44,6 +47,13 @@ export default async function MyDayPage() {
   } catch (err) {
     console.error("My Day failed to load:", err);
   }
+
+  // Their own book, loaded separately so a money table that isn't set up costs
+  // the commission panel rather than the whole day.
+  const commission: CommissionSummary | null = await getCommissionFor(profile).catch((err) => {
+    console.error("Commission failed to load:", err);
+    return null;
+  });
 
   if (!data) {
     return (
@@ -107,6 +117,16 @@ export default async function MyDayPage() {
             sections={data.jobs}
           />
         </>
+      )}
+
+      {commission && commission.lines.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-1 text-lg font-bold">Your commission</h2>
+          <CommissionPanel
+            summary={commission}
+            subtitle="Across every client you manage, not just today's."
+          />
+        </div>
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">

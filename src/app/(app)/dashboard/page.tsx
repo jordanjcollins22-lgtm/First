@@ -4,8 +4,11 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getDashboard } from "@/lib/data/dashboard";
 import { RANGES, type DashboardData, type DashboardRange } from "@/lib/dashboard";
+import { getActivity } from "@/lib/data/activity";
+import type { ActivityItem } from "@/lib/activity";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -39,6 +42,16 @@ export default async function DashboardPage({
     data = await getDashboard(range);
   } catch (err) {
     console.error("Dashboard failed to load:", err);
+  }
+
+  // The feed is the nice-to-have here; the piles are the point. It loads on
+  // its own so a missing table costs an empty section, not the page.
+  let activity: ActivityItem[] = [];
+  if (data) {
+    activity = await getActivity(data.window.start, data.window.end).catch((err) => {
+      console.error("Activity failed to load:", err);
+      return [];
+    });
   }
 
   if (!data) {
@@ -95,6 +108,8 @@ export default async function DashboardPage({
         />
         <Tile label="Booked value" value={money(summary.bookedValue)} hint={data.window.label} />
       </div>
+
+      <ActivityFeed items={activity} showDays={range !== "today"} />
 
       <DashboardSections
         title="Evaluations"
