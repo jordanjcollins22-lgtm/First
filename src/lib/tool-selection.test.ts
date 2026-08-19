@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   addTools,
+  hasAllTools,
+  removeTools,
   dayToolList,
   expandKit,
   kitsFrom,
@@ -135,5 +137,44 @@ describe("dayToolList", () => {
 
   it("is empty for a day with no stops", () => {
     expect(dayToolList([], TOOLS)).toEqual([]);
+  });
+});
+
+describe("hasAllTools", () => {
+  it("is true only when every one is picked", () => {
+    expect(hasAllTools(["Wheelbarrow", "Leaf blower"], ["Wheelbarrow", "Leaf blower"])).toBe(true);
+    expect(hasAllTools(["Wheelbarrow"], ["Wheelbarrow", "Leaf blower"])).toBe(false);
+  });
+
+  it("ignores casing, as the rest of the picker does", () => {
+    expect(hasAllTools(["wheelbarrow"], ["Wheelbarrow"])).toBe(true);
+  });
+
+  it("is false for an empty group, which is not 'applied'", () => {
+    expect(hasAllTools(["Wheelbarrow"], [])).toBe(false);
+  });
+});
+
+describe("removeTools", () => {
+  it("takes a kit's tools back out", () => {
+    expect(removeTools(["Wheelbarrow", "Leaf blower", "Rake"], ["Wheelbarrow", "Leaf blower"])).toEqual([
+      "Rake",
+    ]);
+  });
+
+  it("leaves alone what was not in the kit", () => {
+    expect(removeTools(["Rake"], ["Wheelbarrow"])).toEqual(["Rake"]);
+  });
+
+  it("removes a shared tool too, rather than doing something unguessable", () => {
+    // Kit 1 and Kit 2 both hold the blower. Taking Kit 1 off takes it, and
+    // Kit 2's button stops showing as applied — which is the visible cue to
+    // tap it again. Silently keeping the blower made the tap look broken.
+    const picked = ["Wheelbarrow", "Leaf blower", "Hedge trimmer"];
+    expect(removeTools(picked, ["Wheelbarrow", "Leaf blower"])).toEqual(["Hedge trimmer"]);
+  });
+
+  it("ignores casing when deciding what to drop", () => {
+    expect(removeTools(["Wheelbarrow"], ["wheelbarrow"])).toEqual([]);
   });
 });

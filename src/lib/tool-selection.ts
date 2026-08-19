@@ -95,6 +95,29 @@ export function addTools(current: string[], adding: string[]): string[] {
   return out;
 }
 
+/** Whether every one of these names is already picked — what makes a kit
+ * button read as applied rather than merely available. */
+export function hasAllTools(current: string[], names: string[]): boolean {
+  if (names.length === 0) return false;
+  const picked = new Set(current.map((n) => n.trim().toLowerCase()));
+  return names.every((n) => picked.has(n.trim().toLowerCase()));
+}
+
+/**
+ * Takes a group of tools back out of a selection.
+ *
+ * Removes exactly what the group holds, and nothing cleverer. An earlier
+ * version tried to keep tools that another fully-applied group still wanted,
+ * which meant tapping a kit off could visibly do nothing — the overlap was
+ * invisible and the rule unguessable. If another kit still needs a tool, its
+ * button stops showing as applied, which is the feedback that tells somebody
+ * to tap it again.
+ */
+export function removeTools(current: string[], removing: string[]): string[] {
+  const dropping = new Set(removing.map((n) => n.trim().toLowerCase()));
+  return current.filter((name) => !dropping.has(name.trim().toLowerCase()));
+}
+
 export interface DayToolLine {
   name: string;
   isRental: boolean;

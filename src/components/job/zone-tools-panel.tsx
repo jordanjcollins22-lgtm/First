@@ -5,7 +5,7 @@ import { Check, Loader2, Package, Wrench, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { setZoneTools } from "@/lib/actions/zone-tools-actions";
-import { addTools, kitsFrom, resolveTools } from "@/lib/tool-selection";
+import { addTools, hasAllTools, kitsFrom, removeTools, resolveTools } from "@/lib/tool-selection";
 import type { Tool } from "@/types/domain";
 
 export interface ZoneToolsRow {
@@ -70,6 +70,13 @@ function ZoneRow({ jobId, zone, tools }: { jobId: string; zone: ZoneToolsRow; to
 
   const kits = kitsFrom(tools);
   const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
+  /** Kit and "usual" buttons toggle: tap to apply, tap again to take back.
+   * Add-only left no way to undo a mis-tap short of unticking each tool. */
+  function toggleGroup(names: string[]) {
+    setPicked((current) =>
+      hasAllTools(current, names) ? removeTools(current, names) : addTools(current, names)
+    );
+  }
 
   function toggle(name: string) {
     setPicked((current) =>
@@ -128,11 +135,16 @@ function ZoneRow({ jobId, zone, tools }: { jobId: string; zone: ZoneToolsRow; to
               </p>
               <button
                 type="button"
-                onClick={() => setPicked((current) => addTools(current, zone.defaultToolNames))}
+                onClick={() => toggleGroup(zone.defaultToolNames)}
                 title={zone.defaultToolNames.join(", ")}
-                className="min-h-9 rounded-md border border-border px-2 text-[11px] font-medium hover:bg-accent"
+                className={`flex min-h-9 items-center gap-1 rounded-md border px-2 text-[11px] font-medium ${
+                  hasAllTools(picked, zone.defaultToolNames)
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border hover:bg-accent"
+                }`}
               >
-                Add the usual {zone.defaultToolNames.length}
+                {hasAllTools(picked, zone.defaultToolNames) && <Check className="h-3 w-3" />}
+                The usual {zone.defaultToolNames.length}
               </button>
             </div>
           )}
@@ -141,21 +153,27 @@ function ZoneRow({ jobId, zone, tools }: { jobId: string; zone: ZoneToolsRow; to
             <div className="mb-2">
               <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Package className="h-3 w-3" />
-                Kits
+                Kits — tap to add, tap again to remove
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {kits.map((kit) => (
-                  <button
-                    key={kit.number}
-                    type="button"
-                    onClick={() => setPicked((current) => addTools(current, kit.toolNames))}
-                    title={kit.toolNames.join(", ")}
-                    className="min-h-9 rounded-md border border-border px-2 text-[11px] font-medium hover:bg-accent"
-                  >
-                    Kit {kit.number}
-                    <span className="ml-1 text-muted-foreground">({kit.toolNames.length})</span>
-                  </button>
-                ))}
+                {kits.map((kit) => {
+                  const on = hasAllTools(picked, kit.toolNames);
+                  return (
+                    <button
+                      key={kit.number}
+                      type="button"
+                      onClick={() => toggleGroup(kit.toolNames)}
+                      title={kit.toolNames.join(", ")}
+                      className={`flex min-h-9 items-center gap-1 rounded-md border px-2 text-[11px] font-medium ${
+                        on ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"
+                      }`}
+                    >
+                      {on && <Check className="h-3 w-3" />}
+                      Kit {kit.number}
+                      <span className={on ? "" : "text-muted-foreground"}>({kit.toolNames.length})</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
