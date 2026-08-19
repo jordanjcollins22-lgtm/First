@@ -65,7 +65,12 @@ export async function teamMembersForJob(jobId: string): Promise<string[]> {
   if (!job) return [];
 
   const ids = new Set<string>();
+  // The whole crew, not just the lead — a message about a job should reach
+  // everybody working it. assigned_to is kept as a fallback for jobs that
+  // predate the roster table.
   if (job.assigned_to) ids.add(job.assigned_to);
+  const { data: crew } = await admin.from("job_crew").select("profile_id").eq("job_id", jobId);
+  for (const member of (crew ?? []) as { profile_id: string }[]) ids.add(member.profile_id);
 
   const { data: property } = await admin
     .from("properties")

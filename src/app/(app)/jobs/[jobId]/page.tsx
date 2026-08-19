@@ -26,12 +26,13 @@ import { CompletionPanel } from "@/components/job/completion-panel";
 import { VisitsPanel } from "@/components/job/visits-panel";
 import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
+import { CrewPanel } from "@/components/job/crew-panel";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
-import type { EvaluationStatus, JobStatus } from "@/types/domain";
+import type { EvaluationStatus, JobCrewMember, JobStatus } from "@/types/domain";
 import { requireJobAccess } from "@/lib/data/access";
-import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { isAccountManager } from "@/lib/affiliate-roles";
 
 export default async function JobPage({
@@ -89,6 +90,8 @@ export default async function JobPage({
     discounts,
     photos,
     schedule,
+    crew,
+    teamProfiles,
   ] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
@@ -105,6 +108,13 @@ export default async function JobPage({
     listJobPhotos(jobId).catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
+    // Empty until migration 0083 runs; the page still loads without it.
+    supabase
+      .from("job_crew")
+      .select("*")
+      .eq("job_id", jobId)
+      .then(({ data }) => (data ?? []) as unknown as JobCrewMember[]),
+    listProfiles().catch(() => []),
   ]);
 
   // Names for whoever asked for or decided a walkthrough, plus the sign-off.
@@ -225,6 +235,16 @@ export default async function JobPage({
       </div>
 
       <StageHeader stage={stage} next={nextStep(stageInput)} />
+
+      {/* Above the work panels because who is on the job decides whose Today
+          screen it lands on — an unassigned job is invisible to the field. */}
+      <CrewPanel
+        jobId={jobId}
+        status={job.status}
+        crew={crew as unknown as JobCrewMember[]}
+        profiles={teamProfiles}
+        editable={job.status !== "completed" && job.status !== "cancelled"}
+      />
 
       {/* Photos and sign-off. Which stages are offered depends on where the
           job is: there is no finished work to photograph before anyone has

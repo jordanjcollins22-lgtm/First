@@ -1060,6 +1060,37 @@ export interface Database {
           },
         ];
       };
+      job_crew: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          profile_id: string;
+          is_lead: boolean;
+          added_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_crew"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_crew"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_crew_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_crew_profile_id_fkey";
+            columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crew_day_events: {
         Row: {
           id: string;

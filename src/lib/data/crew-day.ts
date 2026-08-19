@@ -30,6 +30,15 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
 
   const supabase = await createClient();
 
+  // Every job this person is on. Assignment alone is not enough now that a
+  // job has a whole crew — the lead is only one of them, and the rest need
+  // their stops too.
+  const { data: rosterRows } = await supabase
+    .from("job_crew")
+    .select("job_id")
+    .eq("profile_id", profile.id);
+  const myJobs = new Set(((rosterRows ?? []) as { job_id: string }[]).map((r) => r.job_id));
+
   const [{ data: sessions }, { data: events }] = await Promise.all([
     supabase
       .from("job_work_sessions")
@@ -61,7 +70,9 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
   };
 
   const stops: Stop[] = ((sessions ?? []) as unknown as Row[])
-    .filter((r) => r.jobs?.assigned_to === profile.id)
+    // Roster first, with assignment as the fallback so a job that predates the
+    // crew table — or an org that has not run 0083 — still reaches somebody.
+    .filter((r) => myJobs.has(r.job_id) || r.jobs?.assigned_to === profile.id)
     .filter((r) => r.jobs?.status !== "cancelled" && r.jobs?.status !== "completed")
     .sort((a, b) => {
       // Unordered stops sort after ordered ones rather than jumping to the

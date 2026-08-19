@@ -76,9 +76,19 @@ export async function requireJobAccess(jobId: string, tabs: TabKey[]) {
   const permissions = await listRolePermissions().catch(() => []);
   if (tabs.some((tab) => tabsAllowedForRoles(profile.roles, permissions).has(tab))) return;
 
+  // Being on the crew counts, not just leading it — every one of them has
+  // this job on their Today screen and needs the link to work.
   const supabase = await createClient();
-  const { data: job } = await supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle();
-  if (job?.assigned_to === profile.id) return;
+  const [{ data: job }, { data: membership }] = await Promise.all([
+    supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle(),
+    supabase
+      .from("job_crew")
+      .select("id")
+      .eq("job_id", jobId)
+      .eq("profile_id", profile.id)
+      .maybeSingle(),
+  ]);
+  if (job?.assigned_to === profile.id || membership) return;
 
   redirect(deniedUrl("/attractors", tabs[0]));
 }

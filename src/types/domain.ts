@@ -775,3 +775,21 @@ export interface JobWalkthrough {
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Somebody on a job's crew.
+ *
+ * jobs.assigned_to held one person, which is not what a crew is. This is the
+ * roster; assigned_to is now a projection of it — the lead — kept in step by
+ * trigger so every existing query that filters on assignment still works.
+ */
+export interface JobCrewMember {
+  id: string;
+  job_id: string;
+  organization_id: string;
+  profile_id: string;
+  /** The one who answers for the job. At most one per job. */
+  is_lead: boolean;
+  added_by: string | null;
+  created_at: string;
+}
