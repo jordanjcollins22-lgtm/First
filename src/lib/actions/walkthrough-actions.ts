@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -82,7 +83,7 @@ export async function requestWalkthrough(jobId: string, note: string | null): Pr
       requested_by: profile.id,
       requested_note: note?.trim() || null,
     });
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     const property = (job as unknown as {
       properties: { address: string; customers: { name: string; account_manager_id: string | null } | null } | null;
@@ -156,7 +157,7 @@ export async function reviewWalkthrough(
         review_notes: notes?.trim() || null,
       })
       .eq("id", pending.id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     // Tell whoever asked, straight away — they are waiting to load the van.
     if (pending.requested_by && pending.requested_by !== profile.id) {
@@ -201,7 +202,7 @@ export async function cancelWalkthroughRequest(jobId: string): Promise<Walkthrou
       .from("job_walkthroughs")
       .update({ status: "cancelled" })
       .eq("id", pending.id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
     return { ok: true, message: "Request withdrawn." };

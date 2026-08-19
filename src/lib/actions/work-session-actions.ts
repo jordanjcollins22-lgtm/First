@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -65,7 +66,7 @@ export async function addWorkSession(
       ticket_id: ticketId,
       created_by: profile.id,
     });
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     // A ticket with a visit booked is no longer merely open.
     if (ticketId) {
@@ -99,7 +100,7 @@ export async function rescheduleWorkSession(
       .eq("id", id)
       .select("job_id")
       .single();
-    if (error || !data) return { ok: false, message: error?.message ?? "Couldn't move that visit." };
+    if (error || !data) return { ok: false, message: describeDbError(error, "Couldn't move that visit.") };
 
     refresh(data.job_id);
     return { ok: true, message: "Visit moved." };
@@ -141,7 +142,7 @@ export async function setWorkSessionStatus(
       .eq("id", id)
       .select("job_id")
       .single();
-    if (error || !data) return { ok: false, message: error?.message ?? "Couldn't update that visit." };
+    if (error || !data) return { ok: false, message: describeDbError(error, "Couldn't update that visit.") };
 
     refresh(data.job_id);
     return { ok: true };
@@ -166,7 +167,7 @@ export async function deleteWorkSession(id: string): Promise<SessionResult> {
     if (!existing) return { ok: false, message: "That visit is already gone." };
 
     const { error } = await supabase.from("job_work_sessions").delete().eq("id", id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(existing.job_id);
     return { ok: true, message: "Visit removed." };
@@ -206,7 +207,7 @@ export async function openTicket(jobId: string, input: TicketInput): Promise<Ses
       billable: input.billable,
       opened_by: profile.id,
     });
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
     return { ok: true, message: "Ticket opened." };
@@ -233,7 +234,7 @@ export async function updateTicketCause(
       .eq("id", id)
       .select("job_id")
       .single();
-    if (error || !data) return { ok: false, message: error?.message ?? "Couldn't update that ticket." };
+    if (error || !data) return { ok: false, message: describeDbError(error, "Couldn't update that ticket.") };
 
     refresh(data.job_id);
     return { ok: true };
@@ -265,7 +266,7 @@ export async function setTicketStatus(
       .eq("id", id)
       .select("job_id")
       .single();
-    if (error || !data) return { ok: false, message: error?.message ?? "Couldn't update that ticket." };
+    if (error || !data) return { ok: false, message: describeDbError(error, "Couldn't update that ticket.") };
 
     refresh(data.job_id);
     return { ok: true };

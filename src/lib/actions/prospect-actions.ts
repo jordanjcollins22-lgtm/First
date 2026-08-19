@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -115,7 +116,7 @@ export async function importProspects(
       .from("lead_prospects")
       .upsert(rows, { onConflict: "organization_id,address_key" })
       .select("id");
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     // Catches anyone the address check missed — same person, different address
     // on file, or a name/phone/email already in the book.
@@ -146,7 +147,7 @@ export async function setProspectStatus(
     if (!(await requireAdmin())) return { ok: false, message: "Only admins can manage prospects." };
     const supabase = await createClient();
     const { error } = await supabase.from("lead_prospects").update({ status }).eq("id", id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
     revalidatePath("/leads");
     return { ok: true };
   } catch (err) {
@@ -170,7 +171,7 @@ export async function setDoNotContact(id: string, reason: string | null): Promis
       .from("lead_prospects")
       .update({ do_not_contact: true, do_not_contact_reason: reason, status: "rejected" })
       .eq("id", id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
     revalidatePath("/leads");
     return { ok: true };
   } catch (err) {
@@ -191,7 +192,7 @@ export async function deleteProspectBatch(batch: string): Promise<SimpleResult> 
       .delete()
       .eq("source_batch", batch)
       .eq("do_not_contact", false);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
     revalidatePath("/leads");
     return { ok: true };
   } catch (err) {

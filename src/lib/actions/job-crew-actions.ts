@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -72,7 +73,7 @@ export async function assignCrewMember(jobId: string, profileId: string): Promis
       is_lead: loaded.crew.length === 0,
       added_by: actor.id,
     });
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     if (profileId !== actor.id) {
       await notifyTeamMember(
@@ -114,7 +115,7 @@ export async function unassignCrewMember(jobId: string, profileId: string): Prom
       .delete()
       .eq("job_id", jobId)
       .eq("profile_id", profileId);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
     return { ok: true, message: "Taken off the crew." };
@@ -142,14 +143,14 @@ export async function setJobLead(jobId: string, profileId: string): Promise<Crew
       .update({ is_lead: false })
       .eq("job_id", jobId)
       .eq("is_lead", true);
-    if (clearError) return { ok: false, message: clearError.message };
+    if (clearError) return { ok: false, message: describeDbError(clearError) };
 
     const { error } = await supabase
       .from("job_crew")
       .update({ is_lead: true })
       .eq("job_id", jobId)
       .eq("profile_id", profileId);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
     return { ok: true, message: "Lead changed." };

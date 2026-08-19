@@ -13,6 +13,7 @@ import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
+import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -109,11 +110,16 @@ export default async function JobPage({
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
+    // Distinguishes "no crew yet" from "the table doesn't exist", so the panel
+    // can tell somebody to run the migration instead of looking merely empty.
     supabase
       .from("job_crew")
       .select("*")
       .eq("job_id", jobId)
-      .then(({ data }) => (data ?? []) as unknown as JobCrewMember[]),
+      .then(({ data, error }) => ({
+        rows: (data ?? []) as unknown as JobCrewMember[],
+        missing: isMissingTable(error),
+      })),
     listProfiles().catch(() => []),
   ]);
 
@@ -241,7 +247,8 @@ export default async function JobPage({
       <CrewPanel
         jobId={jobId}
         status={job.status}
-        crew={crew as unknown as JobCrewMember[]}
+        crew={crew.rows}
+        setupNeeded={crew.missing}
         profiles={teamProfiles}
         editable={job.status !== "completed" && job.status !== "cancelled"}
       />

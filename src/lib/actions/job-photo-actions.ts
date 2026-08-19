@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -62,7 +63,7 @@ export async function attachJobPhoto(
       })
       .select("id")
       .single();
-    if (error || !data) return { ok: false, message: error?.message ?? "Couldn't save that photo." };
+    if (error || !data) return { ok: false, message: describeDbError(error, "Couldn't save that photo.") };
 
     refresh(jobId);
     return { ok: true, id: data.id };
@@ -87,7 +88,7 @@ export async function deleteJobPhoto(id: string): Promise<PhotoResult> {
     if (!photo) return { ok: false, message: "That photo is already gone." };
 
     const { error } = await supabase.from("job_photos").delete().eq("id", id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     // Best-effort: the row is the record, and a stray file is a smaller
     // problem than a delete that half-failed and reported success.
@@ -164,7 +165,7 @@ export async function completeJob(
         completion_notes: notes?.trim() || null,
       })
       .eq("id", jobId);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
     return { ok: true, message: "Job signed off." };
@@ -191,7 +192,7 @@ export async function reopenCompletedJob(jobId: string): Promise<PhotoResult> {
       .from("jobs")
       .update({ status: "in_progress", completed_at: null, completed_by: null })
       .eq("id", jobId);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
     return { ok: true, message: "Job reopened. The photos and sign-off note are still here." };

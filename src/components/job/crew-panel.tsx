@@ -21,6 +21,7 @@ export function CrewPanel({
   crew,
   profiles,
   editable,
+  setupNeeded = false,
 }: {
   jobId: string;
   status: JobStatus;
@@ -28,6 +29,9 @@ export function CrewPanel({
   profiles: Profile[];
   /** Closed jobs show their roster but do not let it be rewritten. */
   editable: boolean;
+  /** The table isn't there yet. An empty roster and a missing table look
+   * identical from here, and only one of them is fixed by adding somebody. */
+  setupNeeded?: boolean;
 }) {
   const [picking, setPicking] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +66,12 @@ export function CrewPanel({
         )}
       </div>
 
-      {roster.length === 0 ? (
+      {setupNeeded ? (
+        <p className="rounded-lg border border-amber-400/60 bg-amber-50/60 px-3 py-2 text-xs">
+          Crew assignment needs its database migration. In Supabase&apos;s SQL Editor, run{" "}
+          <code>supabase/migrations/0083_job_crew.sql</code>, then reload this page.
+        </p>
+      ) : roster.length === 0 ? (
         <p className="mb-2 text-xs text-muted-foreground">
           Nobody assigned yet. Whoever you add sees this job on their Today screen.
         </p>
@@ -116,7 +125,7 @@ export function CrewPanel({
         </ul>
       )}
 
-      {editable && available.length > 0 && (
+      {!setupNeeded && editable && available.length > 0 && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <select
             value={picking}
@@ -148,7 +157,7 @@ export function CrewPanel({
         </div>
       )}
 
-      {editable && available.length === 0 && (
+      {!setupNeeded && editable && available.length === 0 && (
         <p className="text-[11px] text-muted-foreground">
           {anyCrewExists
             ? "Everybody with the crew role is already on this job."
@@ -156,7 +165,7 @@ export function CrewPanel({
         </p>
       )}
 
-      {!editable && (
+      {!setupNeeded && !editable && (
         <p className="text-[11px] text-muted-foreground">
           {status === "completed"
             ? "This job is finished — its crew is part of the record now."

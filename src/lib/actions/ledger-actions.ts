@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -68,7 +69,7 @@ export async function recordLedgerEntry(input: LedgerEntryInput): Promise<Ledger
       note: input.note?.trim() || null,
       created_by: profile.id,
     });
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     revalidatePath("/admin/payments");
     if (input.jobId) revalidatePath(`/jobs/${input.jobId}`);
@@ -87,7 +88,7 @@ export async function deleteLedgerEntry(id: string): Promise<LedgerResult> {
 
     const supabase = await createClient();
     const { error } = await supabase.from("ledger_entries").delete().eq("id", id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     revalidatePath("/admin/payments");
     return { ok: true, message: "Entry removed." };

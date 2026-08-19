@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -45,7 +46,7 @@ export async function recordCrewEvent(
       lat: position?.lat ?? null,
       lng: position?.lng ?? null,
     });
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     revalidatePath("/today");
     return { ok: true };
@@ -82,7 +83,7 @@ export async function undoLastCrewEvent(): Promise<CrewDayResult> {
     if (!latest) return { ok: false, message: "Nothing to undo." };
 
     const { error } = await supabase.from("crew_day_events").delete().eq("id", latest.id);
-    if (error) return { ok: false, message: error.message };
+    if (error) return { ok: false, message: describeDbError(error) };
 
     revalidatePath("/today");
     return { ok: true, message: "Undone." };
