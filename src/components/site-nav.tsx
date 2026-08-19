@@ -59,7 +59,12 @@ export function SiteNav({
         ...(can("journeys") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
         // Gated on the admin role itself, never on the table it edits —
         // otherwise one stray uncheck would take away the way back in.
-        ...(roles.includes("admin") ? [{ href: "/admin/permissions", label: "Permissions" }] : []),
+        ...(roles.includes("admin")
+          ? [
+              { href: "/admin/permissions", label: "Permissions" },
+              { href: "/admin/database", label: "Database setup" },
+            ]
+          : []),
         // Superadmin, decided by account rather than by role.
         ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
           ? [{ href: "/admin/organizations", label: "Organizations" }]

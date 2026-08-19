@@ -58,6 +58,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/login": "Sign-in page — nobody is signed in yet, so there are no roles to check.",
   "/proposal/[token]": "Opened by a client from an emailed link. They have no account at all.",
   "/admin/permissions": "This screen. Gated on the admin role directly so it can't be locked away.",
+  "/admin/database":
+    "Shows which migrations still need running. Gated on the admin role directly, not on a tab — " +
+    "the tab list lives in the database this page exists to repair.",
   "/today":
     "The crew's own day. Shows only the signed-in person's stops, so there is nothing to withhold — " +
     "and gating it behind a tick is how somebody ends up in a yard with nothing to press.",
