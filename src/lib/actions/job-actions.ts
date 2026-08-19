@@ -279,3 +279,57 @@ export async function reopenJob(jobId: string): Promise<JobActionResult> {
     return { ok: false, message: "Couldn't reopen that job." };
   }
 }
+
+/**
+ * Sets or clears the work dates directly.
+ *
+ * Refuses when the job has visits, because then the columns are a projection
+ * of those visits maintained by trigger and anything written here would be
+ * silently overwritten by the next session change.
+ *
+ * It exists for the case that leaves people stranded otherwise: a job carrying
+ * dates from before visits were tracked, or from an import, with no session to
+ * edit them through. Read-only wrong dates and no way to fix them is worse
+ * than one editor that knows when to stand aside.
+ */
+export async function setJobWorkDates(
+  jobId: string,
+  start: string | null,
+  end: string | null
+): Promise<JobActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { count } = await supabase
+      .from("job_work_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", jobId)
+      .neq("status", "cancelled");
+
+    if ((count ?? 0) > 0) {
+      return {
+        ok: false,
+        message: "This job has visits booked — change the dates there and these follow automatically.",
+      };
+    }
+
+    if (start && end && end < start) {
+      return { ok: false, message: "The end date is before the start date." };
+    }
+    if (!start && end) {
+      return { ok: false, message: "Give it a start date as well as an end date." };
+    }
+
+    const { error } = await supabase
+      .from("jobs")
+      .update({ project_start_date: start, project_end_date: end })
+      .eq("id", jobId);
+    if (error) return { ok: false, message: error.message };
+
+    refresh(jobId);
+    return { ok: true, message: start ? "Work dates updated." : "Taken off the calendar." };
+  } catch (err) {
+    console.error("setJobWorkDates failed:", err);
+    return { ok: false, message: "Couldn't change those dates." };
+  }
+}

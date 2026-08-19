@@ -200,6 +200,14 @@ export default async function JobPage({
   const stage = deriveStage(stageInput);
   const can = capabilities(stageInput);
 
+  const liveSessions = schedule.sessions.filter((s) => s.status !== "cancelled").length;
+
+  // A job already carrying dates or visits must always be fixable, whatever
+  // stage it is at. Gating that behind an accepted proposal strands anything
+  // scheduled by mistake, imported wrong, or booked before the paperwork.
+  const alreadyScheduled = liveSessions > 0 || Boolean(job.project_start_date || job.project_end_date);
+  const canManageVisits = can.visits.available || alreadyScheduled;
+
   const host = headersList.get("host") ?? "";
   const proto = headersList.get("x-forwarded-proto") ?? "https";
   const baseUrl = host ? `${proto}://${host}` : "";
@@ -256,7 +264,7 @@ export default async function JobPage({
         />
       )}
 
-      {can.visits.available || schedule.sessions.length > 0 || schedule.tickets.length > 0 ? (
+      {canManageVisits || schedule.tickets.length > 0 ? (
         <VisitsPanel
           jobId={jobId}
           sessions={schedule.sessions}
@@ -275,6 +283,7 @@ export default async function JobPage({
         evaluationEndDate={job.evaluation_end_date}
         projectStartDate={job.project_start_date}
         projectEndDate={job.project_end_date}
+        sessionCount={liveSessions}
         cancellationReason={job.cancellation_reason}
       />
 

@@ -10,6 +10,7 @@ import {
   cancelJob,
   reopenJob,
   scheduleEstimate,
+  setJobWorkDates,
 } from "@/lib/actions/job-actions";
 import {
   canCancelEstimate,
@@ -72,6 +73,7 @@ export function SchedulePanel({
   evaluationEndDate,
   projectStartDate,
   projectEndDate,
+  sessionCount,
   cancellationReason,
 }: {
   jobId: string;
@@ -81,12 +83,17 @@ export function SchedulePanel({
   evaluationEndDate: string | null;
   projectStartDate: string | null;
   projectEndDate: string | null;
+  /** How many live visits this job has. Above zero, the visits own the dates
+   * and this panel steps back rather than offering a competing editor. */
+  sessionCount: number;
   cancellationReason: string | null;
 }) {
   // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, which is what the
   // person booking is actually thinking in.
   const [estimateStart, setEstimateStart] = useState(toLocalInput(evaluationDate));
   const [estimateEnd, setEstimateEnd] = useState(toLocalInput(evaluationEndDate));
+  const [start, setStart] = useState(projectStartDate?.slice(0, 10) ?? "");
+  const [end, setEnd] = useState(projectEndDate?.slice(0, 10) ?? "");
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState<"estimate" | "job" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -240,22 +247,84 @@ export function SchedulePanel({
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Work dates
           </p>
-          {/* Read-only on purpose. The job's window is derived from its visits
-              by the database, so an editor here would be a second place to
-              write the same fact — and the next session change would silently
-              overwrite whatever was typed. Visits & tickets is the way in. */}
-          {projectStartDate ? (
-            <p className="text-sm">
-              {formatDay(projectStartDate)}
-              {projectEndDate && projectEndDate !== projectStartDate && ` – ${formatDay(projectEndDate)}`}
-            </p>
+
+          {/* When the job has visits, they own these columns by trigger and an
+              editor here would be a second place to write the same fact. With
+              no visits there is nothing else that can fix them, and read-only
+              wrong dates with no way out is the worse failure. */}
+          {sessionCount > 0 ? (
+            <>
+              {projectStartDate ? (
+                <p className="text-sm">
+                  {formatDay(projectStartDate)}
+                  {projectEndDate && projectEndDate !== projectStartDate && ` – ${formatDay(projectEndDate)}`}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Not on the calendar yet.</p>
+              )}
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Set by the {sessionCount === 1 ? "visit" : "visits"} booked below — book, move or cancel
+                a visit in Visits &amp; tickets and these follow.
+              </p>
+            </>
           ) : (
-            <p className="text-sm text-muted-foreground">Not on the calendar yet.</p>
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-xs font-medium">
+                  Start
+                  <Input
+                    type="date"
+                    value={start}
+                    disabled={isPending}
+                    onChange={(e) => setStart(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium">
+                  End
+                  <Input
+                    type="date"
+                    value={end}
+                    disabled={isPending}
+                    onChange={(e) => setEnd(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-11 sm:min-h-9"
+                  disabled={isPending}
+                  onClick={() => run(() => setJobWorkDates(jobId, start || null, end || null))}
+                >
+                  {isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  Save dates
+                </Button>
+
+                {(projectStartDate || projectEndDate) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="min-h-11 sm:min-h-9"
+                    disabled={isPending}
+                    onClick={() => {
+                      setStart("");
+                      setEnd("");
+                      run(() => setJobWorkDates(jobId, null, null));
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Once you book a visit below, these follow the visits instead.
+              </p>
+            </>
           )}
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Set by the visits booked below — book, move or pause a visit in Visits &amp; tickets and
-            these follow.
-          </p>
         </div>
 
         {/* ---------------------------------------------------------- the job */}

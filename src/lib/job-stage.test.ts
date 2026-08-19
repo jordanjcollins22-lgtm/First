@@ -207,3 +207,31 @@ describe("nextStep", () => {
     expect(nextStep(approved)).toMatch(/sign the job off/i);
   });
 });
+
+describe("a job already on the calendar stays fixable", () => {
+  // The trap this closes: work dates showed as read-only, pointing at Visits,
+  // while Visits itself was locked because the proposal wasn't accepted. Wrong
+  // dates, no way to change them, no way out.
+  it("locks visits on a fresh job that was never scheduled", () => {
+    expect(capabilities(job({ evaluationStatus: "completed" })).visits.available).toBe(false);
+  });
+
+  it("still reports the lock reason so the page can decide to override it", () => {
+    const caps = capabilities(job({ evaluationStatus: "completed" }));
+    expect(caps.visits.available === false && caps.visits.reason).toMatch(/accepted/i);
+  });
+
+  it("opens visits once the job is sold, as before", () => {
+    expect(
+      capabilities(job({ evaluationStatus: "completed", proposalStatus: "accepted" })).visits.available
+    ).toBe(true);
+  });
+
+  it("opens visits as soon as work has started, whatever the paperwork says", () => {
+    // Booked and worked before the proposal was marked accepted happens, and
+    // the crew still needs the day fixable.
+    expect(
+      capabilities(job({ status: "in_progress", sessions: [{ status: "in_progress" }] })).visits.available
+    ).toBe(true);
+  });
+});
