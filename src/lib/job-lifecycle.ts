@@ -175,9 +175,11 @@ export function zoneCoverage(zones: ZoneRef[], photos: PhotoRecord[]): ZoneCover
  * nobody can go back for once the ground is closed up, which is what makes it
  * worth enforcing rather than merely encouraging.
  *
- * A job with no zones drawn falls back to the older rule — one 'after' photo
- * of the job. Refusing to let somebody close a job because they never opened
- * the canvas would make the requirement a trap rather than a record.
+ * A job with no zones cannot be signed off at all. There is no such thing as a
+ * photo of a whole job — you cannot stand anywhere and capture it — which is
+ * the entire reason the work is divided into zones in the first place. A
+ * job-wide "after" shot proves somebody pointed a camera at something, and
+ * accepting it as evidence would quietly undo the point of the requirement.
  */
 export function canCompleteJob(
   job: Pick<JobShape, "status">,
@@ -188,9 +190,10 @@ export function canCompleteJob(
   if (job.status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
 
   if (zones.length === 0) {
-    const after = photos.filter((p) => p.kind === "after").length;
-    if (after === 0) return { ok: false, reason: "Add at least one 'after' photo before signing this off." };
-    return ALLOWED;
+    return {
+      ok: false,
+      reason: "Draw the zones first — photos are per zone, and there's no photo of a whole job.",
+    };
   }
 
   const gaps = zoneCoverage(zones, photos).filter((z) => !z.complete);

@@ -68,8 +68,8 @@ export function CompletionPanel({
   const [isPending, startTransition] = useTransition();
 
   const isDone = status === "completed";
-  // Only the stages this job has reached. 'issue' rides with 'during', since
-  // finding a problem means somebody is on site.
+  // Only the stages this job has reached, and only ever for a zone. 'issue'
+  // rides with 'during', since finding a problem means somebody is on site.
   const offered = KINDS.filter(
     (k) =>
       k === "before" ||
@@ -185,9 +185,8 @@ export function CompletionPanel({
 
       {zones.length === 0 && (
         <p className="mb-3 rounded-lg border border-amber-400/60 bg-amber-50/60 px-3 py-2 text-xs">
-          No zones drawn on this job yet. Draw them below and each one gets its own
-          before/during/after. Until then one &ldquo;after&rdquo; photo of the job is enough to
-          sign off.
+          No zones drawn on this job yet. Draw them below — photos are per zone, and there is no
+          photo of a whole job.
         </p>
       )}
 
@@ -206,16 +205,23 @@ export function CompletionPanel({
           />
         ))}
 
-        <ZoneSection
-          zone={null}
-          coverage={null}
-          photos={jobWide}
-          editable={!isDone}
-          uploading={uploading > 0}
-          offered={offered}
-          onUpload={(files, kind) => upload(files, kind, null)}
-          onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
-        />
+        {/* Not a zone and not a stage. Something found on site that belongs to
+            no single zone — blocked access, a neighbour's fence, damage that
+            was already there — still needs somewhere to go. Stage photos
+            deliberately are not offered here: you cannot photograph a whole
+            job, which is why the work is divided into zones at all. */}
+        {(allowDuring || jobWide.length > 0) && (
+          <ZoneSection
+            zone={null}
+            coverage={null}
+            photos={jobWide}
+            editable={!isDone}
+            uploading={uploading > 0}
+            offered={allowDuring ? ["issue"] : []}
+            onUpload={(files, kind) => upload(files, kind, null)}
+            onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
+          />
+        )}
       </div>
 
       {uploading > 0 && (
@@ -323,7 +329,7 @@ function ZoneSection({
       }`}
     >
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className="text-sm font-semibold">{zone ? zone.name : "Whole job"}</p>
+        <p className="text-sm font-semibold">{zone ? zone.name : "Site issues"}</p>
         {coverage && (
           <div className="flex items-center gap-1">
             {REQUIRED_STAGES.map((stage) => (

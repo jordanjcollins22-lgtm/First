@@ -137,30 +137,30 @@ describe("isClosed", () => {
 });
 
 describe("canCompleteJob with no zones drawn", () => {
-  // Falls back to the old rule. Refusing to close a job because nobody opened
-  // the canvas would make the requirement a trap rather than a record.
   const after = [{ kind: "after" as const, zoneId: null }];
 
-  it("signs off on one after photo", () => {
-    expect(canCompleteJob({ status: "in_progress" }, after).ok).toBe(true);
+  it("refuses, because there is no such thing as a photo of a whole job", () => {
+    // You cannot stand anywhere and capture an entire job. That is the whole
+    // reason the work is divided into zones, so a job-wide shot cannot stand
+    // in for zone documentation.
+    const verdict = canCompleteJob({ status: "in_progress" }, after);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.reason).toMatch(/draw the zones first/i);
   });
 
-  it("refuses with nothing at all", () => {
+  it("refuses with nothing at all, for the same reason", () => {
     expect(canCompleteJob({ status: "in_progress" }, []).ok).toBe(false);
   });
 
-  it("does not accept a before photo as proof the work got done", () => {
-    expect(canCompleteJob({ status: "in_progress" }, [{ kind: "before", zoneId: null }]).ok).toBe(false);
-  });
-
-  it("refuses to complete twice", () => {
-    expect(canCompleteJob({ status: "completed" }, after).ok).toBe(false);
-  });
-
-  it("refuses on a cancelled job", () => {
+  it("still reports a cancelled job as cancelled, not as missing zones", () => {
     const verdict = canCompleteJob({ status: "cancelled" }, after);
     expect(verdict.ok).toBe(false);
     expect(verdict.ok === false && verdict.reason).toMatch(/reopen/i);
+  });
+
+  it("still reports an already-complete job as complete", () => {
+    const verdict = canCompleteJob({ status: "completed" }, after);
+    expect(verdict.ok === false && verdict.reason).toMatch(/already/i);
   });
 });
 
