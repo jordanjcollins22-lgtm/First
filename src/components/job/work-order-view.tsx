@@ -86,6 +86,7 @@ export function WorkOrderView({
           imagePath={siteImagePath}
           transform={imageTransform}
           numbered
+          dimSurroundings
           frame={zonesBounds(order.zones, imageTransform.canvasWidth, imageTransform.canvasHeight)}
           className="w-full rounded-xl border border-white/60 bg-muted"
           zones={order.zones.map((zone) => ({

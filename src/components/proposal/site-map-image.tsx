@@ -19,6 +19,7 @@ export function SiteMapImage({
   zones,
   frame,
   numbered = false,
+  dimSurroundings = false,
   className,
 }: {
   imagePath: string;
@@ -31,6 +32,10 @@ export function SiteMapImage({
   frame?: { x: number; y: number; width: number; height: number };
   /** Number each zone on the map, to match a numbered list beside it. */
   numbered?: boolean;
+  /** Darken everything outside the zones. Turns a tinted shape on a busy
+   * satellite photo into the only lit part of the picture, which is what a
+   * crew need glancing at a phone in sunlight. */
+  dimSurroundings?: boolean;
   className?: string;
 }) {
   const url = canvasImageUrl(imagePath);
@@ -62,6 +67,24 @@ export function SiteMapImage({
   const w = naturalSize.w * transform.scale;
   const h = naturalSize.h * transform.scale;
 
+  const view = frame ?? {
+    x: 0,
+    y: 0,
+    width: transform.canvasWidth,
+    height: transform.canvasHeight,
+  };
+
+  // Stroke and marker sizes are a fraction of the frame rather than fixed
+  // numbers, so a zone looks the same on screen whether the view is the whole
+  // canvas or cropped tight around the work. A fixed 3px was sub-pixel on a
+  // phone in the full view and heavy in the cropped one.
+  const unit = Math.max(view.width, view.height);
+  const casingWidth = unit * 0.014;
+  const strokeWidth = unit * 0.006;
+  const markerRadius = unit * 0.035;
+  const markerFont = unit * 0.042;
+  const maskId = `zone-mask-${imagePath.replace(/[^a-z0-9]/gi, "")}`;
+
   return (
     <div className="flex flex-col gap-2">
       <svg
@@ -72,9 +95,32 @@ export function SiteMapImage({
         }
         className={className ?? "w-full rounded-2xl border border-border bg-muted"}
       >
+        {dimSurroundings && (
+          <defs>
+            <mask id={maskId}>
+              <rect x={view.x} y={view.y} width={view.width} height={view.height} fill="white" />
+              {zonesWithOutlines.map((zone, i) => (
+                <polygon key={i} points={zone.points.map((p) => `${p.x},${p.y}`).join(" ")} fill="black" />
+              ))}
+            </mask>
+          </defs>
+        )}
+
         <g transform={`translate(${transform.x} ${transform.y}) rotate(${transform.rotation})`}>
           <image href={url} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="none" />
         </g>
+
+        {dimSurroundings && (
+          <rect
+            x={view.x}
+            y={view.y}
+            width={view.width}
+            height={view.height}
+            fill="#0b1f14"
+            opacity={0.55}
+            mask={`url(#${maskId})`}
+          />
+        )}
         {zonesWithOutlines.map((zone, i) => {
           const centre = zone.points.reduce(
             (acc, p) => ({ x: acc.x + p.x / zone.points.length, y: acc.y + p.y / zone.points.length }),
@@ -82,23 +128,46 @@ export function SiteMapImage({
           );
           return (
             <g key={i}>
+              {/* A white casing under the coloured line, the way a route is
+                  drawn on a map. Satellite imagery is busy and unpredictable,
+                  and a single stroke disappears into whatever is beneath it —
+                  a green zone on grass worst of all. White separates the line
+                  from the photo whatever colour either happens to be, which a
+                  dark casing cannot do under a dark zone. */}
               <polygon
                 points={zone.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                fill={`${zone.color}33`}
+                fill="none"
+                stroke="#ffffff"
+                strokeOpacity={0.9}
+                strokeWidth={casingWidth}
+                strokeLinejoin="round"
+              />
+              <polygon
+                points={zone.points.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill={zone.color}
+                fillOpacity={0.28}
                 stroke={zone.color}
-                strokeWidth={3}
+                strokeWidth={strokeWidth}
+                strokeLinejoin="round"
               />
               {numbered && (
                 <>
-                  <circle cx={centre.x} cy={centre.y} r={16} fill="#ffffff" stroke={zone.color} strokeWidth={3} />
+                  <circle
+                    cx={centre.x}
+                    cy={centre.y}
+                    r={markerRadius}
+                    fill="#ffffff"
+                    stroke="#0b1f14"
+                    strokeWidth={strokeWidth}
+                  />
                   <text
                     x={centre.x}
                     y={centre.y}
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fontSize={18}
+                    fontSize={markerFont}
                     fontWeight="bold"
-                    fill={zone.color}
+                    fill="#0b1f14"
                   >
                     {i + 1}
                   </text>
