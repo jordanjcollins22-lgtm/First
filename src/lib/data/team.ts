@@ -1,3 +1,4 @@
+import { getUserWithRetry } from "@/lib/supabase/auth-guard";
 import { createClient } from "@/lib/supabase/server";
 import { getViewAsProfileId } from "@/lib/impersonation";
 import type { CustomRole, Profile } from "@/types/domain";
@@ -50,9 +51,13 @@ async function fetchProfileById(id: string): Promise<Profile | null> {
  * anything auth-sensitive (granting/revoking the switch itself, audit trails). */
 export async function getRealProfile(): Promise<Profile | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+
+  // Retried once when the check fails for a reason that was not an answer.
+  // Without it a single lost request looks like being signed out, and every
+  // page that redirects on a null profile throws somebody back to the login
+  // screen mid-session. A genuinely expired session still fails twice.
+  const { data } = await getUserWithRetry(() => supabase.auth.getUser());
+  const user = data.user as { id: string } | null;
   if (!user) return null;
   return fetchProfileById(user.id);
 }
