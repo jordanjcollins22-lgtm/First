@@ -12,6 +12,7 @@
  * future change to a component can leak one.
  */
 
+import { resolveTools } from "@/lib/tool-selection";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { Point, WorkZone } from "@/components/canvas/types";
 
@@ -68,7 +69,6 @@ export function buildWorkOrder(
   labelFor: (typeId: string, key: string) => string = (_typeId, key) => key
 ): WorkOrder {
   const serviceName = new Map(catalog.servicePricing.map((s) => [s.service_type_id, s.name]));
-  const toolName = new Map(catalog.tools.map((t) => [t.id, t.name]));
 
   // Tools come from the zone's own saved list where the evaluator has one,
   // falling back to the service's default kit so an older design still tells
@@ -104,7 +104,10 @@ export function buildWorkOrder(
       tasks,
       notes: zone.service.notes ?? "",
       materials: materialsByZone[zone.id] ?? [],
-      toolNames: toolIds.map((id) => toolName.get(id) ?? id),
+      // Resolved rather than printed: zones store names, service defaults are
+      // ids, and a token that matches neither is a tool that no longer exists.
+      // Showing it raw is what put a run of random characters on the screen.
+      toolNames: resolveTools(toolIds, catalog.tools).map((t) => t.name),
     });
   }
 

@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
+import { dayToolList, type DayToolLine } from "@/lib/tool-selection";
 import type { CrewEvent, CrewEventKind, Stop } from "@/lib/crew-day";
+import type { WorkZone } from "@/components/canvas/types";
+import type { Tool } from "@/types/domain";
 
 export interface CrewDayData {
   profileId: string;
   day: string;
   stops: Stop[];
   events: CrewEvent[];
+  /** Everything to load for the whole day, deduped across the stops. */
+  dayTools: DayToolLine[];
 }
 
 /** Today where the crew is, not where the server is. */
@@ -90,16 +95,47 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
       lat: r.jobs?.properties?.lat ?? null,
       lng: r.jobs?.properties?.lng ?? null,
       purpose: r.purpose,
+      toolTokens: [] as string[],
     }));
 
-  return {
-    profileId: profile.id,
-    day,
-    stops,
-    events: ((events ?? []) as { kind: string; job_id: string | null; at: string }[]).map((e) => ({
-      kind: e.kind as CrewEventKind,
-      jobId: e.job_id,
-      at: e.at,
-    })),
-  };
+  // The day's load-out comes from the zones on each stop's site plan. Fetched
+  // in one go rather than per stop, and tolerant of a job with no plan yet.
+  if (stops.length > 0) {
+    const [{ data: designs }, { data: toolRows }] = await Promise.all([
+      supabase.from("canvas_designs").select("job_id, zones").in("job_id", stops.map((s) => s.jobId)),
+      supabase.from("tools").select("*"),
+    ]);
+
+    const zonesByJob = new Map(
+      ((designs ?? []) as unknown as { job_id: string; zones: WorkZone[] }[]).map((d) => [
+        d.job_id,
+        d.zones ?? [],
+      ])
+    );
+
+    for (const stop of stops) {
+      stop.toolTokens = (zonesByJob.get(stop.jobId) ?? []).flatMap((zone) => zone.service?.tools ?? []);
+    }
+
+    return {
+      profileId: profile.id,
+      day,
+      stops,
+      events: readEvents(events),
+      dayTools: dayToolList(
+        stops.map((s) => ({ label: s.address, toolTokens: s.toolTokens })),
+        (toolRows ?? []) as unknown as Tool[]
+      ),
+    };
+  }
+
+  return { profileId: profile.id, day, stops, events: readEvents(events), dayTools: [] };
+}
+
+function readEvents(rows: unknown): CrewEvent[] {
+  return ((rows ?? []) as { kind: string; job_id: string | null; at: string }[]).map((e) => ({
+    kind: e.kind as CrewEventKind,
+    jobId: e.job_id,
+    at: e.at,
+  }));
 }

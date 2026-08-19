@@ -29,6 +29,7 @@ import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
+import { ZoneToolsPanel } from "@/components/job/zone-tools-panel";
 import { buildWorkOrder } from "@/lib/work-order";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
@@ -407,6 +408,22 @@ export default async function JobPage({
           )}
         </div>
       )}
+
+      {/* Sits with the work rather than the money: the account manager decides
+          the load-out, and the crew's day list is the sum of these. */}
+      <ZoneToolsPanel
+        jobId={jobId}
+        tools={catalog.tools}
+        zones={zones.map((zone) => ({
+          zoneId: zone.id,
+          zoneName: zone.name,
+          color: zone.color,
+          service:
+            catalog.servicePricing.find((sp) => sp.service_type_id === zone.service?.typeId)?.name ??
+            "Service",
+          toolTokens: zone.service?.tools ?? [],
+        }))}
+      />
 
       {can.proposal.available || proposal ? (
         <ProposalPanel

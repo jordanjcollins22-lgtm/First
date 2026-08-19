@@ -11,8 +11,8 @@ import {
 } from "@/lib/crew-day";
 
 const STOPS: Stop[] = [
-  { jobId: "j1", address: "12 Elm St", customerName: "Pat", lat: 39.5, lng: -76.3, purpose: "Bed rebuild" },
-  { jobId: "j2", address: "40 Oak Ave", customerName: "Sam", lat: 39.6, lng: -76.4, purpose: "Mulch" },
+  { jobId: "j1", address: "12 Elm St", customerName: "Pat", lat: 39.5, lng: -76.3, purpose: "Bed rebuild", toolTokens: [] },
+  { jobId: "j2", address: "40 Oak Ave", customerName: "Sam", lat: 39.6, lng: -76.4, purpose: "Mulch", toolTokens: [] },
 ];
 
 let clock = 0;
