@@ -33,7 +33,8 @@ import { buildWorkOrder } from "@/lib/work-order";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
-import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
+import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
+import { resolveBaseUrl } from "@/lib/app-url";
 import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus, JobCrewMember, JobStatus } from "@/types/domain";
 import { requireJobAccess } from "@/lib/data/access";
@@ -288,8 +289,11 @@ export default async function JobPage({
   }
 
   const host = headersList.get("host") ?? "";
-  const proto = headersList.get("x-forwarded-proto") ?? "https";
-  const baseUrl = host ? `${proto}://${host}` : "";
+  const baseUrl = resolveBaseUrl({
+    configured: env.appUrl,
+    host,
+    proto: headersList.get("x-forwarded-proto"),
+  });
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:gap-6 sm:py-10">

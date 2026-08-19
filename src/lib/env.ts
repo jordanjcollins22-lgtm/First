@@ -8,6 +8,9 @@ function required(name: string, value: string | undefined): string {
 }
 
 export const env = {
+  /** The domain the business is known by. Links a client follows use this
+   * rather than whatever host happened to serve the request. */
+  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
