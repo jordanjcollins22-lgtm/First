@@ -281,6 +281,10 @@ on conflict (id) do nothing;
 
 -- Access is decided by the first path segment being a job in the caller's
 -- organization, the same shape message-attachments uses.
+--
+-- storage.objects.name is spelled out rather than left bare: the subquery
+-- joins jobs and customers, both of which have a name column, so an
+-- unqualified \`name\` is ambiguous and Postgres refuses the whole policy.
 drop policy if exists "job_photos_read" on storage.objects;
 create policy "job_photos_read" on storage.objects for select to authenticated
 using (
@@ -289,7 +293,7 @@ using (
     select 1 from jobs j
     join properties p on p.id = j.property_id
     join customers c on c.id = p.customer_id
-    where j.id::text = (storage.foldername(name))[1]
+    where j.id::text = (storage.foldername(storage.objects.name))[1]
       and c.organization_id = current_org_id()
   )
 );
@@ -302,7 +306,7 @@ with check (
     select 1 from jobs j
     join properties p on p.id = j.property_id
     join customers c on c.id = p.customer_id
-    where j.id::text = (storage.foldername(name))[1]
+    where j.id::text = (storage.foldername(storage.objects.name))[1]
       and c.organization_id = current_org_id()
   )
 );
@@ -315,7 +319,7 @@ using (
     select 1 from jobs j
     join properties p on p.id = j.property_id
     join customers c on c.id = p.customer_id
-    where j.id::text = (storage.foldername(name))[1]
+    where j.id::text = (storage.foldername(storage.objects.name))[1]
       and c.organization_id = current_org_id()
   )
 );

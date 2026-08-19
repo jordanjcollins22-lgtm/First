@@ -4,14 +4,6 @@
 -- Every statement is idempotent, so running this when some of it has already
 -- been applied is safe and does nothing twice. Paste the whole thing into
 -- Supabase's SQL Editor and run it once.
---
--- What it adds, in order:
---   0078  Job sign-off with photos, and the private job-photos bucket
---   0079  Per-zone before/during/after
---   0080  Evaluation end times, work visits, tickets
---   0081  The account manager's walkthrough before the crew packs up
---   0082  The crew's Today screen
---   0083  Crew rosters on jobs
 -- =============================================================================
 
 
@@ -97,6 +89,10 @@ on conflict (id) do nothing;
 
 -- Access is decided by the first path segment being a job in the caller's
 -- organization, the same shape message-attachments uses.
+--
+-- storage.objects.name is spelled out rather than left bare: the subquery
+-- joins jobs and customers, both of which have a name column, so an
+-- unqualified `name` is ambiguous and Postgres refuses the whole policy.
 drop policy if exists "job_photos_read" on storage.objects;
 create policy "job_photos_read" on storage.objects for select to authenticated
 using (
@@ -105,7 +101,7 @@ using (
     select 1 from jobs j
     join properties p on p.id = j.property_id
     join customers c on c.id = p.customer_id
-    where j.id::text = (storage.foldername(name))[1]
+    where j.id::text = (storage.foldername(storage.objects.name))[1]
       and c.organization_id = current_org_id()
   )
 );
@@ -118,7 +114,7 @@ with check (
     select 1 from jobs j
     join properties p on p.id = j.property_id
     join customers c on c.id = p.customer_id
-    where j.id::text = (storage.foldername(name))[1]
+    where j.id::text = (storage.foldername(storage.objects.name))[1]
       and c.organization_id = current_org_id()
   )
 );
@@ -131,7 +127,7 @@ using (
     select 1 from jobs j
     join properties p on p.id = j.property_id
     join customers c on c.id = p.customer_id
-    where j.id::text = (storage.foldername(name))[1]
+    where j.id::text = (storage.foldername(storage.objects.name))[1]
       and c.organization_id = current_org_id()
   )
 );
