@@ -28,6 +28,10 @@ import { VisitsPanel } from "@/components/job/visits-panel";
 import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
+import { WorkOrderView } from "@/components/job/work-order-view";
+import { buildWorkOrder } from "@/lib/work-order";
+import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { isFieldOnly } from "@/lib/affiliate-roles";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import type { WorkZone } from "@/components/canvas/types";
@@ -54,7 +58,7 @@ export default async function JobPage({
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
-    .select("*, property:properties(address, lat, lng)")
+    .select("*, property:properties(address, lat, lng, customers(name))")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -76,7 +80,7 @@ export default async function JobPage({
     completion_notes: string | null;
     client_notes: string | null;
     budget_range: string | null;
-    property: { address: string; lat: number; lng: number } | null;
+    property: { address: string; lat: number; lng: number; customers: { name: string } | null } | null;
   };
 
   const [
@@ -223,6 +227,46 @@ export default async function JobPage({
   // scheduled by mistake, imported wrong, or booked before the paperwork.
   const alreadyScheduled = liveSessions > 0 || Boolean(job.project_start_date || job.project_end_date);
   const canManageVisits = can.visits.available || alreadyScheduled;
+
+  // Field-only people get the work order, not the office's view of the job.
+  // Proposal totals, discounts and invoices are none of a crew member's
+  // business to be reading on a customer's driveway — and until now this page
+  // showed them all of it.
+  const viewerRoles = (await getCurrentProfile())?.roles ?? [];
+  if (isFieldOnly(viewerRoles)) {
+    // Materials without their costs — quantities are what you load, prices are
+    // not the crew's business.
+    const materialsByZone: Record<string, { name: string; quantityLabel: string }[]> = {};
+    for (const zone of zones) {
+      materialsByZone[zone.id] = materialItems
+        .filter((item) => item.zoneName === zone.name)
+        .map((item) => ({ name: item.material, quantityLabel: formatMaterialQuantity(item) }));
+    }
+
+    const order = buildWorkOrder(zones, catalog, materialsByZone, (typeId, key) => {
+      const field = serviceTypeById(typeId)?.fields?.find((f) => f.key === key);
+      return field?.label ?? key;
+    });
+    return (
+      <WorkOrderView
+        order={order}
+        address={job.property?.address ?? ""}
+        customerName={job.property?.customers?.name ?? "Client"}
+        jobName={job.name}
+        siteImageUrl={design?.image_path ? canvasImageUrl(design.image_path) : null}
+        imageTransform={
+          design
+            ? {
+                x: design.image_x,
+                y: design.image_y,
+                scale: design.image_scale,
+                rotation: design.image_rotation,
+              }
+            : null
+        }
+      />
+    );
+  }
 
   const host = headersList.get("host") ?? "";
   const proto = headersList.get("x-forwarded-proto") ?? "https";
