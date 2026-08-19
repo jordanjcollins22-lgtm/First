@@ -6,6 +6,12 @@ export function isEvaluator(roles: string[]): boolean {
   return roles.some((r) => normalizeRole(r) === "evaluator");
 }
 
+/** Somebody who works jobs. Matched loosely, like every other role check here,
+ * because role names are free text an org defines itself. */
+export function isCrew(roles: string[]): boolean {
+  return roles.some((r) => normalizeRole(r) === "crew");
+}
+
 export function isAccountManager(roles: string[]): boolean {
   return roles.some((r) => normalizeRole(r) === "account manager");
 }

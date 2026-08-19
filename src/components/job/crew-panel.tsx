@@ -6,6 +6,7 @@ import { Loader2, Star, UserPlus, UserMinus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { assignCrewMember, setJobLead, unassignCrewMember } from "@/lib/actions/job-crew-actions";
 import { assignableProfiles, rosterView } from "@/lib/job-crew";
+import { isCrew } from "@/lib/affiliate-roles";
 import type { JobCrewMember, JobStatus, Profile } from "@/types/domain";
 
 /**
@@ -34,6 +35,9 @@ export function CrewPanel({
 
   const roster = rosterView(crew, profiles);
   const available = assignableProfiles(crew, profiles);
+  // "Nobody has the crew role yet" and "they're all already on this job" are
+  // different problems with different fixes, so they get different messages.
+  const anyCrewExists = profiles.some((p) => isCrew(p.roles));
 
   function run(work: () => Promise<{ ok: boolean; message?: string }>) {
     setError(null);
@@ -120,7 +124,7 @@ export function CrewPanel({
             disabled={isPending}
             className="min-h-11 flex-1 rounded-lg border border-border bg-background px-3 text-base sm:text-sm"
           >
-            <option value="">Add someone to this job…</option>
+            <option value="">Add crew to this job…</option>
             {available.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.full_name || p.email}
@@ -144,8 +148,12 @@ export function CrewPanel({
         </div>
       )}
 
-      {editable && available.length === 0 && roster.length > 0 && (
-        <p className="text-[11px] text-muted-foreground">Everybody on the team is already on this job.</p>
+      {editable && available.length === 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          {anyCrewExists
+            ? "Everybody with the crew role is already on this job."
+            : "Nobody has the crew role yet — give it to somebody under Team & Services and they'll show up here."}
+        </p>
       )}
 
       {!editable && (

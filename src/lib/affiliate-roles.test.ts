@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { isAccountManager, isEvaluator, isFieldOnly, isOfficeRole, qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
+import {
+  isAccountManager,
+  isCrew,
+  isEvaluator,
+  isFieldOnly,
+  isOfficeRole,
+  qualifiesForAffiliateLink,
+} from "@/lib/affiliate-roles";
 
 describe("isFieldOnly", () => {
   it("is true for a crew member", () => {
@@ -45,5 +52,23 @@ describe("existing role predicates still hold", () => {
     expect(isEvaluator(["Evaluator"])).toBe(true);
     expect(isAccountManager(["account_manager"])).toBe(true);
     expect(qualifiesForAffiliateLink(["crew"])).toBe(false);
+  });
+});
+
+describe("isCrew", () => {
+  it("matches the role however it was typed", () => {
+    expect(isCrew(["crew"])).toBe(true);
+    expect(isCrew(["Crew"])).toBe(true);
+    expect(isCrew(["CREW"])).toBe(true);
+  });
+
+  it("is true for somebody who does both", () => {
+    expect(isCrew(["admin", "crew"])).toBe(true);
+  });
+
+  it("is false for office-only people", () => {
+    expect(isCrew(["admin"])).toBe(false);
+    expect(isCrew(["Account Manager"])).toBe(false);
+    expect(isCrew([])).toBe(false);
   });
 });

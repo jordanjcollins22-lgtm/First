@@ -5,8 +5,13 @@
  * lead — kept in step by a database trigger. These are the rules the UI greys
  * buttons out with and the server enforces, in one place so they cannot say
  * different things.
+ *
+ * Only people holding the crew role can be put on a job: the roster decides
+ * whose Today screen the job lands on, and an office-only person there would
+ * get a stop they are never going to drive to.
  */
 
+import { isCrew } from "@/lib/affiliate-roles";
 import type { JobCrewMember, JobStatus, Profile } from "@/types/domain";
 
 export interface CrewMemberView {
@@ -40,11 +45,20 @@ export function rosterView(crew: JobCrewMember[], profiles: Profile[]): CrewMemb
     });
 }
 
-/** Who is still available to add. */
+/**
+ * Who can be put on a job: people holding the crew role, minus whoever is
+ * already on it.
+ *
+ * A job's roster decides whose Today screen it lands on, so putting an
+ * office-only person there would give them a stop they are never going to
+ * drive to. Somebody who does both is fine — they hold the crew role and show
+ * up here like anybody else.
+ */
 export function assignableProfiles(crew: JobCrewMember[], profiles: Profile[]): Profile[] {
   const already = new Set(crew.map((c) => c.profile_id));
   return profiles
     .filter((p) => !already.has(p.id))
+    .filter((p) => isCrew(p.roles))
     .sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
 }
 
@@ -55,13 +69,23 @@ export function assignableProfiles(crew: JobCrewMember[], profiles: Profile[]): 
  * it would put a stop on their day for something nobody is doing. A finished
  * one is history and editing its roster rewrites who did the work.
  */
-export function canAssign(status: JobStatus, crew: JobCrewMember[], profileId: string): Verdict {
+export function canAssign(
+  status: JobStatus,
+  crew: JobCrewMember[],
+  profileId: string,
+  candidate?: Pick<Profile, "roles"> | null
+): Verdict {
   if (status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
   if (status === "completed") {
     return { ok: false, reason: "This job is finished — changing the crew now would rewrite who did it." };
   }
   if (crew.some((c) => c.profile_id === profileId)) {
     return { ok: false, reason: "They're already on this job." };
+  }
+  // Checked as well as filtered from the dropdown, so the rule holds against a
+  // stale page or a hand-made request rather than only against the UI.
+  if (candidate && !isCrew(candidate.roles)) {
+    return { ok: false, reason: "Only people with the crew role can be put on a job." };
   }
   return OK;
 }

@@ -22,8 +22,8 @@ function member(profileId: string, isLead = false, createdAt = "2026-09-01T09:00
   };
 }
 
-function profile(id: string, name: string): Profile {
-  return { id, full_name: name, email: `${id}@x.com` } as unknown as Profile;
+function profile(id: string, name: string, roles: string[] = ["crew"]): Profile {
+  return { id, full_name: name, email: `${id}@x.com`, roles } as unknown as Profile;
 }
 
 const PROFILES = [profile("p1", "Zoe Adams"), profile("p2", "Alan Brooks"), profile("p3", "Mia Cole")];
@@ -51,8 +51,29 @@ describe("assignableProfiles", () => {
     expect(options.map((p) => p.id)).toEqual(["p3", "p1"]);
   });
 
-  it("offers everybody when the job is empty", () => {
+  it("offers every crew member when the job is empty", () => {
     expect(assignableProfiles([], PROFILES)).toHaveLength(3);
+  });
+
+  it("leaves out anybody without the crew role", () => {
+    // The roster decides whose Today screen the job lands on. An office-only
+    // person there gets a stop they are never going to drive to.
+    const withOffice = [...PROFILES, profile("p4", "Office Only", ["admin"])];
+    expect(assignableProfiles([], withOffice).map((p) => p.id)).not.toContain("p4");
+  });
+
+  it("keeps somebody who does both", () => {
+    const both = [profile("p5", "Both Hats", ["admin", "crew"])];
+    expect(assignableProfiles([], both).map((p) => p.id)).toEqual(["p5"]);
+  });
+
+  it("matches the role however it was typed", () => {
+    const odd = [profile("p6", "Odd Casing", ["Crew"]), profile("p7", "Underscored", ["CREW"])];
+    expect(assignableProfiles([], odd)).toHaveLength(2);
+  });
+
+  it("offers nobody when nobody holds the crew role", () => {
+    expect(assignableProfiles([], [profile("p8", "Admin", ["admin"])])).toEqual([]);
   });
 });
 
@@ -75,6 +96,24 @@ describe("canAssign", () => {
 
   it("refuses to add the same person twice", () => {
     expect(canAssign("approved", [member("p1")], "p1").ok).toBe(false);
+  });
+
+  it("refuses somebody without the crew role, even if the page offered them", () => {
+    // Checked as well as filtered, so a stale page cannot route around it.
+    const verdict = canAssign("approved", [], "p4", { roles: ["admin"] } as unknown as Profile);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.reason).toMatch(/crew role/i);
+  });
+
+  it("accepts somebody who holds crew alongside an office role", () => {
+    expect(
+      canAssign("approved", [], "p5", { roles: ["admin", "crew"] } as unknown as Profile).ok
+    ).toBe(true);
+  });
+
+  it("still allows the call when no candidate was supplied", () => {
+    // The roles check is opt-in so callers that already know stay simple.
+    expect(canAssign("approved", [], "p1").ok).toBe(true);
   });
 });
 

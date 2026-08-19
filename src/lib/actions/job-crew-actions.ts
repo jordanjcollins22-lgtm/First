@@ -53,7 +53,15 @@ export async function assignCrewMember(jobId: string, profileId: string): Promis
     const loaded = await loadCrew(supabase, jobId);
     if (!loaded) return { ok: false, message: "Couldn't find that job." };
 
-    const verdict = canAssign(loaded.status, loaded.crew, profileId);
+    // Read the candidate's roles rather than trusting the dropdown that
+    // offered them — the rule has to hold against a stale page too.
+    const { data: roleRows } = await supabase
+      .from("profile_roles")
+      .select("role_name")
+      .eq("profile_id", profileId);
+    const candidate = { roles: ((roleRows ?? []) as { role_name: string }[]).map((r) => r.role_name) };
+
+    const verdict = canAssign(loaded.status, loaded.crew, profileId, candidate);
     if (!verdict.ok) return { ok: false, message: verdict.reason };
 
     const organizationId = await getCurrentOrganizationId();
