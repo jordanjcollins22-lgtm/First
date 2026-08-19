@@ -1,11 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Star, UserPlus, UserMinus, Users } from "lucide-react";
+import { Briefcase, Loader2, Star, UserPlus, UserMinus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { assignCrewMember, setJobLead, unassignCrewMember } from "@/lib/actions/job-crew-actions";
-import { assignableProfiles, rosterView } from "@/lib/job-crew";
+import {
+  assignCrewMember,
+  setAccountManager,
+  setJobLead,
+  unassignCrewMember,
+} from "@/lib/actions/job-crew-actions";
+import { assignableAccountManagers, assignableProfiles, rosterView } from "@/lib/job-crew";
 import { isCrew } from "@/lib/affiliate-roles";
 import type { JobCrewMember, JobStatus, Profile } from "@/types/domain";
 
@@ -21,12 +26,18 @@ export function CrewPanel({
   crew,
   profiles,
   editable,
+  customerId,
+  accountManagerId,
   setupNeeded = false,
 }: {
   jobId: string;
   status: JobStatus;
   crew: JobCrewMember[];
   profiles: Profile[];
+  /** The account manager is stored on the client, so changing it here changes
+   * it for every job that client has. Said plainly in the UI. */
+  customerId: string;
+  accountManagerId: string | null;
   /** Closed jobs show their roster but do not let it be rewritten. */
   editable: boolean;
   /** The table isn't there yet. An empty roster and a missing table look
@@ -42,6 +53,8 @@ export function CrewPanel({
   // "Nobody has the crew role yet" and "they're all already on this job" are
   // different problems with different fixes, so they get different messages.
   const anyCrewExists = profiles.some((p) => isCrew(p.roles));
+  const managers = assignableAccountManagers(profiles);
+  const accountManager = profiles.find((p) => p.id === accountManagerId) ?? null;
 
   function run(work: () => Promise<{ ok: boolean; message?: string }>) {
     setError(null);
@@ -57,12 +70,56 @@ export function CrewPanel({
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           <Users className="h-4 w-4" />
-          Crew
+          Who&apos;s on this job
         </h2>
         {roster.length > 0 && (
           <span className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             {roster.length} on this job
           </span>
+        )}
+      </div>
+
+      {/* The account manager first: they own the client and the commission on
+          the job, so "who is on this" starts with them and not the truck. */}
+      <div className="mb-3 rounded-lg border border-border bg-background/60 p-2.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Account manager
+        </p>
+        {accountManager ? (
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
+            {accountManager.full_name || accountManager.email}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">Nobody assigned</p>
+        )}
+
+        {editable && managers.length > 0 && (
+          <>
+            <select
+              value={accountManagerId ?? ""}
+              disabled={isPending}
+              onChange={(e) =>
+                run(() => setAccountManager(customerId, e.target.value || null, jobId))
+              }
+              className="mt-1.5 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-base sm:text-sm"
+            >
+              <option value="">Nobody</option>
+              {managers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.email}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Set on the client — this applies to all of their jobs.
+            </p>
+          </>
+        )}
+        {editable && managers.length === 0 && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Nobody has the account manager role yet.
+          </p>
         )}
       </div>
 

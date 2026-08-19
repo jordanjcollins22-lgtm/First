@@ -11,7 +11,7 @@
  * get a stop they are never going to drive to.
  */
 
-import { isCrew } from "@/lib/affiliate-roles";
+import { isAccountManager, isCrew } from "@/lib/affiliate-roles";
 import type { JobCrewMember, JobStatus, Profile } from "@/types/domain";
 
 export interface CrewMemberView {
@@ -59,6 +59,20 @@ export function assignableProfiles(crew: JobCrewMember[], profiles: Profile[]): 
   return profiles
     .filter((p) => !already.has(p.id))
     .filter((p) => isCrew(p.roles))
+    .sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
+}
+
+/**
+ * Who can be the client's account manager.
+ *
+ * A separate list from the crew, and a separate role: the account manager owns
+ * the client relationship rather than the work, and is the one on commission
+ * for it. Somebody holding both roles appears in both lists, which is normal
+ * in a business this size.
+ */
+export function assignableAccountManagers(profiles: Profile[]): Profile[] {
+  return profiles
+    .filter((p) => isAccountManager(p.roles))
     .sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
 }
 

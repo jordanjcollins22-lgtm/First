@@ -8,6 +8,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { notifyTeamMember } from "@/lib/notifications";
 import { canAssign, canMakeLead, canUnassign } from "@/lib/job-crew";
+import { isAccountManager } from "@/lib/affiliate-roles";
 import type { JobCrewMember, JobStatus } from "@/types/domain";
 
 export type CrewResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -157,5 +158,51 @@ export async function setJobLead(jobId: string, profileId: string): Promise<Crew
   } catch (err) {
     console.error("setJobLead failed:", err);
     return { ok: false, message: "Couldn't change the lead." };
+  }
+}
+
+/**
+ * Sets the client's account manager, from the job page.
+ *
+ * Stored on the customer, not the job — an account manager owns the
+ * relationship, so the same person handles every job that client has. The UI
+ * says so, because changing it here quietly reassigning their whole history
+ * would be a surprise.
+ */
+export async function setAccountManager(
+  customerId: string,
+  profileId: string | null,
+  jobId: string
+): Promise<CrewResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const supabase = await createClient();
+
+    if (profileId) {
+      // Checked here as well as filtered in the picker, so the rule holds
+      // against a stale page.
+      const { data: roleRows } = await supabase
+        .from("profile_roles")
+        .select("role_name")
+        .eq("profile_id", profileId);
+      const roles = ((roleRows ?? []) as { role_name: string }[]).map((r) => r.role_name);
+      if (!isAccountManager(roles)) {
+        return { ok: false, message: "Only people with the account manager role can take a client." };
+      }
+    }
+
+    const { error } = await supabase
+      .from("customers")
+      .update({ account_manager_id: profileId })
+      .eq("id", customerId);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    refresh(jobId);
+    revalidatePath("/contacts");
+    return { ok: true, message: profileId ? "Account manager set." : "Account manager cleared." };
+  } catch (err) {
+    console.error("setAccountManager failed:", err);
+    return { ok: false, message: "Couldn't change the account manager." };
   }
 }

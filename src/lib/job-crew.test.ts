@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assignableAccountManagers,
   assignableProfiles,
   canAssign,
   canMakeLead,
@@ -175,5 +176,36 @@ describe("leadAfterRemoval", () => {
 
   it("is nobody when the last person is removed", () => {
     expect(leadAfterRemoval([member("p1", true)], "p1")).toBeNull();
+  });
+});
+
+describe("assignableAccountManagers", () => {
+  it("offers only people with the account manager role", () => {
+    const people = [
+      profile("p1", "Zoe Adams", ["crew"]),
+      profile("p2", "Alan Brooks", ["Account Manager"]),
+      profile("p3", "Mia Cole", ["admin"]),
+    ];
+    expect(assignableAccountManagers(people).map((p) => p.id)).toEqual(["p2"]);
+  });
+
+  it("includes somebody who runs crews and accounts both", () => {
+    const people = [profile("p1", "Both Hats", ["crew", "account_manager"])];
+    expect(assignableAccountManagers(people)).toHaveLength(1);
+  });
+
+  it("sorts by name so the picker reads the same every time", () => {
+    const people = [
+      profile("p1", "Zoe Adams", ["account manager"]),
+      profile("p2", "Alan Brooks", ["account manager"]),
+    ];
+    expect(assignableAccountManagers(people).map((p) => p.full_name)).toEqual([
+      "Alan Brooks",
+      "Zoe Adams",
+    ]);
+  });
+
+  it("offers nobody when nobody holds the role", () => {
+    expect(assignableAccountManagers([profile("p1", "Crew Only", ["crew"])])).toEqual([]);
   });
 });

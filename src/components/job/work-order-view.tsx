@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, MapPin, Navigation, Wrench } from "lucide-react";
+import { ArrowLeft, MapPin, Navigation, Phone, Wrench } from "lucide-react";
 
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import { polygonPoints, zonesBounds, type WorkOrder } from "@/lib/work-order";
@@ -22,6 +22,7 @@ export function WorkOrderView({
   jobName,
   siteImageUrl,
   imageTransform,
+  accountManager,
 }: {
   order: WorkOrder;
   address: string;
@@ -30,6 +31,8 @@ export function WorkOrderView({
   siteImageUrl: string | null;
   /** How the satellite photo sits under the zones, from the saved design. */
   imageTransform: { x: number; y: number; scale: number; rotation: number } | null;
+  /** Who to ring when something on site does not match the sheet. */
+  accountManager: { name: string; phone: string | null } | null;
 }) {
   const bounds = zonesBounds(order.zones, CANVAS_WIDTH, CANVAS_HEIGHT);
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
@@ -60,6 +63,22 @@ export function WorkOrderView({
           Directions
         </a>
       </header>
+
+      {accountManager && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="text-muted-foreground">Questions:</span>
+          <span className="font-medium">{accountManager.name}</span>
+          {accountManager.phone && (
+            <a
+              href={`tel:${accountManager.phone}`}
+              className="flex min-h-9 items-center gap-1 rounded-lg border border-border px-2 text-sm font-medium"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Call
+            </a>
+          )}
+        </p>
+      )}
 
       {/* ------------------------------------------------------- the site map */}
       {order.zones.length > 0 && (

@@ -151,12 +151,15 @@ export default async function JobPage({
   // admins can always decide, so a job never stalls because one person is out.
   const { data: ownerRow } = await supabase
     .from("properties")
-    .select("customers(account_manager_id)")
+    .select("customer_id, customers(account_manager_id)")
     .eq("id", job.property_id)
     .maybeSingle();
-  const accountManagerId =
-    (ownerRow as unknown as { customers: { account_manager_id: string | null } | null } | null)
-      ?.customers?.account_manager_id ?? null;
+  const owner = ownerRow as unknown as {
+    customer_id: string;
+    customers: { account_manager_id: string | null } | null;
+  } | null;
+  const customerId = owner?.customer_id ?? "";
+  const accountManagerId = owner?.customers?.account_manager_id ?? null;
 
   const viewer = await getCurrentProfile();
   const canReviewWalk = Boolean(
@@ -234,6 +237,17 @@ export default async function JobPage({
   // showed them all of it.
   const viewerRoles = (await getCurrentProfile())?.roles ?? [];
   if (isFieldOnly(viewerRoles)) {
+    // Who the crew ring when something on site doesn't match the sheet.
+    const manager = accountManagerId
+      ? ((
+          await supabase
+            .from("profiles")
+            .select("full_name, email, phone")
+            .eq("id", accountManagerId)
+            .maybeSingle()
+        ).data as { full_name: string | null; email: string; phone: string | null } | null)
+      : null;
+
     // Materials without their costs — quantities are what you load, prices are
     // not the crew's business.
     const materialsByZone: Record<string, { name: string; quantityLabel: string }[]> = {};
@@ -254,6 +268,9 @@ export default async function JobPage({
         customerName={job.property?.customers?.name ?? "Client"}
         jobName={job.name}
         siteImageUrl={design?.image_path ? canvasImageUrl(design.image_path) : null}
+        accountManager={
+          manager ? { name: manager.full_name || manager.email, phone: manager.phone } : null
+        }
         imageTransform={
           design
             ? {
@@ -293,6 +310,8 @@ export default async function JobPage({
         status={job.status}
         crew={crew.rows}
         setupNeeded={crew.missing}
+        customerId={customerId}
+        accountManagerId={accountManagerId}
         profiles={teamProfiles}
         editable={job.status !== "completed" && job.status !== "cancelled"}
       />
