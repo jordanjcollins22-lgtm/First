@@ -65,6 +65,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/today":
     "The crew's own day. Shows only the signed-in person's stops, so there is nothing to withhold — " +
     "and gating it behind a tick is how somebody ends up in a yard with nothing to press.",
+  "/my-day":
+    "The account manager's own day. Same argument as Today: it shows the signed-in person their own " +
+    "clients and jobs and nobody else's, so there is nothing to withhold, and a tick could leave " +
+    "somebody with no screen to open.",
   "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
   "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
 };

@@ -40,6 +40,9 @@ export function SiteNav({
     ? [{ href: "/today", label: "Today" }]
     : [
         ...(can("dashboard") ? [{ href: "/dashboard", label: "Dashboard" }] : []),
+        // Never tab-gated: both of these show the signed-in person their own
+        // work, so there is nothing a tick would be protecting.
+        { href: "/my-day", label: "My Day" },
         { href: "/today", label: "Today" },
         // ?new=1 because the root redirects admins to the dashboard, and this
         // is the link that has to get past that.

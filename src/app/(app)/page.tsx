@@ -12,7 +12,7 @@ import { getBookingLinksBundle, type BookingLinksBundle } from "@/lib/data/booki
 import { checkTabAccess } from "@/lib/data/access";
 import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
-import { isFieldOnly } from "@/lib/affiliate-roles";
+import { isAccountManager, isFieldOnly } from "@/lib/affiliate-roles";
 
 export default async function Home({
   searchParams,
@@ -36,6 +36,10 @@ export default async function Home({
     const { allowed: canSeeDashboard } = await checkTabAccess("dashboard");
     if (canSeeDashboard) redirect("/dashboard");
   }
+
+  // And an account manager lands on their own version of it, for the same
+  // reason: the first question of the morning is what is left today.
+  if (!wantsForm && profile && isAccountManager(profile.roles)) redirect("/my-day");
 
   if (profile && !allowed) {
     const { allowed: canSeeEvaluations } = await checkTabAccess("evaluations");

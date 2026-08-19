@@ -4,6 +4,7 @@ import {
   buildDashboard,
   dayKeyOf,
   evaluationBucket,
+  isTheirs,
   jobBucket,
   windowFor,
   type DashboardJobInput,
@@ -234,5 +235,25 @@ describe("buildDashboard", () => {
       needsSignoff: 0,
       bookedValue: 0,
     });
+  });
+});
+
+describe("isTheirs", () => {
+  it("counts every job on a client they manage", () => {
+    expect(isTheirs({ accountManagerId: "me", assignedTo: "someone-else" }, "me")).toBe(true);
+  });
+
+  it("counts a job they were assigned on somebody else's client", () => {
+    // They are still expected at that appointment. Leaving it off their day
+    // would be lying by omission.
+    expect(isTheirs({ accountManagerId: "other", assignedTo: "me" }, "me")).toBe(true);
+  });
+
+  it("leaves out a job that is neither", () => {
+    expect(isTheirs({ accountManagerId: "other", assignedTo: "other" }, "me")).toBe(false);
+  });
+
+  it("does not treat an unmanaged client as everybody's", () => {
+    expect(isTheirs({ accountManagerId: null, assignedTo: null }, "me")).toBe(false);
   });
 });

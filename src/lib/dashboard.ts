@@ -118,6 +118,21 @@ export const JOB_BUCKETS: { key: JobBucket; label: string; blurb: string; histor
   { key: "cancelled", label: "Cancelled", blurb: "Called off.", history: true },
 ];
 
+/**
+ * Whether a job belongs on one person's own board.
+ *
+ * Two ways in, and both are needed. The account manager on the client owns
+ * everything that happens to that client. But an account manager who went out
+ * and evaluated somebody else's client is still expected at that appointment,
+ * and a day that left it off would be lying by omission.
+ */
+export function isTheirs(
+  job: { accountManagerId: string | null; assignedTo: string | null },
+  profileId: string
+): boolean {
+  return job.accountManagerId === profileId || job.assignedTo === profileId;
+}
+
 export interface DashboardJobInput {
   id: string;
   jobName: string;

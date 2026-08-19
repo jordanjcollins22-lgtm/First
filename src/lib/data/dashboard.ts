@@ -1,7 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { listProfiles } from "@/lib/data/team";
-import { buildDashboard, type DashboardData, type DashboardJobInput, type DashboardRange } from "@/lib/dashboard";
+import {
+  buildDashboard,
+  isTheirs,
+  type DashboardData,
+  type DashboardJobInput,
+  type DashboardRange,
+} from "@/lib/dashboard";
+
+export interface DashboardOptions {
+  /**
+   * Narrow the whole board to one person's work.
+   *
+   * Theirs means either: they are the account manager on the client, or they
+   * are the one assigned to the job. An account manager who evaluated a job
+   * for somebody else's client still has to turn up to it, and a board that
+   * left it out would be lying about their day.
+   */
+  forProfileId?: string;
+}
 
 /**
  * Everything the dashboard shows, in three queries.
@@ -11,8 +29,18 @@ import { buildDashboard, type DashboardData, type DashboardJobInput, type Dashbo
  * turning an id into a name). One query each rather than one per job — the
  * whole point of this page is that it loads in a single go on a phone.
  */
-export async function getDashboard(range: DashboardRange, today: Date = new Date()): Promise<DashboardData> {
-  const jobs = await listJobsWithLocation();
+export async function getDashboard(
+  range: DashboardRange,
+  today: Date = new Date(),
+  options: DashboardOptions = {}
+): Promise<DashboardData> {
+  const all = await listJobsWithLocation();
+  const mine = options.forProfileId;
+  const jobs = mine
+    ? all.filter((j) =>
+        isTheirs({ accountManagerId: j.property.customer.account_manager_id, assignedTo: j.assigned_to }, mine)
+      )
+    : all;
   if (jobs.length === 0) return buildDashboard([], range, today);
 
   const supabase = await createClient();
