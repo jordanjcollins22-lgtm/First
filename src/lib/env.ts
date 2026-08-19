@@ -8,9 +8,12 @@ function required(name: string, value: string | undefined): string {
 }
 
 export const env = {
-  /** The domain the business is known by. Links a client follows use this
-   * rather than whatever host happened to serve the request. */
+  /** An explicit override for the domain links are built from. Only needed
+   * when the automatic answer below is wrong. */
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+  /** Set by Vercel on every deployment: the project's production domain, which
+   * is the custom domain once one is attached. Nothing to configure. */
+  productionDomain: process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "",
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",

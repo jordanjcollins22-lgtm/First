@@ -35,16 +35,51 @@ describe("resolveBaseUrl", () => {
     ).toBe("https://app.jslandscapingmd.com");
   });
 
-  it("falls back to the request host when no domain is set", () => {
+  it("uses Vercel's production domain with nothing configured", () => {
+    // The usual case: a custom domain is attached to the project and nobody
+    // has had to set anything in the app.
+    expect(
+      resolveBaseUrl({
+        configured: "",
+        productionDomain: "app.jslandscapingmd.com",
+        host: "first-git-abc123.vercel.app",
+        proto: "https",
+      })
+    ).toBe("https://app.jslandscapingmd.com");
+  });
+
+  it("lets an explicit override beat the production domain", () => {
+    // For a project with several custom domains, where Vercel's pick is not
+    // the one clients should see.
+    expect(
+      resolveBaseUrl({
+        configured: "book.jslandscapingmd.com",
+        productionDomain: "app.jslandscapingmd.com",
+        host: "x.vercel.app",
+      })
+    ).toBe("https://book.jslandscapingmd.com");
+  });
+
+  it("writes links to the real site even from a preview deployment", () => {
+    const link = resolveBaseUrl({
+      configured: "",
+      productionDomain: "app.jslandscapingmd.com",
+      host: "first-git-feature-branch.vercel.app",
+    });
+    expect(link).not.toContain("vercel.app");
+  });
+
+  it("falls back to the request host when there is neither", () => {
     expect(resolveBaseUrl({ configured: "", host: "example.vercel.app", proto: "https" })).toBe(
       "https://example.vercel.app"
     );
   });
 
   it("keeps http for a local host, since that is what served it", () => {
-    expect(resolveBaseUrl({ configured: "", host: "localhost:3000", proto: "http" })).toBe(
-      "http://localhost:3000"
-    );
+    // Locally there is no production domain either, so this still has to work.
+    expect(
+      resolveBaseUrl({ configured: "", productionDomain: "", host: "localhost:3000", proto: "http" })
+    ).toBe("http://localhost:3000");
   });
 
   it("assumes https when the proxy did not say", () => {

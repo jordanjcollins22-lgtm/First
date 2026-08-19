@@ -291,6 +291,7 @@ export default async function JobPage({
   const host = headersList.get("host") ?? "";
   const baseUrl = resolveBaseUrl({
     configured: env.appUrl,
+    productionDomain: env.productionDomain,
     host,
     proto: headersList.get("x-forwarded-proto"),
   });

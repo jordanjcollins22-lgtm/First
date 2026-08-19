@@ -27,16 +27,27 @@ export function normalizeBaseUrl(value: string): string {
 /**
  * Picks the base URL for a link somebody outside the app will follow.
  *
- * `configured` is the custom domain. `host`/`proto` come from the request and
- * are used only when no domain is set, so nothing breaks before it is.
+ * Three sources, in order:
+ *
+ *  1. `configured` — an explicit override, for when the automatic answer is
+ *     wrong (several custom domains on one project, say).
+ *  2. `productionDomain` — Vercel hands the project's production domain to
+ *     every deployment at runtime, and that is the custom domain once one is
+ *     attached. Nothing to set up, and a preview deployment still writes
+ *     links pointing at the real site rather than at itself.
+ *  3. The request host, so local development works with no domain at all.
  */
 export function resolveBaseUrl(input: {
   configured: string;
+  productionDomain?: string;
   host: string | null;
   proto?: string | null;
 }): string {
   const configured = normalizeBaseUrl(input.configured);
   if (configured) return configured;
+
+  const production = normalizeBaseUrl(input.productionDomain ?? "");
+  if (production) return production;
 
   if (!input.host) return "";
   return `${input.proto || "https"}://${input.host}`;
