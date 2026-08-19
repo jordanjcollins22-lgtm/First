@@ -122,10 +122,15 @@ export function TodayBoard({
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
+                {/* Naming the stop rather than counting it: "1 stop" tells
+                    somebody a tool is needed once, which they can see; which
+                    one is the part they cannot. */}
+                <span className="max-w-[45%] shrink-0 truncate text-[11px] text-muted-foreground">
                   {line.jobLabels.length === stops.length && stops.length > 1
                     ? "every stop"
-                    : `${line.jobLabels.length} stop${line.jobLabels.length === 1 ? "" : "s"}`}
+                    : line.jobLabels.length === 1
+                      ? line.jobLabels[0]
+                      : `${line.jobLabels.length} stops`}
                 </span>
               </li>
             ))}
