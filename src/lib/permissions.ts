@@ -16,6 +16,7 @@ export interface TabDefinition {
 }
 
 export const TABS: readonly TabDefinition[] = [
+  { key: "dashboard", label: "Dashboard", href: "/dashboard" },
   { key: "new-property", label: "New Property (Home)", href: "/" },
   { key: "project-data", label: "Project Data", href: "/attractors" },
   { key: "evaluations", label: "Calendar", href: "/evaluations" },

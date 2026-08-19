@@ -14,14 +14,28 @@ import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
+  const { new: wantsForm } = await searchParams;
   const { allowed, profile } = await checkTabAccess("new-property");
 
   // Anybody who only works in the field lands on their day and stays there.
   // The office view is noise to somebody standing in a yard with a mower.
   if (profile && isFieldOnly(profile.roles)) redirect("/today");
+
+  // Admins land on the business, not on a form. Whoever opens this app first
+  // thing wants to know what is happening today before they want to start
+  // anything new. ?new=1 is how the nav still reaches the form — without it
+  // the redirect would swallow the only link to it.
+  if (!wantsForm && profile?.roles.includes("admin")) {
+    const { allowed: canSeeDashboard } = await checkTabAccess("dashboard");
+    if (canSeeDashboard) redirect("/dashboard");
+  }
 
   if (profile && !allowed) {
     const { allowed: canSeeEvaluations } = await checkTabAccess("evaluations");

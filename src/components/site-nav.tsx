@@ -39,7 +39,11 @@ export function SiteNav({
   const links = fieldOnly
     ? [{ href: "/today", label: "Today" }]
     : [
+        ...(can("dashboard") ? [{ href: "/dashboard", label: "Dashboard" }] : []),
         { href: "/today", label: "Today" },
+        // ?new=1 because the root redirects admins to the dashboard, and this
+        // is the link that has to get past that.
+        ...(can("new-property") ? [{ href: "/?new=1", label: "New Estimate" }] : []),
         ...(can("project-data") ? [{ href: "/attractors", label: "Project Data" }] : []),
         ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
         ...(can("leads") ? [{ href: "/leads", label: "Leads" }] : []),
