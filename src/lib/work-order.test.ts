@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkOrder, polygonPoints, zonesBounds } from "@/lib/work-order";
+import { buildWorkOrder, zonesBounds } from "@/lib/work-order";
 import type { WorkZone } from "@/components/canvas/types";
 
 const catalog = {
@@ -152,11 +152,5 @@ describe("zonesBounds", () => {
 
   it("falls back to the whole canvas with nothing drawn", () => {
     expect(zonesBounds([], 1280, 800)).toEqual({ x: 0, y: 0, width: 1280, height: 800 });
-  });
-});
-
-describe("polygonPoints", () => {
-  it("writes an SVG points attribute", () => {
-    expect(polygonPoints([{ x: 1, y: 2 }, { x: 3, y: 4 }])).toBe("1,2 3,4");
   });
 });

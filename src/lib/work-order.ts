@@ -140,8 +140,3 @@ export function zonesBounds(
 
   return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
 }
-
-/** An SVG polygon points attribute from a zone's shape. */
-export function polygonPoints(points: Point[]): string {
-  return points.map((p) => `${p.x},${p.y}`).join(" ");
-}

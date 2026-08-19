@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft, MapPin, Navigation, Phone, Wrench } from "lucide-react";
 
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
-import { polygonPoints, zonesBounds, type WorkOrder } from "@/lib/work-order";
+import { SiteMapImage } from "@/components/proposal/site-map-image";
+import { zonesBounds, type WorkOrder } from "@/lib/work-order";
+import type { ProposalSiteImageTransform } from "@/types/domain";
 
 /**
  * The crew's sheet for one job.
@@ -20,7 +21,7 @@ export function WorkOrderView({
   address,
   customerName,
   jobName,
-  siteImageUrl,
+  siteImagePath,
   imageTransform,
   accountManager,
 }: {
@@ -28,13 +29,12 @@ export function WorkOrderView({
   address: string;
   customerName: string;
   jobName: string;
-  siteImageUrl: string | null;
+  siteImagePath: string | null;
   /** How the satellite photo sits under the zones, from the saved design. */
-  imageTransform: { x: number; y: number; scale: number; rotation: number } | null;
+  imageTransform: ProposalSiteImageTransform | null;
   /** Who to ring when something on site does not match the sheet. */
   accountManager: { name: string; phone: string | null } | null;
 }) {
-  const bounds = zonesBounds(order.zones, CANVAS_WIDTH, CANVAS_HEIGHT);
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
 
   return (
@@ -81,64 +81,19 @@ export function WorkOrderView({
       )}
 
       {/* ------------------------------------------------------- the site map */}
-      {order.zones.length > 0 && (
-        <section className="overflow-hidden rounded-xl border border-white/60 bg-card/60 backdrop-blur-md">
-          <svg
-            viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
-            className="block w-full bg-muted"
-            role="img"
-            aria-label="Site map with the work zones marked"
-          >
-            {/* Same placement the canvas uses, so the photo lines up with the
-                shapes drawn on top of it. */}
-            {siteImageUrl && imageTransform && (
-              <g
-                transform={`translate(${imageTransform.x} ${imageTransform.y}) rotate(${imageTransform.rotation})`}
-              >
-                <image
-                  href={siteImageUrl}
-                  x={-(CANVAS_WIDTH * imageTransform.scale) / 2}
-                  y={-(CANVAS_HEIGHT * imageTransform.scale) / 2}
-                  width={CANVAS_WIDTH * imageTransform.scale}
-                  height={CANVAS_HEIGHT * imageTransform.scale}
-                  preserveAspectRatio="xMidYMid slice"
-                />
-              </g>
-            )}
-
-            {order.zones.map((zone, i) => {
-              const centre = zone.points.reduce(
-                (acc, p) => ({ x: acc.x + p.x / zone.points.length, y: acc.y + p.y / zone.points.length }),
-                { x: 0, y: 0 }
-              );
-              return (
-                <g key={zone.id}>
-                  <polygon
-                    points={polygonPoints(zone.points)}
-                    fill={zone.color}
-                    fillOpacity={0.35}
-                    stroke={zone.color}
-                    strokeWidth={3}
-                  />
-                  {/* Numbered to match the cards below, so "zone 2" means the
-                      same thing on the map and in the list. */}
-                  <circle cx={centre.x} cy={centre.y} r={16} fill="#ffffff" stroke={zone.color} strokeWidth={3} />
-                  <text
-                    x={centre.x}
-                    y={centre.y}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={18}
-                    fontWeight="bold"
-                    fill={zone.color}
-                  >
-                    {i + 1}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-        </section>
+      {order.zones.length > 0 && siteImagePath && imageTransform && (
+        <SiteMapImage
+          imagePath={siteImagePath}
+          transform={imageTransform}
+          numbered
+          frame={zonesBounds(order.zones, imageTransform.canvasWidth, imageTransform.canvasHeight)}
+          className="w-full rounded-xl border border-white/60 bg-muted"
+          zones={order.zones.map((zone) => ({
+            zoneName: zone.name,
+            color: zone.color,
+            points: zone.points,
+          }))}
+        />
       )}
 
       {/* ------------------------------------------------------ what to bring */}

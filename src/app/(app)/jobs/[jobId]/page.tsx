@@ -30,7 +30,7 @@ import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
 import { buildWorkOrder } from "@/lib/work-order";
-import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
@@ -267,7 +267,7 @@ export default async function JobPage({
         address={job.property?.address ?? ""}
         customerName={job.property?.customers?.name ?? "Client"}
         jobName={job.name}
-        siteImageUrl={design?.image_path ? canvasImageUrl(design.image_path) : null}
+        siteImagePath={design?.image_path ?? null}
         accountManager={
           manager ? { name: manager.full_name || manager.email, phone: manager.phone } : null
         }
@@ -278,6 +278,8 @@ export default async function JobPage({
                 y: design.image_y,
                 scale: design.image_scale,
                 rotation: design.image_rotation,
+                canvasWidth: CANVAS_WIDTH,
+                canvasHeight: CANVAS_HEIGHT,
               }
             : null
         }
