@@ -15,6 +15,9 @@ export interface ZoneToolsRow {
   service: string;
   /** Whatever is stored — names, or ids from an older service default. */
   toolTokens: string[];
+  /** The tools this service is set up with, offered as a starting point.
+   * Suggested rather than applied: an empty zone means an empty zone. */
+  defaultToolNames: string[];
 }
 
 /**
@@ -118,6 +121,22 @@ function ZoneRow({ jobId, zone, tools }: { jobId: string; zone: ZoneToolsRow; to
         </button>
       ) : (
         <div className="mt-2 rounded-lg border border-border bg-background/60 p-2.5">
+          {zone.defaultToolNames.length > 0 && (
+            <div className="mb-2">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Usual for {zone.service}
+              </p>
+              <button
+                type="button"
+                onClick={() => setPicked((current) => addTools(current, zone.defaultToolNames))}
+                title={zone.defaultToolNames.join(", ")}
+                className="min-h-9 rounded-md border border-border px-2 text-[11px] font-medium hover:bg-accent"
+              >
+                Add the usual {zone.defaultToolNames.length}
+              </button>
+            </div>
+          )}
+
           {kits.length > 0 && (
             <div className="mb-2">
               <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

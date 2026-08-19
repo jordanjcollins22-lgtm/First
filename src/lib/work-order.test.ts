@@ -77,12 +77,13 @@ describe("buildWorkOrder", () => {
     expect(buildWorkOrder([zone()], catalog).zones[0].toolNames).toEqual(["Wheelbarrow", "Leaf blower"]);
   });
 
-  it("falls back to the service's default kit when the zone lists none", () => {
-    // An older design still has to tell somebody what to load.
+  it("lists nothing when nothing was picked, rather than substituting defaults", () => {
+    // A zone the account manager deliberately cleared must not turn up on the
+    // crew's sheet carrying tools nobody chose. The picker is the only source.
     const z = zone({
       service: { typeId: "hedge", values: {}, notes: "", photos: [], tools: [] },
     } as Partial<WorkZone>);
-    expect(buildWorkOrder([z], catalog).zones[0].toolNames).toEqual(["Hedge trimmer"]);
+    expect(buildWorkOrder([z], catalog).zones[0].toolNames).toEqual([]);
   });
 
   it("builds one deduped, sorted loading list for the whole job", () => {

@@ -422,6 +422,10 @@ export default async function JobPage({
             catalog.servicePricing.find((sp) => sp.service_type_id === zone.service?.typeId)?.name ??
             "Service",
           toolTokens: zone.service?.tools ?? [],
+          defaultToolNames: catalog.serviceTools
+            .filter((link) => link.service_type_id === zone.service?.typeId)
+            .map((link) => catalog.tools.find((t) => t.id === link.tool_id)?.name)
+            .filter((name): name is string => Boolean(name)),
         }))}
       />
 

@@ -62,7 +62,7 @@ function sizeLabelFor(zone: WorkZone): string | null {
  */
 export function buildWorkOrder(
   zones: WorkZone[],
-  catalog: Pick<CanvasCatalog, "servicePricing" | "tools" | "serviceTools">,
+  catalog: Pick<CanvasCatalog, "servicePricing" | "tools">,
   materialsByZone: Record<string, { name: string; quantityLabel: string }[]> = {},
   /** Turns a checklist field key into the words the evaluator saw. Without it
    * the crew read raw keys, which is a worse instruction than none. */
@@ -70,24 +70,19 @@ export function buildWorkOrder(
 ): WorkOrder {
   const serviceName = new Map(catalog.servicePricing.map((s) => [s.service_type_id, s.name]));
 
-  // Tools come from the zone's own saved list where the evaluator has one,
-  // falling back to the service's default kit so an older design still tells
-  // somebody what to load.
-  const defaultToolsByService = new Map<string, string[]>();
-  for (const link of catalog.serviceTools) {
-    const list = defaultToolsByService.get(link.service_type_id) ?? [];
-    list.push(link.tool_id);
-    defaultToolsByService.set(link.service_type_id, list);
-  }
-
   const built: WorkOrderZone[] = [];
 
   for (const zone of zones) {
     if (!zone.service) continue;
 
     const typeId = zone.service.typeId;
-    const toolIds =
-      zone.service.tools.length > 0 ? zone.service.tools : (defaultToolsByService.get(typeId) ?? []);
+
+    // Exactly what was picked, with no fallback to the service's default kit.
+    // Substituting defaults for an empty list meant a zone the account manager
+    // had deliberately cleared still turned up on the crew's sheet carrying
+    // ten tools nobody chose — and made the picker disagree with the screen it
+    // is meant to control.
+    const toolIds = zone.service.tools;
 
     const tasks = Object.entries(zone.service.values ?? {})
       .filter(([, value]) => value !== "" && value != null)
