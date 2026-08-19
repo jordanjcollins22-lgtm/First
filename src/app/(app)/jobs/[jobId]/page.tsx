@@ -29,7 +29,6 @@ import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
-import { ZoneToolsPanel } from "@/components/job/zone-tools-panel";
 import { buildWorkOrder } from "@/lib/work-order";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
@@ -250,16 +249,7 @@ export default async function JobPage({
         ).data as { full_name: string | null; email: string; phone: string | null } | null)
       : null;
 
-    // Materials without their costs — quantities are what you load, prices are
-    // not the crew's business.
-    const materialsByZone: Record<string, { name: string; quantityLabel: string }[]> = {};
-    for (const zone of zones) {
-      materialsByZone[zone.id] = materialItems
-        .filter((item) => item.zoneName === zone.name)
-        .map((item) => ({ name: item.material, quantityLabel: formatMaterialQuantity(item) }));
-    }
-
-    const order = buildWorkOrder(zones, catalog, materialsByZone, (typeId, key) => {
+    const order = buildWorkOrder(zones, catalog, (typeId, key) => {
       const field = serviceTypeById(typeId)?.fields?.find((f) => f.key === key);
       return field?.label ?? key;
     });
@@ -408,26 +398,6 @@ export default async function JobPage({
           )}
         </div>
       )}
-
-      {/* Sits with the work rather than the money: the account manager decides
-          the load-out, and the crew's day list is the sum of these. */}
-      <ZoneToolsPanel
-        jobId={jobId}
-        tools={catalog.tools}
-        zones={zones.map((zone) => ({
-          zoneId: zone.id,
-          zoneName: zone.name,
-          color: zone.color,
-          service:
-            catalog.servicePricing.find((sp) => sp.service_type_id === zone.service?.typeId)?.name ??
-            "Service",
-          toolTokens: zone.service?.tools ?? [],
-          defaultToolNames: catalog.serviceTools
-            .filter((link) => link.service_type_id === zone.service?.typeId)
-            .map((link) => catalog.tools.find((t) => t.id === link.tool_id)?.name)
-            .filter((name): name is string => Boolean(name)),
-        }))}
-      />
 
       {can.proposal.available || proposal ? (
         <ProposalPanel

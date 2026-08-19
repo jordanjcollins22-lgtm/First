@@ -60,7 +60,7 @@ describe("buildWorkOrder", () => {
     const z = zone({
       service: { typeId: "mulch", values: { edge_type: "Spade cut" }, notes: "", photos: [], tools: [] },
     } as Partial<WorkZone>);
-    const order = buildWorkOrder([z], catalog, {}, (typeId, key) =>
+    const order = buildWorkOrder([z], catalog, (typeId, key) =>
       typeId === "mulch" && key === "edge_type" ? "Edge type" : key
     );
     expect(order.zones[0].tasks).toEqual([{ label: "Edge type", value: "Spade cut" }]);
@@ -71,32 +71,6 @@ describe("buildWorkOrder", () => {
       service: { typeId: "mulch", values: { Depth: "3 inches", Edging: "" }, notes: "", photos: [], tools: [] },
     } as Partial<WorkZone>);
     expect(buildWorkOrder([z], catalog).zones[0].tasks).toEqual([{ label: "Depth", value: "3 inches" }]);
-  });
-
-  it("resolves the zone's own tools to names", () => {
-    expect(buildWorkOrder([zone()], catalog).zones[0].toolNames).toEqual(["Wheelbarrow", "Leaf blower"]);
-  });
-
-  it("lists nothing when nothing was picked, rather than substituting defaults", () => {
-    // A zone the account manager deliberately cleared must not turn up on the
-    // crew's sheet carrying tools nobody chose. The picker is the only source.
-    const z = zone({
-      service: { typeId: "hedge", values: {}, notes: "", photos: [], tools: [] },
-    } as Partial<WorkZone>);
-    expect(buildWorkOrder([z], catalog).zones[0].toolNames).toEqual([]);
-  });
-
-  it("builds one deduped, sorted loading list for the whole job", () => {
-    const a = zone({ id: "z1" });
-    const b = zone({
-      id: "z2",
-      service: { typeId: "hedge", values: {}, notes: "", photos: [], tools: ["t2", "t3"] },
-    } as Partial<WorkZone>);
-    expect(buildWorkOrder([a, b], catalog).toolNames).toEqual([
-      "Hedge trimmer",
-      "Leaf blower",
-      "Wheelbarrow",
-    ]);
   });
 
   it("skips zones with no service, which are drafting artefacts", () => {
@@ -121,21 +95,21 @@ describe("buildWorkOrder", () => {
   it("carries no money anywhere, whatever the catalog holds", () => {
     // The guarantee: a work order has nowhere to put a price, so no future
     // change to a component can leak one.
-    const order = buildWorkOrder([zone()], catalog, {
-      z1: [{ name: "Hardwood mulch", quantityLabel: "3 yd" }],
-    });
-    const serialised = JSON.stringify(order);
+    const serialised = JSON.stringify(buildWorkOrder([zone()], catalog));
     expect(serialised).not.toContain("cost");
     expect(serialised).not.toContain("cogs");
     expect(serialised).not.toContain("price");
     expect(serialised).not.toContain("12.5");
   });
 
-  it("passes materials through with quantities and no costs", () => {
-    const order = buildWorkOrder([zone()], catalog, {
-      z1: [{ name: "Hardwood mulch", quantityLabel: "3 yd" }],
-    });
-    expect(order.zones[0].materials).toEqual([{ name: "Hardwood mulch", quantityLabel: "3 yd" }]);
+  it("says nothing about what to load — not tools, not materials", () => {
+    // Loading is the shop's business. A list on the crew's sheet that nobody
+    // maintains is worse than no list, because they stop reading the sheet.
+    const order = buildWorkOrder([zone()], catalog);
+    const serialised = JSON.stringify(order);
+    expect(serialised).not.toContain("tool");
+    expect(serialised).not.toContain("material");
+    expect(serialised).not.toContain("Wheelbarrow");
   });
 });
 

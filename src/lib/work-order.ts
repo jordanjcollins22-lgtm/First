@@ -6,13 +6,14 @@
  * reading the price of it — that is a conversation between the account manager
  * and the client, and a number the crew were never meant to quote from.
  *
- * So this assembles a separate thing from the same source data: zones, what to
- * do in each, and what to bring. Money is not omitted from the display, it is
- * absent from the shape — a work order has nowhere to put a price, so no
- * future change to a component can leak one.
+ * So this assembles a separate thing from the same source data: the zones and
+ * what to do in each. Nothing about loading the truck — tools and materials
+ * are the shop's problem, and a list that goes stale is worse than none.
+ * Money is not omitted from the display, it is absent from the shape — a work
+ * order has nowhere to put a price, so no future change to a component can
+ * leak one.
  */
 
-import { resolveTools } from "@/lib/tool-selection";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { Point, WorkZone } from "@/components/canvas/types";
 
@@ -35,15 +36,10 @@ export interface WorkOrderZone {
   /** The evaluator's checklist answers — the actual instructions. */
   tasks: WorkOrderTask[];
   notes: string;
-  /** Materials to bring, with quantities. No costs. */
-  materials: { name: string; quantityLabel: string }[];
-  toolNames: string[];
 }
 
 export interface WorkOrder {
   zones: WorkOrderZone[];
-  /** Every tool the day needs, deduped — the loading list. */
-  toolNames: string[];
 }
 
 function sizeLabelFor(zone: WorkZone): string | null {
@@ -62,8 +58,7 @@ function sizeLabelFor(zone: WorkZone): string | null {
  */
 export function buildWorkOrder(
   zones: WorkZone[],
-  catalog: Pick<CanvasCatalog, "servicePricing" | "tools">,
-  materialsByZone: Record<string, { name: string; quantityLabel: string }[]> = {},
+  catalog: Pick<CanvasCatalog, "servicePricing">,
   /** Turns a checklist field key into the words the evaluator saw. Without it
    * the crew read raw keys, which is a worse instruction than none. */
   labelFor: (typeId: string, key: string) => string = (_typeId, key) => key
@@ -76,13 +71,6 @@ export function buildWorkOrder(
     if (!zone.service) continue;
 
     const typeId = zone.service.typeId;
-
-    // Exactly what was picked, with no fallback to the service's default kit.
-    // Substituting defaults for an empty list meant a zone the account manager
-    // had deliberately cleared still turned up on the crew's sheet carrying
-    // ten tools nobody chose — and made the picker disagree with the screen it
-    // is meant to control.
-    const toolIds = zone.service.tools;
 
     const tasks = Object.entries(zone.service.values ?? {})
       .filter(([, value]) => value !== "" && value != null)
@@ -98,20 +86,10 @@ export function buildWorkOrder(
       sizeLabel: sizeLabelFor(zone),
       tasks,
       notes: zone.service.notes ?? "",
-      materials: materialsByZone[zone.id] ?? [],
-      // Resolved rather than printed: zones store names, service defaults are
-      // ids, and a token that matches neither is a tool that no longer exists.
-      // Showing it raw is what put a run of random characters on the screen.
-      toolNames: resolveTools(toolIds, catalog.tools).map((t) => t.name),
     });
   }
 
-  // The loading list: every tool once, in a stable order so it reads the same
-  // way each morning.
-  const all = new Set<string>();
-  for (const zone of built) for (const tool of zone.toolNames) all.add(tool);
-
-  return { zones: built, toolNames: [...all].sort((a, b) => a.localeCompare(b)) };
+  return { zones: built };
 }
 
 /**

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, MapPin, Navigation, Phone, Wrench } from "lucide-react";
+import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 
 import { SiteMapImage } from "@/components/proposal/site-map-image";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
@@ -11,7 +11,7 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
  * Deliberately not the job page. That screen is the office's — proposal
  * totals, discounts, invoices — and none of it is a crew member's business to
  * be reading on a customer's driveway. This is the same job seen as work:
- * where each zone is, what to do in it, and what to bring.
+ * where each zone is and what to do in it.
  *
  * Server component with no interactivity, because there is nothing here to
  * change. The crew record progress on Today; this is what to do.
@@ -97,26 +97,6 @@ export function WorkOrderView({
         />
       )}
 
-      {/* ------------------------------------------------------ what to bring */}
-      {order.toolNames.length > 0 && (
-        <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
-          <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-            <Wrench className="h-4 w-4" />
-            Load the truck
-          </h2>
-          <ul className="flex flex-wrap gap-1.5">
-            {order.toolNames.map((tool) => (
-              <li
-                key={tool}
-                className="rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs font-medium"
-              >
-                {tool}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {/* ----------------------------------------------------------- the work */}
       {order.zones.length === 0 ? (
         <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">
@@ -168,28 +148,6 @@ export function WorkOrderView({
                 </p>
               )}
 
-              {zone.materials.length > 0 && (
-                <div className="mb-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Materials
-                  </p>
-                  <ul className="text-sm">
-                    {zone.materials.map((material) => (
-                      <li key={material.name} className="flex justify-between gap-3">
-                        <span>{material.name}</span>
-                        <span className="font-medium">{material.quantityLabel}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {zone.toolNames.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium">Tools: </span>
-                  {zone.toolNames.join(", ")}
-                </p>
-              )}
             </li>
           ))}
         </ol>
