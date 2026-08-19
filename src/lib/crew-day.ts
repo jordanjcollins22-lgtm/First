@@ -34,7 +34,6 @@ export interface Stop {
   purpose: string | null;
   /** Every tool this stop's zones call for, unresolved. Totalled across the
    * day so the crew load once rather than per job. */
-  toolTokens: string[];
 }
 
 /** Where the day has got to. */

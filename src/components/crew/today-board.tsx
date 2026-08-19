@@ -2,12 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Loader2, MapPin, Navigation, RotateCcw, Truck, Wrench } from "lucide-react";
+import { Check, ChevronRight, Loader2, MapPin, Navigation, RotateCcw, Truck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { recordCrewEvent, undoLastCrewEvent } from "@/lib/actions/crew-day-actions";
 import { directionsUrl, readDay, type CrewEvent, type Stop } from "@/lib/crew-day";
-import type { DayToolLine } from "@/lib/tool-selection";
 
 /**
  * The crew's whole screen.
@@ -24,13 +23,10 @@ import type { DayToolLine } from "@/lib/tool-selection";
 export function TodayBoard({
   stops,
   events,
-  dayTools,
   personName,
 }: {
   stops: Stop[];
   events: CrewEvent[];
-  /** Everything to load, across every stop. */
-  dayTools: DayToolLine[];
   personName: string;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -102,41 +98,6 @@ export function TodayBoard({
           </button>
         )}
       </section>
-
-      {/* Before the stops, because loading the truck happens before driving
-          to any of them. */}
-      {dayTools.length > 0 && (
-        <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
-          <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-            <Wrench className="h-4 w-4" />
-            Load for today ({dayTools.length})
-          </h2>
-          <ul className="flex flex-col gap-1.5">
-            {dayTools.map((line) => (
-              <li key={line.name} className="flex items-baseline justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-1.5 text-sm">
-                  <span className="truncate font-medium">{line.name}</span>
-                  {line.isRental && (
-                    <span className="shrink-0 rounded-full border border-amber-500/50 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-800">
-                      rental
-                    </span>
-                  )}
-                </span>
-                {/* Naming the stop rather than counting it: "1 stop" tells
-                    somebody a tool is needed once, which they can see; which
-                    one is the part they cannot. */}
-                <span className="max-w-[45%] shrink-0 truncate text-[11px] text-muted-foreground">
-                  {line.jobLabels.length === stops.length && stops.length > 1
-                    ? "every stop"
-                    : line.jobLabels.length === 1
-                      ? line.jobLabels[0]
-                      : `${line.jobLabels.length} stops`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       <section>
         <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

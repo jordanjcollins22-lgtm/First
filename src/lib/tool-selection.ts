@@ -131,6 +131,10 @@ export interface DayToolLine {
  * Deduped by tool and annotated with the stops that need it — a crew member
  * looking at "Plate compactor" wants to know whether that is one job or three
  * before deciding whether to make two trips.
+ *
+ * Nothing calls this today — the load list was taken off the Today screen.
+ * Kept whole, with its tests, because the per-zone picking it reads from is
+ * still there, so putting the list back is a matter of wiring.
  */
 export function dayToolList(
   stops: { label: string; toolTokens: string[] }[],

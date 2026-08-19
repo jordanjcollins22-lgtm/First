@@ -39,7 +39,6 @@ export default async function TodayPage() {
       <TodayBoard
         stops={day.stops}
         events={day.events}
-        dayTools={day.dayTools}
         personName={profile.full_name || profile.email}
       />
     </div>
