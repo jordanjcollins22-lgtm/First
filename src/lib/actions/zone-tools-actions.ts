@@ -60,3 +60,43 @@ export async function setZoneTools(
     return { ok: false, message: "Couldn't save those tools." };
   }
 }
+
+/**
+ * Empties every zone's tool list on a job.
+ *
+ * For the jobs carrying tools nobody picked: the survey used to attach the
+ * service's whole list on save, so clearing them one zone at a time would mean
+ * a lot of tapping to undo something that was never chosen.
+ */
+export async function clearAllZoneTools(jobId: string): Promise<ZoneToolsResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const supabase = await createClient();
+    const { data: design, error: readError } = await supabase
+      .from("canvas_designs")
+      .select("id, zones")
+      .eq("job_id", jobId)
+      .maybeSingle();
+    if (readError) return { ok: false, message: describeDbError(readError) };
+    if (!design) return { ok: false, message: "This job has no site plan yet." };
+
+    const zones = (design.zones as unknown as WorkZone[]) ?? [];
+    const next = zones.map((zone) =>
+      zone.service ? { ...zone, service: { ...zone.service, tools: [] } } : zone
+    );
+
+    const { error } = await supabase
+      .from("canvas_designs")
+      .update({ zones: next as unknown as never })
+      .eq("id", design.id);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath(`/jobs/${jobId}`);
+    revalidatePath("/today");
+    return { ok: true, message: "Cleared every zone." };
+  } catch (err) {
+    console.error("clearAllZoneTools failed:", err);
+    return { ok: false, message: "Couldn't clear those tools." };
+  }
+}

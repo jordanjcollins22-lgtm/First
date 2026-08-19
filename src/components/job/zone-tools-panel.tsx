@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Check, Loader2, Package, Wrench, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { setZoneTools } from "@/lib/actions/zone-tools-actions";
+import { clearAllZoneTools, setZoneTools } from "@/lib/actions/zone-tools-actions";
 import { addTools, hasAllTools, kitsFrom, removeTools, resolveTools } from "@/lib/tool-selection";
 import type { Tool } from "@/types/domain";
 
@@ -37,7 +37,12 @@ export function ZoneToolsPanel({
   zones: ZoneToolsRow[];
   tools: Tool[];
 }) {
+  const [cleared, setCleared] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
   if (zones.length === 0) return null;
+
+  const anyPicked = zones.some((z) => z.toolTokens.length > 0);
 
   return (
     <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
@@ -48,6 +53,23 @@ export function ZoneToolsPanel({
       <p className="mb-3 text-xs text-muted-foreground">
         What the crew load for each zone. Everything picked here adds up into their list for the day.
       </p>
+
+      {anyPicked && !cleared && (
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await clearAllZoneTools(jobId);
+              if (result.ok) setCleared(true);
+            })
+          }
+          className="mb-3 flex min-h-9 items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+        >
+          {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Clear every zone and start fresh
+        </button>
+      )}
 
       <div className="flex flex-col gap-3">
         {zones.map((zone) => (
@@ -221,6 +243,16 @@ function ZoneRow({ jobId, zone, tools }: { jobId: string; zone: ZoneToolsRow; to
             >
               Cancel
             </Button>
+            {picked.length > 0 && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setPicked([])}
+                className="ml-auto flex min-h-9 items-center text-[11px] text-muted-foreground hover:text-destructive"
+              >
+                Clear all
+              </button>
+            )}
           </div>
         </div>
       )}

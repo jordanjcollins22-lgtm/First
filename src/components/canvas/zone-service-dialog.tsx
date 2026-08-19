@@ -348,8 +348,9 @@ export function ZoneServiceDialog({
     [serviceType]
   );
 
-  // Tools come from the service's own checklist; the evaluator never picks
-  // them, they just ride along with the zone for the crew's plan.
+  // What this service usually needs. Shown as a reminder on the review step;
+  // the actual load-out is chosen per zone on the job page, so nothing here
+  // writes to the zone.
   const autoTools = catalog.tools.filter((tool) =>
     catalog.serviceTools.some((link) => link.service_type_id === typeId && link.tool_id === tool.id)
   );
@@ -568,9 +569,12 @@ export function ZoneServiceDialog({
   }
 
   function handleSave() {
-    // Tools come straight from the service's checklist — the evaluator never
-    // picks them, they just travel with the zone for the crew.
-    const tools = autoTools.map((tool) => tool.name);
+    // Whatever the account manager chose on the job page, untouched. This used
+    // to overwrite them with the service's whole tool list on every save,
+    // which meant a zone nobody had picked tools for still arrived on the
+    // crew's sheet carrying ten of them — and re-saving a zone silently wiped
+    // a selection somebody had made deliberately.
+    const tools = initialService?.tools ?? [];
 
     // Drop the blank placeholder an unfilled "Other" leaves behind.
     const cleanedChoices: Record<string, { type?: string; color?: string }> = {};
@@ -1126,7 +1130,8 @@ export function ZoneServiceDialog({
               )}
               {autoTools.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Tools: {autoTools.map((t) => t.name).join(", ")}
+                  Usually needs: {autoTools.map((t) => t.name).join(", ")} — picked per zone on the job
+                  page, not here.
                 </p>
               )}
             </ReviewRow>
