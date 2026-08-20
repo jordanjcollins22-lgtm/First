@@ -2,26 +2,33 @@ import Link from "next/link";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
-import { getDashboard } from "@/lib/data/dashboard";
+import { getDashboard, loadJobInputs } from "@/lib/data/dashboard";
 import { getCommissionFor } from "@/lib/data/commission";
+import { buildMyWork, type MyWork } from "@/lib/my-work";
 import type { DashboardData } from "@/lib/dashboard";
 import type { CommissionSummary } from "@/lib/commission";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
+import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
 
-function money(n: number): string {
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-}
-
 /**
- * The account manager's day.
+ * One person's own work — whoever they are.
  *
- * Same piles as the admin dashboard and the same derivation behind them, cut
- * two ways: only their clients and the jobs they are on, and only today. An
- * account manager standing in a driveway at nine in the morning is not asking
- * how the month is going — they are asking what is left today, and a month
- * switcher on that screen is one more thing to tap past.
+ * The dashboard answers "what is the business doing". This answers "what is on
+ * me", which is a different question with a different audience of one.
+ *
+ * It reads top to bottom in the order somebody actually needs it. Today first,
+ * because that is what an account manager standing in a driveway at nine in
+ * the morning is asking. Then what they owe somebody — the visits made but
+ * never written up, which is the pile no other screen in the app shows,
+ * because a job with an unsubmitted evaluation looks perfectly healthy from
+ * every other angle. Then what is coming, then the live work they are
+ * carrying, then what they have earned.
+ *
+ * One page rather than one per role: an admin and an account manager want the
+ * same five answers about themselves, and a second copy of this screen would
+ * be a second thing to keep in step.
  *
  * Not tab-gated, for the same reason Today is not: it shows the signed-in
  * person their own work and nobody else's, so there is nothing here to
@@ -47,6 +54,15 @@ export default async function MyDayPage() {
   } catch (err) {
     console.error("My Day failed to load:", err);
   }
+
+  // The forward-looking half: what is booked, what is owed, what is running.
+  // Same rows as the board above, read a different way.
+  const work: MyWork | null = await loadJobInputs({ forProfileId: profile.id })
+    .then((inputs) => buildMyWork(inputs))
+    .catch((err) => {
+      console.error("My work failed to load:", err);
+      return null;
+    });
 
   // Their own book, loaded separately so a money table that isn't set up costs
   // the commission panel rather than the whole day.
@@ -74,7 +90,7 @@ export default async function MyDayPage() {
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="text-2xl font-bold">My Day</h1>
       <p className="mb-4 text-muted-foreground">
-        {profile.full_name || profile.email} — your clients and your jobs, today.
+        {profile.full_name || profile.email} — your clients and your jobs.
       </p>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -91,11 +107,19 @@ export default async function MyDayPage() {
           hint={summary.needsSignoff > 0 ? "Go and walk it" : undefined}
           alert={summary.needsSignoff > 0}
         />
-        <Tile label="Booked value" value={money(summary.bookedValue)} hint="Your work today" />
+        {/* Booked value moved to the "Jobs you're managing" header, where it
+            totals the live work rather than only today's. This slot goes to
+            the pile nothing else in the app surfaces. */}
+        <Tile
+          label="Needs submitting"
+          value={String(work?.submissions.length ?? 0)}
+          hint={work && work.submissions.length > 0 ? "Visits not written up" : undefined}
+          alert={(work?.submissions.length ?? 0) > 0}
+        />
       </div>
 
       {nothing ? (
-        <p className="rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
+        <p className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
           Nothing on your plate today. Anything overdue would show here, so a quiet screen means a quiet
           day — check the{" "}
           <Link href="/pipeline" className="underline">
@@ -106,16 +130,24 @@ export default async function MyDayPage() {
       ) : (
         <>
           <DashboardSections
-            title="Evaluations"
+            title="Today's evaluations"
             blurb="Visits on your clients. Anything still outstanding from before today is pulled in and marked late."
             sections={data.evaluations}
           />
 
           <DashboardSections
-            title="Jobs"
+            title="Today's jobs"
             blurb="Your work. Sold-but-unbooked and sign-off piles ignore the date — they matter whenever they exist."
             sections={data.jobs}
           />
+        </>
+      )}
+
+      {work && (
+        <>
+          <NeedsSubmitting items={work.submissions} />
+          <UpcomingEvaluations items={work.upcoming} />
+          <ManagedJobs items={work.managed} />
         </>
       )}
 

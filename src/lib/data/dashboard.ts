@@ -22,18 +22,18 @@ export interface DashboardOptions {
 }
 
 /**
- * Everything the dashboard shows, in three queries.
+ * The job rows every board is built from, in three queries.
  *
  * Jobs already arrive with their property and customer joined, so the only
  * extra reads are the proposals (for status and value) and the profiles (for
  * turning an id into a name). One query each rather than one per job — the
- * whole point of this page is that it loads in a single go on a phone.
+ * whole point of these pages is that they load in a single go on a phone.
+ *
+ * Shared rather than duplicated: the dashboard, the personal board and the
+ * work queue all read the same rows, so none of them can quietly disagree
+ * about what a job is.
  */
-export async function getDashboard(
-  range: DashboardRange,
-  today: Date = new Date(),
-  options: DashboardOptions = {}
-): Promise<DashboardData> {
+export async function loadJobInputs(options: DashboardOptions = {}): Promise<DashboardJobInput[]> {
   const all = await listJobsWithLocation();
   const mine = options.forProfileId;
   const jobs = mine
@@ -41,7 +41,7 @@ export async function getDashboard(
         isTheirs({ accountManagerId: j.property.customer.account_manager_id, assignedTo: j.assigned_to }, mine)
       )
     : all;
-  if (jobs.length === 0) return buildDashboard([], range, today);
+  if (jobs.length === 0) return [];
 
   const supabase = await createClient();
   const [{ data: proposals }, profiles] = await Promise.all([
@@ -60,7 +60,7 @@ export async function getDashboard(
   );
   const nameById = new Map(profiles.map((p) => [p.id, p.full_name || p.email]));
 
-  const inputs: DashboardJobInput[] = jobs.map((job) => {
+  return jobs.map((job) => {
     const proposal = proposalByJob.get(job.id) ?? null;
     return {
       id: job.id,
@@ -79,6 +79,14 @@ export async function getDashboard(
       personName: job.assigned_to ? (nameById.get(job.assigned_to) ?? null) : null,
     };
   });
+}
 
+/** Everything the dashboard shows, for one window. */
+export async function getDashboard(
+  range: DashboardRange,
+  today: Date = new Date(),
+  options: DashboardOptions = {}
+): Promise<DashboardData> {
+  const inputs = await loadJobInputs(options);
   return buildDashboard(inputs, range, today);
 }

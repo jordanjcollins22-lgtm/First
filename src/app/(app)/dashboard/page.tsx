@@ -74,7 +74,19 @@ export default async function DashboardPage({
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
       <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="mb-4 text-muted-foreground">Everything happening, and everything about to.</p>
+      <p className="mb-3 text-muted-foreground">Everything happening, and everything about to.</p>
+
+      {/* This page is the business. The personal half — what is booked on you,
+          what you owe somebody, what you are carrying — lives one tap away. */}
+      <Link
+        href="/my-day"
+        className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-white/60 bg-card/60 px-3 py-2.5 text-sm backdrop-blur-md hover:bg-accent/50"
+      >
+        <span className="font-medium">My Day</span>
+        <span className="text-xs text-muted-foreground">
+          Your upcoming visits, what needs submitting, and the jobs you&apos;re managing &rarr;
+        </span>
+      </Link>
 
       {/* Plain links, so the window survives a reload and can be bookmarked. */}
       <nav className="mb-4 flex gap-1 rounded-xl border border-white/60 bg-card/60 p-1 backdrop-blur-md">
