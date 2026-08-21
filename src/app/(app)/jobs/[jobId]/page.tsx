@@ -271,7 +271,7 @@ export default async function JobPage({
           href={`/jobs/${jobId}/work-order`}
           className="shrink-0 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
         >
-          Crew sheet
+          View crew sheet
         </Link>
       </div>
 

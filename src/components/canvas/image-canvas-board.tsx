@@ -294,7 +294,7 @@ export function ImageCanvasBoard({
           setLocked(initialDesign.locked);
           // Prefer the live property address over whatever was saved with this
           // design snapshot — the property address can be corrected later
-          // (e.g. from a bad webhook value) and the canvas/PDF should follow it.
+          // (e.g. from a bad webhook value) and the canvas should follow it.
           setAddress(initialAddress || initialDesign.address || "");
           setZones(initialDesign.zones as unknown as WorkZone[]);
           setPropertyLine(initialDesign.property_line ?? []);
@@ -897,7 +897,7 @@ export function ImageCanvasBoard({
               <Button type="button" size="sm" variant="outline" asChild>
                 <Link href={`/jobs/${jobId}/work-order`} target="_blank" rel="noopener noreferrer">
                   <ClipboardList className="h-4 w-4" />
-                  Crew sheet
+                  View crew sheet
                 </Link>
               </Button>
             )}
