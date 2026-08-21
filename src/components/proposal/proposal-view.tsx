@@ -8,6 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
 import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
+import {
+  PROPOSAL_ACCEPT_NOTE,
+  PROPOSAL_TERMS,
+  PROPOSAL_TERMS_TITLE,
+  PROPOSAL_TERMS_TITLE_AGREED,
+} from "@/lib/proposal-terms";
 import { SiteMapImage } from "./site-map-image";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
@@ -141,6 +147,25 @@ export function ProposalView({
         )}
       </div>
 
+      {/* Between the price and the buttons deliberately. These terms exist
+          because work gets added on the day, and a clause a client scrolls
+          past after accepting protects nobody. */}
+      <section className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4">
+        <h2 className="text-lg font-semibold">
+          {status === "sent" || status === "needs_approval"
+            ? PROPOSAL_TERMS_TITLE
+            : PROPOSAL_TERMS_TITLE_AGREED}
+        </h2>
+        <ul className="flex flex-col gap-3">
+          {PROPOSAL_TERMS.map((term) => (
+            <li key={term.heading}>
+              <p className="text-sm font-semibold">{term.heading}</p>
+              <p className="text-sm text-muted-foreground">{term.body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <div className="flex flex-col items-center gap-3">
         {status === "needs_approval" ? (
           <p className="text-sm text-muted-foreground">
@@ -149,11 +174,27 @@ export function ProposalView({
         ) : status === "sent" ? (
           <>
             {!showDeclineForm ? (
-              <div className="flex w-full gap-3">
-                <Button type="button" size="xl" className="flex-1" disabled={isPending} onClick={() => respond("accepted")}>
+              // Stacked on a phone: two xl buttons side by side pushed Decline
+              // off the right edge of a 390px screen, which is most of the
+              // screens this page is ever opened on.
+              <div className="flex w-full flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  size="xl"
+                  className="w-full sm:flex-1"
+                  disabled={isPending}
+                  onClick={() => respond("accepted")}
+                >
                   Accept this proposal
                 </Button>
-                <Button type="button" size="xl" variant="outline" disabled={isPending} onClick={() => setShowDeclineForm(true)}>
+                <Button
+                  type="button"
+                  size="xl"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={isPending}
+                  onClick={() => setShowDeclineForm(true)}
+                >
                   Decline
                 </Button>
               </div>
@@ -186,6 +227,9 @@ export function ProposalView({
                   </Button>
                 </div>
               </div>
+            )}
+            {!showDeclineForm && (
+              <p className="text-center text-xs text-muted-foreground">{PROPOSAL_ACCEPT_NOTE}</p>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
           </>
