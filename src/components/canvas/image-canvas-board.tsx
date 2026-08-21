@@ -9,13 +9,12 @@ import {
   type PointerEvent,
 } from "react";
 import { v4 as uuid } from "uuid";
-import jsPDF from "jspdf";
 import Link from "next/link";
 import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Download,
+  ClipboardList,
   Home,
   ImageUp,
   Lock,
@@ -34,14 +33,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
@@ -50,30 +41,18 @@ import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
 import { ZoneServiceDialog } from "./zone-service-dialog";
-import { serviceTypeById, type ServiceFieldDef } from "./service-catalog";
+import { serviceTypeById } from "./service-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
 import { updateEvaluationStatus } from "@/lib/actions/job-actions";
-import {
-  computeJobTotals,
-  formatMaterialQuantity,
-  formatMeasurements,
-  zoneMaterialLineItems,
-  zoneMeasurements,
-  type MaterialLineItem,
-} from "@/lib/proposal-pricing";
+import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 
 const CLOSE_POINT_RADIUS = 12;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
 const METERS_TO_FEET = 3.28084;
-
-// PDF page canvases, sized to match a US Letter page's aspect ratio (8.5x11).
-const PAGE_WIDTH = 1000;
-const PAGE_HEIGHT = Math.round((PAGE_WIDTH / 8.5) * 11);
-const PAGE_MARGIN = 48;
 
 interface CanvasImage {
   element: HTMLImageElement;
@@ -116,641 +95,12 @@ function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
-// Cached across a single PDF export (and reused between exports in the same
-// session) so the same tool/material photo isn't re-fetched for every zone it
-// appears in.
-const inventoryImageCache = new Map<string, Promise<HTMLImageElement | null>>();
-
-function loadInventoryImage(
-  bucket: "tool-images" | "material-images" | "canvas-images",
-  path: string | null
-): Promise<HTMLImageElement | null> {
-  if (!path) return Promise.resolve(null);
-  const key = `${bucket}:${path}`;
-  let cached = inventoryImageCache.get(key);
-  if (!cached) {
-    cached = (async () => {
-      try {
-        const supabase = createClient();
-        const url = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        return await loadImageElement(await res.blob());
-      } catch {
-        return null;
-      }
-    })();
-    inventoryImageCache.set(key, cached);
-  }
-  return cached;
-}
-
-function toolImageFor(name: string, catalog: CanvasCatalog): Promise<HTMLImageElement | null> {
-  return loadInventoryImage("tool-images", catalog.tools.find((t) => t.name === name)?.image_path ?? null);
-}
-
-function materialImageFor(materialId: string, catalog: CanvasCatalog): Promise<HTMLImageElement | null> {
-  return loadInventoryImage(
-    "material-images",
-    catalog.materials.find((m) => m.id === materialId)?.image_path ?? null
-  );
-}
-
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [];
-  const lines: string[] = [];
-  let current = words[0];
-  for (const word of words.slice(1)) {
-    const candidate = `${current} ${word}`;
-    if (ctx.measureText(candidate).width > maxWidth) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = candidate;
-    }
-  }
-  lines.push(current);
-  return lines;
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-/** Draws a titled box, wrapping raw (unwrapped) lines to fit. Returns the next y. */
-function drawBoxedSection(
-  ctx: CanvasRenderingContext2D,
-  title: string,
-  rawLines: string[],
-  y: number,
-  bg = "#f9fafb"
-): number {
-  const padding = 14;
-  const lineHeight = 20;
-  const font = "14px sans-serif";
-  const titleFont = "700 15px sans-serif";
-  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
-  const innerMaxWidth = maxWidth - padding * 2;
-
-  ctx.font = font;
-  const wrapped: string[] = [];
-  for (const raw of rawLines) wrapped.push(...wrapText(ctx, raw, innerMaxWidth));
-
-  const titleHeight = title ? 24 : 0;
-  const boxHeight = padding * 2 + titleHeight + Math.max(wrapped.length, 1) * lineHeight;
-
-  ctx.fillStyle = bg;
-  roundRect(ctx, PAGE_MARGIN, y, maxWidth, boxHeight, 8);
-  ctx.fill();
-
-  let innerY = y + padding;
-  if (title) {
-    ctx.font = titleFont;
-    ctx.fillStyle = "#111827";
-    ctx.fillText(title, PAGE_MARGIN + padding, innerY);
-    innerY += titleHeight;
-  }
-  ctx.font = font;
-  ctx.fillStyle = "#374151";
-  for (const line of wrapped) {
-    ctx.fillText(line, PAGE_MARGIN + padding, innerY);
-    innerY += lineHeight;
-  }
-
-  return y + boxHeight + 18;
-}
-
-/** Draws wrapping pill chips, each with the tool's actual photo (or its icon as a fallback). Returns the next y. */
-async function drawToolChips(
-  ctx: CanvasRenderingContext2D,
-  toolNames: string[],
-  catalog: CanvasCatalog,
-  x: number,
-  y: number,
-  maxWidth: number
-): Promise<number> {
-  const paddingX = 10;
-  const iconSize = 18;
-  const iconGap = 6;
-  const chipHeight = 26;
-  const gap = 8;
-  ctx.font = "13px sans-serif";
-  ctx.textBaseline = "middle";
-  let cx = x;
-  let cy = y;
-  for (const name of toolNames) {
-    const image = await toolImageFor(name, catalog);
-    const textWidth = ctx.measureText(name).width;
-    const chipWidth = textWidth + paddingX * 2 + iconSize + iconGap;
-    if (cx + chipWidth > x + maxWidth && cx > x) {
-      cx = x;
-      cy += chipHeight + gap;
-    }
-    ctx.fillStyle = "#eef2f7";
-    roundRect(ctx, cx, cy, chipWidth, chipHeight, chipHeight / 2);
-    ctx.fill();
-    const iconY = cy + (chipHeight - iconSize) / 2;
-    if (image) {
-      ctx.save();
-      roundRect(ctx, cx + paddingX, iconY, iconSize, iconSize, 4);
-      ctx.clip();
-      ctx.drawImage(image, cx + paddingX, iconY, iconSize, iconSize);
-      ctx.restore();
-    } else {
-      ctx.font = "14px sans-serif";
-      ctx.fillText(toolIconFor(name, catalog), cx + paddingX, cy + chipHeight / 2 + 1);
-      ctx.font = "13px sans-serif";
-    }
-    ctx.fillStyle = "#111827";
-    ctx.fillText(name, cx + paddingX + iconSize + iconGap, cy + chipHeight / 2 + 1);
-    cx += chipWidth + gap;
-  }
-  ctx.textBaseline = "top";
-  return cy + chipHeight + 18;
-}
-
-/** Breaks an auto-scope sentence (or sentences) into ordered checklist steps. */
-function splitScopeIntoSteps(scope: string): string[] {
-  const sentences = scope.split(/(?<=\.)\s+/).map((s) => s.trim()).filter(Boolean);
-  const steps: string[] = [];
-  for (const sentence of sentences) {
-    const withoutPeriod = sentence.replace(/\.$/, "");
-    const parts = withoutPeriod
-      .split(/,\s*(?:and\s+)?|\s+and\s+/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    for (const part of parts) {
-      steps.push(part.charAt(0).toUpperCase() + part.slice(1));
-    }
-  }
-  return steps;
-}
-
 function zoneServiceSummary(service: ZoneServiceData, catalog: CanvasCatalog): string {
   return (
     catalog.servicePricing.find((p) => p.service_type_id === service.typeId)?.name ??
     serviceTypeById(service.typeId)?.label ??
     "Details added"
   );
-}
-
-function displayFieldValue(values: Record<string, string>, field: ServiceFieldDef): string {
-  if (field.checklistItem) {
-    const qty = values[`${field.key}__qty`];
-    return qty ? `${field.checklistItem.question} — Qty: ${qty}` : field.checklistItem.question;
-  }
-  const value = values[field.key];
-  if (value === "Other") {
-    const explanation = values[`${field.key}__other`];
-    return explanation ? `Other — ${explanation}` : "Other";
-  }
-  return value;
-}
-
-function toolIconFor(name: string, catalog: CanvasCatalog): string {
-  return catalog.tools.find((t) => t.name === name)?.icon ?? "🧰";
-}
-
-function allToolsAcrossZones(zones: WorkZone[]): string[] {
-  const set = new Set<string>();
-  for (const zone of zones) {
-    for (const tool of zone.service?.tools ?? []) set.add(tool);
-  }
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
-}
-
-
-async function renderCoverPage(
-  planCanvas: HTMLCanvasElement,
-  address: string,
-  tools: string[],
-  catalog: CanvasCatalog
-): Promise<HTMLCanvasElement> {
-  const canvas = document.createElement("canvas");
-  canvas.width = PAGE_WIDTH;
-  canvas.height = PAGE_HEIGHT;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-
-  let y = PAGE_MARGIN;
-  ctx.font = "700 30px sans-serif";
-  ctx.fillStyle = "#111827";
-  ctx.fillText("Site Plan", PAGE_MARGIN, y);
-  y += 40;
-
-  if (address.trim()) {
-    ctx.font = "16px sans-serif";
-    ctx.fillStyle = "#6b7280";
-    ctx.fillText(address.trim(), PAGE_MARGIN, y);
-    y += 26;
-  }
-  y += 12;
-
-  const mapWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
-  const mapHeight = mapWidth * (planCanvas.height / planCanvas.width);
-  ctx.drawImage(planCanvas, PAGE_MARGIN, y, mapWidth, mapHeight);
-  y += mapHeight + 36;
-
-  ctx.font = "700 20px sans-serif";
-  ctx.fillStyle = "#111827";
-  ctx.fillText("Tools to Grab", PAGE_MARGIN, y);
-  y += 30;
-
-  if (tools.length === 0) {
-    ctx.font = "italic 15px sans-serif";
-    ctx.fillStyle = "#9ca3af";
-    ctx.fillText("No tools listed yet.", PAGE_MARGIN, y);
-  } else {
-    ctx.font = "15px sans-serif";
-    ctx.fillStyle = "#374151";
-    const colWidth = (PAGE_WIDTH - PAGE_MARGIN * 2) / 2;
-    const rowHeight = 26;
-    const rowsPerColumn = Math.ceil(tools.length / 2);
-    const iconSize = 18;
-    for (let i = 0; i < tools.length; i++) {
-      const tool = tools[i];
-      const col = Math.floor(i / rowsPerColumn);
-      const row = i % rowsPerColumn;
-      const colX = PAGE_MARGIN + col * colWidth;
-      const rowY = y + row * rowHeight;
-      const image = await toolImageFor(tool, catalog);
-      ctx.font = "15px sans-serif";
-      ctx.fillStyle = "#374151";
-      ctx.fillText("☐", colX, rowY);
-      const iconX = colX + 22;
-      if (image) {
-        ctx.drawImage(image, iconX, rowY - 1, iconSize, iconSize);
-      } else {
-        ctx.fillText(toolIconFor(tool, catalog), iconX, rowY);
-      }
-      ctx.fillText(tool, iconX + iconSize + 6, rowY);
-    }
-  }
-
-  return canvas;
-}
-
-async function renderZonePage(zone: WorkZone, catalog: CanvasCatalog): Promise<HTMLCanvasElement> {
-  const canvas = document.createElement("canvas");
-  canvas.width = PAGE_WIDTH;
-  canvas.height = PAGE_HEIGHT;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-
-  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
-
-  const HEADER_HEIGHT = 96;
-  ctx.fillStyle = zone.color;
-  ctx.fillRect(0, 0, PAGE_WIDTH, HEADER_HEIGHT);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 32px sans-serif";
-  ctx.fillText(zone.name, PAGE_MARGIN, 26);
-  if (zone.location.trim()) {
-    ctx.font = "16px sans-serif";
-    ctx.fillText(`📍 ${zone.location.trim()}`, PAGE_MARGIN, 66);
-  }
-
-  let y = HEADER_HEIGHT + 28;
-  const service = zone.service;
-  const serviceType = service ? serviceTypeById(service.typeId) : undefined;
-  const serviceRow = service ? catalog.servicePricing.find((p) => p.service_type_id === service.typeId) : undefined;
-  const serviceName = serviceRow?.name ?? serviceType?.label ?? "Service";
-
-  if (service) {
-    ctx.font = "700 22px sans-serif";
-    ctx.fillStyle = "#111827";
-    ctx.fillText(serviceName, PAGE_MARGIN, y);
-    y += 36;
-
-    if (serviceRow?.status === "pending") {
-      y = drawBoxedSection(ctx, "Status", ["⏳ Pending pricing review"], y, "#fffbeb");
-    } else if (serviceRow?.status === "denied") {
-      y = drawBoxedSection(ctx, "Status", ["🚫 Outside our current scope — we don't offer this service"], y, "#fef2f2");
-    }
-
-    const fieldLines = (serviceType?.fields ?? [])
-      .filter((field) => service.values[field.key])
-      .map((field) =>
-        field.checklistItem ? displayFieldValue(service.values, field) : `${field.label}: ${displayFieldValue(service.values, field)}`
-      );
-    if (fieldLines.length > 0) {
-      y = drawBoxedSection(ctx, "Details", fieldLines, y);
-    }
-
-    // What the customer picked on site, so the crew buys the right thing.
-    const materialLines = Object.entries(service.materialChoices ?? {})
-      .map(([name, choice]) => {
-        const detail = [choice?.type?.trim(), choice?.color?.trim()].filter(Boolean).join(" · ");
-        return detail ? `${name}: ${detail}` : null;
-      })
-      .filter((line): line is string => Boolean(line));
-    if (materialLines.length > 0) {
-      y = drawBoxedSection(ctx, "Material choice", materialLines, y, "#f0fdf4");
-    }
-
-    if (service.tools.length > 0) {
-      ctx.font = "700 15px sans-serif";
-      ctx.fillStyle = "#111827";
-      ctx.fillText("Tools", PAGE_MARGIN, y);
-      y += 24;
-      y = await drawToolChips(ctx, service.tools, catalog, PAGE_MARGIN, y, maxWidth);
-    }
-
-    if (serviceType?.autoScope) {
-      const steps = splitScopeIntoSteps(serviceType.autoScope(service.values)).map((s) => `☐ ${s}`);
-      y = drawBoxedSection(ctx, "Checklist", steps, y, "#eff6ff");
-    }
-
-    if (service.notes.trim()) {
-      y = drawBoxedSection(ctx, "Notes", [service.notes.trim()], y, "#fffbeb");
-    }
-
-    if (service.photos.length > 0) {
-      const photoSize = 200;
-      const gap = 16;
-      const maxPhotos = Math.min(service.photos.length, 3);
-      let x = PAGE_MARGIN;
-      for (let i = 0; i < maxPhotos; i++) {
-        const photoElement = await loadInventoryImage("canvas-images", service.photos[i]);
-        if (photoElement) {
-          ctx.drawImage(photoElement, x, y, photoSize, photoSize);
-          ctx.strokeStyle = "#e5e7eb";
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x, y, photoSize, photoSize);
-        }
-        x += photoSize + gap;
-      }
-      y += photoSize + 16;
-      if (service.photos.length > maxPhotos) {
-        ctx.font = "italic 13px sans-serif";
-        ctx.fillStyle = "#6b7280";
-        ctx.fillText(`+${service.photos.length - maxPhotos} more photo(s) on file`, PAGE_MARGIN, y);
-      }
-    }
-  } else {
-    ctx.font = "italic 16px sans-serif";
-    ctx.fillStyle = "#9ca3af";
-    ctx.fillText("No service details added yet.", PAGE_MARGIN, y);
-  }
-
-  return canvas;
-}
-
-async function renderMaterialsPage(
-  zones: WorkZone[],
-  address: string,
-  catalog: CanvasCatalog
-): Promise<HTMLCanvasElement> {
-  const canvas = document.createElement("canvas");
-  canvas.width = PAGE_WIDTH;
-  canvas.height = PAGE_HEIGHT;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-
-  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
-  let y = PAGE_MARGIN;
-
-  ctx.font = "700 26px sans-serif";
-  ctx.fillStyle = "#111827";
-  ctx.fillText("Materials & Rentals to Order", PAGE_MARGIN, y);
-  y += 34;
-  if (address.trim()) {
-    ctx.font = "14px sans-serif";
-    ctx.fillStyle = "#6b7280";
-    ctx.fillText(address.trim(), PAGE_MARGIN, y);
-    y += 24;
-  }
-  y += 12;
-
-  const allItems: MaterialLineItem[] = [];
-  for (const zone of zones) {
-    const measurements = zoneMeasurements(zone);
-    if (!measurements) continue;
-    allItems.push(...zoneMaterialLineItems(zone, measurements.areaSqFt, catalog));
-  }
-
-  ctx.font = "700 19px sans-serif";
-  ctx.fillStyle = "#111827";
-  ctx.fillText("Materials", PAGE_MARGIN, y);
-  y += 28;
-
-  if (allItems.length === 0) {
-    ctx.font = "italic 14px sans-serif";
-    ctx.fillStyle = "#9ca3af";
-    for (const line of wrapText(
-      ctx,
-      "No bulk materials calculated yet — needs a zone with a manually entered area (sq ft) and a material rule configured.",
-      maxWidth
-    )) {
-      ctx.fillText(line, PAGE_MARGIN, y);
-      y += 20;
-    }
-  } else {
-    for (const item of allItems) {
-      ctx.font = "700 14px sans-serif";
-      ctx.fillStyle = "#111827";
-      ctx.fillText(item.zoneName, PAGE_MARGIN, y);
-      y += 19;
-
-      const image = await materialImageFor(item.materialId, catalog);
-      const iconSize = 20;
-      const textX = PAGE_MARGIN + (image ? iconSize + 8 : 0);
-      ctx.font = "14px sans-serif";
-      const lines = wrapText(
-        ctx,
-        `☐ ${item.material}: ${formatMaterialQuantity(item)}`,
-        maxWidth - (textX - PAGE_MARGIN)
-      );
-      if (image) ctx.drawImage(image, PAGE_MARGIN, y, iconSize, iconSize);
-      ctx.fillStyle = "#374151";
-      for (const [i, line] of lines.entries()) {
-        ctx.fillText(line, textX, y + i * 20);
-      }
-      y += Math.max(lines.length * 20, image ? iconSize + 4 : 0);
-      y += 6;
-    }
-  }
-
-  y += 14;
-  ctx.font = "700 19px sans-serif";
-  ctx.fillStyle = "#111827";
-  ctx.fillText("Equipment to Rent", PAGE_MARGIN, y);
-  y += 28;
-
-  const rentals = Array.from(
-    new Set(
-      zones
-        .flatMap((zone) => zone.service?.tools ?? [])
-        .filter((toolName) => catalog.tools.find((t) => t.name === toolName)?.is_rental)
-    )
-  );
-  if (rentals.length === 0) {
-    ctx.font = "italic 14px sans-serif";
-    ctx.fillStyle = "#9ca3af";
-    ctx.fillText("No rental equipment flagged for this job.", PAGE_MARGIN, y);
-  } else {
-    ctx.font = "14px sans-serif";
-    ctx.fillStyle = "#374151";
-    const iconSize = 18;
-    for (const tool of rentals) {
-      const image = await toolImageFor(tool, catalog);
-      if (image) {
-        ctx.drawImage(image, PAGE_MARGIN, y - 2, iconSize, iconSize);
-        ctx.fillText(`☐ ${tool}`, PAGE_MARGIN + iconSize + 6, y);
-      } else {
-        ctx.fillText(`☐ ${toolIconFor(tool, catalog)} ${tool}`, PAGE_MARGIN, y);
-      }
-      y += 22;
-    }
-  }
-
-  return canvas;
-}
-
-interface JobPlanLine {
-  text: string;
-  font: string;
-  color: string;
-  indent: number;
-}
-
-function buildJobPlanTaskLines(zones: WorkZone[], catalog: CanvasCatalog): JobPlanLine[] {
-  const lines: JobPlanLine[] = [];
-  let step = 1;
-  for (const zone of zones) {
-    lines.push({
-      text: zone.name + (zone.location.trim() ? ` — ${zone.location.trim()}` : ""),
-      font: "700 15px sans-serif",
-      color: "#111827",
-      indent: 0,
-    });
-    const service = zone.service;
-    const serviceRow = service ? catalog.servicePricing.find((p) => p.service_type_id === service.typeId) : undefined;
-    const serviceType = service ? serviceTypeById(service.typeId) : undefined;
-    if (service && serviceRow?.status === "denied") {
-      lines.push({
-        text: "Outside our current scope of work — we don't offer this service.",
-        font: "italic 14px sans-serif",
-        color: "#9ca3af",
-        indent: 16,
-      });
-    } else if (service && serviceRow?.status === "pending") {
-      lines.push({ text: "Pending pricing review.", font: "italic 14px sans-serif", color: "#9ca3af", indent: 16 });
-    } else if (service && serviceType?.autoScope) {
-      for (const taskStep of splitScopeIntoSteps(serviceType.autoScope(service.values))) {
-        lines.push({ text: `${step}. ${taskStep}`, font: "14px sans-serif", color: "#374151", indent: 16 });
-        step++;
-      }
-    } else if (service) {
-      const name = serviceRow?.name ?? "Service";
-      const detail = service.notes.trim() ? `${name} — ${service.notes.trim()}` : name;
-      lines.push({ text: `${step}. ${detail}`, font: "14px sans-serif", color: "#374151", indent: 16 });
-      step++;
-    } else {
-      lines.push({ text: "No service details added.", font: "italic 14px sans-serif", color: "#9ca3af", indent: 16 });
-    }
-  }
-  return lines;
-}
-
-/** Paginates the whole-job task list so large jobs don't silently overflow one page. */
-function renderJobPlanPages(
-  zones: WorkZone[],
-  address: string,
-  catalog: CanvasCatalog
-): HTMLCanvasElement[] {
-  const maxWidth = PAGE_WIDTH - PAGE_MARGIN * 2;
-  const measureCanvas = document.createElement("canvas");
-  const mctx = measureCanvas.getContext("2d");
-  if (!mctx) return [];
-
-  const totalAreaSqFt = zones.reduce((sum, zone) => sum + (zoneMeasurements(zone)?.areaSqFt ?? 0), 0);
-  const summary = `${zones.length} zone${zones.length === 1 ? "" : "s"}${
-    totalAreaSqFt > 0 ? ` · ${Math.round(totalAreaSqFt).toLocaleString()} sq ft total` : ""
-  }`;
-
-  const totals = computeJobTotals(zones, catalog);
-  const totalsParts: string[] = [];
-  if (totals.totalCost > 0) {
-    totalsParts.push(`Est. cost: $${totals.totalCost.toFixed(2)}${totals.hasNonFlatRate ? " (includes per-unit rates — verify)" : ""}`);
-  }
-  if (totals.totalHours > 0) totalsParts.push(`Est. time: ${totals.totalHours.toFixed(1)} crew hrs`);
-
-  const headerLines: JobPlanLine[] = [
-    { text: "Job Plan", font: "700 28px sans-serif", color: "#111827", indent: 0 },
-    ...(address.trim() ? [{ text: address.trim(), font: "16px sans-serif", color: "#6b7280", indent: 0 }] : []),
-    { text: summary, font: "15px sans-serif", color: "#374151", indent: 0 },
-    ...(totalsParts.length > 0
-      ? [{ text: totalsParts.join(" · "), font: "700 15px sans-serif", color: "#111827", indent: 0 }]
-      : []),
-    { text: "Order of Work", font: "700 18px sans-serif", color: "#111827", indent: 0 },
-  ];
-
-  const wrapped: JobPlanLine[] = [];
-  for (const line of [...headerLines, ...buildJobPlanTaskLines(zones, catalog)]) {
-    mctx.font = line.font;
-    for (const piece of wrapText(mctx, line.text, maxWidth - line.indent)) {
-      wrapped.push({ ...line, text: piece });
-    }
-  }
-
-  const LINE_HEIGHT = 24;
-  const linesPerPage = Math.max(1, Math.floor((PAGE_HEIGHT - PAGE_MARGIN * 2) / LINE_HEIGHT));
-
-  const pages: HTMLCanvasElement[] = [];
-  for (let i = 0; i < wrapped.length; i += linesPerPage) {
-    const chunk = wrapped.slice(i, i + linesPerPage);
-    const canvas = document.createElement("canvas");
-    canvas.width = PAGE_WIDTH;
-    canvas.height = PAGE_HEIGHT;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) continue;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    let y = PAGE_MARGIN;
-    for (const line of chunk) {
-      ctx.font = line.font;
-      ctx.fillStyle = line.color;
-      ctx.fillText(line.text, PAGE_MARGIN + line.indent, y);
-      y += LINE_HEIGHT;
-    }
-    pages.push(canvas);
-  }
-
-  if (pages.length > 0) return pages;
-  const fallback = document.createElement("canvas");
-  fallback.width = PAGE_WIDTH;
-  fallback.height = PAGE_HEIGHT;
-  const fctx = fallback.getContext("2d");
-  if (fctx) {
-    fctx.fillStyle = "#ffffff";
-    fctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-  }
-  return [fallback];
 }
 
 function ZonePhotoThumbnail({ path }: { path: string }) {
@@ -804,8 +154,6 @@ export function ImageCanvasBoard({
   const [satelliteLoading, setSatelliteLoading] = useState(false);
   const [satelliteError, setSatelliteError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [submittingEval, setSubmittingEval] = useState(false);
   const [evalSubmitted, setEvalSubmitted] = useState(initialEvaluationStatus === "completed");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1374,68 +722,6 @@ export function ImageCanvasBoard({
     }
   }
 
-  async function handleExportPdf() {
-    const planCanvas = canvasRef.current;
-    if (!planCanvas) return;
-
-    setExporting(true);
-    try {
-      const tools = allToolsAcrossZones(zones);
-      const coverCanvas = await renderCoverPage(planCanvas, address, tools, catalog);
-
-      const pdf = new jsPDF({ unit: "pt", format: "letter" });
-      const pageWidthPt = pdf.internal.pageSize.getWidth();
-      const pageHeightPt = pdf.internal.pageSize.getHeight();
-
-      // JPEG compresses these mostly-flat, opaque pages far better than PNG does
-      // through jsPDF (which doesn't reuse PNG's own DEFLATE stream), keeping the
-      // PDF a reasonable size to email or download.
-      let firstPage = true;
-      const addPageCanvas = (canvas: HTMLCanvasElement) => {
-        if (!firstPage) pdf.addPage("letter", "portrait");
-        firstPage = false;
-        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageWidthPt, pageHeightPt);
-      };
-
-      // Cover first, then the zone detail pages the crew flips through on-site,
-      // and the office-facing materials/job-plan pages trail at the very end.
-      addPageCanvas(coverCanvas);
-
-      for (const zone of zones) {
-        addPageCanvas(await renderZonePage(zone, catalog));
-      }
-
-      addPageCanvas(await renderMaterialsPage(zones, address, catalog));
-
-      for (const jobPlanCanvas of renderJobPlanPages(zones, address, catalog)) {
-        addPageCanvas(jobPlanCanvas);
-      }
-
-      const blob = pdf.output("blob");
-      setPdfPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(blob);
-      });
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  function handleClosePdfPreview() {
-    setPdfPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-  }
-
-  function handleDownloadPdf() {
-    if (!pdfPreviewUrl) return;
-    const link = document.createElement("a");
-    link.href = pdfPreviewUrl;
-    link.download = "scope-of-work.pdf";
-    link.click();
-  }
-
   async function handleClearSavedDesign() {
     if (!jobId) await clearDesign();
     setImage(null);
@@ -1603,10 +889,18 @@ export function ImageCanvasBoard({
                 Services
               </Link>
             </div>
-            <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={handleExportPdf}>
-              <Download className="h-4 w-4" />
-              {exporting ? "Building PDF..." : "Preview PDF"}
-            </Button>
+            {/* This used to build a scope-of-work PDF. The crew sheet replaced
+                it: it is the same job read the same way, except it is live, so
+                it cannot be a week out of date in somebody's downloads folder
+                the way a printed copy always ended up being. */}
+            {jobId && (
+              <Button type="button" size="sm" variant="outline" asChild>
+                <Link href={`/jobs/${jobId}/work-order`} target="_blank" rel="noopener noreferrer">
+                  <ClipboardList className="h-4 w-4" />
+                  Crew sheet
+                </Link>
+              </Button>
+            )}
             {jobId && (
               <Button
                 type="button"
@@ -1974,35 +1268,6 @@ export function ImageCanvasBoard({
         onCancel={() => setServiceDialogZoneId(null)}
       />
 
-      <Dialog open={pdfPreviewUrl !== null} onOpenChange={(next) => !next && handleClosePdfPreview()}>
-        <DialogContent className="flex h-[95vh] max-h-[95vh] w-[95vw] max-w-none flex-col">
-          <DialogHeader>
-            <DialogTitle>Preview scope of work PDF</DialogTitle>
-            <DialogDescription>
-              Review every page before downloading. Close this and adjust the job plan if
-              anything looks off.
-            </DialogDescription>
-          </DialogHeader>
-
-          {pdfPreviewUrl && (
-            <iframe
-              src={pdfPreviewUrl}
-              title="Scope of work PDF preview"
-              className="w-full flex-1 rounded-md border border-border"
-            />
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClosePdfPreview}>
-              Close
-            </Button>
-            <Button type="button" onClick={handleDownloadPdf}>
-              <Download className="h-4 w-4" />
-              Download PDF
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

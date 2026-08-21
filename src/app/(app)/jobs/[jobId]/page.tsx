@@ -29,8 +29,7 @@ import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
-import { buildWorkOrder } from "@/lib/work-order";
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
+import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
@@ -238,45 +237,11 @@ export default async function JobPage({
   // showed them all of it.
   const viewerRoles = (await getCurrentProfile())?.roles ?? [];
   if (isFieldOnly(viewerRoles)) {
-    // Who the crew ring when something on site doesn't match the sheet.
-    const manager = accountManagerId
-      ? ((
-          await supabase
-            .from("profiles")
-            .select("full_name, email, phone")
-            .eq("id", accountManagerId)
-            .maybeSingle()
-        ).data as { full_name: string | null; email: string; phone: string | null } | null)
-      : null;
-
-    const order = buildWorkOrder(zones, catalog, (typeId, key) => {
-      const field = serviceTypeById(typeId)?.fields?.find((f) => f.key === key);
-      return field?.label ?? key;
-    });
-    return (
-      <WorkOrderView
-        order={order}
-        address={job.property?.address ?? ""}
-        customerName={job.property?.customers?.name ?? "Client"}
-        jobName={job.name}
-        siteImagePath={design?.image_path ?? null}
-        accountManager={
-          manager ? { name: manager.full_name || manager.email, phone: manager.phone } : null
-        }
-        imageTransform={
-          design
-            ? {
-                x: design.image_x,
-                y: design.image_y,
-                scale: design.image_scale,
-                rotation: design.image_rotation,
-                canvasWidth: CANVAS_WIDTH,
-                canvasHeight: CANVAS_HEIGHT,
-              }
-            : null
-        }
-      />
-    );
+    // The same loader the sheet's own URL uses, so what the crew see here and
+    // what anybody else sees there can never be two different things.
+    const sheet = await getWorkOrderForJob(jobId);
+    if (!sheet) notFound();
+    return <WorkOrderView {...sheet} />;
   }
 
   const host = headersList.get("host") ?? "";
@@ -294,9 +259,20 @@ export default async function JobPage({
         Back to Project Data
       </Link>
 
-      <div>
-        <h1 className="text-xl font-bold sm:text-2xl">{job.property?.address ?? job.name}</h1>
-        <p className="text-sm text-muted-foreground sm:text-base">{job.name}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold sm:text-2xl">{job.property?.address ?? job.name}</h1>
+          <p className="text-sm text-muted-foreground sm:text-base">{job.name}</p>
+        </div>
+        {/* What the crew will actually be looking at on site. Worth a tap from
+            here rather than only from inside the drawing tool — checking the
+            sheet before sending somebody out is the point of it existing. */}
+        <Link
+          href={`/jobs/${jobId}/work-order`}
+          className="shrink-0 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
+        >
+          Crew sheet
+        </Link>
       </div>
 
       <StageHeader stage={stage} next={nextStep(stageInput)} />

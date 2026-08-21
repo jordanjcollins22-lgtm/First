@@ -69,6 +69,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The account manager's own day. Same argument as Today: it shows the signed-in person their own " +
     "clients and jobs and nobody else's, so there is nothing to withhold, and a tick could leave " +
     "somebody with no screen to open.",
+  "/jobs/[jobId]/work-order":
+    "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
+    "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +
+    "and whoever can open the job can see that.",
   "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
   "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
 };

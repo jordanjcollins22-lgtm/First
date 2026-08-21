@@ -24,6 +24,7 @@ export function WorkOrderView({
   siteImagePath,
   imageTransform,
   accountManager,
+  back,
 }: {
   order: WorkOrder;
   address: string;
@@ -34,17 +35,21 @@ export function WorkOrderView({
   imageTransform: ProposalSiteImageTransform | null;
   /** Who to ring when something on site does not match the sheet. */
   accountManager: { name: string; phone: string | null } | null;
+  /** Where the back link goes. Defaults to the crew's day, which is where a
+   * crew member came from; the office opens this from the job and wants to go
+   * back there instead. */
+  back?: { href: string; label: string };
 }) {
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
       <Link
-        href="/today"
+        href={back?.href ?? "/today"}
         className="flex min-h-9 items-center gap-1 text-sm text-muted-foreground hover:text-primary"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to today
+        {back?.label ?? "Back to today"}
       </Link>
 
       <header>
