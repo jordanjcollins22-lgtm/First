@@ -6,9 +6,10 @@
  * reading the price of it — that is a conversation between the account manager
  * and the client, and a number the crew were never meant to quote from.
  *
- * So this assembles a separate thing from the same source data: the zones and
- * what to do in each. Nothing about loading the truck — tools and materials
- * are the shop's problem, and a list that goes stale is worse than none.
+ * So this assembles a separate thing from the same source data: the zones,
+ * what to do in each, and what the evaluator photographed and marked there.
+ * Nothing about loading the truck — tools and materials are the shop's
+ * problem, and a list that goes stale is worse than none.
  * Money is not omitted from the display, it is absent from the shape — a work
  * order has nowhere to put a price, so no future change to a component can
  * leak one.
@@ -16,6 +17,19 @@
 
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { Point, WorkZone } from "@/components/canvas/types";
+
+export interface ZonePhoto {
+  /** Storage path in the canvas-images bucket. */
+  path: string;
+  /**
+   * Where the evaluator tapped, as fractions of the image's width and height.
+   *
+   * Fractions rather than pixels because the crew see these on a phone and the
+   * evaluator marked them on whatever they were holding — a pin stored in
+   * pixels lands in the wrong place on every other screen.
+   */
+  markers: Point[];
+}
 
 export interface WorkOrderTask {
   label: string;
@@ -36,6 +50,15 @@ export interface WorkOrderZone {
   /** The evaluator's checklist answers — the actual instructions. */
   tasks: WorkOrderTask[];
   notes: string;
+  /**
+   * What the evaluator photographed here, with whatever they marked on it.
+   *
+   * The single most useful thing on the sheet after the map. "Re-edge the bed"
+   * is an instruction; the photo with a pin on the corner that has collapsed
+   * is the instruction plus the answer to the question the crew were going to
+   * ring about.
+   */
+  photos: ZonePhoto[];
 }
 
 export interface WorkOrder {
@@ -86,6 +109,12 @@ export function buildWorkOrder(
       sizeLabel: sizeLabelFor(zone),
       tasks,
       notes: zone.service.notes ?? "",
+      // Markers are keyed by the photo's own path, so a photo with none
+      // simply has none — there is no separate "unmarked" state to handle.
+      photos: (zone.service.photos ?? []).map((path) => ({
+        path,
+        markers: zone.service?.photoMarkers?.[path] ?? [],
+      })),
     });
   }
 

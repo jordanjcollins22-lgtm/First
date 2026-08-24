@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 
 import { SiteMapImage } from "@/components/proposal/site-map-image";
+import { ZonePhotos } from "@/components/job/marked-photo";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
 import type { ProposalSiteImageTransform } from "@/types/domain";
 
@@ -13,8 +14,10 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
  * be reading on a customer's driveway. This is the same job seen as work:
  * where each zone is and what to do in it.
  *
- * Server component with no interactivity, because there is nothing here to
- * change. The crew record progress on Today; this is what to do.
+ * Server component apart from the photos, which open full screen — a
+ * thumbnail is enough to know a photo exists and not enough to see which
+ * corner of a bed the evaluator pinned, which is the whole reason the pin was
+ * dropped. Nothing here changes any record; the crew do that on Today.
  */
 export function WorkOrderView({
   order,
@@ -152,6 +155,11 @@ export function WorkOrderView({
                   {zone.notes}
                 </p>
               )}
+
+              {/* Below the words, because the words say what to do and the
+                  photos say where. Somebody reads the instruction first and
+                  then looks for the thing it is talking about. */}
+              <ZonePhotos photos={zone.photos} zoneName={zone.name} />
 
             </li>
           ))}

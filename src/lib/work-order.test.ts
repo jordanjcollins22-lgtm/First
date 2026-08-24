@@ -102,6 +102,38 @@ describe("buildWorkOrder", () => {
     expect(serialised).not.toContain("12.5");
   });
 
+  it("carries the evaluator's photos with the pins they dropped", () => {
+    // The pins are the point: "re-edge the bed" is an instruction, the photo
+    // with a pin on the collapsed corner is the instruction plus the answer.
+    const z = zone({
+      service: {
+        typeId: "mulch",
+        values: {},
+        notes: "",
+        photos: ["a.jpg", "b.jpg"],
+        photoMarkers: { "a.jpg": [{ x: 0.25, y: 0.5 }] },
+        tools: [],
+      },
+    } as Partial<WorkZone>);
+    const [built] = buildWorkOrder([z], catalog).zones;
+    expect(built.photos).toEqual([
+      { path: "a.jpg", markers: [{ x: 0.25, y: 0.5 }] },
+      { path: "b.jpg", markers: [] },
+    ]);
+  });
+
+  it("gives a photo nobody marked an empty list rather than nothing", () => {
+    // No separate "unmarked" state to handle downstream.
+    const z = zone({
+      service: { typeId: "mulch", values: {}, notes: "", photos: ["a.jpg"], tools: [] },
+    } as Partial<WorkZone>);
+    expect(buildWorkOrder([z], catalog).zones[0].photos).toEqual([{ path: "a.jpg", markers: [] }]);
+  });
+
+  it("has no photos on a zone nobody photographed", () => {
+    expect(buildWorkOrder([zone()], catalog).zones[0].photos).toEqual([]);
+  });
+
   it("says nothing about what to load — not tools, not materials", () => {
     // Loading is the shop's business. A list on the crew's sheet that nobody
     // maintains is worse than no list, because they stop reading the sheet.
