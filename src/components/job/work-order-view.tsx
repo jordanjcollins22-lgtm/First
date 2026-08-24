@@ -20,6 +20,7 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
  * dropped. Nothing here changes any record; the crew do that on Today.
  */
 export function WorkOrderView({
+  jobId,
   order,
   address,
   customerName,
@@ -29,6 +30,7 @@ export function WorkOrderView({
   accountManager,
   back,
 }: {
+  jobId: string;
   order: WorkOrder;
   address: string;
   customerName: string;
@@ -43,8 +45,6 @@ export function WorkOrderView({
    * back there instead. */
   back?: { href: string; label: string };
 }) {
-  const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
-
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
       <Link
@@ -61,15 +61,13 @@ export function WorkOrderView({
           {customerName}
           {jobName && ` · ${jobName}`}
         </p>
-        <a
-          href={directions}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          href={`/jobs/${jobId}/directions`}
           className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground"
         >
           <Navigation className="h-5 w-5" />
           Directions
-        </a>
+        </Link>
       </header>
 
       {accountManager && (

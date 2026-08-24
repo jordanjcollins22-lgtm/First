@@ -238,10 +238,14 @@ export function minutesElapsed(events: CrewEvent[], now: Date = new Date()): num
   return Math.max(0, Math.round((end - start) / 60_000));
 }
 
-/** A map link that works on both phones, for "show me which house". */
+/**
+ * Where "Directions" goes: the app's own directions screen for that stop.
+ *
+ * It used to hand straight off to Google Maps, which works but is a one-way
+ * door — the crew leave, and the tap that says "I'm on the way" is now three
+ * apps back. The in-app screen keeps that a tap away and still offers the
+ * handover to a real navigation app for anybody who wants spoken turns.
+ */
 export function directionsUrl(stop: Stop): string {
-  if (stop.lat != null && stop.lng != null) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`;
-  }
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}`;
+  return `/jobs/${stop.jobId}/directions`;
 }

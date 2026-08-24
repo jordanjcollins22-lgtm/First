@@ -27,5 +27,5 @@ export default async function WorkOrderPage({ params }: { params: Promise<{ jobI
   const data = await getWorkOrderForJob(jobId);
   if (!data) notFound();
 
-  return <WorkOrderView {...data} back={{ href: `/jobs/${jobId}`, label: "Back to the job" }} />;
+  return <WorkOrderView jobId={jobId} {...data} back={{ href: `/jobs/${jobId}`, label: "Back to the job" }} />;
 }

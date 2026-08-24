@@ -183,12 +183,13 @@ describe("minutesElapsed", () => {
 });
 
 describe("directionsUrl", () => {
-  it("uses coordinates when it has them", () => {
-    expect(directionsUrl(STOPS[0])).toContain("39.5,-76.3");
+  it("stays inside the app", () => {
+    // Handing straight off to Google Maps is a one-way door: the crew leave,
+    // and the tap that says "I'm on the way" is three apps back.
+    expect(directionsUrl(STOPS[0])).toBe("/jobs/j1/directions");
   });
 
-  it("falls back to the address, escaped", () => {
-    const url = directionsUrl({ ...STOPS[0], lat: null, lng: null });
-    expect(url).toContain("12%20Elm%20St");
+  it("works for a stop with no pin, since the screen handles that itself", () => {
+    expect(directionsUrl({ ...STOPS[0], lat: null, lng: null })).toBe("/jobs/j1/directions");
   });
 });

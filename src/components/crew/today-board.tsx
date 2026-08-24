@@ -138,15 +138,13 @@ function StopCallout({ stop, phase }: { stop: Stop; phase: string }) {
       {stop.purpose && <p className="mt-0.5 text-xs text-muted-foreground">{stop.purpose}</p>}
 
       <div className="mt-2 flex flex-wrap gap-2">
-        <a
+        <Link
           href={directionsUrl(stop)}
-          target="_blank"
-          rel="noreferrer"
           className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground"
         >
           <Navigation className="h-4 w-4" />
           Directions
-        </a>
+        </Link>
         <Link
           href={`/jobs/${stop.jobId}`}
           className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium"
@@ -201,15 +199,13 @@ function StopRow({
 
       {/* Always tappable, even when it isn't the current stop — "show me which
           house that was" is a fair question about any of them. */}
-      <a
+      <Link
         href={directionsUrl(stop)}
-        target="_blank"
-        rel="noreferrer"
         aria-label={`Directions to ${stop.address}`}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border"
       >
         <ChevronRight className="h-4 w-4" />
-      </a>
+      </Link>
     </li>
   );
 }

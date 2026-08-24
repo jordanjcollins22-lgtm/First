@@ -20,8 +20,10 @@ function formatWhen(iso: string): string {
   });
 }
 
-function directionsUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+/** The app's own directions screen. It used to jump out to a Google Maps
+ * search, which loses whoever tapped it to another app mid-day. */
+function directionsUrl(jobId: string): string {
+  return `/jobs/${jobId}/directions`;
 }
 
 function ActionButton({ jobId, status }: { jobId: string; status: EvaluationStatus }) {
@@ -106,15 +108,13 @@ function UpcomingCard({
             <span>{name}</span>
           </>
         )}
-        <a
-          href={directionsUrl(job.property.lat, job.property.lng)}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href={directionsUrl(job.id)}
           className="flex items-center gap-1 text-primary underline-offset-2 hover:underline"
         >
           <Navigation className="h-3.5 w-3.5" />
           Directions
-        </a>
+        </Link>
       </div>
       {isMine && (
         <div className="flex justify-end">

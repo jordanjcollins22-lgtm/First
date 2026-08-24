@@ -241,7 +241,7 @@ export default async function JobPage({
     // what anybody else sees there can never be two different things.
     const sheet = await getWorkOrderForJob(jobId);
     if (!sheet) notFound();
-    return <WorkOrderView {...sheet} />;
+    return <WorkOrderView jobId={jobId} {...sheet} />;
   }
 
   const host = headersList.get("host") ?? "";
