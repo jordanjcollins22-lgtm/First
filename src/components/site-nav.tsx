@@ -49,7 +49,7 @@ export function SiteNav({
         ...(can("new-property") ? [{ href: "/?new=1", label: "New Estimate" }] : []),
         ...(can("project-data") ? [{ href: "/attractors", label: "Project Data" }] : []),
         ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
-        ...(can("leads") ? [{ href: "/leads", label: "Leads" }] : []),
+        ...(can("leads") ? [{ href: "/leads", label: "Lead Generation" }] : []),
         ...(can("contacts") ? [{ href: "/contacts", label: "Contacts" }] : []),
         ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
         ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),

@@ -29,7 +29,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "proposals", label: "Proposals", href: "/proposals" },
   { key: "contacts", label: "Contacts", href: "/contacts" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
-  { key: "leads", label: "Leads", href: "/leads" },
+  { key: "leads", label: "Lead Generation", href: "/leads" },
   { key: "conversations", label: "Conversations", href: "/conversations" },
   { key: "notifications", label: "Notifications", href: "/notifications" },
   { key: "weather", label: "Weather", href: "/weather" },

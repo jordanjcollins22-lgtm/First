@@ -18,6 +18,8 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   job_walkthroughs: "0081_final_walkthrough.sql",
   crew_day_events: "0082_crew_day.sql",
   job_crew: "0083_job_crew.sql",
+  outreach_channels: "0084_outreach.sql",
+  outreach_touches: "0084_outreach.sql",
 };
 
 interface DbError {

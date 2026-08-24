@@ -7,6 +7,9 @@ import { TARGET_TICKET } from "@/lib/leads";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getProspects, type ProspectsData } from "@/lib/data/prospects";
 import { ProspectPanel } from "@/components/leads/prospect-panel";
+import { OutreachBoard } from "@/components/leads/outreach-board";
+import { getOutreach, type OutreachData } from "@/lib/data/outreach";
+import { getCurrentProfile } from "@/lib/data/team";
 import { isRentcastConfigured } from "@/lib/env";
 
 function money(n: number): string {
@@ -14,10 +17,18 @@ function money(n: number): string {
 }
 
 /**
- * Who to chase next for a $5k+ landscaping job, and where those jobs come from.
+ * How this business gets evaluations booked.
  *
- * Everything here is drawn from work the business has already touched — no
- * bought list, no invented homeowners.
+ * The page leads with the day's outreach rather than with the lead list,
+ * because the list was never the bottleneck. The bottleneck is that the ways
+ * this business wins work live in one person's head, so when that person is
+ * away nobody books anything and the calendar goes quiet three weeks later.
+ * Channels with written playbooks and a number to hit are what somebody else
+ * can pick up on a Monday.
+ *
+ * The scoring, the sources and the prospect list sit underneath, unchanged —
+ * they answer "who do I ring", which only matters once somebody knows they are
+ * supposed to be ringing anybody.
  */
 export default async function LeadsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -37,6 +48,14 @@ export default async function LeadsPage() {
     console.error("Prospects failed to load:", err);
   }
 
+  // Loaded on its own so an un-migrated outreach table costs this section
+  // rather than the whole page.
+  const outreach: OutreachData | null = await getOutreach().catch((err) => {
+    console.error("Outreach failed to load:", err);
+    return null;
+  });
+  const viewerRoles = (await getCurrentProfile())?.roles ?? [];
+
   if (!data) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
@@ -51,8 +70,59 @@ export default async function LeadsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-      <h1 className="mb-1 text-2xl font-bold">Leads</h1>
+      <h1 className="mb-1 text-2xl font-bold">Lead generation</h1>
       <p className="mb-4 text-muted-foreground">
+        Every way we know how to get an evaluation booked, written down so anybody can run it.
+      </p>
+
+      {outreach && (
+        <section className="mb-8">
+          {outreach.setupNeeded ? (
+            <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">
+              The outreach playbooks need their database migration. In Supabase&apos;s SQL Editor run{" "}
+              <code>supabase/migrations/0084_outreach.sql</code> (or copy it from{" "}
+              <Link href="/admin/database" className="underline">
+                Database setup
+              </Link>
+              ), then reload.
+            </p>
+          ) : (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Tile
+                  label="Logged today"
+                  value={
+                    outreach.summary.target > 0
+                      ? `${outreach.summary.logged}/${outreach.summary.target}`
+                      : String(outreach.summary.logged)
+                  }
+                  hint="Attempts across every channel"
+                />
+                <Tile
+                  label="Booked today"
+                  value={String(outreach.summary.booked)}
+                  hint="Evaluations — the only score that counts"
+                />
+                <Tile
+                  label="Channels done"
+                  value={`${outreach.summary.channelsDone}/${outreach.summary.channelsWithTarget}`}
+                />
+                <Tile label="Channels running" value={String(outreach.progress.length)} />
+              </div>
+
+              <OutreachBoard
+                progress={outreach.progress}
+                results={outreach.results}
+                windowDays={outreach.windowDays}
+                canEdit={viewerRoles.includes("admin")}
+              />
+            </>
+          )}
+        </section>
+      )}
+
+      <h2 className="mb-1 text-lg font-bold">Who to call</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
         Homeowners already in the book who look worth {money(TARGET_TICKET)} or more — ranked by who to call
         first.
       </p>

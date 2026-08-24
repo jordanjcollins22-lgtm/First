@@ -1091,6 +1091,58 @@ export interface Database {
           },
         ];
       };
+      outreach_channels: {
+        Row: {
+          id: string;
+          organization_id: string;
+          key: string;
+          name: string;
+          temperature: string;
+          cost_type: string;
+          summary: string | null;
+          playbook: string | null;
+          daily_target: number | null;
+          active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_channels"]["Row"]> & {
+          organization_id: string;
+          key: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_channels"]["Row"]>;
+        Relationships: [];
+      };
+      outreach_touches: {
+        Row: {
+          id: string;
+          organization_id: string;
+          channel_id: string;
+          profile_id: string | null;
+          prospect_id: string | null;
+          customer_id: string | null;
+          outcome: string;
+          note: string | null;
+          at: string;
+          day: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_touches"]["Row"]> & {
+          organization_id: string;
+          channel_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_touches"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "outreach_touches_channel_id_fkey";
+            columns: ["channel_id"];
+            referencedRelation: "outreach_channels";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crew_day_events: {
         Row: {
           id: string;
