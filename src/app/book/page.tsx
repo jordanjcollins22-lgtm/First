@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { resolveBookingContext, listPublicServices, listOrgEvaluatorIds, listAvailabilityData } from "@/lib/data/public-booking";
 import { computeAvailableSlots } from "@/lib/booking-availability";
+import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import { BookingWizard } from "@/components/booking/booking-wizard";
 
 export default async function BookPage({
@@ -35,9 +36,12 @@ export default async function BookPage({
     ? [context.dedicatedEvaluatorId]
     : await listOrgEvaluatorIds(context.organizationId);
 
-  const [services, availability] = await Promise.all([
+  const [services, availability, busy] = await Promise.all([
     listPublicServices(context.organizationId),
     listAvailabilityData(evaluatorIds),
+    // Every other calendar these people are on. Without this a client could be
+    // offered ten o'clock with somebody who has been on an install since eight.
+    getBusyBlocksAsAdmin().catch(() => []),
   ]);
 
   const slots = computeAvailableSlots({
@@ -45,6 +49,7 @@ export default async function BookPage({
     weeklyAvailability: availability.weeklyAvailability,
     daysOff: availability.daysOff,
     bookedTimes: availability.bookedTimes,
+    busy,
     from: new Date(),
   });
 

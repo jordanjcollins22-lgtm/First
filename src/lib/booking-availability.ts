@@ -1,4 +1,5 @@
 import { evaluationWindow, windowsOverlap, type Window } from "@/lib/scheduling";
+import type { BusyBlock } from "@/lib/busy";
 import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
 export const SLOT_MINUTES = 60;
@@ -51,6 +52,7 @@ export function computeAvailableSlots({
   weeklyAvailability,
   daysOff,
   bookedTimes,
+  busy = [],
   from,
   daysAhead = 14,
   slotMinutes = SLOT_MINUTES,
@@ -60,6 +62,16 @@ export function computeAvailableSlots({
   weeklyAvailability: WeeklyAvailability[];
   daysOff: DayOff[];
   bookedTimes: BookedTime[];
+  /**
+   * Everything else already on these people's time — work visits, time off,
+   * evaluations on any other calendar.
+   *
+   * The person is the resource, not the calendar. Somebody on a patio install
+   * since eight is not free at ten just because the install is on a different
+   * calendar, and until this was passed in, the booking page offered exactly
+   * that slot to clients.
+   */
+  busy?: BusyBlock[];
   from: Date;
   daysAhead?: number;
   slotMinutes?: number;
@@ -89,6 +101,12 @@ export function computeAvailableSlots({
     const list = bookedByEvaluator.get(b.evaluatorId) ?? [];
     list.push(window);
     bookedByEvaluator.set(b.evaluatorId, list);
+  }
+  for (const block of busy) {
+    if (!evaluatorIds.includes(block.profileId)) continue;
+    const list = bookedByEvaluator.get(block.profileId) ?? [];
+    list.push({ start: block.start, end: block.end });
+    bookedByEvaluator.set(block.profileId, list);
   }
 
   const earliestAllowed = addMinutes(from, minLeadMinutes);

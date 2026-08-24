@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getBusyBlocks } from "@/lib/data/busy";
+import { conflictFor, describeConflict } from "@/lib/busy";
+import { evaluationWindow } from "@/lib/scheduling";
 import { generateProposal } from "@/lib/actions/proposal-actions";
 import {
   canCancelEstimate,
@@ -90,6 +93,42 @@ async function loadJob(supabase: Awaited<ReturnType<typeof createClient>>, jobId
   };
 }
 
+/**
+ * Whether the person assigned to this job is already spoken for.
+ *
+ * Returns the sentence to show them, or null when the slot is clear. Reads
+ * every calendar rather than only evaluations, which is the whole point:
+ * a double booking that only one screen can see is still a double booking.
+ */
+async function findClash(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  jobId: string,
+  startIso: string,
+  endIso: string | null
+): Promise<string | null> {
+  const window = evaluationWindow(startIso, endIso);
+  if (!window) return null;
+
+  const { data } = await supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle();
+  const assignedTo = (data as { assigned_to: string | null } | null)?.assigned_to ?? null;
+  // Nobody assigned means nobody to double-book. The office schedules first
+  // and assigns second often enough that refusing here would be wrong.
+  if (!assignedTo) return null;
+
+  const blocks = await getBusyBlocks().catch(() => []);
+  const clash = conflictFor(blocks, assignedTo, window, jobId);
+  if (!clash) return null;
+
+  const { data: person } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", assignedTo)
+    .maybeSingle();
+  const name = (person as { full_name: string | null; email: string } | null);
+
+  return describeConflict(clash, name?.full_name || name?.email || null);
+}
+
 function refresh(jobId: string) {
   revalidatePath("/attractors");
   revalidatePath("/evaluations");
@@ -158,6 +197,13 @@ export async function scheduleEstimate(
 
     const window = validateAppointment(date, endDate);
     if (!window.ok) return { ok: false, message: window.reason };
+
+    // The person is the resource, not the calendar. Somebody already on a job
+    // that morning is not free for an evaluation just because the job sits on
+    // a different calendar — and the office could book exactly that until now.
+    // The job's own appointment is ignored, or nothing could ever be moved.
+    const clash = date ? await findClash(supabase, jobId, date, endDate) : null;
+    if (clash) return { ok: false, message: clash };
 
     const patch: JobUpdate = {
       evaluation_date: date,

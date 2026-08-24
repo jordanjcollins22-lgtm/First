@@ -8,6 +8,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { notifyTeamMember } from "@/lib/notifications";
 import { canAssign, canMakeLead, canUnassign } from "@/lib/job-crew";
+import { getBusyBlocks } from "@/lib/data/busy";
+import { conflictFor, describeConflict } from "@/lib/busy";
 import { isAccountManager } from "@/lib/affiliate-roles";
 import type { JobCrewMember, JobStatus } from "@/types/domain";
 
@@ -46,6 +48,44 @@ async function loadCrew(supabase: Awaited<ReturnType<typeof createClient>>, jobI
  * a crew and nobody answering for it. They get a text, because being given a
  * job you find out about by opening the app tomorrow is not being given a job.
  */
+/**
+ * Whether this person is already committed on the days this job runs.
+ *
+ * Only a job with dates can clash — one that has not been scheduled yet books
+ * nobody's time, and refusing to staff it would stop the normal order of
+ * things, which is to pick the crew and then find them a week.
+ */
+async function assignmentClash(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  jobId: string,
+  profileId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("jobs")
+    .select("project_start_date, project_end_date")
+    .eq("id", jobId)
+    .maybeSingle();
+  const dates = data as { project_start_date: string | null; project_end_date: string | null } | null;
+  const startsOn = dates?.project_start_date;
+  const endsOn = dates?.project_end_date ?? startsOn;
+  if (!startsOn || !endsOn) return null;
+
+  const window = { start: new Date(`${startsOn}T00:00:00`), end: new Date(`${endsOn}T23:59:59`) };
+  if (Number.isNaN(window.start.getTime()) || Number.isNaN(window.end.getTime())) return null;
+
+  const blocks = await getBusyBlocks().catch(() => []);
+  const clash = conflictFor(blocks, profileId, window, jobId);
+  if (!clash) return null;
+
+  const { data: person } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", profileId)
+    .maybeSingle();
+  const p = person as { full_name: string | null; email: string } | null;
+  return describeConflict(clash, p?.full_name || p?.email || null);
+}
+
 export async function assignCrewMember(jobId: string, profileId: string): Promise<CrewResult> {
   try {
     const actor = await getCurrentProfile();
@@ -65,6 +105,13 @@ export async function assignCrewMember(jobId: string, profileId: string): Promis
 
     const verdict = canAssign(loaded.status, loaded.crew, profileId, candidate);
     if (!verdict.ok) return { ok: false, message: verdict.reason };
+
+    // Putting somebody on a job books their days as surely as booking the job
+    // does. Catching it here rather than at the visit means the clash surfaces
+    // while somebody is still choosing who goes, which is when it is cheap to
+    // fix.
+    const clash = await assignmentClash(supabase, jobId, profileId);
+    if (clash) return { ok: false, message: clash };
 
     const organizationId = await getCurrentOrganizationId();
     const { error } = await supabase.from("job_crew").insert({

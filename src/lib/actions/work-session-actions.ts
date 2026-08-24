@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { validateSession } from "@/lib/scheduling";
+import { getBusyBlocks } from "@/lib/data/busy";
+import { conflictFor, describeConflict } from "@/lib/busy";
 import { canRescheduleJob } from "@/lib/job-lifecycle";
 import type {
   JobStatus,
@@ -23,6 +25,53 @@ function refresh(jobId: string) {
   revalidatePath("/attractors");
   revalidatePath("/evaluations");
   revalidatePath("/pipeline");
+}
+
+/**
+ * Whether anybody on this job's crew is already spoken for on those days.
+ *
+ * Reads every calendar, not just the visits one — somebody with an evaluation
+ * booked on Thursday morning cannot also be on a patio in Bel Air all
+ * Thursday, and the two used to be booked in complete ignorance of each other.
+ *
+ * The job's own bookings are ignored, so moving a visit does not trip over the
+ * visit being moved.
+ */
+async function crewClash(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  jobId: string,
+  startsOn: string,
+  endsOn: string
+): Promise<string | null> {
+  const window = { start: new Date(`${startsOn}T00:00:00`), end: new Date(`${endsOn}T23:59:59`) };
+  if (Number.isNaN(window.start.getTime()) || Number.isNaN(window.end.getTime())) return null;
+
+  const [{ data: crew }, { data: job }] = await Promise.all([
+    supabase.from("job_crew").select("profile_id").eq("job_id", jobId),
+    supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle(),
+  ]);
+
+  const people = new Set((crew ?? []).map((c) => (c as { profile_id: string }).profile_id));
+  const lead = (job as { assigned_to: string | null } | null)?.assigned_to;
+  if (lead) people.add(lead);
+  // Nobody on it yet means nobody to double-book. Jobs are routinely booked
+  // before the crew is picked, and refusing that would be wrong.
+  if (people.size === 0) return null;
+
+  const blocks = await getBusyBlocks().catch(() => []);
+  for (const profileId of people) {
+    const clash = conflictFor(blocks, profileId, window, jobId);
+    if (!clash) continue;
+
+    const { data: person } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", profileId)
+      .maybeSingle();
+    const p = person as { full_name: string | null; email: string } | null;
+    return describeConflict(clash, p?.full_name || p?.email || null);
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------- work visits */
@@ -56,6 +105,9 @@ export async function addWorkSession(
     if (!job) return { ok: false, message: "Couldn't find that job." };
     const allowed = canRescheduleJob({ status: job.status as JobStatus });
     if (!allowed.ok) return { ok: false, message: allowed.reason };
+
+    const clash = await crewClash(supabase, jobId, startsOn, endsOn);
+    if (clash) return { ok: false, message: clash };
 
     const { error } = await supabase.from("job_work_sessions").insert({
       job_id: jobId,
@@ -94,6 +146,17 @@ export async function rescheduleWorkSession(
     if (!verdict.ok) return { ok: false, message: verdict.reason };
 
     const supabase = await createClient();
+
+    const { data: existing } = await supabase
+      .from("job_work_sessions")
+      .select("job_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { ok: false, message: "Couldn't find that visit." };
+
+    const clash = await crewClash(supabase, (existing as { job_id: string }).job_id, startsOn, endsOn);
+    if (clash) return { ok: false, message: clash };
+
     const { data, error } = await supabase
       .from("job_work_sessions")
       .update({ starts_on: startsOn, ends_on: endsOn })
