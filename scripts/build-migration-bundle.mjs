@@ -24,6 +24,10 @@ const CREATES = {
   "0081_final_walkthrough.sql": ["job_walkthroughs"],
   "0082_crew_day.sql": ["crew_day_events"],
   "0083_job_crew.sql": ["job_crew"],
+  "0084_outreach.sql": ["outreach_channels", "outreach_touches"],
+  // Triggers and functions only — nothing to probe for, so it reports as
+  // applied when its neighbours are. Flagged as such on the setup page.
+  "0085_no_double_booking.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

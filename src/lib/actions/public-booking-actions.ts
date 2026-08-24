@@ -1,6 +1,9 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
+import { freeOf } from "@/lib/busy";
+import { SLOT_MINUTES } from "@/lib/booking-availability";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
@@ -71,21 +74,16 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
   if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
   const iso = evaluationDateTime.toISOString();
 
-  let evaluatorId: string | null = null;
-  for (const candidate of input.candidateEvaluatorIds) {
-    const { data: conflict, error } = await admin
-      .from("jobs")
-      .select("id")
-      .eq("assigned_to", candidate)
-      .eq("evaluation_date", iso)
-      .neq("status", "cancelled")
-      .limit(1);
-    if (error) throw error;
-    if (!conflict || conflict.length === 0) {
-      evaluatorId = candidate;
-      break;
-    }
-  }
+  // Re-checked at submit, not merely when the slots were drawn: a booking page
+  // can sit open on somebody's phone for an hour, and two people can be on it
+  // at once. This used to compare the exact timestamp only, so an appointment
+  // that merely overlapped — or a whole day the crew were on an install —
+  // sailed straight through.
+  const end = new Date(evaluationDateTime.getTime() + SLOT_MINUTES * 60_000);
+  const blocks = await getBusyBlocksAsAdmin().catch(() => []);
+
+  const evaluatorId =
+    freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end })[0] ?? null;
   if (!evaluatorId) throw new Error("That time was just booked — please pick another.");
 
   const { data: activeServices, error: servicesError } = await admin

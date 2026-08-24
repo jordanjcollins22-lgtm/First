@@ -47,6 +47,14 @@ export function isMissingTable(error: DbError | null | undefined): boolean {
  */
 export function describeDbError(error: DbError | null | undefined, fallback = "Something went wrong."): string {
   if (!error) return fallback;
+
+  // The database's own double-booking guard. It fires only when a write got
+  // past the app's checks, and its message already names the person, the job
+  // and the hours — so it is passed through with the prefix stripped rather
+  // than replaced with something vaguer.
+  const doubleBooked = (error.message ?? "").match(/Double booking: (.+)$/);
+  if (doubleBooked) return doubleBooked[1];
+
   if (!isMissingTable(error)) return error.message ?? fallback;
 
   const table = Object.keys(TABLE_MIGRATIONS).find((name) =>

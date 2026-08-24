@@ -25,6 +25,16 @@ describe("isMissingTable", () => {
 });
 
 describe("describeDbError", () => {
+  it("passes the database's double-booking refusal through, without its prefix", () => {
+    // The trigger's message already names the person, the job and the hours.
+    // Replacing it with something vaguer would throw away the only part
+    // somebody can act on.
+    const message = describeDbError({
+      message: 'Double booking: Mike Dunn is already committed to 40 Oak Ave from X to Y.',
+    });
+    expect(message).toBe("Mike Dunn is already committed to 40 Oak Ave from X to Y.");
+  });
+
   it("names the migration that creates the missing table", () => {
     const message = describeDbError({
       message: "Could not find the table 'public.job_crew' in the schema cache",

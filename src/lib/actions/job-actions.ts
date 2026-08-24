@@ -40,13 +40,42 @@ export async function updateJobStatus(jobId: string, status: string) {
   revalidatePath("/attractors");
 }
 
+/**
+ * Hands the job to somebody.
+ *
+ * Checked, because assigning is a way of booking: a job with an appointment on
+ * it books whoever it is handed to, and this was the door that let somebody be
+ * double-booked without anybody touching a date.
+ */
 export async function assignJob(jobId: string, profileId: string | null) {
   const supabase = await createClient();
+
+  if (profileId) {
+    const { data } = await supabase
+      .from("jobs")
+      .select("evaluation_date, evaluation_end_date")
+      .eq("id", jobId)
+      .maybeSingle();
+    const dates = data as { evaluation_date: string | null; evaluation_end_date: string | null } | null;
+    if (dates?.evaluation_date) {
+      const clash = await findClashFor(supabase, jobId, profileId, dates.evaluation_date, dates.evaluation_end_date);
+      if (clash) throw new Error(clash);
+    }
+  }
+
   const { error } = await supabase.from("jobs").update({ assigned_to: profileId }).eq("id", jobId);
   if (error) throw error;
   revalidatePath("/attractors");
 }
 
+/**
+ * Moves dates from the calendar — dragging an appointment, mostly.
+ *
+ * Same rule as every other door: a move that lands on top of something else is
+ * refused rather than saved. The calendar is the screen where a double booking
+ * is easiest to create by accident, which makes it the last place to leave
+ * unchecked.
+ */
 export async function updateJobDates(
   jobId: string,
   dates: { evaluationDate?: string | null; projectStartDate?: string | null; projectEndDate?: string | null }
@@ -57,6 +86,12 @@ export async function updateJobDates(
   if (dates.projectEndDate !== undefined) patch.project_end_date = dates.projectEndDate;
 
   const supabase = await createClient();
+
+  if (dates.evaluationDate) {
+    const clash = await findClash(supabase, jobId, dates.evaluationDate, null);
+    if (clash) throw new Error(clash);
+  }
+
   const { error } = await supabase.from("jobs").update(patch).eq("id", jobId);
   if (error) throw error;
   revalidatePath("/attractors");
@@ -106,25 +141,36 @@ async function findClash(
   startIso: string,
   endIso: string | null
 ): Promise<string | null> {
-  const window = evaluationWindow(startIso, endIso);
-  if (!window) return null;
-
   const { data } = await supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle();
   const assignedTo = (data as { assigned_to: string | null } | null)?.assigned_to ?? null;
   // Nobody assigned means nobody to double-book. The office schedules first
   // and assigns second often enough that refusing here would be wrong.
   if (!assignedTo) return null;
+  return findClashFor(supabase, jobId, assignedTo, startIso, endIso);
+}
+
+/** The same question about a named person, for the moment somebody is being
+ * handed a job that already has an appointment on it. */
+async function findClashFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  jobId: string,
+  profileId: string,
+  startIso: string,
+  endIso: string | null
+): Promise<string | null> {
+  const window = evaluationWindow(startIso, endIso);
+  if (!window) return null;
 
   const blocks = await getBusyBlocks().catch(() => []);
-  const clash = conflictFor(blocks, assignedTo, window, jobId);
+  const clash = conflictFor(blocks, profileId, window, jobId);
   if (!clash) return null;
 
   const { data: person } = await supabase
     .from("profiles")
     .select("full_name, email")
-    .eq("id", assignedTo)
+    .eq("id", profileId)
     .maybeSingle();
-  const name = (person as { full_name: string | null; email: string } | null);
+  const name = person as { full_name: string | null; email: string } | null;
 
   return describeConflict(clash, name?.full_name || name?.email || null);
 }
