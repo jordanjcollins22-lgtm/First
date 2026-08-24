@@ -2,6 +2,7 @@ import { listAttractorTypes, listAttractorVariants, listAttractorWaves } from "@
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { listBusinessLocations, listLocationAreas } from "@/lib/data/locations";
 import { listProperties } from "@/lib/data/properties";
+import { listProspectAddresses } from "@/lib/data/prospects";
 import { listProfiles } from "@/lib/data/team";
 import { checkTabAccess } from "@/lib/data/access";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -74,7 +75,13 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles] = await Promise.all([listProperties(), listProfiles().catch(() => [] as Profile[])]);
+  const [properties, profiles, prospectAddresses] = await Promise.all([
+    listProperties(),
+    listProfiles().catch(() => [] as Profile[]),
+    // Coordinates only, for counting doors inside a drawn area. Empty until
+    // somebody imports parcels, which the count itself then says.
+    listProspectAddresses().catch(() => []),
+  ]);
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
@@ -93,6 +100,7 @@ export default async function AttractorsPage({
         locations={locations}
         areas={areas}
         properties={properties}
+        prospectAddresses={prospectAddresses}
         profiles={profiles}
         currentProfileId={profile?.id ?? null}
       />

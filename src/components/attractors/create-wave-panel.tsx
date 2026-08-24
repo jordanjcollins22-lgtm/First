@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
 import { createAttractorWave } from "@/lib/actions/attractor-actions";
 import type {
+  AttractorGeometry,
   AttractorGeometryType,
   AttractorType,
   AttractorVariant,
@@ -18,6 +19,8 @@ import type {
   LatLng,
 } from "@/types/domain";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
+import { AreaCoveragePanel } from "./area-coverage-panel";
+import type { AreaAddress } from "@/lib/area-coverage";
 
 const GEOMETRY_OPTIONS: { value: AttractorGeometryType; label: string; hint: string }[] = [
   { value: "point_radius", label: "Address + radius", hint: "Yard sign, billboard, single location" },
@@ -31,6 +34,7 @@ export function CreateWavePanel({
   variants,
   drawnPoints,
   onRequestDraw,
+  areaAddresses,
   onCancel,
   onCreated,
 }: {
@@ -38,6 +42,8 @@ export function CreateWavePanel({
   variants: AttractorVariant[];
   drawnPoints: LatLng[] | null;
   onRequestDraw: (geometryType: "polygon" | "route") => void;
+  /** Every address on file, for counting doors inside the shape being drawn. */
+  areaAddresses: AreaAddress[];
   onCancel: () => void;
   onCreated: () => void;
 }) {
@@ -58,6 +64,44 @@ export function CreateWavePanel({
 
   const availableVariants = useMemo(() => variants.filter((v) => v.type_id === typeId), [variants, typeId]);
 
+  /**
+   * The area as the form currently describes it.
+   *
+   * One builder for both the live door count and the save, so the number
+   * somebody reads before pressing the button is the number for the shape that
+   * actually gets saved.
+   */
+  function buildGeometry(): { geometry: AttractorGeometry } | { error: string } {
+    if (geometryType === "point_radius") {
+      if (!address) return { error: "Search for and pick an address." };
+      const radius = Number(radiusMiles);
+      if (!radius || radius <= 0) return { error: "Enter a radius in miles." };
+      return { geometry: { lat: address.lat, lng: address.lng, radius_miles: radius } };
+    }
+    if (geometryType === "polygon") {
+      if (!drawnPoints || drawnPoints.length < 3) {
+        return { error: "Draw the area on the Satellite Map first." };
+      }
+      return { geometry: { points: drawnPoints } };
+    }
+    if (geometryType === "route") {
+      if (!drawnPoints || drawnPoints.length < 2) {
+        return { error: "Draw the route on the Satellite Map first." };
+      }
+      const buffer = Number(bufferMiles);
+      return { geometry: { points: drawnPoints, buffer_miles: buffer > 0 ? buffer : 0.1 } };
+    }
+    const zips = zipText
+      .split(/[\s,]+/)
+      .map((z) => z.trim())
+      .filter(Boolean);
+    if (zips.length === 0) return { error: "Enter at least one zip code." };
+    return { geometry: { zips } };
+  }
+
+  const built = buildGeometry();
+  const previewGeometry = "geometry" in built ? built.geometry : null;
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -71,42 +115,12 @@ export function CreateWavePanel({
       return;
     }
 
-    let geometry;
-    if (geometryType === "point_radius") {
-      if (!address) {
-        setError("Search for and pick an address.");
-        return;
-      }
-      const radius = Number(radiusMiles);
-      if (!radius || radius <= 0) {
-        setError("Enter a radius in miles.");
-        return;
-      }
-      geometry = { lat: address.lat, lng: address.lng, radius_miles: radius };
-    } else if (geometryType === "polygon") {
-      if (!drawnPoints || drawnPoints.length < 3) {
-        setError("Draw the area on the Satellite Map first.");
-        return;
-      }
-      geometry = { points: drawnPoints };
-    } else if (geometryType === "route") {
-      if (!drawnPoints || drawnPoints.length < 2) {
-        setError("Draw the route on the Satellite Map first.");
-        return;
-      }
-      const buffer = Number(bufferMiles);
-      geometry = { points: drawnPoints, buffer_miles: buffer > 0 ? buffer : 0.1 };
-    } else {
-      const zips = zipText
-        .split(/[\s,]+/)
-        .map((z) => z.trim())
-        .filter(Boolean);
-      if (zips.length === 0) {
-        setError("Enter at least one zip code.");
-        return;
-      }
-      geometry = { zips };
+    const built = buildGeometry();
+    if ("error" in built) {
+      setError(built.error);
+      return;
     }
+    const geometry = built.geometry;
 
     startTransition(async () => {
       try {
@@ -305,6 +319,11 @@ export function CreateWavePanel({
         <Label htmlFor="wave-notes">Notes</Label>
         <Textarea id="wave-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="h-16 text-sm" />
       </div>
+
+      {/* Live, as the shape is drawn. The moment the door count changes a
+          decision is the moment somebody is deciding how big to make the
+          circle — showing it only after saving is showing it too late. */}
+      <AreaCoveragePanel type={geometryType} geometry={previewGeometry} addresses={areaAddresses} />
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 

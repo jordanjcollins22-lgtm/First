@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { deleteAttractorWave, updateAttractorWave } from "@/lib/actions/attractor-actions";
 import { colorForAttractorType } from "./attractor-colors";
+import { AreaCoveragePanel } from "./area-coverage-panel";
+import type { AreaAddress } from "@/lib/area-coverage";
 import type { AttractorType, AttractorVariant, AttractorWave, AttractorWaveStatus } from "@/types/domain";
 
 const GEOMETRY_LABEL: Record<string, string> = {
@@ -23,12 +25,15 @@ export function WaveDetailPanel({
   wave,
   types,
   variants,
+  areaAddresses,
   onClose,
   onDeleted,
 }: {
   wave: AttractorWave;
   types: AttractorType[];
   variants: AttractorVariant[];
+  /** Every address on file, for counting the doors inside this wave's area. */
+  areaAddresses: AreaAddress[];
   onClose: () => void;
   onDeleted: () => void;
 }) {
@@ -126,6 +131,15 @@ export function WaveDetailPanel({
       </div>
 
       {wave.date_planned && <p className="text-xs text-muted-foreground">Planned for {wave.date_planned}</p>}
+
+      {/* Above the quantity field on purpose: the count is what somebody
+          should be reading before they decide what number to type in. */}
+      <AreaCoveragePanel
+        type={wave.geometry_type}
+        geometry={wave.geometry}
+        addresses={areaAddresses}
+        quantityDeployed={wave.quantity_deployed}
+      />
 
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Quantity deployed</Label>

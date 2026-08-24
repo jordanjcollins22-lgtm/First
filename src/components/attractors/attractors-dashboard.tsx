@@ -14,6 +14,7 @@ import { ClientList } from "./client-list";
 import { SatelliteMapView } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
+import type { AreaAddress } from "@/lib/area-coverage";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
@@ -45,6 +46,7 @@ export function AttractorsDashboard({
   locations,
   areas,
   properties,
+  prospectAddresses,
   profiles,
   currentProfileId,
 }: {
@@ -55,9 +57,27 @@ export function AttractorsDashboard({
   locations: BusinessLocation[];
   areas: LocationArea[];
   properties: PropertyWithCustomer[];
+  /** Imported parcels, coordinates only — the door count for a drawn area. */
+  prospectAddresses: { lat: number | null; lng: number | null; zip: string | null; doNotContact: boolean }[];
   profiles: Profile[];
   currentProfileId: string | null;
 }) {
+  // Built once rather than per panel: this is a bought list of thousands in
+  // the cases that matter, and rebuilding it on every keystroke in the wave
+  // form would be felt.
+  const areaAddresses: AreaAddress[] = useMemo(
+    () => [
+      ...prospectAddresses.map((p) => ({ ...p, source: "prospect" as const })),
+      ...properties.map((p) => ({
+        lat: p.lat,
+        lng: p.lng,
+        zip: null,
+        source: "client" as const,
+      })),
+    ],
+    [prospectAddresses, properties]
+  );
+
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
   const [managingTypes, setManagingTypes] = useState(false);
@@ -346,6 +366,7 @@ export function AttractorsDashboard({
                 <CreateWavePanel
                   types={types}
                   variants={variants}
+                  areaAddresses={areaAddresses}
                   drawnPoints={drawTarget === "wave" ? drawnPoints : null}
                   onRequestDraw={requestDraw}
                   onCancel={() => {
@@ -365,6 +386,7 @@ export function AttractorsDashboard({
                   wave={selectedWave}
                   types={types}
                   variants={variants}
+                  areaAddresses={areaAddresses}
                   onClose={() => setSelectedWaveId(null)}
                   onDeleted={() => setSelectedWaveId(null)}
                 />

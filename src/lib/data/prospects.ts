@@ -70,3 +70,26 @@ export async function getProspects(): Promise<ProspectsData> {
     migrationMissing: false,
   };
 }
+
+/**
+ * Just the coordinates, for counting doors inside a drawn area.
+ *
+ * Deliberately narrow: the door-hanger count needs a position, a zip and
+ * whether somebody has asked us to stop, and pulling whole prospect rows to
+ * answer "how many houses" would read a bought list of thousands into memory
+ * to produce one number.
+ */
+export async function listProspectAddresses(): Promise<
+  { lat: number | null; lng: number | null; zip: string | null; doNotContact: boolean }[]
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("lead_prospects").select("lat, lng, zip, do_not_contact");
+  if (error) return [];
+
+  return ((data ?? []) as unknown as {
+    lat: number | null;
+    lng: number | null;
+    zip: string | null;
+    do_not_contact: boolean;
+  }[]).map((p) => ({ lat: p.lat, lng: p.lng, zip: p.zip, doNotContact: p.do_not_contact }));
+}
