@@ -42,6 +42,13 @@ export interface Database {
           phone: string | null;
           notes: string | null;
           account_manager_id: string | null;
+          contact_type: string;
+          source: string | null;
+          import_batch: string | null;
+          external_id: string | null;
+          do_not_contact: boolean;
+          tags: string[] | null;
+          import_address: string | null;
           created_at: string;
           updated_at: string;
         };

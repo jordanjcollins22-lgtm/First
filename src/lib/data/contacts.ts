@@ -8,6 +8,12 @@ export interface ContactRow {
   phone: string | null;
   propertyCount: number;
   addresses: string[];
+  /** client, lead, supplier, subcontractor, referral_partner or other. */
+  contactType: string;
+  tags: string[];
+  /** Asked not to be contacted. Shown on the row, because the whole reason to
+   * carry it across from the CRM is that somebody sees it before they ring. */
+  doNotContact: boolean;
 }
 
 export interface DuplicatePair {
@@ -34,7 +40,7 @@ export async function getContacts(): Promise<ContactsData> {
 
   const { data, error } = await supabase
     .from("customers")
-    .select("id, name, email, phone, properties(id, address)")
+    .select("id, name, email, phone, contact_type, tags, do_not_contact, properties(id, address)")
     .order("name");
   if (error) throw error;
 
@@ -44,9 +50,15 @@ export async function getContacts(): Promise<ContactsData> {
       name: string;
       email: string | null;
       phone: string | null;
+      contact_type: string | null;
+      tags: string[] | null;
+      do_not_contact: boolean | null;
       properties: { id: string; address: string }[] | null;
     }[]
   ).map((c) => ({
+    contactType: c.contact_type ?? "client",
+    tags: c.tags ?? [],
+    doNotContact: c.do_not_contact ?? false,
     id: c.id,
     name: c.name,
     email: c.email,

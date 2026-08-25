@@ -31,6 +31,7 @@ const CREATES = {
   "0086_job_observers.sql": ["job_observers"],
   // Alters only — nothing to probe for.
   "0087_referral_outcome.sql": [],
+  "0088_contact_types.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

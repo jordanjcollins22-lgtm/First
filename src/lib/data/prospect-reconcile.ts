@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CLIENT_SIDE_TYPES } from "@/lib/contact-types";
 
 import { findDuplicateCustomer, normalizeAddress } from "@/lib/dedupe";
 import type { Database } from "@/lib/supabase/database.types";
@@ -39,7 +40,7 @@ export async function reconcileProspects(supabase: Client): Promise<ReconcileRep
 
   const [{ data: properties }, { data: customers }] = await Promise.all([
     supabase.from("properties").select("address, customer_id"),
-    supabase.from("customers").select("id, name, email, phone"),
+    supabase.from("customers").select("id, name, email, phone").in("contact_type", CLIENT_SIDE_TYPES),
   ]);
 
   const customerByAddress = new Map<string, string>();

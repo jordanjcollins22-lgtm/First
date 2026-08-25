@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { CLIENT_SIDE_TYPES } from "@/lib/contact-types";
 
 /** The calendar the crew works off. Created on demand rather than in a
  * migration so it needs no schema change and each org gets one the first time
@@ -147,6 +148,9 @@ export async function runAssistantTool(name: string, input: Record<string, unkno
           .from("customers")
           .select("id, name, email, phone, properties(id, address, jobs(id, name, status, project_start_date, project_end_date, evaluation_date, client_notes))")
           .ilike("name", `%${query}%`)
+          // Clients and leads only. "Find client" that returns a supplier is
+          // answering a different question than the one that was asked.
+          .in("contact_type", CLIENT_SIDE_TYPES)
           .limit(5);
         if (error) return fail(error.message);
         if (!customers || customers.length === 0) return { ok: true, matches: [], note: `No client matching "${query}".` };

@@ -13,10 +13,18 @@ import {
   updateContact,
 } from "@/lib/actions/contact-actions";
 import type { ContactsData, ContactRow } from "@/lib/data/contacts";
+import { CONTACT_TYPES, contactTypeLabel } from "@/lib/contact-types";
+import { ContactImportPanel } from "./contact-import-panel";
 
 function summary(contact: ContactRow): string {
   return (
-    [contact.email, contact.phone, `${contact.propertyCount} propert${contact.propertyCount === 1 ? "y" : "ies"}`]
+    [
+      contactTypeLabel(contact.contactType),
+      contact.email,
+      contact.phone,
+      `${contact.propertyCount} propert${contact.propertyCount === 1 ? "y" : "ies"}`,
+      contact.doNotContact ? "DO NOT CONTACT" : null,
+    ]
       .filter(Boolean)
       .join(" · ")
   );
@@ -25,6 +33,15 @@ function summary(contact: ContactRow): string {
 export function ContactsManager({ data, canMerge }: { data: ContactsData; canMerge: boolean }) {
   const { contacts, duplicates } = data;
   const [adding, setAdding] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  // Counted before filtering, so a tab reading zero is a fact about the book
+  // rather than about the tab that happens to be selected.
+  const counts = new Map<string, number>();
+  for (const contact of contacts) {
+    counts.set(contact.contactType, (counts.get(contact.contactType) ?? 0) + 1);
+  }
+  const shown = typeFilter === "all" ? contacts : contacts.filter((c) => c.contactType === typeFilter);
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,28 +68,60 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
 
       <ManualMerge contacts={contacts} canMerge={canMerge} />
 
+      <ContactImportPanel />
+
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">All contacts ({contacts.length})</h2>
+          <h2 className="text-sm font-semibold">All contacts ({shown.length})</h2>
           <Button type="button" size="sm" className="min-h-9" onClick={() => setAdding((v) => !v)}>
             <UserPlus className="mr-1.5 h-3.5 w-3.5" />
             {adding ? "Cancel" : "Add contact"}
           </Button>
         </div>
 
+        {/* Only the kinds actually present. Offering six tabs to a book that
+            holds one kind is six taps to learn nothing. */}
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          <TypeChip label={`Everyone (${contacts.length})`} active={typeFilter === "all"} onClick={() => setTypeFilter("all")} />
+          {CONTACT_TYPES.filter((t) => (counts.get(t.value) ?? 0) > 0).map((t) => (
+            <TypeChip
+              key={t.value}
+              label={`${t.label} (${counts.get(t.value)})`}
+              active={typeFilter === t.value}
+              onClick={() => setTypeFilter(t.value)}
+            />
+          ))}
+        </div>
+
         {adding && <ContactForm onDone={() => setAdding(false)} />}
 
-        {contacts.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No contacts yet.</p>
+        {shown.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {contacts.length === 0 ? "No contacts yet." : "None of that kind."}
+          </p>
         ) : (
           <ul className="flex flex-col gap-1.5">
-            {contacts.map((contact) => (
+            {shown.map((contact) => (
               <ContactRowItem key={contact.id} contact={contact} />
             ))}
           </ul>
         )}
       </section>
     </div>
+  );
+}
+
+function TypeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-8 rounded-full border px-3 text-xs font-medium ${
+        active ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent/50"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
