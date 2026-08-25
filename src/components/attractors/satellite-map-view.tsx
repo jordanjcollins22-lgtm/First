@@ -28,6 +28,13 @@ interface SatelliteMapViewProps {
    * worked from somewhere we merely know about.
    */
   leadProperties: { id: string; customerId: string; name: string; address: string; lat: number; lng: number }[];
+  /**
+   * Ranked areas, strongest first, with an intensity from 0 to 1.
+   *
+   * Drawn as blobs under everything else — the point is the shape of where the
+   * work is, which markers on top of it do not obscure and do not explain.
+   */
+  densityCells: { key: string; lat: number; lng: number; intensity: number; rank: number; label: string }[];
   visibleWaveIds: Set<string>;
   selectedWaveId: string | null;
   onSelectWave: (id: string | null) => void;
@@ -48,6 +55,8 @@ const JOBS_SOURCE = "attractor-jobs";
 const JOBS_LAYER = "attractor-jobs-circle";
 const LEADS_SOURCE = "attractor-leads";
 const LEADS_LAYER = "attractor-leads-circle";
+const DENSITY_SOURCE = "attractor-density";
+const DENSITY_LAYER = "attractor-density-circle";
 const AREAS_SOURCE = "location-areas";
 const AREAS_FILL_LAYER = "location-areas-fill";
 const AREAS_LINE_LAYER = "location-areas-line";
@@ -69,6 +78,7 @@ export function SatelliteMapView({
   waves,
   jobs,
   leadProperties,
+  densityCells,
   visibleWaveIds,
   selectedWaveId,
   onSelectWave,
@@ -142,6 +152,46 @@ export function SatelliteMapView({
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["case", ["==", ["get", "selected"], true], 3, 1.5],
+        },
+      });
+
+      map.addSource(DENSITY_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: DENSITY_LAYER,
+        type: "circle",
+        source: DENSITY_SOURCE,
+        paint: {
+          // Grows with zoom so a blob covers roughly the same ground rather
+          // than the same pixels — a fixed radius is a lie about area.
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 8, 12, 30, 16, 120],
+          "circle-color": [
+            "interpolate",
+            ["linear"],
+            ["get", "intensity"],
+            0,
+            "#fde68a",
+            0.5,
+            "#f97316",
+            1,
+            "#b91c1c",
+          ],
+          "circle-opacity": 0.35,
+          "circle-blur": 0.6,
+        },
+      });
+      map.addLayer({
+        id: `${DENSITY_LAYER}-rank`,
+        type: "symbol",
+        source: DENSITY_SOURCE,
+        layout: {
+          "text-field": ["get", "rank"],
+          "text-size": 13,
+          "text-allow-overlap": true,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "#000000",
+          "text-halo-width": 1.5,
         },
       });
 
@@ -296,6 +346,23 @@ export function SatelliteMapView({
 
     source.setData({ type: "FeatureCollection", features });
   }, [waves, visibleWaveIds, selectedWaveId, mapLoaded]);
+
+  // Keep the density blobs in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(DENSITY_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    source.setData({
+      type: "FeatureCollection",
+      features: densityCells.map((c) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [c.lng, c.lat] },
+        properties: { intensity: c.intensity, rank: String(c.rank), label: c.label },
+      })),
+    });
+  }, [densityCells, mapLoaded]);
 
   // Keep the lead markers in sync.
   useEffect(() => {

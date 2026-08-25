@@ -16,6 +16,8 @@ import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
 import type { AreaAddress } from "@/lib/area-coverage";
 import { isClientSide } from "@/lib/contact-types";
+import { densityCells, intensityOf, rankCells, type DensityMode, type DensityPoint } from "@/lib/area-density";
+import { DensityPanel } from "./density-panel";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
@@ -48,6 +50,7 @@ export function AttractorsDashboard({
   areas,
   properties,
   prospectAddresses,
+  densityPoints,
   profiles,
   currentProfileId,
 }: {
@@ -60,6 +63,8 @@ export function AttractorsDashboard({
   properties: PropertyWithCustomer[];
   /** Imported parcels, coordinates only — the door count for a drawn area. */
   prospectAddresses: { lat: number | null; lng: number | null; zip: string | null; doNotContact: boolean }[];
+  /** Every address with what it has actually paid, for ranking areas. */
+  densityPoints: DensityPoint[];
   profiles: Profile[];
   currentProfileId: string | null;
 }) {
@@ -114,6 +119,28 @@ export function AttractorsDashboard({
   // Off by default: a book of a few thousand imported addresses would bury the
   // handful of real jobs under dots the first time somebody opened the page.
   const [showLeads, setShowLeads] = useState(false);
+  const [densityMode, setDensityMode] = useState<DensityMode | null>(null);
+
+  // Ranked once per mode change rather than per render: this walks every
+  // address in the book, and the book is the point.
+  const rankedCells = useMemo(() => {
+    if (!densityMode) return [];
+    return rankCells(densityCells(densityPoints), densityMode);
+  }, [densityPoints, densityMode]);
+
+  const mapCells = useMemo(() => {
+    if (!densityMode) return [];
+    const all = densityCells(densityPoints);
+    return rankedCells.map((cell, i) => ({
+      key: cell.key,
+      lat: cell.lat,
+      lng: cell.lng,
+      intensity: intensityOf(cell, all, densityMode),
+      rank: i + 1,
+      label: cell.area,
+    }));
+  }, [densityPoints, densityMode, rankedCells]);
+
   const [jobStatusFilter, setJobStatusFilter] = useState<Set<JobStatus>>(new Set());
   const [manuallyHiddenWaveIds, setManuallyHiddenWaveIds] = useState<Set<string>>(new Set());
 
@@ -281,6 +308,8 @@ export function AttractorsDashboard({
         </Card>
       )}
 
+      <DensityPanel mode={densityMode} onModeChange={setDensityMode} cells={rankedCells} />
+
       <FilterBar
         showLeads={showLeads}
         leadCount={leadProperties.length}
@@ -339,6 +368,7 @@ export function AttractorsDashboard({
                 waves={waves}
                 jobs={filteredJobs}
                 leadProperties={showLeads ? leadProperties : []}
+                densityCells={mapCells}
                 visibleWaveIds={visibleWaveIds}
                 selectedWaveId={selectedWaveId}
                 onSelectWave={selectWave}
