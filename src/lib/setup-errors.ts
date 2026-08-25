@@ -22,6 +22,7 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   outreach_touches: "0084_outreach.sql",
   job_observers: "0086_job_observers.sql",
   org_counters: "0089_job_numbers_and_pipeline.sql",
+  contact_merges: "0091_contact_merge_undo.sql",
 };
 
 /**

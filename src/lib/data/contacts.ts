@@ -30,6 +30,15 @@ export interface DuplicatePair {
   reason: string;
 }
 
+export interface MergeRecord {
+  id: string;
+  keptName: string;
+  mergedName: string;
+  movedProperties: number;
+  mergedAt: string;
+  undoneAt: string | null;
+}
+
 export interface ContactsData {
   contacts: ContactRow[];
   duplicates: DuplicatePair[];
@@ -39,6 +48,10 @@ export interface ContactsData {
   /** Addresses a lookup could not place — usually partial, and needing a
    * human. Counted so they are visible rather than quietly absent forever. */
   failedGeocodes: number;
+  /** The last few merges, each of which deleted somebody. Kept in front of
+   * whoever is merging rather than behind a menu — an undo you have to go
+   * looking for is one you find after forty more merges. */
+  recentMerges: MergeRecord[];
 }
 
 /**
@@ -69,6 +82,32 @@ export async function getContacts(): Promise<ContactsData> {
       .not("geocode_error", "is", null),
   ]);
   if (error) throw error;
+
+  // Empty until migration 0091 runs, and empty is the right answer then: with
+  // no record of a merge there is nothing to offer an undo for.
+  const { data: mergeRows } = await supabase
+    .from("contact_merges")
+    .select("id, kept_name, merged_name, moved_property_ids, merged_at, undone_at")
+    .order("merged_at", { ascending: false })
+    .limit(10);
+
+  const recentMerges: MergeRecord[] = (
+    (mergeRows ?? []) as unknown as {
+      id: string;
+      kept_name: string;
+      merged_name: string;
+      moved_property_ids: string[] | null;
+      merged_at: string;
+      undone_at: string | null;
+    }[]
+  ).map((m) => ({
+    id: m.id,
+    keptName: m.kept_name,
+    mergedName: m.merged_name,
+    movedProperties: (m.moved_property_ids ?? []).length,
+    mergedAt: m.merged_at,
+    undoneAt: m.undone_at,
+  }));
 
   const contacts: ContactRow[] = (
     (data ?? []) as unknown as {
@@ -152,5 +191,6 @@ export async function getContacts(): Promise<ContactsData> {
     duplicates,
     pendingGeocodes: pendingGeocodes ?? 0,
     failedGeocodes: failedGeocodes ?? 0,
+    recentMerges,
   };
 }

@@ -99,6 +99,31 @@ export interface Database {
           },
         ];
       };
+      contact_merges: {
+        Row: {
+          id: string;
+          organization_id: string;
+          kept_id: string;
+          kept_name: string;
+          merged_snapshot: Record<string, unknown>;
+          merged_name: string;
+          moved_property_ids: string[];
+          patched_fields: Record<string, unknown>;
+          merged_by: string | null;
+          merged_at: string;
+          undone_at: string | null;
+          undone_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["contact_merges"]["Row"]> & {
+          organization_id: string;
+          kept_id: string;
+          kept_name: string;
+          merged_snapshot: Record<string, unknown>;
+          merged_name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["contact_merges"]["Row"]>;
+        Relationships: [];
+      };
       org_counters: {
         Row: { organization_id: string; next_job_number: number };
         Insert: { organization_id: string; next_job_number?: number };

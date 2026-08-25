@@ -16,6 +16,7 @@ import type { ContactsData, ContactRow } from "@/lib/data/contacts";
 import { CONTACT_TYPES, contactTypeLabel } from "@/lib/contact-types";
 import { ContactImportPanel } from "./contact-import-panel";
 import { GeocodePanel } from "./geocode-panel";
+import { RecentMergesPanel } from "./recent-merges-panel";
 
 function summary(contact: ContactRow): string {
   return (
@@ -76,6 +77,8 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
       )}
 
       <ManualMerge contacts={contacts} canMerge={canMerge} />
+
+      <RecentMergesPanel merges={data.recentMerges} />
 
       <GeocodePanel pending={data.pendingGeocodes} failed={data.failedGeocodes} />
 

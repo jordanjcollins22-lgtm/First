@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { isMissingTable } from "@/lib/setup-errors";
+import type { Database } from "@/lib/supabase/database.types";
 import { getCurrentProfile } from "@/lib/data/team";
 import { mergeableFields } from "@/lib/dedupe";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -44,9 +46,11 @@ export async function mergeContacts(keepId: string, mergeId: string): Promise<Me
 
     const supabase = await createClient();
 
+    // Every column, not just the ones the merge itself needs: the row is
+    // about to be deleted, and what an undo will want back is all of it.
     const { data: contacts, error: readError } = await supabase
       .from("customers")
-      .select("id, name, email, phone, notes, account_manager_id")
+      .select("*")
       .in("id", [keepId, mergeId]);
     if (readError) return { ok: false, message: readError.message };
 
@@ -80,6 +84,29 @@ export async function mergeContacts(keepId: string, mergeId: string): Promise<Me
         .update({ ...patch, ...accountManagerPatch })
         .eq("id", keepId);
       if (patchError) return { ok: false, message: patchError.message };
+    }
+
+    // Written before the delete, so a merge can never destroy a row without
+    // the means to restore it existing first. If this insert fails the merge
+    // stops here with the duplicate still intact — an un-undoable merge is
+    // worse than a merge that did not happen.
+    const { error: recordError } = await supabase.from("contact_merges").insert({
+      organization_id: (merge as { organization_id: string }).organization_id,
+      kept_id: keepId,
+      kept_name: keep.name,
+      merged_snapshot: merge as unknown as Record<string, unknown>,
+      merged_name: merge.name,
+      moved_property_ids: (moved ?? []).map((p) => (p as { id: string }).id),
+      patched_fields: { ...patch, ...accountManagerPatch },
+      merged_by: profile.id,
+    });
+    if (recordError) {
+      return {
+        ok: false,
+        message: isMissingTable(recordError)
+          ? "Merging needs its database migration first — run supabase/migrations/0091_contact_merge_undo.sql. Nothing was changed."
+          : `Couldn't record the merge, so nothing was merged: ${recordError.message}`,
+      };
     }
 
     const { error: deleteError } = await supabase.from("customers").delete().eq("id", mergeId);
@@ -219,5 +246,108 @@ export async function deleteContact(id: string): Promise<ContactResult> {
   } catch (err) {
     console.error("deleteContact failed:", err);
     return { ok: false, message: "Couldn't remove that contact." };
+  }
+}
+
+/**
+ * Puts a merged contact back.
+ *
+ * Three things happened and all three are reversed: the deleted row is
+ * restored with its own id, the properties that changed hands go back, and
+ * the blanks the merge filled on the keeper are emptied again.
+ *
+ * Restored with its original id on purpose. A new id would be a different
+ * contact wearing the same name, and anything that had ever pointed at the old
+ * one would still be pointing at nothing.
+ *
+ * The fields are only cleared if they still hold exactly what the merge put
+ * there. Somebody may have corrected that phone number in the meantime, and an
+ * undo that wipes a correction is a second mistake fixing the first.
+ */
+export async function undoContactMerge(mergeRecordId: string): Promise<ContactResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile?.roles.includes("admin")) {
+      return { ok: false, message: "Only admins can undo a merge." };
+    }
+
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from("contact_merges")
+      .select("*")
+      .eq("id", mergeRecordId)
+      .maybeSingle();
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    const record = data as unknown as {
+      id: string;
+      kept_id: string;
+      merged_snapshot: Record<string, unknown>;
+      merged_name: string;
+      moved_property_ids: string[];
+      patched_fields: Record<string, unknown>;
+      undone_at: string | null;
+    } | null;
+    if (!record) return { ok: false, message: "Couldn't find that merge." };
+    if (record.undone_at) return { ok: false, message: "That one has already been put back." };
+
+    const snapshot = { ...record.merged_snapshot };
+    const restoredId = snapshot.id as string | undefined;
+    if (!restoredId) return { ok: false, message: "That merge has no record of what was deleted." };
+
+    const { error: restoreError } = await supabase
+      .from("customers")
+      .insert(snapshot as unknown as Database["public"]["Tables"]["customers"]["Insert"]);
+    if (restoreError) {
+      return { ok: false, message: `Couldn't restore ${record.merged_name}: ${restoreError.message}` };
+    }
+
+    if (record.moved_property_ids.length > 0) {
+      const { error: moveBackError } = await supabase
+        .from("properties")
+        .update({ customer_id: restoredId })
+        .in("id", record.moved_property_ids);
+      if (moveBackError) {
+        return {
+          ok: false,
+          message: `${record.merged_name} is back, but their properties didn't move: ${moveBackError.message}`,
+        };
+      }
+    }
+
+    const clearable = Object.keys(record.patched_fields);
+    if (clearable.length > 0) {
+      const { data: keeper } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", record.kept_id)
+        .maybeSingle();
+
+      const current = (keeper ?? {}) as Record<string, unknown>;
+      const revert: Record<string, null> = {};
+      for (const field of clearable) {
+        // Only if it still holds what the merge put there.
+        if (current[field] === record.patched_fields[field]) revert[field] = null;
+      }
+      if (Object.keys(revert).length > 0) {
+        await supabase
+          .from("customers")
+          .update(revert as Database["public"]["Tables"]["customers"]["Update"])
+          .eq("id", record.kept_id);
+      }
+    }
+
+    await supabase
+      .from("contact_merges")
+      .update({ undone_at: new Date().toISOString(), undone_by: profile.id })
+      .eq("id", record.id);
+
+    revalidatePath("/contacts");
+    revalidatePath("/attractors");
+    return { ok: true, message: `${record.merged_name} is back.` };
+  } catch (err) {
+    console.error("undoContactMerge failed:", err);
+    return { ok: false, message: "Couldn't undo that merge." };
   }
 }
