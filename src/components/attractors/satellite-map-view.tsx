@@ -19,6 +19,15 @@ if (env.mapboxToken) {
 interface SatelliteMapViewProps {
   waves: AttractorWave[];
   jobs: JobWithLocation[];
+  /**
+   * Addresses with nobody's work on them yet.
+   *
+   * The map has only ever drawn jobs, so a contact with an address and no job
+   * — which is every contact that arrived by import — was invisible on it.
+   * These are those, drawn hollow so a glance separates somewhere we have
+   * worked from somewhere we merely know about.
+   */
+  leadProperties: { id: string; customerId: string; name: string; address: string; lat: number; lng: number }[];
   visibleWaveIds: Set<string>;
   selectedWaveId: string | null;
   onSelectWave: (id: string | null) => void;
@@ -37,6 +46,8 @@ const WAVES_FILL_LAYER = "attractor-waves-fill";
 const WAVES_LINE_LAYER = "attractor-waves-line";
 const JOBS_SOURCE = "attractor-jobs";
 const JOBS_LAYER = "attractor-jobs-circle";
+const LEADS_SOURCE = "attractor-leads";
+const LEADS_LAYER = "attractor-leads-circle";
 const AREAS_SOURCE = "location-areas";
 const AREAS_FILL_LAYER = "location-areas-fill";
 const AREAS_LINE_LAYER = "location-areas-line";
@@ -44,9 +55,20 @@ const LOCATIONS_SOURCE = "business-locations";
 const LOCATIONS_LAYER = "business-locations-circle";
 const LOCATIONS_LABEL_LAYER = "business-locations-label";
 
+/** Names and addresses go into a popup as HTML, so anything that could be
+ * read as markup is neutralised first. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export function SatelliteMapView({
   waves,
   jobs,
+  leadProperties,
   visibleWaveIds,
   selectedWaveId,
   onSelectWave,
@@ -123,6 +145,23 @@ export function SatelliteMapView({
         },
       });
 
+      map.addSource(LEADS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: LEADS_LAYER,
+        type: "circle",
+        source: LEADS_SOURCE,
+        paint: {
+          "circle-radius": 4,
+          // Hollow: somewhere we know about rather than somewhere we have
+          // worked. Filled dots are jobs, and the difference has to survive a
+          // glance at a phone in a truck.
+          "circle-color": "#ffffff",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#7c3aed",
+          "circle-opacity": 0.9,
+        },
+      });
+
       map.addSource(JOBS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: JOBS_LAYER,
@@ -179,6 +218,31 @@ export function SatelliteMapView({
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectWaveRef.current(id);
       });
+      map.on("click", LEADS_LAYER, (e) => {
+        const feature = e.features?.[0];
+        const point = feature?.geometry as GeoJSON.Point | undefined;
+        if (!feature || !point) return;
+        const { customerId, name, address } = feature.properties as {
+          customerId: string;
+          name: string;
+          address: string;
+        };
+        new mapboxgl.Popup({ offset: 10 })
+          .setLngLat(point.coordinates as [number, number])
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>${escapeHtml(name)}</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(address)}</div>` +
+              `<a href="/clients/${customerId}" style="color:#2f6d3c;text-decoration:underline">Open contact</a></div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", LEADS_LAYER, () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", LEADS_LAYER, () => {
+        map.getCanvas().style.cursor = "";
+      });
+
       map.on("click", JOBS_LAYER, (e) => {
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectJobRef.current(id);
@@ -232,6 +296,23 @@ export function SatelliteMapView({
 
     source.setData({ type: "FeatureCollection", features });
   }, [waves, visibleWaveIds, selectedWaveId, mapLoaded]);
+
+  // Keep the lead markers in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(LEADS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    source.setData({
+      type: "FeatureCollection",
+      features: leadProperties.map((p) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
+        properties: { customerId: p.customerId, name: p.name, address: p.address },
+      })),
+    });
+  }, [leadProperties, mapLoaded]);
 
   // Keep the job markers in sync.
   useEffect(() => {

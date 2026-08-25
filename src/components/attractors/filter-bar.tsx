@@ -49,6 +49,9 @@ export function FilterBar({
   dateTo,
   onDateFromChange,
   onDateToChange,
+  showLeads,
+  leadCount,
+  onToggleShowLeads,
   showProjects,
   onToggleShowProjects,
   jobStatusFilter,
@@ -66,6 +69,11 @@ export function FilterBar({
   dateTo: string;
   onDateFromChange: (v: string) => void;
   onDateToChange: (v: string) => void;
+  /** Addresses we hold with no work on them — every imported contact, in
+   * practice. Off by default: a few thousand would bury the real jobs. */
+  showLeads: boolean;
+  leadCount: number;
+  onToggleShowLeads: () => void;
   showProjects: boolean;
   onToggleShowProjects: () => void;
   jobStatusFilter: Set<JobStatus>;
@@ -126,6 +134,14 @@ export function FilterBar({
         <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <input type="checkbox" checked={showProjects} onChange={onToggleShowProjects} className="h-3.5 w-3.5" />
           Projects
+        </Label>
+
+        {/* The count is in the label because zero is the interesting case: it
+            means the addresses are imported but nobody has placed them yet,
+            and the answer is on the Contacts page rather than here. */}
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <input type="checkbox" checked={showLeads} onChange={onToggleShowLeads} className="h-3.5 w-3.5" />
+          Leads with an address ({leadCount.toLocaleString()})
         </Label>
         {showProjects && (
           <Select

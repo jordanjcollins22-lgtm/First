@@ -15,6 +15,7 @@ import { SatelliteMapView } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
 import type { AreaAddress } from "@/lib/area-coverage";
+import { isClientSide } from "@/lib/contact-types";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
@@ -78,6 +79,27 @@ export function AttractorsDashboard({
     [prospectAddresses, properties]
   );
 
+  /**
+   * Addresses with no work on them.
+   *
+   * The map draws jobs, so a property that has never had one is invisible on
+   * it — which is every property that arrived by import. These are those:
+   * somewhere we know about rather than somewhere we have worked.
+   */
+  const leadProperties = useMemo(() => {
+    const withJobs = new Set(jobs.map((j) => j.property_id));
+    return properties
+      .filter((p) => !withJobs.has(p.id) && isClientSide(p.customer?.contact_type))
+      .map((p) => ({
+        id: p.id,
+        customerId: p.customer_id,
+        name: p.customer?.name ?? "Contact",
+        address: p.address,
+        lat: p.lat,
+        lng: p.lng,
+      }));
+  }, [properties, jobs]);
+
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
   const [managingTypes, setManagingTypes] = useState(false);
@@ -89,6 +111,9 @@ export function AttractorsDashboard({
   const [dateTo, setDateTo] = useState("");
   const [showProjects, setShowProjects] = useState(true);
   const [showLocations, setShowLocations] = useState(true);
+  // Off by default: a book of a few thousand imported addresses would bury the
+  // handful of real jobs under dots the first time somebody opened the page.
+  const [showLeads, setShowLeads] = useState(false);
   const [jobStatusFilter, setJobStatusFilter] = useState<Set<JobStatus>>(new Set());
   const [manuallyHiddenWaveIds, setManuallyHiddenWaveIds] = useState<Set<string>>(new Set());
 
@@ -257,6 +282,9 @@ export function AttractorsDashboard({
       )}
 
       <FilterBar
+        showLeads={showLeads}
+        leadCount={leadProperties.length}
+        onToggleShowLeads={() => setShowLeads((v) => !v)}
         types={types}
         typeFilter={typeFilter}
         onToggleType={(id) => toggleInSet(setTypeFilter, id)}
@@ -310,6 +338,7 @@ export function AttractorsDashboard({
               <SatelliteMapView
                 waves={waves}
                 jobs={filteredJobs}
+                leadProperties={showLeads ? leadProperties : []}
                 visibleWaveIds={visibleWaveIds}
                 selectedWaveId={selectedWaveId}
                 onSelectWave={selectWave}
