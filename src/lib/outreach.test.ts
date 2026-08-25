@@ -114,12 +114,24 @@ describe("resultsFor", () => {
     expect(resultsFor(channels, touches)[0].closeRate).toBe(50);
   });
 
+  it("counts a name given by somebody who was never going to buy", () => {
+    // The entire argument for working the parts of the county that are not
+    // our market. Logged as "not interested" it would be invisible.
+    const touches = [
+      touch({ channelId: "c1", outcome: "referral_received" }),
+      touch({ channelId: "c1", outcome: "not_interested" }),
+    ];
+    const [c1] = resultsFor(channels, touches);
+    expect(c1.referrals).toBe(1);
+    expect(c1.reached).toBe(2);
+  });
+
   it("keeps a channel nobody has worked, at zero", () => {
     // A channel that vanishes when it goes untouched is one nobody notices
     // they have stopped doing.
     const results = resultsFor(channels, [touch({ channelId: "c1" })]);
     expect(results).toHaveLength(2);
-    expect(results[1]).toMatchObject({ attempts: 0, booked: 0, bookedPer100: null, closeRate: null });
+    expect(results[1]).toMatchObject({ attempts: 0, booked: 0, referrals: 0, bookedPer100: null, closeRate: null });
   });
 
   it("says nothing rather than dividing by zero", () => {

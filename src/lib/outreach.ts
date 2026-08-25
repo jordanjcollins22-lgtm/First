@@ -40,13 +40,21 @@ export const COST_LABELS: Record<CostType, string> = { free: "Free", paid: "Cost
  * calls nobody logged is a day nobody can learn from, and if logging a
  * no-answer takes more than one tap it will not happen.
  */
-export type Outcome = "attempted" | "reached" | "interested" | "booked" | "not_interested" | "do_not_contact";
+export type Outcome =
+  | "attempted"
+  | "reached"
+  | "interested"
+  | "booked"
+  | "referral_received"
+  | "not_interested"
+  | "do_not_contact";
 
 export const OUTCOMES: Outcome[] = [
   "attempted",
   "reached",
   "interested",
   "booked",
+  "referral_received",
   "not_interested",
   "do_not_contact",
 ];
@@ -56,13 +64,21 @@ export const OUTCOME_LABELS: Record<Outcome, string> = {
   reached: "Spoke to them",
   interested: "Interested",
   booked: "Booked an evaluation",
+  referral_received: "Gave us a name",
   not_interested: "Not interested",
   do_not_contact: "Do not contact",
 };
 
 /** Outcomes where somebody actually made contact — the denominator for how
  * well the pitch is working, as opposed to how much dialling is happening. */
-const REACHED: Outcome[] = ["reached", "interested", "booked", "not_interested", "do_not_contact"];
+const REACHED: Outcome[] = [
+  "reached",
+  "interested",
+  "booked",
+  "referral_received",
+  "not_interested",
+  "do_not_contact",
+];
 
 export interface ChannelShape {
   id: string;
@@ -101,6 +117,9 @@ export interface ChannelResults {
   attempts: number;
   reached: number;
   booked: number;
+  /** Names gathered from people who were never going to buy — the reason to
+   * work the parts of the county that are not our market. */
+  referrals: number;
   /** Booked evaluations per hundred attempts. The only number that matters. */
   bookedPer100: number | null;
   /** Of the people actually spoken to, how many booked. */
@@ -169,11 +188,13 @@ export function resultsFor(channels: ChannelShape[], touches: TouchShape[]): Cha
     const attempts = rows.length;
     const reached = rows.filter((r) => REACHED.includes(r.outcome)).length;
     const booked = rows.filter((r) => r.outcome === "booked").length;
+    const referrals = rows.filter((r) => r.outcome === "referral_received").length;
     return {
       channelId: channel.id,
       attempts,
       reached,
       booked,
+      referrals,
       bookedPer100: attempts === 0 ? null : Math.round((booked / attempts) * 1000) / 10,
       closeRate: rate(booked, reached),
     };

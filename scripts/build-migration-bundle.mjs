@@ -29,6 +29,8 @@ const CREATES = {
   // applied when its neighbours are. Flagged as such on the setup page.
   "0085_no_double_booking.sql": [],
   "0086_job_observers.sql": ["job_observers"],
+  // Alters only — nothing to probe for.
+  "0087_referral_outcome.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

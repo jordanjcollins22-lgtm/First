@@ -8,6 +8,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getProspects, type ProspectsData } from "@/lib/data/prospects";
 import { ProspectPanel } from "@/components/leads/prospect-panel";
 import { OutreachBoard } from "@/components/leads/outreach-board";
+import { CoveragePanel } from "@/components/leads/coverage-panel";
+import { getCoverageSummary, type CoverageData } from "@/lib/data/coverage";
 import { getOutreach, type OutreachData } from "@/lib/data/outreach";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isRentcastConfigured } from "@/lib/env";
@@ -56,6 +58,13 @@ export default async function LeadsPage() {
   });
   const viewerRoles = (await getCurrentProfile())?.roles ?? [];
 
+  // Loaded on its own: this reads every prospect in the county, and a slow or
+  // missing table should cost the map rather than the page.
+  const coverage: CoverageData | null = await getCoverageSummary().catch((err) => {
+    console.error("Coverage failed to load:", err);
+    return null;
+  });
+
   if (!data) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
@@ -74,6 +83,8 @@ export default async function LeadsPage() {
       <p className="mb-4 text-muted-foreground">
         Every way we know how to get an evaluation booked, written down so anybody can run it.
       </p>
+
+      {coverage && <CoveragePanel summary={coverage.summary} setupNeeded={coverage.setupNeeded} />}
 
       {outreach && (
         <section className="mb-8">

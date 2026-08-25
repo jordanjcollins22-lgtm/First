@@ -20,8 +20,11 @@ import {
 } from "@/lib/outreach";
 
 /** The outcomes worth a button on the channel card. The full set lives in the
- * module; these four are what somebody taps forty times in a morning. */
-const QUICK: Outcome[] = ["attempted", "reached", "booked", "not_interested"];
+ * module; these are what somebody taps forty times in a morning. "Gave us a
+ * name" is among them because the whole reason to ring a house that will never
+ * buy is to ask who they know, and an outcome nobody can log is one nobody
+ * asks for. */
+const QUICK: Outcome[] = ["attempted", "reached", "booked", "referral_received", "not_interested"];
 
 const ORDER: Temperature[] = ["warm", "cold", "inbound"];
 
@@ -151,7 +154,7 @@ function ChannelCard({
             key={outcome}
             type="button"
             size="sm"
-            variant={outcome === "booked" ? "default" : "outline"}
+            variant={outcome === "booked" || outcome === "referral_received" ? "default" : "outline"}
             disabled={isPending}
             onClick={() => record(outcome)}
           >
@@ -174,7 +177,8 @@ function ChannelCard({
         </button>
         {result && result.attempts > 0 && (
           <span className="text-[11px] tabular-nums text-muted-foreground">
-            {result.booked} booked from {result.attempts} in {windowDays}d
+            {result.booked} booked
+            {result.referrals > 0 && `, ${result.referrals} names`} from {result.attempts} in {windowDays}d
           </span>
         )}
       </div>
@@ -196,7 +200,7 @@ function ChannelCard({
           {result && result.attempts > 0 && (
             <p className="mt-3 text-[11px] text-muted-foreground">
               Last {windowDays} days: {result.attempts} attempts, {result.reached} reached,{" "}
-              {result.booked} booked
+              {result.booked} booked, {result.referrals} names given
               {result.closeRate != null && ` — ${result.closeRate}% of people spoken to`}
             </p>
           )}
