@@ -24,6 +24,38 @@ describe("isMissingTable", () => {
   });
 });
 
+describe("describeDbError — missing columns", () => {
+  it("names the migration when a column is missing, not just a table", () => {
+    // Most migrations after the first few add columns, and PostgREST reports
+    // a missing column with the same "schema cache" wording. Without this the
+    // app worked out that a migration was missing and then could not say
+    // which — the half that was worth saying.
+    const message = describeDbError({
+      code: "PGRST204",
+      message: "Could not find the 'contact_type' column of 'customers' in the schema cache",
+    });
+    expect(message).toContain("0088_contact_types.sql");
+  });
+
+  it("names the right migration for a column added later", () => {
+    const message = describeDbError({
+      code: "PGRST204",
+      message: "Could not find the 'pipeline_stage' column of 'customers' in the schema cache",
+    });
+    expect(message).toContain("0089");
+  });
+
+  it("keeps the raw detail when it cannot work out which migration", () => {
+    // "Run a migration, I won't say which" is the message this replaced.
+    const message = describeDbError({
+      code: "PGRST204",
+      message: "Could not find the 'wizardry' column of 'spells' in the schema cache",
+    });
+    expect(message).toContain("Database setup");
+    expect(message).toContain("wizardry");
+  });
+});
+
 describe("describeDbError", () => {
   it("passes the database's double-booking refusal through, without its prefix", () => {
     // The trigger's message already names the person, the job and the hours.

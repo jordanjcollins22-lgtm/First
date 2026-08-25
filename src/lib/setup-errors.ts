@@ -21,7 +21,34 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   outreach_channels: "0084_outreach.sql",
   outreach_touches: "0084_outreach.sql",
   job_observers: "0086_job_observers.sql",
+  org_counters: "0089_job_numbers_and_pipeline.sql",
 };
+
+/**
+ * Which migration adds what column.
+ *
+ * Needed because most migrations after the first few add columns rather than
+ * tables, and PostgREST reports a missing column with the same "schema cache"
+ * wording as a missing table. Without this the app correctly worked out that a
+ * migration was missing and then could not say which — which is the half that
+ * was worth saying.
+ *
+ * Keyed on column name alone. Two tables could in principle both gain a column
+ * called "source", so the table is checked too where the message carries it.
+ */
+const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[] = [
+  { column: "referral_note", table: "outreach_touches", migration: "0087_referral_outcome.sql" },
+  { column: "in_target_market", table: "lead_prospects", migration: "0087_referral_outcome.sql" },
+  { column: "contact_type", table: "customers", migration: "0088_contact_types.sql" },
+  { column: "external_id", table: "customers", migration: "0088_contact_types.sql" },
+  { column: "import_batch", table: "customers", migration: "0088_contact_types.sql" },
+  { column: "import_address", table: "customers", migration: "0088_contact_types.sql" },
+  { column: "do_not_contact", table: "customers", migration: "0088_contact_types.sql" },
+  { column: "job_number", table: "jobs", migration: "0089_job_numbers_and_pipeline.sql" },
+  { column: "pipeline_stage", table: "customers", migration: "0089_job_numbers_and_pipeline.sql" },
+  { column: "opportunity_value", table: "customers", migration: "0089_job_numbers_and_pipeline.sql" },
+  { column: "pipeline", table: "customers", migration: "0089_job_numbers_and_pipeline.sql" },
+];
 
 interface DbError {
   message?: string;
@@ -41,6 +68,34 @@ export function isMissingTable(error: DbError | null | undefined): boolean {
 }
 
 /**
+ * Whether a column is missing rather than a whole table.
+ *
+ * PostgREST uses PGRST204 and Postgres 42703, and both report it with the same
+ * "schema cache" wording a missing table gets — so this is checked first when
+ * working out which migration to name.
+ */
+export function isMissingColumn(error: DbError | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === "PGRST204" || error.code === "42703") return true;
+  const message = error.message ?? "";
+  return /could not find the '.*' column/i.test(message) || /column .* does not exist/i.test(message);
+}
+
+/** The migration that would fix this error, or null when nothing matches. */
+export function migrationFor(error: DbError | null | undefined): string | null {
+  const message = error?.message ?? "";
+  if (!message) return null;
+
+  const column = COLUMN_MIGRATIONS.find(
+    (c) => message.includes(c.column) && (!c.table || message.includes(c.table))
+  );
+  if (column) return column.migration;
+
+  const table = Object.keys(TABLE_MIGRATIONS).find((name) => message.includes(name));
+  return table ? TABLE_MIGRATIONS[table] : null;
+}
+
+/**
  * A message worth showing somebody.
  *
  * Falls back to the raw message when it is not a missing-table error, because
@@ -56,14 +111,11 @@ export function describeDbError(error: DbError | null | undefined, fallback = "S
   const doubleBooked = (error.message ?? "").match(/Double booking: (.+)$/);
   if (doubleBooked) return doubleBooked[1];
 
-  if (!isMissingTable(error)) return error.message ?? fallback;
+  if (!isMissingTable(error) && !isMissingColumn(error)) return error.message ?? fallback;
 
-  const table = Object.keys(TABLE_MIGRATIONS).find((name) =>
-    (error.message ?? "").includes(name)
-  );
-  const migration = table ? TABLE_MIGRATIONS[table] : null;
+  const migration = migrationFor(error);
 
   return migration
-    ? `This feature needs its database migration. In Supabase's SQL Editor, run supabase/migrations/${migration}, then reload.`
-    : "This feature needs its database migration run in Supabase's SQL Editor.";
+    ? `This feature needs its database migration. In Supabase's SQL Editor, run supabase/migrations/${migration}, then reload. Database setup has a copy button.`
+    : `This feature needs a database migration that hasn't been run. Open Database setup to see which ones are outstanding. (${error.message ?? "no detail"})`;
 }
