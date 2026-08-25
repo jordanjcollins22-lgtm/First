@@ -20,6 +20,9 @@ export interface ContactRow {
   opportunityValue: number | null;
 }
 
+/** How many imported addresses are still waiting to be placed on the map, so
+ * the Contacts page can offer the step rather than leaving somebody to wonder
+ * why their import is invisible on Project Data. */
 export interface DuplicatePair {
   keep: ContactRow;
   merge: ContactRow;
@@ -30,6 +33,12 @@ export interface DuplicatePair {
 export interface ContactsData {
   contacts: ContactRow[];
   duplicates: DuplicatePair[];
+  /** Imported addresses not yet placed on the map. Until they are, those
+   * contacts have no property and appear nowhere that draws one. */
+  pendingGeocodes: number;
+  /** Addresses a lookup could not place — usually partial, and needing a
+   * human. Counted so they are visible rather than quietly absent forever. */
+  failedGeocodes: number;
 }
 
 /**
@@ -42,10 +51,23 @@ export interface ContactsData {
 export async function getContacts(): Promise<ContactsData> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("customers")
-    .select("id, name, email, phone, contact_type, tags, do_not_contact, pipeline, pipeline_stage, opportunity_value, properties(id, address)")
-    .order("name");
+  const [{ data, error }, { count: pendingGeocodes }, { count: failedGeocodes }] = await Promise.all([
+    supabase
+      .from("customers")
+      .select(
+        "id, name, email, phone, contact_type, tags, do_not_contact, pipeline, pipeline_stage, opportunity_value, properties(id, address)"
+      )
+      .order("name"),
+    supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .not("import_address", "is", null)
+      .is("geocode_attempted_at", null),
+    supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .not("geocode_error", "is", null),
+  ]);
   if (error) throw error;
 
   const contacts: ContactRow[] = (
@@ -125,5 +147,10 @@ export async function getContacts(): Promise<ContactsData> {
     }
   }
 
-  return { contacts, duplicates };
+  return {
+    contacts,
+    duplicates,
+    pendingGeocodes: pendingGeocodes ?? 0,
+    failedGeocodes: failedGeocodes ?? 0,
+  };
 }

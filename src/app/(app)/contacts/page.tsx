@@ -14,7 +14,7 @@ export default async function ContactsPage() {
   // itself is open to more people.
   const canMerge = Boolean(profile?.roles.includes("admin"));
 
-  let data: ContactsData = { contacts: [], duplicates: [] };
+  let data: ContactsData = { contacts: [], duplicates: [], pendingGeocodes: 0, failedGeocodes: 0 };
   try {
     data = await getContacts();
   } catch (err) {

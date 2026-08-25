@@ -52,6 +52,8 @@ export interface Database {
           pipeline: string | null;
           pipeline_stage: string | null;
           opportunity_value: number | null;
+          geocode_attempted_at: string | null;
+          geocode_error: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -15,6 +15,7 @@ import {
 import type { ContactsData, ContactRow } from "@/lib/data/contacts";
 import { CONTACT_TYPES, contactTypeLabel } from "@/lib/contact-types";
 import { ContactImportPanel } from "./contact-import-panel";
+import { GeocodePanel } from "./geocode-panel";
 
 function summary(contact: ContactRow): string {
   return (
@@ -75,6 +76,8 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
       )}
 
       <ManualMerge contacts={contacts} canMerge={canMerge} />
+
+      <GeocodePanel pending={data.pendingGeocodes} failed={data.failedGeocodes} />
 
       <ContactImportPanel />
 
