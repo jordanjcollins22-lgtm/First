@@ -36,7 +36,9 @@ interface SatelliteMapViewProps {
    */
   densityCells: {
     key: string;
-    bounds: [number, number, number, number];
+    /** Every half-mile square the area is made of, so the drawn shape is the
+     * actual run of streets rather than a rectangle around it. */
+    cells: [number, number, number, number][];
     lat: number;
     lng: number;
     intensity: number;
@@ -205,10 +207,12 @@ export function SatelliteMapView({
         source: DENSITY_SOURCE,
         layout: {
           // The rank and the place, so the map is readable without holding the
-          // list next to it.
+          // list next to it. Placed at the polygon's centre rather than
+          // repeated on every square it is made of.
           "text-field": ["concat", ["get", "rank"], ".  ", ["get", "label"]],
           "text-size": 13,
           "text-allow-overlap": true,
+          "symbol-placement": "point",
         },
         paint: {
           "text-color": "#ffffff",
@@ -378,25 +382,22 @@ export function SatelliteMapView({
 
     source.setData({
       type: "FeatureCollection",
-      features: densityCells.map((c) => {
-        const [west, south, east, north] = c.bounds;
-        return {
-          type: "Feature" as const,
-          geometry: {
-            type: "Polygon" as const,
-            coordinates: [
-              [
-                [west, south],
-                [east, south],
-                [east, north],
-                [west, north],
-                [west, south],
-              ],
+      features: densityCells.map((c) => ({
+        type: "Feature" as const,
+        geometry: {
+          type: "MultiPolygon" as const,
+          coordinates: c.cells.map(([west, south, east, north]) => [
+            [
+              [west, south],
+              [east, south],
+              [east, north],
+              [west, north],
+              [west, south],
             ],
-          },
-          properties: { intensity: c.intensity, rank: String(c.rank), label: c.label },
-        };
-      }),
+          ]),
+        },
+        properties: { intensity: c.intensity, rank: String(c.rank), label: c.label },
+      })),
     });
   }, [densityCells, mapLoaded]);
 

@@ -44,6 +44,30 @@ export interface DensityCell {
   area: string;
 }
 
+/**
+ * A run of touching cells, treated as one place.
+ *
+ * Without this, a town that covers six half-mile cells appears six times in a
+ * top ten, and a ranked list reading "Bel Air, Aberdeen, Bel Air, Aberdeen"
+ * looks broken even though every row is technically correct. Two squares that
+ * share an edge or a corner are one place to somebody driving to them, so they
+ * are one row.
+ */
+export interface DensityArea {
+  key: string;
+  /** The cells it is made of, for drawing the real shape rather than a box
+   * around it — an L-shaped run of streets is not a rectangle. */
+  cells: DensityCell[];
+  /** Everything it covers, for flying the map to it. */
+  bounds: [number, number, number, number];
+  lat: number;
+  lng: number;
+  count: number;
+  collected: number;
+  jobs: number;
+  area: string;
+}
+
 export type DensityMode = "count" | "paid";
 
 export const DENSITY_MODES: { value: DensityMode; label: string; blurb: string }[] = [
@@ -128,14 +152,117 @@ export function densityCells(points: DensityPoint[], size = CELL_DEGREES): Densi
 }
 
 /**
- * The cells worth looking at, best first.
+ * Joins cells that touch into single areas.
+ *
+ * Eight-connected: diagonally adjacent counts, because a neighbourhood that
+ * runs corner to corner across a grid line is still one neighbourhood, and the
+ * grid line is an artefact of how this is counted rather than anything on the
+ * ground.
+ */
+export function clusterCells(cells: DensityCell[]): DensityArea[] {
+  const byKey = new Map(cells.map((c) => [c.key, c]));
+  const seen = new Set<string>();
+  const areas: DensityArea[] = [];
+
+  for (const cell of cells) {
+    if (seen.has(cell.key)) continue;
+
+    // Flood fill from this cell, taking every neighbour it can reach.
+    const group: DensityCell[] = [];
+    const queue = [cell.key];
+    seen.add(cell.key);
+
+    while (queue.length > 0) {
+      const key = queue.pop() as string;
+      const current = byKey.get(key);
+      if (!current) continue;
+      group.push(current);
+
+      const [latIndex, lngIndex] = key.split(":").map(Number);
+      for (let dLat = -1; dLat <= 1; dLat++) {
+        for (let dLng = -1; dLng <= 1; dLng++) {
+          if (dLat === 0 && dLng === 0) continue;
+          const neighbour = `${latIndex + dLat}:${lngIndex + dLng}`;
+          if (byKey.has(neighbour) && !seen.has(neighbour)) {
+            seen.add(neighbour);
+            queue.push(neighbour);
+          }
+        }
+      }
+    }
+
+    const count = group.reduce((sum, c) => sum + c.count, 0);
+    const areaNames = new Map<string, number>();
+    for (const c of group) areaNames.set(c.area, (areaNames.get(c.area) ?? 0) + c.count);
+    let label = "Unknown";
+    let best = 0;
+    for (const [name, n] of areaNames) {
+      if (n > best) {
+        best = n;
+        label = name;
+      }
+    }
+
+    areas.push({
+      key: group.map((c) => c.key).sort().join("|"),
+      cells: group,
+      bounds: [
+        Math.min(...group.map((c) => c.bounds[0])),
+        Math.min(...group.map((c) => c.bounds[1])),
+        Math.max(...group.map((c) => c.bounds[2])),
+        Math.max(...group.map((c) => c.bounds[3])),
+      ],
+      // Weighted by how many addresses each cell holds, so the label sits
+      // over the busy end of a long run rather than its geometric middle.
+      lat: group.reduce((sum, c) => sum + c.lat * c.count, 0) / Math.max(1, count),
+      lng: group.reduce((sum, c) => sum + c.lng * c.count, 0) / Math.max(1, count),
+      count,
+      collected: group.reduce((sum, c) => sum + c.collected, 0),
+      jobs: group.reduce((sum, c) => sum + c.jobs, 0),
+      area: label,
+    });
+  }
+
+  return areas;
+}
+
+/**
+ * Tells apart two genuinely separate pockets that share a town name.
+ *
+ * Clustering removes nearly all of these, but a town really can have two
+ * unconnected patches of our addresses in it, and printing the same name twice
+ * with no way to tell which is which is the thing being fixed here — so the
+ * survivors get a compass point rather than being left ambiguous.
+ */
+export function disambiguate(areas: DensityArea[]): DensityArea[] {
+  const counts = new Map<string, number>();
+  for (const a of areas) counts.set(a.area, (counts.get(a.area) ?? 0) + 1);
+
+  return areas.map((area) => {
+    if ((counts.get(area.area) ?? 0) < 2) return area;
+
+    const siblings = areas.filter((a) => a.area === area.area);
+    const meanLat = siblings.reduce((sum, a) => sum + a.lat, 0) / siblings.length;
+    const meanLng = siblings.reduce((sum, a) => sum + a.lng, 0) / siblings.length;
+
+    const dLat = area.lat - meanLat;
+    const dLng = area.lng - meanLng;
+    const compass =
+      Math.abs(dLat) >= Math.abs(dLng) ? (dLat >= 0 ? "north" : "south") : dLng >= 0 ? "east" : "west";
+
+    return { ...area, area: `${area.area} (${compass})` };
+  });
+}
+
+/**
+ * The areas worth looking at, best first.
  *
  * In paid mode, cells that have never earned anything are dropped rather than
  * ranked last. A list of the top ten places by money that is eight zeroes is
  * not a ranking, it is a list of places with a zero next to them.
  */
-export function rankCells(cells: DensityCell[], mode: DensityMode, limit = 10): DensityCell[] {
-  const scored = mode === "paid" ? cells.filter((c) => c.collected > 0) : cells.filter((c) => c.count > 0);
+export function rankAreas(areas: DensityArea[], mode: DensityMode, limit = 10): DensityArea[] {
+  const scored = mode === "paid" ? areas.filter((c) => c.collected > 0) : areas.filter((c) => c.count > 0);
 
   return scored
     .sort((a, b) => {
@@ -158,7 +285,7 @@ export function rankCells(cells: DensityCell[], mode: DensityMode, limit = 10): 
  * magnitude between a book of two hundred addresses and one of ninety
  * thousand, and a fixed scale would render one of them entirely one colour.
  */
-export function intensityOf(cell: DensityCell, cells: DensityCell[], mode: DensityMode): number {
+export function intensityOf(cell: DensityArea, cells: DensityArea[], mode: DensityMode): number {
   const value = mode === "paid" ? cell.collected : cell.count;
   const max = cells.reduce((best, c) => Math.max(best, mode === "paid" ? c.collected : c.count), 0);
   if (max <= 0) return 0;
@@ -167,7 +294,7 @@ export function intensityOf(cell: DensityCell, cells: DensityCell[], mode: Densi
 
 /** What a cell is worth per address — the number that says whether a dense
  * area is dense with work or merely dense with houses. */
-export function valuePerAddress(cell: DensityCell): number {
+export function valuePerAddress(cell: Pick<DensityArea, "count" | "collected">): number {
   if (cell.count === 0) return 0;
   return Math.round(cell.collected / cell.count);
 }

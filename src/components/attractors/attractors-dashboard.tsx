@@ -16,7 +16,15 @@ import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
 import type { AreaAddress } from "@/lib/area-coverage";
 import { isClientSide } from "@/lib/contact-types";
-import { densityCells, intensityOf, rankCells, type DensityMode, type DensityPoint } from "@/lib/area-density";
+import {
+  clusterCells,
+  densityCells,
+  disambiguate,
+  intensityOf,
+  rankAreas,
+  type DensityMode,
+  type DensityPoint,
+} from "@/lib/area-density";
 import { DensityPanel } from "./density-panel";
 import { CreateWavePanel } from "./create-wave-panel";
 import { WaveDetailPanel } from "./wave-detail-panel";
@@ -123,24 +131,33 @@ export function AttractorsDashboard({
 
   // Ranked once per mode change rather than per render: this walks every
   // address in the book, and the book is the point.
-  const rankedCells = useMemo(() => {
-    if (!densityMode) return [];
-    return rankCells(densityCells(densityPoints), densityMode);
-  }, [densityPoints, densityMode]);
+  // Cells joined into places before ranking. A half-mile cell is a counting
+  // unit; a town is not, and ranking the units put the same town in the list
+  // four times.
+  const allAreas = useMemo(
+    () => (densityMode ? disambiguate(clusterCells(densityCells(densityPoints))) : []),
+    [densityPoints, densityMode]
+  );
+
+  const rankedCells = useMemo(
+    () => (densityMode ? rankAreas(allAreas, densityMode) : []),
+    [allAreas, densityMode]
+  );
 
   const mapCells = useMemo(() => {
     if (!densityMode) return [];
-    const all = densityCells(densityPoints);
-    return rankedCells.map((cell, i) => ({
-      key: cell.key,
-      bounds: cell.bounds,
-      lat: cell.lat,
-      lng: cell.lng,
-      intensity: intensityOf(cell, all, densityMode),
+    return rankedCells.map((area, i) => ({
+      key: area.key,
+      // Every cell it is made of, so an L-shaped run of streets draws as that
+      // rather than as a box around it.
+      cells: area.cells.map((c) => c.bounds),
+      lat: area.lat,
+      lng: area.lng,
+      intensity: intensityOf(area, allAreas, densityMode),
       rank: i + 1,
-      label: cell.area,
+      label: area.area,
     }));
-  }, [densityPoints, densityMode, rankedCells]);
+  }, [allAreas, densityMode, rankedCells]);
 
   const [jobStatusFilter, setJobStatusFilter] = useState<Set<JobStatus>>(new Set());
   const [manuallyHiddenWaveIds, setManuallyHiddenWaveIds] = useState<Set<string>>(new Set());
