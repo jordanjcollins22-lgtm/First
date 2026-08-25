@@ -28,6 +28,7 @@ const CREATES = {
   // Triggers and functions only — nothing to probe for, so it reports as
   // applied when its neighbours are. Flagged as such on the setup page.
   "0085_no_double_booking.sql": [],
+  "0086_job_observers.sql": ["job_observers"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

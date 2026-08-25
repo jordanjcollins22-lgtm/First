@@ -28,6 +28,7 @@ import { VisitsPanel } from "@/components/job/visits-panel";
 import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
+import { ObserversPanel, type ObserverRow } from "@/components/job/observers-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { isFieldOnly } from "@/lib/affiliate-roles";
@@ -97,6 +98,7 @@ export default async function JobPage({
     schedule,
     crew,
     teamProfiles,
+    observerRows,
   ] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
@@ -125,6 +127,26 @@ export default async function JobPage({
         missing: isMissingTable(error),
       })),
     listProfiles().catch(() => []),
+    // Empty until migration 0086 runs; the panel says so rather than looking
+    // merely empty.
+    supabase
+      .from("job_observers")
+      .select("id, name, email, phone, relationship, token, revoked_at, last_viewed_at")
+      .eq("job_id", jobId)
+      .order("created_at")
+      .then(({ data, error }) => ({
+        rows: (data ?? []) as unknown as {
+          id: string;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          relationship: string;
+          token: string;
+          revoked_at: string | null;
+          last_viewed_at: string | null;
+        }[],
+        missing: isMissingTable(error),
+      })),
   ]);
 
   // Names for whoever asked for or decided a walkthrough, plus the sign-off.
@@ -288,6 +310,26 @@ export default async function JobPage({
         accountManagerId={accountManagerId}
         profiles={teamProfiles}
         editable={job.status !== "completed" && job.status !== "cancelled"}
+      />
+
+      {/* Sits with the crew, because both answer "who is on this job" — one
+          inside the business and one outside it. */}
+      <ObserversPanel
+        jobId={jobId}
+        baseUrl={baseUrl}
+        setupNeeded={observerRows.missing}
+        observers={observerRows.rows.map(
+          (o): ObserverRow => ({
+            id: o.id,
+            name: o.name,
+            email: o.email,
+            phone: o.phone,
+            relationship: o.relationship,
+            token: o.token,
+            revokedAt: o.revoked_at,
+            lastViewedAt: o.last_viewed_at,
+          })
+        )}
       />
 
       {/* Photos and sign-off. Which stages are offered depends on where the

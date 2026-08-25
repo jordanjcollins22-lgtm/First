@@ -1091,6 +1091,38 @@ export interface Database {
           },
         ];
       };
+      job_observers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          relationship: string;
+          token: string;
+          revoked_at: string | null;
+          last_viewed_at: string | null;
+          added_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_observers"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          name: string;
+          token: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_observers"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_observers_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       outreach_channels: {
         Row: {
           id: string;
