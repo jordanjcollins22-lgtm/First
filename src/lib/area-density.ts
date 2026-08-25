@@ -27,6 +27,11 @@ export interface DensityPoint {
 
 export interface DensityCell {
   key: string;
+  /** The cell's own square, as [west, south, east, north]. Drawn as a boundary
+   * rather than a blurred dot: an outline says "this area, these streets",
+   * and a soft blob says "somewhere around here", which is not a place
+   * anybody can be sent. */
+  bounds: [number, number, number, number];
   /** Centre of the cell, for drawing. */
   lat: number;
   lng: number;
@@ -93,6 +98,7 @@ export function densityCells(points: DensityPoint[], size = CELL_DEGREES): Densi
   }
 
   return [...cells.entries()].map(([key, cell]) => {
+    const [latIndex, lngIndex] = key.split(":").map(Number);
     let area = "Unknown";
     let best = 0;
     for (const [name, n] of cell.areas) {
@@ -103,8 +109,14 @@ export function densityCells(points: DensityPoint[], size = CELL_DEGREES): Densi
     }
     return {
       key,
+      bounds: [
+        lngIndex * size,
+        latIndex * size,
+        (lngIndex + 1) * size,
+        (latIndex + 1) * size,
+      ] as [number, number, number, number],
       // The average of what is in it, not the corner of the box — it puts the
-      // marker where the houses are rather than on an arbitrary gridline.
+      // label where the houses are rather than on an arbitrary gridline.
       lat: cell.latSum / cell.count,
       lng: cell.lngSum / cell.count,
       count: cell.count,

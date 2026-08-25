@@ -34,7 +34,15 @@ interface SatelliteMapViewProps {
    * Drawn as blobs under everything else — the point is the shape of where the
    * work is, which markers on top of it do not obscure and do not explain.
    */
-  densityCells: { key: string; lat: number; lng: number; intensity: number; rank: number; label: string }[];
+  densityCells: {
+    key: string;
+    bounds: [number, number, number, number];
+    lat: number;
+    lng: number;
+    intensity: number;
+    rank: number;
+    label: string;
+  }[];
   visibleWaveIds: Set<string>;
   selectedWaveId: string | null;
   onSelectWave: (id: string | null) => void;
@@ -156,15 +164,16 @@ export function SatelliteMapView({
       });
 
       map.addSource(DENSITY_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // A drawn boundary rather than a soft blob: the area is a real square of
+      // streets somebody is going to walk, and an outline says which streets.
+      // A blur says "somewhere around here", which is not a place anybody can
+      // be sent.
       map.addLayer({
         id: DENSITY_LAYER,
-        type: "circle",
+        type: "fill",
         source: DENSITY_SOURCE,
         paint: {
-          // Grows with zoom so a blob covers roughly the same ground rather
-          // than the same pixels — a fixed radius is a lie about area.
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 8, 12, 30, 16, 120],
-          "circle-color": [
+          "fill-color": [
             "interpolate",
             ["linear"],
             ["get", "intensity"],
@@ -175,8 +184,19 @@ export function SatelliteMapView({
             1,
             "#b91c1c",
           ],
-          "circle-opacity": 0.35,
-          "circle-blur": 0.6,
+          // Strong enough to read over satellite imagery, which is dark and
+          // busy and swallows anything gentler.
+          "fill-opacity": 0.45,
+        },
+      });
+      map.addLayer({
+        id: `${DENSITY_LAYER}-outline`,
+        type: "line",
+        source: DENSITY_SOURCE,
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 2,
+          "line-opacity": 0.9,
         },
       });
       map.addLayer({
@@ -184,7 +204,9 @@ export function SatelliteMapView({
         type: "symbol",
         source: DENSITY_SOURCE,
         layout: {
-          "text-field": ["get", "rank"],
+          // The rank and the place, so the map is readable without holding the
+          // list next to it.
+          "text-field": ["concat", ["get", "rank"], ".  ", ["get", "label"]],
           "text-size": 13,
           "text-allow-overlap": true,
         },
@@ -356,11 +378,25 @@ export function SatelliteMapView({
 
     source.setData({
       type: "FeatureCollection",
-      features: densityCells.map((c) => ({
-        type: "Feature" as const,
-        geometry: { type: "Point" as const, coordinates: [c.lng, c.lat] },
-        properties: { intensity: c.intensity, rank: String(c.rank), label: c.label },
-      })),
+      features: densityCells.map((c) => {
+        const [west, south, east, north] = c.bounds;
+        return {
+          type: "Feature" as const,
+          geometry: {
+            type: "Polygon" as const,
+            coordinates: [
+              [
+                [west, south],
+                [east, south],
+                [east, north],
+                [west, north],
+                [west, south],
+              ],
+            ],
+          },
+          properties: { intensity: c.intensity, rank: String(c.rank), label: c.label },
+        };
+      }),
     });
   }, [densityCells, mapLoaded]);
 

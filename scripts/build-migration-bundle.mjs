@@ -35,6 +35,7 @@ const CREATES = {
   "0089_job_numbers_and_pipeline.sql": ["org_counters"],
   "0090_geocode_tracking.sql": [],
   "0091_contact_merge_undo.sql": ["contact_merges"],
+  "0092_target_markets.sql": ["target_markets"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

@@ -133,6 +133,7 @@ export function AttractorsDashboard({
     const all = densityCells(densityPoints);
     return rankedCells.map((cell, i) => ({
       key: cell.key,
+      bounds: cell.bounds,
       lat: cell.lat,
       lng: cell.lng,
       intensity: intensityOf(cell, all, densityMode),

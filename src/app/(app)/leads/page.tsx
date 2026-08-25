@@ -10,6 +10,8 @@ import { ProspectPanel } from "@/components/leads/prospect-panel";
 import { OutreachBoard } from "@/components/leads/outreach-board";
 import { CoveragePanel } from "@/components/leads/coverage-panel";
 import { getCoverageSummary, type CoverageData } from "@/lib/data/coverage";
+import { getTargetMarkets, type TargetMarketData } from "@/lib/data/target-markets";
+import { TargetMarketPanel } from "@/components/leads/target-market-panel";
 import { getOutreach, type OutreachData } from "@/lib/data/outreach";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isRentcastConfigured } from "@/lib/env";
@@ -58,6 +60,11 @@ export default async function LeadsPage() {
   });
   const viewerRoles = (await getCurrentProfile())?.roles ?? [];
 
+  const markets: TargetMarketData = await getTargetMarkets().catch((err) => {
+    console.error("Target markets failed to load:", err);
+    return { markets: [], outOfMarket: 0, setupNeeded: true };
+  });
+
   // Loaded on its own: this reads every prospect in the county, and a slow or
   // missing table should cost the map rather than the page.
   const coverage: CoverageData | null = await getCoverageSummary().catch((err) => {
@@ -83,6 +90,12 @@ export default async function LeadsPage() {
       <p className="mb-4 text-muted-foreground">
         Every way we know how to get an evaluation booked, written down so anybody can run it.
       </p>
+
+      <TargetMarketPanel
+        markets={markets.markets}
+        outOfMarket={markets.outOfMarket}
+        setupNeeded={markets.setupNeeded}
+      />
 
       {coverage && <CoveragePanel summary={coverage.summary} setupNeeded={coverage.setupNeeded} />}
 

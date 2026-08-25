@@ -54,6 +54,7 @@ export interface Database {
           opportunity_value: number | null;
           geocode_attempted_at: string | null;
           geocode_error: string | null;
+          in_target_market: boolean | null;
           created_at: string;
           updated_at: string;
         };
@@ -98,6 +99,26 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      target_markets: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          zips: string[];
+          cities: string[];
+          counties: string[];
+          active: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["target_markets"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["target_markets"]["Row"]>;
+        Relationships: [];
       };
       contact_merges: {
         Row: {
@@ -1028,6 +1049,7 @@ export interface Database {
           score: number | null;
           notes: string | null;
           converted_customer_id: string | null;
+          in_target_market: boolean | null;
           created_at: string;
           updated_at: string;
         };

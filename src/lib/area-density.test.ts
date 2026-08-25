@@ -55,6 +55,18 @@ describe("densityCells", () => {
     expect(densityCells([point({ lat: Number.NaN })])).toEqual([]);
   });
 
+  it("carries the cell's own square, for drawing a boundary", () => {
+    // An outline says "these streets". A blurred dot says "somewhere around
+    // here", which is not a place anybody can be sent.
+    const [cell] = densityCells([point({ lat: 39.505, lng: -76.305 })]);
+    const [west, south, east, north] = cell.bounds;
+    expect(south).toBeLessThanOrEqual(39.505);
+    expect(north).toBeGreaterThan(39.505);
+    expect(west).toBeLessThanOrEqual(-76.305);
+    expect(east).toBeGreaterThan(-76.305);
+    expect(north - south).toBeCloseTo(CELL_DEGREES);
+  });
+
   it("uses a cell about half a mile across", () => {
     // A cell somebody cannot walk in a session is not a decision.
     expect(CELL_DEGREES).toBeCloseTo(0.01);
@@ -137,6 +149,8 @@ describe("valuePerAddress", () => {
   });
 
   it("is zero rather than a division by zero", () => {
-    expect(valuePerAddress({ key: "k", lat: 0, lng: 0, count: 0, collected: 0, jobs: 0, area: "x" })).toBe(0);
+    expect(
+      valuePerAddress({ key: "k", bounds: [0, 0, 1, 1], lat: 0, lng: 0, count: 0, collected: 0, jobs: 0, area: "x" })
+    ).toBe(0);
   });
 });
