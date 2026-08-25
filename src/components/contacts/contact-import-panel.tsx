@@ -139,9 +139,27 @@ export function ContactImportPanel() {
         {preview && (
           <div className="rounded-lg border border-border bg-background/60 p-3 text-sm">
             <p className="font-semibold">
-              {preview.creating} new · {preview.updating} already here
+              {preview.creating} new · {preview.updating} to fill in
+              {preview.unchanged > 0 && ` · ${preview.unchanged} already complete`}
               {preview.skipped.length > 0 && ` · ${preview.skipped.length} skipped`}
             </p>
+
+            {/* The line somebody re-importing is looking for. A run that was
+                meant to add addresses and would add none should say so here,
+                not after three thousand rows have gone through. */}
+            {preview.gainingAddress > 0 ? (
+              <p className="mt-0.5 text-xs font-medium text-emerald-700">
+                {preview.gainingAddress} will gain an address.
+              </p>
+            ) : (
+              preview.updating === 0 &&
+              preview.creating === 0 && (
+                <p className="mt-0.5 text-xs font-medium text-amber-800">
+                  Nothing in this file is missing from what&apos;s already here — this import would change
+                  nothing.
+                </p>
+              )
+            )}
             {preview.optedOut > 0 && (
               <p className="mt-0.5 text-xs font-medium text-amber-800">
                 {preview.optedOut} marked do-not-contact — that flag comes across with them.

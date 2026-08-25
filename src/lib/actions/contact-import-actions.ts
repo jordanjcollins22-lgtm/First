@@ -14,8 +14,14 @@ export interface ImportPreview {
   ok: true;
   /** Rows that would create a new contact. */
   creating: number;
-  /** Rows that match somebody already here and would fill in their blanks. */
+  /** Rows that match somebody already here and would gain something. */
   updating: number;
+  /** Matched, but the file has nothing they are missing. */
+  unchanged: number;
+  /** Of the updates, how many gain an address — the thing somebody re-imports
+   * for, and the thing worth confirming before they commit to three thousand
+   * rows a second time. */
+  gainingAddress: number;
   optedOut: number;
   skipped: { row: number; reason: string }[];
   unmatchedHeaders: string[];
@@ -35,12 +41,76 @@ interface ExistingRow {
   email: string | null;
   phone: string | null;
   external_id: string | null;
+  import_address: string | null;
+  notes: string | null;
+  source: string | null;
+  pipeline: string | null;
+  pipeline_stage: string | null;
+  opportunity_value: number | null;
 }
 
+/**
+ * Everything a re-import might fill in.
+ *
+ * Wider than it looks like it needs to be, because "fill the blanks" can only
+ * be decided by knowing which are blank. Importing the same export twice —
+ * once without a column, once with it — is a normal thing to do and has to
+ * work, so every field an import can write is read back here.
+ */
 async function loadExisting(): Promise<ExistingRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("customers").select("id, name, email, phone, external_id");
+  const { data } = await supabase
+    .from("customers")
+    .select(
+      "id, name, email, phone, external_id, import_address, notes, source, pipeline, pipeline_stage, opportunity_value"
+    );
   return (data ?? []) as unknown as ExistingRow[];
+}
+
+/**
+ * What a second import would add to somebody already here.
+ *
+ * Blanks only, always. An import must never overwrite a phone number or a
+ * spelling the office corrected by hand — but a field that is empty has
+ * nothing to protect, and leaving it empty when the file has the answer is the
+ * bug that makes people re-import and wonder why nothing happened.
+ *
+ * The opt-out is the one exception, and it only ever moves towards silence.
+ */
+interface ContactPatch {
+  email?: string;
+  phone?: string;
+  external_id?: string;
+  import_address?: string;
+  notes?: string;
+  source?: string;
+  pipeline?: string;
+  pipeline_stage?: string;
+  opportunity_value?: number;
+  do_not_contact?: boolean;
+  tags?: string[];
+}
+
+function fillBlanks(match: ExistingRow, draft: ContactDraft): ContactPatch {
+  const patch: ContactPatch = {};
+
+  if (!match.email && draft.email) patch.email = draft.email;
+  if (!match.phone && draft.phone) patch.phone = draft.phone;
+  if (!match.external_id && draft.externalId) patch.external_id = draft.externalId;
+  if (!match.import_address && draft.address) patch.import_address = draft.address;
+  if (!match.notes && draft.notes) patch.notes = draft.notes;
+  if (!match.source && draft.source) patch.source = draft.source;
+  if (!match.pipeline && draft.pipeline) patch.pipeline = draft.pipeline;
+  if (!match.pipeline_stage && draft.pipelineStage) patch.pipeline_stage = draft.pipelineStage;
+  if (match.opportunity_value == null && draft.opportunityValue != null) {
+    patch.opportunity_value = draft.opportunityValue;
+  }
+
+  // Only ever towards silence.
+  if (draft.doNotContact) patch.do_not_contact = true;
+  if (draft.tags.length > 0) patch.tags = draft.tags;
+
+  return patch;
 }
 
 /**
@@ -89,12 +159,21 @@ export async function previewContactImport(csvText: string): Promise<PreviewResu
     const existing = await loadExisting();
     let creating = 0;
     let updating = 0;
+    let unchanged = 0;
+    let gainingAddress = 0;
     const sample: ImportPreview["sample"] = [];
 
     for (const draft of report.drafts) {
       const match = matchExisting(draft, existing);
-      if (match) updating++;
-      else creating++;
+      if (match) {
+        const patch = fillBlanks(match, draft);
+        if (Object.keys(patch).length > 0) updating++;
+        else unchanged++;
+        if (patch.import_address) gainingAddress++;
+      } else {
+        creating++;
+        if (draft.address) gainingAddress++;
+      }
       if (sample.length < 5) {
         sample.push({
           name: draft.name,
@@ -109,6 +188,8 @@ export async function previewContactImport(csvText: string): Promise<PreviewResu
       ok: true,
       creating,
       updating,
+      unchanged,
+      gainingAddress,
       optedOut: report.drafts.filter((d) => d.doNotContact).length,
       skipped: report.skipped,
       unmatchedHeaders: report.unmatchedHeaders,
@@ -155,29 +236,19 @@ export async function importContacts(
 
     let created = 0;
     let updated = 0;
+    let unchanged = 0;
 
     for (const draft of report.drafts) {
       const match = matchExisting(draft, existing);
 
       if (match) {
-        const patch: {
-          email?: string;
-          phone?: string;
-          external_id?: string;
-          do_not_contact?: boolean;
-          tags?: string[];
-        } = {};
-        if (!match.email && draft.email) patch.email = draft.email;
-        if (!match.phone && draft.phone) patch.phone = draft.phone;
-        if (!match.external_id && draft.externalId) patch.external_id = draft.externalId;
-        // Only ever towards silence.
-        if (draft.doNotContact) patch.do_not_contact = true;
-        if (draft.tags.length > 0) patch.tags = draft.tags;
-
+        const patch = fillBlanks(match, draft);
         if (Object.keys(patch).length > 0) {
           await supabase.from("customers").update(patch).eq("id", match.id);
+          updated++;
+        } else {
+          unchanged++;
         }
-        updated++;
         continue;
       }
 
@@ -217,9 +288,17 @@ export async function importContacts(
       ok: true,
       created,
       updated,
-      message: `${created} added, ${updated} already here${
-        report.skipped.length > 0 ? `, ${report.skipped.length} skipped` : ""
-      }.`,
+      // Filled-in and left-alone counted separately, so a re-import that was
+      // supposed to add something and added nothing says so instead of
+      // reporting a cheerful number that means "I did nothing".
+      message: [
+        created > 0 ? `${created} added` : null,
+        updated > 0 ? `${updated} filled in` : null,
+        unchanged > 0 ? `${unchanged} already complete` : null,
+        report.skipped.length > 0 ? `${report.skipped.length} skipped` : null,
+      ]
+        .filter(Boolean)
+        .join(", ") + ".",
     };
   } catch (err) {
     console.error("importContacts failed:", err);

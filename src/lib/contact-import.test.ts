@@ -125,3 +125,35 @@ describe("parseContactCsv", () => {
     expect(parseContactCsv(csv).drafts[0].name).toBe("Dana Holt");
   });
 });
+
+describe("re-importing the same export with a column added", () => {
+  // The exact case: contacts imported once without addresses, then the same
+  // export again with them. It must match rather than duplicate, and it must
+  // actually save the addresses — matching and then doing nothing is the
+  // failure that sends somebody round the loop a third time.
+  it("produces the same identity both times, so the rows match", () => {
+    const withoutAddress = ["Contact Id,First Name,Last Name,Email", "abc123,Pat,Rivera,pat@x.com"].join("\n");
+    const withAddress = [
+      "Contact Id,First Name,Last Name,Email,Address,City,State,Postal Code",
+      "abc123,Pat,Rivera,pat@x.com,208 Crafton Rd,Bel Air,MD,21014",
+    ].join("\n");
+
+    const first = parseContactCsv(withoutAddress).drafts[0];
+    const second = parseContactCsv(withAddress).drafts[0];
+
+    expect(first.externalId).toBe(second.externalId);
+    expect(first.email).toBe(second.email);
+    expect(first.address).toBeNull();
+    expect(second.address).toBe("208 Crafton Rd, Bel Air, MD, 21014");
+  });
+
+  it("still matches on email when the export carries no contact id", () => {
+    const first = parseContactCsv(["Name,Email", "Pat Rivera,pat@x.com"].join("\n")).drafts[0];
+    const second = parseContactCsv(
+      ["Name,Email,Address", "Pat Rivera,pat@x.com,208 Crafton Rd"].join("\n")
+    ).drafts[0];
+
+    expect(first.email).toBe(second.email);
+    expect(second.address).toBe("208 Crafton Rd");
+  });
+});
