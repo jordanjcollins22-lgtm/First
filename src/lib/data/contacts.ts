@@ -14,6 +14,10 @@ export interface ContactRow {
   /** Asked not to be contacted. Shown on the row, because the whole reason to
    * carry it across from the CRM is that somebody sees it before they ring. */
   doNotContact: boolean;
+  /** What the CRM had them at, kept verbatim rather than mapped onto this
+   * app's own stages. */
+  pipelineStage: string | null;
+  opportunityValue: number | null;
 }
 
 export interface DuplicatePair {
@@ -40,7 +44,7 @@ export async function getContacts(): Promise<ContactsData> {
 
   const { data, error } = await supabase
     .from("customers")
-    .select("id, name, email, phone, contact_type, tags, do_not_contact, properties(id, address)")
+    .select("id, name, email, phone, contact_type, tags, do_not_contact, pipeline, pipeline_stage, opportunity_value, properties(id, address)")
     .order("name");
   if (error) throw error;
 
@@ -53,12 +57,17 @@ export async function getContacts(): Promise<ContactsData> {
       contact_type: string | null;
       tags: string[] | null;
       do_not_contact: boolean | null;
+      pipeline: string | null;
+      pipeline_stage: string | null;
+      opportunity_value: number | null;
       properties: { id: string; address: string }[] | null;
     }[]
   ).map((c) => ({
     contactType: c.contact_type ?? "client",
     tags: c.tags ?? [],
     doNotContact: c.do_not_contact ?? false,
+    pipelineStage: c.pipeline_stage,
+    opportunityValue: c.opportunity_value != null ? Number(c.opportunity_value) : null,
     id: c.id,
     name: c.name,
     email: c.email,

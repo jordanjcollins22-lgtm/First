@@ -49,6 +49,9 @@ export interface Database {
           do_not_contact: boolean;
           tags: string[] | null;
           import_address: string | null;
+          pipeline: string | null;
+          pipeline_stage: string | null;
+          opportunity_value: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -94,8 +97,15 @@ export interface Database {
           },
         ];
       };
+      org_counters: {
+        Row: { organization_id: string; next_job_number: number };
+        Insert: { organization_id: string; next_job_number?: number };
+        Update: Partial<{ organization_id: string; next_job_number: number }>;
+        Relationships: [];
+      };
       jobs: {
         Row: {
+          job_number: number | null;
           id: string;
           property_id: string;
           name: string;

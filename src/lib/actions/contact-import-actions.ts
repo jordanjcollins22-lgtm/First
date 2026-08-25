@@ -196,6 +196,9 @@ export async function importContacts(
           do_not_contact: draft.doNotContact,
           tags: draft.tags.length > 0 ? draft.tags : null,
           import_address: draft.address,
+          pipeline: draft.pipeline,
+          pipeline_stage: draft.pipelineStage,
+          opportunity_value: draft.opportunityValue,
         })
         .select("id, name, email, phone, external_id")
         .single();

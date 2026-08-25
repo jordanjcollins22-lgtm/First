@@ -4,6 +4,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getPipeline, type PipelineCard } from "@/lib/data/pipeline";
 import { STAGES, STAGE_STATUSES } from "@/lib/pipeline";
+import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 
 function money(n: number): string {
@@ -98,7 +99,14 @@ export default async function PipelinePage() {
                                   }`}
                                 >
                                   <div className="flex items-baseline justify-between gap-2">
-                                    <span className="truncate font-medium">{card.customerName}</span>
+                                    <span className="truncate font-medium">
+                                      {card.customerName}
+                                      {formatJobNumber(card.jobNumber) && (
+                                        <span className="ml-1.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                                          {formatJobNumber(card.jobNumber)}
+                                        </span>
+                                      )}
+                                    </span>
                                     {card.value != null && (
                                       <span className="shrink-0 text-xs tabular-nums">{money(card.value)}</span>
                                     )}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { DashboardSection } from "@/lib/dashboard";
+import { formatJobNumber } from "@/lib/job-number";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -87,7 +88,14 @@ export function DashboardSections<K extends string>({
                       className="block rounded-lg border border-border bg-background/60 p-2.5 hover:bg-accent/50"
                     >
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate font-medium">{row.customerName}</span>
+                        <span className="truncate font-medium">
+                          {row.customerName}
+                          {formatJobNumber(row.jobNumber) && (
+                            <span className="ml-1.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                              {formatJobNumber(row.jobNumber)}
+                            </span>
+                          )}
+                        </span>
                         {row.value != null && row.value > 0 && (
                           <span className="shrink-0 text-xs tabular-nums">{money(row.value)}</span>
                         )}

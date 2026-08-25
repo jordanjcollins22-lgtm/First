@@ -3,6 +3,7 @@ import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 
 import { SiteMapImage } from "@/components/proposal/site-map-image";
 import { ZonePhotos } from "@/components/job/marked-photo";
+import { formatJobNumber } from "@/lib/job-number";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
 import type { ProposalSiteImageTransform } from "@/types/domain";
 
@@ -21,6 +22,7 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
  */
 export function WorkOrderView({
   jobId,
+  jobNumber,
   order,
   address,
   customerName,
@@ -31,6 +33,8 @@ export function WorkOrderView({
   back,
 }: {
   jobId: string;
+  /** The number the office will say on the phone when they ring about it. */
+  jobNumber: number | null;
   order: WorkOrder;
   address: string;
   customerName: string;
@@ -60,6 +64,7 @@ export function WorkOrderView({
         <p className="text-sm text-muted-foreground">
           {customerName}
           {jobName && ` · ${jobName}`}
+          {formatJobNumber(jobNumber) && ` · ${formatJobNumber(jobNumber)}`}
         </p>
         <Link
           href={`/jobs/${jobId}/directions`}

@@ -8,6 +8,7 @@ const TODAY = new Date(2026, 7, 19, 9, 0, 0);
 function job(overrides: Partial<DashboardJobInput> = {}): DashboardJobInput {
   return {
     id: "j1",
+    jobNumber: 1,
     jobName: "Front beds",
     customerName: "Pat Rivera",
     address: "208 Crafton Rd",

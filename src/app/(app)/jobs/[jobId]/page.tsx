@@ -31,6 +31,7 @@ import { CrewPanel } from "@/components/job/crew-panel";
 import { ObserversPanel, type ObserverRow } from "@/components/job/observers-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
+import { formatJobNumber } from "@/lib/job-number";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
@@ -67,6 +68,7 @@ export default async function JobPage({
 
   const job = jobRow as unknown as {
     id: string;
+    job_number: number | null;
     name: string;
     status: JobStatus;
     evaluation_status: EvaluationStatus;
@@ -284,7 +286,14 @@ export default async function JobPage({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-bold sm:text-2xl">{job.property?.address ?? job.name}</h1>
-          <p className="text-sm text-muted-foreground sm:text-base">{job.name}</p>
+          <p className="text-sm text-muted-foreground sm:text-base">
+            {job.name}
+            {formatJobNumber(job.job_number) && (
+              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums">
+                {formatJobNumber(job.job_number)}
+              </span>
+            )}
+          </p>
         </div>
         {/* What the crew will actually be looking at on site. Worth a tap from
             here rather than only from inside the drawing tool — checking the

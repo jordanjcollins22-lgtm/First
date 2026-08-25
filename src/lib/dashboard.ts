@@ -135,6 +135,7 @@ export function isTheirs(
 
 export interface DashboardJobInput {
   id: string;
+  jobNumber: number | null;
   jobName: string;
   customerName: string;
   address: string;
@@ -155,6 +156,7 @@ export interface DashboardJobInput {
 
 export interface DashboardRow {
   jobId: string;
+  jobNumber: number | null;
   customerName: string;
   address: string;
   jobName: string;
@@ -240,6 +242,7 @@ export function jobBucket(job: DashboardJobInput, today: string): JobBucket | nu
 function rowFor(job: DashboardJobInput, date: string | null, overdue: boolean): DashboardRow {
   return {
     jobId: job.id,
+    jobNumber: job.jobNumber,
     customerName: job.customerName,
     address: job.address,
     jobName: job.jobName,

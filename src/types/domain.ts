@@ -33,6 +33,9 @@ export interface Customer {
   do_not_contact: boolean;
   tags: string[] | null;
   import_address: string | null;
+  pipeline: string | null;
+  pipeline_stage: string | null;
+  opportunity_value: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,6 +61,9 @@ export type EvaluationStatus = "scheduled" | "on_way" | "arrived" | "completed" 
 export interface Job {
   id: string;
   property_id: string;
+  /** Sequential per organisation, assigned by the database. Null only on rows
+   * written before numbering existed. */
+  job_number: number | null;
   name: string;
   status: JobStatus;
   assigned_to: string | null;

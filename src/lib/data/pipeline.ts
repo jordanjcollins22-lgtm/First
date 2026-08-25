@@ -4,6 +4,7 @@ import { isOnPipeline, pipelinePosition, type PipelineStage } from "@/lib/pipeli
 
 export interface PipelineCard {
   jobId: string;
+  jobNumber: number | null;
   customerName: string;
   address: string;
   stage: PipelineStage;
@@ -52,6 +53,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
       const position = pipelinePosition(input);
       return {
         jobId: job.id,
+        jobNumber: job.job_number,
         customerName: job.property.customer.name,
         address: job.property.address,
         stage: position.stage,

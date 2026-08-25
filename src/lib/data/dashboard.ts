@@ -64,6 +64,7 @@ export async function loadJobInputs(options: DashboardOptions = {}): Promise<Das
     const proposal = proposalByJob.get(job.id) ?? null;
     return {
       id: job.id,
+      jobNumber: job.job_number,
       jobName: job.name,
       customerName: job.property.customer.name,
       address: job.property.address,

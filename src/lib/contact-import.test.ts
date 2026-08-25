@@ -84,10 +84,29 @@ describe("parseContactCsv", () => {
     expect(report.skipped[0].reason).toBe("No name, email or phone");
   });
 
+  it("keeps the pipeline the CRM had them in, verbatim", () => {
+    // Not mapped onto this app's stages: a stage named in somebody else's
+    // system means what they meant by it, and guessing turns a won deal into
+    // an open one.
+    const csv = [
+      "Name,Email,Pipeline,Stage,Opportunity Value",
+      'Pat,pat@x.com,Landscaping,Proposal Sent,"$4,200.00"',
+    ].join("\n");
+    const [draft] = parseContactCsv(csv).drafts;
+    expect(draft.pipeline).toBe("Landscaping");
+    expect(draft.pipelineStage).toBe("Proposal Sent");
+    expect(draft.opportunityValue).toBe(4200);
+  });
+
+  it("has no opportunity value when the cell is empty or not a number", () => {
+    const csv = ["Name,Opportunity Value", "Pat,", "Dana,TBD"].join("\n");
+    expect(parseContactCsv(csv).drafts.map((d) => d.opportunityValue)).toEqual([null, null]);
+  });
+
   it("names the columns nothing claimed, rather than dropping them silently", () => {
     // A column carrying something important should be visible.
-    const csv = ["Name,Email,Pipeline Stage,Opportunity Value", "Pat,pat@x.com,Won,4200"].join("\n");
-    expect(parseContactCsv(csv).unmatchedHeaders).toEqual(["Pipeline Stage", "Opportunity Value"]);
+    const csv = ["Name,Email,Opportunity Name,Assigned User", "Pat,pat@x.com,Backyard,Mike"].join("\n");
+    expect(parseContactCsv(csv).unmatchedHeaders).toEqual(["Opportunity Name", "Assigned User"]);
   });
 
   it("refuses a file that is plainly not a contact export", () => {

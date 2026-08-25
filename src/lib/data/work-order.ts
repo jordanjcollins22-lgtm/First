@@ -9,6 +9,7 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
 
 export interface WorkOrderPageData {
   order: WorkOrder;
+  jobNumber: number | null;
   address: string;
   customerName: string;
   jobName: string;
@@ -31,12 +32,13 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
 
   const { data: jobRow } = await supabase
     .from("jobs")
-    .select("id, name, property_id, property:properties(address, customers(name))")
+    .select("id, job_number, name, property_id, property:properties(address, customers(name))")
     .eq("id", jobId)
     .maybeSingle();
 
   const job = jobRow as unknown as {
     id: string;
+    job_number: number | null;
     name: string;
     property_id: string;
     property: { address: string; customers: { name: string } | null } | null;
@@ -69,6 +71,7 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
 
   return {
     order,
+    jobNumber: job.job_number,
     address: job.property?.address ?? "",
     customerName: job.property?.customers?.name ?? "Client",
     jobName: job.name,

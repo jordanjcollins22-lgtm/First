@@ -23,6 +23,14 @@ function summary(contact: ContactRow): string {
       contact.email,
       contact.phone,
       `${contact.propertyCount} propert${contact.propertyCount === 1 ? "y" : "ies"}`,
+      contact.pipelineStage,
+      contact.opportunityValue
+        ? contact.opportunityValue.toLocaleString(undefined, {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+          })
+        : null,
       contact.doNotContact ? "DO NOT CONTACT" : null,
     ]
       .filter(Boolean)

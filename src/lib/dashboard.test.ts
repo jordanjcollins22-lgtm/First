@@ -16,6 +16,7 @@ const TODAY = new Date(2026, 7, 19, 9, 0, 0);
 function job(overrides: Partial<DashboardJobInput> = {}): DashboardJobInput {
   return {
     id: "j1",
+    jobNumber: 1,
     jobName: "Front beds",
     customerName: "Pat Rivera",
     address: "208 Crafton Rd",
@@ -222,6 +223,15 @@ describe("buildDashboard", () => {
     ];
     const scheduled = rows(buildDashboard(jobs, "week", TODAY), "jobs", "scheduled");
     expect(scheduled.map((r) => r.jobId)).toEqual(["early", "late"]);
+  });
+
+  it("carries the job number onto the row, since that is what gets said aloud", () => {
+    const data = buildDashboard(
+      [job({ jobNumber: 1042, status: "in_progress", projectStartDate: "2026-08-19" })],
+      "today",
+      TODAY
+    );
+    expect(rows(data, "jobs", "working")[0].jobNumber).toBe(1042);
   });
 
   it("returns every pile even when empty, so the shape of the day is visible", () => {

@@ -34,6 +34,12 @@ export interface ContactDraft {
   /** Opted out at the CRM. The one field that must survive the journey. */
   doNotContact: boolean;
   notes: string | null;
+  /** What the CRM had them at, verbatim. Deliberately not mapped onto this
+   * app's own stages: a stage named in somebody else's system means what they
+   * meant by it, and guessing is how a won deal becomes an open one. */
+  pipeline: string | null;
+  pipelineStage: string | null;
+  opportunityValue: number | null;
 }
 
 export interface ContactImportReport {
@@ -65,6 +71,16 @@ const COLUMN_ALIASES = {
   externalId: ["contact id", "contactid", "id", "external id"],
   dnd: ["dnd", "do not disturb", "do not contact", "unsubscribed", "opted out", "email opt out"],
   notes: ["notes", "note", "additional notes", "description"],
+  pipeline: ["pipeline", "pipeline name", "opportunity pipeline"],
+  pipelineStage: ["stage", "pipeline stage", "opportunity stage", "status", "deal stage"],
+  opportunityValue: [
+    "opportunity value",
+    "lead value",
+    "value",
+    "deal value",
+    "monetary value",
+    "amount",
+  ],
 } as const;
 
 type Field = keyof typeof COLUMN_ALIASES;
@@ -90,6 +106,15 @@ function readOptOut(value: string | undefined): boolean {
   const text = (value ?? "").trim().toLowerCase();
   if (!text) return false;
   return !["false", "0", "no", "n", "off", "null"].includes(text);
+}
+
+/** Strips the currency symbol and thousands separators every CRM writes. */
+function readMoney(value: string | null): number | null {
+  if (!value) return null;
+  const cleaned = value.replace(/[^0-9.-]/g, "");
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 /** GHL exports tags as a comma or semicolon separated list in one cell. */
@@ -199,6 +224,9 @@ export function parseContactCsv(text: string): ContactImportReport {
       externalId: cell(row, "externalId"),
       doNotContact: readOptOut(columnFor.dnd !== undefined ? row[columnFor.dnd] : undefined),
       notes: cell(row, "notes"),
+      pipeline: cell(row, "pipeline"),
+      pipelineStage: cell(row, "pipelineStage"),
+      opportunityValue: readMoney(cell(row, "opportunityValue")),
     });
   }
 
