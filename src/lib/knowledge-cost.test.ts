@@ -9,6 +9,7 @@ import {
   hours,
   isTimeUnit,
   money,
+  shortages,
   suggestedQuantity,
   unitDef,
 } from "@/lib/knowledge-cost";
@@ -38,6 +39,8 @@ function node(
     runSize: null,
     runUnit: null,
     fixedCost: null,
+    durationHours: null,
+    hourlyRate: null,
     materialId: null,
     toolId: null,
     materialName: null,
@@ -534,5 +537,115 @@ describe("describeQuantity with a home-made unit", () => {
   it("still handles the built-in ones", () => {
     expect(describeQuantity(2000, "sheet")).toBe("2000 sheets");
     expect(describeQuantity(5, "each")).toBe("5");
+  });
+});
+
+describe("time said on the thing itself", () => {
+  it("counts its own hours and rate", () => {
+    // A door hanger drop takes four hours because somebody walks it. There is
+    // no inventory row to link to.
+    const graph: Graph = {
+      nodes: [{ ...node("drop", "Door hanger drop"), durationHours: 4, hourlyRate: 22 }],
+      edges: [],
+    };
+    const cost = costOf(graph, "drop");
+    expect(cost.hours).toBe(4);
+    expect(cost.labour).toBe(88);
+    expect(cost.total).toBe(88);
+  });
+
+  it("adds to hours linked by the hour rather than replacing them", () => {
+    const graph: Graph = {
+      nodes: [
+        { ...node("drop", "Door hanger drop"), durationHours: 4, hourlyRate: 22 },
+        node("design", "Design time", "skill", 45, "hour"),
+      ],
+      edges: [edge("e", "drop", "design", 2, "requires_skill")],
+    };
+    const cost = costOf(graph, "drop");
+    expect(cost.hours).toBe(6);
+    expect(cost.labour).toBe(88 + 90);
+  });
+
+  it("counts the hours even with no rate on them", () => {
+    // Knowing it takes four hours is what the calendar needs, whether or not
+    // anybody has priced an hour.
+    const graph: Graph = {
+      nodes: [{ ...node("drop", "Drop"), durationHours: 4 }],
+      edges: [],
+    };
+    expect(costOf(graph, "drop").hours).toBe(4);
+    expect(costOf(graph, "drop").labour).toBe(0);
+  });
+
+  it("is nothing when nobody has said how long", () => {
+    expect(costOf({ nodes: [node("a", "A")], edges: [] }, "a").hours).toBe(0);
+  });
+});
+
+describe("shortages", () => {
+  const stocked = (id: string, title: string, cost: number, unit: string, onHand: number) => ({
+    ...node(id, title, "material", cost, unit),
+    materialId: `mat-${id}`,
+    stockOnHand: onHand,
+  });
+
+  it("says what there is not enough of", () => {
+    const graph: Graph = {
+      nodes: [node("run", "Flyer run"), stocked("card", "Cardstock", 0.12, "sheet", 400)],
+      edges: [edge("e", "run", "card", 2500, "requires_material")],
+    };
+    const [short] = shortages(graph, "run");
+    expect(short.node.title).toBe("Cardstock");
+    expect(short.needed).toBe(2500);
+    expect(short.onHand).toBe(400);
+    expect(short.short).toBe(2100);
+  });
+
+  it("says nothing when there is enough", () => {
+    const graph: Graph = {
+      nodes: [node("run", "Flyer run"), stocked("card", "Cardstock", 0.12, "sheet", 5000)],
+      edges: [edge("e", "run", "card", 2500, "requires_material")],
+    };
+    expect(shortages(graph, "run")).toHaveLength(0);
+  });
+
+  it("adds up the same material reached by two routes", () => {
+    const graph: Graph = {
+      nodes: [
+        node("campaign", "Campaign"),
+        node("a", "Hanger drop", "process"),
+        node("b", "Flyer drop", "process"),
+        stocked("card", "Cardstock", 0.12, "sheet", 1000),
+      ],
+      edges: [
+        edge("e1", "campaign", "a"),
+        edge("e2", "campaign", "b"),
+        edge("e3", "a", "card", 800, "requires_material"),
+        edge("e4", "b", "card", 800, "requires_material"),
+      ],
+    };
+    const [short] = shortages(graph, "campaign");
+    expect(short.needed).toBe(1600);
+    expect(short.short).toBe(600);
+  });
+
+  it("ignores anything with no stock figure — no row, no shortage", () => {
+    const graph: Graph = {
+      nodes: [node("run", "Run"), node("card", "Cardstock", "material", 0.12, "sheet")],
+      edges: [edge("e", "run", "card", 9999, "requires_material")],
+    };
+    expect(shortages(graph, "run")).toHaveLength(0);
+  });
+
+  it("ignores kit — one printer does not run out by being used twice", () => {
+    const graph: Graph = {
+      nodes: [
+        node("run", "Run"),
+        { ...node("printer", "Printer", "equipment", 420), materialId: "t1", stockOnHand: 1 },
+      ],
+      edges: [edge("e", "run", "printer", 5, "requires_equipment")],
+    };
+    expect(shortages(graph, "run")).toHaveLength(0);
   });
 });

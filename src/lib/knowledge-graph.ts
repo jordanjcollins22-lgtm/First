@@ -192,6 +192,10 @@ export interface GraphNode {
   /** A flat price charged once per use rather than per unit — a
    * subcontractor, a permit, a delivery fee. */
   fixedCost: number | null;
+  /** How long one run takes. What the calendar blocks out. */
+  durationHours: number | null;
+  /** What an hour of it costs. */
+  hourlyRate: number | null;
   /** The real thing in inventory, where this node is one. A node links to a
    * material or a tool, never both. */
   materialId: string | null;

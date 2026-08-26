@@ -121,6 +121,8 @@ export interface Database {
           run_size: number | null;
           run_unit: string | null;
           fixed_cost: number | null;
+          duration_hours: number | null;
+          hourly_rate: number | null;
           purchase_url: string | null;
           material_id: string | null;
           tool_id: string | null;

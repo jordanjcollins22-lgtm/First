@@ -35,6 +35,8 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
     runSize: null,
     runUnit: null,
     fixedCost: null,
+    durationHours: null,
+    hourlyRate: null,
     materialId: null,
     toolId: null,
     materialName: null,

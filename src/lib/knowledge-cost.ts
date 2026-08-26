@@ -235,9 +235,16 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
 
   walk(nodeId, 1, 0, new Set([nodeId]), [], true);
 
+  // Time said directly on the thing, on top of anything linked to inventory
+  // by the hour. Most work has no inventory row to link to — a drop takes
+  // four hours because somebody walks it — and without this the calendar has
+  // nothing to block out.
+  const ownHours = root.durationHours ?? 0;
+  const ownLabour = ownHours * (root.hourlyRate ?? 0);
+
   let materials = 0;
-  let labour = 0;
-  let hours = 0;
+  let labour = ownLabour;
+  let hours = ownHours;
   const capitalItems = new Map<string, GraphNode>();
   const serviceItems = new Map<string, GraphNode>();
   let capital = 0;
@@ -395,4 +402,44 @@ export function describeQuantity(quantity: number, unit: string): string {
   const noun = def.label.replace(/^per /, "");
   if (quantity === 1) return `1 ${noun}`;
   return `${amount} ${def.plural ?? (noun.endsWith("s") ? noun : `${noun}s`)}`;
+}
+
+export interface Shortage {
+  node: GraphNode;
+  needed: number;
+  onHand: number;
+  short: number;
+}
+
+/**
+ * What there is not enough of to do this once.
+ *
+ * Only things linked to inventory, because only those have a real number on
+ * hand — a node nobody linked has no stock to be short of, and inventing one
+ * would turn every unlinked input into a false alarm.
+ *
+ * Kit is skipped: one printer does not run out by being used twice. This is
+ * about the paper.
+ */
+export function shortages(graph: Graph, nodeId: string, maxDepth = 4): Shortage[] {
+  const needed = new Map<string, { node: GraphNode; quantity: number }>();
+
+  for (const line of costOf(graph, nodeId, maxDepth).lines) {
+    if (line.capital || line.fixed) continue;
+    if (line.node.stockOnHand == null) continue;
+
+    const running = needed.get(line.node.id);
+    if (running) running.quantity += line.quantity;
+    else needed.set(line.node.id, { node: line.node, quantity: line.quantity });
+  }
+
+  return [...needed.values()]
+    .map(({ node, quantity }) => ({
+      node,
+      needed: quantity,
+      onHand: node.stockOnHand ?? 0,
+      short: quantity - (node.stockOnHand ?? 0),
+    }))
+    .filter((s) => s.short > 0)
+    .sort((a, b) => b.short - a.short || a.node.title.localeCompare(b.node.title));
 }

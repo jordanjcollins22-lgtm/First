@@ -38,6 +38,8 @@ function node(
     runSize: null,
     runUnit: null,
     fixedCost: null,
+    durationHours: null,
+    hourlyRate: null,
     materialId: null,
     toolId: null,
     materialName: null,

@@ -46,6 +46,9 @@ export interface NodeInput {
   runUnit?: string | null;
   /** A flat price, charged once per use rather than per unit. */
   fixedCost?: number | null;
+  /** How long one run takes, and what an hour of it costs. */
+  durationHours?: number | null;
+  hourlyRate?: number | null;
   purchaseUrl?: string | null;
   /** The inventory item this is. Where the price comes from — the graph does
    * not keep one of its own. */
@@ -98,6 +101,8 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         run_size: positiveOrNull(input.runSize),
         run_unit: input.runUnit?.trim() || null,
         fixed_cost: numberOrNull(input.fixedCost),
+        duration_hours: positiveOrNull(input.durationHours),
+        hourly_rate: numberOrNull(input.hourlyRate),
         material_id: input.materialId ?? null,
         tool_id: input.toolId ?? null,
         purchase_url: safePurchaseUrl(input.purchaseUrl),
@@ -156,6 +161,8 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.runSize !== undefined) update.run_size = positiveOrNull(patch.runSize);
     if (patch.runUnit !== undefined) update.run_unit = patch.runUnit?.trim() || null;
     if (patch.fixedCost !== undefined) update.fixed_cost = numberOrNull(patch.fixedCost);
+    if (patch.durationHours !== undefined) update.duration_hours = positiveOrNull(patch.durationHours);
+    if (patch.hourlyRate !== undefined) update.hourly_rate = numberOrNull(patch.hourlyRate);
     if (patch.purchaseUrl !== undefined) update.purchase_url = safePurchaseUrl(patch.purchaseUrl);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
     if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);

@@ -40,7 +40,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, unit, cost_basis, output_per_unit, output_unit, run_size, run_unit, fixed_cost, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, unit, cost_basis, output_per_unit, output_unit, run_size, run_unit, fixed_cost, duration_hours, hourly_rate, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
@@ -169,6 +169,8 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       run_size: number | null;
       run_unit: string | null;
       fixed_cost: number | null;
+      duration_hours: number | null;
+      hourly_rate: number | null;
       purchase_url: string | null;
       material_id: string | null;
       tool_id: string | null;
@@ -207,6 +209,8 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     outputUnit: n.output_unit,
     runSize: n.run_size != null ? Number(n.run_size) : null,
     runUnit: n.run_unit,
+    durationHours: n.duration_hours != null ? Number(n.duration_hours) : null,
+    hourlyRate: n.hourly_rate != null ? Number(n.hourly_rate) : null,
     fixedCost: material?.isFee
       ? material.costPerUnit
       : n.fixed_cost != null

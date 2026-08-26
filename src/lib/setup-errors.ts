@@ -67,6 +67,8 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "kind", table: "materials", migration: "0101_inventory_kind_resale_steps.sql" },
   { column: "resale_value", migration: "0101_inventory_kind_resale_steps.sql" },
   { column: "step_order", table: "knowledge_relationships", migration: "0101_inventory_kind_resale_steps.sql" },
+  { column: "duration_hours", table: "knowledge_nodes", migration: "0102_node_time_and_rate.sql" },
+  { column: "hourly_rate", table: "knowledge_nodes", migration: "0102_node_time_and_rate.sql" },
   { column: "category", table: "materials", migration: "0096_knowledge_inventory_link.sql" },
 ];
 

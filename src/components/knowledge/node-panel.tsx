@@ -41,6 +41,7 @@ import {
 import {
   costOf,
   defaultCostBasis,
+  shortages,
   suggestedQuantity,
   describeQuantity,
   hours as formatHours,
@@ -126,6 +127,10 @@ export function NodePanel({
   );
   const [outputUnit, setOutputUnit] = useState(node.outputUnit ?? "");
   const [fixedCost, setFixedCost] = useState(node.fixedCost != null ? String(node.fixedCost) : "");
+  const [durationHours, setDurationHours] = useState(
+    node.durationHours != null ? String(node.durationHours) : ""
+  );
+  const [hourlyRate, setHourlyRate] = useState(node.hourlyRate != null ? String(node.hourlyRate) : "");
   /** One answer, three ways, derived from what the node already is: a flat
    * price makes it an "other", kit makes it a tool, everything else is stock. */
   const [editKind, setEditKind] = useState<InventoryKind>(
@@ -347,6 +352,9 @@ export function NodePanel({
   const stepIds = useMemo(() => steps.map((s) => s.edge.id), [steps]);
 
   const cost = useMemo(() => costOf(graph, node.id), [graph, node.id]);
+  /** What there is not enough of to run this once. Checked here so it is in
+   * front of somebody at the moment they are putting a date on it. */
+  const short = useMemo(() => shortages(graph, node.id), [graph, node.id]);
   const payback = useMemo(() => paybackOf(graph, node.id), [graph, node.id]);
 
   /** Ways of earning that already exist somewhere in the graph. Attaching a
@@ -565,6 +573,32 @@ export function NodePanel({
             <InventoryKindChoice value={editKind} onChange={setEditKind} />
           </div>
 
+          {/* What the calendar blocks out, and what that hour costs. Said
+              here because most work has no inventory row to link to — a drop
+              takes four hours because somebody walks it. */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">How long it takes (hours)</Label>
+              <Input
+                value={durationHours}
+                inputMode="decimal"
+                placeholder="4"
+                onChange={(e) => setDurationHours(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Cost per hour</Label>
+              <Input
+                value={hourlyRate}
+                inputMode="decimal"
+                placeholder="22"
+                onChange={(e) => setHourlyRate(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+          </div>
+
           {node.nodeType === "idea" ? (
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">One run makes</Label>
@@ -668,6 +702,8 @@ export function NodePanel({
                   outputPerUnit: outputPerUnit ? Number(outputPerUnit) : null,
                   outputUnit: outputUnit || null,
                   fixedCost: editKind === "other" && fixedCost ? Number(fixedCost) : null,
+                  durationHours: durationHours ? Number(durationHours) : null,
+                  hourlyRate: hourlyRate ? Number(hourlyRate) : null,
                   purchaseUrl: purchaseUrl || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
@@ -705,6 +741,22 @@ export function NodePanel({
 
       <Section title="When does this happen?">
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
+          {/* Before the date, not after it. Finding out on the morning that
+              there are four hundred sheets and the run needs two and a half
+              thousand is the expensive way to learn it. */}
+          {short.length > 0 && (
+            <div className="rounded-lg border border-amber-400/70 bg-amber-50/60 p-2">
+              <p className="text-xs font-medium text-amber-800">Not enough in stock for one run</p>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {short.map((item) => (
+                  <li key={item.node.id} className="text-[11px] text-amber-800">
+                    {item.node.title}: need {describeQuantity(item.needed, item.node.unit)}, have{" "}
+                    {item.onHand} — short {describeQuantity(item.short, item.node.unit)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {node.scheduledFor ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{describeDue(node.scheduledFor, today)}</span>
@@ -1169,6 +1221,11 @@ export function NodePanel({
               <Figure label="Paid out" value={money(cost.services)} />
               <Figure label="Per run" value={money(cost.total)} strong />
             </div>
+            {cost.hours > 0 && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Blocks out {formatHours(cost.hours)} when it is scheduled.
+              </p>
+            )}
             {cost.serviceItems.length > 0 && (
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Flat prices: {cost.serviceItems.map((n) => n.title).join(", ")} — charged once a run
