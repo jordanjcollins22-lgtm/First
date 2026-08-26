@@ -94,3 +94,58 @@ body {
   background-color: var(--border);
   border-radius: 9999px;
 }
+
+/* ------------------------------------------------------------------
+   The EDDM flyer.
+
+   On screen the sheet is proportional so it fits a phone; on paper it is
+   given its real measurements, because 4" x 4.75" is what an advertiser paid
+   for and what the print shop cuts to. Two sets of rules for one element, and
+   only the printed one has to be exact.
+   ------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  /* Nothing but the sheets goes on the paper. */
+  .flyer-hide-on-print {
+    display: none !important;
+  }
+
+  .flyer-sheet {
+    width: 8.5in !important;
+    height: 11in !important;
+    aspect-ratio: auto !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .flyer-sheet:last-of-type {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .flyer-inner {
+    padding: 0.25in !important;
+  }
+
+  .flyer-grid {
+    grid-template-columns: 4in 4in !important;
+    gap: 0.15in !important;
+  }
+
+  .flyer-tile {
+    width: 4in !important;
+    height: 4.75in !important;
+  }
+}

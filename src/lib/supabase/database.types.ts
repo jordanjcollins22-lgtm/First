@@ -165,6 +165,27 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["knowledge_relationships"]["Row"]>;
         Relationships: [];
       };
+      flyer_ad_spots: {
+        Row: {
+          id: string;
+          organization_id: string;
+          slot: number;
+          business_name: string | null;
+          contact: string | null;
+          image_path: string | null;
+          price: number | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["flyer_ad_spots"]["Row"]> & {
+          organization_id: string;
+          slot: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["flyer_ad_spots"]["Row"]>;
+        Relationships: [];
+      };
       inventory_codes: {
         Row: {
           id: string;

@@ -91,6 +91,12 @@ export default async function InventoryPage() {
         </div>
         <div className="flex shrink-0 gap-2">
           <Link
+            href="/admin/flyer"
+            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            Flyer ads
+          </Link>
+          <Link
             href="/admin/labels"
             className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
           >
