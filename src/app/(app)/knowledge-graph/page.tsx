@@ -5,6 +5,7 @@ import { getKnowledgeGraph, type KnowledgeGraphData } from "@/lib/data/knowledge
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { KnowledgeWorkspace } from "@/components/knowledge/knowledge-workspace";
 import { todayKey } from "@/lib/knowledge-schedule";
+import { listMaterialOptions, type MaterialOption } from "@/lib/data/materials";
 
 /**
  * Where ideas get broken down until they stop being ideas.
@@ -19,6 +20,13 @@ export default async function KnowledgeGraphPage() {
   await requireTab("knowledge-graph", "/dashboard");
 
   const profile = await getCurrentProfile();
+
+  // Loaded on its own so an inventory problem costs the link picker rather
+  // than the whole graph.
+  const materials: MaterialOption[] = await listMaterialOptions().catch((err) => {
+    console.error("Material options failed to load:", err);
+    return [];
+  });
 
   let data: KnowledgeGraphData | null = null;
   try {
@@ -52,6 +60,7 @@ export default async function KnowledgeGraphPage() {
         <KnowledgeWorkspace
           graph={{ nodes: data.nodes, edges: data.edges }}
           tags={data.tags}
+          materials={materials}
           canDelete={profile?.roles.includes("admin") ?? false}
           today={todayKey()}
         />

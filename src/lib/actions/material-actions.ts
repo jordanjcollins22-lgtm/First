@@ -34,6 +34,9 @@ export async function createMaterial(formData: FormData) {
     ? "order_as_needed"
     : "in_stock";
   const isDelivered = formData.get("is_delivered") === "on" || formData.get("is_delivered") === "true";
+  // Anything unrecognised is job stock: that is the list the estimator uses,
+  // and the wrong item showing up there is visible where a missing one is not.
+  const category = String(formData.get("category") ?? "job") === "marketing" ? "marketing" : "job";
 
   if (stockMethod === "in_stock" && !storageLocation) {
     throw new Error("Enter where it's stored — required for materials kept in stock.");
@@ -48,6 +51,7 @@ export async function createMaterial(formData: FormData) {
       organization_id: organizationId,
       name,
       unit,
+      category,
       coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,
       cost_per_unit: derivedCostPerUnit(packSize, packCost, costRaw ? Number(costRaw) : null),
       pack_size: packSize,
@@ -68,6 +72,8 @@ export async function createMaterial(formData: FormData) {
   if (error) throw error;
 
   revalidatePath("/admin/materials");
+  revalidatePath("/admin/tools");
+  revalidatePath("/knowledge-graph");
   revalidatePath("/canvas");
   return { id: data.id as string, name: data.name as string };
 }

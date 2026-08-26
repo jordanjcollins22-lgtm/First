@@ -115,6 +115,8 @@ export interface Database {
           notes: string | null;
           position_x: number | null;
           position_y: number | null;
+          purchase_url: string | null;
+          material_id: string | null;
           scheduled_for: string | null;
           recurrence: string;
           recurrence_interval: number;
@@ -606,6 +608,7 @@ export interface Database {
           organization_id: string;
           name: string;
           unit: string;
+          category: string;
           coverage_per_unit_sqft: number | null;
           pack_size: number | null;
           pack_cost: number | null;

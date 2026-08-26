@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { listTools } from "@/lib/data/tools";
-import { listMaterials } from "@/lib/data/materials";
+import { listMaterials, listMarketingMaterials } from "@/lib/data/materials";
 import { listServicePricing } from "@/lib/data/service-pricing";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
@@ -27,9 +27,12 @@ export default async function InventoryPage() {
   if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
 
   const supabase = await createClient();
-  const [tools, materials, services, linksRes, businessLocations] = await Promise.all([
+  const [tools, materials, marketing, services, linksRes, businessLocations] = await Promise.all([
     listTools(),
     listMaterials(),
+    // Marketing stock lives in the same table under its own category, so
+    // moving an item between the two lists is a one-field change.
+    listMarketingMaterials().catch(() => []),
     listServicePricing(),
     supabase.from("service_tools").select("*"),
     // Same places as the Project Data map — one list, not two.
@@ -58,6 +61,15 @@ export default async function InventoryPage() {
   const equipment = tools.filter((t) => t.category !== "gear");
   const gear = tools.filter((t) => t.category === "gear");
   const storageLocations = businessLocations.map((location) => location.name);
+
+  const needsOrderingCount = (items: typeof materials) =>
+    items.filter(
+      (m) =>
+        !m.on_order &&
+        m.quantity_on_hand != null &&
+        m.reorder_threshold != null &&
+        m.quantity_on_hand <= m.reorder_threshold
+    ).length;
 
   const materialsToOrderCount = materials.filter(
     (m) =>
@@ -265,6 +277,69 @@ export default async function InventoryPage() {
               </div>
               {materials.length === 0 && (
                 <p className="p-4 text-sm text-muted-foreground">No materials yet — add one above.</p>
+              )}
+            </Card>
+          </>
+        }
+        marketingContent={
+          <>
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Add a marketing resource</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Door hangers, flyers, yard signs, business cards. Same stock levels and reorder alerts as
+                  job materials — kept on its own list so nobody is offered a business card while pricing a
+                  patio. Link these to ideas on the{" "}
+                  <Link href="/knowledge-graph" className="underline">
+                    Knowledge Graph
+                  </Link>{" "}
+                  and the cost of a campaign works itself out.
+                </p>
+                <CreateMaterialForm storageLocations={storageLocations} category="marketing" />
+              </CardContent>
+            </Card>
+
+            <div className="mb-3 flex items-center gap-4 text-sm text-muted-foreground">
+              <span>{marketing.length} marketing resources</span>
+              {needsOrderingCount(marketing) > 0 && (
+                <span className="font-medium text-destructive">
+                  {needsOrderingCount(marketing)} need ordering
+                </span>
+              )}
+            </div>
+
+            <Card>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="sticky left-0 z-10 bg-card p-2 font-medium">Resource</th>
+                      <th className="p-2 font-medium">Stored At</th>
+                      <th className="p-2 font-medium">On hand</th>
+                      <th className="p-2 font-medium">Reorder at</th>
+                      <th className="p-2 font-medium">Status</th>
+                      <th className="p-2 font-medium">Cost</th>
+                      <th className="p-2 font-medium">Buy</th>
+                      <th className="p-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marketing.map((material) => (
+                      <MaterialInventoryRow
+                        key={material.id}
+                        material={material}
+                        storageLocations={storageLocations}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {marketing.length === 0 && (
+                <p className="p-4 text-sm text-muted-foreground">
+                  Nothing here yet — add the first door hanger or flyer above.
+                </p>
               )}
             </Card>
           </>

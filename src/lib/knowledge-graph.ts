@@ -147,9 +147,19 @@ export interface GraphNode {
   status: NodeStatus;
   description: string | null;
   importance: number | null;
-  /** What one unit costs — one sheet, one hour, one bag. */
+  /** What one unit costs — one sheet, one hour, one bag. Where the node is
+   * linked to an inventory material this is the material's price, not a
+   * second copy of it. */
   estimatedCost: number | null;
   unit: string;
+  /** Where you buy it. */
+  purchaseUrl: string | null;
+  /** The real material in inventory, where this node is one. */
+  materialId: string | null;
+  materialName: string | null;
+  stockOnHand: number | null;
+  reorderThreshold: number | null;
+  onOrder: boolean;
   potentialValue: number | null;
   notes: string | null;
   tags: string[];

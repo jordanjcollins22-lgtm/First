@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-type View = "tools" | "gear" | "materials";
+type View = "tools" | "gear" | "materials" | "marketing";
 
 export function InventoryViewToggle({
   showTools,
@@ -10,6 +10,7 @@ export function InventoryViewToggle({
   toolsContent,
   gearContent,
   materialsContent,
+  marketingContent,
 }: {
   showTools: boolean;
   showMaterials: boolean;
@@ -17,6 +18,10 @@ export function InventoryViewToggle({
   /** Crew gear shares the tools permission — it's the same table. */
   gearContent: ReactNode;
   materialsContent: ReactNode;
+  /** Door hangers, flyers, yard signs — same table and same reorder alerts
+   * as job materials, kept on their own list so an estimator pricing a patio
+   * is never offered a business card. */
+  marketingContent: ReactNode;
 }) {
   const [view, setView] = useState<View>(showTools ? "tools" : "materials");
 
@@ -24,6 +29,7 @@ export function InventoryViewToggle({
     { key: "tools", label: "Tools", visible: showTools },
     { key: "gear", label: "Crew Gear", visible: showTools },
     { key: "materials", label: "Materials", visible: showMaterials },
+    { key: "marketing", label: "Marketing", visible: showMaterials },
   ];
   const visibleTabs = tabs.filter((tab) => tab.visible);
 
@@ -48,6 +54,7 @@ export function InventoryViewToggle({
       {showTools && <div className={view === "tools" ? "" : "hidden"}>{toolsContent}</div>}
       {showTools && <div className={view === "gear" ? "" : "hidden"}>{gearContent}</div>}
       {showMaterials && <div className={view === "materials" ? "" : "hidden"}>{materialsContent}</div>}
+      {showMaterials && <div className={view === "marketing" ? "" : "hidden"}>{marketingContent}</div>}
     </div>
   );
 }

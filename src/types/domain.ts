@@ -357,6 +357,8 @@ export interface Material {
   pack_size: number | null;
   pack_cost: number | null;
   active: boolean;
+  /** job = used on site and quotable. marketing = door hangers and flyers. */
+  category: "job" | "marketing";
   description: string | null;
   purchase_url: string | null;
   quantity_on_hand: number | null;

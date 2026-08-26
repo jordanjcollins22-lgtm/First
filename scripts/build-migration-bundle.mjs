@@ -40,6 +40,7 @@ const CREATES = {
   // Alters only — nothing to probe for.
   "0094_knowledge_schedule.sql": [],
   "0095_knowledge_costs.sql": [],
+  "0096_knowledge_inventory_link.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

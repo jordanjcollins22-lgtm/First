@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,8 @@ import {
   type NodeType,
   type RelationshipType,
 } from "@/lib/knowledge-graph";
+import type { MaterialOption } from "@/lib/data/materials";
+import { describePurchaseUrl } from "@/lib/purchase-url";
 import {
   UNITS,
   costOf,
@@ -39,6 +42,7 @@ import {
   addRequirement,
   deleteNode,
   deleteRelationship,
+  linkNodeToMaterial,
   markNodeDone,
   updateRelationship,
   scheduleNode,
@@ -63,6 +67,7 @@ import {
 export function NodePanel({
   graph,
   node,
+  materials,
   canDelete,
   onClose,
   onFocus,
@@ -71,6 +76,8 @@ export function NodePanel({
 }: {
   graph: Graph;
   node: GraphNode;
+  /** Everything in inventory, for linking this node to the real thing. */
+  materials: MaterialOption[];
   canDelete: boolean;
   onClose: () => void;
   onFocus: () => void;
@@ -90,6 +97,7 @@ export function NodePanel({
   const [tags, setTags] = useState(node.tags.join(", "));
   const [unitCost, setUnitCost] = useState(node.estimatedCost != null ? String(node.estimatedCost) : "");
   const [unit, setUnit] = useState(node.unit);
+  const [purchaseUrl, setPurchaseUrl] = useState(node.purchaseUrl ?? "");
 
   // Every field above is seeded from the node once. The workspace remounts
   // this panel when the selection changes (key={node.id}), which resets the
@@ -292,6 +300,22 @@ export function NodePanel({
             Priced per unit, so everything that needs it works its own total out. An hour or a day makes
             it time rather than materials.
           </p>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Where you buy it</Label>
+            <Input
+              value={purchaseUrl}
+              inputMode="url"
+              placeholder="uline.com/…"
+              onChange={(e) => setPurchaseUrl(e.target.value)}
+              className="h-9 text-sm"
+              disabled={node.materialId != null}
+            />
+            {node.materialId != null && (
+              <p className="text-[11px] text-muted-foreground">
+                Comes from the linked material — change it in Inventory.
+              </p>
+            )}
+          </div>
           <Button
             type="button"
             size="sm"
@@ -307,6 +331,7 @@ export function NodePanel({
                   importance: importance ? Number(importance) : null,
                   estimatedCost: unitCost ? Number(unitCost) : null,
                   unit,
+                  purchaseUrl: purchaseUrl || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
               )
@@ -329,6 +354,109 @@ export function NodePanel({
           </p>
         </div>
       )}
+
+      <Section title="Where it comes from">
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
+          {node.materialId && node.materialName ? (
+            <>
+              <p className="text-sm">
+                Linked to <span className="font-medium">{node.materialName}</span> in Inventory.
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {node.estimatedCost != null
+                  ? `${money(node.estimatedCost)} ${unitDef(node.unit).label}`
+                  : "No price on it in inventory yet"}
+                {node.stockOnHand != null ? ` · ${node.stockOnHand} on hand` : ""}
+                {node.onOrder ? " · on order" : ""}
+              </p>
+              {node.stockOnHand != null &&
+                node.reorderThreshold != null &&
+                node.stockOnHand <= node.reorderThreshold &&
+                !node.onOrder && (
+                  <p className="text-[11px] font-medium text-amber-700">
+                    Down to the reorder point — order before the next run needs it.
+                  </p>
+                )}
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/admin/tools"
+                  className="rounded-md border border-border px-2 py-1 text-xs"
+                >
+                  Open in Inventory
+                </Link>
+                {node.purchaseUrl && (
+                  <a
+                    href={node.purchaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-md border border-border px-2 py-1 text-xs"
+                  >
+                    Buy at {describePurchaseUrl(node.purchaseUrl)}
+                  </a>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => run(() => linkNodeToMaterial(node.id, null))}
+                >
+                  Unlink
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                Link it to the real thing and its price, stock and purchase link all come from Inventory —
+                one number, kept where the rest of the business keeps it.
+              </p>
+              <Select value="" onValueChange={(v) => run(() => linkNodeToMaterial(node.id, v))}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Link to a material…" />
+                </SelectTrigger>
+                {/* Capped and truncated: an inventory name plus a price is
+                    easily wider than a phone, and a dropdown that runs off
+                    the screen hides the end of every row. */}
+                <SelectContent className="max-w-[calc(100vw-2.5rem)]">
+                  {materials.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="block truncate">
+                        {m.name}
+                        {m.category === "marketing" ? " (marketing)" : ""}
+                      </span>
+                      {m.costPerUnit != null && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          {money(m.costPerUnit)} per {m.unit}
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {materials.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Nothing in Inventory yet.{" "}
+                  <Link href="/admin/tools" className="underline">
+                    Add it there
+                  </Link>{" "}
+                  and it becomes linkable here.
+                </p>
+              )}
+              {node.purchaseUrl && (
+                <a
+                  href={node.purchaseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="self-start rounded-md border border-border px-2 py-1 text-xs"
+                >
+                  Buy at {describePurchaseUrl(node.purchaseUrl)}
+                </a>
+              )}
+            </>
+          )}
+        </div>
+      </Section>
 
       <Section title="When does this happen?">
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">

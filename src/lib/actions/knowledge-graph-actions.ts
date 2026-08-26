@@ -8,6 +8,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { RECURRENCES, advance, todayKey, type Recurrence } from "@/lib/knowledge-schedule";
 import { UNITS } from "@/lib/knowledge-cost";
+import { safePurchaseUrl } from "@/lib/purchase-url";
 import {
   NODE_STATUSES,
   NODE_TYPES,
@@ -37,6 +38,7 @@ export interface NodeInput {
   /** What one unit costs. */
   estimatedCost?: number | null;
   unit?: string;
+  purchaseUrl?: string | null;
   potentialValue?: number | null;
   tags?: string[];
   positionX?: number | null;
@@ -79,6 +81,7 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         importance: clampScale(input.importance),
         estimated_cost: numberOrNull(input.estimatedCost),
         unit: validUnit(input.unit),
+        purchase_url: safePurchaseUrl(input.purchaseUrl),
         potential_value: numberOrNull(input.potentialValue),
         position_x: input.positionX ?? null,
         position_y: input.positionY ?? null,
@@ -129,6 +132,7 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
     if (patch.estimatedCost !== undefined) update.estimated_cost = numberOrNull(patch.estimatedCost);
     if (patch.unit !== undefined) update.unit = validUnit(patch.unit);
+    if (patch.purchaseUrl !== undefined) update.purchase_url = safePurchaseUrl(patch.purchaseUrl);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
     if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);
     if (patch.recurrence !== undefined) update.recurrence = validRecurrence(patch.recurrence);
@@ -332,6 +336,40 @@ export async function updateRelationship(
   } catch (err) {
     console.error("updateRelationship failed:", err);
     return { ok: false, message: "Couldn't save that." };
+  }
+}
+
+/**
+ * Points a node at the real material in inventory.
+ *
+ * Once linked, the material is the price and the purchase link — the graph
+ * stops holding its own copy. That is the whole point: a supplier puts
+ * cardstock up and the number in the graph moves, rather than two numbers
+ * disagreeing until somebody notices at the till.
+ */
+export async function linkNodeToMaterial(
+  nodeId: string,
+  materialId: string | null
+): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("knowledge_nodes")
+      .update({ material_id: materialId } as never)
+      .eq("id", nodeId);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath(PATH);
+    return {
+      ok: true,
+      id: nodeId,
+      message: materialId ? "Linked. Its price now comes from inventory." : "Unlinked.",
+    };
+  } catch (err) {
+    console.error("linkNodeToMaterial failed:", err);
+    return { ok: false, message: "Couldn't link that." };
   }
 }
 

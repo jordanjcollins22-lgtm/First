@@ -15,7 +15,15 @@ import { fetchLinkPreview } from "@/lib/actions/link-preview-actions";
 import { StorageLocationSelect } from "@/components/inventory/storage-location-select";
 import { derivedCostPerUnit } from "@/lib/pricing";
 
-export function CreateMaterialForm({ storageLocations }: { storageLocations: string[] }) {
+export function CreateMaterialForm({
+  storageLocations,
+  category = "job",
+}: {
+  storageLocations: string[];
+  /** Which list it lands on. Marketing stock is the same inventory problem
+   * — stock levels, reorder points, where the box is — on a different list. */
+  category?: "job" | "marketing";
+}) {
   const formRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const costRef = useRef<HTMLInputElement>(null);
@@ -65,6 +73,7 @@ export function CreateMaterialForm({ storageLocations }: { storageLocations: str
         if (uploadError) throw new Error("Couldn't upload the photo — try again.");
         formData.set("image_path", path);
         formData.set("stock_method", stockMethod);
+        formData.set("category", category);
         await createMaterial(formData);
         formRef.current?.reset();
         setFile(null);
