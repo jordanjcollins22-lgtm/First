@@ -99,14 +99,118 @@ async function createMaterialInner(formData: FormData): Promise<CreateMaterialRe
     .single();
 
   if (error) {
-    // The one that actually happens: materials are unique per name inside an
-    // organisation, and somebody adding "8.5x11 Flyer" a second time deserves
-    // to be told that rather than a stack trace.
+    // Names are unique per organisation, and the row holding a name is not
+    // always one anybody can see: removing something sets active = false
+    // rather than deleting it, and every list filters those out. Refusing to
+    // add a thing that is not on any screen is a dead end with no way out of
+    // it, so a removed one is brought back instead.
     if (error.code === "23505") {
-      return { ok: false, message: `"${name}" is already in Inventory — edit that one instead.` };
+      return await reviveMaterial(name, {
+        organizationId,
+        unit,
+        category,
+        kind,
+        coverage: coverageRaw ? Number(coverageRaw) : null,
+        costPerUnit: derivedCostPerUnit(packSize, packCost, costRaw ? Number(costRaw) : null),
+        packSize,
+        packCost,
+        waste: wasteRaw ? Number(wasteRaw) : 10,
+        purchaseUrl,
+        quantityOnHand,
+        reorder: reorderRaw ? Number(reorderRaw) : null,
+        description,
+        storageLocation,
+        shopLocation,
+        stockMethod,
+        isDelivered,
+        imagePath,
+      });
     }
     return { ok: false, message: describeDbError(error) };
   }
+
+  revalidatePath("/admin/materials");
+  revalidatePath("/admin/tools");
+  revalidatePath("/knowledge-graph");
+  revalidatePath("/canvas");
+  return { ok: true, id: data.id as string, name: data.name as string };
+}
+
+/**
+ * Brings back the row that was already holding this name.
+ *
+ * Only ever an active one is refused. A removed one is reactivated and
+ * overwritten with what was just typed, which is what "add it again" means
+ * to the person doing it — the alternative is telling them to go and edit
+ * something that appears on no list in the app.
+ */
+async function reviveMaterial(
+  name: string,
+  values: {
+    organizationId: string;
+    unit: string;
+    category: string;
+    kind: string;
+    coverage: number | null;
+    costPerUnit: number | null;
+    packSize: number | null;
+    packCost: number | null;
+    waste: number;
+    purchaseUrl: string | null;
+    quantityOnHand: number | null;
+    reorder: number | null;
+    description: string | null;
+    storageLocation: string | null;
+    shopLocation: string | null;
+    stockMethod: string;
+    isDelivered: boolean;
+    imagePath: string;
+  }
+): Promise<CreateMaterialResult> {
+  const supabase = await createClient();
+
+  const { data: existing, error: findError } = await supabase
+    .from("materials")
+    .select("id, active, category")
+    .eq("organization_id", values.organizationId)
+    .eq("name", name)
+    .maybeSingle();
+
+  if (findError) return { ok: false, message: describeDbError(findError) };
+  if (!existing) return { ok: false, message: `"${name}" is already taken.` };
+
+  if (existing.active) {
+    const where = existing.category === "marketing" ? "Marketing" : "Materials";
+    return { ok: false, message: `"${name}" is already on the ${where} list — edit that one instead.` };
+  }
+
+  const { data, error } = await supabase
+    .from("materials")
+    .update({
+      active: true,
+      unit: values.unit,
+      category: values.category,
+      kind: values.kind,
+      coverage_per_unit_sqft: values.coverage,
+      cost_per_unit: values.costPerUnit,
+      pack_size: values.packSize,
+      pack_cost: values.packCost,
+      waste_factor_pct: values.waste,
+      purchase_url: values.purchaseUrl,
+      quantity_on_hand: values.quantityOnHand,
+      reorder_threshold: values.reorder,
+      description: values.description,
+      storage_location: values.storageLocation,
+      shop_location: values.shopLocation,
+      stock_method: values.stockMethod,
+      is_delivered: values.isDelivered,
+      image_path: values.imagePath,
+    } as never)
+    .eq("id", existing.id)
+    .select()
+    .single();
+
+  if (error) return { ok: false, message: describeDbError(error) };
 
   revalidatePath("/admin/materials");
   revalidatePath("/admin/tools");

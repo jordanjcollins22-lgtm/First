@@ -92,7 +92,26 @@ async function createToolInner(formData: FormData): Promise<CreateToolResult> {
     .select()
     .single();
   if (error) {
-    if (error.code === "23505") return { ok: false, message: `A tool named "${name}" already exists.` };
+    // A removed tool still holds its name: removing sets active = false
+    // rather than deleting, and every list filters those out. Refusing to add
+    // something that appears on no screen is a dead end, so it comes back.
+    if (error.code === "23505") {
+      return await reviveTool(name, organizationId, {
+        category,
+        icon,
+        cost,
+        is_rental: isRental,
+        kits,
+        quantity,
+        image_path: imagePath,
+        storage_location: storageLocation,
+        shop_location: shopLocation,
+        purchase_url: purchaseUrl,
+        reorder_threshold: reorderThreshold,
+        stock_method: stockMethod,
+        is_delivered: isDelivered,
+      });
+    }
     return {
       ok: false,
       message: error.message ? `${error.message}${error.code ? ` (${error.code})` : ""}` : "Couldn't add that tool.",
@@ -106,6 +125,48 @@ async function createToolInner(formData: FormData): Promise<CreateToolResult> {
 /** Moves an item between Tools and Crew Gear. Everything else about it —
  * stock, storage, reorder point, cost — carries over untouched, which is the
  * point of keeping both in one table. */
+/**
+ * Brings back the tool that was already holding this name.
+ *
+ * Only an active one is refused. A removed one is reactivated with whatever
+ * was just typed, because that is what somebody adding it again means — and
+ * the alternative is being told to edit a row that is on no list.
+ */
+async function reviveTool(
+  name: string,
+  organizationId: string,
+  values: Record<string, unknown>
+): Promise<CreateToolResult> {
+  const supabase = await createClient();
+
+  const { data: existing, error: findError } = await supabase
+    .from("tools")
+    .select("id, active, category")
+    .eq("organization_id", organizationId)
+    .eq("name", name)
+    .maybeSingle();
+
+  if (findError) return { ok: false, message: findError.message };
+  if (!existing) return { ok: false, message: `"${name}" is already taken.` };
+
+  if (existing.active) {
+    const where = existing.category === "gear" ? "Crew Gear" : "Tools";
+    return { ok: false, message: `"${name}" is already on the ${where} list — edit that one instead.` };
+  }
+
+  const { data, error } = await supabase
+    .from("tools")
+    .update({ active: true, ...values } as never)
+    .eq("id", existing.id)
+    .select()
+    .single();
+
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/admin/tools");
+  return { ok: true, id: data.id as string, name: data.name as string };
+}
+
 export async function updateToolCategory(id: string, category: ToolCategory) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ category }).eq("id", id);
