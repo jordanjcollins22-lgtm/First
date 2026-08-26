@@ -200,7 +200,9 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     // into the graph is a guess that outlives whatever it was guessing about,
     // and two prices for one material is worse than one price and a gap.
     // A fee has no per-unit price: the whole of it is the fixed cost below.
-    estimatedCost: material?.isFee ? null : material?.costPerUnit ?? null,
+    // cost_per_unit means per unit, whatever kind of thing it is. An "other"
+    // priced at 25c is 25c each, not 25c however many go out.
+    estimatedCost: material?.costPerUnit ?? null,
     unit: material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each",
     costBasis:
       n.cost_basis === "consumable" || n.cost_basis === "capital" ? n.cost_basis : null,
@@ -211,11 +213,12 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     runUnit: n.run_unit,
     durationHours: n.duration_hours != null ? Number(n.duration_hours) : null,
     hourlyRate: n.hourly_rate != null ? Number(n.hourly_rate) : null,
-    fixedCost: material?.isFee
-      ? material.costPerUnit
-      : n.fixed_cost != null
-        ? Number(n.fixed_cost)
-        : null,
+    fixedCost: n.fixed_cost != null ? Number(n.fixed_cost) : null,
+    isFee:
+      material?.isFee === true ||
+      n.fixed_cost != null ||
+      n.node_type === "service" ||
+      n.node_type === "cost",
     purchaseUrl: material?.purchaseUrl ?? n.purchase_url,
     materialId: n.material_id,
     toolId: n.tool_id,

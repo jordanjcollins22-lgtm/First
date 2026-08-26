@@ -1228,8 +1228,7 @@ export function NodePanel({
             )}
             {cost.serviceItems.length > 0 && (
               <p className="mt-2 text-[11px] text-muted-foreground">
-                Flat prices: {cost.serviceItems.map((n) => n.title).join(", ")} — charged once a run
-                whatever the quantity.
+                Paid out to somebody else: {cost.serviceItems.map((n) => n.title).join(", ")}.
               </p>
             )}
             {cost.capital > 0 && (
@@ -1631,7 +1630,7 @@ function ConnectionRow({
             {consumed.fixedCost != null
               ? ` · ${money(consumed.fixedCost)} flat`
               : amount != null
-                ? ` · ${money(amount)}`
+                ? ` · ${money(amount)}${consumed.isFee ? " paid out" : ""}`
                 : ""}
           </span>
         </button>

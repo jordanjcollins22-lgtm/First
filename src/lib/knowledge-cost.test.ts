@@ -39,6 +39,7 @@ function node(
     runSize: null,
     runUnit: null,
     fixedCost: null,
+    isFee: false,
     durationHours: null,
     hourlyRate: null,
     materialId: null,
@@ -647,5 +648,58 @@ describe("shortages", () => {
       edges: [edge("e", "run", "printer", 5, "requires_equipment")],
     };
     expect(shortages(graph, "run")).toHaveLength(0);
+  });
+});
+
+describe("a third-party cost charged per piece", () => {
+  // EDDM postage is 25c a piece. Twenty-five cents was showing as the whole
+  // bill because "somebody else's money" and "priced once a run" had been
+  // treated as the same thing.
+  const postage = (): Graph => ({
+    nodes: [
+      node("flyers", "Flyers"),
+      { ...node("eddm", "EDDM postage", "service", 0.25, "each"), isFee: true },
+    ],
+    edges: [edge("e", "flyers", "eddm", 2500, "requires")],
+  });
+
+  it("multiplies by the quantity", () => {
+    expect(costOf(postage(), "flyers").services).toBeCloseTo(625, 5);
+  });
+
+  it("still counts as money paid out, not as materials", () => {
+    const cost = costOf(postage(), "flyers");
+    expect(cost.materials).toBe(0);
+    expect(cost.hours).toBe(0);
+    expect(cost.total).toBeCloseTo(625, 5);
+  });
+
+  it("keeps a genuinely flat fee flat", () => {
+    const graph: Graph = {
+      nodes: [
+        node("flyers", "Flyers"),
+        { ...node("permit", "Permit", "service"), fixedCost: 90, isFee: true },
+      ],
+      edges: [edge("e", "flyers", "permit", 2500, "requires")],
+    };
+    expect(costOf(graph, "flyers").services).toBe(90);
+  });
+
+  it("adds a per-piece cost up across every route, unlike a flat one", () => {
+    const graph: Graph = {
+      nodes: [
+        node("campaign", "Campaign"),
+        node("a", "Drop one", "process"),
+        node("b", "Drop two", "process"),
+        { ...node("eddm", "EDDM postage", "service", 0.25, "each"), isFee: true },
+      ],
+      edges: [
+        edge("e1", "campaign", "a"),
+        edge("e2", "campaign", "b"),
+        edge("e3", "a", "eddm", 1000, "requires"),
+        edge("e4", "b", "eddm", 1000, "requires"),
+      ],
+    };
+    expect(costOf(graph, "campaign").services).toBeCloseTo(500, 5);
   });
 });

@@ -73,9 +73,10 @@ export interface CostLine {
   time: boolean;
   /** Bought once and kept, rather than consumed by this run. */
   capital: boolean;
-  /** A flat price that does not multiply by the quantity — a subcontractor,
-   * a permit, a delivery fee. */
+  /** Money paid to somebody else rather than stock we hold. */
   fixed: boolean;
+  /** Priced once a run rather than per unit. */
+  flat: boolean;
   hours: number;
   /** How far down the breakdown this came from. Zero is directly required. */
   depth: number;
@@ -200,17 +201,21 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
       const quantity = (edge.quantity ?? 1) * multiplier;
       const quantityStated = stated && edge.quantity != null;
       const unitCost = node.estimatedCost ?? 0;
-      const fixed = node.fixedCost != null;
-      const capital = !fixed && isCapital(node);
+      // Two separate questions: whose money is it, and how is it priced.
+      // A flat price is a fee by definition, so the two fields cannot
+      // disagree even if something set one without the other.
+      const flat = node.fixedCost != null;
+      const fee = node.isFee || flat;
+      const capital = !fee && isCapital(node);
       // Hours come from the unit the node actually carries, resolved when the
       // graph loaded — so a unit this business invented counts as time if
       // they said it was.
       const perUnitHours = node.unitHours ?? (isTimeUnit(node.unit) ? unitDef(node.unit).hours ?? 1 : 0);
-      const time = !capital && !fixed && perUnitHours > 0;
+      const time = !capital && !fee && perUnitHours > 0;
 
       // A flat fee is priced by definition. Only a per-unit thing with no
       // price is a gap in the total.
-      if (!fixed && node.estimatedCost == null) unpriced.set(node.id, node);
+      if (!flat && node.estimatedCost == null) unpriced.set(node.id, node);
 
       lines.push({
         node,
@@ -219,11 +224,13 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
         quantityStated,
         unitCost,
         // A flat fee is the fee. Kit is priced at what it costs to own,
-        // once, not once per run. Everything else multiplies.
-        amount: fixed ? node.fixedCost! : capital ? unitCost : quantity * unitCost,
+        // once, not once per run. Everything else multiplies — including a
+        // per-piece cost that happens to be somebody else's invoice.
+        amount: flat ? node.fixedCost! : capital ? unitCost : quantity * unitCost,
         time,
         capital,
-        fixed,
+        fixed: fee,
+        flat,
         hours: time ? quantity * perUnitHours : 0,
         depth,
         path: [...trail, node.id],
@@ -252,9 +259,13 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
 
   for (const line of lines) {
     if (line.fixed) {
-      // Once per idea, however many routes reach it: one run does not pay the
-      // mailing house twice because two of its parts need them.
-      if (!serviceItems.has(line.node.id)) {
+      // A flat fee is paid once per idea however many routes reach it — one
+      // run does not pay the mailing house twice because two of its parts
+      // need them. A per-piece one adds up like anything else.
+      if (!line.flat) {
+        serviceItems.set(line.node.id, line.node);
+        services += line.amount;
+      } else if (!serviceItems.has(line.node.id)) {
         serviceItems.set(line.node.id, line.node);
         services += line.amount;
       }

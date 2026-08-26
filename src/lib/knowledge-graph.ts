@@ -189,9 +189,19 @@ export interface GraphNode {
   /** For an idea: how much one run of it produces. */
   runSize: number | null;
   runUnit: string | null;
-  /** A flat price charged once per use rather than per unit — a
-   * subcontractor, a permit, a delivery fee. */
+  /** A flat price charged once per use rather than per unit — a permit, a
+   * call-out fee, a mailing house's price per drop. */
   fixedCost: number | null;
+  /**
+   * Money that goes to somebody else rather than stock we hold.
+   *
+   * Separate from how it is priced. Postage is a third-party cost at
+   * twenty-five cents a piece; a permit is a third-party cost at ninety
+   * dollars flat. Both belong under "paid out", and only one of them is
+   * flat — conflating the two is what turned 2,500 pieces of postage into
+   * a single quarter.
+   */
+  isFee: boolean;
   /** How long one run takes. What the calendar blocks out. */
   durationHours: number | null;
   /** What an hour of it costs. */
