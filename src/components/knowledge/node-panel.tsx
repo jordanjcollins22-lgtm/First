@@ -308,12 +308,16 @@ export function NodePanel({
    */
   const steps = useMemo(
     () =>
-      outgoing
+      neighbours
         .filter((n) => n.edge.stepOrder != null)
         .sort((a, b) => (a.edge.stepOrder ?? 0) - (b.edge.stepOrder ?? 0)),
-    [outgoing]
+    [neighbours]
   );
-  const notSteps = useMemo(() => outgoing.filter((n) => n.edge.stepOrder == null), [outgoing]);
+
+  /** Anything touching this node that is not in the sequence yet — either
+   * direction. A step that feeds this thing points into it now, and leaving
+   * those out meant half of what happens could never be put in order. */
+  const notSteps = useMemo(() => neighbours.filter((n) => n.edge.stepOrder == null), [neighbours]);
 
   const stepIds = useMemo(() => steps.map((s) => s.edge.id), [steps]);
 
@@ -1315,57 +1319,37 @@ export function NodePanel({
             ) : (
               <ol className="flex flex-col gap-1.5">
                 {steps.map((step, index) => (
-                  <li
+                  <ConnectionRow
                     key={step.edge.id}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2"
-                  >
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums">
-                      {index + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onSelect(step.node.id)}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <span className="block truncate text-sm">{step.node.title}</span>
-                      <span className="block text-[11px] text-muted-foreground">
-                        {relationshipDef(step.edge.relationshipType).label}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending || index === 0}
-                      onClick={() => run(() => reorderSteps(node.id, move(stepIds, index, -1)))}
-                      className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-30"
-                      aria-label="Move up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending || index === steps.length - 1}
-                      onClick={() => run(() => reorderSteps(node.id, move(stepIds, index, 1)))}
-                      className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-30"
-                      aria-label="Move down"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() =>
+                    owner={node}
+                    node={step.node}
+                    edge={step.edge}
+                    outgoing={step.outgoing}
+                    pending={pending}
+                    onSelect={onSelect}
+                    onRemove={(edgeId) => run(() => deleteRelationship(edgeId))}
+                    onQuantity={(edgeId, quantity) =>
+                      run(() => updateRelationship(edgeId, { quantity }))
+                    }
+                    onRelationship={(edgeId, relationshipType) =>
+                      run(() => updateRelationship(edgeId, { relationshipType }))
+                    }
+                    step={{
+                      number: index + 1,
+                      first: index === 0,
+                      last: index === steps.length - 1,
+                      onUp: () => run(() => reorderSteps(node.id, move(stepIds, index, -1), stepIds)),
+                      onDown: () => run(() => reorderSteps(node.id, move(stepIds, index, 1), stepIds)),
+                      onOut: () =>
                         run(() =>
                           reorderSteps(
                             node.id,
-                            stepIds.filter((id) => id !== step.edge.id)
+                            stepIds.filter((id) => id !== step.edge.id),
+                            stepIds
                           )
-                        )
-                      }
-                      className="shrink-0 text-[11px] text-muted-foreground underline"
-                    >
-                      Out
-                    </button>
-                  </li>
+                        ),
+                    }}
+                  />
                 ))}
               </ol>
             )}
@@ -1376,13 +1360,18 @@ export function NodePanel({
                   Add one of these to the sequence:
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {notSteps.map(({ node: target, edge }) => (
+                  {notSteps.map(({ node: target, edge, outgoing: points }) => (
                     <button
                       key={edge.id}
                       type="button"
                       disabled={pending}
                       className="rounded-full border border-border px-2 py-1 text-xs"
-                      onClick={() => run(() => reorderSteps(node.id, [...stepIds, edge.id]))}
+                      onClick={() => run(() => reorderSteps(node.id, [...stepIds, edge.id], stepIds))}
+                      title={
+                        points
+                          ? `${node.title} ${relationshipDef(edge.relationshipType).label} ${target.title}`
+                          : `${target.title} ${relationshipDef(edge.relationshipType).label} ${node.title}`
+                      }
                     >
                       <span
                         className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
@@ -1508,6 +1497,7 @@ function ConnectionRow({
   onRemove,
   onQuantity,
   onRelationship,
+  step,
 }: {
   /** The node whose panel this row is on, so a run size can suggest a
    * quantity from this side too. */
@@ -1520,6 +1510,17 @@ function ConnectionRow({
   onRemove: (edgeId: string) => void;
   onQuantity: (edgeId: string, quantity: number | null) => void;
   onRelationship: (edgeId: string, relationshipType: RelationshipType) => void;
+  /** Set when this row is a step in a sequence: its number, and the ways it
+   * can move. A step is a connection like any other, so it is the same row
+   * with the same editing rather than a second kind of row that drifts. */
+  step?: {
+    number: number;
+    first: boolean;
+    last: boolean;
+    onUp: () => void;
+    onDown: () => void;
+    onOut: () => void;
+  };
 }) {
   const [draft, setDraft] = useState(edge.quantity != null ? String(edge.quantity) : "");
   const [editing, setEditing] = useState(false);
@@ -1538,10 +1539,16 @@ function ConnectionRow({
   return (
     <li className="flex flex-col gap-1.5 rounded-lg border border-border/60 p-2">
       <div className="flex items-center gap-2">
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: nodeTypeDef(node.nodeType).color }}
-        />
+        {step ? (
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums">
+            {step.number}
+          </span>
+        ) : (
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: nodeTypeDef(node.nodeType).color }}
+          />
+        )}
         <button type="button" onClick={() => onSelect(node.id)} className="min-w-0 flex-1 text-left">
           <span className="block truncate text-sm">{node.title}</span>
           <span className="block text-[11px] text-muted-foreground">
@@ -1554,6 +1561,28 @@ function ConnectionRow({
                 : ""}
           </span>
         </button>
+        {step && (
+          <>
+            <button
+              type="button"
+              disabled={pending || step.first}
+              onClick={step.onUp}
+              className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-30"
+              aria-label="Move up"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              disabled={pending || step.last}
+              onClick={step.onDown}
+              className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-30"
+              aria-label="Move down"
+            >
+              ↓
+            </button>
+          </>
+        )}
         <button
           type="button"
           onClick={() => setEditing((e) => !e)}
@@ -1609,14 +1638,26 @@ function ConnectionRow({
             </SelectContent>
           </Select>
 
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => onRemove(edge.id)}
-            className="self-start text-[11px] text-muted-foreground underline"
-          >
-            Remove this connection
-          </button>
+          <div className="flex flex-wrap gap-3">
+            {step && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={step.onOut}
+                className="text-[11px] text-muted-foreground underline"
+              >
+                Take it out of the sequence
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onRemove(edge.id)}
+              className="text-[11px] text-muted-foreground underline"
+            >
+              Remove this connection
+            </button>
+          </div>
         </div>
       )}
     </li>

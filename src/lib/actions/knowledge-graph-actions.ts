@@ -565,26 +565,31 @@ export async function addUnit(input: {
  * Anything not in the list stops being a step and goes back to being part of
  * the thing, which is how something is taken out of the sequence.
  */
-export async function reorderSteps(nodeId: string, edgeIdsInOrder: string[]): Promise<GraphResult> {
+export async function reorderSteps(
+  nodeId: string,
+  edgeIdsInOrder: string[],
+  /** What was in the sequence before, so those come out of it. Passed in
+   * rather than worked out from the source node: a step can be a connection
+   * pointing either way now, and clearing by direction would leave the ones
+   * pointing in stuck at whatever number they had. */
+  previousEdgeIds: string[] = []
+): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
 
     const supabase = await createClient();
 
     // Clear first, then number: the two writes together are what make the
-    // list exactly what was passed in rather than merged with what was there.
-    const { error: clearError } = await supabase
-      .from("knowledge_nodes")
-      .select("id")
-      .eq("id", nodeId)
-      .maybeSingle();
-    if (clearError) return { ok: false, message: describeDbError(clearError) };
-
-    const { error: resetError } = await supabase
-      .from("knowledge_relationships")
-      .update({ step_order: null } as never)
-      .eq("source_node_id", nodeId);
-    if (resetError) return { ok: false, message: describeDbError(resetError) };
+    // sequence exactly what was passed in rather than merged with what was
+    // there. Anything dropped from the list stops being a step.
+    const dropped = previousEdgeIds.filter((id) => !edgeIdsInOrder.includes(id));
+    if (dropped.length > 0) {
+      const { error: resetError } = await supabase
+        .from("knowledge_relationships")
+        .update({ step_order: null } as never)
+        .in("id", dropped);
+      if (resetError) return { ok: false, message: describeDbError(resetError) };
+    }
 
     const results = await Promise.all(
       edgeIdsInOrder.map((edgeId, index) =>
@@ -592,7 +597,6 @@ export async function reorderSteps(nodeId: string, edgeIdsInOrder: string[]): Pr
           .from("knowledge_relationships")
           .update({ step_order: index + 1 } as never)
           .eq("id", edgeId)
-          .eq("source_node_id", nodeId)
       )
     );
 
