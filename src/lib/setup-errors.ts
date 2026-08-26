@@ -24,6 +24,8 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   org_counters: "0089_job_numbers_and_pipeline.sql",
   contact_merges: "0091_contact_merge_undo.sql",
   target_markets: "0092_target_markets.sql",
+  knowledge_nodes: "0093_knowledge_graph.sql",
+  knowledge_relationships: "0093_knowledge_graph.sql",
 };
 
 /**

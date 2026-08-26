@@ -100,6 +100,64 @@ export interface Database {
           },
         ];
       };
+      knowledge_nodes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          title: string;
+          description: string | null;
+          node_type: string;
+          status: string;
+          importance: number | null;
+          estimated_cost: number | null;
+          potential_value: number | null;
+          notes: string | null;
+          position_x: number | null;
+          position_y: number | null;
+          metadata: Record<string, unknown>;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["knowledge_nodes"]["Row"]> & {
+          organization_id: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["knowledge_nodes"]["Row"]>;
+        Relationships: [];
+      };
+      knowledge_relationships: {
+        Row: {
+          id: string;
+          organization_id: string;
+          source_node_id: string;
+          target_node_id: string;
+          relationship_type: string;
+          strength: number;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["knowledge_relationships"]["Row"]> & {
+          organization_id: string;
+          source_node_id: string;
+          target_node_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["knowledge_relationships"]["Row"]>;
+        Relationships: [];
+      };
+      knowledge_tags: {
+        Row: { id: string; organization_id: string; name: string; color: string | null; created_at: string };
+        Insert: { organization_id: string; name: string; id?: string; color?: string | null };
+        Update: Partial<{ id: string; organization_id: string; name: string; color: string | null }>;
+        Relationships: [];
+      };
+      knowledge_node_tags: {
+        Row: { node_id: string; tag_id: string };
+        Insert: { node_id: string; tag_id: string };
+        Update: Partial<{ node_id: string; tag_id: string }>;
+        Relationships: [];
+      };
       target_markets: {
         Row: {
           id: string;

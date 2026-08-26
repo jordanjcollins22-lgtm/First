@@ -55,6 +55,7 @@ export function SiteNav({
         ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
         ...(can("evaluations") ? [{ href: "/evaluations", label: "Calendar" }] : []),
         ...(can("weather") ? [{ href: "/weather", label: "Weather" }] : []),
+        ...(can("knowledge-graph") ? [{ href: "/knowledge-graph", label: "Knowledge Graph" }] : []),
         ...(can("notifications") ? [{ href: "/notifications", label: "Notifications" }] : []),
         ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
         ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),

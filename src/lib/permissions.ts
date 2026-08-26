@@ -33,6 +33,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "conversations", label: "Conversations", href: "/conversations" },
   { key: "notifications", label: "Notifications", href: "/notifications" },
   { key: "weather", label: "Weather", href: "/weather" },
+  { key: "knowledge-graph", label: "Knowledge Graph", href: "/knowledge-graph" },
 
   // Money and admin tooling — closed until somebody says otherwise.
   { key: "payments", label: "Money", href: "/admin/payments" },
