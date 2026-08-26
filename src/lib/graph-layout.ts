@@ -218,3 +218,154 @@ export function fitToCanvas(
     y: offsetY + (node.y - minY) * scale,
   }));
 }
+
+export interface LayeredOptions {
+  width: number;
+  height: number;
+  /** Nodes to treat as the top row. Everything else is placed by how far
+   * below one of these it sits. */
+  roots: string[];
+  margin?: number;
+}
+
+/**
+ * The breakdown, drawn as a breakdown.
+ *
+ * A force layout is the right way to see a graph as a whole — what clusters,
+ * what is central, what floats. It is the wrong way to read one idea. The
+ * cardstock ends up above the flyers and to the left of the printer, and
+ * nothing about the picture says "this is what that needs".
+ *
+ * So: ideas on the top row, whatever they require on the row beneath, what
+ * those require beneath that. Depth is the shortest hop from any idea, so a
+ * material two ideas need at different depths sits at the shallower one —
+ * near the thing that names it directly.
+ *
+ * Rows are ordered by the average position of what points into them, which is
+ * the cheap version of crossing minimisation and gets most of the benefit: a
+ * material lands under the idea that needs it rather than three columns away
+ * with a line stretched across everything in between.
+ */
+export function layeredLayout(
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+  options: LayeredOptions
+): LayoutNode[] {
+  const { width, height, roots, margin = 46 } = options;
+  if (nodes.length === 0) return [];
+
+  const ids = new Set(nodes.map((n) => n.id));
+  const outgoing = new Map<string, string[]>();
+  const incoming = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!ids.has(edge.sourceId) || !ids.has(edge.targetId)) continue;
+    if (edge.sourceId === edge.targetId) continue;
+    outgoing.set(edge.sourceId, [...(outgoing.get(edge.sourceId) ?? []), edge.targetId]);
+    incoming.set(edge.targetId, [...(incoming.get(edge.targetId) ?? []), edge.sourceId]);
+  }
+
+  // Breadth-first from every root at once, so depth is the shortest hop from
+  // any of them rather than from whichever happened to be walked first.
+  const depth = new Map<string, number>();
+  let frontier = roots.filter((id) => ids.has(id));
+  for (const id of frontier) depth.set(id, 0);
+
+  for (let level = 0; frontier.length > 0 && level < nodes.length; level++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const target of outgoing.get(id) ?? []) {
+        if (depth.has(target)) continue;
+        depth.set(target, level + 1);
+        next.push(target);
+      }
+    }
+    frontier = next;
+  }
+
+  // Anything no idea reaches still has to go somewhere. A row of its own at
+  // the bottom is honest: these are the things nothing has been connected to.
+  const reachedDepth = Math.max(0, ...[...depth.values()]);
+  const strandedRow = depth.size === nodes.length ? reachedDepth : reachedDepth + 1;
+  for (const node of nodes) if (!depth.has(node.id)) depth.set(node.id, strandedRow);
+
+  const rows = new Map<number, string[]>();
+  for (const node of nodes) {
+    const row = depth.get(node.id) ?? 0;
+    rows.set(row, [...(rows.get(row) ?? []), node.id]);
+  }
+
+  const rowNumbers = [...rows.keys()].sort((a, b) => a - b);
+  const order = new Map<string, number>();
+
+  // Top row first, alphabetically, so the same graph opens the same way.
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const titleOf = (id: string) => byId.get(id)?.id ?? id;
+
+  for (const rowNumber of rowNumbers) {
+    const row = rows.get(rowNumber)!;
+    if (rowNumber === rowNumbers[0]) {
+      row.sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
+    } else {
+      // Sit under whatever points into you. Ties keep a stable order rather
+      // than shuffling on every render.
+      row.sort((a, b) => {
+        const pa = barycentre(a, incoming, order);
+        const pb = barycentre(b, incoming, order);
+        if (pa !== pb) return pa - pb;
+        return titleOf(a).localeCompare(titleOf(b));
+      });
+    }
+    row.forEach((id, index) => order.set(id, index));
+  }
+
+  const usableH = Math.max(1, height - margin * 2);
+  const usableW = Math.max(1, width - margin * 2);
+
+  // Rows sit a comfortable distance apart and the whole block is centred,
+  // rather than the first and last row being pinned to the edges with a
+  // canyon between them. Two rows stretched across a phone screen is a lot of
+  // empty space and a lot of very long arrows.
+  const rowGap =
+    rowNumbers.length > 1 ? Math.min(usableH / (rowNumbers.length - 1), MAX_ROW_GAP) : 0;
+  const blockHeight = rowGap * (rowNumbers.length - 1);
+  const topY = Math.max(margin, (height - blockHeight) / 2);
+
+  return nodes.map((node) => {
+    const rowNumber = depth.get(node.id) ?? 0;
+    const row = rows.get(rowNumber)!;
+    const index = row.indexOf(node.id);
+
+    // A crowded row is allowed to run wider than the canvas rather than
+    // packing its labels on top of each other — the graph pans, and an
+    // unreadable row that fits is worse than a readable one that does not.
+    const step = row.length > 1 ? Math.max(usableW / (row.length - 1), MIN_COLUMN_GAP) : 0;
+    const rowWidth = step * (row.length - 1);
+    const startX = width / 2 - rowWidth / 2;
+
+    // And past a few in a row, alternate heights so a label has somewhere to
+    // go that is not on top of its neighbour's.
+    const zigzag = row.length > 3 ? (index % 2 === 0 ? -ZIGZAG : ZIGZAG) : 0;
+
+    return {
+      ...node,
+      x: row.length > 1 ? startX + index * step : width / 2,
+      y: rowNumbers.length > 1 ? topY + rowNumbers.indexOf(rowNumber) * rowGap + zigzag : height / 2,
+    };
+  });
+}
+
+const MAX_ROW_GAP = 150;
+const MIN_COLUMN_GAP = 92;
+const ZIGZAG = 15;
+
+/** Average position of everything pointing into a node, or a large number so
+ * anything with no parents sorts to the end rather than to the front. */
+function barycentre(
+  id: string,
+  incoming: Map<string, string[]>,
+  order: Map<string, number>
+): number {
+  const parents = (incoming.get(id) ?? []).map((p) => order.get(p)).filter((p): p is number => p != null);
+  if (parents.length === 0) return Number.MAX_SAFE_INTEGER;
+  return parents.reduce((a, b) => a + b, 0) / parents.length;
+}

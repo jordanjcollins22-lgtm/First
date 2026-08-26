@@ -31,7 +31,7 @@ import {
   scheduleBuckets,
   type ScheduledNode,
 } from "@/lib/knowledge-schedule";
-import { fitToCanvas, layoutGraph, seedPositions } from "@/lib/graph-layout";
+import { fitToCanvas, layeredLayout, layoutGraph, seedPositions } from "@/lib/graph-layout";
 import {
   EMPTY_FILTERS,
   NODE_STATUSES,
@@ -85,7 +85,22 @@ export function KnowledgeWorkspace({
   const [focusId, setFocusId] = useState<string | null>(null);
   const [depth, setDepth] = useState(1);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [moved, setMoved] = useState<Map<string, Point>>(new Map());
+  /**
+   * Two ways of reading the same graph.
+   *
+   * The web answers "what is this business made of" — what clusters, what is
+   * central. The breakdown answers "what does this idea need", which is a
+   * different question and one a force layout is bad at: it will happily put
+   * the cardstock above the flyers and leave nothing on screen saying which
+   * needs which.
+   */
+  const [view, setView] = useState<"web" | "breakdown">("web");
+  // Drags are kept per view. A node shoved aside on the web has no business
+  // moving where it sits in the breakdown, which is a computed arrangement.
+  const [moved, setMoved] = useState<{ web: Map<string, Point>; breakdown: Map<string, Point> }>({
+    web: new Map(),
+    breakdown: new Map(),
+  });
   const [message, setMessage] = useState<string | null>(null);
 
   // Quick add.
@@ -160,6 +175,31 @@ export function KnowledgeWorkspace({
   const layout = useMemo(() => {
     if (!size.width || !size.height || visible.nodes.length === 0) return new Map<string, Point>();
 
+    if (view === "breakdown") {
+      // Ideas are the top row. With none visible — filtered to materials, say
+      // — whatever nothing points into stands in, so the arrangement still
+      // reads downwards instead of collapsing into one line.
+      const ideas = visible.nodes.filter((n) => n.nodeType === "idea").map((n) => n.id);
+      const pointedAt = new Set(visible.edges.map((e) => e.targetId));
+      const roots =
+        ideas.length > 0
+          ? ideas
+          : visible.nodes.filter((n) => !pointedAt.has(n.id)).map((n) => n.id);
+
+      const laid = layeredLayout(
+        visible.nodes.map((node) => ({
+          id: node.id,
+          x: 0,
+          y: 0,
+          weight: 1 + (degrees.get(node.id) ?? 0) * 0.5,
+        })),
+        visible.edges.map((e) => ({ sourceId: e.sourceId, targetId: e.targetId, strength: e.strength })),
+        { width: size.width, height: size.height, roots }
+      );
+
+      return new Map<string, Point>(laid.map((n) => [n.id, { x: n.x, y: n.y }]));
+    }
+
     const seeds = seedPositions(visible.nodes, size.width, size.height);
     const laid = layoutGraph(
       visible.nodes.map((node) => {
@@ -193,13 +233,13 @@ export function KnowledgeWorkspace({
     const placed = anchored ? laid : fitToCanvas(laid, size.width, size.height);
 
     return new Map<string, Point>(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
-  }, [visible, degrees, size.width, size.height]);
+  }, [visible, degrees, size.width, size.height, view]);
 
   const positions = useMemo(() => {
     const merged = new Map(layout);
-    for (const [id, point] of moved) if (merged.has(id)) merged.set(id, point);
+    for (const [id, point] of moved[view]) if (merged.has(id)) merged.set(id, point);
     return merged;
-  }, [layout, moved]);
+  }, [layout, moved, view]);
 
   const handleMeasure = useCallback((next: { width: number; height: number }) => {
     setSize((current) =>
@@ -208,12 +248,16 @@ export function KnowledgeWorkspace({
   }, []);
 
   function handleMove(id: string, point: Point) {
-    setMoved((current) => new Map(current).set(id, point));
+    setMoved((current) => ({ ...current, [view]: new Map(current[view]).set(id, point) }));
   }
 
   function handleMoveEnd(id: string) {
     const point = positions.get(id);
     if (!point) return;
+    // Only the web is a board somebody arranges. The breakdown is worked out
+    // from the connections every time, so saving a position from it would
+    // pin a node in a place that only made sense in the other view.
+    if (view !== "web") return;
     // Fired and not awaited: the node is already under the finger that put it
     // there, and blocking a drop on a round trip is how a board feels heavy.
     void saveNodePositions([{ id, x: point.x, y: point.y }]);
@@ -319,6 +363,14 @@ export function KnowledgeWorkspace({
           placeholder="Search"
           className="h-9 w-full text-sm sm:w-56"
         />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setView((v) => (v === "web" ? "breakdown" : "web"))}
+        >
+          {view === "web" ? "Breakdown" : "Web"}
+        </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => setShowFilters((s) => !s)}>
           {showFilters ? "Hide filters" : "Filters"}
         </Button>
@@ -412,13 +464,15 @@ export function KnowledgeWorkspace({
           if (title) add(title, draftType, point);
         }}
         onMeasure={handleMeasure}
+        fitTo={layout}
         today={today}
       />
 
       <p className="mb-4 mt-1.5 text-[11px] text-muted-foreground">
-        Drag to move a node, drag the background to pan, pinch or scroll to zoom, tap a node to open it,
-        double-tap empty space to add one there. Size is how many things touch it; a ring means it is
-        scheduled, and amber means it has gone by.
+        {view === "breakdown"
+          ? "Ideas across the top, what they need on the row beneath, what those need under that. Worked out from the connections each time, so moving something here is just for a look — the web is the board that remembers."
+          : "Drag to move a node, drag the background to pan, pinch or scroll to zoom, tap a node to open it, double-tap empty space to add one there."}{" "}
+        Size is how many things touch it; a ring means it is scheduled, and amber means it has gone by.
       </p>
 
       {selected && (

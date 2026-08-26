@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { clampToCanvas, radiusFor } from "@/lib/graph-layout";
+import { radiusFor } from "@/lib/graph-layout";
 import { degreeMap, nodeTypeDef, relationshipDef, type Graph } from "@/lib/knowledge-graph";
 
 export interface Point {
@@ -30,6 +30,7 @@ export function GraphCanvas({
   onMoveEnd,
   onCreateAt,
   onMeasure,
+  fitTo,
   today,
   height = "h-[58vh] min-h-[360px]",
 }: {
@@ -41,6 +42,14 @@ export function GraphCanvas({
   onMoveEnd: (id: string) => void;
   onCreateAt: (point: Point) => void;
   onMeasure: (size: { width: number; height: number }) => void;
+  /**
+   * The computed arrangement, before anybody dragged anything.
+   *
+   * The view is fitted to this rather than to what is on screen, so moving
+   * one node does not re-fit — and therefore shift — every other node under
+   * the finger that moved it.
+   */
+  fitTo: Map<string, Point>;
   /** Today, so a scheduled node can show whether it has gone by. */
   today: string;
   height?: string;
@@ -48,6 +57,10 @@ export function GraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  // Whatever the person has done with their fingers, on top of a fit worked
+  // out from the layout. Kept separate so switching to a taller arrangement
+  // re-fits on its own, and "Reset view" is just dropping this back to
+  // nothing rather than guessing a scale.
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -76,6 +89,44 @@ export function GraphCanvas({
 
   const degrees = useMemo(() => degreeMap(graph), [graph]);
 
+  /**
+   * The scale that gets the whole arrangement on screen.
+   *
+   * Only ever zooms out. A three-node graph blown up to fill a phone looks
+   * broken; a breakdown with eight things on a row that runs off both edges
+   * is worse, because the parts you cannot see are the ones you did not know
+   * to look for.
+   */
+  const fit = useMemo(() => {
+    const points = [...fitTo.values()];
+    if (points.length === 0 || !size.width || !size.height) return { k: 1, tx: 0, ty: 0 };
+
+    const padding = 46;
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const k = Math.min(
+      1,
+      Math.max(0.25, (size.width - padding * 2) / spanX),
+      Math.max(0.25, (size.height - padding * 2) / spanY)
+    );
+
+    return {
+      k,
+      tx: size.width / 2 - ((minX + maxX) / 2) * k,
+      ty: size.height / 2 - ((minY + maxY) / 2) * k,
+    };
+  }, [fitTo, size.width, size.height]);
+
+  // What is actually on screen: the fit, then whatever the person did to it.
+  const k = fit.k * view.k;
+  const tx = fit.tx * view.k + view.tx;
+  const ty = fit.ty * view.k + view.ty;
+
   // What stays bright. Hovering or selecting a node dims everything it does
   // not touch, which is the whole way a dense graph becomes readable.
   const focus = useMemo(() => {
@@ -94,12 +145,22 @@ export function GraphCanvas({
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
       return {
-        x: (clientX - rect.left - view.tx) / view.k,
-        y: (clientY - rect.top - view.ty) / view.k,
+        x: (clientX - rect.left - tx) / k,
+        y: (clientY - rect.top - ty) / k,
       };
     },
-    [view]
+    [tx, ty, k]
   );
+
+  /** The slice of logical space currently on screen. */
+  function visibleLogicalBounds() {
+    return {
+      left: -tx / k,
+      top: -ty / k,
+      width: (size.width || 1) / k,
+      height: (size.height || 1) / k,
+    };
+  }
 
   function handlePointerDownNode(e: React.PointerEvent, id: string) {
     e.stopPropagation();
@@ -115,12 +176,14 @@ export function GraphCanvas({
     if (!drag) return;
     e.stopPropagation();
     const cursor = toLogical(e.clientX, e.clientY);
-    const next = clampToCanvas(
-      cursor.x + drag.offset.x,
-      cursor.y + drag.offset.y,
-      size.width || 1,
-      size.height || 1
-    );
+    // Kept inside what is on screen rather than inside the canvas in pixels:
+    // once the view is zoomed out those are different boxes, and clamping to
+    // the wrong one makes a node lag behind the finger dragging it.
+    const bounds = visibleLogicalBounds();
+    const next = {
+      x: clamp(cursor.x + drag.offset.x, bounds.left + 16, bounds.left + bounds.width - 16),
+      y: clamp(cursor.y + drag.offset.y, bounds.top + 16, bounds.top + bounds.height - 16),
+    };
     movedRef.current = true;
     onMove(drag.id, next);
   }
@@ -175,16 +238,26 @@ export function GraphCanvas({
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
     const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+
     setView((v) => {
-      const k = Math.min(3, Math.max(0.3, v.k * factor));
-      // Zoom about the cursor, so the thing being looked at stays put.
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      return { k, tx: px - ((px - v.tx) / v.k) * k, ty: py - ((py - v.ty) / v.k) * k };
+      const nextUserK = Math.min(3, Math.max(0.3, v.k * factor));
+      const applied = nextUserK / v.k;
+      // Zoom about the cursor, so the thing being looked at stays put. Done
+      // on the effective transform and converted back, because the fit
+      // underneath it is not the person's to move.
+      const nextTx = px - (px - tx) * applied;
+      const nextTy = py - (py - ty) * applied;
+      return {
+        k: nextUserK,
+        tx: nextTx - fit.tx * nextUserK,
+        ty: nextTy - fit.ty * nextUserK,
+      };
     });
   }
 
-  const showLabels = view.k >= 0.65 || graph.nodes.length <= 40;
+  const showLabels = k >= 0.55 || graph.nodes.length <= 40;
 
   return (
     <div className="relative">
@@ -231,7 +304,7 @@ export function GraphCanvas({
             onPointerDown={() => onSelect(null)}
           />
 
-          <g transform={`translate(${view.tx},${view.ty}) scale(${view.k})`}>
+          <g transform={`translate(${tx},${ty}) scale(${k})`}>
             {graph.edges.map((edge) => {
               const a = positions.get(edge.sourceId);
               const b = positions.get(edge.targetId);
@@ -373,4 +446,8 @@ function labelX(x: number, radius: number, width: number): number {
   if (anchor === "start") return x - radius;
   if (anchor === "end") return x + radius;
   return x;
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(Math.max(value, low), Math.max(low, high));
 }
