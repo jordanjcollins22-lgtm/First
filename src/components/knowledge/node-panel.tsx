@@ -24,6 +24,7 @@ import {
   relationshipDef,
   type Graph,
   type GraphNode,
+  type Neighbour,
   type NodeStatus,
   type NodeType,
   type RelationshipType,
@@ -167,8 +168,24 @@ export function NodePanel({
   const [needKind, setNeedKind] = useState<InventoryKind>("material");
 
   const neighbours = useMemo(() => neighboursOf(graph, node.id), [graph, node.id]);
-  const outgoing = neighbours.filter((n) => n.outgoing);
-  const incoming = neighbours.filter((n) => !n.outgoing);
+  /**
+   * Which way a connection actually runs, from where we are standing.
+   *
+   * Not the direction the edge is stored in. "Door hangers require
+   * cardstock" is stored hangers → cardstock because that is the order the
+   * words go in, but the cardstock goes into the hangers — so on the
+   * hangers' panel it belongs with the things coming in, next to the arrow
+   * that already points that way on the graph.
+   *
+   * Stored direction, flipped for the relationships whose flow runs against
+   * their wording. The same rule the arrowheads use, so a list and a picture
+   * of the same connection can never say opposite things.
+   */
+  const flowsOut = (n: Neighbour) =>
+    n.outgoing !== (relationshipDef(n.edge.relationshipType).flowReversed === true);
+
+  const outgoing = neighbours.filter(flowsOut);
+  const incoming = neighbours.filter((n) => !flowsOut(n));
 
   // Suggested while typing a requirement, so the printer gets connected twice
   // rather than entered twice.
@@ -1387,7 +1404,7 @@ export function NodePanel({
         </Section>
       )}
 
-      <Section title={`Points out (${outgoing.length})`}>
+      <Section title={`Goes out of this (${outgoing.length})`}>
         <ConnectionList
           owner={node}
           items={outgoing}
@@ -1402,7 +1419,7 @@ export function NodePanel({
         />
       </Section>
 
-      <Section title={`Points in (${incoming.length})`}>
+      <Section title={`Comes into this (${incoming.length})`}>
         <ConnectionList
           owner={node}
           items={incoming}
@@ -1451,9 +1468,9 @@ function ConnectionList({
   if (items.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        {direction === "out"
-          ? "Nothing yet. Break it down above and it stops being just an idea."
-          : "Nothing points at this yet."}
+        {direction === "in"
+          ? "Nothing goes into this yet. Break it down above and it stops being just an idea."
+          : "Nothing comes out of this yet — no revenue, nothing it produces."}
       </p>
     );
   }
