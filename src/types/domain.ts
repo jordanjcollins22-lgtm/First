@@ -325,6 +325,8 @@ export interface Tool {
   category: ToolCategory;
   icon: string;
   cost: number | null;
+  /** What we would get back, where somebody disagreed with the default. */
+  resale_value: number | null;
   is_rental: boolean;
   active: boolean;
   kits: number[];
@@ -359,6 +361,11 @@ export interface Material {
   active: boolean;
   /** job = used on site and quotable. marketing = door hangers and flyers. */
   category: "job" | "marketing";
+  /** material = stock that gets used up. other = a cost with nothing behind
+   * it, which is why it never gets a resale value. */
+  kind: "material" | "other";
+  /** What we would get back, where somebody disagreed with the default. */
+  resale_value: number | null;
   description: string | null;
   purchase_url: string | null;
   quantity_on_hand: number | null;

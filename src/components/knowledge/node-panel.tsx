@@ -31,8 +31,7 @@ import {
 import { INVENTORY_GROUPS, type InventoryGroup, type MaterialOption } from "@/lib/inventory-groups";
 import { describePurchaseUrl } from "@/lib/purchase-url";
 import type { UnitOption } from "@/lib/data/knowledge-graph";
-import { CreateMaterialForm } from "@/components/material/create-material-form";
-import { CreateToolForm } from "@/components/tool/create-tool-form";
+import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import {
   costOf,
   defaultCostBasis,
@@ -52,6 +51,7 @@ import {
   deleteRelationship,
   linkNodeToMaterial,
   markNodeDone,
+  reorderSteps,
   updateRelationship,
   scheduleNode,
   updateNode,
@@ -298,6 +298,24 @@ export function NodePanel({
     if (!quantity || picked?.unitCost == null) return null;
     return quantity * picked.unitCost;
   }, [needQuantity, picked]);
+
+  /**
+   * The sequence, and everything else that hangs off this node.
+   *
+   * A breakdown says what something is made of. It does not say what happens
+   * first, and for anything somebody has to actually carry out, that is the
+   * part they need.
+   */
+  const steps = useMemo(
+    () =>
+      outgoing
+        .filter((n) => n.edge.stepOrder != null)
+        .sort((a, b) => (a.edge.stepOrder ?? 0) - (b.edge.stepOrder ?? 0)),
+    [outgoing]
+  );
+  const notSteps = useMemo(() => outgoing.filter((n) => n.edge.stepOrder == null), [outgoing]);
+
+  const stepIds = useMemo(() => steps.map((s) => s.edge.id), [steps]);
 
   const cost = useMemo(() => costOf(graph, node.id), [graph, node.id]);
   const payback = useMemo(() => paybackOf(graph, node.id), [graph, node.id]);
@@ -1041,22 +1059,13 @@ export function NodePanel({
                     {INVENTORY_GROUPS.find((g) => g.value === newIn)?.label}, and connects to{" "}
                     {node.title} on the terms above.
                   </p>
-                  {newIn === "materials" || newIn === "marketing" ? (
-                    <CreateMaterialForm
-                      key={newIn}
-                      storageLocations={storageLocations}
-                      category={newIn === "marketing" ? "marketing" : "job"}
-                      onCreated={(item) => connectNewInventory("material", item)}
-                    />
-                  ) : (
-                    <CreateToolForm
-                      key={newIn}
-                      availableKits={availableKits}
-                      storageLocations={storageLocations}
-                      category={newIn === "gear" ? "gear" : "tool"}
-                      onCreated={(item) => connectNewInventory("tool", item)}
-                    />
-                  )}
+                  <InventoryAddForm
+                    key={newIn}
+                    group={newIn as InventoryGroup}
+                    storageLocations={storageLocations}
+                    availableKits={availableKits}
+                    onCreated={(item) => connectNewInventory(item.kind, item)}
+                  />
                 </div>
               )}
             </>
@@ -1291,6 +1300,100 @@ export function NodePanel({
             >
               {pending ? "Adding…" : earnPicked ? `Earn through ${earnPicked.title}` : "Add a way it pays"}
             </Button>
+          </div>
+        </Section>
+      )}
+
+      {(steps.length > 0 || notSteps.length > 0) && (
+        <Section title={steps.length > 0 ? `Steps, in order (${steps.length})` : "Put it in order"}>
+          <div className="flex flex-col gap-2">
+            {steps.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nothing is a step yet. Add one below and this becomes a sequence somebody can follow
+                rather than a pile of parts.
+              </p>
+            ) : (
+              <ol className="flex flex-col gap-1.5">
+                {steps.map((step, index) => (
+                  <li
+                    key={step.edge.id}
+                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums">
+                      {index + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelect(step.node.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate text-sm">{step.node.title}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {relationshipDef(step.edge.relationshipType).label}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending || index === 0}
+                      onClick={() => run(() => reorderSteps(node.id, move(stepIds, index, -1)))}
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-30"
+                      aria-label="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending || index === steps.length - 1}
+                      onClick={() => run(() => reorderSteps(node.id, move(stepIds, index, 1)))}
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-30"
+                      aria-label="Move down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() =>
+                        run(() =>
+                          reorderSteps(
+                            node.id,
+                            stepIds.filter((id) => id !== step.edge.id)
+                          )
+                        )
+                      }
+                      className="shrink-0 text-[11px] text-muted-foreground underline"
+                    >
+                      Out
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {notSteps.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Add one of these to the sequence:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {notSteps.map(({ node: target, edge }) => (
+                    <button
+                      key={edge.id}
+                      type="button"
+                      disabled={pending}
+                      className="rounded-full border border-border px-2 py-1 text-xs"
+                      onClick={() => run(() => reorderSteps(node.id, [...stepIds, edge.id]))}
+                    >
+                      <span
+                        className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
+                        style={{ backgroundColor: nodeTypeDef(target.nodeType).color }}
+                      />
+                      {target.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </Section>
       )}
@@ -1729,4 +1832,14 @@ export function TypeSelect({ value, onChange }: { value: NodeType; onChange: (v:
       </SelectContent>
     </Select>
   );
+}
+
+/** One row up or down, as a whole new order — the server is told the sequence
+ * it should end up with rather than the nudge that got there. */
+function move(ids: string[], index: number, delta: number): string[] {
+  const next = [...ids];
+  const target = index + delta;
+  if (target < 0 || target >= next.length) return next;
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
 }

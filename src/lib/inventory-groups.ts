@@ -18,6 +18,8 @@ export interface MaterialOption {
   group: InventoryGroup;
   /** Which table it is in, because linking a node needs to know. */
   kind: "material" | "tool";
+  /** A cost with nothing behind it: priced as a flat fee, never resold. */
+  isFee?: boolean;
 }
 
 export const INVENTORY_GROUPS: { value: InventoryGroup; label: string; kind: "material" | "tool" }[] = [

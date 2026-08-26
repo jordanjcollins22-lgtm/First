@@ -554,6 +554,63 @@ export async function addUnit(input: {
   }
 }
 
+/**
+ * Puts the steps of something in order.
+ *
+ * Takes the whole sequence rather than one move at a time, and writes 1..n
+ * over it. Nudging a single row up would leave two things claiming to be
+ * step three the moment two people did it at once, and a sequence with two
+ * step threes is worse than no sequence.
+ *
+ * Anything not in the list stops being a step and goes back to being part of
+ * the thing, which is how something is taken out of the sequence.
+ */
+export async function reorderSteps(nodeId: string, edgeIdsInOrder: string[]): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const supabase = await createClient();
+
+    // Clear first, then number: the two writes together are what make the
+    // list exactly what was passed in rather than merged with what was there.
+    const { error: clearError } = await supabase
+      .from("knowledge_nodes")
+      .select("id")
+      .eq("id", nodeId)
+      .maybeSingle();
+    if (clearError) return { ok: false, message: describeDbError(clearError) };
+
+    const { error: resetError } = await supabase
+      .from("knowledge_relationships")
+      .update({ step_order: null } as never)
+      .eq("source_node_id", nodeId);
+    if (resetError) return { ok: false, message: describeDbError(resetError) };
+
+    const results = await Promise.all(
+      edgeIdsInOrder.map((edgeId, index) =>
+        supabase
+          .from("knowledge_relationships")
+          .update({ step_order: index + 1 } as never)
+          .eq("id", edgeId)
+          .eq("source_node_id", nodeId)
+      )
+    );
+
+    const failed = results.find((r) => r.error);
+    if (failed?.error) return { ok: false, message: describeDbError(failed.error) };
+
+    revalidatePath(PATH);
+    return {
+      ok: true,
+      id: nodeId,
+      message: edgeIdsInOrder.length > 0 ? "Order saved." : "No longer a sequence.",
+    };
+  } catch (err) {
+    console.error("reorderSteps failed:", err);
+    return { ok: false, message: "Couldn't save the order." };
+  }
+}
+
 /** Removes one line. Not admin-gated the way deleting a node is: a wrong
  * connection is a small mistake, and leaving it there is a worse one. */
 export async function deleteRelationship(id: string): Promise<GraphResult> {

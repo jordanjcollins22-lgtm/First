@@ -283,6 +283,17 @@ export function GraphCanvas({
         >
           <defs>
             <marker
+              id="kg-arrow-back"
+              viewBox="0 0 10 10"
+              refX="1"
+              refY="5"
+              markerWidth="5"
+              markerHeight="5"
+              orient="auto-start-reverse"
+            >
+              <path d="M 10 0 L 0 5 L 10 10 z" fill="#64748b" />
+            </marker>
+            <marker
               id="kg-arrow"
               viewBox="0 0 10 10"
               refX="9"
@@ -311,27 +322,53 @@ export function GraphCanvas({
               if (!a || !b) return null;
               const def = relationshipDef(edge.relationshipType);
               const lit = !focus || (focus.has(edge.sourceId) && focus.has(edge.targetId));
-              // Stop the line short of the target so the arrowhead sits
-              // against the circle rather than buried inside it.
-              const radius = radiusFor(degrees.get(edge.targetId) ?? 0);
+
+              // Both ends stop short of their circle, so an arrowhead sits
+              // against the node rather than buried inside it — whichever end
+              // it is on.
               const dx = b.x - a.x;
               const dy = b.y - a.y;
               const distance = Math.hypot(dx, dy) || 1;
-              const endX = b.x - (dx / distance) * (radius + 3);
-              const endY = b.y - (dy / distance) * (radius + 3);
+              const targetRadius = radiusFor(degrees.get(edge.targetId) ?? 0);
+              const sourceRadius = radiusFor(degrees.get(edge.sourceId) ?? 0);
+              const startX = a.x + (dx / distance) * (sourceRadius + 3);
+              const startY = a.y + (dy / distance) * (sourceRadius + 3);
+              const endX = b.x - (dx / distance) * (targetRadius + 3);
+              const endY = b.y - (dy / distance) * (targetRadius + 3);
+
+              // "Job has cost fuel" is stored job → fuel because that is the
+              // order the words go in, but the fuel goes into the job. The
+              // arrowhead follows what moves, not what was typed first.
+              const reversed = def.flowReversed === true;
 
               return (
-                <line
-                  key={edge.id}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={endX}
-                  y2={endY}
-                  stroke={lit ? "#94a3b8" : "#334155"}
-                  strokeWidth={0.7 + edge.strength * 0.35}
-                  strokeOpacity={lit ? 0.85 : 0.25}
-                  markerEnd={def.directional ? "url(#kg-arrow)" : undefined}
-                />
+                <g key={edge.id}>
+                  <line
+                    x1={reversed ? startX : a.x}
+                    y1={reversed ? startY : a.y}
+                    x2={endX}
+                    y2={endY}
+                    stroke={lit ? "#94a3b8" : "#334155"}
+                    strokeWidth={0.7 + edge.strength * 0.35}
+                    strokeOpacity={lit ? 0.85 : 0.25}
+                    markerEnd={def.directional && !reversed ? "url(#kg-arrow)" : undefined}
+                    markerStart={def.directional && reversed ? "url(#kg-arrow-back)" : undefined}
+                  />
+                  {/* A numbered step says what happens when, which a line on
+                      its own cannot. */}
+                  {edge.stepOrder != null && (
+                    <text
+                      x={(a.x + b.x) / 2}
+                      y={(a.y + b.y) / 2 - 3}
+                      textAnchor="middle"
+                      fontSize={10}
+                      fill={lit ? "#e2e8f0" : "#475569"}
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {edge.stepOrder}
+                    </text>
+                  )}
+                </g>
               );
             })}
 

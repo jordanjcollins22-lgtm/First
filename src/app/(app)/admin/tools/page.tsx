@@ -10,9 +10,8 @@ import { checkTabAccess } from "@/lib/data/access";
 import { SERVICE_TYPES } from "@/components/canvas/service-catalog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { CreateToolForm } from "@/components/tool/create-tool-form";
+import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
-import { CreateMaterialForm } from "@/components/material/create-material-form";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
 import { listBusinessLocations } from "@/lib/data/locations";
@@ -125,7 +124,11 @@ export default async function InventoryPage() {
                 <CardTitle>Add a tool</CardTitle>
               </CardHeader>
               <CardContent>
-                <CreateToolForm availableKits={availableKits} storageLocations={storageLocations} />
+                <InventoryAddForm
+                  group="tools"
+                  availableKits={availableKits}
+                  storageLocations={storageLocations}
+                />
               </CardContent>
             </Card>
 
@@ -149,6 +152,7 @@ export default async function InventoryPage() {
                       <th className="p-2 font-medium">Reorder at</th>
                       <th className="p-2 font-medium">Status</th>
                       <th className="p-2 font-medium">Cost (/day if rented)</th>
+                      <th className="p-2 font-medium">Resale</th>
                       <th className="p-2 font-medium">Buy</th>
                       <th className="p-2" />
                     </tr>
@@ -180,10 +184,10 @@ export default async function InventoryPage() {
                 <CardTitle>Add crew gear</CardTitle>
               </CardHeader>
               <CardContent>
-                <CreateToolForm
+                <InventoryAddForm
+                  group="gear"
                   availableKits={availableKits}
                   storageLocations={storageLocations}
-                  category="gear"
                 />
               </CardContent>
             </Card>
@@ -208,6 +212,7 @@ export default async function InventoryPage() {
                       <th className="p-2 font-medium">Reorder at</th>
                       <th className="p-2 font-medium">Status</th>
                       <th className="p-2 font-medium">Cost (/day if rented)</th>
+                      <th className="p-2 font-medium">Resale</th>
                       <th className="p-2 font-medium">Buy</th>
                       <th className="p-2" />
                     </tr>
@@ -242,7 +247,11 @@ export default async function InventoryPage() {
                 <CardTitle>Add a material</CardTitle>
               </CardHeader>
               <CardContent>
-                <CreateMaterialForm storageLocations={storageLocations} />
+                <InventoryAddForm
+                  group="materials"
+                  availableKits={availableKits}
+                  storageLocations={storageLocations}
+                />
               </CardContent>
             </Card>
 
@@ -264,6 +273,7 @@ export default async function InventoryPage() {
                       <th className="p-2 font-medium">Reorder at</th>
                       <th className="p-2 font-medium">Status</th>
                       <th className="p-2 font-medium">Cost</th>
+                      <th className="p-2 font-medium">Resale</th>
                       <th className="p-2 font-medium">Buy</th>
                       <th className="p-2" />
                     </tr>
@@ -297,7 +307,11 @@ export default async function InventoryPage() {
                   </Link>{" "}
                   and the cost of a campaign works itself out.
                 </p>
-                <CreateMaterialForm storageLocations={storageLocations} category="marketing" />
+                <InventoryAddForm
+                  group="marketing"
+                  availableKits={availableKits}
+                  storageLocations={storageLocations}
+                />
               </CardContent>
             </Card>
 
@@ -321,6 +335,7 @@ export default async function InventoryPage() {
                       <th className="p-2 font-medium">Reorder at</th>
                       <th className="p-2 font-medium">Status</th>
                       <th className="p-2 font-medium">Cost</th>
+                      <th className="p-2 font-medium">Resale</th>
                       <th className="p-2 font-medium">Buy</th>
                       <th className="p-2" />
                     </tr>

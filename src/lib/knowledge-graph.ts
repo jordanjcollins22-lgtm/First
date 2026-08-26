@@ -105,6 +105,16 @@ export interface RelationshipDef {
   /** A relationship that means the same thing both ways is drawn without an
    * arrowhead — an arrow on "similar to" claims a direction that is not there. */
   directional: boolean;
+  /**
+   * True where the thing flows the opposite way to how the sentence is
+   * stored.
+   *
+   * "Job has cost fuel" is stored job → fuel because that is the order the
+   * words go in, but the fuel goes into the job, and an arrow pointing from
+   * the job at the fuel is telling somebody the opposite of what happens.
+   * These get their arrowhead at the other end.
+   */
+  flowReversed?: boolean;
 }
 
 export const RELATIONSHIP_TYPES: RelationshipDef[] = [
@@ -119,15 +129,15 @@ export const RELATIONSHIP_TYPES: RelationshipDef[] = [
   { value: "replaces", label: "replaces", inverse: "replaced by", directional: true },
   { value: "leads_to", label: "leads to", inverse: "led to by", directional: true },
   { value: "sold_through", label: "sold through", inverse: "sells", directional: true },
-  { value: "purchased_from", label: "purchased from", inverse: "supplies", directional: true },
-  { value: "performed_by", label: "performed by", inverse: "performs", directional: true },
+  { value: "purchased_from", label: "purchased from", inverse: "supplies", directional: true, flowReversed: true },
+  { value: "performed_by", label: "performed by", inverse: "performs", directional: true, flowReversed: true },
   { value: "used_by", label: "used by", inverse: "uses", directional: true },
   { value: "located_at", label: "located at", inverse: "location of", directional: true },
-  { value: "has_cost", label: "has cost", inverse: "cost of", directional: true },
+  { value: "has_cost", label: "has cost", inverse: "cost of", directional: true, flowReversed: true },
   { value: "generates_revenue", label: "generates revenue", inverse: "revenue from", directional: true },
   { value: "part_of", label: "part of", inverse: "contains", directional: true },
   { value: "parent_of", label: "parent of", inverse: "child of", directional: true },
-  { value: "child_of", label: "child of", inverse: "parent of", directional: true },
+  { value: "child_of", label: "child of", inverse: "parent of", directional: true, flowReversed: true },
   { value: "similar_to", label: "similar to", inverse: "similar to", directional: false },
   { value: "shares_resource_with", label: "shares a resource with", inverse: "shares a resource with", directional: false },
   { value: "can_be_combined_with", label: "can be combined with", inverse: "can be combined with", directional: false },
@@ -206,6 +216,9 @@ export interface GraphNode {
 
 export interface GraphEdge {
   id: string;
+  /** Where this comes in the sequence, counting from 1. Null means it is part
+   * of the thing rather than a step in it. */
+  stepOrder?: number | null;
   sourceId: string;
   targetId: string;
   relationshipType: RelationshipType;

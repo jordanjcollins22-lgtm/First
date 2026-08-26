@@ -64,6 +64,9 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "fixed_cost", table: "knowledge_nodes", migration: "0100_units_outputs_and_fees.sql" },
   { column: "output_per_unit", table: "knowledge_nodes", migration: "0100_units_outputs_and_fees.sql" },
   { column: "run_size", table: "knowledge_nodes", migration: "0100_units_outputs_and_fees.sql" },
+  { column: "kind", table: "materials", migration: "0101_inventory_kind_resale_steps.sql" },
+  { column: "resale_value", migration: "0101_inventory_kind_resale_steps.sql" },
+  { column: "step_order", table: "knowledge_relationships", migration: "0101_inventory_kind_resale_steps.sql" },
   { column: "category", table: "materials", migration: "0096_knowledge_inventory_link.sql" },
 ];
 

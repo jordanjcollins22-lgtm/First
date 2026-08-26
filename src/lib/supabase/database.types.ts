@@ -150,6 +150,7 @@ export interface Database {
           relationship_type: string;
           strength: number;
           quantity: number | null;
+          step_order: number | null;
           notes: string | null;
           created_by: string | null;
           created_at: string;
@@ -601,6 +602,7 @@ export interface Database {
           name: string;
           icon: string;
           cost: number | null;
+          resale_value: number | null;
           is_rental: boolean;
           category: string;
           active: boolean;
@@ -633,6 +635,8 @@ export interface Database {
           name: string;
           unit: string;
           category: string;
+          kind: string;
+          resale_value: number | null;
           coverage_per_unit_sqft: number | null;
           pack_size: number | null;
           pack_cost: number | null;

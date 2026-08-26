@@ -7,6 +7,7 @@ import { ToolImageThumb } from "./tool-image-thumb";
 import { ToolImageUpload } from "./tool-image-upload";
 import { ToolKitsInput } from "./tool-kits-input";
 import { ToolCostInput } from "./tool-cost-input";
+import { ResaleCell } from "@/components/inventory/resale-cell";
 import { ToolQuantityInput } from "./tool-quantity-input";
 import { ToolReorderThresholdInput } from "./tool-reorder-threshold-input";
 import { ToolOrderStatus } from "./tool-order-status";
@@ -104,6 +105,9 @@ export function ToolInventoryRow({
           <ToolCostInput toolId={tool.id} initialCost={tool.cost} isRental={isRental} />
         </td>
         <td className="p-2">
+          <ResaleCell cost={tool.cost} override={tool.resale_value} isRental={isRental} />
+        </td>
+        <td className="p-2">
           <ToolBuyLink url={tool.purchase_url} />
         </td>
         <td className="p-2 text-right">
@@ -119,7 +123,7 @@ export function ToolInventoryRow({
       </tr>
       {open && (
         <tr className="border-b border-border bg-muted/30">
-          <td colSpan={10} className="p-3">
+          <td colSpan={11} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Photo</span>

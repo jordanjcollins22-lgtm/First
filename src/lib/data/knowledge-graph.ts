@@ -45,7 +45,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       .order("created_at"),
     supabase
       .from("knowledge_relationships")
-      .select("id, source_node_id, target_node_id, relationship_type, strength, quantity, notes"),
+      .select("id, source_node_id, target_node_id, relationship_type, strength, quantity, step_order, notes"),
     supabase.from("knowledge_node_tags").select("node_id, knowledge_tags(name)"),
     // Units this business typed itself. A table that is not there yet costs
     // the custom units, not the graph.
@@ -108,7 +108,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
   if (materialIds.length > 0) {
     const { data: materialRows } = await supabase
       .from("materials")
-      .select("id, name, cost_per_unit, unit, purchase_url, quantity_on_hand, reorder_threshold, on_order")
+      .select("id, name, cost_per_unit, unit, kind, purchase_url, quantity_on_hand, reorder_threshold, on_order")
       .in("id", materialIds);
 
     for (const row of (materialRows ?? []) as unknown as MaterialRow[]) {
@@ -116,6 +116,9 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
         name: row.name,
         costPerUnit: row.cost_per_unit != null ? Number(row.cost_per_unit) : null,
         unit: row.unit,
+        // An inventory row marked "other" is a fee, not stock. Its price is
+        // the whole price, not the price of one of them.
+        isFee: row.kind === "other",
         purchaseUrl: row.purchase_url,
         stockOnHand: row.quantity_on_hand != null ? Number(row.quantity_on_hand) : null,
         reorderThreshold: row.reorder_threshold != null ? Number(row.reorder_threshold) : null,
@@ -194,7 +197,8 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     // Only ever the real price of the real thing. A number somebody typed
     // into the graph is a guess that outlives whatever it was guessing about,
     // and two prices for one material is worse than one price and a gap.
-    estimatedCost: material?.costPerUnit ?? null,
+    // A fee has no per-unit price: the whole of it is the fixed cost below.
+    estimatedCost: material?.isFee ? null : material?.costPerUnit ?? null,
     unit: material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each",
     costBasis:
       n.cost_basis === "consumable" || n.cost_basis === "capital" ? n.cost_basis : null,
@@ -203,7 +207,11 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     outputUnit: n.output_unit,
     runSize: n.run_size != null ? Number(n.run_size) : null,
     runUnit: n.run_unit,
-    fixedCost: n.fixed_cost != null ? Number(n.fixed_cost) : null,
+    fixedCost: material?.isFee
+      ? material.costPerUnit
+      : n.fixed_cost != null
+        ? Number(n.fixed_cost)
+        : null,
     purchaseUrl: material?.purchaseUrl ?? n.purchase_url,
     materialId: n.material_id,
     toolId: n.tool_id,
@@ -235,6 +243,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       relationship_type: string;
       strength: number;
       quantity: number | null;
+      step_order: number | null;
       notes: string | null;
     }[]
   ).map((e) => ({
@@ -244,6 +253,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     relationshipType: e.relationship_type as RelationshipType,
     strength: e.strength,
     quantity: e.quantity != null ? Number(e.quantity) : null,
+    stepOrder: e.step_order,
     notes: e.notes,
   }));
 
@@ -261,6 +271,7 @@ interface MaterialRow {
   name: string;
   cost_per_unit: number | null;
   unit: string;
+  kind: string | null;
   purchase_url: string | null;
   quantity_on_hand: number | null;
   reorder_threshold: number | null;
@@ -271,6 +282,7 @@ interface MaterialLink {
   name: string;
   costPerUnit: number | null;
   unit: string;
+  isFee?: boolean;
   purchaseUrl: string | null;
   stockOnHand: number | null;
   reorderThreshold: number | null;

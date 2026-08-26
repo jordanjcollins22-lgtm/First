@@ -48,7 +48,7 @@ export async function listMaterialOptions(): Promise<MaterialOption[]> {
   const supabase = await createClient();
 
   const [materialsRes, toolsRes] = await Promise.all([
-    supabase.from("materials").select("id, name, unit, cost_per_unit, category").eq("active", true),
+    supabase.from("materials").select("id, name, unit, cost_per_unit, category, kind").eq("active", true),
     supabase.from("tools").select("id, name, cost, cost_to_own, category").eq("active", true),
   ]);
 
@@ -60,6 +60,7 @@ export async function listMaterialOptions(): Promise<MaterialOption[]> {
     unit: string;
     cost_per_unit: number | null;
     category: string;
+    kind: string | null;
   }[]).map((m) => ({
     id: m.id,
     name: m.name,
@@ -67,6 +68,7 @@ export async function listMaterialOptions(): Promise<MaterialOption[]> {
     costPerUnit: m.cost_per_unit != null ? Number(m.cost_per_unit) : null,
     group: m.category === "marketing" ? "marketing" : "materials",
     kind: "material",
+    isFee: m.kind === "other",
   }));
 
   // A tools table that is not there yet costs the tools, not the whole list.

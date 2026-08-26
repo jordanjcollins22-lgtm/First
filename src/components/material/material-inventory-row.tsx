@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { MaterialCostInput } from "./material-cost-input";
+import { ResaleCell } from "@/components/inventory/resale-cell";
 import { MaterialQuantityInput } from "./material-quantity-input";
 import { MaterialReorderThresholdInput } from "./material-reorder-threshold-input";
 import { MaterialPurchaseLinkInput } from "./material-purchase-link-input";
@@ -76,6 +77,13 @@ export function MaterialInventoryRow({ material, storageLocations }: MaterialInv
           <MaterialCostInput materialId={material.id} initialCost={material.cost_per_unit} />
         </td>
         <td className="p-2">
+          <ResaleCell
+            cost={material.cost_per_unit}
+            override={material.resale_value}
+            isOther={material.kind === "other"}
+          />
+        </td>
+        <td className="p-2">
           <MaterialBuyLink url={material.purchase_url} />
         </td>
         <td className="p-2 text-right">
@@ -91,7 +99,7 @@ export function MaterialInventoryRow({ material, storageLocations }: MaterialInv
       </tr>
       {open && (
         <tr className="border-b border-border bg-muted/30">
-          <td colSpan={8} className="p-3">
+          <td colSpan={9} className="p-3">
             <div className="flex flex-wrap items-start gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Photo</span>

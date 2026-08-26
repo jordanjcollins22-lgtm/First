@@ -37,6 +37,9 @@ export async function createMaterial(formData: FormData) {
   // Anything unrecognised is job stock: that is the list the estimator uses,
   // and the wrong item showing up there is visible where a missing one is not.
   const category = String(formData.get("category") ?? "job") === "marketing" ? "marketing" : "job";
+  // Anything unrecognised is stock. "Other" is the unusual answer, and the
+  // wrong one showing up as a material is visible where the reverse is not.
+  const kind = String(formData.get("kind") ?? "material") === "other" ? "other" : "material";
 
   if (stockMethod === "in_stock" && !storageLocation) {
     throw new Error("Enter where it's stored — required for materials kept in stock.");
@@ -52,6 +55,7 @@ export async function createMaterial(formData: FormData) {
       name,
       unit,
       category,
+      kind,
       coverage_per_unit_sqft: coverageRaw ? Number(coverageRaw) : null,
       cost_per_unit: derivedCostPerUnit(packSize, packCost, costRaw ? Number(costRaw) : null),
       pack_size: packSize,

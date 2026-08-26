@@ -18,6 +18,7 @@ import { derivedCostPerUnit } from "@/lib/pricing";
 export function CreateMaterialForm({
   storageLocations,
   category = "job",
+  kind = "material",
   onCreated,
 }: {
   storageLocations: string[];
@@ -27,6 +28,9 @@ export function CreateMaterialForm({
   /** Which list it lands on. Marketing stock is the same inventory problem
    * — stock levels, reorder points, where the box is — on a different list. */
   category?: "job" | "marketing";
+  /** material = stock that gets used up. other = a cost with nothing behind
+   * it, which is why it never gets a resale value. */
+  kind?: "material" | "other";
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -78,6 +82,7 @@ export function CreateMaterialForm({
         formData.set("image_path", path);
         formData.set("stock_method", stockMethod);
         formData.set("category", category);
+        formData.set("kind", kind);
         const created = await createMaterial(formData);
         onCreated?.(created);
         formRef.current?.reset();

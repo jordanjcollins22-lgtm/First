@@ -46,6 +46,7 @@ const CREATES = {
   "0098_knowledge_tool_link.sql": [],
   "0099_cost_basis.sql": [],
   "0100_units_outputs_and_fees.sql": ["knowledge_units"],
+  "0101_inventory_kind_resale_steps.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
