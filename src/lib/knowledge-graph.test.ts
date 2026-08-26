@@ -28,6 +28,7 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
     unit: "each",
     purchaseUrl: null,
     materialId: null,
+    toolId: null,
     materialName: null,
     stockOnHand: null,
     reorderThreshold: null,

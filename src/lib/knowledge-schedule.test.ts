@@ -32,6 +32,7 @@ function node(
     unit: "each",
     purchaseUrl: null,
     materialId: null,
+    toolId: null,
     materialName: null,
     stockOnHand: null,
     reorderThreshold: null,

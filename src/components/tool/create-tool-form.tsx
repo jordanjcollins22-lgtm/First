@@ -19,9 +19,13 @@ export function CreateToolForm({
   availableKits,
   storageLocations,
   category = "tool",
+  onCreated,
 }: {
   availableKits: number[];
   storageLocations: string[];
+  /** Told what was just added, for callers that need to do something with it
+   * — the knowledge graph connects it to the idea that needed it. */
+  onCreated?: (item: { id: string; name: string }) => void;
   /** Which tab this form feeds — gear and tools share one table. */
   category?: ToolCategory;
 }) {
@@ -91,6 +95,7 @@ export function CreateToolForm({
           setError(result.message);
           return;
         }
+        onCreated?.({ id: result.id, name: result.name });
         formRef.current?.reset();
         setFile(null);
         setPreviewUrl(null);

@@ -58,6 +58,7 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "unit", table: "knowledge_nodes", migration: "0095_knowledge_costs.sql" },
   { column: "quantity", table: "knowledge_relationships", migration: "0095_knowledge_costs.sql" },
   { column: "material_id", table: "knowledge_nodes", migration: "0096_knowledge_inventory_link.sql" },
+  { column: "tool_id", table: "knowledge_nodes", migration: "0098_knowledge_tool_link.sql" },
   { column: "category", table: "materials", migration: "0096_knowledge_inventory_link.sql" },
 ];
 

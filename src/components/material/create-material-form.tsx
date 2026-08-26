@@ -18,8 +18,12 @@ import { derivedCostPerUnit } from "@/lib/pricing";
 export function CreateMaterialForm({
   storageLocations,
   category = "job",
+  onCreated,
 }: {
   storageLocations: string[];
+  /** Told what was just added, for callers that need to do something with it
+   * — the knowledge graph connects it to the idea that needed it. */
+  onCreated?: (item: { id: string; name: string }) => void;
   /** Which list it lands on. Marketing stock is the same inventory problem
    * — stock levels, reorder points, where the box is — on a different list. */
   category?: "job" | "marketing";
@@ -74,7 +78,8 @@ export function CreateMaterialForm({
         formData.set("image_path", path);
         formData.set("stock_method", stockMethod);
         formData.set("category", category);
-        await createMaterial(formData);
+        const created = await createMaterial(formData);
+        onCreated?.(created);
         formRef.current?.reset();
         setFile(null);
         setPreviewUrl(null);

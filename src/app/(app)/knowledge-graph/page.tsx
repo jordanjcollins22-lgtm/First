@@ -6,6 +6,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { KnowledgeWorkspace } from "@/components/knowledge/knowledge-workspace";
 import { todayKey } from "@/lib/knowledge-schedule";
 import { listMaterialOptions, type MaterialOption } from "@/lib/data/materials";
+import { listBusinessLocations } from "@/lib/data/locations";
+import { listTools } from "@/lib/data/tools";
 
 /**
  * Where ideas get broken down until they stop being ideas.
@@ -27,6 +29,17 @@ export default async function KnowledgeGraphPage() {
     console.error("Material options failed to load:", err);
     return [];
   });
+
+  // The Inventory add forms need these. Loaded here so adding a material
+  // from an idea is the same form, with the same fields, as adding it on the
+  // Inventory page — a second, simpler way to add stock is how half an
+  // inventory ends up with no storage location and no reorder point.
+  const [locations, tools] = await Promise.all([
+    listBusinessLocations().catch(() => []),
+    listTools().catch(() => []),
+  ]);
+  const storageLocations = locations.map((location) => location.name);
+  const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
 
   let data: KnowledgeGraphData | null = null;
   try {
@@ -61,6 +74,8 @@ export default async function KnowledgeGraphPage() {
           graph={{ nodes: data.nodes, edges: data.edges }}
           tags={data.tags}
           materials={materials}
+          storageLocations={storageLocations}
+          availableKits={availableKits}
           canDelete={profile?.roles.includes("admin") ?? false}
           today={todayKey()}
         />

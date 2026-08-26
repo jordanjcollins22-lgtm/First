@@ -28,8 +28,10 @@ import {
   type NodeType,
   type RelationshipType,
 } from "@/lib/knowledge-graph";
-import type { MaterialOption } from "@/lib/data/materials";
+import { INVENTORY_GROUPS, type InventoryGroup, type MaterialOption } from "@/lib/inventory-groups";
 import { describePurchaseUrl } from "@/lib/purchase-url";
+import { CreateMaterialForm } from "@/components/material/create-material-form";
+import { CreateToolForm } from "@/components/tool/create-tool-form";
 import {
   UNITS,
   costOf,
@@ -70,6 +72,8 @@ export function NodePanel({
   graph,
   node,
   materials,
+  storageLocations,
+  availableKits,
   canDelete,
   onClose,
   onFocus,
@@ -80,6 +84,10 @@ export function NodePanel({
   node: GraphNode;
   /** Everything in inventory, for linking this node to the real thing. */
   materials: MaterialOption[];
+  /** What the inventory add forms need, so adding something new here is the
+   * same form as adding it on the Inventory page. */
+  storageLocations: string[];
+  availableKits: number[];
   canDelete: boolean;
   onClose: () => void;
   onFocus: () => void;
@@ -121,6 +129,10 @@ export function NodePanel({
   const [earnCount, setEarnCount] = useState("");
   const [needQuantity, setNeedQuantity] = useState("");
   const [needUnit, setNeedUnit] = useState("each");
+  /** Where a brand-new input should land: one of the inventory lists, or
+   * nowhere, for the things that are not stock — an hour, a permit, a
+   * process. */
+  const [newIn, setNewIn] = useState<InventoryGroup | "none">("materials");
 
   const neighbours = useMemo(() => neighboursOf(graph, node.id), [graph, node.id]);
   const outgoing = neighbours.filter((n) => n.outgoing);
@@ -141,37 +153,56 @@ export function NodePanel({
   );
 
   /**
-   * Everything already in the graph that could be an input, priced ones
-   * first.
-   *
-   * Ideas are left out: an idea is a thing you have, not a thing you buy, and
-   * a dropdown of every thought in the business is a dropdown nobody scrolls.
+   * Things in the graph that are not inventory items — design time, a print
+   * run, a permit. Anything that is an inventory item is offered under its
+   * own inventory group instead, so nothing appears in the list twice.
    */
-  const reusable = useMemo(
+  const graphOnly = useMemo(
     () =>
       graph.nodes
-        .filter((n) => n.id !== node.id && n.nodeType !== "idea" && n.status !== "archived")
-        .sort(
-          (a, b) =>
-            Number(b.estimatedCost != null) - Number(a.estimatedCost != null) ||
-            a.title.localeCompare(b.title)
-        ),
+        .filter(
+          (n) =>
+            n.id !== node.id &&
+            n.nodeType !== "idea" &&
+            n.status !== "archived" &&
+            !n.materialId &&
+            !n.toolId
+        )
+        .sort((a, b) => a.title.localeCompare(b.title)),
     [graph.nodes, node.id]
   );
 
-  /** Inventory that has no node yet. The ones that do are already in the list
-   * above, and offering both would be offering the same thing twice. */
-  const unusedMaterials = useMemo(() => {
-    const linked = new Set(graph.nodes.map((n) => n.materialId).filter(Boolean));
-    return materials.filter((m) => !linked.has(m.id));
-  }, [graph.nodes, materials]);
+  /** Which inventory items already have a node, so picking one connects to
+   * what is there rather than making a second copy of it. */
+  const nodeByInventory = useMemo(() => {
+    const map = new Map<string, GraphNode>();
+    for (const n of graph.nodes) {
+      if (n.materialId) map.set(`material:${n.materialId}`, n);
+      if (n.toolId) map.set(`tool:${n.toolId}`, n);
+    }
+    return map;
+  }, [graph.nodes]);
 
-  /** Whichever of the two lists was picked from, flattened so the form below
-   * does not have to care which. */
+  /** All of inventory, in the same four lists the Inventory page uses. */
+  const inventoryGroups = useMemo(
+    () =>
+      INVENTORY_GROUPS.map((group) => ({
+        ...group,
+        items: materials.filter((m) => m.group === group.value),
+      })).filter((group) => group.items.length > 0),
+    [materials]
+  );
+
+  /** Whichever list was picked from, flattened so the form below does not
+   * have to care which. */
   const picked = useMemo(() => {
-    const [kind, id] = pickedKey.split(":");
+    const separator = pickedKey.indexOf(":");
+    if (separator < 0) return null;
+    const kind = pickedKey.slice(0, separator);
+    const id = pickedKey.slice(separator + 1);
+
     if (kind === "node") {
-      const found = reusable.find((r) => r.id === id);
+      const found = graphOnly.find((r) => r.id === id);
       return found
         ? {
             kind: "node" as const,
@@ -183,21 +214,19 @@ export function NodePanel({
           }
         : null;
     }
-    if (kind === "material") {
-      const found = unusedMaterials.find((m) => m.id === id);
-      return found
-        ? {
-            kind: "material" as const,
-            id: found.id,
-            title: found.name,
-            unit: found.unit,
-            unitLabel: found.unit,
-            unitCost: found.costPerUnit,
-          }
-        : null;
-    }
-    return null;
-  }, [pickedKey, reusable, unusedMaterials]);
+
+    const found = materials.find((m) => m.kind === kind && m.id === id);
+    return found
+      ? {
+          kind: found.kind,
+          id: found.id,
+          title: found.name,
+          unit: found.unit,
+          unitLabel: found.unit,
+          unitCost: found.costPerUnit,
+        }
+      : null;
+  }, [pickedKey, graphOnly, materials]);
 
   // What the line about to be added would come to, shown before it is added
   // rather than after — that is when somebody can still change their mind.
@@ -228,6 +257,25 @@ export function NodePanel({
   const def = nodeTypeDef(node.nodeType);
   const today = todayKey();
 
+  /** "$89 each" rather than "$89 per each". */
+  const perUnit = (amount: number, unit: string) =>
+    unit === "each" ? `${money(amount)} each` : `${money(amount)} per ${unit}`;
+
+  /** Connects something just added to Inventory, without making the person
+   * find it again in a list they were not looking at. */
+  function connectNewInventory(kind: "material" | "tool", item: { id: string; name: string }) {
+    run(async () => {
+      const result = await addRequirement({
+        nodeId: node.id,
+        inventory: { kind, id: item.id, name: item.name, unit: kind === "tool" ? "each" : needUnit },
+        relationshipType: needRelationship,
+        quantity: needQuantity ? Number(needQuantity) : null,
+      });
+      if (result.ok) setNeedQuantity("");
+      return result;
+    });
+  }
+
   function run(action: () => Promise<{ ok: boolean; message?: string }>) {
     start(async () => {
       const result = await action();
@@ -235,6 +283,46 @@ export function NodePanel({
       if (result.ok) onChanged();
     });
   }
+
+  /**
+   * How much of it, and how it hangs off this node.
+   *
+   * Rendered in one of two places: under the picker when connecting something
+   * that already exists, and above the Inventory form when adding something
+   * new — because that form's own button is what saves it, and the numbers it
+   * will use should be in front of somebody before they press it.
+   */
+  const CONNECTION_FIELDS = (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">How it connects</Label>
+              <Select value={needRelationship} onValueChange={(v) => setNeedRelationship(v as RelationshipType)}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATIONSHIP_TYPES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">
+                How many {picked ? picked.unitLabel : unitDef(needUnit).label.replace(/^per /, "")}
+              </Label>
+              <Input
+                value={needQuantity}
+                inputMode="decimal"
+                placeholder="2000"
+                onChange={(e) => setNeedQuantity(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+          </div>
+  );
 
   return (
     <div className="rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
@@ -566,23 +654,34 @@ export function NodePanel({
                     Not in Inventory, so it has no cost. Prices come from the real thing — link it and
                     every total that depends on it works itself out.
                   </p>
-                  <Select value="" onValueChange={(v) => run(() => linkNodeToMaterial(node.id, v))}>
+                  <Select
+                    value=""
+                    onValueChange={(v) => {
+                      const separator = v.indexOf(":");
+                      const kind = v.slice(0, separator) as "material" | "tool";
+                      run(() => linkNodeToMaterial(node.id, { kind, id: v.slice(separator + 1) }));
+                    }}
+                  >
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue placeholder="Link to an inventory item…" />
                     </SelectTrigger>
                     <SelectContent className="max-w-[calc(100vw-2.5rem)]">
-                      {materials.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          <span className="block truncate">
-                            {m.name}
-                            {m.category === "marketing" ? " (marketing)" : ""}
-                          </span>
-                          {m.costPerUnit != null && (
-                            <span className="block text-[11px] text-muted-foreground">
-                              {money(m.costPerUnit)} per {m.unit}
-                            </span>
-                          )}
-                        </SelectItem>
+                      {inventoryGroups.map((group) => (
+                        <div key={group.value}>
+                          <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                            {group.label}
+                          </p>
+                          {group.items.map((m) => (
+                            <SelectItem key={`${m.kind}:${m.id}`} value={`${m.kind}:${m.id}`}>
+                              <span className="block truncate">{m.name}</span>
+                              {m.costPerUnit != null && (
+                                <span className="block text-[11px] text-muted-foreground">
+                                  {perUnit(m.costPerUnit, m.unit)}
+                                </span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </div>
                       ))}
                     </SelectContent>
                   </Select>
@@ -617,39 +716,36 @@ export function NodePanel({
                 <SelectValue placeholder="Pick an input…" />
               </SelectTrigger>
               <SelectContent className="max-w-[calc(100vw-2.5rem)]">
-                {reusable.length > 0 && (
+                {inventoryGroups.map((group) => (
+                  <div key={group.value}>
+                    <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </p>
+                    {group.items.map((m) => {
+                      const already = nodeByInventory.get(`${m.kind}:${m.id}`);
+                      return (
+                        <SelectItem key={`${m.kind}:${m.id}`} value={`${m.kind}:${m.id}`}>
+                          <span className="block truncate">{m.name}</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {m.costPerUnit != null ? perUnit(m.costPerUnit, m.unit) : "no price yet"}
+                            {already ? " · already in the graph" : ""}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </div>
+                ))}
+                {graphOnly.length > 0 && (
                   <div>
                     <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                      In the graph
+                      In the graph only
                     </p>
-                    {reusable.map((r) => (
+                    {graphOnly.map((r) => (
                       <SelectItem key={r.id} value={`node:${r.id}`}>
                         <span className="block truncate">{r.title}</span>
                         <span className="block text-[11px] text-muted-foreground">
-                          {r.estimatedCost != null
-                            ? `${money(r.estimatedCost)} ${unitDef(r.unit).label}`
-                            : "no price — not linked to Inventory"}
+                          not in Inventory, so no price
                         </span>
-                      </SelectItem>
-                    ))}
-                  </div>
-                )}
-                {unusedMaterials.length > 0 && (
-                  <div>
-                    <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                      From Inventory
-                    </p>
-                    {unusedMaterials.map((m) => (
-                      <SelectItem key={m.id} value={`material:${m.id}`}>
-                        <span className="block truncate">
-                          {m.name}
-                          {m.category === "marketing" ? " (marketing)" : ""}
-                        </span>
-                        {m.costPerUnit != null && (
-                          <span className="block text-[11px] text-muted-foreground">
-                            {money(m.costPerUnit)} per {m.unit}
-                          </span>
-                        )}
                       </SelectItem>
                     ))}
                   </div>
@@ -673,124 +769,150 @@ export function NodePanel({
             <>
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-border" />
-                <span className="text-[11px] text-muted-foreground">
-                  or something that is neither, yet
-                </span>
+                <span className="text-[11px] text-muted-foreground">or add something new</span>
                 <span className="h-px flex-1 bg-border" />
               </div>
-              <Input
-                value={needTitle}
-                onChange={(e) => setNeedTitle(e.target.value)}
-                placeholder="Design time, a permit, somebody's Saturday…"
-                className="h-9 text-sm"
-              />
-              {suggestions.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <p className="text-[11px] text-muted-foreground">
-                    Already in the graph — use one of these instead:
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suggestions.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        disabled={pending}
-                        className="rounded-full border border-border px-2 py-1 text-xs"
-                        onClick={() => {
-                          setPickedKey(`node:${s.id}`);
-                          setNeedTitle("");
-                        }}
-                      >
-                        <span
-                          className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
-                          style={{ backgroundColor: nodeTypeDef(s.nodeType).color }}
-                        />
-                        {s.title}
-                      </button>
+
+              {/* Adding stock here is the Inventory form, not a smaller copy
+                  of it. A second, simpler way to add a material is how you
+                  end up with half your inventory missing its storage
+                  location and its reorder point. */}
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Where it belongs</Label>
+                <Select value={newIn} onValueChange={(v) => setNewIn(v as InventoryGroup | "none")}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INVENTORY_GROUPS.map((group) => (
+                      <SelectItem key={group.value} value={group.value}>
+                        Inventory — {group.label}
+                      </SelectItem>
                     ))}
+                    <SelectItem value="none">Not inventory (time, a permit, a process)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newIn === "none" ? (
+                <>
+                  <Input
+                    value={needTitle}
+                    onChange={(e) => setNeedTitle(e.target.value)}
+                    placeholder="Design time, a permit, somebody's Saturday…"
+                    className="h-9 text-sm"
+                  />
+                  {suggestions.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-[11px] text-muted-foreground">
+                        Already in the graph — use one of these instead:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {suggestions.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            disabled={pending}
+                            className="rounded-full border border-border px-2 py-1 text-xs"
+                            onClick={() => {
+                              setPickedKey(`node:${s.id}`);
+                              setNeedTitle("");
+                            }}
+                          >
+                            <span
+                              className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
+                              style={{ backgroundColor: nodeTypeDef(s.nodeType).color }}
+                            />
+                            {s.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs">What kind of thing</Label>
+                      <TypeSelect value={needType} onChange={setNeedType} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs">One of it is</Label>
+                      <UnitSelect value={needUnit} onChange={setNeedUnit} />
+                    </div>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    It will have no cost until somebody links it to Inventory — hours included, if you
+                    keep a rate in there.
+                  </p>
+                </>
+              ) : (
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-card/60 p-2">
+                  {CONNECTION_FIELDS}
+                  <p className="text-[11px] text-muted-foreground">
+                    Goes straight into Inventory under{" "}
+                    {INVENTORY_GROUPS.find((g) => g.value === newIn)?.label}, and connects to{" "}
+                    {node.title} on the terms above.
+                  </p>
+                  {newIn === "materials" || newIn === "marketing" ? (
+                    <CreateMaterialForm
+                      key={newIn}
+                      storageLocations={storageLocations}
+                      category={newIn === "marketing" ? "marketing" : "job"}
+                      onCreated={(item) => connectNewInventory("material", item)}
+                    />
+                  ) : (
+                    <CreateToolForm
+                      key={newIn}
+                      availableKits={availableKits}
+                      storageLocations={storageLocations}
+                      category={newIn === "gear" ? "gear" : "tool"}
+                      onCreated={(item) => connectNewInventory("tool", item)}
+                    />
+                  )}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">What kind of thing</Label>
-                  <TypeSelect value={needType} onChange={setNeedType} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">One of it is</Label>
-                  <UnitSelect value={needUnit} onChange={setNeedUnit} />
-                </div>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                It will have no cost until somebody links it to Inventory — hours included, if you keep a
-                rate in there.
-              </p>
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">How it connects</Label>
-              <Select value={needRelationship} onValueChange={(v) => setNeedRelationship(v as RelationshipType)}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RELATIONSHIP_TYPES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">
-                How many {picked ? picked.unitLabel : unitDef(needUnit).label.replace(/^per /, "")}
-              </Label>
-              <Input
-                value={needQuantity}
-                inputMode="decimal"
-                placeholder="2000"
-                onChange={(e) => setNeedQuantity(e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-          </div>
-
+          {(picked || newIn === "none") && CONNECTION_FIELDS}
           {lineTotal != null && (
             <p className="text-[11px] text-muted-foreground">That line comes to {money(lineTotal)}.</p>
           )}
 
-          <Button
-            type="button"
-            size="sm"
-            disabled={pending || (!picked && needTitle.trim().length === 0)}
-            onClick={() =>
-              run(async () => {
-                const result = await addRequirement({
-                  nodeId: node.id,
-                  existingId: picked?.kind === "node" ? picked.id : undefined,
-                  materialId: picked?.kind === "material" ? picked.id : undefined,
-                  materialName: picked?.kind === "material" ? picked.title : undefined,
-                  materialUnit: picked?.kind === "material" ? picked.unit : undefined,
-                  title: picked ? undefined : needTitle,
-                  nodeType: picked?.kind === "material" ? "material" : picked ? undefined : needType,
-                  unit: picked ? undefined : needUnit,
-                  relationshipType: needRelationship,
-                  quantity: needQuantity ? Number(needQuantity) : null,
-                });
-                if (result.ok) {
-                  setNeedTitle("");
-                  setPickedKey("");
-                  setNeedQuantity("");
-                }
-                return result;
-              })
-            }
-          >
-            {pending ? "Adding…" : picked ? `Use ${picked.title}` : "Add it"}
-          </Button>
+          {/* The Inventory form has its own button and does the connecting
+              itself, so a second one here would be a button that does
+              nothing. */}
+          {(picked || newIn === "none") && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={pending || (!picked && needTitle.trim().length === 0)}
+              onClick={() =>
+                run(async () => {
+                  const result = await addRequirement({
+                    nodeId: node.id,
+                    existingId: picked?.kind === "node" ? picked.id : undefined,
+                    inventory:
+                      picked && picked.kind !== "node"
+                        ? { kind: picked.kind, id: picked.id, name: picked.title, unit: picked.unit }
+                        : undefined,
+                    title: picked ? undefined : needTitle,
+                    nodeType: picked ? undefined : needType,
+                    unit: picked ? undefined : needUnit,
+                    relationshipType: needRelationship,
+                    quantity: needQuantity ? Number(needQuantity) : null,
+                  });
+                  if (result.ok) {
+                    setNeedTitle("");
+                    setPickedKey("");
+                    setNeedQuantity("");
+                  }
+                  return result;
+                })
+              }
+            >
+              {pending ? "Adding…" : picked ? `Use ${picked.title}` : "Add it"}
+            </Button>
+          )}
         </div>
       </Section>
 

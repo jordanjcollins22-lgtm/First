@@ -37,9 +37,10 @@ export interface NodeInput {
   importance?: number | null;
   unit?: string;
   purchaseUrl?: string | null;
-  /** The inventory material this is. Where the price comes from — the graph
-   * does not keep one of its own. */
+  /** The inventory item this is. Where the price comes from — the graph does
+   * not keep one of its own. */
   materialId?: string | null;
+  toolId?: string | null;
   potentialValue?: number | null;
   tags?: string[];
   positionX?: number | null;
@@ -82,6 +83,7 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         importance: clampScale(input.importance),
         unit: validUnit(input.unit),
         material_id: input.materialId ?? null,
+        tool_id: input.toolId ?? null,
         purchase_url: safePurchaseUrl(input.purchaseUrl),
         potential_value: numberOrNull(input.potentialValue),
         position_x: input.positionX ?? null,
@@ -257,12 +259,10 @@ export async function createRelationship(input: {
 export async function addRequirement(input: {
   nodeId: string;
   existingId?: string;
-  /** An inventory material to require. Reuses the node already standing for
-   * it if there is one, so a material cannot end up in the graph twice with
-   * two prices. */
-  materialId?: string;
-  materialName?: string;
-  materialUnit?: string;
+  /** An inventory item to require, of either kind. Reuses the node already
+   * standing for it if there is one, so nothing ends up in the graph twice
+   * with two prices. */
+  inventory?: { kind: "material" | "tool"; id: string; name: string; unit: string };
   title?: string;
   nodeType?: NodeType;
   relationshipType: RelationshipType;
@@ -276,12 +276,13 @@ export async function addRequirement(input: {
 
     let targetId = input.existingId;
 
-    if (!targetId && input.materialId) {
+    if (!targetId && input.inventory) {
+      const { kind, id, name, unit } = input.inventory;
       const supabase = await createClient();
       const { data: existing } = await supabase
         .from("knowledge_nodes")
         .select("id")
-        .eq("material_id", input.materialId)
+        .eq(kind === "material" ? "material_id" : "tool_id", id)
         .limit(1)
         .maybeSingle();
 
@@ -289,11 +290,14 @@ export async function addRequirement(input: {
         targetId = existing.id;
       } else {
         const created = await createNode({
-          title: input.materialName ?? "Material",
-          nodeType: input.nodeType ?? "material",
+          title: name,
+          // A tool is kit: bought once and used forever, which is what keeps
+          // it out of the cost of a single run.
+          nodeType: input.nodeType ?? (kind === "tool" ? "tool" : "material"),
           status: "idea",
-          unit: input.materialUnit,
-          materialId: input.materialId,
+          unit,
+          materialId: kind === "material" ? id : null,
+          toolId: kind === "tool" ? id : null,
         });
         if (!created.ok) return created;
         targetId = created.id;
@@ -375,15 +379,20 @@ export async function updateRelationship(
  */
 export async function linkNodeToMaterial(
   nodeId: string,
-  materialId: string | null
+  target: { kind: "material" | "tool"; id: string } | null
 ): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
 
     const supabase = await createClient();
+    // One or the other, never both — the database refuses it anyway, and a
+    // node with two prices is the thing all of this exists to stop.
     const { error } = await supabase
       .from("knowledge_nodes")
-      .update({ material_id: materialId } as never)
+      .update({
+        material_id: target?.kind === "material" ? target.id : null,
+        tool_id: target?.kind === "tool" ? target.id : null,
+      } as never)
       .eq("id", nodeId);
     if (error) return { ok: false, message: describeDbError(error) };
 
@@ -391,7 +400,7 @@ export async function linkNodeToMaterial(
     return {
       ok: true,
       id: nodeId,
-      message: materialId ? "Linked. Its price now comes from inventory." : "Unlinked.",
+      message: target ? "Linked. Its price now comes from Inventory." : "Unlinked.",
     };
   } catch (err) {
     console.error("linkNodeToMaterial failed:", err);

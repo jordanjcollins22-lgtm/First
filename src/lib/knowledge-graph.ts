@@ -154,8 +154,11 @@ export interface GraphNode {
   unit: string;
   /** Where you buy it. */
   purchaseUrl: string | null;
-  /** The real material in inventory, where this node is one. */
+  /** The real thing in inventory, where this node is one. A node links to a
+   * material or a tool, never both. */
   materialId: string | null;
+  toolId: string | null;
+  /** What it is called in inventory, whichever list it came from. */
   materialName: string | null;
   stockOnHand: number | null;
   reorderThreshold: number | null;

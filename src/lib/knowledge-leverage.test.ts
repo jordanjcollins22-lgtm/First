@@ -28,6 +28,7 @@ function node(
     unit,
     purchaseUrl: null,
     materialId: null,
+    toolId: null,
     materialName: null,
     stockOnHand: null,
     reorderThreshold: null,

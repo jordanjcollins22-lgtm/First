@@ -28,7 +28,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, unit, purchase_url, material_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, unit, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
@@ -71,6 +71,14 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     ),
   ];
 
+  const toolIds = [
+    ...new Set(
+      ((nodeRes.data ?? []) as unknown as { tool_id: string | null }[])
+        .map((n) => n.tool_id)
+        .filter((id): id is string => id != null)
+    ),
+  ];
+
   const materials = new Map<string, MaterialLink>();
   if (materialIds.length > 0) {
     const { data: materialRows } = await supabase
@@ -91,6 +99,33 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     }
   }
 
+  if (toolIds.length > 0) {
+    const { data: toolRows } = await supabase
+      .from("tools")
+      .select("id, name, cost, cost_to_own, purchase_url, quantity, reorder_threshold, on_order")
+      .in("id", toolIds);
+
+    for (const row of (toolRows ?? []) as unknown as ToolRow[]) {
+      materials.set(row.id, {
+        name: row.name,
+        // What it costs to have one. A rental has no purchase price, so what
+        // it costs to own stands in — otherwise the thing the whole idea
+        // hangs on shows as free.
+        costPerUnit:
+          row.cost != null
+            ? Number(row.cost)
+            : row.cost_to_own != null
+              ? Number(row.cost_to_own)
+              : null,
+        unit: "each",
+        purchaseUrl: row.purchase_url,
+        stockOnHand: row.quantity != null ? Number(row.quantity) : null,
+        reorderThreshold: row.reorder_threshold != null ? Number(row.reorder_threshold) : null,
+        onOrder: row.on_order ?? false,
+      });
+    }
+  }
+
   const nodes: GraphNode[] = (
     (nodeRes.data ?? []) as unknown as {
       id: string;
@@ -102,6 +137,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       unit: string | null;
       purchase_url: string | null;
       material_id: string | null;
+      tool_id: string | null;
       potential_value: number | null;
       notes: string | null;
       position_x: number | null;
@@ -116,7 +152,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       updated_at: string;
     }[]
   ).map((n) => {
-    const material = n.material_id ? materials.get(n.material_id) : undefined;
+    const material = materials.get(n.material_id ?? n.tool_id ?? "");
     return {
     id: n.id,
     title: n.title,
@@ -131,6 +167,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     unit: material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each",
     purchaseUrl: material?.purchaseUrl ?? n.purchase_url,
     materialId: n.material_id,
+    toolId: n.tool_id,
     materialName: material?.name ?? null,
     stockOnHand: material?.stockOnHand ?? null,
     reorderThreshold: material?.reorderThreshold ?? null,
@@ -209,4 +246,15 @@ function normaliseUnit(materialUnit: string, nodeUnit: string | null): string {
   const cleaned = materialUnit.trim().toLowerCase();
   if (known.has(cleaned)) return cleaned;
   return nodeUnit ?? "each";
+}
+
+interface ToolRow {
+  id: string;
+  name: string;
+  cost: number | null;
+  cost_to_own: number | null;
+  purchase_url: string | null;
+  quantity: number | null;
+  reorder_threshold: number | null;
+  on_order: boolean | null;
 }

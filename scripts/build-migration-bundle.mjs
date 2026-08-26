@@ -43,6 +43,7 @@ const CREATES = {
   "0096_knowledge_inventory_link.sql": [],
   // Comments only — nothing to probe for.
   "0097_costs_from_inventory.sql": [],
+  "0098_knowledge_tool_link.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

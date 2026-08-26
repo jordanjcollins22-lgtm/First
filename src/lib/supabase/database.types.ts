@@ -117,6 +117,7 @@ export interface Database {
           position_y: number | null;
           purchase_url: string | null;
           material_id: string | null;
+          tool_id: string | null;
           scheduled_for: string | null;
           recurrence: string;
           recurrence_interval: number;

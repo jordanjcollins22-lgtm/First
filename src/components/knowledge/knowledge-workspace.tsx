@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { MaterialOption } from "@/lib/data/materials";
+import type { MaterialOption } from "@/lib/inventory-groups";
 import { GraphCanvas, type Point } from "@/components/knowledge/graph-canvas";
 import { NodePanel, TypeSelect } from "@/components/knowledge/node-panel";
 import { createNode, markNodeDone, saveNodePositions } from "@/lib/actions/knowledge-graph-actions";
@@ -64,6 +64,8 @@ export function KnowledgeWorkspace({
   graph,
   tags,
   materials,
+  storageLocations,
+  availableKits,
   canDelete,
   today,
 }: {
@@ -71,6 +73,10 @@ export function KnowledgeWorkspace({
   tags: string[];
   /** Inventory, for linking a node to the real thing. */
   materials: MaterialOption[];
+  /** What the inventory add forms need, so adding stock from here is the
+   * same form as adding it on the Inventory page. */
+  storageLocations: string[];
+  availableKits: number[];
   canDelete: boolean;
   /** Worked out on the server, like every other date in this app, so the
    * page renders the same on both sides of hydration. */
@@ -481,6 +487,8 @@ export function KnowledgeWorkspace({
             key={selected.id}
             graph={graph}
             materials={materials}
+            storageLocations={storageLocations}
+            availableKits={availableKits}
             node={selected}
             canDelete={canDelete}
             onClose={() => setSelectedId(null)}
