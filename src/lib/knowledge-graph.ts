@@ -109,22 +109,26 @@ export interface RelationshipDef {
    * True where the thing flows the opposite way to how the sentence is
    * stored.
    *
-   * "Job has cost fuel" is stored job → fuel because that is the order the
-   * words go in, but the fuel goes into the job, and an arrow pointing from
-   * the job at the fuel is telling somebody the opposite of what happens.
-   * These get their arrowhead at the other end.
+   * "Door hangers require cardstock" is stored hangers → cardstock because
+   * that is the order the words go in. The cardstock goes into the hangers.
+   * An arrow pointing from the hangers at the cardstock says the opposite of
+   * what happens, and on a board about how things are made that is the whole
+   * meaning of the picture.
+   *
+   * The rule: true wherever the target feeds the source. Everything an idea
+   * needs points into it; everything it makes points out of it.
    */
   flowReversed?: boolean;
 }
 
 export const RELATIONSHIP_TYPES: RelationshipDef[] = [
-  { value: "uses", label: "uses", inverse: "used by", directional: true },
-  { value: "requires", label: "requires", inverse: "required by", directional: true },
-  { value: "requires_material", label: "requires material", inverse: "material for", directional: true },
-  { value: "requires_equipment", label: "requires equipment", inverse: "equipment for", directional: true },
-  { value: "requires_skill", label: "requires skill", inverse: "skill for", directional: true },
+  { value: "uses", label: "uses", inverse: "used by", directional: true, flowReversed: true },
+  { value: "requires", label: "requires", inverse: "required by", directional: true, flowReversed: true },
+  { value: "requires_material", label: "requires material", inverse: "material for", directional: true, flowReversed: true },
+  { value: "requires_equipment", label: "requires equipment", inverse: "equipment for", directional: true, flowReversed: true },
+  { value: "requires_skill", label: "requires skill", inverse: "skill for", directional: true, flowReversed: true },
   { value: "produces", label: "produces", inverse: "produced by", directional: true },
-  { value: "depends_on", label: "depends on", inverse: "depended on by", directional: true },
+  { value: "depends_on", label: "depends on", inverse: "depended on by", directional: true, flowReversed: true },
   { value: "enables", label: "enables", inverse: "enabled by", directional: true },
   { value: "replaces", label: "replaces", inverse: "replaced by", directional: true },
   { value: "leads_to", label: "leads to", inverse: "led to by", directional: true },

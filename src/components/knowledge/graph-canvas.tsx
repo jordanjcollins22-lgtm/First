@@ -282,16 +282,21 @@ export function GraphCanvas({
           onDoubleClick={(e) => onCreateAt(toLogical(e.clientX, e.clientY))}
         >
           <defs>
+            {/* The same triangle as the forward one. `auto-start-reverse`
+                is what turns it round when it is used as a marker-start —
+                drawing a mirrored triangle as well turned it back again,
+                which is how an arrow meant to point at the idea ended up
+                pointing at the material. */}
             <marker
               id="kg-arrow-back"
               viewBox="0 0 10 10"
-              refX="1"
+              refX="9"
               refY="5"
               markerWidth="5"
               markerHeight="5"
               orient="auto-start-reverse"
             >
-              <path d="M 10 0 L 0 5 L 10 10 z" fill="#64748b" />
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
             </marker>
             <marker
               id="kg-arrow"

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_FILTERS,
+  RELATIONSHIP_TYPES,
   applyFilters,
   degreeMap,
   findSimilarNodes,
@@ -252,5 +253,51 @@ describe("applyFilters — scheduled only", () => {
   it("leaves everything alone when it is off", () => {
     const graph: Graph = { nodes: [node("a", "One"), node("b", "Two")], edges: [] };
     expect(applyFilters(graph, EMPTY_FILTERS).nodes).toHaveLength(2);
+  });
+});
+
+describe("which way the arrows point", () => {
+  const flowOf = (value: string) => relationshipDef(value).flowReversed === true;
+
+  it("points what a thing needs into it, not out of it", () => {
+    // The cardstock goes into the door hangers. An arrow from the hangers at
+    // the cardstock says the opposite of what happens.
+    for (const value of [
+      "uses",
+      "requires",
+      "requires_material",
+      "requires_equipment",
+      "requires_skill",
+      "depends_on",
+    ]) {
+      expect(flowOf(value), value).toBe(true);
+    }
+  });
+
+  it("points what a thing makes away from it", () => {
+    for (const value of ["produces", "enables", "leads_to", "generates_revenue", "parent_of"]) {
+      expect(flowOf(value), value).toBe(false);
+    }
+  });
+
+  it("points a cost into the thing that carries it", () => {
+    expect(flowOf("has_cost")).toBe(true);
+    expect(flowOf("purchased_from")).toBe(true);
+    expect(flowOf("performed_by")).toBe(true);
+    expect(flowOf("child_of")).toBe(true);
+  });
+
+  it("leaves a part pointing at the whole it belongs to", () => {
+    // "Hanger drop is part of the spring campaign" — the drop feeds the
+    // campaign, so the arrow already runs the right way.
+    expect(flowOf("part_of")).toBe(false);
+    expect(flowOf("used_by")).toBe(false);
+    expect(flowOf("sold_through")).toBe(false);
+  });
+
+  it("never claims a direction for a relationship that has none", () => {
+    for (const def of RELATIONSHIP_TYPES) {
+      if (!def.directional) expect(def.flowReversed ?? false, def.value).toBe(false);
+    }
   });
 });
