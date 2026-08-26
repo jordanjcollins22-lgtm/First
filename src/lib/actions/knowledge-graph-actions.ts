@@ -373,6 +373,61 @@ export async function linkNodeToMaterial(
   }
 }
 
+/**
+ * Attaches a way of making money to an idea.
+ *
+ * The same shape as adding a requirement, on purpose: something that costs
+ * money and something that earns it are both just things an idea is connected
+ * to, and making earning a different kind of operation is how it ends up being
+ * the one nobody bothers with.
+ *
+ * A flyer is paper going through six hundred doors. Paper going through six
+ * hundred doors has advertising space on it. This is where somebody writes
+ * that down.
+ */
+export async function addEarner(input: {
+  nodeId: string;
+  existingId?: string;
+  title?: string;
+  /** What one of them is worth — one ad spot, one sponsorship, one referral. */
+  unitValue?: number | null;
+  /** How many of them this idea can carry. */
+  quantity?: number | null;
+}): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    let targetId = input.existingId;
+
+    if (!targetId) {
+      const created = await createNode({
+        title: input.title ?? "",
+        nodeType: "revenue_source",
+        status: "idea",
+        potentialValue: input.unitValue ?? null,
+      });
+      if (!created.ok) return created;
+      targetId = created.id;
+    }
+
+    if (!targetId) return { ok: false, message: "Couldn't work out what to connect." };
+
+    const linked = await createRelationship({
+      sourceId: input.nodeId,
+      targetId,
+      relationshipType: "generates_revenue",
+      quantity: input.quantity,
+    });
+    if (!linked.ok) return linked;
+
+    revalidatePath(PATH);
+    return { ok: true, id: targetId, message: "That is a way it pays for itself." };
+  } catch (err) {
+    console.error("addEarner failed:", err);
+    return { ok: false, message: "Couldn't add that." };
+  }
+}
+
 /** Removes one line. Not admin-gated the way deleting a node is: a wrong
  * connection is a small mistake, and leaving it there is a worse one. */
 export async function deleteRelationship(id: string): Promise<GraphResult> {

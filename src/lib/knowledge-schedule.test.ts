@@ -356,3 +356,53 @@ describe("leverage quantities", () => {
     expect(leverage.totalQuantity).toBe(2000);
   });
 });
+
+describe("leverage and kit", () => {
+  it("never counts a shared printer as a quantity", () => {
+    // Door hangers need two print runs; each run uses the printer. That is
+    // two runs, not two printers, and a row about sharing one piece of kit
+    // must not say "3".
+    const graph: Graph = {
+      nodes: [
+        node("hangers", "Door hangers", "idea", { scheduledFor: "2026-03-28" }),
+        node("flyers", "Flyers", "idea", { scheduledFor: "2026-04-02" }),
+        node("run", "Print run", "process"),
+        { ...node("printer", "Colour printer", "equipment"), estimatedCost: 420 },
+      ],
+      edges: [
+        edge("e1", "hangers", "run", 2),
+        edge("e2", "run", "printer", 1),
+        edge("e3", "flyers", "printer", 1),
+      ],
+    };
+
+    const printer = leverageInWindow(graph, "2026-03-25", 30).find(
+      (l) => l.resource.title === "Colour printer"
+    )!;
+    expect(printer.totalQuantity).toBeNull();
+    expect(printer.uses).toHaveLength(2);
+  });
+
+  it("follows the chain to find what two scheduled ideas really share", () => {
+    // Door hangers never mention cardstock. Their print run does.
+    const graph: Graph = {
+      nodes: [
+        node("hangers", "Door hangers", "idea", { scheduledFor: "2026-03-28" }),
+        node("flyers", "Flyers", "idea", { scheduledFor: "2026-04-02" }),
+        node("run", "Print run", "process"),
+        { ...node("card", "Cardstock", "material"), estimatedCost: 0.1, unit: "sheet" },
+      ],
+      edges: [
+        edge("e1", "hangers", "run", 2),
+        edge("e2", "run", "card", 1000),
+        edge("e3", "flyers", "card", 1500),
+      ],
+    };
+
+    const card = leverageInWindow(graph, "2026-03-25", 30).find(
+      (l) => l.resource.title === "Cardstock"
+    )!;
+    expect(card.totalQuantity).toBe(3500);
+    expect(card.totalAmount).toBeCloseTo(350, 5);
+  });
+});

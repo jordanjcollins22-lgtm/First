@@ -64,6 +64,10 @@ export interface CostLine {
   /** How many units, defaulting to one so an unpriced connection still
    * counts the thing once rather than counting it as nothing. */
   quantity: number;
+  /** True only when every hop from the root to here said how many. A
+   * quantity that defaulted to one along the way is a guess, and somewhere
+   * further up something needs to say whether it is two thousand or five. */
+  quantityStated: boolean;
   unitCost: number;
   amount: number;
   time: boolean;
@@ -72,6 +76,10 @@ export interface CostLine {
   hours: number;
   /** How far down the breakdown this came from. Zero is directly required. */
   depth: number;
+  /** The chain from the thing being costed to here, ids only. What makes it
+   * possible to say "door hangers → print run → printer" rather than just
+   * "the printer is in there somewhere". */
+  path: string[];
 }
 
 export interface CostBreakdown {
@@ -147,7 +155,14 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
   const lines: CostLine[] = [];
   const unpriced = new Map<string, GraphNode>();
 
-  function walk(id: string, multiplier: number, depth: number, seen: Set<string>) {
+  function walk(
+    id: string,
+    multiplier: number,
+    depth: number,
+    seen: Set<string>,
+    trail: string[],
+    stated: boolean
+  ) {
     if (depth > maxDepth) return;
 
     for (const { node, edge, outgoing } of neighboursOf(graph, id)) {
@@ -158,6 +173,7 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
       if (seen.has(node.id)) continue;
 
       const quantity = (edge.quantity ?? 1) * multiplier;
+      const quantityStated = stated && edge.quantity != null;
       const unitCost = node.estimatedCost ?? 0;
       const capital = isCapital(node);
       const time = !capital && isTimeUnit(node.unit);
@@ -169,6 +185,7 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
         node,
         edge,
         quantity,
+        quantityStated,
         unitCost,
         // Kit is priced at what it costs to own, once, not once per run.
         amount: capital ? unitCost : quantity * unitCost,
@@ -176,13 +193,14 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
         capital,
         hours: time ? quantity * perUnitHours : 0,
         depth,
+        path: [...trail, node.id],
       });
 
-      walk(node.id, quantity, depth + 1, new Set([...seen, node.id]));
+      walk(node.id, quantity, depth + 1, new Set([...seen, node.id]), [...trail, node.id], quantityStated);
     }
   }
 
-  walk(nodeId, 1, 0, new Set([nodeId]));
+  walk(nodeId, 1, 0, new Set([nodeId]), [], true);
 
   let materials = 0;
   let labour = 0;

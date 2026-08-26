@@ -19,6 +19,12 @@ import {
   money,
 } from "@/lib/knowledge-cost";
 import {
+  crossings,
+  leverageSummary,
+  notEarningYet,
+  provenEarners,
+} from "@/lib/knowledge-leverage";
+import {
   describeDue,
   describeRecurrence,
   leverageInWindow,
@@ -36,7 +42,6 @@ import {
   isolatedNodes,
   localGraph,
   nodeTypeDef,
-  sharedResources,
   type Graph,
   type GraphFilters,
   type NodeType,
@@ -94,7 +99,13 @@ export function KnowledgeWorkspace({
   );
 
   const degrees = useMemo(() => degreeMap(graph), [graph]);
-  const shared = useMemo(() => sharedResources(graph), [graph]);
+  // Crossings supersede the old shallow list: this one follows the chain, so
+  // two ideas that meet three levels down show up the same as two that both
+  // say "printer" on their own screen.
+  const crossed = useMemo(() => crossings(graph), [graph]);
+  const summary = useMemo(() => leverageSummary(graph), [graph]);
+  const suggestions = useMemo(() => provenEarners(graph), [graph]);
+  const gaps = useMemo(() => notEarningYet(graph), [graph]);
   const orphans = useMemo(() => isolatedNodes(graph), [graph]);
   const buckets = useMemo(() => scheduleBuckets(graph.nodes, today), [graph.nodes, today]);
   const leverage = useMemo(() => leverageInWindow(graph, today, 30), [graph, today]);
@@ -120,8 +131,8 @@ export function KnowledgeWorkspace({
     [leverage]
   );
   const waiting = useMemo(
-    () => shared.filter((s) => !scheduledResourceIds.has(s.node.id)),
-    [shared, scheduledResourceIds]
+    () => crossed.filter((c) => !scheduledResourceIds.has(c.node.id)),
+    [crossed, scheduledResourceIds]
   );
   const selected = useMemo(
     () => graph.nodes.find((n) => n.id === selectedId) ?? null,
@@ -545,32 +556,124 @@ export function KnowledgeWorkspace({
 
       {waiting.length > 0 && (
         <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
-          <h2 className="text-lg font-bold">Shared, but not on the calendar</h2>
+          <h2 className="text-lg font-bold">Where paths cross</h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            More than one idea needs each of these, and none of those ideas has a date yet. Buy it once —
-            and give one of them a date, because that is what turns the list into work.
+            Every place two ideas end up needing the same thing — following the chain, not just the first
+            step. The ones neither idea names directly come first, because those are the ones nobody could
+            already see.
           </p>
           <ul className="flex flex-col gap-2">
-            {waiting.map(({ node, dependents }) => (
-              <li key={node.id} className="rounded-lg border border-border/60 p-2">
-                <button type="button" onClick={() => setSelectedId(node.id)} className="w-full text-left">
+            {waiting.map((crossing) => (
+              <li key={crossing.node.id} className="rounded-lg border border-border/60 p-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(crossing.node.id)}
+                  className="w-full text-left"
+                >
                   <span className="flex items-center gap-2">
                     <span
                       className="h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: nodeTypeDef(node.nodeType).color }}
+                      style={{ backgroundColor: nodeTypeDef(crossing.node.nodeType).color }}
                     />
-                    <span className="text-sm font-medium">{node.title}</span>
+                    <span className="text-sm font-medium">{crossing.node.title}</span>
+                    {crossing.indirect && (
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                        hidden
+                      </span>
+                    )}
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {dependents.length} ideas
+                      {crossing.totalAmount > 0
+                        ? crossing.capital
+                          ? `${money(crossing.totalAmount)} once`
+                          : money(crossing.totalAmount)
+                        : `${crossing.through.length} ideas`}
                     </span>
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                    {dependents.map((d) => d.title).join(" · ")}
+                  {/* The route matters more than the fact. "Door hangers →
+                      print run → printer" is the sentence somebody acts on. */}
+                  <span className="mt-1 block space-y-0.5">
+                    {crossing.through.map((route) => (
+                      <span key={route.idea.id} className="block text-[11px] text-muted-foreground">
+                        {route.idea.title}
+                        {route.path.length > 1
+                          ? ` → ${route.path.slice(0, -1).map((n) => n.title).join(" → ")} →`
+                          : " →"}{" "}
+                        {crossing.node.title}
+                        {route.quantity > 0 && !crossing.capital
+                          ? ` (${describeQuantity(route.quantity, crossing.node.unit)})`
+                          : ""}
+                      </span>
+                    ))}
                   </span>
                 </button>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Money, last, because it is the question to ask about everything
+          above rather than a section of its own. */}
+      {summary.totalIdeas > 0 && (summary.spending > 0 || summary.earning > 0) && (
+        <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
+          <h2 className="text-lg font-bold">Making it pay</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            {money(summary.spending)} going out, {money(summary.earning)} coming back across{" "}
+            {summary.totalIdeas} idea{summary.totalIdeas === 1 ? "" : "s"} —{" "}
+            {summary.earningIdeas} of them earning anything at all.
+          </p>
+
+          {suggestions.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-sm font-semibold">Already works here — would it work there?</p>
+              <ul className="flex flex-col gap-1.5">
+                {suggestions.map((s) => (
+                  <li key={s.revenue.id} className="rounded-lg border border-emerald-300/60 bg-emerald-50/50 p-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(s.couldAlsoEarn[0].id)}
+                      className="w-full text-left"
+                    >
+                      <span className="block text-sm font-medium">{s.revenue.title}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        Earning on {s.earningFrom.map((n) => n.title).join(", ")}. Crosses paths with{" "}
+                        {s.couldAlsoEarn.map((n) => n.title).join(", ")}, where nobody has asked yet.
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {gaps.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-sm font-semibold">Costs money, earns nothing yet</p>
+              <ul className="flex flex-col gap-1.5">
+                {gaps.slice(0, 6).map(({ idea, payback }) => (
+                  <li key={idea.id} className="flex items-center gap-2 rounded-lg border border-border/60 p-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(idea.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate text-sm">{idea.title}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {money(payback.cost.total)} a run
+                        {payback.cost.hours > 0 ? `, ${formatHours(payback.cost.hours)}` : ""}
+                      </span>
+                    </button>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">no answer yet</span>
+                  </li>
+                ))}
+              </ul>
+              {gaps.length > 6 && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  and {gaps.length - 6} more.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

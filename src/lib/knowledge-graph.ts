@@ -269,47 +269,6 @@ export function localGraph(graph: Graph, nodeId: string, depth = 1): Graph {
   };
 }
 
-export interface SharedResource {
-  node: GraphNode;
-  /** The ideas that all lean on it. */
-  dependents: GraphNode[];
-}
-
-/**
- * Resources more than one idea leans on.
- *
- * This is the payoff. Seven marketing ideas that each require printing look
- * like seven separate problems until something counts the printer, and then
- * they are one purchase. Sorted by how many ideas hang off each, because that
- * ordering is the recommendation.
- */
-export function sharedResources(graph: Graph, minimumDependents = 2): SharedResource[] {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const dependentsOf = new Map<string, Set<string>>();
-
-  for (const edge of graph.edges) {
-    const source = byId.get(edge.sourceId);
-    const target = byId.get(edge.targetId);
-    if (!source || !target) continue;
-    // An idea leaning on something that is not itself an idea. Two ideas that
-    // merely mention each other is not a shared resource, it is a cross
-    // reference.
-    if (source.nodeType !== "idea" || target.nodeType === "idea") continue;
-
-    const set = dependentsOf.get(target.id) ?? new Set<string>();
-    set.add(source.id);
-    dependentsOf.set(target.id, set);
-  }
-
-  return [...dependentsOf.entries()]
-    .filter(([, dependents]) => dependents.size >= minimumDependents)
-    .map(([id, dependents]) => ({
-      node: byId.get(id)!,
-      dependents: [...dependents].map((d) => byId.get(d)!).filter(Boolean),
-    }))
-    .sort((a, b) => b.dependents.length - a.dependents.length || a.node.title.localeCompare(b.node.title));
-}
-
 /** Nodes nothing connects to. Worth being able to hide — a graph of orphans is
  * a list, and worth being able to show, because an orphan is usually a thought
  * somebody never finished. */

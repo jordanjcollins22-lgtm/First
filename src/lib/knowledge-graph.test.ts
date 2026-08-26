@@ -11,7 +11,6 @@ import {
   nodeTypeDef,
   normaliseTitle,
   relationshipDef,
-  sharedResources,
   type Graph,
   type GraphEdge,
   type GraphNode,
@@ -150,36 +149,6 @@ describe("localGraph", () => {
 
   it("returns just the node when nothing touches it", () => {
     expect(localGraph(PRINT_SHOP, "orphan", 2).nodes.map((n) => n.id)).toEqual(["orphan"]);
-  });
-});
-
-describe("sharedResources", () => {
-  it("finds the printer three ideas lean on", () => {
-    // The payoff: seven marketing ideas that each require printing look like
-    // seven problems until something counts the printer.
-    const shared = sharedResources(PRINT_SHOP);
-    expect(shared[0].node.id).toBe("printer");
-    expect(shared[0].dependents).toHaveLength(3);
-  });
-
-  it("orders by how many ideas hang off each, since that is the recommendation", () => {
-    const shared = sharedResources(PRINT_SHOP);
-    const counts = shared.map((s) => s.dependents.length);
-    expect(counts).toEqual([...counts].sort((a, b) => b - a));
-  });
-
-  it("ignores a resource only one idea uses", () => {
-    const shared = sharedResources(PRINT_SHOP);
-    expect(shared.map((s) => s.node.id)).not.toContain("leadgen");
-  });
-
-  it("does not count two ideas merely mentioning each other", () => {
-    // A cross reference is not a shared resource.
-    const crossRef: Graph = {
-      nodes: [node("a", "A"), node("b", "B"), node("c", "C")],
-      edges: [edge("x", "a", "c", "similar_to"), edge("y", "b", "c", "similar_to")],
-    };
-    expect(sharedResources(crossRef)).toEqual([]);
   });
 });
 

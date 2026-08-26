@@ -12,6 +12,7 @@
  * is the kind of bug nobody notices until a season has gone.
  */
 
+import { crossings } from "@/lib/knowledge-leverage";
 import type { Graph, GraphNode } from "@/lib/knowledge-graph";
 
 export type Recurrence = "none" | "daily" | "weekly" | "fortnightly" | "monthly" | "quarterly" | "yearly";
@@ -246,6 +247,12 @@ export interface Leverage {
  * hangers and flyers share a printer is worth something; knowing they are
  * both due the same fortnight is worth doing something about, because that is
  * one print run instead of two, one setup, one delivery charge.
+ *
+ * Built on the same crossings the rest of the app uses, so it follows the
+ * chain rather than stopping at the first step — two ideas that meet three
+ * levels down are as batchable as two that both say "printer" out loud, and
+ * having one panel see that while another does not is how two screens end up
+ * contradicting each other.
  */
 export function leverageInWindow(
   graph: Graph,
@@ -254,9 +261,8 @@ export function leverageInWindow(
   minimumUses = 2
 ): Leverage[] {
   const end = addDays(today, windowDays);
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
-  const dueByNode = new Map<string, string>();
+  const dueByIdea = new Map<string, string>();
   for (const node of graph.nodes) {
     if (!node.scheduledFor || node.status === "archived") continue;
     const occurrences = occurrencesBetween(
@@ -266,45 +272,40 @@ export function leverageInWindow(
       today,
       end
     );
-    if (occurrences.length > 0) dueByNode.set(node.id, occurrences[0]);
+    if (occurrences.length > 0) dueByIdea.set(node.id, occurrences[0]);
   }
 
-  const usesOf = new Map<string, LeverageUse[]>();
-  for (const edge of graph.edges) {
-    const source = byId.get(edge.sourceId);
-    const target = byId.get(edge.targetId);
-    if (!source || !target) continue;
-    // Something scheduled leaning on something that is not itself scheduled
-    // work. Two scheduled ideas pointing at each other is a sequence, not a
-    // shared resource.
-    if (target.nodeType === "idea") continue;
+  if (dueByIdea.size === 0) return [];
 
-    const due = dueByNode.get(source.id);
-    if (!due) continue;
+  return crossings(graph, 1)
+    .map((crossing) => {
+      const uses: LeverageUse[] = crossing.through
+        .filter((route) => dueByIdea.has(route.idea.id))
+        .map((route) => ({
+          node: route.idea,
+          due: dueByIdea.get(route.idea.id)!,
+          // Nothing rather than a guess. And never a count for kit: two
+          // print runs through one printer is two runs, not two printers,
+          // and "3 printers" on a row about sharing one is worse than
+          // saying nothing.
+          quantity: crossing.capital || !route.quantityStated ? null : route.quantity,
+        }))
+        .sort((a, b) => a.due.localeCompare(b.due));
 
-    const list = usesOf.get(target.id) ?? [];
-    if (!list.some((u) => u.node.id === source.id)) {
-      list.push({ node: source, due, quantity: edge.quantity ?? null });
-    }
-    usesOf.set(target.id, list);
-  }
-
-  return [...usesOf.entries()]
-    .filter(([, uses]) => uses.length >= minimumUses)
-    .map(([id, uses]) => {
-      const resource = byId.get(id)!;
       const quantities = uses.map((u) => u.quantity).filter((q): q is number => q != null);
       const totalQuantity = quantities.length > 0 ? quantities.reduce((a, b) => a + b, 0) : null;
+
       return {
-        resource,
-        uses: uses.sort((a, b) => a.due.localeCompare(b.due)),
+        resource: crossing.node,
+        uses,
         totalQuantity,
         totalAmount:
-          totalQuantity != null && resource.estimatedCost != null
-            ? totalQuantity * resource.estimatedCost
+          totalQuantity != null && crossing.node.estimatedCost != null
+            ? totalQuantity * crossing.node.estimatedCost
             : null,
       };
     })
+    .filter((leverage) => leverage.uses.length >= minimumUses)
     .sort(
       (a, b) =>
         b.uses.length - a.uses.length ||

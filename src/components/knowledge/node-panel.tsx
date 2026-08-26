@@ -38,7 +38,9 @@ import {
   money,
   unitDef,
 } from "@/lib/knowledge-cost";
+import { paybackOf } from "@/lib/knowledge-leverage";
 import {
+  addEarner,
   addRequirement,
   deleteNode,
   deleteRelationship,
@@ -114,6 +116,10 @@ export function NodePanel({
   const [needType, setNeedType] = useState<NodeType>("material");
   const [needRelationship, setNeedRelationship] = useState<RelationshipType>("requires");
   const [pickedId, setPickedId] = useState("");
+  const [earnTitle, setEarnTitle] = useState("");
+  const [earnPickedId, setEarnPickedId] = useState("");
+  const [earnValue, setEarnValue] = useState("");
+  const [earnCount, setEarnCount] = useState("");
   const [needQuantity, setNeedQuantity] = useState("");
   const [needCost, setNeedCost] = useState("");
   const [needUnit, setNeedUnit] = useState("each");
@@ -167,6 +173,22 @@ export function NodePanel({
   }, [needQuantity, needCost, picked]);
 
   const cost = useMemo(() => costOf(graph, node.id), [graph, node.id]);
+  const payback = useMemo(() => paybackOf(graph, node.id), [graph, node.id]);
+
+  /** Ways of earning that already exist somewhere in the graph. Attaching a
+   * proven one beats inventing a second copy of it. */
+  const earners = useMemo(
+    () =>
+      graph.nodes
+        .filter((n) => n.nodeType === "revenue_source" && n.id !== node.id && n.status !== "archived")
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    [graph.nodes, node.id]
+  );
+
+  const earnPicked = useMemo(
+    () => earners.find((e) => e.id === earnPickedId) ?? null,
+    [earners, earnPickedId]
+  );
 
   const def = nodeTypeDef(node.nodeType);
   const today = todayKey();
@@ -758,6 +780,135 @@ export function NodePanel({
                 Includes what its own requirements need, all the way down.
               </p>
             )}
+          </div>
+        </Section>
+      )}
+
+      {node.nodeType === "idea" && (
+        <Section title="What this earns">
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
+            {payback.lines.length > 0 ? (
+              <>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <Figure label="Earns" value={money(payback.revenue)} />
+                  <Figure label="Costs" value={money(payback.cost.total)} />
+                  <Figure
+                    label={payback.net >= 0 ? "Clears" : "Short by"}
+                    value={money(Math.abs(payback.net))}
+                    strong
+                  />
+                </div>
+                <ul className="flex flex-col gap-1">
+                  {payback.lines.map((line) => (
+                    <li key={line.node.id} className="text-[11px] text-muted-foreground">
+                      {line.quantity} × {line.node.title}
+                      {line.unitValue > 0 ? ` at ${money(line.unitValue)} = ${money(line.amount)}` : " — no value on it yet"}
+                    </li>
+                  ))}
+                </ul>
+                {payback.coversItself && (
+                  <p className="text-[11px] font-medium text-emerald-700">This one pays for itself.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Nothing earns from this yet. A flyer is paper going through six hundred doors — and paper
+                going through six hundred doors has advertising space on it. Worth asking before it goes
+                out.
+              </p>
+            )}
+
+            {earners.length > 0 && (
+              <Select value={earnPickedId} onValueChange={(v) => { setEarnPickedId(v); setEarnTitle(""); }}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Use a way that already earns…" />
+                </SelectTrigger>
+                <SelectContent className="max-w-[calc(100vw-2.5rem)]">
+                  {earners.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      <span className="block truncate">{e.title}</span>
+                      {e.potentialValue != null && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          {money(e.potentialValue)} each
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {!earnPicked && (
+              <>
+                <Input
+                  value={earnTitle}
+                  onChange={(e) => setEarnTitle(e.target.value)}
+                  placeholder="Ad spot on the flyer, sponsor logo, referral fee…"
+                  className="h-9 text-sm"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Worth each</Label>
+                    <Input
+                      value={earnValue}
+                      inputMode="decimal"
+                      placeholder="75"
+                      onChange={(e) => setEarnValue(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">How many</Label>
+                    <Input
+                      value={earnCount}
+                      inputMode="decimal"
+                      placeholder="6"
+                      onChange={(e) => setEarnCount(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {earnPicked && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">How many {earnPicked.title.toLowerCase()}</Label>
+                <Input
+                  value={earnCount}
+                  inputMode="decimal"
+                  placeholder="6"
+                  onChange={(e) => setEarnCount(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            )}
+
+            <Button
+              type="button"
+              size="sm"
+              disabled={pending || (!earnPicked && earnTitle.trim().length === 0)}
+              onClick={() =>
+                run(async () => {
+                  const result = await addEarner({
+                    nodeId: node.id,
+                    existingId: earnPicked?.id,
+                    title: earnPicked ? undefined : earnTitle,
+                    unitValue: earnValue ? Number(earnValue) : null,
+                    quantity: earnCount ? Number(earnCount) : null,
+                  });
+                  if (result.ok) {
+                    setEarnTitle("");
+                    setEarnPickedId("");
+                    setEarnValue("");
+                    setEarnCount("");
+                  }
+                  return result;
+                })
+              }
+            >
+              {pending ? "Adding…" : earnPicked ? `Earn through ${earnPicked.title}` : "Add a way it pays"}
+            </Button>
           </div>
         </Section>
       )}
