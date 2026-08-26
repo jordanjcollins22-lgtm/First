@@ -28,10 +28,19 @@ import {
   type RelationshipType,
 } from "@/lib/knowledge-graph";
 import {
+  UNITS,
+  costOf,
+  describeQuantity,
+  hours as formatHours,
+  money,
+  unitDef,
+} from "@/lib/knowledge-cost";
+import {
   addRequirement,
   deleteNode,
   deleteRelationship,
   markNodeDone,
+  updateRelationship,
   scheduleNode,
   updateNode,
 } from "@/lib/actions/knowledge-graph-actions";
@@ -79,6 +88,8 @@ export function NodePanel({
   const [notes, setNotes] = useState(node.notes ?? "");
   const [importance, setImportance] = useState(node.importance ? String(node.importance) : "");
   const [tags, setTags] = useState(node.tags.join(", "));
+  const [unitCost, setUnitCost] = useState(node.estimatedCost != null ? String(node.estimatedCost) : "");
+  const [unit, setUnit] = useState(node.unit);
 
   // Every field above is seeded from the node once. The workspace remounts
   // this panel when the selection changes (key={node.id}), which resets the
@@ -94,6 +105,10 @@ export function NodePanel({
   const [needTitle, setNeedTitle] = useState("");
   const [needType, setNeedType] = useState<NodeType>("material");
   const [needRelationship, setNeedRelationship] = useState<RelationshipType>("requires");
+  const [pickedId, setPickedId] = useState("");
+  const [needQuantity, setNeedQuantity] = useState("");
+  const [needCost, setNeedCost] = useState("");
+  const [needUnit, setNeedUnit] = useState("each");
 
   const neighbours = useMemo(() => neighboursOf(graph, node.id), [graph, node.id]);
   const outgoing = neighbours.filter((n) => n.outgoing);
@@ -112,6 +127,38 @@ export function NodePanel({
           ),
     [graph.nodes, needTitle, node.id]
   );
+
+  /**
+   * Everything already in the graph that could be an input, priced ones
+   * first.
+   *
+   * Ideas are left out: an idea is a thing you have, not a thing you buy, and
+   * a dropdown of every thought in the business is a dropdown nobody scrolls.
+   */
+  const reusable = useMemo(
+    () =>
+      graph.nodes
+        .filter((n) => n.id !== node.id && n.nodeType !== "idea" && n.status !== "archived")
+        .sort(
+          (a, b) =>
+            Number(b.estimatedCost != null) - Number(a.estimatedCost != null) ||
+            a.title.localeCompare(b.title)
+        ),
+    [graph.nodes, node.id]
+  );
+
+  const picked = useMemo(() => reusable.find((r) => r.id === pickedId) ?? null, [reusable, pickedId]);
+
+  // What the line about to be added would come to, shown before it is added
+  // rather than after — that is when somebody can still change their mind.
+  const lineTotal = useMemo(() => {
+    const quantity = Number(needQuantity) || 0;
+    const rate = picked ? picked.estimatedCost : needCost ? Number(needCost) : null;
+    if (!quantity || rate == null || Number.isNaN(rate)) return null;
+    return quantity * rate;
+  }, [needQuantity, needCost, picked]);
+
+  const cost = useMemo(() => costOf(graph, node.id), [graph, node.id]);
 
   const def = nodeTypeDef(node.nodeType);
   const today = todayKey();
@@ -225,6 +272,26 @@ export function NodePanel({
               <Input value={tags} onChange={(e) => setTags(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Cost of one</Label>
+              <Input
+                value={unitCost}
+                inputMode="decimal"
+                placeholder="0.12"
+                onChange={(e) => setUnitCost(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">One of it is</Label>
+              <UnitSelect value={unit} onChange={setUnit} />
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Priced per unit, so everything that needs it works its own total out. An hour or a day makes
+            it time rather than materials.
+          </p>
           <Button
             type="button"
             size="sm"
@@ -238,6 +305,8 @@ export function NodePanel({
                   description,
                   notes,
                   importance: importance ? Number(importance) : null,
+                  estimatedCost: unitCost ? Number(unitCost) : null,
+                  unit,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
               )
@@ -252,6 +321,9 @@ export function NodePanel({
           {node.notes && <p className="text-muted-foreground">{node.notes}</p>}
           <p className="text-xs text-muted-foreground">
             {NODE_STATUSES.find((s) => s.value === node.status)?.label ?? node.status}
+            {node.estimatedCost != null
+              ? ` · ${money(node.estimatedCost)} ${unitDef(node.unit).label}`
+              : ""}
             {node.importance ? ` · importance ${node.importance}/5` : ""}
             {node.tags.length > 0 ? ` · ${node.tags.join(", ")}` : ""}
           </p>
@@ -367,80 +439,200 @@ export function NodePanel({
 
       <Section title="What does this physically require?">
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
-          <Input
-            value={needTitle}
-            onChange={(e) => setNeedTitle(e.target.value)}
-            placeholder="Cardstock, printer, toner, four hours of design…"
-            className="h-9 text-sm"
-          />
-          {suggestions.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <p className="text-[11px] text-muted-foreground">Already in the graph — connect to one of these:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {suggestions.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    disabled={pending}
-                    className="rounded-full border border-border px-2 py-1 text-xs"
-                    onClick={() =>
-                      run(async () => {
-                        const result = await addRequirement({
-                          nodeId: node.id,
-                          existingId: s.id,
-                          relationshipType: needRelationship,
-                        });
-                        if (result.ok) setNeedTitle("");
-                        return result;
-                      })
-                    }
-                  >
-                    <span
-                      className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
-                      style={{ backgroundColor: nodeTypeDef(s.nodeType).color }}
-                    />
-                    {s.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <Select value={needRelationship} onValueChange={(v) => setNeedRelationship(v as RelationshipType)}>
+          {/* The dropdown comes first on purpose. Once the cardstock exists
+              and is priced, every idea after this one should be picking it,
+              not typing it again — a second copy is a second price to keep
+              up to date and a shared resource nobody can see. */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Use something already in the graph</Label>
+            <Select
+              value={pickedId}
+              onValueChange={(v) => {
+                setPickedId(v);
+                setNeedTitle("");
+              }}
+            >
               <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
+                <SelectValue placeholder="Pick an input…" />
               </SelectTrigger>
               <SelectContent>
-                {RELATIONSHIP_TYPES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
+                {reusable.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.title}
+                    {r.estimatedCost != null ? ` — ${money(r.estimatedCost)} ${unitDef(r.unit).label}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <TypeSelect value={needType} onChange={setNeedType} />
           </div>
+
+          {picked ? (
+            <p className="text-[11px] text-muted-foreground">
+              {picked.title}
+              {picked.estimatedCost != null
+                ? ` · ${money(picked.estimatedCost)} ${unitDef(picked.unit).label}`
+                : " · no price on it yet"}
+              {" · "}
+              <button type="button" className="underline" onClick={() => setPickedId("")}>
+                pick something else
+              </button>
+            </p>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-[11px] text-muted-foreground">or add a new one</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <Input
+                value={needTitle}
+                onChange={(e) => setNeedTitle(e.target.value)}
+                placeholder="Cardstock, printer, toner, design time…"
+                className="h-9 text-sm"
+              />
+              {suggestions.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <p className="text-[11px] text-muted-foreground">
+                    Already in the graph — use one of these instead:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={pending}
+                        className="rounded-full border border-border px-2 py-1 text-xs"
+                        onClick={() => {
+                          setPickedId(s.id);
+                          setNeedTitle("");
+                        }}
+                      >
+                        <span
+                          className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
+                          style={{ backgroundColor: nodeTypeDef(s.nodeType).color }}
+                        />
+                        {s.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">What kind of thing</Label>
+                  <TypeSelect value={needType} onChange={setNeedType} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Cost of one</Label>
+                  <Input
+                    value={needCost}
+                    inputMode="decimal"
+                    placeholder="0.12"
+                    onChange={(e) => setNeedCost(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">One of it is</Label>
+                <UnitSelect value={needUnit} onChange={setNeedUnit} />
+              </div>
+            </>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">How it connects</Label>
+              <Select value={needRelationship} onValueChange={(v) => setNeedRelationship(v as RelationshipType)}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATIONSHIP_TYPES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">
+                How many {picked ? unitDef(picked.unit).label.replace(/^per /, "") : unitDef(needUnit).label.replace(/^per /, "")}
+              </Label>
+              <Input
+                value={needQuantity}
+                inputMode="decimal"
+                placeholder="2000"
+                onChange={(e) => setNeedQuantity(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          {lineTotal != null && (
+            <p className="text-[11px] text-muted-foreground">That line comes to {money(lineTotal)}.</p>
+          )}
+
           <Button
             type="button"
             size="sm"
-            disabled={pending || needTitle.trim().length === 0}
+            disabled={pending || (!picked && needTitle.trim().length === 0)}
             onClick={() =>
               run(async () => {
                 const result = await addRequirement({
                   nodeId: node.id,
-                  title: needTitle,
-                  nodeType: needType,
+                  existingId: picked?.id,
+                  title: picked ? undefined : needTitle,
+                  nodeType: picked ? undefined : needType,
                   relationshipType: needRelationship,
+                  quantity: needQuantity ? Number(needQuantity) : null,
+                  unitCost: picked || !needCost ? null : Number(needCost),
+                  unit: picked ? undefined : needUnit,
                 });
-                if (result.ok) setNeedTitle("");
+                if (result.ok) {
+                  setNeedTitle("");
+                  setPickedId("");
+                  setNeedQuantity("");
+                  setNeedCost("");
+                }
                 return result;
               })
             }
           >
-            {pending ? "Adding…" : "Add as a new node"}
+            {pending ? "Adding…" : picked ? `Use ${picked.title}` : "Add as a new node"}
           </Button>
         </div>
       </Section>
+
+      {(cost.lines.length > 0 || node.estimatedCost != null) && (
+        <Section title="What this costs">
+          <div className="rounded-lg border border-border bg-background/60 p-3">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <Figure label="Materials" value={money(cost.materials)} />
+              <Figure label="Time" value={formatHours(cost.hours)} hint={money(cost.labour)} />
+              <Figure label="Per run" value={money(cost.total)} strong />
+            </div>
+            {cost.capital > 0 && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Plus {money(cost.capital)} of kit — {cost.capitalItems.map((n) => n.title).join(", ")} —
+                bought once, not once per run.
+              </p>
+            )}
+            {cost.unpriced.length > 0 && (
+              <p className="mt-2 text-[11px] text-amber-700">
+                No price yet on {cost.unpriced.map((n) => n.title).join(", ")} — the total is short by
+                whatever those cost.
+              </p>
+            )}
+            {cost.lines.some((l) => l.depth > 0) && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Includes what its own requirements need, all the way down.
+              </p>
+            )}
+          </div>
+        </Section>
+      )}
 
       <Section title={`Points out (${outgoing.length})`}>
         <ConnectionList
@@ -448,6 +640,7 @@ export function NodePanel({
           pending={pending}
           onSelect={onSelect}
           onRemove={(edgeId) => run(() => deleteRelationship(edgeId))}
+          onQuantity={(edgeId, quantity) => run(() => updateRelationship(edgeId, { quantity }))}
           direction="out"
         />
       </Section>
@@ -458,6 +651,7 @@ export function NodePanel({
           pending={pending}
           onSelect={onSelect}
           onRemove={(edgeId) => run(() => deleteRelationship(edgeId))}
+          onQuantity={(edgeId, quantity) => run(() => updateRelationship(edgeId, { quantity }))}
           direction="in"
         />
       </Section>
@@ -480,12 +674,14 @@ function ConnectionList({
   direction,
   onSelect,
   onRemove,
+  onQuantity,
 }: {
   items: ReturnType<typeof neighboursOf>;
   pending: boolean;
   direction: "in" | "out";
   onSelect: (id: string) => void;
   onRemove: (edgeId: string) => void;
+  onQuantity: (edgeId: string, quantity: number | null) => void;
 }) {
   if (items.length === 0) {
     return (
@@ -499,32 +695,136 @@ function ConnectionList({
 
   return (
     <ul className="flex flex-col gap-1.5">
-      {items.map(({ node, edge, outgoing }) => {
-        const def = relationshipDef(edge.relationshipType);
-        return (
-          <li key={edge.id} className="flex items-center gap-2 rounded-lg border border-border/60 p-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: nodeTypeDef(node.nodeType).color }}
-            />
-            <button type="button" onClick={() => onSelect(node.id)} className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-sm">{node.title}</span>
-              <span className="block text-[11px] text-muted-foreground">
-                {outgoing ? def.label : def.inverse} · strength {edge.strength}
-              </span>
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => onRemove(edge.id)}
-              className="shrink-0 text-[11px] text-muted-foreground underline"
-            >
-              Remove
-            </button>
-          </li>
-        );
-      })}
+      {items.map(({ node, edge, outgoing }) => (
+        <ConnectionRow
+          key={edge.id}
+          node={node}
+          edge={edge}
+          outgoing={outgoing}
+          pending={pending}
+          onSelect={onSelect}
+          onRemove={onRemove}
+          onQuantity={onQuantity}
+        />
+      ))}
     </ul>
+  );
+}
+
+/**
+ * One connection, with how much of it this needs.
+ *
+ * The quantity is editable in place rather than behind an edit screen: it is
+ * the number most likely to be wrong on the first pass, and the one somebody
+ * corrects while looking at the total it produced.
+ */
+function ConnectionRow({
+  node,
+  edge,
+  outgoing,
+  pending,
+  onSelect,
+  onRemove,
+  onQuantity,
+}: {
+  node: GraphNode;
+  edge: ReturnType<typeof neighboursOf>[number]["edge"];
+  outgoing: boolean;
+  pending: boolean;
+  onSelect: (id: string) => void;
+  onRemove: (edgeId: string) => void;
+  onQuantity: (edgeId: string, quantity: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(edge.quantity != null ? String(edge.quantity) : "");
+  const def = relationshipDef(edge.relationshipType);
+  const amount = edge.quantity != null && node.estimatedCost != null
+    ? edge.quantity * node.estimatedCost
+    : null;
+
+  return (
+    <li className="flex flex-col gap-1.5 rounded-lg border border-border/60 p-2">
+      <div className="flex items-center gap-2">
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: nodeTypeDef(node.nodeType).color }}
+        />
+        <button type="button" onClick={() => onSelect(node.id)} className="min-w-0 flex-1 text-left">
+          <span className="block truncate text-sm">{node.title}</span>
+          <span className="block text-[11px] text-muted-foreground">
+            {outgoing ? def.label : def.inverse}
+            {edge.quantity != null ? ` · ${describeQuantity(edge.quantity, node.unit)}` : ""}
+            {amount != null ? ` · ${money(amount)}` : ""}
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => onRemove(edge.id)}
+          className="shrink-0 text-[11px] text-muted-foreground underline"
+        >
+          Remove
+        </button>
+      </div>
+
+      {outgoing && (
+        <div className="flex items-center gap-2">
+          <Input
+            value={draft}
+            inputMode="decimal"
+            placeholder={`How many ${unitDef(node.unit).label.replace(/^per /, "")}`}
+            onChange={(e) => setDraft(e.target.value)}
+            className="h-8 flex-1 text-xs"
+          />
+          <button
+            type="button"
+            disabled={pending || draft === (edge.quantity != null ? String(edge.quantity) : "")}
+            onClick={() => onQuantity(edge.id, draft ? Number(draft) : null)}
+            className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-40"
+          >
+            Save
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Figure({
+  label,
+  value,
+  hint,
+  strong,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className={`tabular-nums ${strong ? "text-base font-bold" : "text-sm font-medium"}`}>{value}</p>
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/** What one of a thing is. Kept short and in the order somebody reaches for
+ * them, with time at the top because that is the cost people forget. */
+export function UnitSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-9 text-sm">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {UNITS.map((u) => (
+          <SelectItem key={u.value} value={u.value}>
+            {u.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

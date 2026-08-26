@@ -110,6 +110,7 @@ export interface Database {
           status: string;
           importance: number | null;
           estimated_cost: number | null;
+          unit: string;
           potential_value: number | null;
           notes: string | null;
           position_x: number | null;
@@ -139,6 +140,7 @@ export interface Database {
           target_node_id: string;
           relationship_type: string;
           strength: number;
+          quantity: number | null;
           notes: string | null;
           created_by: string | null;
           created_at: string;

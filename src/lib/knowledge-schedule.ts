@@ -220,11 +220,23 @@ export function scheduleBuckets(nodes: GraphNode[], today: string, soonDays = 7)
   return buckets;
 }
 
+export interface LeverageUse {
+  node: GraphNode;
+  due: string;
+  /** How many units that idea needs, where somebody has said. */
+  quantity: number | null;
+}
+
 export interface Leverage {
   /** The thing more than one scheduled idea needs. */
   resource: GraphNode;
   /** Which ideas need it, and when. */
-  uses: { node: GraphNode; due: string }[];
+  uses: LeverageUse[];
+  /** Everything they need between them — the number to put on one order
+   * instead of two. Null where no quantities have been filled in. */
+  totalQuantity: number | null;
+  /** What that comes to, where the resource has a price. */
+  totalAmount: number | null;
 }
 
 /**
@@ -257,7 +269,7 @@ export function leverageInWindow(
     if (occurrences.length > 0) dueByNode.set(node.id, occurrences[0]);
   }
 
-  const usesOf = new Map<string, { node: GraphNode; due: string }[]>();
+  const usesOf = new Map<string, LeverageUse[]>();
   for (const edge of graph.edges) {
     const source = byId.get(edge.sourceId);
     const target = byId.get(edge.targetId);
@@ -271,16 +283,28 @@ export function leverageInWindow(
     if (!due) continue;
 
     const list = usesOf.get(target.id) ?? [];
-    if (!list.some((u) => u.node.id === source.id)) list.push({ node: source, due });
+    if (!list.some((u) => u.node.id === source.id)) {
+      list.push({ node: source, due, quantity: edge.quantity ?? null });
+    }
     usesOf.set(target.id, list);
   }
 
   return [...usesOf.entries()]
     .filter(([, uses]) => uses.length >= minimumUses)
-    .map(([id, uses]) => ({
-      resource: byId.get(id)!,
-      uses: uses.sort((a, b) => a.due.localeCompare(b.due)),
-    }))
+    .map(([id, uses]) => {
+      const resource = byId.get(id)!;
+      const quantities = uses.map((u) => u.quantity).filter((q): q is number => q != null);
+      const totalQuantity = quantities.length > 0 ? quantities.reduce((a, b) => a + b, 0) : null;
+      return {
+        resource,
+        uses: uses.sort((a, b) => a.due.localeCompare(b.due)),
+        totalQuantity,
+        totalAmount:
+          totalQuantity != null && resource.estimatedCost != null
+            ? totalQuantity * resource.estimatedCost
+            : null,
+      };
+    })
     .sort(
       (a, b) =>
         b.uses.length - a.uses.length ||

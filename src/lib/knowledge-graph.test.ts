@@ -26,6 +26,7 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
     description: null,
     importance: null,
     estimatedCost: null,
+    unit: "each",
     potentialValue: null,
     notes: null,
     tags: [],
@@ -43,7 +44,7 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
 }
 
 function edge(id: string, sourceId: string, targetId: string, type: GraphEdge["relationshipType"] = "uses"): GraphEdge {
-  return { id, sourceId, targetId, relationshipType: type, strength: 3, notes: null };
+  return { id, sourceId, targetId, relationshipType: type, strength: 3, quantity: null, notes: null };
 }
 
 /** The example from the brief: two marketing ideas, one printer. */

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { RECURRENCES, advance, todayKey, type Recurrence } from "@/lib/knowledge-schedule";
+import { UNITS } from "@/lib/knowledge-cost";
 import {
   NODE_STATUSES,
   NODE_TYPES,
@@ -24,6 +25,7 @@ const VALID_TYPES = new Set(NODE_TYPES.map((t) => t.value as string));
 const VALID_STATUSES = new Set(NODE_STATUSES.map((s) => s.value as string));
 const VALID_RELATIONSHIPS = new Set(RELATIONSHIP_TYPES.map((r) => r.value as string));
 const VALID_RECURRENCES = new Set(RECURRENCES.map((r) => r.value as string));
+const VALID_UNITS = new Set(UNITS.map((u) => u.value));
 
 export interface NodeInput {
   title: string;
@@ -32,7 +34,9 @@ export interface NodeInput {
   description?: string;
   notes?: string;
   importance?: number | null;
+  /** What one unit costs. */
   estimatedCost?: number | null;
+  unit?: string;
   potentialValue?: number | null;
   tags?: string[];
   positionX?: number | null;
@@ -74,6 +78,7 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         notes: input.notes?.trim() || null,
         importance: clampScale(input.importance),
         estimated_cost: numberOrNull(input.estimatedCost),
+        unit: validUnit(input.unit),
         potential_value: numberOrNull(input.potentialValue),
         position_x: input.positionX ?? null,
         position_y: input.positionY ?? null,
@@ -123,6 +128,7 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.notes !== undefined) update.notes = patch.notes.trim() || null;
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
     if (patch.estimatedCost !== undefined) update.estimated_cost = numberOrNull(patch.estimatedCost);
+    if (patch.unit !== undefined) update.unit = validUnit(patch.unit);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
     if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);
     if (patch.recurrence !== undefined) update.recurrence = validRecurrence(patch.recurrence);
@@ -191,6 +197,7 @@ export async function createRelationship(input: {
   targetId: string;
   relationshipType: RelationshipType;
   strength?: number;
+  quantity?: number | null;
   notes?: string;
 }): Promise<GraphResult> {
   try {
@@ -212,6 +219,7 @@ export async function createRelationship(input: {
         target_node_id: input.targetId,
         relationship_type: input.relationshipType,
         strength: clampScale(input.strength) ?? 3,
+        quantity: quantityOrNull(input.quantity),
         notes: input.notes?.trim() || null,
         created_by: profile.id,
       })
@@ -249,6 +257,12 @@ export async function addRequirement(input: {
   nodeType?: NodeType;
   relationshipType: RelationshipType;
   strength?: number;
+  /** How many units of it this needs. */
+  quantity?: number | null;
+  /** What one unit costs, for something being created here for the first
+   * time. Priced once, then reused by everything else that needs it. */
+  unitCost?: number | null;
+  unit?: string;
 }): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
@@ -260,6 +274,8 @@ export async function addRequirement(input: {
         title: input.title ?? "",
         nodeType: input.nodeType ?? "material",
         status: "idea",
+        estimatedCost: input.unitCost ?? null,
+        unit: input.unit,
       });
       if (!created.ok) return created;
       targetId = created.id;
@@ -272,6 +288,7 @@ export async function addRequirement(input: {
       targetId,
       relationshipType: input.relationshipType,
       strength: input.strength,
+      quantity: input.quantity,
     });
     if (!linked.ok) return linked;
 
@@ -280,6 +297,41 @@ export async function addRequirement(input: {
   } catch (err) {
     console.error("addRequirement failed:", err);
     return { ok: false, message: "Couldn't add that requirement." };
+  }
+}
+
+/**
+ * Changes how much of something a connection needs.
+ *
+ * On the edge rather than the node, because the quantity is the part that
+ * differs: door hangers need two thousand sheets and postcards need five
+ * hundred, off the same cardstock at the same price.
+ */
+export async function updateRelationship(
+  id: string,
+  patch: { quantity?: number | null; strength?: number; notes?: string }
+): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const update: Record<string, unknown> = {};
+    if (patch.quantity !== undefined) update.quantity = quantityOrNull(patch.quantity);
+    if (patch.strength !== undefined) update.strength = clampScale(patch.strength) ?? 3;
+    if (patch.notes !== undefined) update.notes = patch.notes.trim() || null;
+    if (Object.keys(update).length === 0) return { ok: true, id };
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("knowledge_relationships")
+      .update(update as never)
+      .eq("id", id);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath(PATH);
+    return { ok: true, id, message: "Saved." };
+  } catch (err) {
+    console.error("updateRelationship failed:", err);
+    return { ok: false, message: "Couldn't save that." };
   }
 }
 
@@ -490,6 +542,10 @@ function dateOrNull(value: string | null | undefined): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
+function validUnit(value: string | undefined): string {
+  return value && VALID_UNITS.has(value) ? value : "each";
+}
+
 function validRecurrence(value: string | undefined): Recurrence {
   return value && VALID_RECURRENCES.has(value) ? (value as Recurrence) : "none";
 }
@@ -502,6 +558,13 @@ function clampInterval(value: number | null | undefined): number {
 function clampScale(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null;
   return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+/** Nothing, or a number that is not negative. A negative quantity is a typo,
+ * and storing it makes a total that reads as a discount. */
+function quantityOrNull(value: number | null | undefined): number | null {
+  if (value == null || Number.isNaN(value)) return null;
+  return Math.max(0, value);
 }
 
 function numberOrNull(value: number | null | undefined): number | null {

@@ -29,6 +29,7 @@ function node(
     description: null,
     importance: null,
     estimatedCost: null,
+    unit: "each",
     potentialValue: null,
     notes: null,
     tags: [],
@@ -45,8 +46,13 @@ function node(
   };
 }
 
-function edge(id: string, sourceId: string, targetId: string): GraphEdge {
-  return { id, sourceId, targetId, relationshipType: "requires", strength: 3, notes: null };
+function edge(
+  id: string,
+  sourceId: string,
+  targetId: string,
+  quantity: number | null = null
+): GraphEdge {
+  return { id, sourceId, targetId, relationshipType: "requires", strength: 3, quantity, notes: null };
 }
 
 describe("date arithmetic", () => {
@@ -289,5 +295,58 @@ describe("wording", () => {
     expect(describeDue("2026-03-30", "2026-03-25")).toBe("In 5 days");
     // Far enough out that the date itself is more use than the gap.
     expect(describeDue("2026-06-30", "2026-03-25")).toBe("2026-06-30");
+  });
+});
+
+describe("leverage quantities", () => {
+  it("adds up what one order would have to cover", () => {
+    // Two print runs off the same cardstock, a fortnight apart. The number
+    // worth knowing is 2,500 sheets, not "they both need paper".
+    const graph: Graph = {
+      nodes: [
+        node("a", "Door hangers", "idea", { scheduledFor: "2026-03-28" }),
+        node("b", "Flyers", "idea", { scheduledFor: "2026-04-05" }),
+        { ...node("card", "Cardstock", "material"), estimatedCost: 0.1, unit: "sheet" },
+      ],
+      edges: [edge("e1", "a", "card", 2000), edge("e2", "b", "card", 500)],
+    };
+
+    const [leverage] = leverageInWindow(graph, "2026-03-25", 30);
+    expect(leverage.totalQuantity).toBe(2500);
+    expect(leverage.totalAmount).toBeCloseTo(250, 5);
+  });
+
+  it("says nothing rather than guessing when no quantities are filled in", () => {
+    const graph: Graph = {
+      nodes: [
+        node("a", "Door hangers", "idea", { scheduledFor: "2026-03-28" }),
+        node("b", "Flyers", "idea", { scheduledFor: "2026-04-05" }),
+        { ...node("printer", "Colour printer", "equipment"), estimatedCost: 400 },
+      ],
+      edges: [edge("e1", "a", "printer"), edge("e2", "b", "printer")],
+    };
+
+    const [leverage] = leverageInWindow(graph, "2026-03-25", 30);
+    expect(leverage.totalQuantity).toBeNull();
+    expect(leverage.totalAmount).toBeNull();
+  });
+
+  it("counts only the ideas inside the window", () => {
+    const graph: Graph = {
+      nodes: [
+        node("a", "Door hangers", "idea", { scheduledFor: "2026-03-28" }),
+        node("b", "Flyers", "idea", { scheduledFor: "2026-04-05" }),
+        node("c", "Autumn postcards", "idea", { scheduledFor: "2026-10-01" }),
+        { ...node("card", "Cardstock", "material"), estimatedCost: 0.1, unit: "sheet" },
+      ],
+      edges: [
+        edge("e1", "a", "card", 1000),
+        edge("e2", "b", "card", 1000),
+        edge("e3", "c", "card", 9000),
+      ],
+    };
+
+    const [leverage] = leverageInWindow(graph, "2026-03-25", 30);
+    expect(leverage.totalQuantity).toBe(2000);
   });
 });

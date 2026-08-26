@@ -147,7 +147,9 @@ export interface GraphNode {
   status: NodeStatus;
   description: string | null;
   importance: number | null;
+  /** What one unit costs — one sheet, one hour, one bag. */
   estimatedCost: number | null;
+  unit: string;
   potentialValue: number | null;
   notes: string | null;
   tags: string[];
@@ -171,6 +173,8 @@ export interface GraphEdge {
   targetId: string;
   relationshipType: RelationshipType;
   strength: number;
+  /** How many units of the target this needs. Null means nobody has said. */
+  quantity: number | null;
   notes: string | null;
 }
 

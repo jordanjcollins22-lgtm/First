@@ -9,6 +9,15 @@ import { GraphCanvas, type Point } from "@/components/knowledge/graph-canvas";
 import { NodePanel, TypeSelect } from "@/components/knowledge/node-panel";
 import { createNode, markNodeDone, saveNodePositions } from "@/lib/actions/knowledge-graph-actions";
 import {
+  costOf,
+  costOfMany,
+  describeQuantity,
+  hours as formatHours,
+  isCapital,
+  isTimeUnit,
+  money,
+} from "@/lib/knowledge-cost";
+import {
   describeDue,
   describeRecurrence,
   leverageInWindow,
@@ -86,6 +95,18 @@ export function KnowledgeWorkspace({
   const buckets = useMemo(() => scheduleBuckets(graph.nodes, today), [graph.nodes, today]);
   const leverage = useMemo(() => leverageInWindow(graph, today, 30), [graph, today]);
   const dueCount = buckets.overdue.length + buckets.today.length + buckets.soon.length;
+
+  // What the near-term schedule costs, materials and time kept apart. Shared
+  // inputs are counted per idea on purpose: two campaigns both needing two
+  // thousand sheets need four thousand sheets.
+  const dueCost = useMemo(
+    () =>
+      costOfMany(
+        graph,
+        [...buckets.overdue, ...buckets.today, ...buckets.soon].map((b) => b.node.id)
+      ),
+    [graph, buckets]
+  );
 
   // Anything already showing under "worth doing together" is left out here.
   // The same printer listed twice, once with dates and once without, reads as
@@ -403,16 +424,37 @@ export function KnowledgeWorkspace({
       {dueCount > 0 && (
         <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
           <h2 className="text-lg font-bold">Coming up</h2>
-          <p className="mb-3 text-xs text-muted-foreground">
+          <p className="mb-2 text-xs text-muted-foreground">
             Ticking something off rolls a repeating idea forward on its own, so nothing has to be
             re-entered to keep happening.
           </p>
+          {dueCost.total > 0 && (
+            <p className="mb-3 text-xs">
+              <span className="font-medium">{money(dueCost.total)}</span> and{" "}
+              <span className="font-medium">{formatHours(dueCost.hours)}</span> to get through what is
+              below.
+              {dueCost.capital > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  Plus {money(dueCost.capital)} of kit ({dueCost.capitalItems.map((n) => n.title).join(", ")}),
+                  bought once for all of it.
+                </span>
+              )}
+              {dueCost.unpriced.length > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  Nothing priced yet on {dueCost.unpriced.map((n) => n.title).join(", ")}.
+                </span>
+              )}
+            </p>
+          )}
           <DueList
             label="Overdue"
             tone="alert"
             items={buckets.overdue}
             today={today}
             pending={pending}
+            graph={graph}
             onSelect={setSelectedId}
             onDone={done}
           />
@@ -421,6 +463,7 @@ export function KnowledgeWorkspace({
             items={buckets.today}
             today={today}
             pending={pending}
+            graph={graph}
             onSelect={setSelectedId}
             onDone={done}
           />
@@ -429,6 +472,7 @@ export function KnowledgeWorkspace({
             items={buckets.soon}
             today={today}
             pending={pending}
+            graph={graph}
             onSelect={setSelectedId}
             onDone={done}
           />
@@ -448,7 +492,7 @@ export function KnowledgeWorkspace({
             one setup, one delivery.
           </p>
           <ul className="flex flex-col gap-2">
-            {leverage.map(({ resource, uses }) => (
+            {leverage.map(({ resource, uses, totalQuantity, totalAmount }) => (
               <li key={resource.id} className="rounded-lg border border-border/60 p-2">
                 <button type="button" onClick={() => setSelectedId(resource.id)} className="w-full text-left">
                   <span className="flex items-center gap-2">
@@ -457,10 +501,35 @@ export function KnowledgeWorkspace({
                       style={{ backgroundColor: nodeTypeDef(resource.nodeType).color }}
                     />
                     <span className="text-sm font-medium">{resource.title}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">{uses.length} times</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {totalQuantity != null
+                        ? describeQuantity(totalQuantity, resource.unit)
+                        : `${uses.length} times`}
+                    </span>
                   </span>
+                  {/* One order, one block of somebody's day, or one purchase
+                      — three different kinds of leverage, and calling them all
+                      "an order" would be wrong about two of them. */}
+                  {isCapital(resource) && resource.estimatedCost != null ? (
+                    <span className="mt-0.5 block text-xs font-medium">
+                      {money(resource.estimatedCost)} once, earning its keep {uses.length} times
+                    </span>
+                  ) : totalAmount != null && totalQuantity != null ? (
+                    <span className="mt-0.5 block text-xs font-medium">
+                      {isTimeUnit(resource.unit)
+                        ? `${describeQuantity(totalQuantity, resource.unit)} in one sitting — ${money(totalAmount)}`
+                        : `${money(totalAmount)} in one order instead of ${uses.length}`}
+                    </span>
+                  ) : null}
                   <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                    {uses.map((u) => `${u.node.title} (${describeDue(u.due, today)})`).join(" · ")}
+                    {uses
+                      .map(
+                        (u) =>
+                          `${u.node.title} (${describeDue(u.due, today)}${
+                            u.quantity != null ? `, ${describeQuantity(u.quantity, resource.unit)}` : ""
+                          })`
+                      )
+                      .join(" · ")}
                   </span>
                 </button>
               </li>
@@ -571,6 +640,7 @@ function DueList({
   today,
   pending,
   tone,
+  graph,
   onSelect,
   onDone,
 }: {
@@ -579,6 +649,7 @@ function DueList({
   today: string;
   pending: boolean;
   tone?: "alert";
+  graph: Graph;
   onSelect: (id: string) => void;
   onDone: (id: string) => void;
 }) {
@@ -590,7 +661,13 @@ function DueList({
         {label} ({items.length})
       </p>
       <ul className="flex flex-col gap-1.5">
-        {items.map(({ node, due }) => (
+        {items.map(({ node, due }) => {
+          const own = costOf(graph, node.id);
+          const cost =
+            own.total > 0
+              ? `${money(own.total)} a run${own.hours > 0 ? `, ${formatHours(own.hours)}` : ""}`
+              : "";
+          return (
           <li
             key={node.id}
             className={`flex items-center gap-2 rounded-lg border p-2 ${
@@ -605,6 +682,7 @@ function DueList({
               <span className="block truncate text-sm">{node.title}</span>
               <span className="block text-[11px] text-muted-foreground">
                 {describeDue(due, today)} · {describeRecurrence(node.recurrence, node.recurrenceInterval)}
+                {cost ? ` · ${cost}` : ""}
               </span>
             </button>
             <button
@@ -616,7 +694,8 @@ function DueList({
               Done
             </button>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

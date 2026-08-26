@@ -27,12 +27,12 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, estimated_cost, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, estimated_cost, unit, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
       .from("knowledge_relationships")
-      .select("id, source_node_id, target_node_id, relationship_type, strength, notes"),
+      .select("id, source_node_id, target_node_id, relationship_type, strength, quantity, notes"),
     supabase.from("knowledge_node_tags").select("node_id, knowledge_tags(name)"),
   ]);
 
@@ -62,6 +62,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       status: string;
       importance: number | null;
       estimated_cost: number | null;
+      unit: string | null;
       potential_value: number | null;
       notes: string | null;
       position_x: number | null;
@@ -83,6 +84,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     status: n.status as NodeStatus,
     importance: n.importance,
     estimatedCost: n.estimated_cost != null ? Number(n.estimated_cost) : null,
+    unit: n.unit ?? "each",
     potentialValue: n.potential_value != null ? Number(n.potential_value) : null,
     notes: n.notes,
     tags: tagsByNode.get(n.id) ?? [],
@@ -105,6 +107,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       target_node_id: string;
       relationship_type: string;
       strength: number;
+      quantity: number | null;
       notes: string | null;
     }[]
   ).map((e) => ({
@@ -113,6 +116,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     targetId: e.target_node_id,
     relationshipType: e.relationship_type as RelationshipType,
     strength: e.strength,
+    quantity: e.quantity != null ? Number(e.quantity) : null,
     notes: e.notes,
   }));
 

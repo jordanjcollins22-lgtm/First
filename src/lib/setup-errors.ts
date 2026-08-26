@@ -55,6 +55,8 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "scheduled_for", table: "knowledge_nodes", migration: "0094_knowledge_schedule.sql" },
   { column: "recurrence", table: "knowledge_nodes", migration: "0094_knowledge_schedule.sql" },
   { column: "times_done", table: "knowledge_nodes", migration: "0094_knowledge_schedule.sql" },
+  { column: "unit", table: "knowledge_nodes", migration: "0095_knowledge_costs.sql" },
+  { column: "quantity", table: "knowledge_relationships", migration: "0095_knowledge_costs.sql" },
 ];
 
 interface DbError {

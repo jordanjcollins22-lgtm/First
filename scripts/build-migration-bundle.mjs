@@ -39,6 +39,7 @@ const CREATES = {
   "0093_knowledge_graph.sql": ["knowledge_nodes", "knowledge_relationships"],
   // Alters only — nothing to probe for.
   "0094_knowledge_schedule.sql": [],
+  "0095_knowledge_costs.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
