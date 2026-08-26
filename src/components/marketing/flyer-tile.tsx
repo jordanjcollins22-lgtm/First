@@ -123,15 +123,15 @@ export function SupportBanner() {
 export function EddmIndicia({ permit }: { permit?: string | null }) {
   return (
     <div
-      className="absolute right-[3%] top-[1.6%] z-10 bg-white px-[1%] py-[0.6%] text-center leading-tight"
-      style={{ border: "1px solid #111", color: "#111", width: "22%" }}
+      className="absolute right-[3.4%] top-[1.9%] z-10 bg-white px-[0.7%] py-[0.4%] text-center leading-tight"
+      style={{ border: "1px solid #111", color: "#111", width: "15.5%" }}
     >
-      <p className="text-[1.9cqw] font-bold uppercase">PRSRT STD</p>
-      <p className="text-[1.9cqw] font-bold uppercase">ECRWSS</p>
-      <p className="text-[1.9cqw] font-bold uppercase">U.S. Postage</p>
-      <p className="text-[2.4cqw] font-extrabold uppercase">Paid</p>
-      <p className="text-[1.9cqw] font-bold uppercase">EDDM Retail</p>
-      {permit ? <p className="text-[1.7cqw] uppercase">{permit}</p> : null}
+      <p className="text-[1.35cqw] font-bold uppercase">PRSRT STD</p>
+      <p className="text-[1.35cqw] font-bold uppercase">ECRWSS</p>
+      <p className="text-[1.35cqw] font-bold uppercase">U.S. Postage</p>
+      <p className="text-[1.7cqw] font-extrabold uppercase">Paid</p>
+      <p className="text-[1.35cqw] font-bold uppercase">EDDM Retail</p>
+      {permit ? <p className="text-[1.2cqw] uppercase">{permit}</p> : null}
     </div>
   );
 }
