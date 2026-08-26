@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { isMissingTable } from "@/lib/setup-errors";
 import type { Graph, GraphEdge, GraphNode, NodeStatus, NodeType, RelationshipType } from "@/lib/knowledge-graph";
+import type { Recurrence } from "@/lib/knowledge-schedule";
 
 export interface KnowledgeGraphData extends Graph {
   /** Every tag in use, for the filter list. */
@@ -26,7 +27,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, estimated_cost, potential_value, notes, position_x, position_y, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, estimated_cost, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
@@ -65,6 +66,11 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       notes: string | null;
       position_x: number | null;
       position_y: number | null;
+      scheduled_for: string | null;
+      recurrence: string | null;
+      recurrence_interval: number | null;
+      last_done_at: string | null;
+      times_done: number | null;
       created_by: string | null;
       created_at: string;
       updated_at: string;
@@ -82,6 +88,11 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     tags: tagsByNode.get(n.id) ?? [],
     positionX: n.position_x,
     positionY: n.position_y,
+    scheduledFor: n.scheduled_for,
+    recurrence: (n.recurrence ?? "none") as Recurrence,
+    recurrenceInterval: n.recurrence_interval ?? 1,
+    lastDoneAt: n.last_done_at,
+    timesDone: n.times_done ?? 0,
     createdBy: n.created_by,
     createdAt: n.created_at,
     updatedAt: n.updated_at,

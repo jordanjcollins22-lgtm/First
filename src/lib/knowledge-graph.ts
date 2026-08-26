@@ -12,6 +12,10 @@
  * into more ideas has not been decomposed.
  */
 
+// Type-only, so the two modules can reference each other without a runtime
+// import cycle.
+import type { Recurrence } from "@/lib/knowledge-schedule";
+
 export type NodeType =
   | "idea" | "material" | "equipment" | "tool" | "machine" | "software" | "person"
   | "role" | "skill" | "process" | "task" | "location" | "supplier" | "customer_type"
@@ -149,6 +153,13 @@ export interface GraphNode {
   tags: string[];
   positionX: number | null;
   positionY: number | null;
+  /** When this is next meant to happen. Null is a perfectly good answer for
+   * an idea; a date is what turns it into work. */
+  scheduledFor: string | null;
+  recurrence: Recurrence;
+  recurrenceInterval: number;
+  lastDoneAt: string | null;
+  timesDone: number;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -339,6 +350,9 @@ export interface GraphFilters {
   relationshipTypes: Set<string>;
   showIsolated: boolean;
   minConnections: number;
+  /** Only things with a date on them. What is actually happening, rather than
+   * everything anybody ever thought of. */
+  scheduledOnly: boolean;
 }
 
 export const EMPTY_FILTERS: GraphFilters = {
@@ -348,6 +362,7 @@ export const EMPTY_FILTERS: GraphFilters = {
   relationshipTypes: new Set(),
   showIsolated: true,
   minConnections: 0,
+  scheduledOnly: false,
 };
 
 /**
@@ -363,6 +378,7 @@ export function applyFilters(graph: Graph, filters: GraphFilters): Graph {
 
   if (filters.nodeTypes.size > 0) nodes = nodes.filter((n) => filters.nodeTypes.has(n.nodeType));
   if (filters.statuses.size > 0) nodes = nodes.filter((n) => filters.statuses.has(n.status));
+  if (filters.scheduledOnly) nodes = nodes.filter((n) => n.scheduledFor != null);
 
   let edges = graph.edges;
   if (filters.relationshipTypes.size > 0) {

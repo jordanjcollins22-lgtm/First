@@ -31,6 +31,11 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
     tags: [],
     positionX: null,
     positionY: null,
+    scheduledFor: null,
+    recurrence: "none",
+    recurrenceInterval: 1,
+    lastDoneAt: null,
+    timesDone: 0,
     createdBy: null,
     createdAt: "2026-08-19T00:00:00Z",
     updatedAt: "2026-08-19T00:00:00Z",
@@ -243,5 +248,25 @@ describe("applyFilters", () => {
   it("filters by how connected a node is", () => {
     const filtered = applyFilters(PRINT_SHOP, { ...EMPTY_FILTERS, minConnections: 3 });
     expect(filtered.nodes.map((n) => n.id).sort()).toEqual(["flyers", "hangers", "printer"]);
+  });
+});
+
+describe("applyFilters — scheduled only", () => {
+  it("keeps only what has a date on it", () => {
+    const graph: Graph = {
+      nodes: [
+        { ...node("a", "Door hangers"), scheduledFor: "2026-04-01" },
+        node("b", "Someday: radio ad"),
+      ],
+      edges: [],
+    };
+
+    const filtered = applyFilters(graph, { ...EMPTY_FILTERS, scheduledOnly: true });
+    expect(filtered.nodes.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("leaves everything alone when it is off", () => {
+    const graph: Graph = { nodes: [node("a", "One"), node("b", "Two")], edges: [] };
+    expect(applyFilters(graph, EMPTY_FILTERS).nodes).toHaveLength(2);
   });
 });

@@ -52,6 +52,9 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "pipeline_stage", table: "customers", migration: "0089_job_numbers_and_pipeline.sql" },
   { column: "opportunity_value", table: "customers", migration: "0089_job_numbers_and_pipeline.sql" },
   { column: "pipeline", table: "customers", migration: "0089_job_numbers_and_pipeline.sql" },
+  { column: "scheduled_for", table: "knowledge_nodes", migration: "0094_knowledge_schedule.sql" },
+  { column: "recurrence", table: "knowledge_nodes", migration: "0094_knowledge_schedule.sql" },
+  { column: "times_done", table: "knowledge_nodes", migration: "0094_knowledge_schedule.sql" },
 ];
 
 interface DbError {

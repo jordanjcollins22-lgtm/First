@@ -30,6 +30,7 @@ export function GraphCanvas({
   onMoveEnd,
   onCreateAt,
   onMeasure,
+  today,
   height = "h-[58vh] min-h-[360px]",
 }: {
   graph: Graph;
@@ -40,6 +41,8 @@ export function GraphCanvas({
   onMoveEnd: (id: string) => void;
   onCreateAt: (point: Point) => void;
   onMeasure: (size: { width: number; height: number }) => void;
+  /** Today, so a scheduled node can show whether it has gone by. */
+  today: string;
   height?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -291,6 +294,20 @@ export function GraphCanvas({
                   />
                   {node.status === "archived" && (
                     <circle cx={point.x} cy={point.y} r={radius} fill="#0f172a" fillOpacity={0.55} />
+                  )}
+                  {/* A ring means it is on the calendar, amber means it has
+                      gone by. Scheduled work should be findable on the board
+                      without reading every label. */}
+                  {node.scheduledFor && (
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={radius + 4}
+                      fill="none"
+                      stroke={node.scheduledFor < today ? "#f59e0b" : "#e2e8f0"}
+                      strokeWidth={1.5}
+                      strokeDasharray={node.recurrence === "none" ? "3 3" : undefined}
+                    />
                   )}
                   {(showLabels || selected || degree >= 3) && (
                     <text

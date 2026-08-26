@@ -114,6 +114,11 @@ export interface Database {
           notes: string | null;
           position_x: number | null;
           position_y: number | null;
+          scheduled_for: string | null;
+          recurrence: string;
+          recurrence_interval: number;
+          last_done_at: string | null;
+          times_done: number;
           metadata: Record<string, unknown>;
           created_by: string | null;
           created_at: string;

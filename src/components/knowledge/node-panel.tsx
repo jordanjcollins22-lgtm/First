@@ -31,8 +31,17 @@ import {
   addRequirement,
   deleteNode,
   deleteRelationship,
+  markNodeDone,
+  scheduleNode,
   updateNode,
 } from "@/lib/actions/knowledge-graph-actions";
+import {
+  RECURRENCES,
+  describeDue,
+  describeRecurrence,
+  todayKey,
+  type Recurrence,
+} from "@/lib/knowledge-schedule";
 
 /**
  * One node, everything about it, and everything touching it.
@@ -76,6 +85,11 @@ export function NodePanel({
   // form without an effect that fights whatever somebody is halfway through
   // typing.
 
+  // Schedule row.
+  const [scheduledFor, setScheduledFor] = useState(node.scheduledFor ?? "");
+  const [recurrence, setRecurrence] = useState<Recurrence>(node.recurrence);
+  const [interval, setInterval] = useState(String(node.recurrenceInterval || 1));
+
   // Breakdown row.
   const [needTitle, setNeedTitle] = useState("");
   const [needType, setNeedType] = useState<NodeType>("material");
@@ -100,6 +114,7 @@ export function NodePanel({
   );
 
   const def = nodeTypeDef(node.nodeType);
+  const today = todayKey();
 
   function run(action: () => Promise<{ ok: boolean; message?: string }>) {
     start(async () => {
@@ -242,6 +257,113 @@ export function NodePanel({
           </p>
         </div>
       )}
+
+      <Section title="When does this happen?">
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
+          {node.scheduledFor ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{describeDue(node.scheduledFor, today)}</span>
+              <span className="text-xs text-muted-foreground">
+                {node.scheduledFor} · {describeRecurrence(node.recurrence, node.recurrenceInterval)}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                className="ml-auto"
+                disabled={pending}
+                onClick={() => run(() => markNodeDone(node.id))}
+              >
+                {pending ? "…" : "Mark done"}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Not scheduled. An idea with no date is a note — give it one and it starts pulling its
+              requirements along with it.
+            </p>
+          )}
+
+          {(node.lastDoneAt || node.timesDone > 0) && (
+            <p className="text-[11px] text-muted-foreground">
+              Done {node.timesDone} time{node.timesDone === 1 ? "" : "s"}
+              {node.lastDoneAt ? `, last on ${node.lastDoneAt}` : ""}.
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Next date</Label>
+              <Input
+                type="date"
+                value={scheduledFor}
+                onChange={(e) => setScheduledFor(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Repeats</Label>
+              <Select value={recurrence} onValueChange={(v) => setRecurrence(v as Recurrence)}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RECURRENCES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {recurrence !== "none" && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Every how many? ({describeRecurrence(recurrence, Number(interval) || 1)})</Label>
+              <Input
+                value={interval}
+                inputMode="numeric"
+                onChange={(e) => setInterval(e.target.value)}
+                className="h-9 w-24 text-sm"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                run(() =>
+                  scheduleNode(node.id, {
+                    scheduledFor: scheduledFor || null,
+                    recurrence,
+                    recurrenceInterval: Number(interval) || 1,
+                  })
+                )
+              }
+            >
+              {pending ? "Saving…" : "Save schedule"}
+            </Button>
+            {node.scheduledFor && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setScheduledFor("");
+                  setRecurrence("none");
+                  run(() => scheduleNode(node.id, { scheduledFor: null, recurrence: "none" }));
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+      </Section>
 
       <Section title="What does this physically require?">
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">

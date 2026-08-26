@@ -6,6 +6,7 @@ import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { RECURRENCES, advance, todayKey, type Recurrence } from "@/lib/knowledge-schedule";
 import {
   NODE_STATUSES,
   NODE_TYPES,
@@ -22,6 +23,7 @@ const PATH = "/knowledge-graph";
 const VALID_TYPES = new Set(NODE_TYPES.map((t) => t.value as string));
 const VALID_STATUSES = new Set(NODE_STATUSES.map((s) => s.value as string));
 const VALID_RELATIONSHIPS = new Set(RELATIONSHIP_TYPES.map((r) => r.value as string));
+const VALID_RECURRENCES = new Set(RECURRENCES.map((r) => r.value as string));
 
 export interface NodeInput {
   title: string;
@@ -35,6 +37,9 @@ export interface NodeInput {
   tags?: string[];
   positionX?: number | null;
   positionY?: number | null;
+  scheduledFor?: string | null;
+  recurrence?: Recurrence;
+  recurrenceInterval?: number;
 }
 
 /**
@@ -72,6 +77,9 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         potential_value: numberOrNull(input.potentialValue),
         position_x: input.positionX ?? null,
         position_y: input.positionY ?? null,
+        scheduled_for: dateOrNull(input.scheduledFor),
+        recurrence: validRecurrence(input.recurrence),
+        recurrence_interval: clampInterval(input.recurrenceInterval),
         created_by: profile.id,
       })
       .select("id")
@@ -116,6 +124,11 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
     if (patch.estimatedCost !== undefined) update.estimated_cost = numberOrNull(patch.estimatedCost);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
+    if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);
+    if (patch.recurrence !== undefined) update.recurrence = validRecurrence(patch.recurrence);
+    if (patch.recurrenceInterval !== undefined) {
+      update.recurrence_interval = clampInterval(patch.recurrenceInterval);
+    }
 
     const supabase = await createClient();
 
@@ -325,6 +338,109 @@ export async function saveNodePositions(
   }
 }
 
+/**
+ * Puts a date on an idea, and says whether it comes round again.
+ *
+ * Scheduling is deliberately a first-class thing you can do to any node, not
+ * only to something called a task. The whole point of breaking an idea down
+ * is that it becomes work, and work happens on days.
+ */
+export async function scheduleNode(
+  id: string,
+  input: { scheduledFor: string | null; recurrence?: Recurrence; recurrenceInterval?: number }
+): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const scheduledFor = dateOrNull(input.scheduledFor);
+    const recurrence = validRecurrence(input.recurrence);
+
+    // A recurrence with no start date has nothing to recur from, and saving it
+    // would leave something that says "every month" and never comes round.
+    if (!scheduledFor && recurrence !== "none") {
+      return { ok: false, message: "Pick the first date before setting it to repeat." };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("knowledge_nodes")
+      .update({
+        scheduled_for: scheduledFor,
+        recurrence,
+        recurrence_interval: clampInterval(input.recurrenceInterval),
+      } as never)
+      .eq("id", id);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath(PATH);
+    return {
+      ok: true,
+      id,
+      message: scheduledFor ? "Scheduled." : "Taken off the schedule.",
+    };
+  } catch (err) {
+    console.error("scheduleNode failed:", err);
+    return { ok: false, message: "Couldn't schedule that." };
+  }
+}
+
+/**
+ * Ticks something off, and rolls it forward if it repeats.
+ *
+ * The roll-forward is the reason recurrence is worth having at all: a monthly
+ * thing that has to be re-entered every month is a monthly thing that stops
+ * happening in March. A one-off simply comes off the schedule, keeping its
+ * count, so the graph can still say the printer earned its money.
+ */
+export async function markNodeDone(id: string, on?: string): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("knowledge_nodes")
+      .select("scheduled_for, recurrence, recurrence_interval, times_done")
+      .eq("id", id)
+      .single();
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    const done = dateOrNull(on) ?? todayKey();
+    const recurrence = validRecurrence(data.recurrence);
+    const interval = clampInterval(data.recurrence_interval);
+
+    // Stepped from the date it was due, not from today, so a job done two days
+    // late does not drag every future one two days later with it.
+    const from = data.scheduled_for ?? done;
+    let next = advance(from, recurrence, interval);
+    // If it was done very late, roll on until it is actually in front of us.
+    for (let step = 0; step < 500 && next && next <= done; step++) {
+      const following = advance(next, recurrence, interval);
+      if (!following || following === next) break;
+      next = following;
+    }
+
+    const { error: updateError } = await supabase
+      .from("knowledge_nodes")
+      .update({
+        last_done_at: done,
+        times_done: (data.times_done ?? 0) + 1,
+        scheduled_for: next,
+      } as never)
+      .eq("id", id);
+    if (updateError) return { ok: false, message: describeDbError(updateError) };
+
+    revalidatePath(PATH);
+    return {
+      ok: true,
+      id,
+      message: next ? `Done. Next one ${next}.` : "Done.",
+    };
+  } catch (err) {
+    console.error("markNodeDone failed:", err);
+    return { ok: false, message: "Couldn't mark that done." };
+  }
+}
+
 /** Tags, created on first use. A tag list somebody has to set up in advance is
  * a tag list nobody uses. */
 async function applyTags(
@@ -365,6 +481,22 @@ async function applyTags(
   if (linkError) return { ok: false, message: describeDbError(linkError) };
 
   return { ok: true };
+}
+
+/** A date, or nothing. An empty string arrives from a cleared date input and
+ * means "no longer scheduled", not "the epoch". */
+function dateOrNull(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function validRecurrence(value: string | undefined): Recurrence {
+  return value && VALID_RECURRENCES.has(value) ? (value as Recurrence) : "none";
+}
+
+function clampInterval(value: number | null | undefined): number {
+  if (value == null || Number.isNaN(value)) return 1;
+  return Math.min(52, Math.max(1, Math.round(value)));
 }
 
 function clampScale(value: number | null | undefined): number | null {

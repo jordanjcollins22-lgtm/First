@@ -37,6 +37,8 @@ const CREATES = {
   "0091_contact_merge_undo.sql": ["contact_merges"],
   "0092_target_markets.sql": ["target_markets"],
   "0093_knowledge_graph.sql": ["knowledge_nodes", "knowledge_relationships"],
+  // Alters only — nothing to probe for.
+  "0094_knowledge_schedule.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GraphCanvas, type Point } from "@/components/knowledge/graph-canvas";
 import { NodePanel, TypeSelect } from "@/components/knowledge/node-panel";
-import { createNode, saveNodePositions } from "@/lib/actions/knowledge-graph-actions";
+import { createNode, markNodeDone, saveNodePositions } from "@/lib/actions/knowledge-graph-actions";
+import {
+  describeDue,
+  describeRecurrence,
+  leverageInWindow,
+  scheduleBuckets,
+  type ScheduledNode,
+} from "@/lib/knowledge-schedule";
 import { fitToCanvas, layoutGraph, seedPositions } from "@/lib/graph-layout";
 import {
   EMPTY_FILTERS,
@@ -42,10 +49,14 @@ export function KnowledgeWorkspace({
   graph,
   tags,
   canDelete,
+  today,
 }: {
   graph: Graph;
   tags: string[];
   canDelete: boolean;
+  /** Worked out on the server, like every other date in this app, so the
+   * page renders the same on both sides of hydration. */
+  today: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -72,6 +83,21 @@ export function KnowledgeWorkspace({
   const degrees = useMemo(() => degreeMap(graph), [graph]);
   const shared = useMemo(() => sharedResources(graph), [graph]);
   const orphans = useMemo(() => isolatedNodes(graph), [graph]);
+  const buckets = useMemo(() => scheduleBuckets(graph.nodes, today), [graph.nodes, today]);
+  const leverage = useMemo(() => leverageInWindow(graph, today, 30), [graph, today]);
+  const dueCount = buckets.overdue.length + buckets.today.length + buckets.soon.length;
+
+  // Anything already showing under "worth doing together" is left out here.
+  // The same printer listed twice, once with dates and once without, reads as
+  // two findings and is one.
+  const scheduledResourceIds = useMemo(
+    () => new Set(leverage.map((l) => l.resource.id)),
+    [leverage]
+  );
+  const waiting = useMemo(
+    () => shared.filter((s) => !scheduledResourceIds.has(s.node.id)),
+    [shared, scheduledResourceIds]
+  );
   const selected = useMemo(
     () => graph.nodes.find((n) => n.id === selectedId) ?? null,
     [graph.nodes, selectedId]
@@ -155,6 +181,14 @@ export function KnowledgeWorkspace({
     // Fired and not awaited: the node is already under the finger that put it
     // there, and blocking a drop on a round trip is how a board feels heavy.
     void saveNodePositions([{ id, x: point.x, y: point.y }]);
+  }
+
+  function done(id: string) {
+    start(async () => {
+      const result = await markNodeDone(id);
+      setMessage(result.message ?? null);
+      if (result.ok) router.refresh();
+    });
   }
 
   function add(title: string, nodeType: NodeType, point?: Point) {
@@ -301,10 +335,25 @@ export function KnowledgeWorkspace({
               />
               Show unconnected ({orphans.length})
             </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={filters.scheduledOnly}
+                onChange={(e) => setFilters({ ...filters, scheduledOnly: e.target.checked })}
+              />
+              Scheduled only
+            </label>
             <button
               type="button"
               className="underline text-muted-foreground"
-              onClick={() => setFilters({ ...EMPTY_FILTERS, nodeTypes: new Set(), statuses: new Set(), relationshipTypes: new Set() })}
+              onClick={() =>
+                setFilters({
+                  ...EMPTY_FILTERS,
+                  nodeTypes: new Set(),
+                  statuses: new Set(),
+                  relationshipTypes: new Set(),
+                })
+              }
             >
               Clear filters
             </button>
@@ -327,11 +376,13 @@ export function KnowledgeWorkspace({
           if (title) add(title, draftType, point);
         }}
         onMeasure={handleMeasure}
+        today={today}
       />
 
       <p className="mb-4 mt-1.5 text-[11px] text-muted-foreground">
         Drag to move a node, drag the background to pan, pinch or scroll to zoom, tap a node to open it,
-        double-tap empty space to add one there. Size is how many things touch it.
+        double-tap empty space to add one there. Size is how many things touch it; a ring means it is
+        scheduled, and amber means it has gone by.
       </p>
 
       {selected && (
@@ -349,15 +400,84 @@ export function KnowledgeWorkspace({
         </div>
       )}
 
-      {shared.length > 0 && (
+      {dueCount > 0 && (
         <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
-          <h2 className="text-lg font-bold">What more than one idea needs</h2>
+          <h2 className="text-lg font-bold">Coming up</h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Seven marketing ideas look like seven problems until something counts the printer. Buy the top
-            of this list once.
+            Ticking something off rolls a repeating idea forward on its own, so nothing has to be
+            re-entered to keep happening.
+          </p>
+          <DueList
+            label="Overdue"
+            tone="alert"
+            items={buckets.overdue}
+            today={today}
+            pending={pending}
+            onSelect={setSelectedId}
+            onDone={done}
+          />
+          <DueList
+            label="Today"
+            items={buckets.today}
+            today={today}
+            pending={pending}
+            onSelect={setSelectedId}
+            onDone={done}
+          />
+          <DueList
+            label="This week"
+            items={buckets.soon}
+            today={today}
+            pending={pending}
+            onSelect={setSelectedId}
+            onDone={done}
+          />
+          {buckets.later.length > 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {buckets.later.length} more scheduled further out.
+            </p>
+          )}
+        </div>
+      )}
+
+      {leverage.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
+          <h2 className="text-lg font-bold">Worth doing together</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Scheduled inside the next month and leaning on the same thing. One print run instead of two,
+            one setup, one delivery.
           </p>
           <ul className="flex flex-col gap-2">
-            {shared.map(({ node, dependents }) => (
+            {leverage.map(({ resource, uses }) => (
+              <li key={resource.id} className="rounded-lg border border-border/60 p-2">
+                <button type="button" onClick={() => setSelectedId(resource.id)} className="w-full text-left">
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: nodeTypeDef(resource.nodeType).color }}
+                    />
+                    <span className="text-sm font-medium">{resource.title}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{uses.length} times</span>
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                    {uses.map((u) => `${u.node.title} (${describeDue(u.due, today)})`).join(" · ")}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {waiting.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
+          <h2 className="text-lg font-bold">Shared, but not on the calendar</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            More than one idea needs each of these, and none of those ideas has a date yet. Buy it once —
+            and give one of them a date, because that is what turns the list into work.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {waiting.map(({ node, dependents }) => (
               <li key={node.id} className="rounded-lg border border-border/60 p-2">
                 <button type="button" onClick={() => setSelectedId(node.id)} className="w-full text-left">
                   <span className="flex items-center gap-2">
@@ -434,6 +554,70 @@ function ChipRow({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * One bucket of what is due.
+ *
+ * Marking done sits on the row rather than behind the node, because the whole
+ * value of a recurring idea is that keeping it going costs one tap. Anything
+ * more and the schedule quietly stops reflecting what actually happens.
+ */
+function DueList({
+  label,
+  items,
+  today,
+  pending,
+  tone,
+  onSelect,
+  onDone,
+}: {
+  label: string;
+  items: ScheduledNode[];
+  today: string;
+  pending: boolean;
+  tone?: "alert";
+  onSelect: (id: string) => void;
+  onDone: (id: string) => void;
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mb-3">
+      <p className={`mb-1.5 text-xs font-semibold ${tone === "alert" ? "text-amber-700" : ""}`}>
+        {label} ({items.length})
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        {items.map(({ node, due }) => (
+          <li
+            key={node.id}
+            className={`flex items-center gap-2 rounded-lg border p-2 ${
+              tone === "alert" ? "border-amber-400/70 bg-amber-50/60" : "border-border/60"
+            }`}
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: nodeTypeDef(node.nodeType).color }}
+            />
+            <button type="button" onClick={() => onSelect(node.id)} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm">{node.title}</span>
+              <span className="block text-[11px] text-muted-foreground">
+                {describeDue(due, today)} · {describeRecurrence(node.recurrence, node.recurrenceInterval)}
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onDone(node.id)}
+              className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px]"
+            >
+              Done
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
