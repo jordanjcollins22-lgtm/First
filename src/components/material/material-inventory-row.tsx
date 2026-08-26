@@ -43,8 +43,13 @@ export function MaterialInventoryRow({ material, storageLocations }: MaterialInv
             <div>
               <p className="font-medium">{material.name}</p>
               <p className="text-xs text-muted-foreground">
+                {/* Square feet only where that is what it means. A flyer
+                    covers no square footage, and saying it does is worse than
+                    saying nothing. */}
                 {material.coverage_per_unit_sqft
-                  ? `${material.coverage_per_unit_sqft} sq ft / ${material.unit.replace(/s$/, "")}`
+                  ? material.category === "job"
+                    ? `${material.coverage_per_unit_sqft} sq ft / ${material.unit.replace(/s$/, "")}`
+                    : `${material.coverage_per_unit_sqft} per ${material.unit.replace(/s$/, "")}`
                   : material.unit}{" "}
                 · {material.waste_factor_pct}% waste
               </p>

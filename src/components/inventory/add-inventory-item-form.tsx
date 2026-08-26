@@ -98,6 +98,10 @@ export function AddInventoryItemForm({
         formData.set("unit", unit.trim());
         formData.set("cost_per_unit", cost.trim());
         const created = await createMaterial(formData);
+        if (!created.ok) {
+          setError(created.message);
+          return;
+        }
         onCreated({ kind: "material", id: created.id, name: created.name });
       }
     } catch (err) {

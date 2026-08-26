@@ -5,15 +5,39 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { derivedCostPerUnit } from "@/lib/pricing";
+import { describeDbError } from "@/lib/setup-errors";
 
-export async function createMaterial(formData: FormData) {
+export type CreateMaterialResult =
+  | { ok: true; id: string; name: string }
+  | { ok: false; message: string };
+
+/**
+ * Adds a material, and says what went wrong when it does not.
+ *
+ * Returns rather than throws. A thrown message does not survive a production
+ * build — Next strips it and React hands the browser "Minified React error
+ * #441", which tells somebody adding a flyer precisely nothing. Every reason
+ * this can fail is a reason a person can act on: a name already taken, a
+ * missing photo, no storage location. They should read it.
+ */
+export async function createMaterial(formData: FormData): Promise<CreateMaterialResult> {
+  try {
+    return await createMaterialInner(formData);
+  } catch (err) {
+    console.error("createMaterial failed:", err);
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    return { ok: false, message: message || "Couldn't add that — try again." };
+  }
+}
+
+async function createMaterialInner(formData: FormData): Promise<CreateMaterialResult> {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
 
   const name = String(formData.get("name") ?? "").trim();
   const unit = String(formData.get("unit") ?? "").trim();
-  if (!name) throw new Error("Material name is required");
-  if (!unit) throw new Error("Unit is required");
+  if (!name) return { ok: false, message: "Give it a name." };
+  if (!unit) return { ok: false, message: "Say what one of it is — a bag, a sheet, a yard." };
 
   const coverageRaw = String(formData.get("coverage_per_unit_sqft") ?? "").trim();
   const costRaw = String(formData.get("cost_per_unit") ?? "").trim();
@@ -42,10 +66,10 @@ export async function createMaterial(formData: FormData) {
   const kind = String(formData.get("kind") ?? "material") === "other" ? "other" : "material";
 
   if (stockMethod === "in_stock" && !storageLocation) {
-    throw new Error("Enter where it's stored — required for materials kept in stock.");
+    return { ok: false, message: "Enter where it's stored — required for anything kept in stock." };
   }
   if (!imagePath) {
-    throw new Error("Add a photo of the material.");
+    return { ok: false, message: "Add a photo of it." };
   }
 
   const { data, error } = await supabase
@@ -73,13 +97,22 @@ export async function createMaterial(formData: FormData) {
     })
     .select()
     .single();
-  if (error) throw error;
+
+  if (error) {
+    // The one that actually happens: materials are unique per name inside an
+    // organisation, and somebody adding "8.5x11 Flyer" a second time deserves
+    // to be told that rather than a stack trace.
+    if (error.code === "23505") {
+      return { ok: false, message: `"${name}" is already in Inventory — edit that one instead.` };
+    }
+    return { ok: false, message: describeDbError(error) };
+  }
 
   revalidatePath("/admin/materials");
   revalidatePath("/admin/tools");
   revalidatePath("/knowledge-graph");
   revalidatePath("/canvas");
-  return { id: data.id as string, name: data.name as string };
+  return { ok: true, id: data.id as string, name: data.name as string };
 }
 
 /** Saves what a pack costs and recomputes the per-unit price from it. */

@@ -84,7 +84,11 @@ export function CreateMaterialForm({
         formData.set("category", category);
         formData.set("kind", kind);
         const created = await createMaterial(formData);
-        onCreated?.(created);
+        if (!created.ok) {
+          setError(created.message);
+          return;
+        }
+        onCreated?.({ id: created.id, name: created.name });
         formRef.current?.reset();
         setFile(null);
         setPreviewUrl(null);
@@ -175,7 +179,7 @@ export function CreateMaterialForm({
           <Input id="material-unit" name="unit" required placeholder="cubic yards" className="w-32" />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="material-coverage">Sq ft per unit</Label>
+          <Label htmlFor="material-coverage">Qty per unit</Label>
           <Input
             id="material-coverage"
             name="coverage_per_unit_sqft"
@@ -185,6 +189,7 @@ export function CreateMaterialForm({
             placeholder="100"
             className="w-28"
           />
+          <p className="text-[11px] text-muted-foreground">How much one covers or makes</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="material-waste">Waste %</Label>
