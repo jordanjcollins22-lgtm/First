@@ -97,7 +97,6 @@ export function NodePanel({
   const [notes, setNotes] = useState(node.notes ?? "");
   const [importance, setImportance] = useState(node.importance ? String(node.importance) : "");
   const [tags, setTags] = useState(node.tags.join(", "));
-  const [unitCost, setUnitCost] = useState(node.estimatedCost != null ? String(node.estimatedCost) : "");
   const [unit, setUnit] = useState(node.unit);
   const [purchaseUrl, setPurchaseUrl] = useState(node.purchaseUrl ?? "");
 
@@ -115,13 +114,12 @@ export function NodePanel({
   const [needTitle, setNeedTitle] = useState("");
   const [needType, setNeedType] = useState<NodeType>("material");
   const [needRelationship, setNeedRelationship] = useState<RelationshipType>("requires");
-  const [pickedId, setPickedId] = useState("");
+  const [pickedKey, setPickedKey] = useState("");
   const [earnTitle, setEarnTitle] = useState("");
   const [earnPickedId, setEarnPickedId] = useState("");
   const [earnValue, setEarnValue] = useState("");
   const [earnCount, setEarnCount] = useState("");
   const [needQuantity, setNeedQuantity] = useState("");
-  const [needCost, setNeedCost] = useState("");
   const [needUnit, setNeedUnit] = useState("each");
 
   const neighbours = useMemo(() => neighboursOf(graph, node.id), [graph, node.id]);
@@ -161,16 +159,53 @@ export function NodePanel({
     [graph.nodes, node.id]
   );
 
-  const picked = useMemo(() => reusable.find((r) => r.id === pickedId) ?? null, [reusable, pickedId]);
+  /** Inventory that has no node yet. The ones that do are already in the list
+   * above, and offering both would be offering the same thing twice. */
+  const unusedMaterials = useMemo(() => {
+    const linked = new Set(graph.nodes.map((n) => n.materialId).filter(Boolean));
+    return materials.filter((m) => !linked.has(m.id));
+  }, [graph.nodes, materials]);
+
+  /** Whichever of the two lists was picked from, flattened so the form below
+   * does not have to care which. */
+  const picked = useMemo(() => {
+    const [kind, id] = pickedKey.split(":");
+    if (kind === "node") {
+      const found = reusable.find((r) => r.id === id);
+      return found
+        ? {
+            kind: "node" as const,
+            id: found.id,
+            title: found.title,
+            unit: found.unit,
+            unitLabel: unitDef(found.unit).label.replace(/^per /, ""),
+            unitCost: found.estimatedCost,
+          }
+        : null;
+    }
+    if (kind === "material") {
+      const found = unusedMaterials.find((m) => m.id === id);
+      return found
+        ? {
+            kind: "material" as const,
+            id: found.id,
+            title: found.name,
+            unit: found.unit,
+            unitLabel: found.unit,
+            unitCost: found.costPerUnit,
+          }
+        : null;
+    }
+    return null;
+  }, [pickedKey, reusable, unusedMaterials]);
 
   // What the line about to be added would come to, shown before it is added
   // rather than after — that is when somebody can still change their mind.
   const lineTotal = useMemo(() => {
     const quantity = Number(needQuantity) || 0;
-    const rate = picked ? picked.estimatedCost : needCost ? Number(needCost) : null;
-    if (!quantity || rate == null || Number.isNaN(rate)) return null;
-    return quantity * rate;
-  }, [needQuantity, needCost, picked]);
+    if (!quantity || picked?.unitCost == null) return null;
+    return quantity * picked.unitCost;
+  }, [needQuantity, picked]);
 
   const cost = useMemo(() => costOf(graph, node.id), [graph, node.id]);
   const payback = useMemo(() => paybackOf(graph, node.id), [graph, node.id]);
@@ -302,26 +337,14 @@ export function NodePanel({
               <Input value={tags} onChange={(e) => setTags(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Cost of one</Label>
-              <Input
-                value={unitCost}
-                inputMode="decimal"
-                placeholder="0.12"
-                onChange={(e) => setUnitCost(e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">One of it is</Label>
-              <UnitSelect value={unit} onChange={setUnit} />
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">One of it is</Label>
+            <UnitSelect value={unit} onChange={setUnit} />
+            <p className="text-[11px] text-muted-foreground">
+              What a quantity of it means. An hour or a day makes it time rather than materials. The
+              price is not set here — it comes from Inventory, so there is only ever one of it.
+            </p>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Priced per unit, so everything that needs it works its own total out. An hour or a day makes
-            it time rather than materials.
-          </p>
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs">Where you buy it</Label>
             <Input
@@ -351,7 +374,6 @@ export function NodePanel({
                   description,
                   notes,
                   importance: importance ? Number(importance) : null,
-                  estimatedCost: unitCost ? Number(unitCost) : null,
                   unit,
                   purchaseUrl: purchaseUrl || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
@@ -377,108 +399,6 @@ export function NodePanel({
         </div>
       )}
 
-      <Section title="Where it comes from">
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
-          {node.materialId && node.materialName ? (
-            <>
-              <p className="text-sm">
-                Linked to <span className="font-medium">{node.materialName}</span> in Inventory.
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {node.estimatedCost != null
-                  ? `${money(node.estimatedCost)} ${unitDef(node.unit).label}`
-                  : "No price on it in inventory yet"}
-                {node.stockOnHand != null ? ` · ${node.stockOnHand} on hand` : ""}
-                {node.onOrder ? " · on order" : ""}
-              </p>
-              {node.stockOnHand != null &&
-                node.reorderThreshold != null &&
-                node.stockOnHand <= node.reorderThreshold &&
-                !node.onOrder && (
-                  <p className="text-[11px] font-medium text-amber-700">
-                    Down to the reorder point — order before the next run needs it.
-                  </p>
-                )}
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href="/admin/tools"
-                  className="rounded-md border border-border px-2 py-1 text-xs"
-                >
-                  Open in Inventory
-                </Link>
-                {node.purchaseUrl && (
-                  <a
-                    href={node.purchaseUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-md border border-border px-2 py-1 text-xs"
-                  >
-                    Buy at {describePurchaseUrl(node.purchaseUrl)}
-                  </a>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={pending}
-                  onClick={() => run(() => linkNodeToMaterial(node.id, null))}
-                >
-                  Unlink
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-[11px] text-muted-foreground">
-                Link it to the real thing and its price, stock and purchase link all come from Inventory —
-                one number, kept where the rest of the business keeps it.
-              </p>
-              <Select value="" onValueChange={(v) => run(() => linkNodeToMaterial(node.id, v))}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Link to a material…" />
-                </SelectTrigger>
-                {/* Capped and truncated: an inventory name plus a price is
-                    easily wider than a phone, and a dropdown that runs off
-                    the screen hides the end of every row. */}
-                <SelectContent className="max-w-[calc(100vw-2.5rem)]">
-                  {materials.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      <span className="block truncate">
-                        {m.name}
-                        {m.category === "marketing" ? " (marketing)" : ""}
-                      </span>
-                      {m.costPerUnit != null && (
-                        <span className="block text-[11px] text-muted-foreground">
-                          {money(m.costPerUnit)} per {m.unit}
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {materials.length === 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  Nothing in Inventory yet.{" "}
-                  <Link href="/admin/tools" className="underline">
-                    Add it there
-                  </Link>{" "}
-                  and it becomes linkable here.
-                </p>
-              )}
-              {node.purchaseUrl && (
-                <a
-                  href={node.purchaseUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="self-start rounded-md border border-border px-2 py-1 text-xs"
-                >
-                  Buy at {describePurchaseUrl(node.purchaseUrl)}
-                </a>
-              )}
-            </>
-          )}
-        </div>
-      </Section>
 
       <Section title="When does this happen?">
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
@@ -588,30 +508,152 @@ export function NodePanel({
       </Section>
 
       <Section title="What does this physically require?">
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">
-          {/* The dropdown comes first on purpose. Once the cardstock exists
-              and is priced, every idea after this one should be picking it,
-              not typing it again — a second copy is a second price to keep
-              up to date and a shared resource nobody can see. */}
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/60 p-3">
+          {/* What this node itself is, before what it needs. An input that is
+              a real thing in Inventory carries the real price; one that is
+              not carries no price at all, which is a more useful thing to
+              know than a number somebody guessed a year ago. */}
+          {node.nodeType !== "idea" && (
+            <div className="flex flex-col gap-1.5 border-b border-border/60 pb-3">
+              {node.materialId && node.materialName ? (
+                <>
+                  <p className="text-sm">
+                    This is <span className="font-medium">{node.materialName}</span> in Inventory.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {node.estimatedCost != null
+                      ? `${money(node.estimatedCost)} ${unitDef(node.unit).label}`
+                      : "No price on it in Inventory yet"}
+                    {node.stockOnHand != null ? ` · ${node.stockOnHand} on hand` : ""}
+                    {node.onOrder ? " · on order" : ""}
+                  </p>
+                  {node.stockOnHand != null &&
+                    node.reorderThreshold != null &&
+                    node.stockOnHand <= node.reorderThreshold &&
+                    !node.onOrder && (
+                      <p className="text-[11px] font-medium text-amber-700">
+                        Down to the reorder point — order before the next run needs it.
+                      </p>
+                    )}
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/admin/tools" className="rounded-md border border-border px-2 py-1 text-xs">
+                      Open in Inventory
+                    </Link>
+                    {node.purchaseUrl && (
+                      <a
+                        href={node.purchaseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-md border border-border px-2 py-1 text-xs"
+                      >
+                        Buy at {describePurchaseUrl(node.purchaseUrl)}
+                      </a>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => run(() => linkNodeToMaterial(node.id, null))}
+                    >
+                      Unlink
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-muted-foreground">
+                    Not in Inventory, so it has no cost. Prices come from the real thing — link it and
+                    every total that depends on it works itself out.
+                  </p>
+                  <Select value="" onValueChange={(v) => run(() => linkNodeToMaterial(node.id, v))}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Link to an inventory item…" />
+                    </SelectTrigger>
+                    <SelectContent className="max-w-[calc(100vw-2.5rem)]">
+                      {materials.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          <span className="block truncate">
+                            {m.name}
+                            {m.category === "marketing" ? " (marketing)" : ""}
+                          </span>
+                          {m.costPerUnit != null && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {money(m.costPerUnit)} per {m.unit}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {materials.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Nothing in Inventory yet.{" "}
+                      <Link href="/admin/tools" className="underline">
+                        Add it there
+                      </Link>{" "}
+                      and it becomes linkable here.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* One list, two sources. Something already in the graph, or
+              something in Inventory that is not in the graph yet — picking
+              the second makes the node and the link in one go, so a material
+              can never end up here twice with two prices. */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Use something already in the graph</Label>
+            <Label className="text-xs">What it needs</Label>
             <Select
-              value={pickedId}
+              value={pickedKey}
               onValueChange={(v) => {
-                setPickedId(v);
+                setPickedKey(v);
                 setNeedTitle("");
               }}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Pick an input…" />
               </SelectTrigger>
-              <SelectContent>
-                {reusable.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.title}
-                    {r.estimatedCost != null ? ` — ${money(r.estimatedCost)} ${unitDef(r.unit).label}` : ""}
-                  </SelectItem>
-                ))}
+              <SelectContent className="max-w-[calc(100vw-2.5rem)]">
+                {reusable.length > 0 && (
+                  <div>
+                    <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      In the graph
+                    </p>
+                    {reusable.map((r) => (
+                      <SelectItem key={r.id} value={`node:${r.id}`}>
+                        <span className="block truncate">{r.title}</span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {r.estimatedCost != null
+                            ? `${money(r.estimatedCost)} ${unitDef(r.unit).label}`
+                            : "no price — not linked to Inventory"}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </div>
+                )}
+                {unusedMaterials.length > 0 && (
+                  <div>
+                    <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      From Inventory
+                    </p>
+                    {unusedMaterials.map((m) => (
+                      <SelectItem key={m.id} value={`material:${m.id}`}>
+                        <span className="block truncate">
+                          {m.name}
+                          {m.category === "marketing" ? " (marketing)" : ""}
+                        </span>
+                        {m.costPerUnit != null && (
+                          <span className="block text-[11px] text-muted-foreground">
+                            {money(m.costPerUnit)} per {m.unit}
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </div>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -619,11 +661,11 @@ export function NodePanel({
           {picked ? (
             <p className="text-[11px] text-muted-foreground">
               {picked.title}
-              {picked.estimatedCost != null
-                ? ` · ${money(picked.estimatedCost)} ${unitDef(picked.unit).label}`
+              {picked.unitCost != null
+                ? ` · ${money(picked.unitCost)} per ${picked.unitLabel}`
                 : " · no price on it yet"}
               {" · "}
-              <button type="button" className="underline" onClick={() => setPickedId("")}>
+              <button type="button" className="underline" onClick={() => setPickedKey("")}>
                 pick something else
               </button>
             </p>
@@ -631,13 +673,15 @@ export function NodePanel({
             <>
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-border" />
-                <span className="text-[11px] text-muted-foreground">or add a new one</span>
+                <span className="text-[11px] text-muted-foreground">
+                  or something that is neither, yet
+                </span>
                 <span className="h-px flex-1 bg-border" />
               </div>
               <Input
                 value={needTitle}
                 onChange={(e) => setNeedTitle(e.target.value)}
-                placeholder="Cardstock, printer, toner, design time…"
+                placeholder="Design time, a permit, somebody's Saturday…"
                 className="h-9 text-sm"
               />
               {suggestions.length > 0 && (
@@ -653,7 +697,7 @@ export function NodePanel({
                         disabled={pending}
                         className="rounded-full border border-border px-2 py-1 text-xs"
                         onClick={() => {
-                          setPickedId(s.id);
+                          setPickedKey(`node:${s.id}`);
                           setNeedTitle("");
                         }}
                       >
@@ -673,20 +717,14 @@ export function NodePanel({
                   <TypeSelect value={needType} onChange={setNeedType} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">Cost of one</Label>
-                  <Input
-                    value={needCost}
-                    inputMode="decimal"
-                    placeholder="0.12"
-                    onChange={(e) => setNeedCost(e.target.value)}
-                    className="h-9 text-sm"
-                  />
+                  <Label className="text-xs">One of it is</Label>
+                  <UnitSelect value={needUnit} onChange={setNeedUnit} />
                 </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">One of it is</Label>
-                <UnitSelect value={needUnit} onChange={setNeedUnit} />
-              </div>
+              <p className="text-[11px] text-muted-foreground">
+                It will have no cost until somebody links it to Inventory — hours included, if you keep a
+                rate in there.
+              </p>
             </>
           )}
 
@@ -708,7 +746,7 @@ export function NodePanel({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">
-                How many {picked ? unitDef(picked.unit).label.replace(/^per /, "") : unitDef(needUnit).label.replace(/^per /, "")}
+                How many {picked ? picked.unitLabel : unitDef(needUnit).label.replace(/^per /, "")}
               </Label>
               <Input
                 value={needQuantity}
@@ -732,28 +770,30 @@ export function NodePanel({
               run(async () => {
                 const result = await addRequirement({
                   nodeId: node.id,
-                  existingId: picked?.id,
+                  existingId: picked?.kind === "node" ? picked.id : undefined,
+                  materialId: picked?.kind === "material" ? picked.id : undefined,
+                  materialName: picked?.kind === "material" ? picked.title : undefined,
+                  materialUnit: picked?.kind === "material" ? picked.unit : undefined,
                   title: picked ? undefined : needTitle,
-                  nodeType: picked ? undefined : needType,
+                  nodeType: picked?.kind === "material" ? "material" : picked ? undefined : needType,
+                  unit: picked ? undefined : needUnit,
                   relationshipType: needRelationship,
                   quantity: needQuantity ? Number(needQuantity) : null,
-                  unitCost: picked || !needCost ? null : Number(needCost),
-                  unit: picked ? undefined : needUnit,
                 });
                 if (result.ok) {
                   setNeedTitle("");
-                  setPickedId("");
+                  setPickedKey("");
                   setNeedQuantity("");
-                  setNeedCost("");
                 }
                 return result;
               })
             }
           >
-            {pending ? "Adding…" : picked ? `Use ${picked.title}` : "Add as a new node"}
+            {pending ? "Adding…" : picked ? `Use ${picked.title}` : "Add it"}
           </Button>
         </div>
       </Section>
+
 
       {(cost.lines.length > 0 || node.estimatedCost != null) && (
         <Section title="What this costs">

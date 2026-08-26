@@ -28,7 +28,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, estimated_cost, unit, purchase_url, material_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, unit, purchase_url, material_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
@@ -99,7 +99,6 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       node_type: string;
       status: string;
       importance: number | null;
-      estimated_cost: number | null;
       unit: string | null;
       purchase_url: string | null;
       material_id: string | null;
@@ -125,8 +124,10 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     nodeType: n.node_type as NodeType,
     status: n.status as NodeStatus,
     importance: n.importance,
-    estimatedCost:
-      material?.costPerUnit ?? (n.estimated_cost != null ? Number(n.estimated_cost) : null),
+    // Only ever the real price of the real thing. A number somebody typed
+    // into the graph is a guess that outlives whatever it was guessing about,
+    // and two prices for one material is worse than one price and a gap.
+    estimatedCost: material?.costPerUnit ?? null,
     unit: material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each",
     purchaseUrl: material?.purchaseUrl ?? n.purchase_url,
     materialId: n.material_id,

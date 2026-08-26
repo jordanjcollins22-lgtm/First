@@ -35,10 +35,11 @@ export interface NodeInput {
   description?: string;
   notes?: string;
   importance?: number | null;
-  /** What one unit costs. */
-  estimatedCost?: number | null;
   unit?: string;
   purchaseUrl?: string | null;
+  /** The inventory material this is. Where the price comes from — the graph
+   * does not keep one of its own. */
+  materialId?: string | null;
   potentialValue?: number | null;
   tags?: string[];
   positionX?: number | null;
@@ -79,8 +80,8 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         description: input.description?.trim() || null,
         notes: input.notes?.trim() || null,
         importance: clampScale(input.importance),
-        estimated_cost: numberOrNull(input.estimatedCost),
         unit: validUnit(input.unit),
+        material_id: input.materialId ?? null,
         purchase_url: safePurchaseUrl(input.purchaseUrl),
         potential_value: numberOrNull(input.potentialValue),
         position_x: input.positionX ?? null,
@@ -130,7 +131,6 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.description !== undefined) update.description = patch.description.trim() || null;
     if (patch.notes !== undefined) update.notes = patch.notes.trim() || null;
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
-    if (patch.estimatedCost !== undefined) update.estimated_cost = numberOrNull(patch.estimatedCost);
     if (patch.unit !== undefined) update.unit = validUnit(patch.unit);
     if (patch.purchaseUrl !== undefined) update.purchase_url = safePurchaseUrl(patch.purchaseUrl);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
@@ -257,15 +257,18 @@ export async function createRelationship(input: {
 export async function addRequirement(input: {
   nodeId: string;
   existingId?: string;
+  /** An inventory material to require. Reuses the node already standing for
+   * it if there is one, so a material cannot end up in the graph twice with
+   * two prices. */
+  materialId?: string;
+  materialName?: string;
+  materialUnit?: string;
   title?: string;
   nodeType?: NodeType;
   relationshipType: RelationshipType;
   strength?: number;
   /** How many units of it this needs. */
   quantity?: number | null;
-  /** What one unit costs, for something being created here for the first
-   * time. Priced once, then reused by everything else that needs it. */
-  unitCost?: number | null;
   unit?: string;
 }): Promise<GraphResult> {
   try {
@@ -273,12 +276,35 @@ export async function addRequirement(input: {
 
     let targetId = input.existingId;
 
+    if (!targetId && input.materialId) {
+      const supabase = await createClient();
+      const { data: existing } = await supabase
+        .from("knowledge_nodes")
+        .select("id")
+        .eq("material_id", input.materialId)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        targetId = existing.id;
+      } else {
+        const created = await createNode({
+          title: input.materialName ?? "Material",
+          nodeType: input.nodeType ?? "material",
+          status: "idea",
+          unit: input.materialUnit,
+          materialId: input.materialId,
+        });
+        if (!created.ok) return created;
+        targetId = created.id;
+      }
+    }
+
     if (!targetId) {
       const created = await createNode({
         title: input.title ?? "",
         nodeType: input.nodeType ?? "material",
         status: "idea",
-        estimatedCost: input.unitCost ?? null,
         unit: input.unit,
       });
       if (!created.ok) return created;
