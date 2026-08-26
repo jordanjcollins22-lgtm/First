@@ -165,6 +165,49 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["knowledge_relationships"]["Row"]>;
         Relationships: [];
       };
+      inventory_codes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          code: string;
+          tool_id: string | null;
+          material_id: string | null;
+          storage_location: string | null;
+          label: string | null;
+          expected_quantity: number | null;
+          active: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["inventory_codes"]["Row"]> & {
+          organization_id: string;
+          code: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["inventory_codes"]["Row"]>;
+        Relationships: [];
+      };
+      inventory_movements: {
+        Row: {
+          id: string;
+          organization_id: string;
+          tool_id: string | null;
+          material_id: string | null;
+          code_id: string | null;
+          direction: string;
+          quantity: number;
+          profile_id: string | null;
+          job_id: string | null;
+          note: string | null;
+          happened_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["inventory_movements"]["Row"]> & {
+          organization_id: string;
+          direction: string;
+          quantity: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["inventory_movements"]["Row"]>;
+        Relationships: [];
+      };
       knowledge_units: {
         Row: {
           id: string;

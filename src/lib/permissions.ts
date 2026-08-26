@@ -47,6 +47,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "conversation-thread", label: "Conversation Thread", href: "/conversations/[channelId]" },
   { key: "conversation-call", label: "Video Call", href: "/conversations/[channelId]/call" },
   { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup" },
+  { key: "labels", label: "Labels & Codes", href: "/admin/labels" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
 ];
 
@@ -80,6 +81,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +
     "and whoever can open the job can see that.",
+  "/i/[code]":
+    "What a sticker opens. Whoever is holding the thing is standing in front of it, so gating the " +
+    "scan behind a tick is how somebody ends up unable to sign a saw back in. It still needs a " +
+    "signed-in person to record a movement, and it shows one item and nothing else.",
   "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
   "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
 };

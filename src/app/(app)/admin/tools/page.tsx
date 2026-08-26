@@ -89,12 +89,20 @@ export default async function InventoryPage() {
             Tools, crew gear, and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
           </p>
         </div>
-        <Link
-          href="/admin/inventory-setup"
-          className="shrink-0 whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-        >
-          Quick setup
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/admin/labels"
+            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            Labels &amp; codes
+          </Link>
+          <Link
+            href="/admin/inventory-setup"
+            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            Quick setup
+          </Link>
+        </div>
       </div>
 
       {isEmpty && (

@@ -27,6 +27,8 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   knowledge_nodes: "0093_knowledge_graph.sql",
   knowledge_relationships: "0093_knowledge_graph.sql",
   knowledge_units: "0100_units_outputs_and_fees.sql",
+  inventory_codes: "0103_inventory_codes_and_movements.sql",
+  inventory_movements: "0103_inventory_codes_and_movements.sql",
 };
 
 /**
