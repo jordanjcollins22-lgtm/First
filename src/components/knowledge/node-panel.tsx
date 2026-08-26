@@ -30,12 +30,13 @@ import {
 } from "@/lib/knowledge-graph";
 import { INVENTORY_GROUPS, type InventoryGroup, type MaterialOption } from "@/lib/inventory-groups";
 import { describePurchaseUrl } from "@/lib/purchase-url";
+import type { UnitOption } from "@/lib/data/knowledge-graph";
 import { CreateMaterialForm } from "@/components/material/create-material-form";
 import { CreateToolForm } from "@/components/tool/create-tool-form";
 import {
-  UNITS,
   costOf,
   defaultCostBasis,
+  suggestedQuantity,
   describeQuantity,
   hours as formatHours,
   isCapital,
@@ -46,6 +47,7 @@ import { paybackOf } from "@/lib/knowledge-leverage";
 import {
   addEarner,
   addRequirement,
+  addUnit,
   deleteNode,
   deleteRelationship,
   linkNodeToMaterial,
@@ -74,6 +76,7 @@ export function NodePanel({
   graph,
   node,
   materials,
+  units,
   storageLocations,
   availableKits,
   canDelete,
@@ -86,6 +89,8 @@ export function NodePanel({
   node: GraphNode;
   /** Everything in inventory, for linking this node to the real thing. */
   materials: MaterialOption[];
+  /** Every unit this business measures in, built-in and home-made. */
+  units: UnitOption[];
   /** What the inventory add forms need, so adding something new here is the
    * same form as adding it on the Inventory page. */
   storageLocations: string[];
@@ -108,6 +113,13 @@ export function NodePanel({
   const [importance, setImportance] = useState(node.importance ? String(node.importance) : "");
   const [tags, setTags] = useState(node.tags.join(", "));
   const [unit, setUnit] = useState(node.unit);
+  const [runSize, setRunSize] = useState(node.runSize != null ? String(node.runSize) : "");
+  const [runUnit, setRunUnit] = useState(node.runUnit ?? "");
+  const [outputPerUnit, setOutputPerUnit] = useState(
+    node.outputPerUnit != null ? String(node.outputPerUnit) : ""
+  );
+  const [outputUnit, setOutputUnit] = useState(node.outputUnit ?? "");
+  const [fixedCost, setFixedCost] = useState(node.fixedCost != null ? String(node.fixedCost) : "");
   const [basis, setBasis] = useState<"consumable" | "capital">(
     node.costBasis ?? defaultCostBasis(node.nodeType)
   );
@@ -137,7 +149,8 @@ export function NodePanel({
   /** Where a brand-new input should land: one of the inventory lists, or
    * nowhere, for the things that are not stock — an hour, a permit, a
    * process. */
-  const [newIn, setNewIn] = useState<InventoryGroup | "none">("materials");
+  const [newIn, setNewIn] = useState<InventoryGroup | "none" | "service">("materials");
+  const [feeAmount, setFeeAmount] = useState("");
   /**
    * Whether the thing being added gets bought again every run.
    *
@@ -258,6 +271,26 @@ export function NodePanel({
   const willCreateNode =
     !picked || (picked.kind !== "node" && !nodeByInventory.has(`${picked.kind}:${picked.id}`));
 
+  /**
+   * The node behind whatever was picked.
+   *
+   * An inventory item that is already in the graph is picked by its inventory
+   * id, not its node id — so without this the app would forget it knows how
+   * much one sheet does, in exactly the case where it does know.
+   */
+  const pickedNode = useMemo(() => {
+    if (!picked) return null;
+    if (picked.kind === "node") return graph.nodes.find((n) => n.id === picked.id) ?? null;
+    return nodeByInventory.get(`${picked.kind}:${picked.id}`) ?? null;
+  }, [picked, graph.nodes, nodeByInventory]);
+
+  /** How many a run needs, where the idea says what a run makes and the input
+   * says what one of it does. */
+  const suggestion = useMemo(
+    () => (pickedNode ? suggestedQuantity(node, pickedNode) : null),
+    [node, pickedNode]
+  );
+
   // What the line about to be added would come to, shown before it is added
   // rather than after — that is when somebody can still change their mind.
   const lineTotal = useMemo(() => {
@@ -286,6 +319,11 @@ export function NodePanel({
 
   const def = nodeTypeDef(node.nodeType);
   const today = todayKey();
+
+  /** How more than one of a unit reads, using whatever this business calls
+   * it. Falls back to the name itself rather than inventing a plural. */
+  const unitPlural = (unit: string) =>
+    units.find((u) => u.value === unit)?.plural ?? unitDef(unit).label.replace(/^per /, "");
 
   /** "$89 each" rather than "$89 per each". */
   const perUnit = (amount: number, unit: string) =>
@@ -342,7 +380,7 @@ export function NodePanel({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">
-                How many {picked ? picked.unitLabel : unitDef(needUnit).label.replace(/^per /, "")}
+                How many {unitPlural(picked ? picked.unit : needUnit)}
               </Label>
               <Input
                 value={needQuantity}
@@ -458,7 +496,7 @@ export function NodePanel({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs">One of it is</Label>
-            <UnitSelect value={unit} onChange={setUnit} />
+            <UnitSelect value={unit} units={units} onChange={setUnit} onAdded={onChanged} />
             <p className="text-[11px] text-muted-foreground">
               What a quantity of it means. An hour or a day makes it time rather than materials. The
               price is not set here — it comes from Inventory, so there is only ever one of it.
@@ -468,6 +506,70 @@ export function NodePanel({
             <Label className="text-xs">Buying it</Label>
             <BasisChoice value={basis} onChange={setBasis} />
           </div>
+
+          {node.nodeType === "idea" ? (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">One run makes</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  value={runSize}
+                  inputMode="decimal"
+                  placeholder="2000"
+                  onChange={(e) => setRunSize(e.target.value)}
+                  className="h-9 text-sm"
+                />
+                <Input
+                  value={runUnit}
+                  placeholder="hangers"
+                  onChange={(e) => setRunUnit(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Say this and the app works out how much of each input a run needs, instead of somebody
+                doing the sum in their head every time.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">One {unitDef(node.unit).label.replace(/^per /, "")} does</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    value={outputPerUnit}
+                    inputMode="decimal"
+                    placeholder="100"
+                    onChange={(e) => setOutputPerUnit(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <Input
+                    value={outputUnit}
+                    placeholder="sq ft"
+                    onChange={(e) => setOutputUnit(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  A bag covers a hundred square feet; a sheet makes one hanger. Matched against what a run
+                  makes, so the quantity works itself out.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Or a flat price somebody else charges</Label>
+                <Input
+                  value={fixedCost}
+                  inputMode="decimal"
+                  placeholder="450"
+                  onChange={(e) => setFixedCost(e.target.value)}
+                  className="h-9 text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  For work you pay another company to do. Charged once per run whatever the quantity, and
+                  counted apart from materials and hours.
+                </p>
+              </div>
+            </>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs">Where you buy it</Label>
             <Input
@@ -499,6 +601,11 @@ export function NodePanel({
                   importance: importance ? Number(importance) : null,
                   unit,
                   costBasis: basis,
+                  runSize: runSize ? Number(runSize) : null,
+                  runUnit: runUnit || null,
+                  outputPerUnit: outputPerUnit ? Number(outputPerUnit) : null,
+                  outputUnit: outputUnit || null,
+                  fixedCost: fixedCost ? Number(fixedCost) : null,
                   purchaseUrl: purchaseUrl || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
@@ -517,10 +624,15 @@ export function NodePanel({
             {node.estimatedCost != null
               ? ` · ${money(node.estimatedCost)} ${unitDef(node.unit).label}`
               : ""}
-            {node.nodeType !== "idea"
+            {node.fixedCost != null ? ` · ${money(node.fixedCost)} flat` : ""}
+            {node.nodeType !== "idea" && node.fixedCost == null
               ? isCapital(node)
                 ? " · bought once, kept"
                 : " · bought again each run"
+              : ""}
+            {node.runSize != null ? ` · one run makes ${node.runSize} ${node.runUnit ?? ""}`.trimEnd() : ""}
+            {node.outputPerUnit != null
+              ? ` · one does ${node.outputPerUnit} ${node.outputUnit ?? ""}`.trimEnd()
               : ""}
             {node.importance ? ` · importance ${node.importance}/5` : ""}
             {node.tags.length > 0 ? ` · ${node.tags.join(", ")}` : ""}
@@ -820,7 +932,7 @@ export function NodePanel({
                   location and its reorder point. */}
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Where it belongs</Label>
-                <Select value={newIn} onValueChange={(v) => setNewIn(v as InventoryGroup | "none")}>
+                <Select value={newIn} onValueChange={(v) => setNewIn(v as InventoryGroup | "none" | "service")}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue />
                   </SelectTrigger>
@@ -830,12 +942,40 @@ export function NodePanel({
                         Inventory — {group.label}
                       </SelectItem>
                     ))}
+                    <SelectItem value="service">Someone else does it — a flat price</SelectItem>
                     <SelectItem value="none">Not inventory (time, a permit, a process)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {newIn === "none" ? (
+              {newIn === "service" ? (
+                <>
+                  {/* Not everything is a material with a unit price. A mailing
+                      house charges the same whether the drop is two thousand
+                      pieces or three, and multiplying that by a quantity would
+                      be wrong in both directions. */}
+                  <Input
+                    value={needTitle}
+                    onChange={(e) => setNeedTitle(e.target.value)}
+                    placeholder="Mailing house, sign printer, permit fee…"
+                    className="h-9 text-sm"
+                  />
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">What they charge</Label>
+                    <Input
+                      value={feeAmount}
+                      inputMode="decimal"
+                      placeholder="450"
+                      onChange={(e) => setFeeAmount(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      A flat price, charged once a run whatever the quantity. Counted apart from
+                      materials and hours, so a subcontractor never looks like stock you own.
+                    </p>
+                  </div>
+                </>
+              ) : newIn === "none" ? (
                 <>
                   <Input
                     value={needTitle}
@@ -877,7 +1017,7 @@ export function NodePanel({
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs">One of it is</Label>
-                      <UnitSelect value={needUnit} onChange={setNeedUnit} />
+                      <UnitSelect value={needUnit} units={units} onChange={setNeedUnit} onAdded={onChanged} />
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -922,12 +1062,26 @@ export function NodePanel({
             </>
           )}
 
-          {(picked || newIn === "none") && CONNECTION_FIELDS}
+          {(picked || newIn === "none" || newIn === "service") && CONNECTION_FIELDS}
           {picked && willCreateNode && (
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">Buying it</Label>
               <BasisChoice value={needBasis} onChange={setBasisOverride} />
             </div>
+          )}
+
+          {suggestion != null && String(suggestion) !== needQuantity && (
+            <p className="text-[11px] text-muted-foreground">
+              A run of {node.runSize} {node.runUnit} needs{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => setNeedQuantity(String(suggestion))}
+              >
+                {suggestion.toLocaleString()} {picked ? unitPlural(picked.unit) : ""}
+              </button>
+              .
+            </p>
           )}
 
           {lineTotal != null && (
@@ -937,7 +1091,7 @@ export function NodePanel({
           {/* The Inventory form has its own button and does the connecting
               itself, so a second one here would be a button that does
               nothing. */}
-          {(picked || newIn === "none") && (
+          {(picked || newIn === "none" || newIn === "service") && (
             <Button
               type="button"
               size="sm"
@@ -952,8 +1106,9 @@ export function NodePanel({
                         ? { kind: picked.kind, id: picked.id, name: picked.title, unit: picked.unit }
                         : undefined,
                     title: picked ? undefined : needTitle,
-                    nodeType: picked ? undefined : needType,
+                    nodeType: picked ? undefined : newIn === "service" ? "service" : needType,
                     unit: picked ? undefined : needUnit,
+                    fixedCost: !picked && newIn === "service" && feeAmount ? Number(feeAmount) : null,
                     relationshipType: needRelationship,
                     quantity: needQuantity ? Number(needQuantity) : null,
                     costBasis: willCreateNode ? needBasis : undefined,
@@ -962,6 +1117,7 @@ export function NodePanel({
                     setNeedTitle("");
                     setPickedKey("");
                     setNeedQuantity("");
+                    setFeeAmount("");
                   }
                   return result;
                 })
@@ -977,11 +1133,18 @@ export function NodePanel({
       {(cost.lines.length > 0 || node.estimatedCost != null) && (
         <Section title="What this costs">
           <div className="rounded-lg border border-border bg-background/60 p-3">
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-4 gap-2 text-center">
               <Figure label="Materials" value={money(cost.materials)} />
               <Figure label="Time" value={formatHours(cost.hours)} hint={money(cost.labour)} />
+              <Figure label="Paid out" value={money(cost.services)} />
               <Figure label="Per run" value={money(cost.total)} strong />
             </div>
+            {cost.serviceItems.length > 0 && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Flat prices: {cost.serviceItems.map((n) => n.title).join(", ")} — charged once a run
+                whatever the quantity.
+              </p>
+            )}
             {cost.capital > 0 && (
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Plus {money(cost.capital)} of kit — {cost.capitalItems.map((n) => n.title).join(", ")} —
@@ -1134,22 +1297,30 @@ export function NodePanel({
 
       <Section title={`Points out (${outgoing.length})`}>
         <ConnectionList
+          owner={node}
           items={outgoing}
           pending={pending}
           onSelect={onSelect}
           onRemove={(edgeId) => run(() => deleteRelationship(edgeId))}
           onQuantity={(edgeId, quantity) => run(() => updateRelationship(edgeId, { quantity }))}
+          onRelationship={(edgeId, relationshipType) =>
+            run(() => updateRelationship(edgeId, { relationshipType }))
+          }
           direction="out"
         />
       </Section>
 
       <Section title={`Points in (${incoming.length})`}>
         <ConnectionList
+          owner={node}
           items={incoming}
           pending={pending}
           onSelect={onSelect}
           onRemove={(edgeId) => run(() => deleteRelationship(edgeId))}
           onQuantity={(edgeId, quantity) => run(() => updateRelationship(edgeId, { quantity }))}
+          onRelationship={(edgeId, relationshipType) =>
+            run(() => updateRelationship(edgeId, { relationshipType }))
+          }
           direction="in"
         />
       </Section>
@@ -1167,19 +1338,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function ConnectionList({
+  owner,
   items,
   pending,
   direction,
   onSelect,
   onRemove,
   onQuantity,
+  onRelationship,
 }: {
+  owner: GraphNode;
   items: ReturnType<typeof neighboursOf>;
   pending: boolean;
   direction: "in" | "out";
   onSelect: (id: string) => void;
   onRemove: (edgeId: string) => void;
   onQuantity: (edgeId: string, quantity: number | null) => void;
+  onRelationship: (edgeId: string, relationshipType: RelationshipType) => void;
 }) {
   if (items.length === 0) {
     return (
@@ -1196,6 +1371,7 @@ function ConnectionList({
       {items.map(({ node, edge, outgoing }) => (
         <ConnectionRow
           key={edge.id}
+          owner={owner}
           node={node}
           edge={edge}
           outgoing={outgoing}
@@ -1203,6 +1379,7 @@ function ConnectionList({
           onSelect={onSelect}
           onRemove={onRemove}
           onQuantity={onQuantity}
+          onRelationship={onRelationship}
         />
       ))}
     </ul>
@@ -1212,11 +1389,14 @@ function ConnectionList({
 /**
  * One connection, with how much of it this needs.
  *
- * The quantity is editable in place rather than behind an edit screen: it is
- * the number most likely to be wrong on the first pass, and the one somebody
- * corrects while looking at the total it produced.
+ * Editable in both directions, on purpose. Looking at the cardstock, the
+ * useful question is "how much of me goes into the door hangers" — and the
+ * answer lives on the same edge whichever end you are standing at. Making it
+ * editable only from the idea meant walking back round to the idea to fix a
+ * number you were already looking at.
  */
 function ConnectionRow({
+  owner,
   node,
   edge,
   outgoing,
@@ -1224,7 +1404,11 @@ function ConnectionRow({
   onSelect,
   onRemove,
   onQuantity,
+  onRelationship,
 }: {
+  /** The node whose panel this row is on, so a run size can suggest a
+   * quantity from this side too. */
+  owner: GraphNode;
   node: GraphNode;
   edge: ReturnType<typeof neighboursOf>[number]["edge"];
   outgoing: boolean;
@@ -1232,12 +1416,21 @@ function ConnectionRow({
   onSelect: (id: string) => void;
   onRemove: (edgeId: string) => void;
   onQuantity: (edgeId: string, quantity: number | null) => void;
+  onRelationship: (edgeId: string, relationshipType: RelationshipType) => void;
 }) {
   const [draft, setDraft] = useState(edge.quantity != null ? String(edge.quantity) : "");
+  const [editing, setEditing] = useState(false);
   const def = relationshipDef(edge.relationshipType);
-  const amount = edge.quantity != null && node.estimatedCost != null
-    ? edge.quantity * node.estimatedCost
-    : null;
+
+  // Whichever end this row is on, the thing being consumed is the other one
+  // when the edge points away, and this node when it points in.
+  const consumed = outgoing ? node : owner;
+  const maker = outgoing ? owner : node;
+  const amount =
+    edge.quantity != null && consumed.estimatedCost != null
+      ? edge.quantity * consumed.estimatedCost
+      : null;
+  const suggestion = suggestedQuantity(maker, consumed);
 
   return (
     <li className="flex flex-col gap-1.5 rounded-lg border border-border/60 p-2">
@@ -1250,36 +1443,76 @@ function ConnectionRow({
           <span className="block truncate text-sm">{node.title}</span>
           <span className="block text-[11px] text-muted-foreground">
             {outgoing ? def.label : def.inverse}
-            {edge.quantity != null ? ` · ${describeQuantity(edge.quantity, node.unit)}` : ""}
-            {amount != null ? ` · ${money(amount)}` : ""}
+            {edge.quantity != null ? ` · ${describeQuantity(edge.quantity, consumed.unit)}` : ""}
+            {consumed.fixedCost != null
+              ? ` · ${money(consumed.fixedCost)} flat`
+              : amount != null
+                ? ` · ${money(amount)}`
+                : ""}
           </span>
         </button>
         <button
           type="button"
-          disabled={pending}
-          onClick={() => onRemove(edge.id)}
+          onClick={() => setEditing((e) => !e)}
           className="shrink-0 text-[11px] text-muted-foreground underline"
         >
-          Remove
+          {editing ? "Done" : "Edit"}
         </button>
       </div>
 
-      {outgoing && (
-        <div className="flex items-center gap-2">
-          <Input
-            value={draft}
-            inputMode="decimal"
-            placeholder={`How many ${unitDef(node.unit).label.replace(/^per /, "")}`}
-            onChange={(e) => setDraft(e.target.value)}
-            className="h-8 flex-1 text-xs"
-          />
+      {editing && (
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2">
+          <div className="flex items-center gap-2">
+            <Input
+              value={draft}
+              inputMode="decimal"
+              placeholder={`How many ${unitDef(consumed.unit).label.replace(/^per /, "")}`}
+              onChange={(e) => setDraft(e.target.value)}
+              className="h-8 flex-1 text-xs"
+            />
+            <button
+              type="button"
+              disabled={pending || draft === (edge.quantity != null ? String(edge.quantity) : "")}
+              onClick={() => onQuantity(edge.id, draft ? Number(draft) : null)}
+              className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-40"
+            >
+              Save
+            </button>
+          </div>
+
+          {suggestion != null && String(suggestion) !== draft && (
+            <p className="text-[11px] text-muted-foreground">
+              A run of {maker.runSize} {maker.runUnit} needs{" "}
+              <button type="button" className="underline" onClick={() => setDraft(String(suggestion))}>
+                {suggestion.toLocaleString()}
+              </button>
+              .
+            </p>
+          )}
+
+          <Select
+            value={edge.relationshipType}
+            onValueChange={(v) => onRelationship(edge.id, v as RelationshipType)}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RELATIONSHIP_TYPES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {outgoing ? r.label : r.inverse}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <button
             type="button"
-            disabled={pending || draft === (edge.quantity != null ? String(edge.quantity) : "")}
-            onClick={() => onQuantity(edge.id, draft ? Number(draft) : null)}
-            className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-40"
+            disabled={pending}
+            onClick={() => onRemove(edge.id)}
+            className="self-start text-[11px] text-muted-foreground underline"
           >
-            Save
+            Remove this connection
           </button>
         </div>
       )}
@@ -1351,24 +1584,119 @@ export function BasisChoice({
   );
 }
 
-/** What one of a thing is. Kept short and in the order somebody reaches for
- * them, with time at the top because that is the cost people forget. */
-export function UnitSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/**
+ * What one of a thing is, including the ones this business invented.
+ *
+ * The last option adds a new one rather than sending somebody to a settings
+ * screen: a unit is only ever needed at the moment you are typing the thing
+ * that uses it, and a trip elsewhere to define "pallet" is a trip most people
+ * do not take — they pick "each" and remember what they meant, which is the
+ * same as not recording it.
+ */
+export function UnitSelect({
+  value,
+  units,
+  onChange,
+  onAdded,
+}: {
+  value: string;
+  units: UnitOption[];
+  onChange: (v: string) => void;
+  onAdded?: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [hours, setHours] = useState("");
+  const [isTime, setIsTime] = useState(false);
+  const [saving, startSaving] = useTransition();
+  const [problem, setProblem] = useState<string | null>(null);
+
+  if (adding) {
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="pallet, scoop, thousand…"
+          className="h-9 text-sm"
+        />
+        <label className="flex items-center gap-1.5 text-[11px]">
+          <input type="checkbox" checked={isTime} onChange={(e) => setIsTime(e.target.checked)} />
+          It is a stretch of somebody&apos;s day
+        </label>
+        {isTime && (
+          <div className="flex items-center gap-2">
+            <Input
+              value={hours}
+              inputMode="decimal"
+              placeholder="6"
+              onChange={(e) => setHours(e.target.value)}
+              className="h-9 w-20 text-sm"
+            />
+            <span className="text-[11px] text-muted-foreground">hours in one</span>
+          </div>
+        )}
+        {problem && <p className="text-[11px] text-amber-700">{problem}</p>}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving || !name.trim()}
+            onClick={() =>
+              startSaving(async () => {
+                const result = await addUnit({
+                  name,
+                  hours: isTime ? Number(hours) || 1 : null,
+                });
+                if (!result.ok) {
+                  setProblem(result.message);
+                  return;
+                }
+                onChange(name.trim().toLowerCase());
+                setAdding(false);
+                setName("");
+                setHours("");
+                setIsTime(false);
+                setProblem(null);
+                onAdded?.();
+              })
+            }
+          >
+            {saving ? "Adding…" : "Add unit"}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setAdding(false)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v === NEW_UNIT) setAdding(true);
+        else onChange(v);
+      }}
+    >
       <SelectTrigger className="h-9 text-sm">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
-        {UNITS.map((u) => (
+      <SelectContent className="max-w-[calc(100vw-2.5rem)]">
+        {units.map((u) => (
           <SelectItem key={u.value} value={u.value}>
             {u.label}
+            {u.hours != null ? ` · ${u.hours} hr${u.hours === 1 ? "" : "s"}` : ""}
           </SelectItem>
         ))}
+        <SelectItem value={NEW_UNIT}>+ Add a unit…</SelectItem>
       </SelectContent>
     </Select>
   );
 }
+
+const NEW_UNIT = "__new_unit__";
 
 /** Twenty-six types is a lot for one list, so they come grouped. */
 export function TypeSelect({ value, onChange }: { value: NodeType; onChange: (v: NodeType) => void }) {

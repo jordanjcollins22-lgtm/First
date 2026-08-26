@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { MaterialOption } from "@/lib/inventory-groups";
+import type { UnitOption } from "@/lib/data/knowledge-graph";
 import { GraphCanvas, type Point } from "@/components/knowledge/graph-canvas";
 import { NodePanel, TypeSelect } from "@/components/knowledge/node-panel";
 import { createNode, markNodeDone, saveNodePositions } from "@/lib/actions/knowledge-graph-actions";
@@ -63,6 +64,7 @@ import {
 export function KnowledgeWorkspace({
   graph,
   tags,
+  units,
   materials,
   storageLocations,
   availableKits,
@@ -71,6 +73,8 @@ export function KnowledgeWorkspace({
 }: {
   graph: Graph;
   tags: string[];
+  /** Every unit this business measures in, built-in and home-made. */
+  units: UnitOption[];
   /** Inventory, for linking a node to the real thing. */
   materials: MaterialOption[];
   /** What the inventory add forms need, so adding stock from here is the
@@ -487,6 +491,7 @@ export function KnowledgeWorkspace({
             key={selected.id}
             graph={graph}
             materials={materials}
+            units={units}
             storageLocations={storageLocations}
             availableKits={availableKits}
             node={selected}

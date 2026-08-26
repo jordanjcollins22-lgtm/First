@@ -116,6 +116,11 @@ export interface Database {
           position_x: number | null;
           position_y: number | null;
           cost_basis: string | null;
+          output_per_unit: number | null;
+          output_unit: string | null;
+          run_size: number | null;
+          run_unit: string | null;
+          fixed_cost: number | null;
           purchase_url: string | null;
           material_id: string | null;
           tool_id: string | null;
@@ -155,6 +160,23 @@ export interface Database {
           target_node_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["knowledge_relationships"]["Row"]>;
+        Relationships: [];
+      };
+      knowledge_units: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          plural: string | null;
+          hours: number | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["knowledge_units"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["knowledge_units"]["Row"]>;
         Relationships: [];
       };
       knowledge_tags: {

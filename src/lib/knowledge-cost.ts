@@ -73,6 +73,9 @@ export interface CostLine {
   time: boolean;
   /** Bought once and kept, rather than consumed by this run. */
   capital: boolean;
+  /** A flat price that does not multiply by the quantity — a subcontractor,
+   * a permit, a delivery fee. */
+  fixed: boolean;
   hours: number;
   /** How far down the breakdown this came from. Zero is directly required. */
   depth: number;
@@ -97,6 +100,11 @@ export interface CostBreakdown {
    * that it is one purchase — is contradicted by the number underneath it. */
   capital: number;
   capitalItems: GraphNode[];
+  /** Money that goes to somebody else at a flat price. Kept apart because a
+   * fixed fee behaves like neither materials nor hours: it does not scale
+   * with the run and it is not somebody's afternoon. */
+  services: number;
+  serviceItems: GraphNode[];
   lines: CostLine[];
   /** Things in the breakdown with no price on them yet. A total that quietly
    * omits half the inputs is the most expensive kind of wrong. */
@@ -110,6 +118,8 @@ const EMPTY: CostBreakdown = {
   total: 0,
   capital: 0,
   capitalItems: [],
+  services: 0,
+  serviceItems: [],
   lines: [],
   unpriced: [],
 };
@@ -190,11 +200,17 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
       const quantity = (edge.quantity ?? 1) * multiplier;
       const quantityStated = stated && edge.quantity != null;
       const unitCost = node.estimatedCost ?? 0;
-      const capital = isCapital(node);
-      const time = !capital && isTimeUnit(node.unit);
-      const perUnitHours = unitDef(node.unit).hours ?? 0;
+      const fixed = node.fixedCost != null;
+      const capital = !fixed && isCapital(node);
+      // Hours come from the unit the node actually carries, resolved when the
+      // graph loaded — so a unit this business invented counts as time if
+      // they said it was.
+      const perUnitHours = node.unitHours ?? (isTimeUnit(node.unit) ? unitDef(node.unit).hours ?? 1 : 0);
+      const time = !capital && !fixed && perUnitHours > 0;
 
-      if (node.estimatedCost == null) unpriced.set(node.id, node);
+      // A flat fee is priced by definition. Only a per-unit thing with no
+      // price is a gap in the total.
+      if (!fixed && node.estimatedCost == null) unpriced.set(node.id, node);
 
       lines.push({
         node,
@@ -202,10 +218,12 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
         quantity,
         quantityStated,
         unitCost,
-        // Kit is priced at what it costs to own, once, not once per run.
-        amount: capital ? unitCost : quantity * unitCost,
+        // A flat fee is the fee. Kit is priced at what it costs to own,
+        // once, not once per run. Everything else multiplies.
+        amount: fixed ? node.fixedCost! : capital ? unitCost : quantity * unitCost,
         time,
         capital,
+        fixed,
         hours: time ? quantity * perUnitHours : 0,
         depth,
         path: [...trail, node.id],
@@ -221,10 +239,19 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
   let labour = 0;
   let hours = 0;
   const capitalItems = new Map<string, GraphNode>();
+  const serviceItems = new Map<string, GraphNode>();
   let capital = 0;
+  let services = 0;
 
   for (const line of lines) {
-    if (line.capital) {
+    if (line.fixed) {
+      // Once per idea, however many routes reach it: one run does not pay the
+      // mailing house twice because two of its parts need them.
+      if (!serviceItems.has(line.node.id)) {
+        serviceItems.set(line.node.id, line.node);
+        services += line.amount;
+      }
+    } else if (line.capital) {
       // Once each, however many times the breakdown reaches it.
       if (!capitalItems.has(line.node.id)) {
         capitalItems.set(line.node.id, line.node);
@@ -242,12 +269,31 @@ export function costOf(graph: Graph, nodeId: string, maxDepth = 4): CostBreakdow
     materials,
     labour,
     hours,
-    total: materials + labour,
+    total: materials + labour + services,
     capital,
     capitalItems: [...capitalItems.values()],
+    services,
+    serviceItems: [...serviceItems.values()],
     lines,
     unpriced: [...unpriced.values()],
   };
+}
+
+/**
+ * How many of something a run needs, where both halves have been said.
+ *
+ * Two thousand door hangers, one hanger to a sheet, is two thousand sheets.
+ * A thousand square feet at a hundred to the bag is ten bags, rounded up,
+ * because nine and a bit bags is ten bags at the counter.
+ *
+ * Nothing where the units do not line up. Guessing that "sq ft" and "hangers"
+ * are the same thing would produce a number that looks calculated and is not.
+ */
+export function suggestedQuantity(idea: GraphNode, input: GraphNode): number | null {
+  if (!idea.runSize || !input.outputPerUnit) return null;
+  if (!idea.runUnit || !input.outputUnit) return null;
+  if (idea.runUnit.trim().toLowerCase() !== input.outputUnit.trim().toLowerCase()) return null;
+  return Math.ceil(idea.runSize / input.outputPerUnit);
 }
 
 /**
@@ -267,11 +313,14 @@ export function costOfMany(graph: Graph, nodeIds: string[], maxDepth = 4): CostB
     total: 0,
     capital: 0,
     capitalItems: [],
+    services: 0,
+    serviceItems: [],
     lines: [],
     unpriced: [],
   };
   const unpriced = new Map<string, GraphNode>();
   const capitalItems = new Map<string, GraphNode>();
+  const serviceItems = new Map<string, GraphNode>();
 
   for (const id of nodeIds) {
     const one = costOf(graph, id, maxDepth);
@@ -279,6 +328,11 @@ export function costOfMany(graph: Graph, nodeIds: string[], maxDepth = 4): CostB
     combined.labour += one.labour;
     combined.hours += one.hours;
     combined.total += one.total;
+    // Deliberately not deduplicated across ideas: two campaigns that each
+    // use the mailing house each pay the mailing house. That is the opposite
+    // of kit, which is one purchase however many use it.
+    combined.services += one.services;
+    for (const item of one.serviceItems) serviceItems.set(item.id, item);
     combined.lines.push(...one.lines);
     for (const node of one.unpriced) unpriced.set(node.id, node);
     // The printer three campaigns share is one printer, not three.
@@ -292,6 +346,7 @@ export function costOfMany(graph: Graph, nodeIds: string[], maxDepth = 4): CostB
 
   combined.unpriced = [...unpriced.values()];
   combined.capitalItems = [...capitalItems.values()];
+  combined.serviceItems = [...serviceItems.values()];
   return combined;
 }
 
@@ -323,8 +378,18 @@ function trim(value: number): string {
 /** How a quantity reads next to its unit: "2,000 sheets", "4 hrs", "1 each"
  * becomes just "1". */
 export function describeQuantity(quantity: number, unit: string): string {
-  const def = unitDef(unit);
   const amount = trim(quantity);
+
+  // A unit this business invented is not in the built-in table, and falling
+  // back to "each" would print "2,000 each" for two thousand pallets.
+  const known = UNIT_BY_VALUE.get(unit);
+  if (!known) {
+    const name = unit.trim();
+    if (!name) return amount;
+    return quantity === 1 ? `1 ${name}` : `${amount} ${name.endsWith("s") ? name : `${name}s`}`;
+  }
+
+  const def = known;
   if (def.value === "each") return quantity === 1 ? "1" : amount;
   // "per sheet" is how the price reads; the quantity reads "2,000 sheets".
   const noun = def.label.replace(/^per /, "");

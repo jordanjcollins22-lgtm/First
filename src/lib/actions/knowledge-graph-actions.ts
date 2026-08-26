@@ -38,6 +38,14 @@ export interface NodeInput {
   unit?: string;
   /** Bought again every run, or bought once and kept. */
   costBasis?: "consumable" | "capital" | null;
+  /** How much one unit of it does — 100 sq ft to a bag, 1 hanger to a sheet. */
+  outputPerUnit?: number | null;
+  outputUnit?: string | null;
+  /** For an idea: how much one run produces. */
+  runSize?: number | null;
+  runUnit?: string | null;
+  /** A flat price, charged once per use rather than per unit. */
+  fixedCost?: number | null;
   purchaseUrl?: string | null;
   /** The inventory item this is. Where the price comes from — the graph does
    * not keep one of its own. */
@@ -85,6 +93,11 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         importance: clampScale(input.importance),
         unit: validUnit(input.unit),
         cost_basis: validCostBasis(input.costBasis),
+        output_per_unit: positiveOrNull(input.outputPerUnit),
+        output_unit: input.outputUnit?.trim() || null,
+        run_size: positiveOrNull(input.runSize),
+        run_unit: input.runUnit?.trim() || null,
+        fixed_cost: numberOrNull(input.fixedCost),
         material_id: input.materialId ?? null,
         tool_id: input.toolId ?? null,
         purchase_url: safePurchaseUrl(input.purchaseUrl),
@@ -138,6 +151,11 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
     if (patch.unit !== undefined) update.unit = validUnit(patch.unit);
     if (patch.costBasis !== undefined) update.cost_basis = validCostBasis(patch.costBasis);
+    if (patch.outputPerUnit !== undefined) update.output_per_unit = positiveOrNull(patch.outputPerUnit);
+    if (patch.outputUnit !== undefined) update.output_unit = patch.outputUnit?.trim() || null;
+    if (patch.runSize !== undefined) update.run_size = positiveOrNull(patch.runSize);
+    if (patch.runUnit !== undefined) update.run_unit = patch.runUnit?.trim() || null;
+    if (patch.fixedCost !== undefined) update.fixed_cost = numberOrNull(patch.fixedCost);
     if (patch.purchaseUrl !== undefined) update.purchase_url = safePurchaseUrl(patch.purchaseUrl);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
     if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);
@@ -275,6 +293,10 @@ export async function addRequirement(input: {
   quantity?: number | null;
   unit?: string;
   costBasis?: "consumable" | "capital" | null;
+  outputPerUnit?: number | null;
+  outputUnit?: string | null;
+  /** A flat price for something somebody else does. */
+  fixedCost?: number | null;
 }): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
@@ -317,6 +339,9 @@ export async function addRequirement(input: {
         status: "idea",
         unit: input.unit,
         costBasis: input.costBasis,
+        outputPerUnit: input.outputPerUnit,
+        outputUnit: input.outputUnit,
+        fixedCost: input.fixedCost,
       });
       if (!created.ok) return created;
       targetId = created.id;
@@ -350,7 +375,12 @@ export async function addRequirement(input: {
  */
 export async function updateRelationship(
   id: string,
-  patch: { quantity?: number | null; strength?: number; notes?: string }
+  patch: {
+    quantity?: number | null;
+    strength?: number;
+    notes?: string;
+    relationshipType?: RelationshipType;
+  }
 ): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
@@ -359,6 +389,12 @@ export async function updateRelationship(
     if (patch.quantity !== undefined) update.quantity = quantityOrNull(patch.quantity);
     if (patch.strength !== undefined) update.strength = clampScale(patch.strength) ?? 3;
     if (patch.notes !== undefined) update.notes = patch.notes.trim() || null;
+    if (patch.relationshipType !== undefined) {
+      if (!VALID_RELATIONSHIPS.has(patch.relationshipType)) {
+        return { ok: false, message: "Pick how they're connected." };
+      }
+      update.relationship_type = patch.relationshipType;
+    }
     if (Object.keys(update).length === 0) return { ok: true, id };
 
     const supabase = await createClient();
@@ -467,6 +503,54 @@ export async function addEarner(input: {
   } catch (err) {
     console.error("addEarner failed:", err);
     return { ok: false, message: "Couldn't add that." };
+  }
+}
+
+/**
+ * Adds a unit this business measures things in.
+ *
+ * The built-in list is a good start and a bad ceiling. Somebody buying sod by
+ * the pallet and printing by the thousand should be able to say so once and
+ * then pick it from the list like everything else.
+ */
+export async function addUnit(input: {
+  name: string;
+  plural?: string;
+  /** Hours in one, where it is a stretch of somebody's day rather than a
+   * thing. That is the whole difference between money and time downstream. */
+  hours?: number | null;
+}): Promise<GraphResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+
+    const name = input.name.trim().toLowerCase();
+    if (!name) return { ok: false, message: "Give the unit a name." };
+    if (name.length > 24) return { ok: false, message: "Keep it short — it has to fit on a row." };
+    if (UNITS.some((u) => u.value === name)) {
+      return { ok: false, message: `"${name}" is already there — pick it from the list.` };
+    }
+
+    const [supabase, organizationId] = await Promise.all([createClient(), getCurrentOrganizationId()]);
+
+    const { error } = await supabase.from("knowledge_units").insert({
+      organization_id: organizationId,
+      name,
+      plural: input.plural?.trim().toLowerCase() || null,
+      hours: positiveOrNull(input.hours),
+      created_by: profile.id,
+    });
+
+    if (error) {
+      if (error.code === "23505") return { ok: false, message: `"${name}" is already on the list.` };
+      return { ok: false, message: describeDbError(error) };
+    }
+
+    revalidatePath(PATH);
+    return { ok: true, message: `"${name}" is on the list now.` };
+  } catch (err) {
+    console.error("addUnit failed:", err);
+    return { ok: false, message: "Couldn't add that unit." };
   }
 }
 
@@ -706,6 +790,13 @@ function clampScale(value: number | null | undefined): number | null {
 function quantityOrNull(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null;
   return Math.max(0, value);
+}
+
+/** A number above zero, or nothing. Zero of something is not a rate — a bag
+ * that covers nothing would divide the whole calculation by zero. */
+function positiveOrNull(value: number | null | undefined): number | null {
+  if (value == null || Number.isNaN(value) || value <= 0) return null;
+  return value;
 }
 
 function numberOrNull(value: number | null | undefined): number | null {

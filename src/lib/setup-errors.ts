@@ -26,6 +26,7 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   target_markets: "0092_target_markets.sql",
   knowledge_nodes: "0093_knowledge_graph.sql",
   knowledge_relationships: "0093_knowledge_graph.sql",
+  knowledge_units: "0100_units_outputs_and_fees.sql",
 };
 
 /**
@@ -60,6 +61,9 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "material_id", table: "knowledge_nodes", migration: "0096_knowledge_inventory_link.sql" },
   { column: "tool_id", table: "knowledge_nodes", migration: "0098_knowledge_tool_link.sql" },
   { column: "cost_basis", table: "knowledge_nodes", migration: "0099_cost_basis.sql" },
+  { column: "fixed_cost", table: "knowledge_nodes", migration: "0100_units_outputs_and_fees.sql" },
+  { column: "output_per_unit", table: "knowledge_nodes", migration: "0100_units_outputs_and_fees.sql" },
+  { column: "run_size", table: "knowledge_nodes", migration: "0100_units_outputs_and_fees.sql" },
   { column: "category", table: "materials", migration: "0096_knowledge_inventory_link.sql" },
 ];
 

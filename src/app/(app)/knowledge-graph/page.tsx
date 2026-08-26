@@ -73,6 +73,7 @@ export default async function KnowledgeGraphPage() {
         <KnowledgeWorkspace
           graph={{ nodes: data.nodes, edges: data.edges }}
           tags={data.tags}
+          units={data.units}
           materials={materials}
           storageLocations={storageLocations}
           availableKits={availableKits}

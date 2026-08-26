@@ -161,6 +161,23 @@ export interface GraphNode {
    * right most of the time and wrong exactly where it costs money.
    */
   costBasis: "consumable" | "capital" | null;
+  /**
+   * Hours in one unit, where the unit is a stretch of somebody's day.
+   *
+   * Resolved when the graph loads, from the built-in units or the ones this
+   * business typed itself — so the cost functions never need a registry of
+   * every unit anybody has ever invented.
+   */
+  unitHours: number | null;
+  /** How much one unit of it does: 100 sq ft to a bag, 1 hanger to a sheet. */
+  outputPerUnit: number | null;
+  outputUnit: string | null;
+  /** For an idea: how much one run of it produces. */
+  runSize: number | null;
+  runUnit: string | null;
+  /** A flat price charged once per use rather than per unit — a
+   * subcontractor, a permit, a delivery fee. */
+  fixedCost: number | null;
   /** The real thing in inventory, where this node is one. A node links to a
    * material or a tool, never both. */
   materialId: string | null;

@@ -9,6 +9,7 @@ import {
   hours,
   isTimeUnit,
   money,
+  suggestedQuantity,
   unitDef,
 } from "@/lib/knowledge-cost";
 import type { Graph, GraphEdge, GraphNode, RelationshipType } from "@/lib/knowledge-graph";
@@ -31,6 +32,12 @@ function node(
     unit,
     purchaseUrl: null,
     costBasis: null,
+    unitHours: null,
+    outputPerUnit: null,
+    outputUnit: null,
+    runSize: null,
+    runUnit: null,
+    fixedCost: null,
     materialId: null,
     toolId: null,
     materialName: null,
@@ -370,5 +377,162 @@ describe("cost basis said out loud", () => {
     expect(defaultCostBasis("software")).toBe("capital");
     expect(defaultCostBasis("material")).toBe("consumable");
     expect(defaultCostBasis("skill")).toBe("consumable");
+  });
+});
+
+describe("money that goes to somebody else", () => {
+  // A mailing house charges a flat four-fifty a drop whether the drop is two
+  // thousand pieces or three.
+  const withFee: Graph = {
+    nodes: [
+      node("hangers", "Door hangers"),
+      node("flyers", "Flyers"),
+      { ...node("mail", "Mailing house", "supplier"), fixedCost: 450 },
+      node("card", "Cardstock", "material", 0.1, "sheet"),
+    ],
+    edges: [
+      edge("e1", "hangers", "mail", 1),
+      edge("e2", "hangers", "card", 1000),
+      edge("e3", "flyers", "mail", 1),
+    ],
+  };
+
+  it("charges the fee flat, not per unit", () => {
+    const graph: Graph = {
+      nodes: [node("a", "Big drop"), { ...node("mail", "Mailing house", "supplier"), fixedCost: 450 }],
+      // Three thousand pieces through the same one drop.
+      edges: [edge("e", "a", "mail", 3000)],
+    };
+    expect(costOf(graph, "a").services).toBe(450);
+  });
+
+  it("keeps it out of materials and out of hours", () => {
+    const cost = costOf(withFee, "hangers");
+    expect(cost.materials).toBeCloseTo(100, 5);
+    expect(cost.hours).toBe(0);
+    expect(cost.services).toBe(450);
+    expect(cost.serviceItems.map((n) => n.title)).toEqual(["Mailing house"]);
+  });
+
+  it("counts it in what the run costs", () => {
+    expect(costOf(withFee, "hangers").total).toBeCloseTo(550, 5);
+  });
+
+  it("pays it once per run however many parts need them", () => {
+    const layered: Graph = {
+      nodes: [
+        node("a", "Campaign"),
+        node("run1", "Hanger drop", "process"),
+        node("run2", "Flyer drop", "process"),
+        { ...node("mail", "Mailing house", "supplier"), fixedCost: 450 },
+      ],
+      edges: [
+        edge("e1", "a", "run1"),
+        edge("e2", "a", "run2"),
+        edge("e3", "run1", "mail"),
+        edge("e4", "run2", "mail"),
+      ],
+    };
+    expect(costOf(layered, "a").services).toBe(450);
+  });
+
+  it("pays it again for a second campaign", () => {
+    // The opposite of kit: two drops are two invoices.
+    expect(costOfMany(withFee, ["hangers", "flyers"]).services).toBe(900);
+  });
+
+  it("does not call a priced fee an unpriced input", () => {
+    expect(costOf(withFee, "hangers").unpriced).toHaveLength(0);
+  });
+
+  it("beats the kind of thing it is", () => {
+    // A subcontractor filed as equipment is still an invoice, not a purchase
+    // that keeps earning.
+    const graph: Graph = {
+      nodes: [node("a", "Job"), { ...node("sub", "Sub crew", "equipment", 900), fixedCost: 1200 }],
+      edges: [edge("e", "a", "sub", 1)],
+    };
+    expect(costOf(graph, "a").capital).toBe(0);
+    expect(costOf(graph, "a").services).toBe(1200);
+  });
+});
+
+describe("units this business typed itself", () => {
+  it("counts a made-up unit as time when they said it is", () => {
+    const graph: Graph = {
+      nodes: [
+        node("a", "Clean-up"),
+        { ...node("shift", "Crew shift", "role", 320, "shift"), unitHours: 6 },
+      ],
+      edges: [edge("e", "a", "shift", 2)],
+    };
+    const cost = costOf(graph, "a");
+    expect(cost.hours).toBe(12);
+    expect(cost.labour).toBe(640);
+    expect(cost.materials).toBe(0);
+  });
+
+  it("treats a made-up unit as a thing when they did not", () => {
+    const graph: Graph = {
+      nodes: [node("a", "Sod job"), node("pallet", "Sod", "material", 180, "pallet")],
+      edges: [edge("e", "a", "pallet", 3)],
+    };
+    const cost = costOf(graph, "a");
+    expect(cost.materials).toBe(540);
+    expect(cost.hours).toBe(0);
+  });
+});
+
+describe("suggestedQuantity", () => {
+  const idea = (runSize: number | null, runUnit: string | null) => ({
+    ...node("i", "Door hangers"),
+    runSize,
+    runUnit,
+  });
+  const input = (outputPerUnit: number | null, outputUnit: string | null) => ({
+    ...node("m", "Cardstock", "material", 0.12, "sheet"),
+    outputPerUnit,
+    outputUnit,
+  });
+
+  it("divides the run by what one of them does", () => {
+    expect(suggestedQuantity(idea(2000, "hangers"), input(1, "hangers"))).toBe(2000);
+  });
+
+  it("rounds up, because nine and a bit bags is ten bags", () => {
+    expect(suggestedQuantity(idea(1000, "sq ft"), input(100, "sq ft"))).toBe(10);
+    expect(suggestedQuantity(idea(950, "sq ft"), input(100, "sq ft"))).toBe(10);
+  });
+
+  it("ignores case and stray spaces in the units", () => {
+    expect(suggestedQuantity(idea(500, "Sq Ft"), input(100, " sq ft "))).toBe(5);
+  });
+
+  it("says nothing when the units do not line up", () => {
+    // A number that looks calculated and is not is worse than no number.
+    expect(suggestedQuantity(idea(2000, "hangers"), input(100, "sq ft"))).toBeNull();
+  });
+
+  it("says nothing when either half is missing", () => {
+    expect(suggestedQuantity(idea(null, "hangers"), input(1, "hangers"))).toBeNull();
+    expect(suggestedQuantity(idea(2000, "hangers"), input(null, "hangers"))).toBeNull();
+    expect(suggestedQuantity(idea(2000, null), input(1, "hangers"))).toBeNull();
+  });
+});
+
+describe("describeQuantity with a home-made unit", () => {
+  it("uses the name somebody typed rather than falling back to each", () => {
+    // "2,000 each" for two thousand pallets is worse than saying nothing.
+    expect(describeQuantity(3, "pallet")).toBe("3 pallets");
+    expect(describeQuantity(1, "pallet")).toBe("1 pallet");
+  });
+
+  it("does not add a second s to a name that already has one", () => {
+    expect(describeQuantity(4, "bunches")).toBe("4 bunches");
+  });
+
+  it("still handles the built-in ones", () => {
+    expect(describeQuantity(2000, "sheet")).toBe("2000 sheets");
+    expect(describeQuantity(5, "each")).toBe("5");
   });
 });

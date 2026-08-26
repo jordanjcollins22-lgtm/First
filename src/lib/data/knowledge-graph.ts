@@ -4,13 +4,25 @@ import type { Graph, GraphEdge, GraphNode, NodeStatus, NodeType, RelationshipTyp
 import type { Recurrence } from "@/lib/knowledge-schedule";
 import { UNITS } from "@/lib/knowledge-cost";
 
+export interface UnitOption {
+  value: string;
+  label: string;
+  plural: string;
+  /** Hours in one, where it is a stretch of somebody's day. */
+  hours: number | null;
+  custom: boolean;
+}
+
 export interface KnowledgeGraphData extends Graph {
   /** Every tag in use, for the filter list. */
   tags: string[];
+  /** The built-in units and the ones this business typed itself, in one list
+   * so a picker never has to know the difference. */
+  units: UnitOption[];
   setupNeeded: boolean;
 }
 
-const EMPTY: KnowledgeGraphData = { nodes: [], edges: [], tags: [], setupNeeded: true };
+const EMPTY: KnowledgeGraphData = { nodes: [], edges: [], tags: [], units: [], setupNeeded: true };
 
 /**
  * The whole graph.
@@ -24,21 +36,34 @@ const EMPTY: KnowledgeGraphData = { nodes: [], edges: [], tags: [], setupNeeded:
 export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
   const supabase = await createClient();
 
-  const [nodeRes, edgeRes, tagRes] = await Promise.all([
+  const [nodeRes, edgeRes, tagRes, unitRes] = await Promise.all([
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, unit, cost_basis, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, unit, cost_basis, output_per_unit, output_unit, run_size, run_unit, fixed_cost, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
       .from("knowledge_relationships")
       .select("id, source_node_id, target_node_id, relationship_type, strength, quantity, notes"),
     supabase.from("knowledge_node_tags").select("node_id, knowledge_tags(name)"),
+    // Units this business typed itself. A table that is not there yet costs
+    // the custom units, not the graph.
+    supabase.from("knowledge_units").select("name, plural, hours"),
   ]);
 
   if (isMissingTable(nodeRes.error)) return EMPTY;
   if (nodeRes.error) throw nodeRes.error;
+
+  const customUnits: CustomUnit[] = ((unitRes.data ?? []) as unknown as {
+    name: string;
+    plural: string | null;
+    hours: number | null;
+  }[]).map((u) => ({
+    name: u.name,
+    plural: u.plural,
+    hours: u.hours != null ? Number(u.hours) : null,
+  }));
 
   const tagsByNode = new Map<string, string[]>();
   const allTags = new Set<string>();
@@ -136,6 +161,11 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       importance: number | null;
       unit: string | null;
       cost_basis: string | null;
+      output_per_unit: number | null;
+      output_unit: string | null;
+      run_size: number | null;
+      run_unit: string | null;
+      fixed_cost: number | null;
       purchase_url: string | null;
       material_id: string | null;
       tool_id: string | null;
@@ -168,6 +198,12 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     unit: material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each",
     costBasis:
       n.cost_basis === "consumable" || n.cost_basis === "capital" ? n.cost_basis : null,
+    unitHours: hoursIn(material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each", customUnits),
+    outputPerUnit: n.output_per_unit != null ? Number(n.output_per_unit) : null,
+    outputUnit: n.output_unit,
+    runSize: n.run_size != null ? Number(n.run_size) : null,
+    runUnit: n.run_unit,
+    fixedCost: n.fixed_cost != null ? Number(n.fixed_cost) : null,
     purchaseUrl: material?.purchaseUrl ?? n.purchase_url,
     materialId: n.material_id,
     toolId: n.tool_id,
@@ -211,7 +247,13 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     notes: e.notes,
   }));
 
-  return { nodes, edges, tags: [...allTags].sort(), setupNeeded: false };
+  return {
+    nodes,
+    edges,
+    tags: [...allTags].sort(),
+    units: mergeUnits(customUnits),
+    setupNeeded: false,
+  };
 }
 
 interface MaterialRow {
@@ -260,4 +302,59 @@ interface ToolRow {
   quantity: number | null;
   reorder_threshold: number | null;
   on_order: boolean | null;
+}
+
+interface CustomUnit {
+  name: string;
+  plural: string | null;
+  hours: number | null;
+}
+
+/**
+ * Hours in one of a unit, or nothing where it is a thing rather than a
+ * stretch of somebody's day.
+ *
+ * Resolved here, once, so the cost functions can stay pure functions of a
+ * node and never need to know which units this business invented.
+ */
+function hoursIn(unit: string, customUnits: CustomUnit[]): number | null {
+  const custom = customUnits.find((u) => u.name === unit);
+  if (custom) return custom.hours;
+  const builtIn = UNITS.find((u) => u.value === unit);
+  return builtIn?.time ? builtIn.hours ?? 1 : null;
+}
+
+/**
+ * One list of units, built-in and home-made together.
+ *
+ * A unit somebody typed wins where the names collide: they meant their own
+ * definition of a "load", not ours.
+ */
+function mergeUnits(customUnits: CustomUnit[]): UnitOption[] {
+  const merged = new Map<string, UnitOption>();
+
+  for (const unit of UNITS) {
+    const noun = unit.label.replace(/^per /, "");
+    merged.set(unit.value, {
+      value: unit.value,
+      label: unit.label,
+      plural: unit.plural ?? (noun.endsWith("s") ? noun : `${noun}s`),
+      hours: unit.hours ?? null,
+      custom: false,
+    });
+  }
+
+  for (const unit of customUnits) {
+    merged.set(unit.name, {
+      value: unit.name,
+      label: `per ${unit.name}`,
+      plural: unit.plural ?? `${unit.name}s`,
+      hours: unit.hours,
+      custom: true,
+    });
+  }
+
+  return [...merged.values()].sort(
+    (a, b) => Number(a.custom) - Number(b.custom) || a.value.localeCompare(b.value)
+  );
 }
