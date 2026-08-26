@@ -28,7 +28,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, unit, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, importance, unit, cost_basis, purchase_url, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
@@ -135,6 +135,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       status: string;
       importance: number | null;
       unit: string | null;
+      cost_basis: string | null;
       purchase_url: string | null;
       material_id: string | null;
       tool_id: string | null;
@@ -165,6 +166,8 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     // and two prices for one material is worse than one price and a gap.
     estimatedCost: material?.costPerUnit ?? null,
     unit: material ? normaliseUnit(material.unit, n.unit) : n.unit ?? "each",
+    costBasis:
+      n.cost_basis === "consumable" || n.cost_basis === "capital" ? n.cost_basis : null,
     purchaseUrl: material?.purchaseUrl ?? n.purchase_url,
     materialId: n.material_id,
     toolId: n.tool_id,

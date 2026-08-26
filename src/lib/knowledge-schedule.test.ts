@@ -31,6 +31,7 @@ function node(
     estimatedCost: null,
     unit: "each",
     purchaseUrl: null,
+    costBasis: null,
     materialId: null,
     toolId: null,
     materialName: null,

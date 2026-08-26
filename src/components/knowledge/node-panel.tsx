@@ -35,8 +35,10 @@ import { CreateToolForm } from "@/components/tool/create-tool-form";
 import {
   UNITS,
   costOf,
+  defaultCostBasis,
   describeQuantity,
   hours as formatHours,
+  isCapital,
   money,
   unitDef,
 } from "@/lib/knowledge-cost";
@@ -106,6 +108,9 @@ export function NodePanel({
   const [importance, setImportance] = useState(node.importance ? String(node.importance) : "");
   const [tags, setTags] = useState(node.tags.join(", "));
   const [unit, setUnit] = useState(node.unit);
+  const [basis, setBasis] = useState<"consumable" | "capital">(
+    node.costBasis ?? defaultCostBasis(node.nodeType)
+  );
   const [purchaseUrl, setPurchaseUrl] = useState(node.purchaseUrl ?? "");
 
   // Every field above is seeded from the node once. The workspace remounts
@@ -133,6 +138,14 @@ export function NodePanel({
    * nowhere, for the things that are not stock — an hour, a permit, a
    * process. */
   const [newIn, setNewIn] = useState<InventoryGroup | "none">("materials");
+  /**
+   * Whether the thing being added gets bought again every run.
+   *
+   * Held as an override rather than a value, so the sensible answer for what
+   * somebody is adding is already selected — a tool is kit, a material is
+   * used up — and only becomes a decision when they disagree with it.
+   */
+  const [basisOverride, setBasisOverride] = useState<"consumable" | "capital" | null>(null);
 
   const neighbours = useMemo(() => neighboursOf(graph, node.id), [graph, node.id]);
   const outgoing = neighbours.filter((n) => n.outgoing);
@@ -228,6 +241,23 @@ export function NodePanel({
       : null;
   }, [pickedKey, graphOnly, materials]);
 
+  const suggestedBasis: "consumable" | "capital" =
+    picked?.kind === "tool"
+      ? "capital"
+      : picked?.kind === "material"
+        ? "consumable"
+        : newIn === "tools" || newIn === "gear"
+          ? "capital"
+          : newIn === "none"
+            ? defaultCostBasis(needType)
+            : "consumable";
+  const needBasis = basisOverride ?? suggestedBasis;
+
+  /** Only worth asking when a node is about to be made. Something already in
+   * the graph has already been answered for. */
+  const willCreateNode =
+    !picked || (picked.kind !== "node" && !nodeByInventory.has(`${picked.kind}:${picked.id}`));
+
   // What the line about to be added would come to, shown before it is added
   // rather than after — that is when somebody can still change their mind.
   const lineTotal = useMemo(() => {
@@ -270,6 +300,7 @@ export function NodePanel({
         inventory: { kind, id: item.id, name: item.name, unit: kind === "tool" ? "each" : needUnit },
         relationshipType: needRelationship,
         quantity: needQuantity ? Number(needQuantity) : null,
+        costBasis: needBasis,
       });
       if (result.ok) setNeedQuantity("");
       return result;
@@ -434,6 +465,10 @@ export function NodePanel({
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Buying it</Label>
+            <BasisChoice value={basis} onChange={setBasis} />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Label className="text-xs">Where you buy it</Label>
             <Input
               value={purchaseUrl}
@@ -463,6 +498,7 @@ export function NodePanel({
                   notes,
                   importance: importance ? Number(importance) : null,
                   unit,
+                  costBasis: basis,
                   purchaseUrl: purchaseUrl || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
@@ -480,6 +516,11 @@ export function NodePanel({
             {NODE_STATUSES.find((s) => s.value === node.status)?.label ?? node.status}
             {node.estimatedCost != null
               ? ` · ${money(node.estimatedCost)} ${unitDef(node.unit).label}`
+              : ""}
+            {node.nodeType !== "idea"
+              ? isCapital(node)
+                ? " · bought once, kept"
+                : " · bought again each run"
               : ""}
             {node.importance ? ` · importance ${node.importance}/5` : ""}
             {node.tags.length > 0 ? ` · ${node.tags.join(", ")}` : ""}
@@ -839,6 +880,10 @@ export function NodePanel({
                       <UnitSelect value={needUnit} onChange={setNeedUnit} />
                     </div>
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Buying it</Label>
+                    <BasisChoice value={needBasis} onChange={setBasisOverride} />
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     It will have no cost until somebody links it to Inventory — hours included, if you
                     keep a rate in there.
@@ -847,6 +892,10 @@ export function NodePanel({
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-border bg-card/60 p-2">
                   {CONNECTION_FIELDS}
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Buying it</Label>
+                    <BasisChoice value={needBasis} onChange={setBasisOverride} />
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     Goes straight into Inventory under{" "}
                     {INVENTORY_GROUPS.find((g) => g.value === newIn)?.label}, and connects to{" "}
@@ -874,6 +923,13 @@ export function NodePanel({
           )}
 
           {(picked || newIn === "none") && CONNECTION_FIELDS}
+          {picked && willCreateNode && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Buying it</Label>
+              <BasisChoice value={needBasis} onChange={setBasisOverride} />
+            </div>
+          )}
+
           {lineTotal != null && (
             <p className="text-[11px] text-muted-foreground">That line comes to {money(lineTotal)}.</p>
           )}
@@ -900,6 +956,7 @@ export function NodePanel({
                     unit: picked ? undefined : needUnit,
                     relationshipType: needRelationship,
                     quantity: needQuantity ? Number(needQuantity) : null,
+                    costBasis: willCreateNode ? needBasis : undefined,
                   });
                   if (result.ok) {
                     setNeedTitle("");
@@ -1246,6 +1303,50 @@ function Figure({
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className={`tabular-nums ${strong ? "text-base font-bold" : "text-sm font-medium"}`}>{value}</p>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Bought again, or bought once.
+ *
+ * Two buttons rather than a dropdown, and worded as what happens rather than
+ * as accounting: "material" and "equipment" are the words the app thinks in,
+ * but the question a person is answering is whether they have to buy it
+ * again next time. Getting this wrong in the other direction is the
+ * expensive one — a thing charged to every run that was only ever bought
+ * once makes every campaign look worse than it is.
+ */
+export function BasisChoice({
+  value,
+  onChange,
+}: {
+  value: "consumable" | "capital";
+  onChange: (v: "consumable" | "capital") => void;
+}) {
+  const options: { value: "consumable" | "capital"; label: string; hint: string }[] = [
+    { value: "consumable", label: "Material", hint: "Used up — buy it again each run" },
+    { value: "capital", label: "Equipment", hint: "Kept — buy it once, use it every time" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {options.map((option) => {
+        const on = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`rounded-lg border p-2 text-left ${
+              on ? "border-primary bg-primary/10" : "border-border"
+            }`}
+          >
+            <span className="block text-sm font-medium">{option.label}</span>
+            <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

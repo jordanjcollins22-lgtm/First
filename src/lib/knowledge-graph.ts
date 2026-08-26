@@ -154,6 +154,13 @@ export interface GraphNode {
   unit: string;
   /** Where you buy it. */
   purchaseUrl: string | null;
+  /**
+   * Whether it gets bought again every run, or once and kept.
+   *
+   * Null means nobody has said and the kind of thing it is decides — which is
+   * right most of the time and wrong exactly where it costs money.
+   */
+  costBasis: "consumable" | "capital" | null;
   /** The real thing in inventory, where this node is one. A node links to a
    * material or a tool, never both. */
   materialId: string | null;

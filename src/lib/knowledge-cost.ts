@@ -118,8 +118,23 @@ const EMPTY: CostBreakdown = {
  * is a cost of being in the business of mowing lawns. */
 const CAPITAL_TYPES = new Set(["equipment", "machine", "tool", "software", "asset"]);
 
+/**
+ * Whether something is charged once or charged every run.
+ *
+ * What somebody actually said wins over what the kind of thing implies. The
+ * inference is right most of the time and wrong in the cases that cost money:
+ * a sign frame is filed as a material and goes back in the truck at the end
+ * of the day, and charging it to every campaign overstates all of them.
+ */
 export function isCapital(node: GraphNode): boolean {
+  if (node.costBasis) return node.costBasis === "capital";
   return CAPITAL_TYPES.has(node.nodeType);
+}
+
+/** What the kind of thing implies, for pre-selecting the choice rather than
+ * making somebody answer a question the app can already guess. */
+export function defaultCostBasis(nodeType: string): "consumable" | "capital" {
+  return CAPITAL_TYPES.has(nodeType) ? "capital" : "consumable";
 }
 
 /** Connections that mean "this is made of that". Pointing at something you

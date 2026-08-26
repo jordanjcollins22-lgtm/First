@@ -115,6 +115,7 @@ export interface Database {
           notes: string | null;
           position_x: number | null;
           position_y: number | null;
+          cost_basis: string | null;
           purchase_url: string | null;
           material_id: string | null;
           tool_id: string | null;

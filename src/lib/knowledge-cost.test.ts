@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   UNITS,
   costOf,
+  defaultCostBasis,
   costOfMany,
   describeQuantity,
   hours,
@@ -29,6 +30,7 @@ function node(
     estimatedCost: cost,
     unit,
     purchaseUrl: null,
+    costBasis: null,
     materialId: null,
     toolId: null,
     materialName: null,
@@ -319,5 +321,54 @@ describe("capital versus running cost", () => {
     const cost = costOf(graph, "a");
     expect(cost.capital).toBe(30);
     expect(cost.hours).toBe(0);
+  });
+});
+
+describe("cost basis said out loud", () => {
+  it("charges a material marked as kept only once", () => {
+    // A sign frame is filed as a material and goes back in the truck. Charged
+    // to every campaign it would overstate all of them.
+    const graph: Graph = {
+      nodes: [
+        node("a", "Spring campaign"),
+        node("b", "Autumn campaign"),
+        { ...node("frame", "Sign frame", "material", 60), costBasis: "capital" as const },
+      ],
+      edges: [edge("e1", "a", "frame", 4), edge("e2", "b", "frame", 4)],
+    };
+
+    expect(costOf(graph, "a").materials).toBe(0);
+    expect(costOf(graph, "a").capital).toBe(60);
+    expect(costOfMany(graph, ["a", "b"]).capital).toBe(60);
+  });
+
+  it("charges a tool marked as used up every run", () => {
+    // Blades and bits are filed with the tools and get consumed.
+    const graph: Graph = {
+      nodes: [
+        node("a", "Edging day"),
+        { ...node("blade", "Trimmer line", "tool", 12), costBasis: "consumable" as const },
+      ],
+      edges: [edge("e", "a", "blade", 3)],
+    };
+
+    expect(costOf(graph, "a").materials).toBe(36);
+    expect(costOf(graph, "a").capital).toBe(0);
+  });
+
+  it("falls back to the kind of thing when nobody has said", () => {
+    const graph: Graph = {
+      nodes: [node("a", "Print run"), node("p", "Printer", "equipment", 420)],
+      edges: [edge("e", "a", "p", 1)],
+    };
+    expect(costOf(graph, "a").capital).toBe(420);
+  });
+
+  it("suggests the basis the kind of thing implies", () => {
+    expect(defaultCostBasis("equipment")).toBe("capital");
+    expect(defaultCostBasis("tool")).toBe("capital");
+    expect(defaultCostBasis("software")).toBe("capital");
+    expect(defaultCostBasis("material")).toBe("consumable");
+    expect(defaultCostBasis("skill")).toBe("consumable");
   });
 });

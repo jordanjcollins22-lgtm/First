@@ -27,6 +27,7 @@ function node(
     estimatedCost: cost,
     unit,
     purchaseUrl: null,
+    costBasis: null,
     materialId: null,
     toolId: null,
     materialName: null,

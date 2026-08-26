@@ -36,6 +36,8 @@ export interface NodeInput {
   notes?: string;
   importance?: number | null;
   unit?: string;
+  /** Bought again every run, or bought once and kept. */
+  costBasis?: "consumable" | "capital" | null;
   purchaseUrl?: string | null;
   /** The inventory item this is. Where the price comes from — the graph does
    * not keep one of its own. */
@@ -82,6 +84,7 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         notes: input.notes?.trim() || null,
         importance: clampScale(input.importance),
         unit: validUnit(input.unit),
+        cost_basis: validCostBasis(input.costBasis),
         material_id: input.materialId ?? null,
         tool_id: input.toolId ?? null,
         purchase_url: safePurchaseUrl(input.purchaseUrl),
@@ -134,6 +137,7 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.notes !== undefined) update.notes = patch.notes.trim() || null;
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
     if (patch.unit !== undefined) update.unit = validUnit(patch.unit);
+    if (patch.costBasis !== undefined) update.cost_basis = validCostBasis(patch.costBasis);
     if (patch.purchaseUrl !== undefined) update.purchase_url = safePurchaseUrl(patch.purchaseUrl);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
     if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);
@@ -270,6 +274,7 @@ export async function addRequirement(input: {
   /** How many units of it this needs. */
   quantity?: number | null;
   unit?: string;
+  costBasis?: "consumable" | "capital" | null;
 }): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
@@ -296,6 +301,7 @@ export async function addRequirement(input: {
           nodeType: input.nodeType ?? (kind === "tool" ? "tool" : "material"),
           status: "idea",
           unit,
+          costBasis: input.costBasis,
           materialId: kind === "material" ? id : null,
           toolId: kind === "tool" ? id : null,
         });
@@ -310,6 +316,7 @@ export async function addRequirement(input: {
         nodeType: input.nodeType ?? "material",
         status: "idea",
         unit: input.unit,
+        costBasis: input.costBasis,
       });
       if (!created.ok) return created;
       targetId = created.id;
@@ -668,6 +675,12 @@ async function applyTags(
 function dateOrNull(value: string | null | undefined): string | null {
   if (!value) return null;
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+/** Null means "nobody has said", which is a real answer — the kind of thing
+ * it is decides until somebody does. */
+function validCostBasis(value: string | null | undefined): "consumable" | "capital" | null {
+  return value === "consumable" || value === "capital" ? value : null;
 }
 
 function validUnit(value: string | undefined): string {
