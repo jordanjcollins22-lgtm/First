@@ -33,6 +33,11 @@ import { describePurchaseUrl } from "@/lib/purchase-url";
 import type { UnitOption } from "@/lib/data/knowledge-graph";
 import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import {
+  InventoryKindChoice,
+  basisFor,
+  type InventoryKind,
+} from "@/components/inventory/inventory-kind-choice";
+import {
   costOf,
   defaultCostBasis,
   suggestedQuantity,
@@ -120,8 +125,14 @@ export function NodePanel({
   );
   const [outputUnit, setOutputUnit] = useState(node.outputUnit ?? "");
   const [fixedCost, setFixedCost] = useState(node.fixedCost != null ? String(node.fixedCost) : "");
-  const [basis, setBasis] = useState<"consumable" | "capital">(
-    node.costBasis ?? defaultCostBasis(node.nodeType)
+  /** One answer, three ways, derived from what the node already is: a flat
+   * price makes it an "other", kit makes it a tool, everything else is stock. */
+  const [editKind, setEditKind] = useState<InventoryKind>(
+    node.fixedCost != null
+      ? "other"
+      : (node.costBasis ?? defaultCostBasis(node.nodeType)) === "capital"
+        ? "tool"
+        : "material"
   );
   const [purchaseUrl, setPurchaseUrl] = useState(node.purchaseUrl ?? "");
 
@@ -149,16 +160,11 @@ export function NodePanel({
   /** Where a brand-new input should land: one of the inventory lists, or
    * nowhere, for the things that are not stock — an hour, a permit, a
    * process. */
-  const [newIn, setNewIn] = useState<InventoryGroup | "none" | "service">("materials");
+  const [newIn, setNewIn] = useState<InventoryGroup | "none">("materials");
   const [feeAmount, setFeeAmount] = useState("");
-  /**
-   * Whether the thing being added gets bought again every run.
-   *
-   * Held as an override rather than a value, so the sensible answer for what
-   * somebody is adding is already selected — a tool is kit, a material is
-   * used up — and only becomes a decision when they disagree with it.
-   */
-  const [basisOverride, setBasisOverride] = useState<"consumable" | "capital" | null>(null);
+  /** What a brand-new, non-inventory input is. The same three answers used
+   * everywhere else, so nothing has to be said twice in two vocabularies. */
+  const [needKind, setNeedKind] = useState<InventoryKind>("material");
 
   const neighbours = useMemo(() => neighboursOf(graph, node.id), [graph, node.id]);
   const outgoing = neighbours.filter((n) => n.outgoing);
@@ -254,17 +260,19 @@ export function NodePanel({
       : null;
   }, [pickedKey, graphOnly, materials]);
 
-  const suggestedBasis: "consumable" | "capital" =
+  /**
+   * How the thing being added is charged, worked out from what it is rather
+   * than asked again. A tool is kit, a material is used up, and something
+   * already in the graph has been answered for.
+   */
+  const needBasis: "consumable" | "capital" =
     picked?.kind === "tool"
       ? "capital"
       : picked?.kind === "material"
         ? "consumable"
-        : newIn === "tools" || newIn === "gear"
-          ? "capital"
-          : newIn === "none"
-            ? defaultCostBasis(needType)
-            : "consumable";
-  const needBasis = basisOverride ?? suggestedBasis;
+        : newIn === "none"
+          ? basisFor(needKind)
+          : defaultCostBasis(needType);
 
   /** Only worth asking when a node is about to be made. Something already in
    * the graph has already been answered for. */
@@ -353,14 +361,25 @@ export function NodePanel({
 
   /** Connects something just added to Inventory, without making the person
    * find it again in a list they were not looking at. */
-  function connectNewInventory(kind: "material" | "tool", item: { id: string; name: string }) {
+  function connectNewInventory(item: {
+    id: string;
+    name: string;
+    table: "material" | "tool";
+    kind: InventoryKind;
+  }) {
     run(async () => {
       const result = await addRequirement({
         nodeId: node.id,
-        inventory: { kind, id: item.id, name: item.name, unit: kind === "tool" ? "each" : needUnit },
+        inventory: {
+          kind: item.table,
+          id: item.id,
+          name: item.name,
+          unit: item.table === "tool" ? "each" : needUnit,
+        },
         relationshipType: needRelationship,
         quantity: needQuantity ? Number(needQuantity) : null,
-        costBasis: needBasis,
+        // Derived from what they already said it was, not asked again.
+        costBasis: basisFor(item.kind),
       });
       if (result.ok) setNeedQuantity("");
       return result;
@@ -525,8 +544,8 @@ export function NodePanel({
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Buying it</Label>
-            <BasisChoice value={basis} onChange={setBasis} />
+            <Label className="text-xs">What is it?</Label>
+            <InventoryKindChoice value={editKind} onChange={setEditKind} />
           </div>
 
           {node.nodeType === "idea" ? (
@@ -554,6 +573,7 @@ export function NodePanel({
             </div>
           ) : (
             <>
+              {editKind !== "other" && (
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">One {unitDef(node.unit).label.replace(/^per /, "")} does</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -576,20 +596,23 @@ export function NodePanel({
                   makes, so the quantity works itself out.
                 </p>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Or a flat price somebody else charges</Label>
-                <Input
-                  value={fixedCost}
-                  inputMode="decimal"
-                  placeholder="450"
-                  onChange={(e) => setFixedCost(e.target.value)}
-                  className="h-9 text-sm"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  For work you pay another company to do. Charged once per run whatever the quantity, and
-                  counted apart from materials and hours.
-                </p>
-              </div>
+              )}
+              {editKind === "other" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">What it costs</Label>
+                  <Input
+                    value={fixedCost}
+                    inputMode="decimal"
+                    placeholder="450"
+                    onChange={(e) => setFixedCost(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    A flat price, charged once per run whatever the quantity, and counted apart from
+                    materials and hours.
+                  </p>
+                </div>
+              )}
             </>
           )}
           <div className="flex flex-col gap-1.5">
@@ -622,12 +645,12 @@ export function NodePanel({
                   notes,
                   importance: importance ? Number(importance) : null,
                   unit,
-                  costBasis: basis,
+                  costBasis: editKind === "other" ? null : basisFor(editKind),
                   runSize: runSize ? Number(runSize) : null,
                   runUnit: runUnit || null,
                   outputPerUnit: outputPerUnit ? Number(outputPerUnit) : null,
                   outputUnit: outputUnit || null,
-                  fixedCost: fixedCost ? Number(fixedCost) : null,
+                  fixedCost: editKind === "other" && fixedCost ? Number(fixedCost) : null,
                   purchaseUrl: purchaseUrl || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
@@ -954,7 +977,7 @@ export function NodePanel({
                   location and its reorder point. */}
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Where it belongs</Label>
-                <Select value={newIn} onValueChange={(v) => setNewIn(v as InventoryGroup | "none" | "service")}>
+                <Select value={newIn} onValueChange={(v) => setNewIn(v as InventoryGroup | "none")}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue />
                   </SelectTrigger>
@@ -964,40 +987,12 @@ export function NodePanel({
                         Inventory — {group.label}
                       </SelectItem>
                     ))}
-                    <SelectItem value="service">Someone else does it — a flat price</SelectItem>
                     <SelectItem value="none">Not inventory (time, a permit, a process)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {newIn === "service" ? (
-                <>
-                  {/* Not everything is a material with a unit price. A mailing
-                      house charges the same whether the drop is two thousand
-                      pieces or three, and multiplying that by a quantity would
-                      be wrong in both directions. */}
-                  <Input
-                    value={needTitle}
-                    onChange={(e) => setNeedTitle(e.target.value)}
-                    placeholder="Mailing house, sign printer, permit fee…"
-                    className="h-9 text-sm"
-                  />
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs">What they charge</Label>
-                    <Input
-                      value={feeAmount}
-                      inputMode="decimal"
-                      placeholder="450"
-                      onChange={(e) => setFeeAmount(e.target.value)}
-                      className="h-9 text-sm"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      A flat price, charged once a run whatever the quantity. Counted apart from
-                      materials and hours, so a subcontractor never looks like stock you own.
-                    </p>
-                  </div>
-                </>
-              ) : newIn === "none" ? (
+              {newIn === "none" ? (
                 <>
                   <Input
                     value={needTitle}
@@ -1043,21 +1038,30 @@ export function NodePanel({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs">Buying it</Label>
-                    <BasisChoice value={needBasis} onChange={setBasisOverride} />
+                    <Label className="text-xs">What is it?</Label>
+                    <InventoryKindChoice value={needKind} onChange={setNeedKind} />
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    It will have no cost until somebody links it to Inventory — hours included, if you
-                    keep a rate in there.
-                  </p>
+                  {needKind === "other" ? (
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs">What it costs</Label>
+                      <Input
+                        value={feeAmount}
+                        inputMode="decimal"
+                        placeholder="450"
+                        onChange={(e) => setFeeAmount(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      It will have no cost until somebody links it to Inventory — hours included, if you
+                      keep a rate in there.
+                    </p>
+                  )}
                 </>
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-border bg-card/60 p-2">
                   {CONNECTION_FIELDS}
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs">Buying it</Label>
-                    <BasisChoice value={needBasis} onChange={setBasisOverride} />
-                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     Goes straight into Inventory under{" "}
                     {INVENTORY_GROUPS.find((g) => g.value === newIn)?.label}, and connects to{" "}
@@ -1068,21 +1072,14 @@ export function NodePanel({
                     group={newIn as InventoryGroup}
                     storageLocations={storageLocations}
                     availableKits={availableKits}
-                    onCreated={(item) => connectNewInventory(item.kind, item)}
+                    onCreated={connectNewInventory}
                   />
                 </div>
               )}
             </>
           )}
 
-          {(picked || newIn === "none" || newIn === "service") && CONNECTION_FIELDS}
-          {picked && willCreateNode && (
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Buying it</Label>
-              <BasisChoice value={needBasis} onChange={setBasisOverride} />
-            </div>
-          )}
-
+          {(picked || newIn === "none") && CONNECTION_FIELDS}
           {suggestion != null && String(suggestion) !== needQuantity && (
             <p className="text-[11px] text-muted-foreground">
               A run of {node.runSize} {node.runUnit} needs{" "}
@@ -1104,7 +1101,7 @@ export function NodePanel({
           {/* The Inventory form has its own button and does the connecting
               itself, so a second one here would be a button that does
               nothing. */}
-          {(picked || newIn === "none" || newIn === "service") && (
+          {(picked || newIn === "none") && (
             <Button
               type="button"
               size="sm"
@@ -1119,9 +1116,12 @@ export function NodePanel({
                         ? { kind: picked.kind, id: picked.id, name: picked.title, unit: picked.unit }
                         : undefined,
                     title: picked ? undefined : needTitle,
-                    nodeType: picked ? undefined : newIn === "service" ? "service" : needType,
+                    nodeType: picked ? undefined : needKind === "other" ? "service" : needType,
                     unit: picked ? undefined : needUnit,
-                    fixedCost: !picked && newIn === "service" && feeAmount ? Number(feeAmount) : null,
+                    fixedCost:
+                      !picked && needKind === "other" && newIn === "none" && feeAmount
+                        ? Number(feeAmount)
+                        : null,
                     relationshipType: needRelationship,
                     quantity: needQuantity ? Number(needQuantity) : null,
                     costBasis: willCreateNode ? needBasis : undefined,
@@ -1680,50 +1680,6 @@ function Figure({
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className={`tabular-nums ${strong ? "text-base font-bold" : "text-sm font-medium"}`}>{value}</p>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
-/**
- * Bought again, or bought once.
- *
- * Two buttons rather than a dropdown, and worded as what happens rather than
- * as accounting: "material" and "equipment" are the words the app thinks in,
- * but the question a person is answering is whether they have to buy it
- * again next time. Getting this wrong in the other direction is the
- * expensive one — a thing charged to every run that was only ever bought
- * once makes every campaign look worse than it is.
- */
-export function BasisChoice({
-  value,
-  onChange,
-}: {
-  value: "consumable" | "capital";
-  onChange: (v: "consumable" | "capital") => void;
-}) {
-  const options: { value: "consumable" | "capital"; label: string; hint: string }[] = [
-    { value: "consumable", label: "Material", hint: "Used up — buy it again each run" },
-    { value: "capital", label: "Equipment", hint: "Kept — buy it once, use it every time" },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {options.map((option) => {
-        const on = value === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={`rounded-lg border p-2 text-left ${
-              on ? "border-primary bg-primary/10" : "border-border"
-            }`}
-          >
-            <span className="block text-sm font-medium">{option.label}</span>
-            <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
-          </button>
-        );
-      })}
     </div>
   );
 }

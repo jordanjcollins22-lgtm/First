@@ -3,17 +3,10 @@
 import { useState } from "react";
 
 import { Label } from "@/components/ui/label";
+import { InventoryKindChoice, type InventoryKind } from "@/components/inventory/inventory-kind-choice";
 import { CreateMaterialForm } from "@/components/material/create-material-form";
 import { CreateToolForm } from "@/components/tool/create-tool-form";
 import type { InventoryGroup } from "@/lib/inventory-groups";
-
-export type InventoryKind = "tool" | "material" | "other";
-
-const KINDS: { value: InventoryKind; label: string; hint: string }[] = [
-  { value: "tool", label: "Tool", hint: "Kept and used again" },
-  { value: "material", label: "Material", hint: "Used up, reordered" },
-  { value: "other", label: "Other", hint: "A cost — a fee, a permit" },
-];
 
 /**
  * The one way to put something into inventory.
@@ -39,7 +32,14 @@ export function InventoryAddForm({
   storageLocations: string[];
   availableKits: number[];
   defaultKind?: InventoryKind;
-  onCreated?: (item: { id: string; name: string; kind: "material" | "tool" }) => void;
+  /** Told what was added, and what kind somebody said it was — the graph
+   * derives how it is charged from that rather than asking again. */
+  onCreated?: (item: {
+    id: string;
+    name: string;
+    table: "material" | "tool";
+    kind: InventoryKind;
+  }) => void;
 }) {
   const [kind, setKind] = useState<InventoryKind>(
     defaultKind ?? (group === "tools" || group === "gear" ? "tool" : "material")
@@ -49,24 +49,7 @@ export function InventoryAddForm({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">What is it?</Label>
-        <div className="grid grid-cols-3 gap-2">
-          {KINDS.map((option) => {
-            const on = kind === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setKind(option.value)}
-                className={`rounded-lg border p-2 text-left ${
-                  on ? "border-primary bg-primary/10" : "border-border"
-                }`}
-              >
-                <span className="block text-sm font-medium">{option.label}</span>
-                <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
-              </button>
-            );
-          })}
-        </div>
+        <InventoryKindChoice value={kind} onChange={setKind} />
         {kind === "other" && (
           <p className="text-[11px] text-muted-foreground">
             A cost with nothing behind it. It gets no resale value, because there is nothing to sell.
@@ -86,7 +69,7 @@ export function InventoryAddForm({
           availableKits={availableKits}
           storageLocations={storageLocations}
           category={group === "gear" ? "gear" : "tool"}
-          onCreated={(item) => onCreated?.({ ...item, kind: "tool" })}
+          onCreated={(item) => onCreated?.({ ...item, table: "tool", kind })}
         />
       ) : (
         <CreateMaterialForm
@@ -94,7 +77,7 @@ export function InventoryAddForm({
           storageLocations={storageLocations}
           category={group === "marketing" ? "marketing" : "job"}
           kind={kind}
-          onCreated={(item) => onCreated?.({ ...item, kind: "material" })}
+          onCreated={(item) => onCreated?.({ ...item, table: "material", kind })}
         />
       )}
     </div>
