@@ -15,6 +15,9 @@ import { listSocialPostsForJob } from "@/lib/data/social";
 import { listPhotoWaivers } from "@/lib/data/photo-waivers";
 import { listPhotoMarks } from "@/lib/data/photo-review";
 import { listJobEntries, listPayPeople } from "@/lib/data/time-clock";
+import { listPlansForJob } from "@/lib/data/payment-plans";
+import { PaymentPlanPanel } from "@/components/payments/payment-plan-panel";
+import { isStripeConfigured } from "@/lib/env";
 import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
 import { isAccountManager as isManagerRole } from "@/lib/affiliate-roles";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
@@ -68,7 +71,7 @@ export default async function JobPage({
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
-    .select("*, property:properties(address, lat, lng, customers(name))")
+    .select("*, property:properties(address, lat, lng, customers(id, name))")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -93,7 +96,12 @@ export default async function JobPage({
     photos_approved_by: string | null;
     client_notes: string | null;
     budget_range: string | null;
-    property: { address: string; lat: number; lng: number; customers: { name: string } | null } | null;
+    property: {
+      address: string;
+      lat: number;
+      lng: number;
+      customers: { id: string; name: string } | null;
+    } | null;
   };
 
   const [
@@ -112,6 +120,7 @@ export default async function JobPage({
     photoMarks,
     jobTimeEntries,
     payPeople,
+    paymentPlans,
     schedule,
     crew,
     teamProfiles,
@@ -138,6 +147,8 @@ export default async function JobPage({
     // Empty until migration 0113/0115 run; the visit just shows nobody logged.
     listJobEntries(jobId).catch(() => []),
     listPayPeople().catch(() => []),
+    // Empty until migration 0116 runs; the panel just offers to start one.
+    listPlansForJob(jobId).catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
@@ -420,6 +431,15 @@ export default async function JobPage({
         approvedAt={job.photos_approved_at ?? null}
         approvedByName={photosApprovedByName}
         canReview={canReviewPhotos}
+      />
+
+      {/* How the job gets paid for: one-off, split up, or recurring. */}
+      <PaymentPlanPanel
+        jobId={jobId}
+        customerId={job.property?.customers?.id ?? null}
+        plans={paymentPlans}
+        suggestedTotal={proposal?.total_cost ?? null}
+        stripeReady={isStripeConfigured}
       />
 
       <BeforeAfterPanel posts={socialPosts} />

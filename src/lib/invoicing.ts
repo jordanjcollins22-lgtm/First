@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isStripeConfigured } from "@/lib/env";
 import { getJobCustomerContact } from "@/lib/job-customer";
+import { stripeCustomerFor } from "@/lib/stripe-customer";
 import { sendSms, toE164 } from "@/lib/sms";
 
 function getStripeClient(): Stripe {
@@ -35,11 +36,16 @@ export async function createAndSendInvoice(jobId: string, proposalId: string, am
 
   const stripe = getStripeClient();
 
-  const stripeCustomer = await stripe.customers.create({
-    name: contact.customerName,
-    email: contact.email || undefined,
-    phone: contact.phone || undefined,
-  });
+  // One Stripe customer per contact, found or created once. Creating a fresh
+  // one per invoice is what stopped payments reconciling to anybody.
+  const reused = contact.customerId ? await stripeCustomerFor(contact.customerId) : null;
+  const stripeCustomer = reused
+    ? { id: reused }
+    : await stripe.customers.create({
+        name: contact.customerName,
+        email: contact.email || undefined,
+        phone: contact.phone || undefined,
+      });
 
   await stripe.invoiceItems.create({
     customer: stripeCustomer.id,

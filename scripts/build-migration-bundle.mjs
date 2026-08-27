@@ -61,6 +61,7 @@ const CREATES = {
   "0113_time_clock.sql": ["time_entries"],
   "0114_photo_review.sql": ["job_photo_marks"],
   "0115_visit_labour.sql": [],
+  "0116_payment_plans.sql": ["payment_plans", "payment_plan_instalments", "payments"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

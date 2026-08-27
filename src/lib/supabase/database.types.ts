@@ -36,6 +36,7 @@ export interface Database {
       customers: {
         Row: {
           id: string;
+          stripe_customer_id: string | null;
           organization_id: string;
           name: string;
           email: string | null;
@@ -191,6 +192,84 @@ export interface Database {
           job_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
+        Relationships: [];
+      };
+      payment_plans: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string | null;
+          proposal_id: string | null;
+          customer_id: string;
+          kind: string;
+          total_cents: number;
+          deposit_cents: number;
+          instalments: number | null;
+          interval: string | null;
+          status: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+          stripe_subscription_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["payment_plans"]["Row"]> & {
+          organization_id: string;
+          customer_id: string;
+          kind: string;
+          total_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["payment_plans"]["Row"]>;
+        Relationships: [];
+      };
+      payment_plan_instalments: {
+        Row: {
+          id: string;
+          plan_id: string;
+          number: number;
+          amount_cents: number;
+          due_on: string;
+          is_deposit: boolean;
+          status: string;
+          stripe_invoice_id: string | null;
+          stripe_payment_intent_id: string | null;
+          hosted_url: string | null;
+          paid_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["payment_plan_instalments"]["Row"]> & {
+          plan_id: string;
+          number: number;
+          amount_cents: number;
+          due_on: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payment_plan_instalments"]["Row"]>;
+        Relationships: [];
+      };
+      payments: {
+        Row: {
+          id: string;
+          organization_id: string;
+          customer_id: string | null;
+          job_id: string | null;
+          plan_id: string | null;
+          instalment_id: string | null;
+          amount_cents: number;
+          currency: string;
+          method: string;
+          stripe_payment_intent_id: string | null;
+          stripe_invoice_id: string | null;
+          received_at: string;
+          note: string | null;
+          recorded_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["payments"]["Row"]> & {
+          organization_id: string;
+          amount_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["payments"]["Row"]>;
         Relationships: [];
       };
       job_photo_marks: {
