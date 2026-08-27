@@ -14,6 +14,28 @@ import { join } from "node:path";
 const DIR = "supabase/migrations";
 const OUT = "src/lib/migrations/bundle.ts";
 
+/**
+ * Columns a migration adds, as "table.column", read out of its own SQL.
+ *
+ * An ALTER-only migration creates no table, so it used to be reported as
+ * applied whenever its neighbours were — the wrong answer for exactly the
+ * migrations most likely to be outstanding, since adding a column to an
+ * existing table is the commonest kind.
+ *
+ * Parsed rather than hand-listed. A hand-written map is a second place to
+ * remember, and the one that gets forgotten is always the one that matters.
+ * One column per table is enough: the columns in a migration land together.
+ */
+function columnsAdded(sql) {
+  const found = new Map();
+  const pattern = /alter\s+table\s+(?:only\s+)?([a-z_][a-z0-9_]*)\s+add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)/gi;
+  for (const [, table, column] of sql.matchAll(pattern)) {
+    const key = table.toLowerCase();
+    if (!found.has(key)) found.set(key, `${key}.${column.toLowerCase()}`);
+  }
+  return [...found.values()];
+}
+
 /** Which tables each migration creates, for the "what's missing" probe. */
 const CREATES = {
   "0076_lead_prospects.sql": ["lead_prospects"],
@@ -87,6 +109,7 @@ const entries = tracked.map((file) => {
   return `  {
     file: ${JSON.stringify(file)},
     creates: ${JSON.stringify(CREATES[file])},
+    adds: ${JSON.stringify(columnsAdded(sql))},
     sql: \`${escape(sql)}\`,
   },`;
 });
@@ -101,6 +124,9 @@ export interface BundledMigration {
   file: string;
   /** Tables this migration creates, used to detect whether it has been run. */
   creates: string[];
+  /** Columns it adds, as "table.column". Lets an ALTER-only migration be
+   * probed for rather than assumed from its neighbours. */
+  adds: string[];
   sql: string;
 }
 

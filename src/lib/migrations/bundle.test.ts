@@ -43,3 +43,35 @@ describe("migration bundle", () => {
     }
   });
 });
+
+describe("column probes", () => {
+  it("names a column for every migration that adds one", () => {
+    // Without this an ALTER-only migration is assumed applied whenever its
+    // neighbours are, which is the wrong answer for exactly the migrations
+    // most likely to be outstanding. A setup page that says the database is
+    // up to date while a column a client's payment needs is missing is worse
+    // than no page at all.
+    for (const migration of MIGRATION_BUNDLE) {
+      if (!/alter\s+table\s+\w+\s+add\s+column/i.test(migration.sql)) continue;
+      expect(migration.adds.length, `${migration.file} adds a column but names none`).toBeGreaterThan(0);
+    }
+  });
+
+  it("writes every probe as table.column", () => {
+    for (const migration of MIGRATION_BUNDLE) {
+      for (const ref of migration.adds) {
+        expect(ref, `${migration.file}: ${ref}`).toMatch(/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/);
+      }
+    }
+  });
+
+  it("can tell whether the payment columns have been run", () => {
+    // The ones standing between an accepted proposal and a paid one. Named
+    // outright because "the page probes something" is not the same as "the
+    // page probes this".
+    const paths = MIGRATION_BUNDLE.find((m) => m.file === "0124_acceptance_payment_path.sql");
+    expect(paths?.adds).toContain("job_proposals.payment_path");
+    const day = MIGRATION_BUNDLE.find((m) => m.file === "0125_client_chosen_day.sql");
+    expect(day?.adds).toContain("job_proposals.client_chosen_day");
+  });
+});

@@ -6,6 +6,9 @@ export interface BundledMigration {
   file: string;
   /** Tables this migration creates, used to detect whether it has been run. */
   creates: string[];
+  /** Columns it adds, as "table.column". Lets an ALTER-only migration be
+   * probed for rather than assumed from its neighbours. */
+  adds: string[];
   sql: string;
 }
 
@@ -13,6 +16,7 @@ export const MIGRATION_BUNDLE: BundledMigration[] = [
   {
     file: "0076_lead_prospects.sql",
     creates: ["lead_prospects"],
+    adds: [],
     sql: `-- Prospects: properties the business has NOT worked with yet, imported from
 -- public parcel records or a bought list, so the lead engine has something to
 -- score beyond its own client book.
@@ -94,6 +98,7 @@ notify pgrst, 'reload schema';
   {
     file: "0077_job_lifecycle_and_ledger.sql",
     creates: ["ledger_entries"],
+    adds: ["jobs.cancelled_at"],
     sql: `-- Two things the business could not do yet:
 --
 --  1. Cancel an estimate. Job status already had 'cancelled'; evaluation
@@ -201,6 +206,7 @@ notify pgrst, 'reload schema';
   {
     file: "0078_job_completion_photos.sql",
     creates: ["job_photos"],
+    adds: ["jobs.completed_at"],
     sql: `-- Signing a job off with proof.
 --
 -- Marking work complete was a status change and nothing else: no record of who
@@ -330,6 +336,7 @@ notify pgrst, 'reload schema';
   {
     file: "0079_zone_photo_stages.sql",
     creates: [],
+    adds: ["job_photos.zone_id"],
     sql: `-- Photos per zone, at three stages.
 --
 -- 0078 gave a job one pile of photos. That is enough to prove somebody stood
@@ -365,6 +372,7 @@ notify pgrst, 'reload schema';
   {
     file: "0080_sessions_and_tickets.sql",
     creates: ["job_work_sessions","job_tickets"],
+    adds: ["jobs.evaluation_end_date","job_work_sessions.ticket_id"],
     sql: `-- Three things a real job needs that the schema could not express.
 --
 --  1. An evaluation was an instant, not an appointment. No end time meant no
@@ -594,6 +602,7 @@ notify pgrst, 'reload schema';
   {
     file: "0081_final_walkthrough.sql",
     creates: ["job_walkthroughs"],
+    adds: ["notification_preferences.walkthrough_requests"],
     sql: `-- The account manager walks the job before the crew packs up.
 --
 -- Sign-off was the crew's own call, which means the first person to find a
@@ -691,6 +700,7 @@ notify pgrst, 'reload schema';
   {
     file: "0082_crew_day.sql",
     creates: ["crew_day_events"],
+    adds: ["job_work_sessions.stop_order"],
     sql: `-- The crew's day, as it actually happens.
 --
 -- A crew member opening the app got the office's view of the business: every
@@ -785,6 +795,7 @@ notify pgrst, 'reload schema';
   {
     file: "0083_job_crew.sql",
     creates: ["job_crew"],
+    adds: [],
     sql: `-- Who is working this job.
 --
 -- jobs.assigned_to held exactly one person, which is not what a crew is. Three
@@ -900,6 +911,7 @@ notify pgrst, 'reload schema';
   {
     file: "0084_outreach.sql",
     creates: ["outreach_channels","outreach_touches"],
+    adds: [],
     sql: `-- Lead generation, as something a person can be handed rather than something
 -- one person knows how to do.
 --
@@ -1111,6 +1123,7 @@ on conflict (organization_id, key) do nothing;
   {
     file: "0085_no_double_booking.sql",
     creates: [],
+    adds: [],
     sql: `-- No double bookings. Ever.
 --
 -- The app already refuses a clash on all four screens that can cause one, and
@@ -1326,6 +1339,7 @@ notify pgrst, 'reload schema';
   {
     file: "0086_job_observers.sql",
     creates: ["job_observers"],
+    adds: [],
     sql: `-- People who want to watch a project without being the client.
 --
 -- A property manager, a management company, a spouse who is not on the
@@ -1393,6 +1407,7 @@ notify pgrst, 'reload schema';
   {
     file: "0087_referral_outcome.sql",
     creates: [],
+    adds: ["lead_prospects.in_target_market","outreach_touches.referral_note"],
     sql: `-- Contacting somebody who will never buy from us, on purpose.
 --
 -- Most of a county is not our target market — small lots, rentals, people who
@@ -1436,6 +1451,7 @@ notify pgrst, 'reload schema';
   {
     file: "0088_contact_types.sql",
     creates: [],
+    adds: ["customers.contact_type"],
     sql: `-- Not everybody in the contact book is a client.
 --
 -- There has only ever been one shelf for a person, and twenty-eight places in
@@ -1491,6 +1507,7 @@ notify pgrst, 'reload schema';
   {
     file: "0089_job_numbers_and_pipeline.sql",
     creates: ["org_counters"],
+    adds: ["jobs.job_number","customers.pipeline"],
     sql: `-- Every project gets a number somebody can say out loud.
 --
 -- A job has only ever had a uuid, which is fine for a database and useless on
@@ -1623,6 +1640,7 @@ notify pgrst, 'reload schema';
   {
     file: "0090_geocode_tracking.sql",
     creates: [],
+    adds: ["customers.geocode_attempted_at"],
     sql: `-- Remembering which addresses could not be placed.
 --
 -- Turning an imported address into a property means asking a geocoder where it
@@ -1649,6 +1667,7 @@ notify pgrst, 'reload schema';
   {
     file: "0091_contact_merge_undo.sql",
     creates: ["contact_merges"],
+    adds: [],
     sql: `-- Merging a contact deletes one. This is how to get it back.
 --
 -- A merge moves the duplicate's properties onto the keeper, fills the keeper's
@@ -1711,6 +1730,7 @@ notify pgrst, 'reload schema';
   {
     file: "0092_target_markets.sql",
     creates: ["target_markets"],
+    adds: ["customers.in_target_market"],
     sql: `-- Where we actually work.
 --
 -- "Our market is Harford County" is a sentence everybody in the business
@@ -1790,6 +1810,7 @@ notify pgrst, 'reload schema';
   {
     file: "0093_knowledge_graph.sql",
     creates: ["knowledge_nodes","knowledge_relationships"],
+    adds: [],
     sql: `-- A place to think, rather than another place to file things.
 --
 -- The point is not storing ideas. It is breaking them down far enough to see
@@ -1950,6 +1971,7 @@ notify pgrst, 'reload schema';
   {
     file: "0094_knowledge_schedule.sql",
     creates: [],
+    adds: ["knowledge_nodes.scheduled_for"],
     sql: `-- Ideas with a date on them.
 --
 -- A graph of things somebody might do is a graph nothing ever comes of. The
@@ -1996,6 +2018,7 @@ notify pgrst, 'reload schema';
   {
     file: "0095_knowledge_costs.sql",
     creates: [],
+    adds: ["knowledge_nodes.unit","knowledge_relationships.quantity"],
     sql: `-- What an idea actually costs.
 --
 -- Breaking "door hangers" down into cardstock, toner and design time is only
@@ -2040,6 +2063,7 @@ notify pgrst, 'reload schema';
   {
     file: "0096_knowledge_inventory_link.sql",
     creates: [],
+    adds: ["materials.category","knowledge_nodes.purchase_url"],
     sql: `-- Ideas that point at real things you can actually buy.
 --
 -- The graph knowing "cardstock, twelve cents a sheet" is useful right up
@@ -2085,6 +2109,7 @@ notify pgrst, 'reload schema';
   {
     file: "0097_costs_from_inventory.sql",
     creates: [],
+    adds: [],
     sql: `-- One price, and it lives in inventory.
 --
 -- knowledge_nodes.estimated_cost was the graph's own copy of what something
@@ -2107,6 +2132,7 @@ notify pgrst, 'reload schema';
   {
     file: "0098_knowledge_tool_link.sql",
     creates: [],
+    adds: ["knowledge_nodes.tool_id"],
     sql: `-- The rest of the inventory.
 --
 -- A node could be linked to a material and nothing else, which quietly meant
@@ -2135,6 +2161,7 @@ notify pgrst, 'reload schema';
   {
     file: "0099_cost_basis.sql",
     creates: [],
+    adds: ["knowledge_nodes.cost_basis"],
     sql: `-- Bought again, or bought once.
 --
 -- The graph has been guessing this from the kind of thing something is:
@@ -2161,6 +2188,7 @@ notify pgrst, 'reload schema';
   {
     file: "0100_units_outputs_and_fees.sql",
     creates: ["knowledge_units"],
+    adds: ["knowledge_nodes.output_per_unit"],
     sql: `-- Three things the graph could not say.
 --
 -- What a unit is, when it is not one of ours. How much one of something does,
@@ -2241,6 +2269,7 @@ notify pgrst, 'reload schema';
   {
     file: "0101_inventory_kind_resale_steps.sql",
     creates: [],
+    adds: ["materials.kind","tools.resale_value","knowledge_relationships.step_order"],
     sql: `-- Three small columns, three things they make possible.
 --
 -- What an inventory item actually is, said the same way on every tab. What we
@@ -2302,6 +2331,7 @@ notify pgrst, 'reload schema';
   {
     file: "0102_node_time_and_rate.sql",
     creates: [],
+    adds: ["knowledge_nodes.duration_hours"],
     sql: `-- How long a thing takes, and what an hour of it costs.
 --
 -- Time could already be counted, but only by linking to something in
@@ -2327,6 +2357,7 @@ notify pgrst, 'reload schema';
   {
     file: "0103_inventory_codes_and_movements.sql",
     creates: ["inventory_codes","inventory_movements"],
+    adds: [],
     sql: `-- A code on every item, and a record of every time one moves.
 --
 -- The point is not the sticker. It is that "how much toner do we get through"
@@ -2437,6 +2468,7 @@ notify pgrst, 'reload schema';
   {
     file: "0104_flyer_ad_spots.sql",
     creates: ["flyer_ad_spots"],
+    adds: [],
     sql: `-- Ad spots on the EDDM flyer.
 --
 -- The flyer already goes out. Every one of them carries eight 4" x 4.75"
@@ -2515,6 +2547,7 @@ notify pgrst, 'reload schema';
   {
     file: "0105_social_posts.sql",
     creates: ["social_posts"],
+    adds: [],
     sql: `-- Before-and-after posts, from photographs we already take.
 --
 -- Every job already has a before and an after of every zone, because a job
@@ -2607,6 +2640,7 @@ notify pgrst, 'reload schema';
   {
     file: "0106_knowledge_app_links.sql",
     creates: [],
+    adds: ["knowledge_nodes.app_route"],
     sql: `-- A node can open the screen it is about.
 --
 -- The graph already knows a flyer needs paper, toner and a designer. It did
@@ -2661,6 +2695,7 @@ notify pgrst, 'reload schema';
   {
     file: "0107_canvas_orientation.sql",
     creates: [],
+    adds: ["canvas_designs.image_bearing"],
     sql: `-- Which way the satellite photo was turned.
 --
 -- Every property should open the same way round: the front of the house at
@@ -2692,6 +2727,7 @@ notify pgrst, 'reload schema';
   {
     file: "0108_door_hangers.sql",
     creates: ["door_hanger_slots"],
+    adds: [],
     sql: `-- Door hangers: two to a sheet.
 --
 -- A letter sheet cut down the middle gives two 4.25" x 11" hangers, which is
@@ -2782,6 +2818,7 @@ notify pgrst, 'reload schema';
   {
     file: "0109_door_hanger_backs.sql",
     creates: [],
+    adds: ["door_hanger_slots.face"],
     sql: `-- The back of the door hanger.
 --
 -- A hanger has two sides and the paper has two sides, and up to now the table
@@ -2815,6 +2852,7 @@ notify pgrst, 'reload schema';
   {
     file: "0110_rank_grid.sql",
     creates: ["rank_keywords","rank_scans","rank_points"],
+    adds: [],
     sql: `-- Where we show up, and where we don't.
 --
 -- "We rank #4 for lawn care" is close to meaningless: local results move with
@@ -2920,6 +2958,7 @@ notify pgrst, 'reload schema';
   {
     file: "0111_canvas_marks.sql",
     creates: [],
+    adds: ["canvas_designs.marks"],
     sql: `-- Notes pinned to a place on the evaluation picture.
 --
 -- The evaluation records what the work is and where the zones are. It had
@@ -2941,6 +2980,7 @@ notify pgrst, 'reload schema';
   {
     file: "0112_photo_waivers.sql",
     creates: ["job_photo_waivers"],
+    adds: [],
     sql: `-- Saying there isn't a photo.
 --
 -- Every zone owes a before, a during and an after, and 'during' is the one
@@ -2987,6 +3027,7 @@ notify pgrst, 'reload schema';
   {
     file: "0113_time_clock.sql",
     creates: ["time_entries"],
+    adds: [],
     sql: `-- What people actually worked.
 --
 -- A scheduled visit says what somebody was meant to do. This says what they
@@ -3040,6 +3081,7 @@ notify pgrst, 'reload schema';
   {
     file: "0114_photo_review.sql",
     creates: ["job_photo_marks"],
+    adds: ["jobs.photos_approved_at"],
     sql: `-- The manager's look at the finished work, before the client sees it.
 --
 -- The crew sign off from site. Nobody senior has been back, and the first
@@ -3096,6 +3138,7 @@ notify pgrst, 'reload schema';
   {
     file: "0115_visit_labour.sql",
     creates: [],
+    adds: ["time_entries.session_id"],
     sql: `-- Who worked on a visit, and for how long.
 --
 -- A visit said when it was and what it was for. It never said who turned up
@@ -3122,6 +3165,7 @@ notify pgrst, 'reload schema';
   {
     file: "0116_payment_plans.sql",
     creates: ["payment_plans","payment_plan_instalments","payments"],
+    adds: ["customers.stripe_customer_id"],
     sql: `-- Taking money: one-off, in instalments, or on a subscription.
 --
 -- And, first, fixing the thing that stopped any of it reconciling. Invoicing
@@ -3288,6 +3332,7 @@ notify pgrst, 'reload schema';
   {
     file: "0117_payment_invoice_ref.sql",
     creates: [],
+    adds: ["payments.source_invoice_ref"],
     sql: `-- The invoice a payment came from, whoever raised it.
 --
 -- Payments already carry stripe_invoice_id, and that column means exactly
@@ -3317,6 +3362,7 @@ notify pgrst, 'reload schema';
   {
     file: "0118_proposal_objections.sql",
     creates: ["proposal_objections","proposal_scope_requests"],
+    adds: [],
     sql: `-- What clients ask before they say yes, and what happened next.
 --
 -- A proposal that goes quiet tells you nothing. A proposal where somebody
@@ -3423,6 +3469,7 @@ notify pgrst, 'reload schema';
   {
     file: "0119_early_start_requests.sql",
     creates: ["early_start_requests"],
+    adds: ["notification_preferences.schedule_requests"],
     sql: `-- "We're done here — can we start the next one?"
 --
 -- A crew that finishes at two has three hours of daylight and nothing to do
@@ -3495,6 +3542,7 @@ notify pgrst, 'reload schema';
   {
     file: "0120_email_sending.sql",
     creates: ["email_domains","email_senders"],
+    adds: [],
     sql: `-- Sending our own email, from domains we prove we own.
 --
 -- Reputation attaches to the domain that signs the mail. A cold campaign sent
@@ -3588,6 +3636,7 @@ notify pgrst, 'reload schema';
   {
     file: "0121_knowledge_issues.sql",
     creates: [],
+    adds: ["knowledge_nodes.is_issue"],
     sql: `-- Problems on the graph, and what solves them.
 --
 -- Everything on the knowledge graph so far is a thing the business has or
@@ -3674,6 +3723,7 @@ notify pgrst, 'reload schema';
   {
     file: "0122_service_scope_template.sql",
     creates: [],
+    adds: ["services.scope_template"],
     sql: `-- The wording a client reads about a service.
 --
 -- Every zone on a proposal prints a heading and a paragraph under it. That
@@ -3697,6 +3747,7 @@ notify pgrst, 'reload schema';
   {
     file: "0123_service_performed_by.sql",
     creates: [],
+    adds: ["services.performed_by"],
     sql: `-- Who actually turns up for a service.
 --
 -- Not all of it is our own crew. Some work goes to a local business we
@@ -3727,6 +3778,7 @@ notify pgrst, 'reload schema';
   {
     file: "0124_acceptance_payment_path.sql",
     creates: [],
+    adds: ["job_proposals.payment_path","payment_plans.keeps_discount"],
     sql: `-- What the client chose to do about paying, and what that means for booking.
 --
 -- Accepting used to be the end of the road: the status changed, an invoice
@@ -3769,6 +3821,7 @@ notify pgrst, 'reload schema';
   {
     file: "0125_client_chosen_day.sql",
     creates: [],
+    adds: ["job_proposals.client_chosen_day"],
     sql: `-- The day the client picked for themselves.
 --
 -- jobs.project_start_date already holds when work starts, but it is written

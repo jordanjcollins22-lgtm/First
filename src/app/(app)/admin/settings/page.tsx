@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listRoles } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
-import { checkSchema } from "@/lib/data/schema-check";
+import { checkSchema, type MigrationStatus } from "@/lib/data/schema-check";
+import { PaymentReadiness } from "@/components/admin/payment-readiness";
+import { env, isStripeConfigured } from "@/lib/env";
 import { listOrganizations } from "@/lib/data/organizations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PageTabs } from "@/components/ui/page-tabs";
@@ -113,6 +115,12 @@ async function DatabaseTab() {
         hands you the SQL.
       </p>
 
+      <PaymentReadiness
+        columnsApplied={paymentColumnsApplied(migrations)}
+        hasStripeKey={isStripeConfigured}
+        hasWebhookSecret={Boolean(env.stripeWebhookSecret)}
+      />
+
       {migrations.length === 0 ? (
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
           Couldn&apos;t check the schema. Make sure Supabase is reachable and reload.
@@ -122,6 +130,20 @@ async function DatabaseTab() {
       )}
     </div>
   );
+}
+
+/**
+ * Whether the columns a client's payment writes to are actually there.
+ *
+ * Read off the same probe the list uses rather than checked again, so the
+ * summary at the top can never disagree with the rows underneath it.
+ */
+function paymentColumnsApplied(migrations: MigrationStatus[]): boolean | null {
+  const needed = ["0124_acceptance_payment_path.sql", "0125_client_chosen_day.sql"];
+  const rows = migrations.filter((m) => needed.includes(m.file));
+  // Nothing to go on — the schema check itself failed.
+  if (rows.length < needed.length) return null;
+  return rows.every((m) => m.applied);
 }
 
 async function OrganizationsTab() {

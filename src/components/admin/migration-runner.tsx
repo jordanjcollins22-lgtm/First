@@ -139,7 +139,12 @@ export function MigrationRunner({
                 {migration.creates.join(", ")}
               </p>
             )}
-            {migration.creates.length === 0 && (
+            {migration.adds.length > 0 && (
+              <p className="mt-0.5 pl-8 text-[11px] text-muted-foreground">
+                Adds {migration.adds.join(", ")}
+              </p>
+            )}
+            {migration.creates.length === 0 && migration.adds.length === 0 && (
               <p className="mt-1 pl-8 text-[11px] text-muted-foreground">
                 Changes existing tables — status follows the migration before it.
               </p>
