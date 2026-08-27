@@ -62,15 +62,43 @@ export function ProposalPanel({
   const [draftZones, setDraftZones] = useState<ProposalZoneSnapshot[]>([]);
   const [draftDiscountId, setDraftDiscountId] = useState<string | null>(null);
   const [localDiscounts, setLocalDiscounts] = useState<Discount[]>(discounts);
+  /** What the last rebuild changed. */
+  const [notice, setNotice] = useState<string | null>(null);
+  /** Set when rebuilding would clear a client's acceptance. */
+  const [confirm, setConfirm] = useState<string | null>(null);
 
   const link = proposal ? `${baseUrl}/proposal/${proposal.token}` : null;
 
-  function handleGenerate() {
+  /**
+   * Take a fresh snapshot of the site map.
+   *
+   * Says what it did. A rebuild that quietly changes nothing is
+   * indistinguishable from a broken button, and that is exactly how a
+   * proposal ends up still quoting a service nobody is doing.
+   */
+  function handleGenerate(force = false) {
     setError(null);
+    setNotice(null);
+    setConfirm(null);
     setEditing(false);
     startTransition(async () => {
       try {
-        await generateProposal(jobId);
+        const outcome = await generateProposal(jobId, { force });
+        if (outcome.ok) {
+          setNotice(
+            outcome.unchanged
+              ? "Rebuilt — the site map already matched this proposal."
+              : `Rebuilt: ${outcome.changes.join(" · ")}`
+          );
+        } else if (outcome.reason === "needs_confirmation") {
+          setConfirm(outcome.confirm ?? "Replace the accepted proposal?");
+        } else {
+          setError(
+            outcome.reason === "no_services"
+              ? "No zone on the site map has a service on it yet."
+              : "There's no site map on this job to build from."
+          );
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't generate the proposal.");
       }
@@ -131,10 +159,26 @@ export function ProposalPanel({
             </span>
           )}
         </div>
-        <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={handleGenerate}>
+        <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => handleGenerate()}>
           {proposal ? "Regenerate from site map" : "Generate now"}
         </Button>
       </div>
+
+      {confirm && (
+        <div className="rounded-lg border border-amber-300/70 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{confirm}</p>
+          <div className="mt-2 flex gap-2">
+            <Button type="button" size="sm" disabled={isPending} onClick={() => handleGenerate(true)}>
+              Rebuild it anyway
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(null)}>
+              Leave it
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
 
       {!proposal && (
         <p className="text-xs text-muted-foreground">

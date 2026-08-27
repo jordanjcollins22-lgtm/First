@@ -66,7 +66,9 @@ function EvalActionButton({ jobId, status }: { jobId: string; status: Evaluation
         disabled={isPending}
         onClick={(e) => {
           e.stopPropagation();
-          startTransition(() => updateEvaluationStatus(jobId, "on_way"));
+          startTransition(() => {
+            void updateEvaluationStatus(jobId, "on_way");
+          });
         }}
       >
         On My Way
@@ -83,7 +85,9 @@ function EvalActionButton({ jobId, status }: { jobId: string; status: Evaluation
         disabled={isPending}
         onClick={(e) => {
           e.stopPropagation();
-          startTransition(() => updateEvaluationStatus(jobId, "arrived"));
+          startTransition(() => {
+            void updateEvaluationStatus(jobId, "arrived");
+          });
         }}
       >
         Arrived

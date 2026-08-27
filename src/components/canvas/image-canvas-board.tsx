@@ -10,7 +10,7 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, ZoomIn } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RefreshCw, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, ZoomIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import { env } from "@/lib/env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
 import type { MeasurementKind } from "@/lib/zone-measurement";
+import { canSubmit, submitLabel } from "@/lib/evaluation-resubmit";
 import {
   canStepMapZoom,
   clampScale,
@@ -191,6 +192,13 @@ export function ImageCanvasBoard({
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [submittingEval, setSubmittingEval] = useState(false);
   const [evalSubmitted, setEvalSubmitted] = useState(initialEvaluationStatus === "completed");
+  /** What the last submit did, shown back so a resubmit is checkable on the
+   * spot rather than days later. */
+  const [evalResult, setEvalResult] = useState<
+    { tone: "ok" | "warn"; text: string; note?: string | null } | null
+  >(null);
+  /** Set when regenerating would clear a client's acceptance. */
+  const [evalConfirm, setEvalConfirm] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sideToolbarOpen, setSideToolbarOpen] = useState(true);
 
@@ -987,14 +995,47 @@ export function ImageCanvasBoard({
     imageDirtyRef.current = true;
   }
 
-  async function handleSubmitEvaluation() {
+  /**
+   * Send the evaluation, and send it again after a correction.
+   *
+   * The proposal is a snapshot, so changing a zone's service does nothing to
+   * the paperwork until a new one is taken. This is that button, and it stays
+   * live after the first submit — it used to disable itself permanently, so a
+   * proposal quoting the wrong service could never be put right.
+   */
+  async function handleSubmitEvaluation(force = false) {
     if (!jobId) return;
     setSubmittingEval(true);
+    setEvalResult(null);
     try {
-      await updateEvaluationStatus(jobId, "completed");
+      const outcome = await updateEvaluationStatus(jobId, "completed", { force });
       setEvalSubmitted(true);
+
+      if (!outcome) {
+        setEvalResult({ tone: "warn", text: "Submitted, but the proposal could not be rebuilt." });
+      } else if (outcome.ok) {
+        setEvalResult({
+          tone: "ok",
+          text: outcome.unchanged
+            ? "Submitted. The proposal already matched — nothing changed."
+            : `Proposal updated: ${outcome.changes.join(" · ")}`,
+          note: outcome.note,
+        });
+      } else if (outcome.reason === "needs_confirmation") {
+        // Not an error. Regenerating clears a client's acceptance, so it asks
+        // rather than doing it as a side effect of a button labelled Submit.
+        setEvalConfirm(outcome.confirm ?? "Send a new proposal?");
+      } else {
+        setEvalResult({
+          tone: "warn",
+          text:
+            outcome.reason === "no_services"
+              ? "Submitted, but no zone has a service on it yet, so there is no proposal to build."
+              : "Submitted, but there is no site map to build a proposal from.",
+        });
+      }
     } catch {
-      // Best-effort — the evaluator can retry the button if this failed.
+      setEvalResult({ tone: "warn", text: "Couldn't submit that. Try again." });
     } finally {
       setSubmittingEval(false);
     }
@@ -1343,11 +1384,12 @@ export function ImageCanvasBoard({
               <Button
                 type="button"
                 size="sm"
-                disabled={submittingEval || evalSubmitted}
-                onClick={handleSubmitEvaluation}
+                variant={evalSubmitted ? "outline" : "default"}
+                disabled={!canSubmit(jobId, submittingEval)}
+                onClick={() => handleSubmitEvaluation()}
               >
-                <CheckCircle2 className="h-4 w-4" />
-                {evalSubmitted ? "Evaluation Submitted" : submittingEval ? "Submitting..." : "Submit Evaluation"}
+                {evalSubmitted ? <RefreshCw className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                {submitLabel(evalSubmitted ? "completed" : "scheduled", submittingEval)}
               </Button>
             )}
             {lastSavedAt && (
@@ -1356,6 +1398,39 @@ export function ImageCanvasBoard({
               </span>
             )}
           </div>
+
+          {evalConfirm && (
+            <div className="mt-2 rounded-lg border border-amber-300/70 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{evalConfirm}</p>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={submittingEval}
+                  onClick={() => {
+                    setEvalConfirm(null);
+                    void handleSubmitEvaluation(true);
+                  }}
+                >
+                  Send the new proposal
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setEvalConfirm(null)}>
+                  Leave it
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {evalResult && (
+            <p
+              className={`mt-2 text-xs ${
+                evalResult.tone === "ok" ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {evalResult.text}
+              {evalResult.note && <span className="block">{evalResult.note}</span>}
+            </p>
+          )}
         </div>
       )}
 

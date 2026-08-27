@@ -34,7 +34,9 @@ function ActionButton({ jobId, status }: { jobId: string; status: EvaluationStat
       <Button
         type="button"
         disabled={isPending}
-        onClick={() => startTransition(() => updateEvaluationStatus(jobId, "on_way"))}
+        onClick={() => startTransition(() => {
+            void updateEvaluationStatus(jobId, "on_way");
+          })}
       >
         On My Way
       </Button>
@@ -45,7 +47,9 @@ function ActionButton({ jobId, status }: { jobId: string; status: EvaluationStat
       <Button
         type="button"
         disabled={isPending}
-        onClick={() => startTransition(() => updateEvaluationStatus(jobId, "arrived"))}
+        onClick={() => startTransition(() => {
+            void updateEvaluationStatus(jobId, "arrived");
+          })}
       >
         Arrived
       </Button>

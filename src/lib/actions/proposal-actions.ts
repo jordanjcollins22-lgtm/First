@@ -5,6 +5,12 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
+import {
+  describeDiff,
+  diffScope,
+  regenDecision,
+  type ProposalStatus,
+} from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
@@ -20,6 +26,18 @@ function generateToken(): string {
 }
 
 /**
+ * What came of asking for a new snapshot.
+ *
+ * A result rather than a throw or a bare null: this is called from a button
+ * an evaluator presses on a driveway, and "nothing happened" with no reason
+ * is what let a proposal sit on the wrong service for a week.
+ */
+export type GenerateOutcome =
+  | { ok: true; token: string; changes: string[]; unchanged: boolean; note: string | null }
+  | { ok: false; reason: "no_design" | "no_services" }
+  | { ok: false; reason: "needs_confirmation"; confirm: string | null };
+
+/**
  * Snapshots the current site map into a proposal awaiting an account
  * manager's approval — price and scope text are frozen at this moment (see
  * the migration's comment for why). Keeps the same shareable token across
@@ -27,14 +45,18 @@ function generateToken(): string {
  * "needs_approval", since a changed scope/price has to go through review
  * again before a client sees it.
  *
- * Called automatically the moment an evaluation is submitted
- * (updateEvaluationStatus in job-actions.ts) — an account manager's only
- * input from here is to edit or approve it, never to click "Generate."
- * Silently does nothing if there's no site map or no zone has a service yet
- * (e.g. an evaluation submitted with nothing on it), rather than erroring
- * out the submission that triggered it.
+ * Runs when an evaluation is submitted, and again every time it is
+ * resubmitted — a site map corrected an hour later has to be able to reach
+ * the paperwork, which for a long time it could not.
+ *
+ * Reports why nothing happened rather than returning a bare null: no site
+ * map, no zone with a service on it, or an accepted proposal that needs
+ * somebody to agree before it is torn up. Pass `force` for that last one.
  */
-export async function generateProposal(jobId: string): Promise<{ token: string } | null> {
+export async function generateProposal(
+  jobId: string,
+  options: { force?: boolean } = {}
+): Promise<GenerateOutcome> {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
 
@@ -43,10 +65,10 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
     getCanvasCatalog(),
     getCurrentOrganizationId(),
   ]);
-  if (!design) return null;
+  if (!design) return { ok: false, reason: "no_design" };
 
   const zones = (design.zones as unknown as WorkZone[]).filter((z) => z.service);
-  if (zones.length === 0) return null;
+  if (zones.length === 0) return { ok: false, reason: "no_services" };
 
   const { total } = computeProposalTotal(zones, catalog);
 
@@ -84,10 +106,24 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
     .from("job_proposals")
-    .select("token")
+    .select("token, status, responded_at, scope_snapshot")
     .eq("job_id", jobId)
     .maybeSingle();
   if (existingError) throw existingError;
+
+  // Regenerating clears a client's acceptance. That is right — they agreed to
+  // work that is no longer what we are proposing — but it destroys a record
+  // of somebody saying yes, so it never happens as a side effect.
+  const decision = regenDecision(
+    existing
+      ? { status: existing.status as ProposalStatus, respondedAt: existing.responded_at }
+      : null
+  );
+  if (!decision.allowed && !options.force) {
+    return { ok: false, reason: "needs_confirmation", confirm: decision.confirm };
+  }
+
+  const previous = (existing?.scope_snapshot ?? []) as unknown as ProposalZoneSnapshot[];
   const token = existing?.token ?? generateToken();
 
   const { error } = await supabase.from("job_proposals").upsert(
@@ -111,7 +147,11 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
 
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/proposals");
-  return { token };
+
+  // What actually moved, so "the paperwork is stuck on lawn care" is
+  // something the evaluator can check on the spot rather than days later.
+  const diff = diffScope(previous, scopeSnapshot);
+  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: decision.note };
 }
 
 /**

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getBusyBlocks } from "@/lib/data/busy";
 import { conflictFor, describeConflict } from "@/lib/busy";
 import { evaluationWindow } from "@/lib/scheduling";
-import { generateProposal } from "@/lib/actions/proposal-actions";
+import { generateProposal, type GenerateOutcome } from "@/lib/actions/proposal-actions";
 import {
   canCancelEstimate,
   canCancelJob,
@@ -20,22 +20,38 @@ import { adoptEvaluationPhotosAsBefores } from "@/lib/data/adopt-befores";
 import type { Database } from "@/lib/supabase/database.types";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
 
-export async function updateEvaluationStatus(jobId: string, status: EvaluationStatus) {
+/**
+ * Submitting an evaluation, and submitting it again.
+ *
+ * Returns what became of the proposal rather than swallowing it. The old
+ * version caught and discarded every failure, so an evaluation whose
+ * proposal never regenerated still reported success — which is how paperwork
+ * ends up quoting a service nobody is doing any more with nothing on screen
+ * to say so.
+ */
+export async function updateEvaluationStatus(
+  jobId: string,
+  status: EvaluationStatus,
+  options: { force?: boolean } = {}
+): Promise<GenerateOutcome | null> {
   const supabase = await createClient();
   const { error } = await supabase.from("jobs").update({ evaluation_status: status }).eq("id", jobId);
   if (error) throw error;
 
+  let outcome: GenerateOutcome | null = null;
+
   if (status === "completed") {
-    // Best-effort — an evaluation with nothing on it yet shouldn't block submission.
-    await generateProposal(jobId).catch(() => {});
+    outcome = await generateProposal(jobId, options).catch(() => null);
     // The zone photos taken at the evaluation are the befores. Adopting them
     // here means the crew only has to shoot the after, and a job that was
-    // photographed properly cannot end up with nothing to show for it.
+    // photographed properly cannot end up with nothing to show for it. Still
+    // best-effort: a photo that fails to adopt must not lose the submission.
     await adoptEvaluationPhotosAsBefores(jobId).catch(() => {});
   }
 
   revalidatePath("/attractors");
   revalidatePath(`/jobs/${jobId}`);
+  return outcome;
 }
 
 export async function updateJobStatus(jobId: string, status: string) {
