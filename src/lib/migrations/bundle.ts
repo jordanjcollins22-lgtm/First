@@ -2755,11 +2755,26 @@ create policy "delete_print_artwork"
   using (bucket_id = 'print-artwork');
 
 -- A door hanger node points at the door hanger designer, not the flyer.
-update knowledge_nodes
-set app_route = '/admin/door-hangers'
-where node_type in ('marketing_channel', 'distribution_method', 'idea', 'process', 'product')
-  and (title ilike '%door hanger%' or title ilike '%doorhanger%')
-  and (app_route is null or app_route = '/admin/flyer');
+--
+-- Guarded on the column existing. The whole script runs as one transaction,
+-- so this statement failing on a database that has not had 0106 yet would
+-- roll back the table above with it — the migration would report an error
+-- about knowledge_nodes and leave no door_hanger_slots behind, which is a
+-- confusing way to fail. A tidy-up that cannot run is not a reason to lose
+-- the table.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'knowledge_nodes' and column_name = 'app_route'
+  ) then
+    update knowledge_nodes
+    set app_route = '/admin/door-hangers'
+    where node_type in ('marketing_channel', 'distribution_method', 'idea', 'process', 'product')
+      and (title ilike '%door hanger%' or title ilike '%doorhanger%')
+      and (app_route is null or app_route = '/admin/flyer');
+  end if;
+end $$;
 
 notify pgrst, 'reload schema';
 `,
