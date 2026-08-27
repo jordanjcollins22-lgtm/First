@@ -26,8 +26,6 @@ const CHIP_GREY = "rgba(150, 150, 150, 0.88)";
 export interface RenderOptions {
   beforeUrl: string;
   afterUrl: string;
-  /** Optional logo drawn over the seam instead of the wordmark. */
-  logoUrl?: string | null;
   /** Set false for a job where the rating badge would be a distraction. */
   showRating?: boolean;
   rating?: string;
@@ -41,10 +39,9 @@ export interface RenderOptions {
  * looks like a mistake.
  */
 export async function renderBeforeAfter(options: RenderOptions): Promise<Blob> {
-  const [before, after, logo] = await Promise.all([
+  const [before, after] = await Promise.all([
     loadImage(options.beforeUrl),
     loadImage(options.afterUrl),
-    options.logoUrl ? loadImage(options.logoUrl).catch(() => null) : Promise.resolve(null),
   ]);
 
   const canvas = document.createElement("canvas");
@@ -66,10 +63,13 @@ export async function renderBeforeAfter(options: RenderOptions): Promise<Blob> {
   drawChip(ctx, "AFTER", 62, BAND_BOTTOM + 34, CHIP_GREEN);
 
   if (options.showRating !== false) {
-    drawGoogleBadge(ctx, CANVAS_WIDTH - 62 - 340, 34, 340, 76, options.rating ?? "5.0");
+    // Flush to the top and right edges. Floated off them it read as a
+    // sticker somebody dropped on the photograph; against the corner it
+    // reads as part of the card.
+    const badgeWidth = 340;
+    const badgeHeight = 86;
+    drawGoogleBadge(ctx, CANVAS_WIDTH - badgeWidth, 0, badgeWidth, badgeHeight, options.rating ?? "5.0");
   }
-
-  drawWatermark(ctx, logo);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -149,22 +149,36 @@ function drawGoogleBadge(
   height: number,
   rating: string
 ) {
+  // Square against the two edges it touches, rounded on the one corner that
+  // sits over the photograph — the shape of something attached rather than
+  // something laid on top.
+  const radius = 22;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width, y);
+  ctx.lineTo(x + width, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.closePath();
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(x, y, width, height);
+  ctx.fill();
+  ctx.restore();
 
-  drawGoogleG(ctx, x + 22, y + height / 2, 22);
+  const centreY = y + height / 2;
+  drawGoogleG(ctx, x + 40, centreY, 22);
 
   ctx.fillStyle = "#5f6368";
   ctx.font = "600 24px system-ui, -apple-system, 'Segoe UI', sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("Google Rating", x + 58, y + 24);
+  ctx.fillText("Google Rating", x + 76, centreY - 14);
 
   ctx.fillStyle = "#3c4043";
   ctx.font = "700 30px system-ui, -apple-system, 'Segoe UI', sans-serif";
-  ctx.fillText(rating, x + 58, y + 54);
+  ctx.fillText(rating, x + 76, centreY + 18);
 
-  drawStars(ctx, x + 108, y + 54, 22);
+  drawStars(ctx, x + 126, centreY + 18, 22);
 }
 
 /** Four arcs and a bar — the mark, near enough at this size. */
@@ -211,36 +225,6 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius:
   }
   ctx.closePath();
   ctx.fill();
-}
-
-/**
- * The mark over the seam.
- *
- * Sits across the join because that is the one place on the square that is
- * ours rather than the customer's garden, and because a watermark somebody
- * can crop off is not a watermark.
- */
-function drawWatermark(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null) {
-  ctx.save();
-  ctx.globalAlpha = 0.28;
-
-  if (logo) {
-    const width = 420;
-    const height = (logo.height / logo.width) * width;
-    ctx.drawImage(logo, (CANVAS_WIDTH - width) / 2, BAND_TOP + BAND_HEIGHT / 2 - height / 2, width, height);
-  } else {
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "800 200px system-ui, -apple-system, 'Segoe UI', sans-serif";
-    ctx.fillText("JS", CANVAS_WIDTH / 2, BAND_TOP - 20);
-
-    ctx.font = "700 54px system-ui, -apple-system, 'Segoe UI', sans-serif";
-    ctx.fillText("LANDSCAPING", CANVAS_WIDTH / 2, BAND_BOTTOM + 62);
-  }
-
-  ctx.restore();
 }
 
 /**
