@@ -31,11 +31,14 @@ export function PayView({
   context,
   organizationName,
   preview,
+  canCharge,
 }: {
   token: string;
   context: AcceptanceContext;
   organizationName: string;
   preview: boolean;
+  /** False when we cannot take a card yet and will invoice instead. */
+  canCharge: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -137,10 +140,12 @@ export function PayView({
               onClick={() => choose(option)}
             >
               {busyId === option.id
-                ? "Opening secure checkout…"
+                ? canCharge
+                  ? "Opening secure checkout…"
+                  : "Just a moment…"
                 : split
-                  ? `Pay ${money(Math.round(amount / instalments))} today`
-                  : `Pay ${money(amount)}`}
+                  ? `${canCharge ? "Pay" : "Start with"} ${money(Math.round(amount / instalments))} today`
+                  : `${canCharge ? "Pay" : "Confirm"} ${money(amount)}`}
             </Button>
 
             {/* Roughly, and said so. The exact split lands on the schedule we
@@ -159,7 +164,9 @@ export function PayView({
 
       <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
         <Lock className="h-3.5 w-3.5" />
-        Card, Apple Pay and Google Pay, handled by Stripe.
+        {canCharge
+          ? "Card, Apple Pay and Google Pay, handled by Stripe."
+          : "We will email your invoice, and nothing is due until we have your day booked."}
       </p>
     </div>
   );

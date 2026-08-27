@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { isSupabaseConfigured } from "@/lib/env";
+import { isStripeConfigured, isSupabaseConfigured } from "@/lib/env";
 import { getProposalByToken } from "@/lib/data/public-proposal";
 import { PayView } from "@/components/proposal/pay-view";
 import { isPreview, proposalPath, schedulePath } from "@/lib/proposal-flow";
@@ -48,6 +48,10 @@ export default async function ProposalPayPage({
     <PayView
       token={token}
       preview={previewing}
+      // Whether tapping the button really takes the money. Without Stripe
+      // keys it raises an invoice instead, and a button that says "Pay" and
+      // then does not is worse than one that says what it does.
+      canCharge={isStripeConfigured}
       organizationName={data.organizationName}
       context={{
         discountCents,

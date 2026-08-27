@@ -78,11 +78,17 @@ export type PublicResult<T = Record<string, never>> =
   | ({ ok: true } & T)
   | { ok: false; message: string };
 
+/**
+ * What a client is told when something breaks.
+ *
+ * Deliberately says nothing. This used to return the underlying message,
+ * which meant a missing column or a constraint name went onto a paying
+ * customer's screen. The real error is logged where the office can find it;
+ * the client gets a sentence they can act on.
+ */
 function describe(err: unknown): string {
-  if (err && typeof err === "object" && "message" in err) {
-    return String((err as { message: string }).message);
-  }
-  return "Something went wrong. Please try again.";
+  if (err) console.error("public proposal action failed:", err);
+  return "Something went wrong on our end. Please try again, or contact us and we will sort it out.";
 }
 
 /** The proposal behind a link, or null. Never leaks why it failed. */
