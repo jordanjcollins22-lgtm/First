@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuid } from "uuid";
-import { CalendarClock, Check, Loader2, Send, X } from "lucide-react";
+import { CalendarClock, Camera, Check, Loader2, Send, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
 import { approveSocialPost, markPosted, skipSocialPost } from "@/lib/actions/social-actions";
 import { describeSlot, suggestCaption } from "@/lib/social-post";
 import { useComposite, useOnScreen } from "./use-composite";
-import type { PostCandidate, SocialPost } from "@/lib/data/social";
+import type { JobMissingPhotos, PostCandidate, SocialPost } from "@/lib/data/social";
 
 const BUCKET = "social-posts";
 const PHONE = "443-819-1521";
@@ -35,9 +35,11 @@ const PHONE = "443-819-1521";
 export function SocialStudio({
   candidates,
   posts,
+  missing,
 }: {
   candidates: PostCandidate[];
   posts: SocialPost[];
+  missing: JobMissingPhotos[];
 }) {
   const [making, setMaking] = useState<PostCandidate | null>(null);
   const router = useRouter();
@@ -53,10 +55,11 @@ export function SocialStudio({
         spaced out from everything already booked.
       </p>
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-4 grid grid-cols-4 gap-2">
         <Stat label="Waiting" value={String(candidates.length)} />
         <Stat label="Scheduled" value={String(scheduled.length)} />
         <Stat label="Posted" value={String(posted.length)} />
+        <Stat label="No photos" value={String(missing.length)} />
       </div>
 
       <Section title={`Waiting on you (${candidates.length})`}>
@@ -88,6 +91,25 @@ export function SocialStudio({
               <PostRow key={post.id} post={post} onChanged={() => router.refresh()} />
             ))}
           </div>
+        )}
+      </Section>
+
+      <Section title={`No before & after yet (${missing.length})`}>
+        {missing.length === 0 ? (
+          <Empty>Every job that has been worked has a pair. Nothing to chase.</Empty>
+        ) : (
+          <>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Worked jobs with no usable pair. A job with plenty of photos still lands here if the
+              before and the after are of different zones — that one looks finished from the job
+              page and produces nothing.
+            </p>
+            <div className="space-y-2">
+              {missing.map((job) => (
+                <MissingRow key={job.jobId} job={job} />
+              ))}
+            </div>
+          </>
         )}
       </Section>
 
@@ -307,6 +329,34 @@ function PostRow({ post, onChanged }: { post: SocialPost; onChanged: () => void 
  * uploaded, so approving cannot produce something the person approving never
  * saw.
  */
+/**
+ * A job with nothing to show for itself.
+ *
+ * Says what is missing rather than that something is, and who it is with, so
+ * chasing it is one message instead of a hunt through the job.
+ */
+function MissingRow({ job }: { job: JobMissingPhotos }) {
+  return (
+    <Link
+      href={`/jobs/${job.jobId}`}
+      className="flex items-center gap-3 rounded-xl border border-white/60 bg-card/60 p-3 backdrop-blur-md hover:border-primary/40"
+    >
+      <Camera className="h-5 w-5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{job.jobName}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {[job.town, job.assignedName].filter(Boolean).join(" · ") ||
+            (job.status === "completed" ? "Completed" : "In progress")}
+        </p>
+        <p className="mt-0.5 text-xs font-medium text-amber-700">
+          {job.gapLabel}
+          {job.photoCount > 0 && ` · ${job.photoCount} photo${job.photoCount === 1 ? "" : "s"}`}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
 function MakePostDialog({
   candidate,
   onClose,

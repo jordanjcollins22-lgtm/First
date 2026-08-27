@@ -66,6 +66,38 @@ export function pairPhotos<T extends PhotoLike>(photos: T[]): BeforeAfterPair<T>
   return pairs;
 }
 
+/**
+ * What is stopping a job having a before-and-after.
+ *
+ * Not "does it have photos" — a job can have twenty photographs and still
+ * produce nothing, because a before of the front bed and an after of the back
+ * garden do not pair. So this answers the question the crew can act on: what
+ * is actually missing, in the words they would use.
+ *
+ * Null means it has at least one usable pair and there is nothing to chase.
+ */
+export function describeGap(photos: PhotoLike[]): { code: PhotoGap; label: string } | null {
+  if (pairPhotos(photos).length > 0) return null;
+
+  const befores = photos.filter((p) => p.kind === "before");
+  const afters = photos.filter((p) => p.kind === "after");
+
+  if (befores.length === 0 && afters.length === 0) {
+    return { code: "none", label: "No photos yet" };
+  }
+  if (afters.length === 0) {
+    return { code: "before_only", label: "Before only — needs an after" };
+  }
+  if (befores.length === 0) {
+    return { code: "after_only", label: "After only — needs a before" };
+  }
+  // Both exist but never of the same patch of ground, which is the one that
+  // looks fine on the job page and produces nothing here.
+  return { code: "unpaired", label: "Before and after are of different zones" };
+}
+
+export type PhotoGap = "none" | "before_only" | "after_only" | "unpaired";
+
 // ============================================================
 // When it goes out
 // ============================================================

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isMissingTable } from "@/lib/setup-errors";
-import { pairPhotos, townFromAddress, type PhotoLike } from "@/lib/social-post";
+import { describeGap, pairPhotos, townFromAddress, type PhotoGap, type PhotoLike } from "@/lib/social-post";
 
 /** Long enough to work through the studio, short enough to expire before it
  * can be passed around. Same reasoning as the job page. */
@@ -214,4 +214,85 @@ function toPost(row: SocialRow): SocialPost {
     postedAt: row.posted_at,
     channel: row.channel,
   };
+}
+
+export interface JobMissingPhotos {
+  jobId: string;
+  jobName: string;
+  town: string | null;
+  status: string;
+  /** Who is on it, so chasing it is one message rather than a hunt. */
+  assignedName: string | null;
+  completedAt: string | null;
+  gap: PhotoGap;
+  gapLabel: string;
+  photoCount: number;
+}
+
+/**
+ * Jobs that have been worked and have no before-and-after to show for it.
+ *
+ * Only jobs somebody has actually been on: nagging about photographs of work
+ * that has not started is how a list becomes wallpaper. And a job counts as
+ * done here the moment it has a usable pair, not when it has photographs —
+ * twenty shots that never pair produce nothing, and that is the case worth
+ * catching, because it is the one that looks finished from the job page.
+ */
+export async function listJobsMissingBeforeAfter(limit = 60): Promise<JobMissingPhotos[]> {
+  const supabase = await createClient();
+
+  const { data: jobRows, error } = await supabase
+    .from("jobs")
+    .select("id, name, status, completed_at, assigned_to, properties(address), profiles:assigned_to(full_name, email)")
+    .in("status", ["in_progress", "completed"])
+    .order("completed_at", { ascending: false, nullsFirst: false })
+    .limit(200);
+
+  if (isMissingTable(error) || error || !jobRows) return [];
+
+  const jobs = jobRows as unknown as {
+    id: string;
+    name: string | null;
+    status: string;
+    completed_at: string | null;
+    properties: { address: string | null } | null;
+    profiles: { full_name: string | null; email: string | null } | null;
+  }[];
+
+  if (jobs.length === 0) return [];
+
+  // One round trip for the photos of every job on the list, rather than one
+  // per job — this is a page somebody opens to chase people, not a report.
+  const { data: photoRows } = await supabase
+    .from("job_photos")
+    .select("id, job_id, kind, zone_id, zone_name, created_at")
+    .in("job_id", jobs.map((job) => job.id));
+
+  const byJob = new Map<string, PhotoLike[]>();
+  for (const row of (photoRows ?? []) as unknown as (PhotoLike & { job_id: string })[]) {
+    const list = byJob.get(row.job_id) ?? [];
+    list.push(row);
+    byJob.set(row.job_id, list);
+  }
+
+  const missing: JobMissingPhotos[] = [];
+  for (const job of jobs) {
+    const photos = byJob.get(job.id) ?? [];
+    const gap = describeGap(photos);
+    if (!gap) continue;
+
+    missing.push({
+      jobId: job.id,
+      jobName: job.name ?? "Job",
+      town: townFromAddress(job.properties?.address),
+      status: job.status,
+      assignedName: job.profiles?.full_name || job.profiles?.email || null,
+      completedAt: job.completed_at,
+      gap: gap.code,
+      gapLabel: gap.label,
+      photoCount: photos.length,
+    });
+  }
+
+  return missing.slice(0, limit);
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   MIN_HOURS_BETWEEN_POSTS,
   POSTING_SLOTS,
+  describeGap,
   duePosts,
   nextPostSlot,
   pairPhotos,
@@ -198,5 +199,42 @@ describe("where the work was", () => {
     expect(townFromAddress(null)).toBeNull();
     expect(townFromAddress("")).toBeNull();
     expect(townFromAddress("MD 21014")).toBeNull();
+  });
+});
+
+describe("what is missing", () => {
+  it("says nothing when there is a usable pair", () => {
+    expect(
+      describeGap([
+        photo({ id: "b", kind: "before", zone_id: "front" }),
+        photo({ id: "a", kind: "after", zone_id: "front" }),
+      ])
+    ).toBeNull();
+  });
+
+  it("names an empty job", () => {
+    expect(describeGap([])?.code).toBe("none");
+  });
+
+  it("names a job that only got the before", () => {
+    expect(describeGap([photo({ id: "b", kind: "before" })])?.code).toBe("before_only");
+  });
+
+  it("names a job that only got the after", () => {
+    expect(describeGap([photo({ id: "a", kind: "after" })])?.code).toBe("after_only");
+  });
+
+  it("catches both-but-never-the-same-place", () => {
+    // The one that looks finished on the job page and produces nothing.
+    expect(
+      describeGap([
+        photo({ id: "b", kind: "before", zone_id: "front" }),
+        photo({ id: "a", kind: "after", zone_id: "back" }),
+      ])?.code
+    ).toBe("unpaired");
+  });
+
+  it("does not count during or issue shots as either half", () => {
+    expect(describeGap([photo({ id: "d", kind: "during" })])?.code).toBe("none");
   });
 });
