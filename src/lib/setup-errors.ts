@@ -33,6 +33,7 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   social_posts: "0105_social_posts.sql",
   door_hanger_slots: "0108_door_hangers.sql",
   job_photo_waivers: "0112_photo_waivers.sql",
+  time_entries: "0113_time_clock.sql",
   rank_keywords: "0110_rank_grid.sql",
   rank_scans: "0110_rank_grid.sql",
   rank_points: "0110_rank_grid.sql",

@@ -5,6 +5,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
 import { TodayBoard } from "@/components/crew/today-board";
+import { ClockControl } from "@/components/crew/clock-control";
+import { myOpenEntry } from "@/lib/data/time-clock";
 import type { Profile } from "@/types/domain";
 import { getDashboard, loadJobInputs } from "@/lib/data/dashboard";
 import { getCommissionFor } from "@/lib/data/commission";
@@ -246,8 +248,16 @@ async function CrewDay({ profile }: { profile: Profile }) {
     );
   }
 
+  // Without somewhere to press start, every hours figure in the business is
+  // somebody's recollection.
+  const open = await myOpenEntry(profile.id).catch(() => null);
+
   return (
     <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
+      <ClockControl
+        open={open}
+        stops={day.stops.map((stop) => ({ jobId: stop.jobId, name: stop.customerName }))}
+      />
       <TodayBoard
         stops={day.stops}
         events={day.events}
