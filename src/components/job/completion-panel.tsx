@@ -368,9 +368,25 @@ function ZoneSection({
   // on whatever was missing when the panel first rendered — so a zone that
   // had just been given its before went on asking for one.
   const [chosen, setChosen] = useState<JobPhotoKind | null>(null);
+
+  /**
+   * The gate is about what usually makes sense, not about what is true. Work
+   * finished before anybody pressed start, a visit logged after the fact, a
+   * crew catching up in the van — all real, and none of them a reason to
+   * refuse the photograph. So the lock is a default somebody can step past,
+   * per zone, rather than a wall.
+   */
+  const [outOfSequence, setOutOfSequence] = useState(false);
+  const available: JobPhotoKind[] = outOfSequence
+    ? [
+        ...REQUIRED_STAGES,
+        ...offered.filter((k) => !REQUIRED_STAGES.includes(k as (typeof REQUIRED_STAGES)[number])),
+      ]
+    : offered;
+
   const suggested: JobPhotoKind =
-    coverage?.missing.find((m) => offered.includes(m)) ?? offered[0] ?? "before";
-  const kind = chosen && offered.includes(chosen) ? chosen : suggested;
+    coverage?.missing.find((m) => available.includes(m)) ?? available[0] ?? "before";
+  const kind = chosen && available.includes(chosen) ? chosen : suggested;
   const setKind = setChosen;
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
@@ -420,52 +436,41 @@ function ZoneSection({
           yet. Saying so beats going on asking for a before that is already
           there, which is what a picker with nothing else to fall back to
           ends up doing. */}
-      {editable && coverage && nothingLeftToAdd(coverage, offered) ? (
+      {editable && coverage && nothingLeftToAdd(coverage, available) ? (
         <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
           <p>
             {PHOTO_KIND_LABELS[
-              REQUIRED_STAGES.filter((stage) => offered.includes(stage)).at(-1) ?? "before"
+              REQUIRED_STAGES.filter((stage) => available.includes(stage)).at(-1) ?? "before"
             ]}{" "}
             is done for this zone.
           </p>
-          {stagesAwaitingUnlock(coverage, offered).length > 0 && (
+          {stagesAwaitingUnlock(coverage, available).length > 0 && (
             <p className="mt-0.5">
-              {stagesAwaitingUnlock(coverage, offered)
+              {stagesAwaitingUnlock(coverage, available)
                 .map((stage) => PHOTO_KIND_LABELS[stage])
                 .join(" and ")}{" "}
-              {stagesAwaitingUnlock(coverage, offered).length === 1 ? "isn't" : "aren't"} available
+              {stagesAwaitingUnlock(coverage, available).length === 1 ? "isn't" : "aren't"} available
               yet. {lockedStageReason ?? "They unlock once the work starts."}
             </p>
           )}
           <button
             type="button"
             className="mt-1 underline"
-            onClick={() => libraryRef.current?.click()}
+            onClick={() => setOutOfSequence(true)}
           >
-            Add another anyway
+            Add a during or after photo anyway
           </button>
-          <input
-            ref={libraryRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              onUpload(e.target.files, kind);
-              e.target.value = "";
-            }}
-          />
         </div>
       ) : null}
 
-      {editable && offered.length > 0 && !(coverage && nothingLeftToAdd(coverage, offered)) && (
+      {editable && available.length > 0 && !(coverage && nothingLeftToAdd(coverage, available)) && (
         <>
           <div
             className={`mb-2 grid gap-1.5 ${
-              offered.length >= 4 ? "grid-cols-4" : offered.length === 3 ? "grid-cols-3" : "grid-cols-2"
+              available.length >= 4 ? "grid-cols-4" : available.length === 3 ? "grid-cols-3" : "grid-cols-2"
             }`}
           >
-            {offered.map((option) => (
+            {available.map((option) => (
               <button
                 key={option}
                 type="button"

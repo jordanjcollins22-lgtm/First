@@ -6,9 +6,35 @@ import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import { withoutEmpty, type CanvasMark } from "@/lib/canvas-marks";
 import type { WorkZone } from "@/components/canvas/types";
-import type { ProposalSiteImageTransform } from "@/types/domain";
+import { listJobPhotos, type JobPhotoWithUrl } from "@/lib/data/job-photos";
+import { listPhotoWaivers } from "@/lib/data/photo-waivers";
+import { getJobSchedule } from "@/lib/data/work-sessions";
+import { getProposalForJob } from "@/lib/data/proposals";
+import { capabilities } from "@/lib/job-stage";
+import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
+import type { EvaluationStatus, JobStatus, ProposalSiteImageTransform } from "@/types/domain";
 
 export interface WorkOrderPageData {
+  /**
+   * Everything the photos panel needs.
+   *
+   * The crew sheet is where a crew stands: it is the screen open on the
+   * driveway. Until now it could show the photographs from the evaluation
+   * and take none, which meant the people doing the work had no way to
+   * record it.
+   */
+  photos: JobPhotoWithUrl[];
+  photoZones: ZoneRef[];
+  waivers: PhotoWaiver[];
+  jobStatus: JobStatus;
+  allowDuring: boolean;
+  allowAfter: boolean;
+  allowSignOff: boolean;
+  signOffLockReason: string | null;
+  lockedStageReason: string | null;
+  completedAt: string | null;
+  completedByName: string | null;
+  completionNotes: string | null;
   /** Notes the evaluator pinned to the picture, in the order they are numbered. */
   marks: CanvasMark[];
   order: WorkOrder;
@@ -35,7 +61,9 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
 
   const { data: jobRow } = await supabase
     .from("jobs")
-    .select("id, job_number, name, property_id, property:properties(address, customers(name))")
+    .select(
+      "id, job_number, name, status, property_id, evaluation_status, evaluation_date, completed_at, completion_notes, completed_by, property:properties(address, customers(name))"
+    )
     .eq("id", jobId)
     .maybeSingle();
 
@@ -43,15 +71,25 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     id: string;
     job_number: number | null;
     name: string;
+    status: JobStatus;
     property_id: string;
+    evaluation_status: EvaluationStatus;
+    evaluation_date: string | null;
+    completed_at: string | null;
+    completion_notes: string | null;
+    completed_by: string | null;
     property: { address: string; customers: { name: string } | null } | null;
   } | null;
   if (!job) return null;
 
-  const [catalog, design, ownerRes] = await Promise.all([
+  const [catalog, design, ownerRes, photos, waivers, schedule, proposal] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
     supabase.from("properties").select("customers(account_manager_id)").eq("id", job.property_id).maybeSingle(),
+    listJobPhotos(jobId).catch(() => []),
+    listPhotoWaivers(jobId).catch(() => []),
+    getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
+    getProposalForJob(jobId).catch(() => null),
   ]);
 
   const accountManagerId =
@@ -75,7 +113,37 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     return field?.label ?? key;
   });
 
+  // The same gate the office page uses, from the same rules — the crew must
+  // not be offered a different set of stages from the person who scheduled
+  // the work.
+  const can = capabilities({
+    status: job.status,
+    evaluationStatus: job.evaluation_status,
+    evaluationDate: job.evaluation_date,
+    proposalStatus: proposal?.status ?? null,
+    sessions: schedule.sessions.map((session) => ({ status: session.status })),
+    walkthroughs: schedule.walkthroughs,
+  });
+
+  const completedByName = job.completed_by
+    ? ((
+        await supabase.from("profiles").select("full_name, email").eq("id", job.completed_by).maybeSingle()
+      ).data as { full_name: string | null; email: string } | null)
+    : null;
+
   return {
+    photos,
+    photoZones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
+    waivers,
+    jobStatus: job.status,
+    allowDuring: can.photoDuring.available,
+    allowAfter: can.photoAfter.available,
+    allowSignOff: can.signOff.available,
+    signOffLockReason: can.signOff.available ? null : can.signOff.reason,
+    lockedStageReason: can.photoDuring.available ? null : can.photoDuring.reason,
+    completedAt: job.completed_at,
+    completedByName: completedByName?.full_name || completedByName?.email || null,
+    completionNotes: job.completion_notes,
     order,
     jobNumber: job.job_number,
     address: job.property?.address ?? "",

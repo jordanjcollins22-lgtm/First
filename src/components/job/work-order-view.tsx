@@ -4,6 +4,10 @@ import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 import type { CanvasMark } from "@/lib/canvas-marks";
 import { SiteMapImage } from "@/components/proposal/site-map-image";
 import { ZonePhotos } from "@/components/job/marked-photo";
+import { CompletionPanel } from "@/components/job/completion-panel";
+import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
+import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
+import type { JobStatus } from "@/types/domain";
 import { formatJobNumber } from "@/lib/job-number";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
 import type { ProposalSiteImageTransform } from "@/types/domain";
@@ -31,6 +35,18 @@ export function WorkOrderView({
   siteImagePath,
   imageTransform,
   marks,
+  photos,
+  photoZones,
+  waivers,
+  jobStatus,
+  allowDuring,
+  allowAfter,
+  allowSignOff,
+  signOffLockReason,
+  lockedStageReason,
+  completedAt,
+  completedByName,
+  completionNotes,
   accountManager,
   back,
 }: {
@@ -46,6 +62,18 @@ export function WorkOrderView({
   imageTransform: ProposalSiteImageTransform | null;
   /** Notes the evaluator pinned to the picture. Written for this sheet. */
   marks: CanvasMark[];
+  photos: JobPhotoWithUrl[];
+  photoZones: ZoneRef[];
+  waivers: PhotoWaiver[];
+  jobStatus: JobStatus;
+  allowDuring: boolean;
+  allowAfter: boolean;
+  allowSignOff: boolean;
+  signOffLockReason: string | null;
+  lockedStageReason: string | null;
+  completedAt: string | null;
+  completedByName: string | null;
+  completionNotes: string | null;
   /** Who to ring when something on site does not match the sheet. */
   accountManager: { name: string; phone: string | null } | null;
   /** Where the back link goes. Defaults to the crew's day, which is where a
@@ -196,6 +224,27 @@ export function WorkOrderView({
           ))}
         </ol>
       )}
+
+      {/* Where the work gets recorded. This is the screen open on the
+          driveway, so it is where the during and after photos have to be
+          taken — the sheet could show the evaluation's pictures and take
+          none of its own, which left the people doing the work with no way
+          to record it. */}
+      <CompletionPanel
+        jobId={jobId}
+        status={jobStatus}
+        photos={photos}
+        zones={photoZones}
+        allowDuring={allowDuring}
+        allowAfter={allowAfter}
+        allowSignOff={allowSignOff}
+        signOffLockReason={signOffLockReason}
+        lockedStageReason={lockedStageReason}
+        waivers={waivers}
+        completedAt={completedAt}
+        completedByName={completedByName}
+        completionNotes={completionNotes}
+      />
     </div>
   );
 }
