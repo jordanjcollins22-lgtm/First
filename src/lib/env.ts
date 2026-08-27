@@ -40,6 +40,10 @@ export const env = {
   // Which listing is ours. Without it a scan cannot tell us apart from
   // another landscaper with a similar name.
   googlePlaceId: process.env.GOOGLE_PLACE_ID ?? "",
+  // Sends our email. Which domains and which addresses are set up in the app
+  // rather than here — those change, and a redeploy to add an address is a
+  // reason nobody adds the address.
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -59,5 +63,7 @@ export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
 export const isLivekitConfigured = Boolean(env.livekitApiKey && env.livekitApiSecret && env.livekitUrl);
+/** Sending email at all. Domains and addresses are configured in the app. */
+export const isResendConfigured = Boolean(env.resendApiKey);
 /** Transcribes voice memos. Without it a memo still records and plays, just untranscribed. */
 export const isTranscriptionConfigured = Boolean(env.openaiApiKey);

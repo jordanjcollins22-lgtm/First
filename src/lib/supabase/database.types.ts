@@ -247,6 +247,48 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["payment_plan_instalments"]["Row"]>;
         Relationships: [];
       };
+      email_domains: {
+        Row: {
+          id: string;
+          organization_id: string;
+          hostname: string;
+          stream: string;
+          provider: string;
+          provider_domain_id: string | null;
+          status: string;
+          dns_records: unknown;
+          last_checked_at: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["email_domains"]["Row"]> & {
+          organization_id: string;
+          hostname: string;
+          stream: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_domains"]["Row"]>;
+        Relationships: [];
+      };
+      email_senders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          domain_id: string;
+          address: string;
+          display_name: string | null;
+          reply_to: string | null;
+          is_default: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["email_senders"]["Row"]> & {
+          organization_id: string;
+          domain_id: string;
+          address: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_senders"]["Row"]>;
+        Relationships: [];
+      };
       early_start_requests: {
         Row: {
           id: string;

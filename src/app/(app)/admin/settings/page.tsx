@@ -11,6 +11,8 @@ import { PermissionsMatrix } from "@/components/permissions/permissions-matrix";
 import { MigrationRunner } from "@/components/admin/migration-runner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateOrganizationForm } from "@/components/organizations/create-organization-form";
+import { getEmailSetup } from "@/lib/data/email-setup";
+import { EmailSetupPanel } from "@/components/admin/email-setup-panel";
 
 const SUPERADMIN_EMAIL = "jordan@jslandscapingmd.com";
 
@@ -45,6 +47,7 @@ export default async function SettingsPage() {
       <PageTabs
         tabs={[
           { key: "permissions", label: "Permissions", content: await PermissionsTab() },
+          { key: "email", label: "Email", content: await EmailTab() },
           { key: "database", label: "Database", content: await DatabaseTab() },
           {
             key: "organizations",
@@ -171,6 +174,35 @@ async function OrganizationsTab() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Who we send email as.
+ *
+ * Loaded on its own: this reads two tables that only exist after 0120, and a
+ * fresh setup should lose this tab rather than the whole settings page.
+ */
+async function EmailTab() {
+  const setup = await getEmailSetup().catch((err) => {
+    console.error("Email setup failed to load:", err);
+    return null;
+  });
+
+  if (!setup) {
+    return (
+      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
+        Couldn&apos;t load email settings. If this is a fresh setup, run{" "}
+        <code>supabase/migrations/0120_email_sending.sql</code>.
+      </p>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <h2 className="mb-1 text-lg font-bold">Email</h2>
+      <EmailSetupPanel setup={setup} />
     </div>
   );
 }

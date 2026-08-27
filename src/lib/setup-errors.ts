@@ -44,6 +44,8 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   proposal_objections: "0118_proposal_objections.sql",
   proposal_scope_requests: "0118_proposal_objections.sql",
   early_start_requests: "0119_early_start_requests.sql",
+  email_domains: "0120_email_sending.sql",
+  email_senders: "0120_email_sending.sql",
 };
 
 /**
