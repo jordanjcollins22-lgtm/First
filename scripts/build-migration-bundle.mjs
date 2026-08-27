@@ -71,6 +71,7 @@ const CREATES = {
   "0121_knowledge_issues.sql": [],
   "0122_service_scope_template.sql": [],
   "0123_service_performed_by.sql": [],
+  "0124_acceptance_payment_path.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

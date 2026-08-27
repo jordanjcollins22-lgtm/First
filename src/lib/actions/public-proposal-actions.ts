@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice } from "@/lib/invoicing";
 import { notifyJobTeam } from "@/lib/notifications";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
+import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
+import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 /**
@@ -52,10 +54,10 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     const { error: jobError } = await admin.from("jobs").update({ status: "approved" }).eq("id", proposal.job_id);
     if (jobError) throw jobError;
 
-    const amountDue = Math.max(0, Math.round((proposal.total_cost ?? 0) - proposal.discount_amount));
-    createAndSendInvoice(proposal.job_id, proposal.id, amountDue).catch(() => {
-      // Best-effort — the acceptance itself already succeeded either way.
-    });
+    // No invoice here any more. Accepting used to fire one for the whole
+    // amount immediately, which took the choice about how to pay away from
+    // the client before they were asked. The next screen asks; whichever way
+    // they answer raises the right paperwork.
   }
 
   revalidatePath(`/jobs/${proposal.job_id}`);
@@ -257,4 +259,182 @@ export async function requestScopeChange(input: {
   } catch (err) {
     return { ok: false, message: describe(err) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// What happens straight after accepting
+// ---------------------------------------------------------------------------
+
+/**
+ * The client choosing how to pay, and by doing so, when they get booked.
+ *
+ * Runs on the service-role client: this is a person with an emailed link and
+ * no account, which is the same footing as accepting in the first place.
+ *
+ * Recording the choice on the proposal is what makes this safe to press
+ * twice. A phone that resent the request would otherwise raise a second
+ * invoice or a second payment plan against the same job.
+ */
+export async function choosePaymentPath(input: {
+  token: string;
+  pathId: string;
+  /** How many payments to split it into. Ignored for paying in full. */
+  instalments?: number;
+}): Promise<PublicResult<{ message: string }>> {
+  try {
+    const admin = createAdminClient();
+
+    const { data: proposal } = await admin
+      .from("job_proposals")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path")
+      .eq("token", input.token)
+      .maybeSingle();
+
+    if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
+    if (proposal.status !== "accepted") {
+      return { ok: false, message: "Accept the proposal first." };
+    }
+    if (proposal.payment_path) {
+      return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
+    }
+
+    const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+    const context = {
+      discountCents,
+      totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+    };
+
+    const option = optionById(context, input.pathId);
+    if (!option) return { ok: false, message: "Pick one of the options." };
+
+    const amountCents = amountForPath(context, option);
+    if (amountCents <= 0) return { ok: false, message: "There is nothing to pay on this one." };
+
+    // Claim the choice before doing the work. Two taps on a slow connection
+    // otherwise both get past the check above and raise two of everything.
+    const { data: claimed } = await admin
+      .from("job_proposals")
+      .update({ payment_path: option.id, payment_path_at: new Date().toISOString() })
+      .eq("id", proposal.id)
+      .is("payment_path", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
+
+    if (option.id === "full") {
+      // Best-effort, like acceptance itself: the choice is recorded either
+      // way, and an invoice that failed to send is something the office can
+      // see and resend rather than a decision that got lost.
+      createAndSendInvoice(proposal.job_id, proposal.id, amountCents / 100).catch(() => {});
+    } else {
+      const built = await buildClientPlan({
+        organizationId: proposal.organization_id,
+        jobId: proposal.job_id,
+        proposalId: proposal.id,
+        amountCents,
+        instalments: input.instalments ?? 3,
+        keepsDiscount: option.keepsDiscount,
+        schedulesAfterFinalPayment: option.schedulesAfterFinalPayment,
+      });
+      if (!built.ok) return built;
+    }
+
+    notifyJobTeam(
+      proposal.job_id,
+      "proposal_responses",
+      option.id === "full"
+        ? "A client accepted and is paying in full."
+        : "A client accepted and set up a payment plan.",
+      { dedupeKey: `${proposal.id}:path` }
+    ).catch(() => {});
+
+    revalidatePath(`/jobs/${proposal.job_id}`);
+    revalidatePath("/proposals");
+
+    return { ok: true, message: confirmationFor(option) };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
+}
+
+/**
+ * The plan itself, written without a signed-in user.
+ *
+ * createPlan in payment-plan-actions is the office's version and needs a
+ * profile to attribute it to. Nobody is signed in here, so the rows are
+ * written directly with the same schedule maths rather than loosening that
+ * function's requirements for everybody.
+ */
+async function buildClientPlan(input: {
+  organizationId: string;
+  jobId: string;
+  proposalId: string;
+  amountCents: number;
+  instalments: number;
+  keepsDiscount: boolean;
+  schedulesAfterFinalPayment: boolean;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  const admin = createAdminClient();
+
+  const { data: job } = await admin
+    .from("jobs")
+    .select("properties(customer_id)")
+    .eq("id", input.jobId)
+    .maybeSingle();
+  const customerId =
+    (job as unknown as { properties: { customer_id: string } | null } | null)?.properties
+      ?.customer_id ?? null;
+  if (!customerId) return { ok: false, message: "We couldn't match this to your account." };
+
+  const planInput = {
+    totalCents: input.amountCents,
+    kind: "instalments" as const,
+    // Clamped rather than refused: a number arriving from a form is not worth
+    // failing a payment over, and the schedule maths is exact at any count.
+    instalments: Math.min(12, Math.max(2, Math.round(input.instalments))),
+    interval: "monthly" as const,
+  };
+
+  const verdict = checkPlan(planInput);
+  if (!verdict.ok) return { ok: false, message: verdict.reason };
+
+  const { data: plan, error } = await admin
+    .from("payment_plans")
+    .insert({
+      organization_id: input.organizationId,
+      job_id: input.jobId,
+      proposal_id: input.proposalId,
+      customer_id: customerId,
+      kind: planInput.kind,
+      total_cents: planInput.totalCents,
+      instalments: planInput.instalments,
+      interval: planInput.interval,
+      // The client agreed to it on this screen, so it is accepted already.
+      status: "accepted",
+      accepted_at: new Date().toISOString(),
+      keeps_discount: input.keepsDiscount,
+      schedules_after_final_payment: input.schedulesAfterFinalPayment,
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error || !plan) return { ok: false, message: describe(error) };
+
+  const today = new Date();
+  const { error: scheduleError } = await admin.from("payment_plan_instalments").insert(
+    buildSchedule(planInput).map((item) => {
+      const due = new Date(today.getTime());
+      due.setDate(due.getDate() + item.dueInDays);
+      return {
+        plan_id: plan.id,
+        number: item.number,
+        amount_cents: item.amountCents,
+        due_on: due.toISOString().slice(0, 10),
+        is_deposit: item.isDeposit,
+      };
+    })
+  );
+  if (scheduleError) return { ok: false, message: describe(scheduleError) };
+
+  return { ok: true };
 }

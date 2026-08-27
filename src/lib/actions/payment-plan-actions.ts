@@ -8,6 +8,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { describeDbError } from "@/lib/setup-errors";
 import { isStripeConfigured } from "@/lib/env";
+import { bookableFromKey } from "@/lib/acceptance-path";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import {
   buildSchedule,
@@ -318,7 +319,14 @@ export async function recordStripePayment(input: {
   }
 }
 
-/** Closes a plan once nothing is left owing on it. */
+/**
+ * Closes a plan once nothing is left owing on it, and books the job.
+ *
+ * A plan that was protecting a discount held the booking back until the
+ * balance was cleared, so this is the moment that condition is met. The start
+ * date goes one month out from today, which is the rule the client was told
+ * on the screen where they chose to pay this way.
+ */
 async function settleIfPaidOff(planId: string): Promise<void> {
   const admin = createAdminClient();
 
@@ -329,10 +337,37 @@ async function settleIfPaidOff(planId: string): Promise<void> {
     .eq("status", "due")
     .limit(1);
 
+  const settled = !outstanding || outstanding.length === 0;
+
   await admin
     .from("payment_plans")
-    .update({ status: outstanding && outstanding.length > 0 ? "active" : "settled" })
+    .update({ status: settled ? "settled" : "active" })
     .eq("id", planId);
+
+  if (!settled) return;
+
+  const { data: plan } = await admin
+    .from("payment_plans")
+    .select("job_id, schedules_after_final_payment")
+    .eq("id", planId)
+    .maybeSingle();
+
+  if (!plan?.job_id || !plan.schedules_after_final_payment) return;
+
+  // Only fills a start date in, never moves one somebody has already set: the
+  // office may well have booked them in the meantime, and overwriting that
+  // would move a date a client has been given.
+  const { data: job } = await admin
+    .from("jobs")
+    .select("project_start_date")
+    .eq("id", plan.job_id)
+    .maybeSingle();
+  if (job?.project_start_date) return;
+
+  await admin
+    .from("jobs")
+    .update({ project_start_date: bookableFromKey(new Date()) })
+    .eq("id", plan.job_id);
 }
 
 function addDays(from: Date, days: number): string {

@@ -642,6 +642,10 @@ export interface JobProposal {
   approved_at: string | null;
   responded_at: string | null;
   client_response_note: string | null;
+  /** How the client chose to pay after accepting. Null means they have
+   * accepted but not chosen yet, which is a job waiting on them, not on us. */
+  payment_path: "full" | "plan" | "plan_no_discount" | null;
+  payment_path_at: string | null;
   created_at: string;
   updated_at: string;
 }

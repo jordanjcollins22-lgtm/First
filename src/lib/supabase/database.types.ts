@@ -211,6 +211,8 @@ export interface Database {
           status: string;
           accepted_at: string | null;
           accepted_by: string | null;
+          keeps_discount: boolean;
+          schedules_after_final_payment: boolean;
           stripe_subscription_id: string | null;
           created_by: string | null;
           created_at: string;
@@ -1466,6 +1468,8 @@ export interface Database {
           organization_id: string;
           token: string;
           status: string;
+          payment_path: string | null;
+          payment_path_at: string | null;
           total_cost: number | null;
           discount_id: string | null;
           discount_kind: string | null;

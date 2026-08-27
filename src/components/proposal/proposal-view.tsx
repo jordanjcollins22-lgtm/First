@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +20,7 @@ import { SiteMapImage } from "./site-map-image";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
 import { displayLabel } from "@/lib/zone-scope";
+import { PaymentChoice } from "@/components/proposal/payment-choice";
 import type { JobMessage, ProposalStatus } from "@/types/domain";
 
 function formatTotal(total: number | null): string {
@@ -264,12 +265,21 @@ export function ProposalView({
             {error && <p className="text-sm text-destructive">{error}</p>}
           </>
         ) : status === "accepted" ? (
-          <div className="flex flex-col items-center gap-2 text-center">
-            <CheckCircle2 className="h-8 w-8 text-primary" />
-            <p className="font-semibold">
-              You accepted this proposal{respondedAt ? ` on ${new Date(respondedAt).toLocaleDateString()}` : ""}.
-            </p>
-            <p className="text-sm text-muted-foreground">We&apos;ll be in touch to schedule the work.</p>
+          // Straight into the one question left rather than a thank-you and a
+          // wait. How they pay and when they get booked are one decision.
+          <div className="w-full">
+            <PaymentChoice
+              token={token}
+              alreadyChosen={proposal.payment_path}
+              context={{
+                discountCents: Math.round((proposal.discount_amount ?? 0) * 100),
+                totalCents: Math.max(
+                  0,
+                  Math.round((proposal.total_cost ?? 0) * 100) -
+                    Math.round((proposal.discount_amount ?? 0) * 100)
+                ),
+              }}
+            />
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 text-center">
