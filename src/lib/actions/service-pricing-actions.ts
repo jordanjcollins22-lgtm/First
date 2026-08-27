@@ -74,6 +74,29 @@ export async function updateServiceHowTo(serviceTypeId: string, howTo: string | 
 }
 
 /**
+ * What a client is told this service covers, on their proposal.
+ *
+ * Separate from how_to, which is the crew's method. A client reading "edge
+ * the bed first, clear debris, lay fabric" is reading an instruction sheet,
+ * not a description of what they are buying — and a business that had only
+ * one field for both ended up sending one of them to the wrong audience.
+ */
+export async function updateServiceScopeTemplate(
+  serviceTypeId: string,
+  scopeTemplate: string | null
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({ scope_template: scopeTemplate })
+    .eq("service_type_id", serviceTypeId);
+  if (error) throw error;
+
+  revalidatePath("/admin/service-pricing");
+  revalidatePath("/canvas");
+}
+
+/**
  * How long one sq ft takes and how many people work it — together the labor
  * half of the COGS calculator (minutes x crew size = paid crew-minutes).
  */

@@ -3,6 +3,9 @@ import type { JobProposal } from "@/types/domain";
 
 export interface PublicProposal {
   proposal: JobProposal;
+  /** Service names by their type id, so a proposal snapshotted while the
+   * label lookup was broken still shows a name rather than a uuid. */
+  serviceNames: Record<string, string>;
   propertyAddress: string;
   customerName: string;
   organizationName: string;
@@ -43,8 +46,23 @@ export async function getProposalByToken(token: string): Promise<PublicProposal 
     : { data: null, error: null };
   if (orgError) throw orgError;
 
+  // Proposals are snapshots, so the ones generated before custom services
+  // resolved their names still hold `custom-<uuid>` in serviceLabel.
+  // Rebuilding fixes them properly; this keeps a database id off a client's
+  // screen until somebody does.
+  const { data: pricing } = await admin
+    .from("services")
+    .select("service_type_id, name")
+    .eq("organization_id", customer?.organization_id ?? "");
+
+  const serviceNames: Record<string, string> = {};
+  for (const row of (pricing ?? []) as { service_type_id: string; name: string }[]) {
+    serviceNames[row.service_type_id] = row.name;
+  }
+
   return {
     proposal: proposal as unknown as JobProposal,
+    serviceNames,
     propertyAddress: property.address,
     customerName: customer?.name ?? "",
     organizationName: org?.name ?? "",

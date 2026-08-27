@@ -1155,6 +1155,7 @@ export interface Database {
           minutes_per_sqft: number | null;
           crew_size: number;
           how_to: string | null;
+          scope_template: string | null;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["services"]["Row"]> & {

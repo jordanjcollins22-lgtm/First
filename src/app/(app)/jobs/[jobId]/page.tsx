@@ -52,6 +52,7 @@ import type { EvaluationStatus, JobCrewMember, JobStatus } from "@/types/domain"
 import { requireJobAccess } from "@/lib/data/access";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { isAccountManager } from "@/lib/affiliate-roles";
+import { serviceLabelFor } from "@/lib/zone-scope";
 
 export default async function JobPage({
   params,
@@ -269,14 +270,19 @@ export default async function JobPage({
     photos.map((photo) => photo.path)
   ).length;
 
+  const pricingByType = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
+
   const zoneBreakdowns: InternalZoneBreakdown[] = zones.map((zone) => {
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
+    // A service this business added itself has no built-in definition; its
+    // name is on the pricing row. Without this the crew sheet showed a uuid.
+    const pricingRow = zone.service ? pricingByType.get(zone.service.typeId) : undefined;
     const checklistAnswers = (def?.fields ?? [])
       .filter((field) => zone.service?.values[field.key])
       .map((field) => ({ label: field.label, value: zone.service!.values[field.key] }));
     return {
       zoneName: zone.name,
-      serviceLabel: def?.label ?? zone.service?.typeId ?? "Service",
+      serviceLabel: serviceLabelFor(def, pricingRow ? { name: pricingRow.name } : undefined),
       notes: zone.service?.notes ?? "",
       checklistAnswers,
       materialLineItems: materialItems

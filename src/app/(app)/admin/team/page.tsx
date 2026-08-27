@@ -352,6 +352,7 @@ export default async function TeamServicesPage() {
                     initialMinutesPerSqft={s.minutes_per_sqft}
                     initialCrewSize={s.crew_size ?? 1}
                     initialHowTo={s.how_to}
+                    initialScopeTemplate={s.scope_template}
                     materials={materials}
                     materialRules={materialRules}
                     tools={tools}

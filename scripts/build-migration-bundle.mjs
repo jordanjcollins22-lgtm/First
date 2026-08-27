@@ -69,6 +69,7 @@ const CREATES = {
   "0120_email_sending.sql": ["email_domains", "email_senders"],
   // Alters and a bucket — nothing new to probe for.
   "0121_knowledge_issues.sql": [],
+  "0122_service_scope_template.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

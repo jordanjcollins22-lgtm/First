@@ -433,6 +433,10 @@ export interface ServicePricing {
   minutes_per_sqft: number | null;
   crew_size: number;
   how_to: string | null;
+  /** What a client is told this service covers, on the proposal. Blank falls
+   * back to the built-in wording; anything typed on the zone itself beats
+   * both, because that was written standing in the garden. */
+  scope_template: string | null;
   updated_at: string;
 }
 

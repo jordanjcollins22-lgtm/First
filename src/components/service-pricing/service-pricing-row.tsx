@@ -12,6 +12,7 @@ import {
   updateServiceCogs,
   updateServiceLabor,
   updateServiceHowTo,
+  updateServiceScopeTemplate,
 } from "@/lib/actions/service-pricing-actions";
 import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/material-actions";
 import { setServiceToolLink } from "@/lib/actions/tool-actions";
@@ -31,6 +32,7 @@ interface ServicePricingRowProps {
   initialMinutesPerSqft: number | null;
   initialCrewSize: number;
   initialHowTo: string | null;
+  initialScopeTemplate: string | null;
   materials: Material[];
   materialRules: ServiceMaterialRule[];
   tools: Tool[];
@@ -50,6 +52,7 @@ export function ServicePricingRow({
   initialMinutesPerSqft,
   initialCrewSize,
   initialHowTo,
+  initialScopeTemplate,
   materials,
   materialRules,
   tools,
@@ -65,6 +68,7 @@ export function ServicePricingRow({
   const [minutesPerSqft, setMinutesPerSqft] = useState(initialMinutesPerSqft?.toString() ?? "");
   const [crewSize, setCrewSize] = useState(initialCrewSize.toString());
   const [howTo, setHowTo] = useState(initialHowTo ?? "");
+  const [scopeTemplate, setScopeTemplate] = useState(initialScopeTemplate ?? "");
   const [showCalculator, setShowCalculator] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
   const [toolSearch, setToolSearch] = useState("");
@@ -165,6 +169,10 @@ export function ServicePricingRow({
 
   function saveHowTo() {
     startTransition(() => updateServiceHowTo(serviceTypeId, howTo.trim() || null));
+  }
+
+  function saveScopeTemplate() {
+    startTransition(() => updateServiceScopeTemplate(serviceTypeId, scopeTemplate.trim() || null));
   }
 
   return (
@@ -298,6 +306,26 @@ export function ServicePricingRow({
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {/* Above the crew's method on purpose: this is the one a client
+                actually reads, and the one that was silently empty for every
+                service this business added itself. */}
+            <p className="text-xs text-muted-foreground">
+              What the client is told — the scope wording on their proposal:
+            </p>
+            <Textarea
+              placeholder="e.g. Pull and treat weeds growing through cracks and joints, then clear the debris away."
+              value={scopeTemplate}
+              disabled={isPending}
+              onChange={(e) => setScopeTemplate(e.target.value)}
+              onBlur={saveScopeTemplate}
+              className="min-h-20 text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Anything typed on an individual zone during an evaluation beats this.
+            </p>
           </div>
 
           <div className="flex flex-col gap-1">

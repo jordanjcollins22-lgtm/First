@@ -19,6 +19,7 @@ import {
 import { SiteMapImage } from "./site-map-image";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
+import { displayLabel } from "@/lib/zone-scope";
 import type { JobMessage, ProposalStatus } from "@/types/domain";
 
 function formatTotal(total: number | null): string {
@@ -37,7 +38,18 @@ export function ProposalView({
   messages: JobMessage[];
   preview?: boolean;
 }) {
-  const { proposal, propertyAddress, customerName, organizationName } = data;
+  const { proposal, propertyAddress, customerName, organizationName, serviceNames } = data;
+
+  /**
+   * The service name, repaired if the snapshot holds a raw id.
+   *
+   * Proposals freeze their wording, so ones generated while custom services
+   * failed to resolve still carry `custom-<uuid>`. Rebuilding fixes them; this
+   * makes sure no client reads a database id in the meantime.
+   */
+  function labelFor(stored: string): string {
+    return displayLabel(stored, serviceNames[stored] ? { name: serviceNames[stored] } : undefined);
+  }
   const [status, setStatus] = useState<ProposalStatus>(proposal.status);
   const [respondedAt, setRespondedAt] = useState(proposal.responded_at);
   const [decliningNote, setDecliningNote] = useState("");
@@ -108,7 +120,7 @@ export function ProposalView({
             <div key={i} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
               <div>
                 <p className="font-semibold">{zone.zoneName}</p>
-                <p className="text-sm text-primary">{zone.serviceLabel}</p>
+                <p className="text-sm text-primary">{labelFor(zone.serviceLabel)}</p>
               </div>
               {zone.scopeText && <p className="text-sm text-muted-foreground">{zone.scopeText}</p>}
               {zone.photoPaths.length > 0 && (
@@ -157,7 +169,7 @@ export function ProposalView({
         disabled={status !== "sent"}
         lines={proposal.scope_snapshot.map<ScopeLine>((zone) => ({
           zoneName: zone.zoneName,
-          serviceLabel: zone.serviceLabel,
+          serviceLabel: labelFor(zone.serviceLabel),
           priceCents: zone.priceCents ?? null,
           priceDerived: zone.priceDerived ?? false,
         }))}
