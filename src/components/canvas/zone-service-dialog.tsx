@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { type ChangeEvent, type MouseEvent as ReactMouseEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, Check, ImagePlus, Loader2, Pencil, X } from "lucide-react";
 
@@ -23,6 +23,13 @@ import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { AddInventoryItemForm, type CreatedInventoryItem } from "@/components/inventory/add-inventory-item-form";
+import {
+  describeMeasurement,
+  kindOfSaved,
+  measurementIsSettled,
+  readMeasurement,
+  type MeasurementKind,
+} from "@/lib/zone-measurement";
 
 function PhotoThumb({
   path,
@@ -283,7 +290,9 @@ interface ZoneServiceDialogProps {
     lengthFt: number | null,
     widthFt: number | null,
     areaSqFt: number | null,
-    perimeterFt: number | null
+    perimeterFt: number | null,
+    /** Whether this was measured as a rectangle or as a run. */
+    measurementKind: MeasurementKind
   ) => void;
   onCancel: () => void;
 }
@@ -315,6 +324,7 @@ export function ZoneServiceDialog({
   const [markingPath, setMarkingPath] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [showAddNewItem, setShowAddNewItem] = useState(false);
+  const widthInputRef = useRef<HTMLInputElement>(null);
   const [lengthFt, setLengthFt] = useState(initialLengthFt?.toString() ?? "");
   const [widthFt, setWidthFt] = useState(initialWidthFt?.toString() ?? "");
   // Answering everything already on file would mean re-clicking through
@@ -322,14 +332,21 @@ export function ZoneServiceDialog({
   // for a zone that's been filled in before; walk fresh zones one at a time.
   const [stepKey, setStepKey] = useState<StepKey>(initialService ? "review" : "location");
 
-  // Area and perimeter come from length x width. A zone measured before this
-  // (length/width blank) keeps whatever was entered directly back then.
-  const lengthValue = lengthFt.trim() ? Number(lengthFt) : null;
-  const widthValue = widthFt.trim() ? Number(widthFt) : null;
-  const derivedAreaSqFt =
-    lengthValue != null && widthValue != null ? lengthValue * widthValue : initialAreaSqFt;
+  // Some work is a run rather than a rectangle — weeds out of driveway
+  // cracks, edging a bed — and asking for a width gets a made-up number.
+  // A blank width is ambiguous though, so a length on its own is not read
+  // as linear until the evaluator says it is. See lib/zone-measurement.
+  const [linearConfirmed, setLinearConfirmed] = useState(
+    () => kindOfSaved({ lengthFt: initialLengthFt, widthFt: initialWidthFt, areaSqFt: initialAreaSqFt }) === "linear"
+  );
+
+  const measurement = readMeasurement({ length: lengthFt, width: widthFt, linearConfirmed });
+
+  // A zone measured before length and width were fields keeps whatever was
+  // entered directly back then.
+  const derivedAreaSqFt = measurement.kind === "none" ? initialAreaSqFt : measurement.areaSqFt;
   const derivedPerimeterFt =
-    lengthValue != null && widthValue != null ? 2 * (lengthValue + widthValue) : initialPerimeterFt;
+    measurement.kind === "none" ? initialPerimeterFt : measurement.perimeterFt;
 
   const serviceType = serviceTypeById(typeId);
   const activeServices = catalog.servicePricing.filter((s) => s.status === "active");
@@ -608,7 +625,15 @@ export function ZoneServiceDialog({
       }
     }
 
-    onSave(location, service, lengthValue, widthValue, derivedAreaSqFt, derivedPerimeterFt);
+    onSave(
+      location,
+      service,
+      measurement.lengthFt,
+      measurement.widthFt,
+      derivedAreaSqFt,
+      derivedPerimeterFt,
+      measurement.kind
+    );
   }
 
   function fieldOptionsFor(field: ServiceFieldDef): string[] {
@@ -649,7 +674,18 @@ export function ZoneServiceDialog({
     );
   } else if (currentStep === "measurements") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What are the measurements?" subtitle="Measure on site — length x width, in feet.">
+      <StepShell
+        currentIndex={currentIndex}
+        totalSteps={steps.length}
+        onBack={goBack}
+        onNext={goNext}
+        // An unconfirmed length is not a measurement. Letting Next through
+        // would be guessing on the evaluator's behalf about the one thing
+        // this step exists to establish.
+        nextDisabled={!measurementIsSettled(measurement)}
+        title="What are the measurements?"
+        subtitle="Measure on site, in feet. Length only is fine for a run."
+      >
         <div className="flex flex-col gap-3">
           <div className="flex items-end gap-2">
             <div className="flex flex-1 flex-col gap-2">
@@ -669,18 +705,61 @@ export function ZoneServiceDialog({
               <Label htmlFor="zone-width">Width (ft)</Label>
               <Input
                 id="zone-width"
+                ref={widthInputRef}
                 type="number"
                 step="0.1"
                 min={0}
                 value={widthFt}
-                onChange={(e) => setWidthFt(e.target.value)}
+                onChange={(e) => {
+                  setWidthFt(e.target.value);
+                  // Typing a width is a change of mind, and the newer
+                  // statement wins. Leaving the flag set would keep the
+                  // rectangle reading as a run.
+                  if (e.target.value.trim()) setLinearConfirmed(false);
+                }}
               />
             </div>
           </div>
-          {derivedAreaSqFt != null && derivedPerimeterFt != null && (
+          {/* A length with no width is ambiguous: a run, or a form somebody
+              is halfway through typing. The difference is a price, so it is
+              asked rather than assumed. */}
+          {measurement.needsConfirmation && (
+            <div className="rounded-lg border border-amber-300/70 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                No width — is this a length only?
+              </p>
+              <p className="mt-0.5 text-xs text-amber-900/80 dark:text-amber-200/80">
+                Like weeds out of driveway cracks, or edging: {measurement.lengthFt} linear ft, priced
+                by the foot rather than the square foot.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <Button type="button" size="sm" onClick={() => setLinearConfirmed(true)}>
+                  Yes — length only
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => widthInputRef.current?.focus()}
+                >
+                  No — add a width
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {describeMeasurement(measurement) && (
             <p className="text-xs text-muted-foreground">
-              = {Math.round(derivedAreaSqFt).toLocaleString()} sq ft ·{" "}
-              {Math.round(derivedPerimeterFt).toLocaleString()} ft perimeter
+              {describeMeasurement(measurement)}
+              {measurement.kind === "linear" && (
+                <button
+                  type="button"
+                  onClick={() => setLinearConfirmed(false)}
+                  className="ml-2 underline"
+                >
+                  not length only
+                </button>
+              )}
             </p>
           )}
         </div>
@@ -1072,14 +1151,19 @@ export function ZoneServiceDialog({
           </ReviewRow>
 
           <ReviewRow label="Measurements" onEdit={() => setStepKey("measurements")}>
-            {lengthValue != null && widthValue != null ? (
+            {measurement.kind === "area" ? (
               <p>
-                {lengthValue} × {widthValue} ft
+                {measurement.lengthFt} × {measurement.widthFt} ft
                 <span className="text-xs text-muted-foreground">
                   {" "}
-                  = {Math.round(lengthValue * widthValue).toLocaleString()} sq ft ·{" "}
-                  {Math.round(2 * (lengthValue + widthValue)).toLocaleString()} ft perimeter
+                  {describeMeasurement(measurement)}
                 </span>
+              </p>
+            ) : measurement.kind === "linear" ? (
+              // Length only, and said so. Never a square-foot figure beside it.
+              <p>
+                {measurement.lengthFt} ft
+                <span className="text-xs text-muted-foreground"> · length only, no width</span>
               </p>
             ) : derivedAreaSqFt != null || derivedPerimeterFt != null ? (
               <p>

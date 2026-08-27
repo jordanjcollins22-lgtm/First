@@ -1,5 +1,6 @@
 import type { WorkZone } from "@/components/canvas/types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
+import { kindOfSaved } from "@/lib/zone-measurement";
 
 const CUBIC_FEET_PER_YARD = 27;
 // Typical loaded wheelbarrow capacity used for hauling estimates.
@@ -20,7 +21,20 @@ export function zoneServiceCount(zone: WorkZone): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-export function formatMeasurements(m: { areaSqFt: number; perimeterFt: number }): string {
+/**
+ * The measurements as a line of text.
+ *
+ * A run measured length-only has no area, and printing "0 sq ft" beside its
+ * length says something false about a zone somebody measured correctly. Pass
+ * the zone so this can tell the two apart.
+ */
+export function formatMeasurements(
+  m: { areaSqFt: number; perimeterFt: number },
+  zone?: Pick<WorkZone, "measurementKind" | "lengthFt" | "widthFt" | "areaSqFt">
+): string {
+  if (zone && kindOfSaved(zone) === "linear") {
+    return `${Math.round(m.perimeterFt).toLocaleString()} linear ft`;
+  }
   return `${Math.round(m.areaSqFt).toLocaleString()} sq ft · ${Math.round(m.perimeterFt).toLocaleString()} ft perimeter`;
 }
 

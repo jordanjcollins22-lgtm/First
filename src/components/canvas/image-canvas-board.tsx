@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
+import type { MeasurementKind } from "@/lib/zone-measurement";
 import {
   canStepMapZoom,
   clampScale,
@@ -837,12 +838,13 @@ export function ImageCanvasBoard({
     lengthFt: number | null,
     widthFt: number | null,
     areaSqFt: number | null,
-    perimeterFt: number | null
+    perimeterFt: number | null,
+    measurementKind: MeasurementKind
   ) {
     setZones((prev) =>
       prev.map((zone) =>
         zone.id === serviceDialogZoneId
-          ? { ...zone, location, service, lengthFt, widthFt, areaSqFt, perimeterFt }
+          ? { ...zone, location, service, lengthFt, widthFt, areaSqFt, perimeterFt, measurementKind }
           : zone
       )
     );
@@ -1720,7 +1722,7 @@ export function ImageCanvasBoard({
                       {measurements && (
                         <span className="text-xs text-muted-foreground">
                           {zone.lengthFt != null && zone.widthFt != null && `${zone.lengthFt} × ${zone.widthFt} ft · `}
-                          {formatMeasurements(measurements)}
+                          {formatMeasurements(measurements, zone)}
                         </span>
                       )}
                       <span className="text-xs text-muted-foreground">

@@ -42,6 +42,15 @@ export interface WorkZone {
   widthFt?: number | null;
   areaSqFt: number | null;
   perimeterFt: number | null;
+  /**
+   * Whether this was measured as a rectangle or as a run.
+   *
+   * Recorded rather than inferred, because a length with no width means
+   * "this is a line" or "somebody stopped typing", and only the evaluator
+   * knows which. Optional: zones saved before this existed have their kind
+   * read back off their numbers instead (see kindOfSaved).
+   */
+  measurementKind?: "area" | "linear" | "none" | null;
 }
 
 export interface StoredDesign {
