@@ -27,7 +27,13 @@ describe("app destinations", () => {
 describe("suggesting a destination", () => {
   it("points a flyer at the flyer designer", () => {
     expect(suggestDestination("EDDM flyer run")?.route).toBe("/admin/flyer");
-    expect(suggestDestination("Door hanger campaign")?.route).toBe("/admin/flyer");
+  });
+
+  it("points a door hanger at its own designer, not the flyer", () => {
+    // The more specific match has to win, or every printed thing lands on
+    // the flyer page.
+    expect(suggestDestination("Door hanger campaign")?.route).toBe("/admin/door-hangers");
+    expect(suggestDestination("Doorhanger drop")?.route).toBe("/admin/door-hangers");
   });
 
   it("points social media at the post queue", () => {

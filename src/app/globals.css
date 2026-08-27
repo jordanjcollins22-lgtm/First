@@ -137,12 +137,12 @@ body {
     visibility: hidden;
   }
 
-  .flyer-print-root,
-  .flyer-print-root * {
+  .print-root,
+  .print-root * {
     visibility: visible;
   }
 
-  .flyer-print-root {
+  .print-root {
     position: absolute;
     top: 0;
     left: 0;
@@ -152,11 +152,11 @@ body {
     padding: 0 !important;
   }
 
-  .flyer-hide-on-print {
+  .print-hide {
     display: none !important;
   }
 
-  .flyer-sheet {
+  .print-sheet {
     width: 8.5in !important;
     height: 11in !important;
     aspect-ratio: auto !important;
@@ -171,7 +171,7 @@ body {
     page-break-inside: avoid;
   }
 
-  .flyer-sheet:last-of-type {
+  .print-sheet:last-of-type {
     break-after: auto;
     page-break-after: auto;
   }
@@ -193,5 +193,12 @@ body {
 
   .flyer-banner {
     height: 0.9in !important;
+  }
+
+  /* Door hangers are full bleed: two 4.25" halves are the whole sheet, and
+     the cut goes straight down the middle with nothing to spare. */
+  .hanger-half {
+    width: 4.25in !important;
+    height: 11in !important;
   }
 }

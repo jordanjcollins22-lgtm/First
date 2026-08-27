@@ -193,6 +193,24 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
         Relationships: [];
       };
+      door_hanger_slots: {
+        Row: {
+          id: string;
+          organization_id: string;
+          side: string;
+          image_path: string | null;
+          label: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["door_hanger_slots"]["Row"]> & {
+          organization_id: string;
+          side: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["door_hanger_slots"]["Row"]>;
+        Relationships: [];
+      };
       flyer_ad_spots: {
         Row: {
           id: string;

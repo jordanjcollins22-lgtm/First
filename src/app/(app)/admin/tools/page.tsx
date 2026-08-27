@@ -14,6 +14,7 @@ import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
+import { PrintMenu } from "@/components/marketing/print-menu";
 import { listBusinessLocations } from "@/lib/data/locations";
 
 export default async function InventoryPage() {
@@ -82,32 +83,15 @@ export default async function InventoryPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="mb-1 text-2xl font-bold">Inventory</h1>
           <p className="text-muted-foreground">
             Tools, crew gear, and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Link
-            href="/admin/social"
-            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-          >
-            Posts
-          </Link>
-          <Link
-            href="/admin/flyer"
-            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-          >
-            Flyer ads
-          </Link>
-          <Link
-            href="/admin/labels"
-            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-          >
-            Labels &amp; codes
-          </Link>
+        <div className="flex shrink-0 items-start gap-2">
+          <PrintMenu />
           <Link
             href="/admin/inventory-setup"
             className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"

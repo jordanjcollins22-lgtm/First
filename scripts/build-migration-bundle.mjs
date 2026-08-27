@@ -53,6 +53,7 @@ const CREATES = {
   "0105_social_posts.sql": ["social_posts"],
   "0106_knowledge_app_links.sql": [],
   "0107_canvas_orientation.sql": [],
+  "0108_door_hangers.sql": ["door_hanger_slots"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

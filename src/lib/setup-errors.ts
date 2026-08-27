@@ -31,6 +31,7 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   inventory_movements: "0103_inventory_codes_and_movements.sql",
   flyer_ad_spots: "0104_flyer_ad_spots.sql",
   social_posts: "0105_social_posts.sql",
+  door_hanger_slots: "0108_door_hangers.sql",
 };
 
 /**

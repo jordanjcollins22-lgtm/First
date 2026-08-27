@@ -25,6 +25,11 @@ export const APP_DESTINATIONS: readonly AppDestination[] = [
     description: "The queue of before-and-afters made from crew photos.",
   },
   {
+    route: "/admin/door-hangers",
+    label: "Door hanger design",
+    description: "Two hangers to a sheet, with the knob hole drawn on.",
+  },
+  {
     route: "/admin/flyer",
     label: "Flyer design",
     description: "The EDDM flyer and the seven ad squares on it.",
@@ -63,7 +68,12 @@ export function destinationFor(route: string | null | undefined): AppDestination
 export function suggestDestination(title: string, nodeType?: string): AppDestination | null {
   const text = title.toLowerCase();
 
-  if (/\b(flyer|flier|eddm|door hanger|mailer)\b/.test(text)) {
+  // Door hangers before flyers: a door hanger is a flyer-ish thing with its
+  // own screen, and the more specific match has to win.
+  if (/\b(door ?hangers?|hanger)\b/.test(text)) {
+    return destinationFor("/admin/door-hangers");
+  }
+  if (/\b(flyer|flier|eddm|mailer)\b/.test(text)) {
     return destinationFor("/admin/flyer");
   }
   if (/\b(social|facebook|instagram|before and after|before\/after|post)\b/.test(text)) {

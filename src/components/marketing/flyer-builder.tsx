@@ -60,7 +60,7 @@ export function FlyerBuilder({ ads }: { ads: FlyerAd[] }) {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-4 sm:py-6">
-      <div className="flyer-hide-on-print">
+      <div className="print-hide">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Flyer ad spots</h1>
@@ -99,7 +99,7 @@ export function FlyerBuilder({ ads }: { ads: FlyerAd[] }) {
 
       {/* Lifted out of the page's flow when printing, so the app's header,
           nav and padding never end up between the sheet and the paper. */}
-      <div className="flyer-print-root mt-5 space-y-6">
+      <div className="print-root mt-5 space-y-6">
         <Sheet side="front" bySlot={bySlot} onPick={setEditing} />
         <Sheet side="back" bySlot={bySlot} onPick={setEditing} />
       </div>
@@ -139,11 +139,11 @@ function Sheet({
 }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground flyer-hide-on-print">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground print-hide">
         {side === "front" ? "Front — the postage side" : "Back"}
       </p>
       <div
-        className="flyer-sheet relative mx-auto w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+        className="print-sheet relative mx-auto w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"
         style={{ aspectRatio: "8.5 / 11", containerType: "inline-size" }}
       >
         <div className="flyer-inner flex h-full w-full flex-col p-[2.9%]">
@@ -201,11 +201,11 @@ function TileButton({
       )}
 
       {/* Screen-only chrome. None of this reaches the paper. */}
-      <span className="flyer-hide-on-print pointer-events-none absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
+      <span className="print-hide pointer-events-none absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
         #{slot}
         {!forSale && " · Ours"}
       </span>
-      <span className="flyer-hide-on-print pointer-events-none absolute inset-0 border-2 border-transparent group-hover:border-primary/60" />
+      <span className="print-hide pointer-events-none absolute inset-0 border-2 border-transparent group-hover:border-primary/60" />
     </button>
   );
 }
