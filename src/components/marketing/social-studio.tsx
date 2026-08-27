@@ -24,6 +24,7 @@ import {
 } from "@/lib/actions/social-actions";
 import { describeSlot, suggestCaption } from "@/lib/social-post";
 import { useComposite, useOnScreen } from "./use-composite";
+import { CompositeEditor } from "./composite-editor";
 import type { JobMissingPhotos, PostCandidate, SocialPost } from "@/lib/data/social";
 
 const BUCKET = "social-posts";
@@ -407,14 +408,11 @@ function MakePostDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
-  // Already drawn by the row that opened this, so it appears at full size
-  // straight away — and it is the same file, not a second render of it.
-  const preview = useComposite(
-    candidateKey(candidate),
-    candidate.beforeUrl,
-    candidate.afterUrl,
-    true
-  );
+  // The editor owns the file now: it redraws on every drag and hands back
+  // whatever is currently on the canvas, so approving cannot upload a
+  // different crop from the one somebody just dragged into place.
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [drawError, setDrawError] = useState<string | null>(null);
 
   const [caption, setCaption] = useState(() =>
     suggestCaption({
@@ -428,7 +426,7 @@ function MakePostDialog({
   const [pending, startTransition] = useTransition();
 
   function approve() {
-    if (!preview.blob) return;
+    if (!blob) return;
     setError(null);
 
     startTransition(async () => {
@@ -437,7 +435,7 @@ function MakePostDialog({
         const path = `${candidate.jobId}/${uuid()}.png`;
         const { error: uploadError } = await supabase.storage
           .from(BUCKET)
-          .upload(path, preview.blob!, { contentType: "image/png" });
+          .upload(path, blob, { contentType: "image/png" });
         if (uploadError) throw uploadError;
 
         const result = await approveSocialPost({
@@ -458,7 +456,7 @@ function MakePostDialog({
     });
   }
 
-  const problem = error ?? preview.error;
+  const problem = error ?? drawError;
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
@@ -472,19 +470,16 @@ function MakePostDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div
-            className="mx-auto w-full max-w-[280px] overflow-hidden rounded-lg border border-border bg-muted"
-            style={{ aspectRatio: "1080 / 1350" }}
-          >
-            {preview.url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={preview.url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            )}
-          </div>
+          {candidate.beforeUrl && candidate.afterUrl ? (
+            <CompositeEditor
+              beforeUrl={candidate.beforeUrl}
+              afterUrl={candidate.afterUrl}
+              onChange={setBlob}
+              onError={setDrawError}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">One of the photos wouldn&apos;t load.</p>
+          )}
 
           <Textarea
             value={caption}
@@ -498,12 +493,7 @@ function MakePostDialog({
           )}
 
           <div className="flex gap-2">
-            <Button
-              type="button"
-              className="flex-1"
-              disabled={!preview.blob || pending}
-              onClick={approve}
-            >
+            <Button type="button" className="flex-1" disabled={!blob || pending} onClick={approve}>
               {pending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (

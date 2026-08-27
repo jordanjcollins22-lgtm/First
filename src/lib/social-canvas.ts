@@ -10,6 +10,8 @@
  * made here is indistinguishable from one made by hand.
  */
 
+import { coverPlacement } from "@/lib/cover-placement";
+
 /** 4:5. The tallest a feed will show without cropping it for you. */
 export const CANVAS_WIDTH = 1080;
 export const CANVAS_HEIGHT = 1350;
@@ -23,38 +25,64 @@ const GREEN = "#2f8f1f";
 const CHIP_GREEN = "#7ab648";
 const CHIP_GREY = "rgba(150, 150, 150, 0.88)";
 
-export interface RenderOptions {
-  beforeUrl: string;
-  afterUrl: string;
+
+/** How far the crop has been nudged, -1 to 1 on each axis. */
+export interface Nudge {
+  x: number;
+  y: number;
+}
+
+export const CENTRED: Nudge = { x: 0, y: 0 };
+
+export interface CompositeOptions {
   /** Set false for a job where the rating badge would be a distraction. */
   showRating?: boolean;
   rating?: string;
+  /** Which part of each photograph ends up in its half. */
+  beforeNudge?: Nudge;
+  afterNudge?: Nudge;
+}
+
+export interface RenderOptions extends CompositeOptions {
+  beforeUrl: string;
+  afterUrl: string;
+}
+
+/** The two halves, so a caller can work out what it is dragging. */
+export const BEFORE_BOX = { x: 0, y: 0, width: CANVAS_WIDTH, height: BAND_TOP };
+export const AFTER_BOX = {
+  x: 0,
+  y: BAND_BOTTOM,
+  width: CANVAS_WIDTH,
+  height: CANVAS_HEIGHT - BAND_BOTTOM,
+};
+
+/** Both photographs, loaded once so a drag can redraw without refetching. */
+export async function loadPair(
+  beforeUrl: string,
+  afterUrl: string
+): Promise<{ before: HTMLImageElement; after: HTMLImageElement }> {
+  const [before, after] = await Promise.all([loadImage(beforeUrl), loadImage(afterUrl)]);
+  return { before, after };
 }
 
 /**
- * Draws the pair and hands back a PNG.
+ * Draws the whole square onto a context somebody else owns.
  *
- * Both photographs are cover-cropped: a post is a fixed shape and a phone
- * photograph is not, and letterboxing a customer's garden inside grey bars
- * looks like a mistake.
+ * Split out from the file-making so a preview can redraw on every frame of a
+ * drag without producing a file each time — and so the file, when it is
+ * finally made, is made by exactly this code and not a second copy of it.
  */
-export async function renderBeforeAfter(options: RenderOptions): Promise<Blob> {
-  const [before, after] = await Promise.all([
-    loadImage(options.beforeUrl),
-    loadImage(options.afterUrl),
-  ]);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = CANVAS_WIDTH;
-  canvas.height = CANVAS_HEIGHT;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("This browser will not give us a canvas to draw on.");
-
+export function drawComposite(
+  ctx: CanvasRenderingContext2D,
+  images: { before: HTMLImageElement; after: HTMLImageElement },
+  options: CompositeOptions = {}
+): void {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-  drawCover(ctx, before, 0, 0, CANVAS_WIDTH, BAND_TOP);
-  drawCover(ctx, after, 0, BAND_BOTTOM, CANVAS_WIDTH, CANVAS_HEIGHT - BAND_BOTTOM);
+  drawCover(ctx, images.before, BEFORE_BOX, options.beforeNudge ?? CENTRED);
+  drawCover(ctx, images.after, AFTER_BOX, options.afterNudge ?? CENTRED);
 
   ctx.fillStyle = GREEN;
   ctx.fillRect(0, BAND_TOP, CANVAS_WIDTH, BAND_HEIGHT);
@@ -70,8 +98,32 @@ export async function renderBeforeAfter(options: RenderOptions): Promise<Blob> {
     const badgeHeight = 86;
     drawGoogleBadge(ctx, CANVAS_WIDTH - badgeWidth, 0, badgeWidth, badgeHeight, options.rating ?? "5.0");
   }
+}
 
-  return await new Promise<Blob>((resolve, reject) => {
+/**
+ * Draws the pair and hands back a PNG.
+ *
+ * Both photographs are cover-cropped: a post is a fixed shape and a phone
+ * photograph is not, and letterboxing a customer's garden inside grey bars
+ * looks like a mistake.
+ */
+export async function renderBeforeAfter(options: RenderOptions): Promise<Blob> {
+  const images = await loadPair(options.beforeUrl, options.afterUrl);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = CANVAS_WIDTH;
+  canvas.height = CANVAS_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("This browser will not give us a canvas to draw on.");
+
+  drawComposite(ctx, images, options);
+
+  return await toBlob(canvas);
+}
+
+/** A canvas as a PNG. The one place the file actually gets made. */
+export function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("Couldn't turn the canvas into a file."))),
       "image/png"
@@ -82,32 +134,23 @@ export async function renderBeforeAfter(options: RenderOptions): Promise<Blob> {
 /**
  * Fills the box, keeping the photograph's shape.
  *
- * Whatever hangs over the edge is cut. A garden filling the frame beats a
- * garden centred in grey.
+ * Whatever hangs over the edge is cut. Which part gets cut is the nudge's
+ * business — a garden at the bottom of the shot should not be lost to a crop
+ * that always takes the middle.
  */
 function drawCover(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
-  x: number,
-  y: number,
-  width: number,
-  height: number
+  box: { x: number; y: number; width: number; height: number },
+  nudge: Nudge
 ) {
-  const scale = Math.max(width / image.width, height / image.height);
-  const drawWidth = image.width * scale;
-  const drawHeight = image.height * scale;
+  const placed = coverPlacement(image.width, image.height, box, nudge.x, nudge.y);
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x, y, width, height);
+  ctx.rect(box.x, box.y, box.width, box.height);
   ctx.clip();
-  ctx.drawImage(
-    image,
-    x + (width - drawWidth) / 2,
-    y + (height - drawHeight) / 2,
-    drawWidth,
-    drawHeight
-  );
+  ctx.drawImage(image, placed.x, placed.y, placed.width, placed.height);
   ctx.restore();
 }
 
