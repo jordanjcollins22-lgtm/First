@@ -232,6 +232,32 @@ export function zoneCoverage(
 }
 
 /**
+ * What this zone is waiting on that it cannot be given yet.
+ *
+ * A zone with its before done on a job nobody has started is not owed
+ * anything today: during and after are photographs of work in progress and
+ * work finished, and neither exists. Saying so beats going on asking for a
+ * before that is already there, which is what a picker with nothing else to
+ * offer falls back to.
+ */
+export function stagesAwaitingUnlock(
+  coverage: Pick<ZoneCoverage, "missing">,
+  offered: readonly string[]
+): JobPhotoStage[] {
+  return coverage.missing.filter((stage) => !offered.includes(stage));
+}
+
+/** True when nothing more can be added to this zone right now. */
+export function nothingLeftToAdd(
+  coverage: Pick<ZoneCoverage, "have" | "missing">,
+  offered: readonly string[]
+): boolean {
+  const offeredRequired = REQUIRED_STAGES.filter((stage) => offered.includes(stage));
+  if (offeredRequired.length === 0) return false;
+  return offeredRequired.every((stage) => coverage.have[stage]);
+}
+
+/**
  * Whether a job can be marked complete.
  *
  * Every zone needs a before, a during and an after. 'during' is the stage

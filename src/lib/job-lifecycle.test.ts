@@ -6,13 +6,15 @@ import {
   canCompleteJob,
   canReopenCompleted,
   canReopenJob,
-  zoneCoverage,
   canRescheduleEstimate,
   canRescheduleJob,
   isClosed,
+  nothingLeftToAdd,
+  stagesAwaitingUnlock,
   statusAfterEstimateCancelled,
   statusAfterReopen,
   type JobShape,
+  zoneCoverage,
 } from "@/lib/job-lifecycle";
 
 function job(overrides: Partial<JobShape> = {}): JobShape {
@@ -329,5 +331,47 @@ describe("saying there isn't a photo", () => {
   it("ignores a waiver for a zone that is not there", () => {
     const coverage = zoneCoverage(zones, [before, after], [{ zoneId: "gone", stage: "during" }]);
     expect(coverage[0].missing).toEqual(["during"]);
+  });
+});
+
+describe("a zone that cannot be given anything else yet", () => {
+  const covered = {
+    have: { before: true, during: false, after: false },
+    missing: ["during", "after"] as const,
+  };
+
+  it("names what is waiting on the work starting", () => {
+    expect(stagesAwaitingUnlock({ missing: [...covered.missing] }, ["before"])).toEqual([
+      "during",
+      "after",
+    ]);
+  });
+
+  it("says there is nothing left to add when the before is the only stage offered", () => {
+    // This is the case that used to go on asking for a before that was
+    // already there, because the picker had nothing else to fall back to.
+    expect(nothingLeftToAdd({ ...covered, missing: [...covered.missing] }, ["before"])).toBe(true);
+  });
+
+  it("says there is still something to add once the work starts", () => {
+    expect(
+      nothingLeftToAdd({ ...covered, missing: [...covered.missing] }, ["before", "during", "after"])
+    ).toBe(false);
+  });
+
+  it("says there is something to add when the offered stage is missing", () => {
+    expect(
+      nothingLeftToAdd(
+        { have: { before: false, during: false, after: false }, missing: ["before", "during", "after"] },
+        ["before"]
+      )
+    ).toBe(false);
+  });
+
+  it("does not claim completeness for a bucket with no required stages", () => {
+    // Site issues are not one of the three, so this must not read as done.
+    expect(
+      nothingLeftToAdd({ have: { before: false, during: false, after: false }, missing: [] }, ["issue"])
+    ).toBe(false);
   });
 });

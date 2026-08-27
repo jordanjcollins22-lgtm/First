@@ -367,6 +367,7 @@ export default async function JobPage({
           jobId={jobId}
           evaluationBeforesAvailable={evaluationBeforesAvailable}
           waivers={photoWaivers}
+          lockedStageReason={can.photoDuring.available ? null : can.photoDuring.reason}
           status={job.status}
           photos={photos}
           zones={photoZones}

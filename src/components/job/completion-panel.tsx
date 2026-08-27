@@ -27,7 +27,9 @@ import {
 } from "@/lib/actions/job-photo-actions";
 import {
   canCompleteJob,
+  nothingLeftToAdd,
   PHOTO_KIND_LABELS,
+  stagesAwaitingUnlock,
   zoneCoverage,
   type PhotoWaiver,
   type ZoneRef,
@@ -64,6 +66,7 @@ export function CompletionPanel({
   completionNotes,
   evaluationBeforesAvailable = 0,
   waivers = [],
+  lockedStageReason = null,
 }: {
   jobId: string;
   status: JobStatus;
@@ -78,6 +81,8 @@ export function CompletionPanel({
   evaluationBeforesAvailable?: number;
   /** Stages somebody has said there is no photo of. */
   waivers?: PhotoWaiver[];
+  /** Why during and after are not on offer yet, in the job's own words. */
+  lockedStageReason?: string | null;
   /** Which stages this job is far enough along to accept. A during or after
    * photo of work nobody has started is a record of something that did not
    * happen. */
@@ -238,6 +243,7 @@ export function CompletionPanel({
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
             jobId={jobId}
             onWaiverChanged={() => router.refresh()}
+            lockedStageReason={lockedStageReason ?? null}
           />
         ))}
 
@@ -258,6 +264,7 @@ export function CompletionPanel({
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
             jobId={jobId}
             onWaiverChanged={() => router.refresh()}
+            lockedStageReason={lockedStageReason ?? null}
           />
         )}
       </div>
@@ -341,6 +348,7 @@ function ZoneSection({
   onRemoved,
   jobId,
   onWaiverChanged,
+  lockedStageReason,
 }: {
   zone: ZoneRef | null;
   coverage: ReturnType<typeof zoneCoverage>[number] | null;
@@ -353,6 +361,8 @@ function ZoneSection({
   onRemoved: (id: string) => void;
   jobId: string;
   onWaiverChanged: () => void;
+  /** Why the stages this zone still owes are not on offer yet. */
+  lockedStageReason: string | null;
 }) {
   // Derived, not seeded. Seeding state from coverage meant the picker stayed
   // on whatever was missing when the panel first rendered — so a zone that
@@ -406,7 +416,49 @@ function ZoneSection({
         )}
       </div>
 
-      {editable && offered.length > 0 && (
+      {/* Everything on offer is already here and the rest is not unlocked
+          yet. Saying so beats going on asking for a before that is already
+          there, which is what a picker with nothing else to fall back to
+          ends up doing. */}
+      {editable && coverage && nothingLeftToAdd(coverage, offered) ? (
+        <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+          <p>
+            {PHOTO_KIND_LABELS[
+              REQUIRED_STAGES.filter((stage) => offered.includes(stage)).at(-1) ?? "before"
+            ]}{" "}
+            is done for this zone.
+          </p>
+          {stagesAwaitingUnlock(coverage, offered).length > 0 && (
+            <p className="mt-0.5">
+              {stagesAwaitingUnlock(coverage, offered)
+                .map((stage) => PHOTO_KIND_LABELS[stage])
+                .join(" and ")}{" "}
+              {stagesAwaitingUnlock(coverage, offered).length === 1 ? "isn't" : "aren't"} available
+              yet. {lockedStageReason ?? "They unlock once the work starts."}
+            </p>
+          )}
+          <button
+            type="button"
+            className="mt-1 underline"
+            onClick={() => libraryRef.current?.click()}
+          >
+            Add another anyway
+          </button>
+          <input
+            ref={libraryRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              onUpload(e.target.files, kind);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      ) : null}
+
+      {editable && offered.length > 0 && !(coverage && nothingLeftToAdd(coverage, offered)) && (
         <>
           <div
             className={`mb-2 grid gap-1.5 ${
