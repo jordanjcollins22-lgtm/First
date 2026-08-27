@@ -282,6 +282,7 @@ export interface NotificationPreferences {
   proposal_responses: boolean;
   team_messages: boolean;
   walkthrough_requests: boolean;
+  schedule_requests: boolean;
   reminder_hours_before: number;
   created_at: string;
   updated_at: string;
@@ -292,7 +293,8 @@ export type NotificationKind =
   | "client_messages"
   | "proposal_responses"
   | "team_messages"
-  | "walkthrough_requests";
+  | "walkthrough_requests"
+  | "schedule_requests";
 
 /** How one person wants to hear about one group. "default" follows their
  * general Team group messages setting. */

@@ -139,6 +139,9 @@ export function NotificationSettings({
     // on a site waiting for you, and a manager who silently never opted in is
     // the exact failure this step exists to prevent.
     walkthroughRequests: preferences?.walkthrough_requests ?? true,
+    // Same reasoning: a crew standing in a finished garden waiting to be told
+    // whether they can start the next one. The answer is worthless tomorrow.
+    scheduleRequests: preferences?.schedule_requests ?? true,
     reminderHoursBefore: preferences?.reminder_hours_before ?? 24,
   });
   const [error, setError] = useState<string | null>(null);
@@ -246,6 +249,13 @@ export function NotificationSettings({
               hint="A crew is on site waiting for you to approve the work before they pack up."
               checked={form.walkthroughRequests}
               onChange={(next) => update({ walkthroughRequests: next })}
+              disabled={isPending || !form.smsEnabled}
+            />
+            <Toggle
+              label="Early start requests"
+              hint="A crew has finished for the day and wants to bring the next job forward."
+              checked={form.scheduleRequests}
+              onChange={(next) => update({ scheduleRequests: next })}
               disabled={isPending || !form.smsEnabled}
             />
             <Toggle

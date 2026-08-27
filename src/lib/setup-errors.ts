@@ -43,6 +43,7 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   rank_points: "0110_rank_grid.sql",
   proposal_objections: "0118_proposal_objections.sql",
   proposal_scope_requests: "0118_proposal_objections.sql",
+  early_start_requests: "0119_early_start_requests.sql",
 };
 
 /**

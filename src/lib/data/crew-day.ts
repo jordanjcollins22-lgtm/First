@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import type { CrewEvent, CrewEventKind, Stop } from "@/lib/crew-day";
+import { nextUp, type EarlyStartRequest, type UpcomingVisit } from "@/lib/early-start";
 
 export interface CrewDayData {
   profileId: string;
   day: string;
   stops: Stop[];
   events: CrewEvent[];
+  /** The next job booked for a later day, offered once today is finished. */
+  nextProject: UpcomingVisit | null;
+  /** The ask already sitting against that job, if there is one. */
+  earlyStart: EarlyStartRequest | null;
 }
 
 /** Today where the crew is, not where the server is. */
@@ -94,7 +99,96 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
       purpose: r.purpose,
     }));
 
-  return { profileId: profile.id, day, stops, events: readEvents(events) };
+  const crewEvents = readEvents(events);
+  const upcoming = await upcomingVisits(profile.id, day, myJobs);
+  const nextProject = nextUp({
+    today: day,
+    stops,
+    finishedJobIds: crewEvents.filter((e) => e.kind === "finished_job" && e.jobId).map((e) => e.jobId!),
+    upcoming,
+  });
+
+  return {
+    profileId: profile.id,
+    day,
+    stops,
+    events: crewEvents,
+    nextProject,
+    earlyStart: nextProject ? await latestRequest(nextProject.sessionId) : null,
+  };
+}
+
+/**
+ * Visits booked for this person after today.
+ *
+ * Bounded to the next few weeks: the crew are being offered something to do
+ * with this afternoon, and a job in November is not that. Reading the whole
+ * forward schedule to throw nearly all of it away would also mean this query
+ * grows with the business while its answer never does.
+ */
+async function upcomingVisits(
+  profileId: string,
+  day: string,
+  myJobs: Set<string>
+): Promise<UpcomingVisit[]> {
+  const supabase = await createClient();
+  const horizon = new Date(`${day}T00:00:00Z`);
+  horizon.setUTCDate(horizon.getUTCDate() + 28);
+
+  const { data } = await supabase
+    .from("job_work_sessions")
+    .select(
+      "id, job_id, starts_on, purpose, jobs(id, assigned_to, status, properties(address, customers(name)))"
+    )
+    .gt("starts_on", day)
+    .lte("starts_on", horizon.toISOString().slice(0, 10))
+    .not("status", "in", "(cancelled,done)")
+    .order("starts_on", { ascending: true });
+
+  type Row = {
+    id: string;
+    job_id: string;
+    starts_on: string;
+    purpose: string | null;
+    jobs: {
+      assigned_to: string | null;
+      status: string;
+      properties: { address: string; customers: { name: string } | null } | null;
+    } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[])
+    .filter((r) => myJobs.has(r.job_id) || r.jobs?.assigned_to === profileId)
+    .filter((r) => r.jobs?.status !== "cancelled" && r.jobs?.status !== "completed")
+    .map((r) => ({
+      jobId: r.job_id,
+      sessionId: r.id,
+      address: r.jobs?.properties?.address ?? "Address missing",
+      customerName: r.jobs?.properties?.customers?.name ?? "Client",
+      startsOn: r.starts_on,
+      purpose: r.purpose,
+    }));
+}
+
+/** The most recent ask against a visit — pending, approved or turned down. */
+async function latestRequest(sessionId: string): Promise<EarlyStartRequest | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("early_start_requests")
+    .select("id, session_id, status, requested_for, decline_reason")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+  return {
+    id: data.id,
+    sessionId: data.session_id,
+    status: data.status as EarlyStartRequest["status"],
+    requestedFor: data.requested_for,
+    declineReason: data.decline_reason,
+  };
 }
 
 function readEvents(rows: unknown): CrewEvent[] {

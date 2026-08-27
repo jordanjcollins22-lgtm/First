@@ -247,6 +247,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["payment_plan_instalments"]["Row"]>;
         Relationships: [];
       };
+      early_start_requests: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          session_id: string;
+          requested_by: string;
+          requested_for: string;
+          note: string | null;
+          status: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decline_reason: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["early_start_requests"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          session_id: string;
+          requested_by: string;
+          requested_for: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["early_start_requests"]["Row"]>;
+        Relationships: [];
+      };
       proposal_objections: {
         Row: {
           id: string;
@@ -840,6 +865,7 @@ export interface Database {
           proposal_responses: boolean;
           team_messages: boolean;
           walkthrough_requests: boolean;
+          schedule_requests: boolean;
           reminder_hours_before: number;
           created_at: string;
           updated_at: string;

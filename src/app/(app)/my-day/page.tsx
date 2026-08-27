@@ -4,6 +4,9 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
+import { NextUpCard } from "@/components/crew/next-up-card";
+import { EarlyStartQueue } from "@/components/crew/early-start-queue";
+import { pendingEarlyStarts } from "@/lib/data/early-start";
 import { TodayBoard } from "@/components/crew/today-board";
 import { ClockControl } from "@/components/crew/clock-control";
 import { myOpenEntry } from "@/lib/data/time-clock";
@@ -115,6 +118,13 @@ async function OfficeDay() {
     );
   }
 
+  // Loaded on its own and allowed to fail on its own: a queue that needs a
+  // migration should cost this panel, not the whole day.
+  const earlyStarts = await pendingEarlyStarts().catch((err) => {
+    console.error("Early start requests failed to load:", err);
+    return [];
+  });
+
   const { summary } = data;
   const nothing =
     data.evaluations.every((s) => s.rows.length === 0) && data.jobs.every((s) => s.rows.length === 0);
@@ -125,6 +135,10 @@ async function OfficeDay() {
       <p className="mb-4 text-muted-foreground">
         {profile.full_name || profile.email} — your clients and your jobs.
       </p>
+
+      {/* Above the tiles: the only thing on this page with a half-life. The
+          crew are standing in a finished garden waiting for an answer. */}
+      <EarlyStartQueue requests={earlyStarts} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile
@@ -267,6 +281,17 @@ async function CrewDay({ profile }: { profile: Profile }) {
         events={day.events}
         personName={profile.full_name || profile.email}
       />
+      {/* Below the board, not above it: this is what to do with the hours
+          left over once the board says the day is done. */}
+      <div className="mt-4">
+        <NextUpCard
+          today={day.day}
+          visit={day.nextProject}
+          existing={day.earlyStart}
+          stops={day.stops}
+          events={day.events}
+        />
+      </div>
     </div>
   );
 }
