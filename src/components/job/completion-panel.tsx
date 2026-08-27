@@ -2,11 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Camera, Check, CheckCircle2, ImagePlus, Loader2, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { adoptBeforesForJob } from "@/lib/actions/social-actions";
 import {
   attachJobPhoto,
   completeJob,
@@ -44,11 +46,19 @@ export function CompletionPanel({
   completedAt,
   completedByName,
   completionNotes,
+  evaluationBeforesAvailable = 0,
 }: {
   jobId: string;
   status: JobStatus;
   photos: JobPhotoWithUrl[];
   zones: ZoneRef[];
+  /**
+   * Zone photos on the evaluation that have not been taken as befores yet.
+   *
+   * Somebody already photographed this garden before anything was touched.
+   * Asking for a before while those are sitting there is asking twice.
+   */
+  evaluationBeforesAvailable?: number;
   /** Which stages this job is far enough along to accept. A during or after
    * photo of work nobody has started is a record of something that did not
    * happen. */
@@ -170,6 +180,10 @@ export function CompletionPanel({
           </span>
         )}
       </div>
+
+      {evaluationBeforesAvailable > 0 && (
+        <AdoptEvaluationBefores jobId={jobId} count={evaluationBeforesAvailable} />
+      )}
 
       {isDone && (
         <div className="mb-3 rounded-lg border border-emerald-600/40 bg-emerald-50/60 p-3 text-xs">
@@ -484,5 +498,51 @@ function PhotoTile({
         </button>
       )}
     </li>
+  );
+}
+
+/**
+ * Takes the evaluation's zone photos as this job's befores.
+ *
+ * Sits here rather than only on the marketing queue because here is where the
+ * question gets asked: an evaluator looking at "needs a before" on a job they
+ * photographed a fortnight ago should be able to answer it without leaving
+ * the page.
+ */
+function AdoptEvaluationBefores({ jobId, count }: { jobId: string; count: number }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="mb-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+      <p className="text-xs">
+        {count} photo{count === 1 ? "" : "s"} from the evaluation {count === 1 ? "is" : "are"} not
+        being used as a before yet.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        className="mt-2 h-7 text-xs"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await adoptBeforesForJob(jobId);
+            setFailed(!result.ok);
+            setMessage(result.message ?? null);
+            if (result.ok) router.refresh();
+          })
+        }
+      >
+        {pending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+        Use the evaluation photos as befores
+      </Button>
+      {message && (
+        <p className={`mt-1 text-xs ${failed ? "text-muted-foreground" : "text-emerald-700"}`}>
+          {message}
+        </p>
+      )}
+    </div>
   );
 }

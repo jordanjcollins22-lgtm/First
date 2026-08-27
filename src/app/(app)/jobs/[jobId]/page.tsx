@@ -12,6 +12,7 @@ import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
 import { listSocialPostsForJob } from "@/lib/data/social";
+import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
@@ -222,6 +223,14 @@ export default async function JobPage({
   // draft would block sign-off on scratch work.
   const photoZones = zones.map((zone) => ({ id: zone.id, name: zone.name }));
 
+  // Zone photos from the evaluation that are not already befores. Somebody
+  // photographed this garden before anything was touched, so asking for a
+  // before while those sit unused is asking twice.
+  const evaluationBeforesAvailable = notYetAdopted(
+    beforesFromZones(jobId, zones as unknown as ZoneLike[]),
+    photos.map((photo) => photo.path)
+  ).length;
+
   const zoneBreakdowns: InternalZoneBreakdown[] = zones.map((zone) => {
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
     const checklistAnswers = (def?.fields ?? [])
@@ -352,6 +361,7 @@ export default async function JobPage({
       {can.photoBefore.available || photos.length > 0 ? (
         <CompletionPanel
           jobId={jobId}
+          evaluationBeforesAvailable={evaluationBeforesAvailable}
           status={job.status}
           photos={photos}
           zones={photoZones}

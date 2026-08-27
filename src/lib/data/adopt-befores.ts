@@ -23,7 +23,17 @@ import {
  * Best-effort by design. A photo that will not copy must not stop an
  * evaluation being submitted.
  */
-export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<number> {
+export interface AdoptionResult {
+  /** How many were copied over. */
+  adopted: number;
+  /** How many were there to try. Zero means the evaluation had no zone photos. */
+  attempted: number;
+  /** Why the last failure failed, if any did. Reported rather than swallowed:
+   * "nothing to do" and "everything failed" look identical from a count. */
+  lastError: string | null;
+}
+
+export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<AdoptionResult> {
   const supabase = await createClient();
 
   const { data: design } = await supabase
@@ -32,10 +42,10 @@ export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<num
     .eq("job_id", jobId)
     .maybeSingle();
 
-  if (!design) return 0;
+  if (!design) return { adopted: 0, attempted: 0, lastError: null };
 
   const candidates = beforesFromZones(jobId, (design.zones ?? []) as unknown as ZoneLike[]);
-  if (candidates.length === 0) return 0;
+  if (candidates.length === 0) return { adopted: 0, attempted: 0, lastError: null };
 
   const { data: existing } = await supabase
     .from("job_photos")
@@ -46,7 +56,7 @@ export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<num
     candidates,
     ((existing ?? []) as { path: string }[]).map((row) => row.path)
   );
-  if (todo.length === 0) return 0;
+  if (todo.length === 0) return { adopted: 0, attempted: 0, lastError: null };
 
   const [profile, organizationId] = await Promise.all([
     getCurrentProfile().catch(() => null),
@@ -54,6 +64,8 @@ export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<num
   ]);
 
   let adopted = 0;
+  let lastError: string | null = null;
+
   for (const candidate of todo) {
     try {
       // The two buckets are separate — one is public working storage for the
@@ -62,12 +74,18 @@ export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<num
       const { data: blob, error: downloadError } = await supabase.storage
         .from("canvas-images")
         .download(candidate.sourcePath);
-      if (downloadError || !blob) continue;
+      if (downloadError || !blob) {
+        lastError = downloadError?.message ?? "the photo could not be read";
+        continue;
+      }
 
       const { error: uploadError } = await supabase.storage
         .from("job-photos")
         .upload(candidate.destPath, blob, { upsert: true, contentType: blob.type || "image/jpeg" });
-      if (uploadError) continue;
+      if (uploadError) {
+        lastError = uploadError.message;
+        continue;
+      }
 
       const { error: insertError } = await supabase.from("job_photos").insert({
         job_id: jobId,
@@ -79,13 +97,17 @@ export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<num
         caption: `From the evaluation — ${candidate.zoneName}`,
         uploaded_by: profile?.id ?? null,
       });
-      if (insertError) continue;
+      if (insertError) {
+        lastError = insertError.message;
+        continue;
+      }
 
       adopted++;
     } catch (err) {
       console.error("adopting an evaluation photo failed:", err);
+      lastError = err instanceof Error ? err.message : "something went wrong";
     }
   }
 
-  return adopted;
+  return { adopted, attempted: todo.length, lastError };
 }

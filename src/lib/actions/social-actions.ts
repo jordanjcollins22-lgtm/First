@@ -190,17 +190,30 @@ export async function adoptBeforesForJob(jobId: string): Promise<SocialResult> {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
 
-    const adopted = await adoptEvaluationPhotosAsBefores(jobId);
+    const { adopted, attempted, lastError } = await adoptEvaluationPhotosAsBefores(jobId);
 
     revalidatePath("/admin/social");
     revalidatePath(`/jobs/${jobId}`);
 
-    return adopted === 0
-      ? { ok: false, message: "No zone photos on that evaluation to use." }
-      : {
-          ok: true,
-          message: `Took ${adopted} evaluation photo${adopted === 1 ? "" : "s"} as befores.`,
-        };
+    if (adopted > 0) {
+      return {
+        ok: true,
+        message: `Took ${adopted} evaluation photo${adopted === 1 ? "" : "s"} as befores.`,
+      };
+    }
+
+    // "Nothing to do" and "everything failed" look identical from a count, so
+    // they are told apart here rather than both reported as an empty shrug.
+    if (attempted === 0) {
+      return { ok: false, message: "No zone photos on that evaluation to use." };
+    }
+
+    return {
+      ok: false,
+      message: `Found ${attempted} evaluation photo${attempted === 1 ? "" : "s"} but couldn't copy ${
+        attempted === 1 ? "it" : "them"
+      }${lastError ? `: ${lastError}` : "."}`,
+    };
   } catch (err) {
     console.error("adoptBeforesForJob failed:", err);
     return { ok: false, message: "Couldn't use those photos." };
