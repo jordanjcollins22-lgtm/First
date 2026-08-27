@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-type View = "tools" | "gear" | "materials" | "marketing";
+import { PageTabs } from "@/components/ui/page-tabs";
 
+/**
+ * Inventory's four lists.
+ *
+ * A thin naming of the shared tab strip rather than its own copy of one:
+ * two tab components in a codebase is two behaviours to keep in step, and
+ * they never stay in step.
+ */
 export function InventoryViewToggle({
   showTools,
   showMaterials,
@@ -23,38 +30,14 @@ export function InventoryViewToggle({
    * is never offered a business card. */
   marketingContent: ReactNode;
 }) {
-  const [view, setView] = useState<View>(showTools ? "tools" : "materials");
-
-  const tabs: { key: View; label: string; visible: boolean }[] = [
-    { key: "tools", label: "Tools", visible: showTools },
-    { key: "gear", label: "Crew Gear", visible: showTools },
-    { key: "materials", label: "Materials", visible: showMaterials },
-    { key: "marketing", label: "Marketing", visible: showMaterials },
-  ];
-  const visibleTabs = tabs.filter((tab) => tab.visible);
-
   return (
-    <div>
-      {visibleTabs.length > 1 && (
-        <div className="mb-6 inline-flex rounded-lg border border-border p-1">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setView(tab.key)}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-                view === tab.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-primary"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {showTools && <div className={view === "tools" ? "" : "hidden"}>{toolsContent}</div>}
-      {showTools && <div className={view === "gear" ? "" : "hidden"}>{gearContent}</div>}
-      {showMaterials && <div className={view === "materials" ? "" : "hidden"}>{materialsContent}</div>}
-      {showMaterials && <div className={view === "marketing" ? "" : "hidden"}>{marketingContent}</div>}
-    </div>
+    <PageTabs
+      tabs={[
+        { key: "tools", label: "Tools", content: toolsContent, visible: showTools },
+        { key: "gear", label: "Crew Gear", content: gearContent, visible: showTools },
+        { key: "materials", label: "Materials", content: materialsContent, visible: showMaterials },
+        { key: "marketing", label: "Marketing", content: marketingContent, visible: showMaterials },
+      ]}
+    />
   );
 }

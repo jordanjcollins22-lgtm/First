@@ -26,19 +26,18 @@ export const TABS: readonly TabDefinition[] = [
   { key: "team", label: "Team Database", href: "/admin/team" },
 
   // Added after the matrix existed.
-  { key: "proposals", label: "Proposals", href: "/proposals" },
-  { key: "contacts", label: "Contacts", href: "/contacts" },
+  { key: "proposals", label: "Proposals (Pipeline tab)", href: "/proposals" },
+  { key: "contacts", label: "Contacts (Pipeline tab)", href: "/contacts" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
   { key: "leads", label: "Lead Generation", href: "/leads" },
   { key: "conversations", label: "Conversations", href: "/conversations" },
-  { key: "notifications", label: "Notifications", href: "/notifications" },
-  { key: "weather", label: "Weather", href: "/weather" },
+  { key: "notifications", label: "Alerts (My Day tab)", href: "/notifications" },
+  { key: "weather", label: "Weather (Calendar tab)", href: "/weather" },
   { key: "knowledge-graph", label: "Knowledge Graph", href: "/knowledge-graph" },
 
   // Money and admin tooling — closed until somebody says otherwise.
   { key: "payments", label: "Money", href: "/admin/payments" },
-  { key: "journeys", label: "Journey Dashboard", href: "/admin/journeys" },
-  { key: "gambling", label: "Gambling (test)", href: "/gambling" },
+  { key: "journeys", label: "Journeys (Dashboard tab)", href: "/admin/journeys" },
 
   // Detail and sub-pages. Each still has its own guard; the checkbox layers
   // on top.
@@ -51,7 +50,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
-  { key: "organizations", label: "Organizations", href: "/admin/organizations" },
+  { key: "organizations", label: "Organizations (Settings tab)", href: "/admin/organizations" },
 ];
 
 export type TabKey = string;
@@ -66,17 +65,17 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +
     "no pricing on the page — the token is the whole of their access.",
-  "/admin/permissions": "This screen. Gated on the admin role directly so it can't be locked away.",
-  "/admin/database":
-    "Shows which migrations still need running. Gated on the admin role directly, not on a tab — " +
-    "the tab list lives in the database this page exists to repair.",
-  "/today":
-    "The crew's own day. Shows only the signed-in person's stops, so there is nothing to withhold — " +
-    "and gating it behind a tick is how somebody ends up in a yard with nothing to press.",
+  "/admin/permissions": "Redirects to Settings, where it is a tab.",
+  "/admin/settings":
+    "Permissions, database setup and organizations in one place. Gated on the admin role directly " +
+    "rather than on a tab — the tab list lives in the database these tabs exist to repair, and a " +
+    "page that could be locked away by the thing it fixes is a trap.",
+  "/admin/database": "Redirects to Settings, where it is a tab.",
+  "/today": "Redirects to My Day, which shows a crew member their own stops.",
   "/my-day":
-    "The account manager's own day. Same argument as Today: it shows the signed-in person their own " +
-    "clients and jobs and nobody else's, so there is nothing to withhold, and a tick could leave " +
-    "somebody with no screen to open.",
+    "Whoever is signed in, looking at their own work — stops for a crew member, clients and jobs " +
+    "for anybody else. It shows one person their own day and nobody else's, so there is nothing to " +
+    "withhold, and a tick could leave somebody with no screen to open.",
   "/jobs/[jobId]/directions":
     "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page — " +
     "it shows a property address, which anybody who can open the job can already see.",

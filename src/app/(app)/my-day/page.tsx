@@ -2,6 +2,10 @@ import Link from "next/link";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
+import { isFieldOnly } from "@/lib/affiliate-roles";
+import { getCrewDay } from "@/lib/data/crew-day";
+import { TodayBoard } from "@/components/crew/today-board";
+import type { Profile } from "@/types/domain";
 import { getDashboard, loadJobInputs } from "@/lib/data/dashboard";
 import { getCommissionFor } from "@/lib/data/commission";
 import { buildMyWork, type MyWork } from "@/lib/my-work";
@@ -11,6 +15,10 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
+import { PageTabs } from "@/components/ui/page-tabs";
+import { isTwilioConfigured } from "@/lib/env";
+import { getMyNotificationSettings } from "@/lib/data/notification-preferences";
+import { NotificationSettings } from "@/components/notifications/notification-settings";
 
 /**
  * One person's own work — whoever they are.
@@ -30,14 +38,37 @@ import { CommissionPanel } from "@/components/payments/commission-panel";
  * same five answers about themselves, and a second copy of this screen would
  * be a second thing to keep in step.
  *
- * Not tab-gated, for the same reason Today is not: it shows the signed-in
- * person their own work and nobody else's, so there is nothing here to
- * withhold, and putting it behind a tick is how somebody ends up with no
- * screen to open.
+ * Not tab-gated: it shows the signed-in person their own work and nobody
+ * else's, so there is nothing here to withhold, and putting it behind a tick
+ * is how somebody ends up with no screen to open.
+ *
+ * A crew member asking "what is on me" is asking about stops, not managed
+ * jobs and commission, so they get the crew's day here instead. Same
+ * question, same address, different answer — rather than two entries in the
+ * nav where only one of them was ever the right one for you.
  */
 export default async function MyDayPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
+  const viewer = await getCurrentProfile();
+  const day =
+    viewer && isFieldOnly(viewer.roles) ? <CrewDay profile={viewer} /> : await OfficeDay();
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
+      <PageTabs
+        tabs={[
+          { key: "day", label: "My Day", content: day },
+          // Personal settings on the personal screen. They were a nav entry
+          // of their own for something nobody opens twice a year.
+          { key: "alerts", label: "Alerts", content: await AlertsTab() },
+        ]}
+      />
+    </div>
+  );
+}
+
+async function OfficeDay() {
   const profile = await getCurrentProfile();
   if (!profile) {
     return (
@@ -189,6 +220,83 @@ function Tile({
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-xl font-bold tabular-nums">{value}</p>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * The crew's own day.
+ *
+ * Was its own page at /today. It is the same question this page answers —
+ * what is on me — asked by somebody whose answer is a list of stops rather
+ * than a list of jobs, so it lives here and /today redirects in.
+ */
+async function CrewDay({ profile }: { profile: Profile }) {
+  const day = await getCrewDay().catch(() => null);
+
+  if (!day) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-6">
+        <h1 className="mb-1 text-2xl font-bold">Today</h1>
+        <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
+          Couldn&apos;t load your day. If this is a fresh setup, run{" "}
+          <code>supabase/migrations/0082_crew_day.sql</code> and reload.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
+      <TodayBoard
+        stops={day.stops}
+        events={day.events}
+        personName={profile.full_name || profile.email}
+      />
+    </div>
+  );
+}
+
+/**
+ * What gets texted to you.
+ *
+ * Was its own page. Personal settings belong on the personal screen, not on
+ * a nav entry of their own for something nobody opens twice a year.
+ */
+async function AlertsTab() {
+  let settings: Awaited<ReturnType<typeof getMyNotificationSettings>> = null;
+  let migrationMissing = false;
+  try {
+    settings = await getMyNotificationSettings();
+  } catch {
+    migrationMissing = true;
+  }
+
+  if (migrationMissing) {
+    return (
+      <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
+        This needs its database migration run first. In Supabase&apos;s SQL Editor, run{" "}
+        <code>supabase/migrations/0067_notification_preferences.sql</code>, then reload.
+      </p>
+    );
+  }
+
+  if (!settings) {
+    return <p className="text-sm text-muted-foreground">Sign in to manage your alerts.</p>;
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <h1 className="mb-1 text-2xl font-bold">Alerts</h1>
+      <p className="mb-6 text-muted-foreground">
+        Choose what you want texted to you. These are your settings — nobody else&apos;s.
+      </p>
+      <NotificationSettings
+        preferences={settings.preferences}
+        phone={settings.phone}
+        smsConfigured={isTwilioConfigured}
+        channels={settings.channels}
+      />
     </div>
   );
 }

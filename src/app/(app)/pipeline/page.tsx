@@ -1,11 +1,17 @@
 import Link from "next/link";
 
 import { isSupabaseConfigured } from "@/lib/env";
-import { requireTab } from "@/lib/data/access";
+import { checkTabAccess, requireTab } from "@/lib/data/access";
+import { PageTabs } from "@/components/ui/page-tabs";
 import { getPipeline, type PipelineCard } from "@/lib/data/pipeline";
 import { STAGES, STAGE_STATUSES } from "@/lib/pipeline";
 import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { getCurrentProfile } from "@/lib/data/team";
+import { getContacts, type ContactsData } from "@/lib/data/contacts";
+import { ContactsManager } from "@/components/contacts/contacts-manager";
+import { listAllProposals } from "@/lib/data/all-proposals";
+import { ProposalsView } from "@/components/proposal/proposals-view";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -18,11 +24,48 @@ function formatDate(value: string): string {
   });
 }
 
-/** Every live job, in the stage it's actually in. */
+/**
+ * The sales funnel, on one page.
+ *
+ * Pipeline, proposals and contacts were three entries in the nav and three
+ * pages to remember. They are the same funnel looked at three ways — the
+ * jobs in flight, the quotes out on them, and the people they belong to — so
+ * they are three tabs now. Each one still checks its own permission, and the
+ * old addresses still work.
+ */
 export default async function PipelinePage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("pipeline", "/attractors");
 
+  const [proposalAccess, contactAccess] = await Promise.all([
+    checkTabAccess("proposals"),
+    checkTabAccess("contacts"),
+  ]);
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+      <PageTabs
+        tabs={[
+          { key: "pipeline", label: "Pipeline", content: await PipelineTab() },
+          {
+            key: "proposals",
+            label: "Proposals",
+            content: proposalAccess.allowed ? await ProposalsTab() : null,
+            visible: proposalAccess.allowed,
+          },
+          {
+            key: "contacts",
+            label: "Contacts",
+            content: contactAccess.allowed ? await ContactsTab() : null,
+            visible: contactAccess.allowed,
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+async function PipelineTab() {
   let cards: PipelineCard[] = [];
   try {
     cards = await getPipeline();
@@ -36,7 +79,7 @@ export default async function PipelinePage() {
   const needsAction = cards.filter((c) => c.actionable).length;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+    <div>
       <h1 className="mb-1 text-2xl font-bold">Pipeline</h1>
       <p className="mb-4 text-muted-foreground">
         Every live job, from going out to look at it through to finishing the work.
@@ -145,6 +188,58 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-xl font-bold tabular-nums">{value}</p>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * The quotes that are out.
+ *
+ * Was its own page; the heading stays so the tab still says what it is
+ * looking at, because a tab strip is a worse label than a sentence.
+ */
+async function ProposalsTab() {
+  const proposals = await listAllProposals();
+
+  return (
+    <div className="max-w-2xl">
+      <h1 className="mb-1 text-2xl font-bold">Proposals</h1>
+      <p className="mb-6 text-muted-foreground">
+        Proposals generate automatically once an evaluation is submitted — edit the price or scope,
+        then approve to send.
+      </p>
+      <ProposalsView proposals={proposals} />
+    </div>
+  );
+}
+
+/** Everyone in the book, and the records that look like one person twice. */
+async function ContactsTab() {
+  const profile = await getCurrentProfile();
+  // Merging is irreversible, so it stays with admins even where the page
+  // itself is open to more people.
+  const canMerge = Boolean(profile?.roles.includes("admin"));
+
+  let data: ContactsData = {
+    contacts: [],
+    duplicates: [],
+    pendingGeocodes: 0,
+    failedGeocodes: 0,
+    recentMerges: [],
+  };
+  try {
+    data = await getContacts();
+  } catch (err) {
+    console.error("Contacts failed to load:", err);
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <h1 className="mb-1 text-2xl font-bold">Contacts</h1>
+      <p className="mb-6 text-muted-foreground">
+        Everyone in the book, and any records that look like the same person entered twice.
+      </p>
+      <ContactsManager data={data} canMerge={canMerge} />
     </div>
   );
 }

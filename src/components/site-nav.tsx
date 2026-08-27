@@ -37,46 +37,36 @@ export function SiteNav({
   // Field-only people get one link. The rest of the app is for the office, and
   // a menu of seventeen things they cannot use is worse than no menu.
   const links = fieldOnly
-    ? [{ href: "/today", label: "Today" }]
+    ? [{ href: "/my-day", label: "My Day" }]
     : [
         ...(can("dashboard") ? [{ href: "/dashboard", label: "Dashboard" }] : []),
         // Never tab-gated: both of these show the signed-in person their own
         // work, so there is nothing a tick would be protecting.
         { href: "/my-day", label: "My Day" },
-        { href: "/today", label: "Today" },
         // ?new=1 because the root redirects admins to the dashboard, and this
         // is the link that has to get past that.
         ...(can("new-property") ? [{ href: "/?new=1", label: "New Estimate" }] : []),
         ...(can("project-data") ? [{ href: "/attractors", label: "Project Data" }] : []),
         ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
         ...(can("leads") ? [{ href: "/leads", label: "Lead Generation" }] : []),
-        ...(can("contacts") ? [{ href: "/contacts", label: "Contacts" }] : []),
-        ...(can("proposals") ? [{ href: "/proposals", label: "Proposals" }] : []),
         ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
         ...(can("evaluations") ? [{ href: "/evaluations", label: "Calendar" }] : []),
-        ...(can("weather") ? [{ href: "/weather", label: "Weather" }] : []),
         ...(can("knowledge-graph") ? [{ href: "/knowledge-graph", label: "Knowledge Graph" }] : []),
-        ...(can("notifications") ? [{ href: "/notifications", label: "Notifications" }] : []),
         ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
         ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
         // Overhead folded in here as a tab, so one link covers all of it.
         ...(can("payments") || roles.includes("overhead")
           ? [{ href: "/admin/payments", label: "Money" }]
           : []),
-        ...(can("gambling") ? [{ href: "/gambling", label: "Gambling (test)" }] : []),
-        ...(can("journeys") ? [{ href: "/admin/journeys", label: "Journey Dashboard" }] : []),
         // Gated on the admin role itself, never on the table it edits —
         // otherwise one stray uncheck would take away the way back in.
         ...(roles.includes("admin")
           ? [
-              { href: "/admin/permissions", label: "Permissions" },
-              { href: "/admin/database", label: "Database setup" },
+              { href: "/admin/settings", label: "Settings" },
             ]
           : []),
-        // Superadmin, decided by account rather than by role.
-        ...(userEmail?.toLowerCase() === "jordan@jslandscapingmd.com"
-          ? [{ href: "/admin/organizations", label: "Organizations" }]
-          : []),
+        // Organizations is a tab on Settings now, shown only to the one
+        // account that can reach it — so it needs no nav entry of its own.
       ];
 
   useEffect(() => {
