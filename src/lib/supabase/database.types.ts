@@ -193,6 +193,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
         Relationships: [];
       };
+      job_photo_marks: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          photo_id: string;
+          x: number;
+          y: number;
+          note: string;
+          created_by: string | null;
+          created_at: string;
+          resolved_at: string | null;
+          resolved_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_photo_marks"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          photo_id: string;
+          x: number;
+          y: number;
+          note: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_photo_marks"]["Row"]>;
+        Relationships: [];
+      };
       time_entries: {
         Row: {
           id: string;
@@ -476,6 +501,8 @@ export interface Database {
           cancelled_at: string | null;
           cancellation_reason: string | null;
           completed_at: string | null;
+          photos_approved_at: string | null;
+          photos_approved_by: string | null;
           completed_by: string | null;
           completion_notes: string | null;
           created_at: string;

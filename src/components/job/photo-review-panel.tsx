@@ -1,0 +1,336 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Check, ClipboardCheck, Loader2, Trash2, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  addPhotoMark,
+  approvePhotos,
+  removePhotoMark,
+  resolvePhotoMark,
+} from "@/lib/actions/photo-review-actions";
+import {
+  canApprove,
+  describeStatus,
+  marksOnPhoto,
+  openMarks,
+  readyForWalkthrough,
+  reviewStatus,
+  summarise,
+  type PhotoMark,
+} from "@/lib/photo-review";
+import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
+
+interface PhotoReviewPanelProps {
+  jobId: string;
+  /** The after shots — what the manager is being asked to sign off. */
+  photos: JobPhotoWithUrl[];
+  marks: PhotoMark[];
+  crewSignedOff: boolean;
+  approvedAt: string | null;
+  approvedByName: string | null;
+  /** Managers mark and approve; the crew see the list and clear it. */
+  canReview: boolean;
+}
+
+/**
+ * The manager's check on the finished work.
+ *
+ * Tap a photo where something needs doing and say what — the note is asked
+ * for in the same breath as the pin, because a pin somebody meant to explain
+ * later is a pin nobody can act on.
+ *
+ * Approval is blocked while anything is outstanding. Booking a client
+ * walkthrough over an unfinished punch list is how a customer gets shown the
+ * one bed nobody went back to.
+ */
+export function PhotoReviewPanel({
+  jobId,
+  photos,
+  marks,
+  crewSignedOff,
+  approvedAt,
+  approvedByName,
+  canReview,
+}: PhotoReviewPanelProps) {
+  const router = useRouter();
+  const [placing, setPlacing] = useState<{ photo: JobPhotoWithUrl; x: number; y: number } | null>(
+    null
+  );
+  const [message, setMessage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const status = reviewStatus({ crewSignedOff, marks, approvedAt });
+  const outstanding = openMarks(marks);
+
+  if (status === "not_ready") return null;
+
+  function run(work: () => Promise<{ ok: boolean; message?: string }>) {
+    setMessage(null);
+    startTransition(async () => {
+      const result = await work();
+      setFailed(!result.ok);
+      setMessage(result.message ?? null);
+      if (result.ok) router.refresh();
+    });
+  }
+
+  return (
+    <section className="mt-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+          <ClipboardCheck className="h-4 w-4" />
+          Photo review
+        </h2>
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+            status === "approved"
+              ? "border-emerald-600/40 bg-emerald-50 text-emerald-800"
+              : status === "changes_requested"
+                ? "border-amber-500/50 bg-amber-50 text-amber-800"
+                : "border-border bg-secondary/60 text-muted-foreground"
+          }`}
+        >
+          {summarise(marks)}
+        </span>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        {describeStatus(status)}
+        {status === "approved" && approvedByName && ` Signed off by ${approvedByName}.`}
+      </p>
+
+      {readyForWalkthrough(status) && (
+        <p className="mb-3 rounded-lg border border-emerald-600/40 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">
+          The work is signed off. Book the walkthrough with the client from the schedule panel above.
+        </p>
+      )}
+
+      {photos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No after photos to look at yet.</p>
+      ) : (
+        <>
+          {canReview && (
+            <p className="mb-2 text-xs text-muted-foreground">
+              Tap a photo where something needs doing.
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {photos.map((photo) => (
+              <ReviewPhoto
+                key={photo.id}
+                photo={photo}
+                marks={marksOnPhoto(marks, photo.id)}
+                canReview={canReview}
+                onPlace={(x, y) => setPlacing({ photo, x, y })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {outstanding.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-sm font-semibold">What still needs doing</h3>
+          <ol className="space-y-1">
+            {outstanding.map((mark, index) => (
+              <li
+                key={mark.id}
+                className="flex items-start gap-2 rounded-lg border border-amber-500/50 bg-amber-50/50 px-2 py-1.5 text-sm"
+              >
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-destructive text-[11px] font-bold text-white">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {mark.note}
+                  {mark.authorName && (
+                    <span className="text-muted-foreground"> — {mark.authorName}</span>
+                  )}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-1.5 text-xs"
+                  disabled={pending}
+                  title="The crew have been back and done this"
+                  onClick={() => run(() => resolvePhotoMark(jobId, mark.id))}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+                {canReview && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5"
+                    disabled={pending}
+                    title="Take this mark back"
+                    onClick={() => run(() => removePhotoMark(jobId, mark.id))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {message && (
+        <p
+          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+            failed ? "bg-amber-500/15 text-amber-800" : "bg-emerald-500/15 text-emerald-700"
+          }`}
+        >
+          {message}
+        </p>
+      )}
+
+      {canReview && status !== "approved" && (
+        <Button
+          type="button"
+          className="mt-3"
+          disabled={pending || !canApprove(marks)}
+          title={canApprove(marks) ? undefined : "Clear the touch-ups first"}
+          onClick={() => run(() => approvePhotos(jobId))}
+        >
+          {pending ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Check className="mr-2 h-4 w-4" />
+          )}
+          Looks right — approve
+        </Button>
+      )}
+
+      {placing && (
+        <MarkDialog
+          onCancel={() => setPlacing(null)}
+          onSave={(note) =>
+            run(async () => {
+              const result = await addPhotoMark({
+                jobId,
+                photoId: placing.photo.id,
+                x: placing.x,
+                y: placing.y,
+                note,
+              });
+              if (result.ok) setPlacing(null);
+              return result;
+            })
+          }
+          pending={pending}
+        />
+      )}
+    </section>
+  );
+}
+
+function ReviewPhoto({
+  photo,
+  marks,
+  canReview,
+  onPlace,
+}: {
+  photo: JobPhotoWithUrl;
+  marks: PhotoMark[];
+  canReview: boolean;
+  onPlace: (x: number, y: number) => void;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border">
+      {/* Natural aspect, never cropped: a marker is a fraction of the image,
+          and once the image is cropped a fraction of the container is
+          somewhere else entirely. */}
+      <button
+        type="button"
+        disabled={!canReview}
+        className="block w-full"
+        onClick={(event) => {
+          if (!canReview) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          onPlace((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+        }}
+      >
+        {photo.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo.url} alt={photo.zone_name ?? "After"} className="block w-full" />
+        ) : (
+          <span className="flex h-40 items-center justify-center text-xs text-muted-foreground">
+            No preview
+          </span>
+        )}
+      </button>
+
+      {marks.map((mark, index) => (
+        <span
+          key={mark.id}
+          style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }}
+          className="pointer-events-none absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-destructive text-[9px] font-bold text-white shadow-md"
+        >
+          {index + 1}
+        </span>
+      ))}
+
+      <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 text-[10px] font-semibold text-white">
+        {photo.zone_name ?? "Whole job"}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * What the pin means.
+ *
+ * Asked the moment the pin lands. A note somebody meant to write later is a
+ * pin nobody can act on, so the mark does not exist until there is one.
+ */
+function MarkDialog({
+  onSave,
+  onCancel,
+  pending,
+}: {
+  onSave: (note: string) => void;
+  onCancel: () => void;
+  pending: boolean;
+}) {
+  const [note, setNote] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
+        <h2 className="text-lg font-semibold">What needs doing here?</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          What is wrong, and what the crew have to do about it.
+        </p>
+
+        <Textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="Bed edge collapsed at the corner — re-cut and pack it."
+        />
+
+        <div className="mt-3 flex gap-2">
+          <Button
+            type="button"
+            className="flex-1"
+            disabled={pending || !note.trim()}
+            onClick={() => onSave(note)}
+          >
+            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Send to the crew
+          </Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

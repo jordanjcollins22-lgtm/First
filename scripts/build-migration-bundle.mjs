@@ -59,6 +59,7 @@ const CREATES = {
   "0111_canvas_marks.sql": [],
   "0112_photo_waivers.sql": ["job_photo_waivers"],
   "0113_time_clock.sql": ["time_entries"],
+  "0114_photo_review.sql": ["job_photo_marks"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

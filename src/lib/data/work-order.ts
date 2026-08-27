@@ -8,6 +8,8 @@ import { withoutEmpty, type CanvasMark } from "@/lib/canvas-marks";
 import type { WorkZone } from "@/components/canvas/types";
 import { listJobPhotos, type JobPhotoWithUrl } from "@/lib/data/job-photos";
 import { listPhotoWaivers } from "@/lib/data/photo-waivers";
+import { listPhotoMarks } from "@/lib/data/photo-review";
+import type { PhotoMark } from "@/lib/photo-review";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { getProposalForJob } from "@/lib/data/proposals";
 import { capabilities } from "@/lib/job-stage";
@@ -25,6 +27,9 @@ export interface WorkOrderPageData {
    */
   photos: JobPhotoWithUrl[];
   photoZones: ZoneRef[];
+  /** The manager's punch list, so the crew can see it and clear it. */
+  photoMarks: PhotoMark[];
+  photosApprovedAt: string | null;
   waivers: PhotoWaiver[];
   jobStatus: JobStatus;
   allowDuring: boolean;
@@ -62,7 +67,7 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
   const { data: jobRow } = await supabase
     .from("jobs")
     .select(
-      "id, job_number, name, status, property_id, evaluation_status, evaluation_date, completed_at, completion_notes, completed_by, property:properties(address, customers(name))"
+      "id, job_number, name, status, property_id, evaluation_status, evaluation_date, completed_at, completion_notes, completed_by, photos_approved_at, property:properties(address, customers(name))"
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -78,16 +83,18 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     completed_at: string | null;
     completion_notes: string | null;
     completed_by: string | null;
+    photos_approved_at: string | null;
     property: { address: string; customers: { name: string } | null } | null;
   } | null;
   if (!job) return null;
 
-  const [catalog, design, ownerRes, photos, waivers, schedule, proposal] = await Promise.all([
+  const [catalog, design, ownerRes, photos, waivers, photoMarks, schedule, proposal] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
     supabase.from("properties").select("customers(account_manager_id)").eq("id", job.property_id).maybeSingle(),
     listJobPhotos(jobId).catch(() => []),
     listPhotoWaivers(jobId).catch(() => []),
+    listPhotoMarks(jobId).catch(() => []),
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     getProposalForJob(jobId).catch(() => null),
   ]);
@@ -134,6 +141,8 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
   return {
     photos,
     photoZones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
+    photoMarks,
+    photosApprovedAt: job.photos_approved_at,
     waivers,
     jobStatus: job.status,
     allowDuring: can.photoDuring.available,

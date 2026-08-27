@@ -13,6 +13,9 @@ import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
 import { listSocialPostsForJob } from "@/lib/data/social";
 import { listPhotoWaivers } from "@/lib/data/photo-waivers";
+import { listPhotoMarks } from "@/lib/data/photo-review";
+import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
+import { isAccountManager as isManagerRole } from "@/lib/affiliate-roles";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
@@ -85,6 +88,8 @@ export default async function JobPage({
     completed_at: string | null;
     completed_by: string | null;
     completion_notes: string | null;
+    photos_approved_at: string | null;
+    photos_approved_by: string | null;
     client_notes: string | null;
     budget_range: string | null;
     property: { address: string; lat: number; lng: number; customers: { name: string } | null } | null;
@@ -103,6 +108,7 @@ export default async function JobPage({
     photos,
     socialPosts,
     photoWaivers,
+    photoMarks,
     schedule,
     crew,
     teamProfiles,
@@ -124,6 +130,8 @@ export default async function JobPage({
     listSocialPostsForJob(jobId).catch(() => []),
     // Empty until migration 0112 runs; the panel just asks for every stage.
     listPhotoWaivers(jobId).catch(() => []),
+    // Empty until migration 0114 runs; the panel simply does not appear.
+    listPhotoMarks(jobId).catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
@@ -230,6 +238,15 @@ export default async function JobPage({
   // Zone photos from the evaluation that are not already befores. Somebody
   // photographed this garden before anything was touched, so asking for a
   // before while those sit unused is asking twice.
+  // Managers mark and approve; anybody else on the job sees the list and
+  // can clear it. Admins can do both, because somebody has to be able to.
+  const canReviewPhotos = Boolean(
+    viewer && (viewer.roles.includes("admin") || isManagerRole(viewer.roles))
+  );
+  const photosApprovedByName = job.photos_approved_by
+    ? teamProfiles.find((p) => p.id === job.photos_approved_by)?.full_name ?? null
+    : null;
+
   const evaluationBeforesAvailable = notYetAdopted(
     beforesFromZones(jobId, zones as unknown as ZoneLike[]),
     photos.map((photo) => photo.path)
@@ -387,6 +404,18 @@ export default async function JobPage({
       )}
 
       {/* What went out about this job, once somebody approved it going out. */}
+      {/* The manager's check on the finished work, before the client sees
+          it. Nobody senior has been back since the crew signed off. */}
+      <PhotoReviewPanel
+        jobId={jobId}
+        photos={photos.filter((photo) => photo.kind === "after")}
+        marks={photoMarks}
+        crewSignedOff={job.status === "completed"}
+        approvedAt={job.photos_approved_at ?? null}
+        approvedByName={photosApprovedByName}
+        canReview={canReviewPhotos}
+      />
+
       <BeforeAfterPanel posts={socialPosts} />
 
       {/* Sits above Visits because on a live job it is the thing holding

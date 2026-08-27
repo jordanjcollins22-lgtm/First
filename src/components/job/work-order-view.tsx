@@ -5,6 +5,8 @@ import type { CanvasMark } from "@/lib/canvas-marks";
 import { SiteMapImage } from "@/components/proposal/site-map-image";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { CompletionPanel } from "@/components/job/completion-panel";
+import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
+import type { PhotoMark } from "@/lib/photo-review";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
 import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { JobStatus } from "@/types/domain";
@@ -37,6 +39,8 @@ export function WorkOrderView({
   marks,
   photos,
   photoZones,
+  photoMarks,
+  photosApprovedAt,
   waivers,
   jobStatus,
   allowDuring,
@@ -64,6 +68,8 @@ export function WorkOrderView({
   marks: CanvasMark[];
   photos: JobPhotoWithUrl[];
   photoZones: ZoneRef[];
+  photoMarks: PhotoMark[];
+  photosApprovedAt: string | null;
   waivers: PhotoWaiver[];
   jobStatus: JobStatus;
   allowDuring: boolean;
@@ -230,6 +236,19 @@ export function WorkOrderView({
           taken — the sheet could show the evaluation's pictures and take
           none of its own, which left the people doing the work with no way
           to record it. */}
+      {/* The manager's punch list, where the crew are standing. They cannot
+          mark or approve — that is the point of the step — but they can see
+          what came back and tick it off. */}
+      <PhotoReviewPanel
+        jobId={jobId}
+        photos={photos.filter((photo) => photo.kind === "after")}
+        marks={photoMarks}
+        crewSignedOff={jobStatus === "completed"}
+        approvedAt={photosApprovedAt}
+        approvedByName={null}
+        canReview={false}
+      />
+
       <CompletionPanel
         jobId={jobId}
         status={jobStatus}
