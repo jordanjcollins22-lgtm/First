@@ -10,29 +10,7 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 import Link from "next/link";
-import {
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  Home,
-  ImageUp,
-  Loader2,
-  Lock,
-  Maximize2,
-  Minimize2,
-  MousePointer2,
-  PenTool,
-  RotateCcw,
-  Route,
-  Ruler,
-  Satellite,
-  StickyNote,
-  Trash2,
-  Undo2,
-  Unlock,
-  Wrench,
-} from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, ZoomIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +19,15 @@ import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
+import {
+  canStepMapZoom,
+  clampScale,
+  distanceBetween,
+  pinchScale,
+  stepMapZoom,
+  zoomBounds,
+  zoomPercent,
+} from "@/lib/canvas-zoom";
 import { nearbyRoads } from "@/lib/mapbox-roads";
 import { drawFrontTarget } from "@/lib/canvas-front-target";
 import {
@@ -162,6 +149,13 @@ export function ImageCanvasBoard({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  /** Every finger currently on the board, in screen coordinates. */
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  /** Where a two-finger pinch began, so the zoom is measured from there and
+   * cannot drift the way a frame-by-frame ratio does. */
+  const pinchRef = useRef<{ startScale: number; startDistance: number; bounds: { min: number; max: number } } | null>(
+    null
+  );
   const loadedRef = useRef(false);
   const uploadedImagePathRef = useRef<string | null>(null);
   const imageDirtyRef = useRef(false);
@@ -185,6 +179,9 @@ export function ImageCanvasBoard({
   // evaluator can nudge the turn and get a fresh, full-frame photo back
   // rather than a rotated one with white corners.
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
+  /** How far out the satellite photo was asked for. Stepping this fetches a
+   * genuinely wider picture, which is the only way to see past its edge. */
+  const [mapZoom, setMapZoom] = useState(BASE_SATELLITE_ZOOM);
   const [bearing, setBearing] = useState(0);
   const [orientConfirmed, setOrientConfirmed] = useState(true);
   const [keepCentered, setKeepCentered] = useState(true);
@@ -393,7 +390,19 @@ export function ImageCanvasBoard({
                 blob,
                 x: initialDesign.image_x,
                 y: initialDesign.image_y,
-                scale: initialDesign.image_scale,
+                // Clamped on the way in. A design saved before the photo had
+                // to cover the board can hold a scale that shows white in the
+                // corners the moment it is turned, and reopening an old
+                // evaluation is not the place to discover that.
+                scale: clampScale(
+                  initialDesign.image_scale,
+                  zoomBounds({
+                    imageWidth: element.width,
+                    imageHeight: element.height,
+                    canvasWidth: CANVAS_WIDTH,
+                    canvasHeight: CANVAS_HEIGHT,
+                  })
+                ),
                 rotation: initialDesign.image_rotation,
                 realWidthFeet: initialDesign.image_real_width_feet,
               });
@@ -631,7 +640,8 @@ export function ImageCanvasBoard({
   async function fetchSatelliteImageBlob(
     lng: number,
     lat: number,
-    mapBearing = 0
+    mapBearing = 0,
+    baseZoom = BASE_SATELLITE_ZOOM
   ): Promise<{ blob: Blob; realWidthFeet: number }> {
     // Mapbox requires its logo/attribution on static images, anchored to the
     // bottom edge. Fetch extra vertical padding, split evenly so the requested
@@ -648,7 +658,7 @@ export function ImageCanvasBoard({
     // Scaling up to fill the corners means seeing less ground, so the photo is
     // fetched from further out by exactly that much. The badge then reads
     // about the same as it always did.
-    const zoom = BASE_SATELLITE_ZOOM - zoomAdjustmentFor(
+    const zoom = baseZoom - zoomAdjustmentFor(
       coverScale(request, keptHeight, CANVAS_WIDTH, CANVAS_HEIGHT)
     );
 
@@ -726,9 +736,11 @@ export function ImageCanvasBoard({
       const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
         suggestion.lng,
         suggestion.lat,
-        turned
+        turned,
+        BASE_SATELLITE_ZOOM
       );
       await loadImageBlob(blob, realWidthFeet);
+      setMapZoom(BASE_SATELLITE_ZOOM);
       setOrigin(point);
       setBearing(turned);
       setOrientConfirmed(false);
@@ -743,6 +755,40 @@ export function ImageCanvasBoard({
       setHouseNeedsConfirmation(true);
     } catch (err) {
       setSatelliteError(err instanceof Error ? err.message : "Couldn't load a satellite photo.");
+    } finally {
+      setSatelliteLoading(false);
+    }
+  }
+
+  /**
+   * Fetch the same spot from further out, or closer in.
+   *
+   * Scaling the photo cannot show what is not in it, so wanting to see the
+   * neighbour's fence means a new photo. The bearing is kept, because a photo
+   * requested at a bearing fills its frame and one rotated afterwards does
+   * not — that is the whole reason the turn happens at the map.
+   */
+  async function refetchAtZoom(nextZoom: number) {
+    if (!origin || satelliteLoading) return;
+    setSatelliteError(null);
+    setSatelliteLoading(true);
+    try {
+      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
+        origin.lng,
+        origin.lat,
+        bearing,
+        nextZoom
+      );
+      await loadImageBlob(blob, realWidthFeet);
+      setMapZoom(nextZoom);
+      // Straight back to the middle: the new photo is centred on the same
+      // point, and keeping a drag offset from the old one would put the house
+      // somewhere it never was.
+      recenterImage();
+    } catch (err) {
+      setSatelliteError(
+        err instanceof Error ? err.message : "Couldn't load a wider satellite photo."
+      );
     } finally {
       setSatelliteLoading(false);
     }
@@ -799,6 +845,24 @@ export function ImageCanvasBoard({
     const canvas = e.currentTarget;
     const point = toCanvasPoint(e.clientX, e.clientY, canvas);
 
+    // Track fingers regardless of tool: a pinch has to work while the zone
+    // tool is selected too, or zooming in to draw accurately means switching
+    // tools first and losing the half-drawn outline.
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2 && image && !locked) {
+      const [a, b] = [...pointersRef.current.values()];
+      pinchRef.current = {
+        startScale: image.scale,
+        startDistance: distanceBetween(a, b),
+        bounds: boundsFor(image.element),
+      };
+      // A second finger cancels whatever the first one had started. Otherwise
+      // the drag carries on underneath the pinch and the photo slides away.
+      dragRef.current = null;
+      setDrawingPoints([]);
+      return;
+    }
+
     if (tool === "house") {
       placeHouseMarker(point);
       return;
@@ -840,6 +904,25 @@ export function ImageCanvasBoard({
   function handlePointerMove(e: PointerEvent<HTMLCanvasElement>) {
     const point = toCanvasPoint(e.clientX, e.clientY, e.currentTarget);
 
+    // A pinch beats everything else on the board. Two fingers down is never
+    // an attempt to draw a zone, and treating the second one as a drag is how
+    // the photo shoots across the screen while somebody is zooming.
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinchRef.current && pointersRef.current.size >= 2) {
+        const [a, b] = [...pointersRef.current.values()];
+        setScale(
+          pinchScale({
+            startScale: pinchRef.current.startScale,
+            startDistance: pinchRef.current.startDistance,
+            distance: distanceBetween(a, b),
+            bounds: pinchRef.current.bounds,
+          })
+        );
+        return;
+      }
+    }
+
     if (tool === "house" || tool === "note") return;
 
     if (tool === "zone" || tool === "property-line") {
@@ -855,13 +938,31 @@ export function ImageCanvasBoard({
     });
   }
 
-  function handlePointerUp() {
+  function handlePointerUp(e: PointerEvent<HTMLCanvasElement>) {
     dragRef.current = null;
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
   }
 
   function handleScaleSliderChange(e: ChangeEvent<HTMLInputElement>) {
+    setScale(Number(e.target.value));
+  }
+
+  /** The zoom range for a given photo on this board. */
+  function boundsFor(element: HTMLImageElement) {
+    return zoomBounds({
+      imageWidth: element.width,
+      imageHeight: element.height,
+      canvasWidth: CANVAS_WIDTH,
+      canvasHeight: CANVAS_HEIGHT,
+    });
+  }
+
+  /** Zoom the photo, never past the point where the corners go white. */
+  function setScale(next: number) {
     if (locked || !image) return;
-    setImage({ ...image, scale: Number(e.target.value) });
+    setImage({ ...image, scale: clampScale(next, boundsFor(image.element)) });
+    imageDirtyRef.current = true;
   }
 
   function handleRotationChange(e: ChangeEvent<HTMLInputElement>) {
@@ -904,7 +1005,17 @@ export function ImageCanvasBoard({
     imageDirtyRef.current = true;
   }
 
-  const maxScale = image ? Math.max(1, Math.min(4, (CANVAS_WIDTH * 2) / image.element.width)) : 1;
+  // The floor is the scale that still covers the board at any angle. Dragging
+  // below it is how the white corners come back, which is the one thing this
+  // board is not allowed to show.
+  const bounds = image
+    ? zoomBounds({
+        imageWidth: image.element.width,
+        imageHeight: image.element.height,
+        canvasWidth: CANVAS_WIDTH,
+        canvasHeight: CANVAS_HEIGHT,
+      })
+    : { min: 1, max: 1 };
   const dialogZone = zones.find((zone) => zone.id === serviceDialogZoneId) ?? null;
 
   // Guided, one-thing-at-a-time setup flow: image -> house -> property line,
@@ -1014,6 +1125,71 @@ export function ImageCanvasBoard({
             </div>
             {satelliteLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
+
+          {image && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Zoom</span>
+                <span className="font-medium tabular-nums text-foreground">
+                  {zoomPercent(image.scale, bounds)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={bounds.min}
+                max={bounds.max}
+                step={0.001}
+                value={image.scale}
+                onChange={handleScaleSliderChange}
+                aria-label="Zoom the photo"
+                className="h-8 w-full accent-primary"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">
+                  Or pinch the photo. 100% is the whole picture.
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 shrink-0 px-2 text-xs"
+                  onClick={() => setScale(bounds.min)}
+                >
+                  Fit
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Zooming out stops at the whole photo, because there is no more
+              photo — seeing further needs a wider one from the map. */}
+          {origin && (
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs text-muted-foreground">Show more ground</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                disabled={satelliteLoading || !canStepMapZoom(mapZoom, -1)}
+                onClick={() => refetchAtZoom(stepMapZoom(mapZoom, -1))}
+              >
+                <Minus className="h-3.5 w-3.5" />
+                Wider
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                disabled={satelliteLoading || !canStepMapZoom(mapZoom, 1)}
+                onClick={() => refetchAtZoom(stepMapZoom(mapZoom, 1))}
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+                Closer
+              </Button>
+            </div>
+          )}
 
           <label className="flex items-center gap-2 text-xs">
             <input
@@ -1410,8 +1586,8 @@ export function ImageCanvasBoard({
             <span className="w-14 shrink-0 text-sm text-muted-foreground">Scale</span>
             <input
               type="range"
-              min={0.1}
-              max={maxScale}
+              min={bounds.min}
+              max={bounds.max}
               step={0.01}
               value={image.scale}
               onChange={handleScaleSliderChange}
