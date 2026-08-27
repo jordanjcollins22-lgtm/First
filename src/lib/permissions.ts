@@ -49,6 +49,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup" },
   { key: "labels", label: "Labels & Codes", href: "/admin/labels" },
   { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
+  { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
 ];
 

@@ -165,6 +165,33 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["knowledge_relationships"]["Row"]>;
         Relationships: [];
       };
+      social_posts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          before_photo_id: string | null;
+          after_photo_id: string | null;
+          zone_id: string | null;
+          zone_name: string | null;
+          image_path: string | null;
+          caption: string | null;
+          status: string;
+          scheduled_for: string | null;
+          posted_at: string | null;
+          channel: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["social_posts"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
+        Relationships: [];
+      };
       flyer_ad_spots: {
         Row: {
           id: string;

@@ -11,6 +11,7 @@ import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
+import { listSocialPostsForJob } from "@/lib/data/social";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
@@ -24,6 +25,7 @@ import { CallClientButton } from "@/components/job/call-client-button";
 import { InvoicePanel } from "@/components/job/invoice-panel";
 import { SchedulePanel } from "@/components/job/schedule-panel";
 import { CompletionPanel } from "@/components/job/completion-panel";
+import { BeforeAfterPanel } from "@/components/marketing/before-after-panel";
 import { VisitsPanel } from "@/components/job/visits-panel";
 import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
@@ -97,6 +99,7 @@ export default async function JobPage({
     externalMessages,
     discounts,
     photos,
+    socialPosts,
     schedule,
     crew,
     teamProfiles,
@@ -115,6 +118,7 @@ export default async function JobPage({
     listDiscounts(),
     // Empty until migration 0078 runs, so the rest of the page still loads.
     listJobPhotos(jobId).catch(() => []),
+    listSocialPostsForJob(jobId).catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
@@ -365,6 +369,9 @@ export default async function JobPage({
           reason={can.photoBefore.available ? "" : can.photoBefore.reason}
         />
       )}
+
+      {/* What went out about this job, once somebody approved it going out. */}
+      <BeforeAfterPanel posts={socialPosts} />
 
       {/* Sits above Visits because on a live job it is the thing holding
           everything else up. */}

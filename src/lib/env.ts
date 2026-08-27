@@ -30,6 +30,10 @@ export const env = {
   livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
   livekitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+  // Where an approved post is handed off to be published — Zapier, Make,
+  // Buffer, anything that takes a JSON body. Unset means posts still get a
+  // time, they just wait for somebody to press send.
+  socialWebhookUrl: process.env.SOCIAL_WEBHOOK_URL ?? "",
 };
 
 export function assertSupabaseConfigured() {
