@@ -250,8 +250,8 @@ function HangerHalf({
  * logo through it.
  *
  * One line, not a slot. No paper comes out — the hanger opens along the cut
- * and closes behind the handle — and it runs down the side of the hole rather
- * than through the middle of it.
+ * and closes behind the handle — and it runs sideways out of the hole to the
+ * edge, so the hanger goes onto the handle from the side.
  */
 function DieLineOverlay({ face }: { face: HangerFace }) {
   const line = dieLine(face);
@@ -273,11 +273,11 @@ function DieLineOverlay({ face }: { face: HangerFace }) {
         }}
       />
       <span
-        className="absolute border-l-2 border-dashed border-neutral-400"
+        className="absolute border-t-2 border-dashed border-neutral-400"
         style={{
-          left: `${line.slitX * 100}%`,
-          top: `${line.slitTop * 100}%`,
-          height: `${(line.slitBottom - line.slitTop) * 100}%`,
+          left: `${Math.min(line.slitStart, line.slitEnd) * 100}%`,
+          top: `${line.slitY * 100}%`,
+          width: `${Math.abs(line.slitEnd - line.slitStart) * 100}%`,
         }}
       />
     </span>

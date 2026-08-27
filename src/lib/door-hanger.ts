@@ -24,9 +24,9 @@ export const HOLE_CENTRE_FROM_TOP_IN = 2.25;
  * The slit the handle passes through on the way in.
  *
  * One cut, not a slot: no paper is removed, the hanger just opens along the
- * line and closes behind the handle. It runs down the left side of the hole,
- * tangent to it, so the tab it leaves is the full width of the hanger rather
- * than two thin strips either side of a gap.
+ * line and closes behind the handle. It runs sideways out of the hole to the
+ * edge of the hanger, so the hanger goes onto the handle from the side rather
+ * than being posted down over it.
  */
 export const SLIT_SIDE: "left" | "right" = "left";
 
@@ -72,12 +72,13 @@ export interface DieLine {
   holeCentreY: number;
   /** Diameter as a fraction of the hanger's width. */
   holeSize: number;
-  /** 0-1 across the hanger: where the single cut line runs. */
-  slitX: number;
-  /** 0-1 down the hanger: the top edge, where the slit starts. */
-  slitTop: number;
-  /** 0-1 down the hanger: where the slit meets the hole. */
-  slitBottom: number;
+  /** 0-1 down the hanger: the height the cut runs at. Level with the hole,
+   * because a cut that meets it anywhere else does not open into it. */
+  slitY: number;
+  /** 0-1 across: the edge of the hanger the cut comes out of. */
+  slitStart: number;
+  /** 0-1 across: where the cut meets the hole. */
+  slitEnd: number;
 }
 
 /**
@@ -94,19 +95,18 @@ export function dieLine(face: HangerFace = "front"): DieLine {
   const holeSize = HOLE_DIAMETER_IN / HANGER_WIDTH_IN;
   const holeCentreY = HOLE_CENTRE_FROM_TOP_IN / HANGER_HEIGHT_IN;
 
-  // Tangent to the hole, on whichever side the slit runs.
+  // Out of the hole to whichever edge the slit runs to.
   const onLeft = face === "front" ? SLIT_SIDE === "left" : SLIT_SIDE !== "left";
-  const slitX = onLeft ? 0.5 - holeSize / 2 : 0.5 + holeSize / 2;
 
   return {
     holeCentreX: 0.5,
     holeCentreY,
     holeSize,
-    slitX,
-    slitTop: 0,
-    // Down to the middle of the hole, so the cut and the circle meet rather
-    // than stopping short of each other.
-    slitBottom: holeCentreY,
+    slitY: holeCentreY,
+    slitStart: onLeft ? 0 : 1,
+    // Stops where the circle starts, so the cut and the hole meet rather
+    // than one being drawn across the other.
+    slitEnd: onLeft ? 0.5 - holeSize / 2 : 0.5 + holeSize / 2,
   };
 }
 

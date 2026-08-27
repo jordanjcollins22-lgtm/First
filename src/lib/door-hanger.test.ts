@@ -52,34 +52,41 @@ describe("the die line", () => {
     expect(HOLE_DIAMETER_IN).toBeGreaterThanOrEqual(1.5);
   });
 
-  it("runs one cut from the top edge down into the hole", () => {
-    // If the cut stops short of the hole the handle cannot get in.
-    expect(line.slitTop).toBe(0);
-    expect(line.slitBottom).toBe(line.holeCentreY);
-    expect(line.slitBottom).toBeGreaterThan(line.slitTop);
+  it("runs the cut sideways out of the hole to the left edge", () => {
+    // Out to the side, not up: the hanger goes onto the handle from the side
+    // rather than being posted down over it.
+    expect(line.slitStart).toBe(0);
+    expect(line.slitEnd).toBeGreaterThan(line.slitStart);
+    expect(line.slitEnd).toBeLessThan(line.holeCentreX);
   });
 
-  it("puts the cut down the left side of the hole, touching it", () => {
-    // Tangent, not through the middle: the tab it leaves is the full width
-    // of the hanger rather than two thin strips either side of a gap.
-    expect(line.slitX).toBeCloseTo(line.holeCentreX - line.holeSize / 2, 10);
-    expect(line.slitX).toBeLessThan(line.holeCentreX);
+  it("meets the hole rather than stopping short of it or crossing it", () => {
+    // Short of it and the handle cannot get in; across it and the cut is
+    // drawn over the hole it is supposed to open into.
+    expect(line.slitEnd).toBeCloseTo(line.holeCentreX - line.holeSize / 2, 10);
+  });
+
+  it("runs level with the hole", () => {
+    // A cut that meets the hole anywhere else does not open into it.
+    expect(line.slitY).toBe(line.holeCentreY);
   });
 
   it("mirrors the cut on the back, because the printer flips the paper", () => {
     const back = dieLine("back");
-    expect(back.slitX).toBeCloseTo(line.holeCentreX + line.holeSize / 2, 10);
-    expect(back.slitX).toBeGreaterThan(back.holeCentreX);
+    expect(back.slitStart).toBe(1);
+    expect(back.slitEnd).toBeCloseTo(line.holeCentreX + line.holeSize / 2, 10);
     // Same hole, same place — only the cut changes side.
     expect(back.holeCentreX).toBe(line.holeCentreX);
     expect(back.holeCentreY).toBe(line.holeCentreY);
     expect(back.holeSize).toBe(line.holeSize);
+    expect(back.slitY).toBe(line.slitY);
   });
 
   it("puts front and back cuts on top of each other once flipped", () => {
     // Flipping the back left-to-right must land its cut where the front's is.
     const back = dieLine("back");
-    expect(1 - back.slitX).toBeCloseTo(line.slitX, 10);
+    expect(1 - back.slitStart).toBeCloseTo(line.slitStart, 10);
+    expect(1 - back.slitEnd).toBeCloseTo(line.slitEnd, 10);
   });
 
   it("keeps the hole in the top third, where artwork does not go", () => {
