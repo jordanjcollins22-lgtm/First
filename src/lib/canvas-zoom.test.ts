@@ -154,9 +154,18 @@ describe("distanceBetween", () => {
 });
 
 describe("stepMapZoom", () => {
-  it("steps out and back in", () => {
-    expect(stepMapZoom(18.7, -1)).toBeCloseTo(17.95, 5);
-    expect(stepMapZoom(17.95, 1)).toBeCloseTo(18.7, 5);
+  it("steps out and back in a whole zoom level at a time", () => {
+    expect(stepMapZoom(18.7, -1)).toBeCloseTo(17.7, 5);
+    expect(stepMapZoom(17.7, 1)).toBeCloseTo(18.7, 5);
+  });
+
+  it("reaches far enough out for a multi-acre property", () => {
+    // Each level doubles the ground across the board. From the default down
+    // to the floor is well over thirty times as much in each direction.
+    let zoom = 18.7;
+    for (let i = 0; i < 20; i += 1) zoom = stepMapZoom(zoom, -1);
+    expect(zoom).toBe(MAP_ZOOM_MIN);
+    expect(18.7 - MAP_ZOOM_MIN).toBeGreaterThanOrEqual(5);
   });
 
   it("never asks the map for something silly", () => {

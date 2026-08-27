@@ -773,13 +773,21 @@ export function ImageCanvasBoard({
     setSatelliteError(null);
     setSatelliteLoading(true);
     try {
+      // Any turn the evaluator made by hand is folded into the bearing we ask
+      // the map for, rather than re-applied to the new photo afterwards. A
+      // photo requested at a bearing fills its frame; one rotated on the
+      // canvas has white where the garden should be. Without this, zooming
+      // out quietly undoes the aiming they just did.
+      const aimed = normalizeDegrees(bearing + (image?.rotation ?? 0));
+
       const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
         origin.lng,
         origin.lat,
-        bearing,
+        aimed,
         nextZoom
       );
       await loadImageBlob(blob, realWidthFeet);
+      setBearing(aimed);
       setMapZoom(nextZoom);
       // Straight back to the middle: the new photo is centred on the same
       // point, and keeping a drag offset from the old one would put the house
@@ -1163,33 +1171,13 @@ export function ImageCanvasBoard({
 
           {/* Zooming out stops at the whole photo, because there is no more
               photo — seeing further needs a wider one from the map. */}
-          {origin && (
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 text-xs text-muted-foreground">Show more ground</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                disabled={satelliteLoading || !canStepMapZoom(mapZoom, -1)}
-                onClick={() => refetchAtZoom(stepMapZoom(mapZoom, -1))}
-              >
-                <Minus className="h-3.5 w-3.5" />
-                Wider
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                disabled={satelliteLoading || !canStepMapZoom(mapZoom, 1)}
-                onClick={() => refetchAtZoom(stepMapZoom(mapZoom, 1))}
-              >
-                <ZoomIn className="h-3.5 w-3.5" />
-                Closer
-              </Button>
-            </div>
-          )}
+          <MapZoomControls
+            visible={origin != null}
+            spanFeet={image?.realWidthFeet ?? null}
+            mapZoom={mapZoom}
+            busy={satelliteLoading}
+            onStep={(steps) => refetchAtZoom(stepMapZoom(mapZoom, steps))}
+          />
 
           <label className="flex items-center gap-2 text-xs">
             <input
@@ -1609,6 +1597,16 @@ export function ImageCanvasBoard({
               {image.rotation}°
             </span>
           </div>
+          {/* Here as well as on the orient step: drawing a property line round
+              a five-acre lot is exactly when the whole boundary has to be on
+              screen, and that is a wider photo rather than a smaller one. */}
+          <MapZoomControls
+            visible={origin != null}
+            spanFeet={image?.realWidthFeet ?? null}
+            mapZoom={mapZoom}
+            busy={satelliteLoading}
+            onStep={(steps) => refetchAtZoom(stepMapZoom(mapZoom, steps))}
+          />
         </div>
       )}
 
@@ -1835,6 +1833,70 @@ function MarkNoteDialog({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Wider and Closer.
+ *
+ * These refetch rather than rescale. Scaling stops at the whole photo because
+ * there is no more photo — the neighbour's fence is not in the file — so
+ * seeing further means asking the map for a wider one.
+ *
+ * Shows how much ground is on the board, because "z16" means nothing and
+ * "about 900 ft across" is the thing somebody is actually judging.
+ *
+ * Declared out here rather than inside the board: a component created during
+ * render is a new component type every time, so React throws the old one away
+ * and remounts it, and a button being rebuilt mid-tap is a button that misses
+ * the tap.
+ */
+function MapZoomControls({
+  visible,
+  spanFeet,
+  mapZoom,
+  busy,
+  onStep,
+}: {
+  visible: boolean;
+  spanFeet: number | null;
+  mapZoom: number;
+  busy: boolean;
+  onStep: (steps: number) => void;
+}) {
+  if (!visible) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {spanFeet != null && spanFeet > 0
+          ? `About ${Math.round(spanFeet).toLocaleString()} ft across`
+          : "Show more ground"}
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 px-2 text-xs"
+        disabled={busy || !canStepMapZoom(mapZoom, -1)}
+        onClick={() => onStep(-1)}
+      >
+        <Minus className="h-3.5 w-3.5" />
+        Wider
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 px-2 text-xs"
+        disabled={busy || !canStepMapZoom(mapZoom, 1)}
+        onClick={() => onStep(1)}
+      >
+        <ZoomIn className="h-3.5 w-3.5" />
+        Closer
+      </Button>
+      {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
     </div>
   );
 }

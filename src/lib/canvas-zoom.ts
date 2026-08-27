@@ -100,14 +100,25 @@ export function pinchScale(input: {
 /**
  * Bounds on what to ask the map for.
  *
- * Below about 16 a residential lot is a smudge among its neighbours, and
- * above about 20 the satellite imagery has no more resolution and simply
- * returns the same pixels larger.
+ * The floor is deliberately far wider than a house needs. A quarter-acre lot
+ * is done at the default, but this business also quotes multi-acre properties
+ * where the whole boundary has to be on screen before a property line can be
+ * drawn round it, and a floor set for the common case is a floor somebody
+ * hits on the job they most needed it for.
+ *
+ * The ceiling is where the satellite imagery runs out of resolution — past it
+ * the map returns the same pixels larger, which is what the photo scale does
+ * anyway and does instantly.
  */
-export const MAP_ZOOM_MIN = 16;
+export const MAP_ZOOM_MIN = 13;
 export const MAP_ZOOM_MAX = 20;
-/** One press. Small enough to feel like a nudge, big enough to be visible. */
-export const MAP_ZOOM_STEP = 0.75;
+/**
+ * One press: a full zoom level, which doubles the ground across the board and
+ * quadruples the area. A fraction of a level reads as nothing happening, and
+ * somebody trying to get a five-acre property on screen should not be tapping
+ * eight times to do it.
+ */
+export const MAP_ZOOM_STEP = 1;
 
 export function stepMapZoom(current: number, steps: number): number {
   const next = current + steps * MAP_ZOOM_STEP;
