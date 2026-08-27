@@ -8,6 +8,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { describeDbError } from "@/lib/setup-errors";
 import { listScheduledTimes } from "@/lib/data/social";
 import { describeSlot, nextPostSlot } from "@/lib/social-post";
+import { adoptEvaluationPhotosAsBefores } from "@/lib/data/adopt-befores";
 
 export type SocialResult =
   | { ok: true; message?: string; scheduledFor?: string }
@@ -173,5 +174,35 @@ export async function markPosted(id: string, channel?: string): Promise<SocialRe
   } catch (err) {
     console.error("markPosted failed:", err);
     return { ok: false, message: "Couldn't mark that one." };
+  }
+}
+
+/**
+ * Takes an already-submitted job's evaluation photos as its befores.
+ *
+ * New evaluations do this on submission. This is the same thing for the ones
+ * that went through before it did — the pictures are sitting there either
+ * way, and a job with a folder of before photos should not be on a list of
+ * jobs with none.
+ */
+export async function adoptBeforesForJob(jobId: string): Promise<SocialResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+
+    const adopted = await adoptEvaluationPhotosAsBefores(jobId);
+
+    revalidatePath("/admin/social");
+    revalidatePath(`/jobs/${jobId}`);
+
+    return adopted === 0
+      ? { ok: false, message: "No zone photos on that evaluation to use." }
+      : {
+          ok: true,
+          message: `Took ${adopted} evaluation photo${adopted === 1 ? "" : "s"} as befores.`,
+        };
+  } catch (err) {
+    console.error("adoptBeforesForJob failed:", err);
+    return { ok: false, message: "Couldn't use those photos." };
   }
 }

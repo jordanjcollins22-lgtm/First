@@ -16,6 +16,7 @@ import {
   statusAfterReopen,
 } from "@/lib/job-lifecycle";
 import { validateAppointment } from "@/lib/scheduling";
+import { adoptEvaluationPhotosAsBefores } from "@/lib/data/adopt-befores";
 import type { Database } from "@/lib/supabase/database.types";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
 
@@ -27,6 +28,10 @@ export async function updateEvaluationStatus(jobId: string, status: EvaluationSt
   if (status === "completed") {
     // Best-effort — an evaluation with nothing on it yet shouldn't block submission.
     await generateProposal(jobId).catch(() => {});
+    // The zone photos taken at the evaluation are the befores. Adopting them
+    // here means the crew only has to shoot the after, and a job that was
+    // photographed properly cannot end up with nothing to show for it.
+    await adoptEvaluationPhotosAsBefores(jobId).catch(() => {});
   }
 
   revalidatePath("/attractors");

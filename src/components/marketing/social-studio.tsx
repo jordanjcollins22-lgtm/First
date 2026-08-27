@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuid } from "uuid";
-import { CalendarClock, Camera, Check, Loader2, Send, X } from "lucide-react";
+import { CalendarClock, Camera, Check, ImageDown, Loader2, Send, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { approveSocialPost, markPosted, skipSocialPost } from "@/lib/actions/social-actions";
+import {
+  adoptBeforesForJob,
+  approveSocialPost,
+  markPosted,
+  skipSocialPost,
+} from "@/lib/actions/social-actions";
 import { describeSlot, suggestCaption } from "@/lib/social-post";
 import { useComposite, useOnScreen } from "./use-composite";
 import type { JobMissingPhotos, PostCandidate, SocialPost } from "@/lib/data/social";
@@ -336,24 +341,60 @@ function PostRow({ post, onChanged }: { post: SocialPost; onChanged: () => void 
  * chasing it is one message instead of a hunt through the job.
  */
 function MissingRow({ job }: { job: JobMissingPhotos }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
   return (
-    <Link
-      href={`/jobs/${job.jobId}`}
-      className="flex items-center gap-3 rounded-xl border border-white/60 bg-card/60 p-3 backdrop-blur-md hover:border-primary/40"
-    >
-      <Camera className="h-5 w-5 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{job.jobName}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {[job.town, job.assignedName].filter(Boolean).join(" · ") ||
-            (job.status === "completed" ? "Completed" : "In progress")}
-        </p>
-        <p className="mt-0.5 text-xs font-medium text-amber-700">
-          {job.gapLabel}
-          {job.photoCount > 0 && ` · ${job.photoCount} photo${job.photoCount === 1 ? "" : "s"}`}
-        </p>
+    <div className="rounded-xl border border-white/60 bg-card/60 p-3 backdrop-blur-md">
+      <div className="flex items-center gap-3">
+        <Camera className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <Link href={`/jobs/${job.jobId}`} className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium hover:underline">{job.jobName}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {[job.town, job.assignedName].filter(Boolean).join(" · ") ||
+              (job.status === "completed" ? "Completed" : "In progress")}
+          </p>
+          <p className="mt-0.5 text-xs font-medium text-amber-700">
+            {job.gapLabel}
+            {job.photoCount > 0 && ` · ${job.photoCount} photo${job.photoCount === 1 ? "" : "s"}`}
+          </p>
+        </Link>
       </div>
-    </Link>
+
+      {/* The evaluation photographed that garden before anything was touched.
+          New evaluations adopt them on submission; this is the same thing for
+          the jobs that went through before that existed. */}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="mt-2 h-7 text-xs"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await adoptBeforesForJob(job.jobId);
+            setFailed(!result.ok);
+            setMessage(result.message ?? null);
+            if (result.ok) router.refresh();
+          })
+        }
+      >
+        {pending ? (
+          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <ImageDown className="mr-1 h-3.5 w-3.5" />
+        )}
+        Use the evaluation photos
+      </Button>
+
+      {message && (
+        <p className={`mt-1 text-xs ${failed ? "text-muted-foreground" : "text-emerald-700"}`}>
+          {message}
+        </p>
+      )}
+    </div>
   );
 }
 
