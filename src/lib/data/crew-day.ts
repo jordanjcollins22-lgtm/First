@@ -43,7 +43,7 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
     supabase
       .from("job_work_sessions")
       .select(
-        "job_id, starts_on, ends_on, status, purpose, stop_order, jobs(id, assigned_to, status, properties(address, lat, lng, customers(name)))"
+        "id, job_id, starts_on, ends_on, status, purpose, stop_order, jobs(id, assigned_to, status, properties(address, lat, lng, customers(name)))"
       )
       .lte("starts_on", day)
       .gte("ends_on", day)
@@ -57,6 +57,7 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
   ]);
 
   type Row = {
+    id: string;
     job_id: string;
     starts_on: string;
     purpose: string | null;
@@ -85,6 +86,7 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
     })
     .map((r) => ({
       jobId: r.job_id,
+      sessionId: r.id,
       address: r.jobs?.properties?.address ?? "Address missing",
       customerName: r.jobs?.properties?.customers?.name ?? "Client",
       lat: r.jobs?.properties?.lat ?? null,

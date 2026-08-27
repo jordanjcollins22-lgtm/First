@@ -14,6 +14,7 @@ import { listJobPhotos } from "@/lib/data/job-photos";
 import { listSocialPostsForJob } from "@/lib/data/social";
 import { listPhotoWaivers } from "@/lib/data/photo-waivers";
 import { listPhotoMarks } from "@/lib/data/photo-review";
+import { listJobEntries, listPayPeople } from "@/lib/data/time-clock";
 import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
 import { isAccountManager as isManagerRole } from "@/lib/affiliate-roles";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
@@ -109,6 +110,8 @@ export default async function JobPage({
     socialPosts,
     photoWaivers,
     photoMarks,
+    jobTimeEntries,
+    payPeople,
     schedule,
     crew,
     teamProfiles,
@@ -132,6 +135,9 @@ export default async function JobPage({
     listPhotoWaivers(jobId).catch(() => []),
     // Empty until migration 0114 runs; the panel simply does not appear.
     listPhotoMarks(jobId).catch(() => []),
+    // Empty until migration 0113/0115 run; the visit just shows nobody logged.
+    listJobEntries(jobId).catch(() => []),
+    listPayPeople().catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
@@ -435,6 +441,10 @@ export default async function JobPage({
         <VisitsPanel
           jobId={jobId}
           sessions={schedule.sessions}
+          timeEntries={jobTimeEntries}
+          people={payPeople}
+          canLogWork={Boolean(viewer?.roles.includes("admin"))}
+          canSeePay={Boolean(viewer?.roles.includes("admin"))}
           tickets={schedule.tickets}
           allowTickets={can.tickets.available}
         />

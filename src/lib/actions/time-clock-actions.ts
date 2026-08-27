@@ -23,7 +23,11 @@ function refresh(jobId?: string | null) {
  * to the next job without clocking out has not been in two places at once,
  * and adding up as though they had inflates both their hours and their pay.
  */
-export async function clockIn(jobId: string | null, note?: string): Promise<ClockResult> {
+export async function clockIn(
+  jobId: string | null,
+  note?: string,
+  sessionId?: string | null
+): Promise<ClockResult> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
@@ -45,6 +49,7 @@ export async function clockIn(jobId: string | null, note?: string): Promise<Cloc
       organization_id: organizationId,
       profile_id: profile.id,
       job_id: jobId,
+      session_id: sessionId ?? null,
       clocked_in_at: now,
       note: note?.trim() || null,
     });
@@ -171,5 +176,58 @@ export async function deleteEntry(id: string): Promise<ClockResult> {
   } catch (err) {
     console.error("deleteEntry failed:", err);
     return { ok: false, message: "Couldn't delete that." };
+  }
+}
+
+/**
+ * Writes down who worked on a visit, and for how long.
+ *
+ * The same rows the clock produces, entered by hand. Somebody who worked a
+ * Tuesday nobody clocked has still worked it, and their hours have to reach
+ * payroll and the job's cost by the same road as everybody else's — a second
+ * place to record hours would be a second set of hours to disagree with the
+ * first.
+ */
+export async function logVisitWork(input: {
+  jobId: string;
+  sessionId: string;
+  profileId: string;
+  startedAt: string;
+  endedAt: string;
+}): Promise<ClockResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile?.roles.includes("admin")) {
+      return { ok: false, message: "Only an admin can log somebody else's hours." };
+    }
+
+    const verdict = checkEdit(input.startedAt, input.endedAt);
+    if (!verdict.ok) return { ok: false, message: verdict.reason };
+
+    const [supabase, organizationId] = await Promise.all([
+      createClient(),
+      getCurrentOrganizationId(),
+    ]);
+
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("time_entries").insert({
+      organization_id: organizationId,
+      profile_id: input.profileId,
+      job_id: input.jobId,
+      session_id: input.sessionId,
+      clocked_in_at: new Date(input.startedAt).toISOString(),
+      clocked_out_at: new Date(input.endedAt).toISOString(),
+      // Entered rather than clocked, and the sheet has to be able to say so.
+      edited_by: profile.id,
+      edited_at: now,
+    });
+
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    refresh(input.jobId);
+    return { ok: true, message: "Logged." };
+  } catch (err) {
+    console.error("logVisitWork failed:", err);
+    return { ok: false, message: "Couldn't log those hours." };
   }
 }

@@ -16,6 +16,8 @@ export interface TimeEntry {
   personName: string;
   jobId: string | null;
   jobName: string | null;
+  /** The visit this belongs to, when it was worked on one. */
+  sessionId: string | null;
   clockedInAt: string;
   /** Null while somebody is still on it. */
   clockedOutAt: string | null;

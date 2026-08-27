@@ -60,6 +60,7 @@ const CREATES = {
   "0112_photo_waivers.sql": ["job_photo_waivers"],
   "0113_time_clock.sql": ["time_entries"],
   "0114_photo_review.sql": ["job_photo_marks"],
+  "0115_visit_labour.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

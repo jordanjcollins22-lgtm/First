@@ -5,6 +5,8 @@ import { AlertTriangle, CalendarPlus, Loader2, Pause, Play, Plus, Ticket, Trash2
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { VisitLabour } from "@/components/job/visit-labour";
+import type { Person, TimeEntry } from "@/lib/time-clock";
 import {
   addWorkSession,
   deleteWorkSession,
@@ -50,10 +52,19 @@ export function VisitsPanel({
   jobId,
   sessions,
   tickets,
+  timeEntries,
+  people,
+  canLogWork,
+  canSeePay,
   allowTickets,
 }: {
   jobId: string;
   sessions: JobWorkSession[];
+  /** Hours logged against this job, so each visit can show its own. */
+  timeEntries: TimeEntry[];
+  people: Person[];
+  canLogWork: boolean;
+  canSeePay: boolean;
   tickets: JobTicket[];
   /** Raising a snag only makes sense once there is work to snag. Existing
    * tickets still show either way — history doesn't disappear. */
@@ -95,7 +106,16 @@ export function VisitsPanel({
         )}
       </div>
 
-      <SessionList jobId={jobId} sessions={sessions} tickets={tickets} onResult={report} />
+      <SessionList
+        jobId={jobId}
+        sessions={sessions}
+        tickets={tickets}
+        timeEntries={timeEntries}
+        people={people}
+        canLogWork={canLogWork}
+        canSeePay={canSeePay}
+        onResult={report}
+      />
 
       {(allowTickets || tickets.length > 0) && (
       <div className="mt-4 border-t border-border pt-3">
@@ -115,11 +135,19 @@ export function VisitsPanel({
 function SessionList({
   jobId,
   sessions,
+  timeEntries,
+  people,
+  canLogWork,
+  canSeePay,
   tickets,
   onResult,
 }: {
   jobId: string;
   sessions: JobWorkSession[];
+  timeEntries: TimeEntry[];
+  people: Person[];
+  canLogWork: boolean;
+  canSeePay: boolean;
   tickets: JobTicket[];
   onResult: (r: { ok: boolean; message?: string }) => void;
 }) {
@@ -146,6 +174,10 @@ function SessionList({
         <ul className="flex flex-col gap-2">
           {sessions.map((session) => (
             <SessionRow
+              timeEntries={timeEntries.filter((entry) => entry.sessionId === session.id)}
+              people={people}
+              canLogWork={canLogWork}
+              canSeePay={canSeePay}
               key={session.id}
               session={session}
               ticket={tickets.find((t) => t.id === session.ticket_id) ?? null}
@@ -245,10 +277,18 @@ function SessionList({
 function SessionRow({
   session,
   ticket,
+  timeEntries,
+  people,
+  canLogWork,
+  canSeePay,
   onResult,
 }: {
   session: JobWorkSession;
   ticket: JobTicket | null;
+  timeEntries: TimeEntry[];
+  people: Person[];
+  canLogWork: boolean;
+  canSeePay: boolean;
   onResult: (r: { ok: boolean; message?: string }) => void;
 }) {
   const [pausing, setPausing] = useState(false);
@@ -376,6 +416,15 @@ function SessionRow({
           </div>
         )
       )}
+      <VisitLabour
+        jobId={session.job_id}
+        sessionId={session.id}
+        startsOn={session.starts_on}
+        entries={timeEntries}
+        people={people}
+        canEdit={canLogWork}
+        canSeePay={canSeePay}
+      />
     </li>
   );
 }

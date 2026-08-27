@@ -27,6 +27,8 @@ export interface CrewEvent {
 
 export interface Stop {
   jobId: string;
+  /** The visit this stop is, so hours clocked here land on it. */
+  sessionId: string;
   address: string;
   customerName: string;
   lat: number | null;

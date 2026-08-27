@@ -256,7 +256,11 @@ async function CrewDay({ profile }: { profile: Profile }) {
     <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
       <ClockControl
         open={open}
-        stops={day.stops.map((stop) => ({ jobId: stop.jobId, name: stop.customerName }))}
+        stops={day.stops.map((stop) => ({
+          jobId: stop.jobId,
+          sessionId: stop.sessionId,
+          name: stop.customerName,
+        }))}
       />
       <TodayBoard
         stops={day.stops}

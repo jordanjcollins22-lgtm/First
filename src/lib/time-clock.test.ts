@@ -23,6 +23,7 @@ function entry(over: Partial<TimeEntry> & { id: string }): TimeEntry {
     personName: "Mike R.",
     jobId: "j1",
     jobName: "Whittaker",
+    sessionId: null,
     clockedInAt: "2026-08-27T13:00:00Z",
     clockedOutAt: "2026-08-27T16:00:00Z",
     note: null,

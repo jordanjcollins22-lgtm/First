@@ -224,6 +224,7 @@ export interface Database {
           organization_id: string;
           profile_id: string;
           job_id: string | null;
+          session_id: string | null;
           clocked_in_at: string;
           clocked_out_at: string | null;
           note: string | null;

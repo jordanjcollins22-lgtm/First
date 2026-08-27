@@ -23,7 +23,7 @@ export function ClockControl({
   stops,
 }: {
   open: TimeEntry | null;
-  stops: { jobId: string; name: string }[];
+  stops: { jobId: string; sessionId: string; name: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -97,7 +97,9 @@ export function ClockControl({
             size="sm"
             variant="outline"
             disabled={pending}
-            onClick={() => run(() => clockIn(stop.jobId))}
+            // The stop is the visit, so the hours land on it and the
+            // visit can say who worked it.
+            onClick={() => run(() => clockIn(stop.jobId, undefined, stop.sessionId))}
           >
             <Play className="mr-1 h-3.5 w-3.5" />
             {stop.name}

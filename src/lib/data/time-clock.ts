@@ -3,13 +3,14 @@ import { isMissingTable } from "@/lib/setup-errors";
 import type { Person, TimeEntry } from "@/lib/time-clock";
 
 const SELECT =
-  "id, profile_id, job_id, clocked_in_at, clocked_out_at, note, edited_by, " +
+  "id, profile_id, job_id, session_id, clocked_in_at, clocked_out_at, note, edited_by, " +
   "profiles:profile_id(full_name, email), editor:edited_by(full_name, email), jobs(name)";
 
 interface Row {
   id: string;
   profile_id: string;
   job_id: string | null;
+  session_id: string | null;
   clocked_in_at: string;
   clocked_out_at: string | null;
   note: string | null;
@@ -25,6 +26,7 @@ function toEntry(row: Row): TimeEntry {
     personName: row.profiles?.full_name || row.profiles?.email || "Someone",
     jobId: row.job_id,
     jobName: row.jobs?.name ?? null,
+    sessionId: row.session_id,
     clockedInAt: row.clocked_in_at,
     clockedOutAt: row.clocked_out_at,
     note: row.note,
@@ -99,4 +101,18 @@ export async function myOpenEntry(profileId: string): Promise<TimeEntry | null> 
 
   if (isMissingTable(error) || error || !data?.length) return null;
   return toEntry(data[0] as unknown as Row);
+}
+
+/** Every hour logged against this job, so each visit can show its own. */
+export async function listJobEntries(jobId: string): Promise<TimeEntry[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select(SELECT)
+    .eq("job_id", jobId)
+    .order("clocked_in_at");
+
+  if (isMissingTable(error) || error) return [];
+  return ((data ?? []) as unknown as Row[]).map(toEntry);
 }
