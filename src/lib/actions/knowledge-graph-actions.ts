@@ -9,6 +9,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { RECURRENCES, advance, todayKey, type Recurrence } from "@/lib/knowledge-schedule";
 import { UNITS } from "@/lib/knowledge-cost";
 import { safePurchaseUrl } from "@/lib/purchase-url";
+import { safeAppRoute } from "@/lib/knowledge-links";
 import {
   NODE_STATUSES,
   NODE_TYPES,
@@ -50,6 +51,7 @@ export interface NodeInput {
   durationHours?: number | null;
   hourlyRate?: number | null;
   purchaseUrl?: string | null;
+  appRoute?: string | null;
   /** The inventory item this is. Where the price comes from — the graph does
    * not keep one of its own. */
   materialId?: string | null;
@@ -106,6 +108,7 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         material_id: input.materialId ?? null,
         tool_id: input.toolId ?? null,
         purchase_url: safePurchaseUrl(input.purchaseUrl),
+        app_route: safeAppRoute(input.appRoute),
         potential_value: numberOrNull(input.potentialValue),
         position_x: input.positionX ?? null,
         position_y: input.positionY ?? null,
@@ -164,6 +167,7 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     if (patch.durationHours !== undefined) update.duration_hours = positiveOrNull(patch.durationHours);
     if (patch.hourlyRate !== undefined) update.hourly_rate = numberOrNull(patch.hourlyRate);
     if (patch.purchaseUrl !== undefined) update.purchase_url = safePurchaseUrl(patch.purchaseUrl);
+    if (patch.appRoute !== undefined) update.app_route = safeAppRoute(patch.appRoute);
     if (patch.potentialValue !== undefined) update.potential_value = numberOrNull(patch.potentialValue);
     if (patch.scheduledFor !== undefined) update.scheduled_for = dateOrNull(patch.scheduledFor);
     if (patch.recurrence !== undefined) update.recurrence = validRecurrence(patch.recurrence);

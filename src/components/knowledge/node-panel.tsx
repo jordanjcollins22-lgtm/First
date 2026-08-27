@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { APP_DESTINATIONS, destinationFor } from "@/lib/knowledge-links";
 import {
   NODE_STATUSES,
   NODE_TYPES,
@@ -141,6 +142,7 @@ export function NodePanel({
         : "material"
   );
   const [purchaseUrl, setPurchaseUrl] = useState(node.purchaseUrl ?? "");
+  const [appRoute, setAppRoute] = useState(node.appRoute ?? "");
 
   // Every field above is seeded from the node once. The workspace remounts
   // this panel when the selection changes (key={node.id}), which resets the
@@ -682,6 +684,28 @@ export function NodePanel({
               </p>
             )}
           </div>
+          {/* Where the work actually gets done. A node that names the flyer
+              and a page that builds the flyer are one thing thought twice. */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Opens in the app</Label>
+            <Select value={appRoute || "none"} onValueChange={(v) => setAppRoute(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nothing — this node just describes</SelectItem>
+                {APP_DESTINATIONS.map((destination) => (
+                  <SelectItem key={destination.route} value={destination.route}>
+                    {destination.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              {destinationFor(appRoute)?.description ??
+                "Point this at the screen where the work actually gets done."}
+            </p>
+          </div>
           <Button
             type="button"
             size="sm"
@@ -705,6 +729,7 @@ export function NodePanel({
                   durationHours: durationHours ? Number(durationHours) : null,
                   hourlyRate: hourlyRate ? Number(hourlyRate) : null,
                   purchaseUrl: purchaseUrl || null,
+                  appRoute: appRoute || null,
                   tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
                 })
               )
@@ -868,6 +893,22 @@ export function NodePanel({
               a real thing in Inventory carries the real price; one that is
               not carries no price at all, which is a more useful thing to
               know than a number somebody guessed a year ago. */}
+          {/* The screen this node is about. Shown above the money because
+              "go and do it" beats "here is what it would cost". */}
+          {destinationFor(node.appRoute) && (
+            <div className="mb-3 border-b border-border/60 pb-3">
+              <Link
+                href={node.appRoute!}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium"
+              >
+                Open {destinationFor(node.appRoute)!.label} →
+              </Link>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {destinationFor(node.appRoute)!.description}
+              </p>
+            </div>
+          )}
+
           {node.nodeType !== "idea" && (
             <div className="flex flex-col gap-1.5 border-b border-border/60 pb-3">
               {node.materialId && node.materialName ? (

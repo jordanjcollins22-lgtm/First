@@ -32,6 +32,7 @@ function node(
     estimatedCost: cost,
     unit,
     purchaseUrl: null,
+    appRoute: null,
     costBasis: null,
     unitHours: null,
     outputPerUnit: null,

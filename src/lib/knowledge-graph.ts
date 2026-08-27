@@ -168,6 +168,9 @@ export interface GraphNode {
   unit: string;
   /** Where you buy it. */
   purchaseUrl: string | null;
+  /** A screen in this app this node opens, from the fixed list in
+   * knowledge-links.ts. Null on a node that is only ever a description. */
+  appRoute: string | null;
   /**
    * Whether it gets bought again every run, or once and kept.
    *

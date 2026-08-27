@@ -28,6 +28,7 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
     estimatedCost: null,
     unit: "each",
     purchaseUrl: null,
+    appRoute: null,
     costBasis: null,
     unitHours: null,
     outputPerUnit: null,

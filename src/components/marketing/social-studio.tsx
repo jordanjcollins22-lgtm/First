@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuid } from "uuid";
@@ -17,8 +17,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { approveSocialPost, markPosted, skipSocialPost } from "@/lib/actions/social-actions";
-import { renderBeforeAfter } from "@/lib/social-canvas";
 import { describeSlot, suggestCaption } from "@/lib/social-post";
+import { useComposite, useOnScreen } from "./use-composite";
 import type { PostCandidate, SocialPost } from "@/lib/data/social";
 
 const BUCKET = "social-posts";
@@ -151,20 +151,51 @@ function CandidateRow({
   onSkipped: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const rowRef = useRef<HTMLDivElement>(null);
+  const visible = useOnScreen(rowRef);
+  const preview = useComposite(
+    candidateKey(candidate),
+    candidate.beforeUrl,
+    candidate.afterUrl,
+    visible
+  );
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/60 bg-card/60 p-2 backdrop-blur-md">
-      <div className="flex shrink-0 gap-1">
-        <Thumb url={candidate.beforeUrl} label="Before" />
-        <Thumb url={candidate.afterUrl} label="After" />
-      </div>
+    <div
+      ref={rowRef}
+      className="flex items-center gap-3 rounded-xl border border-white/60 bg-card/60 p-2 backdrop-blur-md"
+    >
+      {/* The square itself, not the two photos it is made of — what somebody
+          is deciding about is the post, so that is what they should see. */}
+      <button
+        type="button"
+        onClick={onMake}
+        className="h-28 w-[90px] shrink-0 overflow-hidden rounded-md border border-border bg-muted"
+        aria-label={`Preview the post for ${candidate.jobName}`}
+      >
+        {preview.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview.url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full items-center justify-center">
+            {preview.error ? (
+              <span className="px-1 text-center text-[10px] text-muted-foreground">
+                {preview.error}
+              </span>
+            ) : (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </span>
+        )}
+      </button>
+
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{candidate.jobName}</p>
         <p className="truncate text-xs text-muted-foreground">
           {[candidate.zoneName, candidate.town].filter(Boolean).join(" · ") || "Whole job"}
         </p>
         <div className="mt-1 flex gap-1">
-          <Button type="button" size="sm" onClick={onMake}>
+          <Button type="button" size="sm" disabled={!preview.blob} onClick={onMake}>
             Make post
           </Button>
           <Button
@@ -192,18 +223,10 @@ function CandidateRow({
   );
 }
 
-function Thumb({ url, label }: { url: string | null; label: string }) {
-  if (!url) {
-    return (
-      <div className="flex h-16 w-14 items-center justify-center rounded-md border border-dashed border-border text-[10px] text-muted-foreground">
-        {label}
-      </div>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt={label} className="h-16 w-14 rounded-md border border-border object-cover" />
-  );
+/** One pair, one square. Also the cache key, so the list and the dialog share
+ * the render rather than each doing their own. */
+function candidateKey(candidate: PostCandidate): string {
+  return `${candidate.beforePhotoId}:${candidate.afterPhotoId}`;
 }
 
 function PostRow({ post, onChanged }: { post: SocialPost; onChanged: () => void }) {
@@ -293,9 +316,15 @@ function MakePostDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const previewRef = useRef<HTMLImageElement>(null);
-  const [blob, setBlob] = useState<Blob | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Already drawn by the row that opened this, so it appears at full size
+  // straight away — and it is the same file, not a second render of it.
+  const preview = useComposite(
+    candidateKey(candidate),
+    candidate.beforeUrl,
+    candidate.afterUrl,
+    true
+  );
+
   const [caption, setCaption] = useState(() =>
     suggestCaption({
       services: [candidate.jobName],
@@ -307,38 +336,8 @@ function MakePostDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl: string | null = null;
-
-    async function draw() {
-      if (!candidate.beforeUrl || !candidate.afterUrl) {
-        setError("One of the photos wouldn't load.");
-        return;
-      }
-      try {
-        const made = await renderBeforeAfter({
-          beforeUrl: candidate.beforeUrl,
-          afterUrl: candidate.afterUrl,
-        });
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(made);
-        setBlob(made);
-        setPreviewUrl(objectUrl);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't draw that.");
-      }
-    }
-
-    void draw();
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [candidate.beforeUrl, candidate.afterUrl]);
-
   function approve() {
-    if (!blob) return;
+    if (!preview.blob) return;
     setError(null);
 
     startTransition(async () => {
@@ -347,7 +346,7 @@ function MakePostDialog({
         const path = `${candidate.jobId}/${uuid()}.png`;
         const { error: uploadError } = await supabase.storage
           .from(BUCKET)
-          .upload(path, blob, { contentType: "image/png" });
+          .upload(path, preview.blob!, { contentType: "image/png" });
         if (uploadError) throw uploadError;
 
         const result = await approveSocialPost({
@@ -368,6 +367,8 @@ function MakePostDialog({
     });
   }
 
+  const problem = error ?? preview.error;
+
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-md">
@@ -384,9 +385,9 @@ function MakePostDialog({
             className="mx-auto w-full max-w-[280px] overflow-hidden rounded-lg border border-border bg-muted"
             style={{ aspectRatio: "1080 / 1350" }}
           >
-            {previewUrl ? (
+            {preview.url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img ref={previewRef} src={previewUrl} alt="" className="h-full w-full object-cover" />
+              <img src={preview.url} alt="" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -401,12 +402,17 @@ function MakePostDialog({
             aria-label="Caption"
           />
 
-          {error && (
-            <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-700">{error}</p>
+          {problem && (
+            <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-700">{problem}</p>
           )}
 
           <div className="flex gap-2">
-            <Button type="button" className="flex-1" disabled={!blob || pending} onClick={approve}>
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={!preview.blob || pending}
+              onClick={approve}
+            >
               {pending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (

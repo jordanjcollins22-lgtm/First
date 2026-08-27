@@ -124,6 +124,7 @@ export interface Database {
           duration_hours: number | null;
           hourly_rate: number | null;
           purchase_url: string | null;
+          app_route: string | null;
           material_id: string | null;
           tool_id: string | null;
           scheduled_for: string | null;
