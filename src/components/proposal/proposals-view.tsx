@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import type { ProposalWithJob } from "@/lib/data/all-proposals";
+import { ViewCount } from "@/components/proposal/view-count";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove: boolean }) {
-  const { proposal, job } = item;
+  const { proposal, job, viewLabel, viewsWarm } = item;
   const [total, setTotal] = useState(String(Math.round(proposal.total_cost ?? 0)));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,10 @@ function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">{formatDate(proposal.generated_at)}</span>
       </div>
+
+      {/* Whether they have actually read it. Sent and read are different
+          facts, and the office only ever had the first one. */}
+      <ViewCount label={viewLabel} warm={viewsWarm} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">

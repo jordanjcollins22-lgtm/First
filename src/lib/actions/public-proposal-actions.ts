@@ -1,6 +1,9 @@
 "use server";
 
+import { createHash } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice } from "@/lib/invoicing";
@@ -9,6 +12,7 @@ import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
 import { startProposalCheckout } from "@/lib/proposal-checkout";
 import { previewResult, schedulePath } from "@/lib/proposal-flow";
+import { isSameSitting } from "@/lib/proposal-views";
 import { offeredWorkDays } from "@/lib/data/work-day-offer";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
@@ -605,5 +609,71 @@ export async function chooseWorkDay(input: {
     return { ok: true, date: day.date, message: `You are booked in for ${day.label}.` };
   } catch (err) {
     return { ok: false, message: describe(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Did they actually open it
+// ---------------------------------------------------------------------------
+
+/**
+ * Log that a client opened their proposal.
+ *
+ * Silent in every direction. It returns nothing the page uses, it never
+ * throws, and a failure here is not allowed to be visible: proposals are
+ * already out with clients, and a counter for the office is not worth a
+ * broken page for any of them. If the table is missing because the migration
+ * has not been run, the client sees exactly what they saw before.
+ *
+ * Not counted: the internal preview, and a client who refreshes or comes
+ * back from a photo they tapped. Those are the same sitting, and a number
+ * inflated by them is a number nobody can act on.
+ */
+export async function recordProposalView(input: {
+  token: string;
+  preview?: boolean;
+}): Promise<void> {
+  try {
+    if (input.preview) return;
+
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from("job_proposals")
+      .select("id")
+      .eq("token", input.token)
+      .maybeSingle();
+    if (!proposal) return;
+
+    // Roughly who, without keeping anything about them. Salted with the
+    // proposal's own id so the same person's visits to two proposals cannot
+    // be lined up against each other.
+    const list = await headers();
+    const fingerprint = [
+      list.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "",
+      list.get("user-agent") ?? "",
+    ].join("|");
+    const visitorHash = fingerprint.trim()
+      ? createHash("sha256").update(`${proposal.id}:${fingerprint}`).digest("hex").slice(0, 32)
+      : null;
+
+    if (visitorHash) {
+      const { data: last } = await admin
+        .from("proposal_views")
+        .select("viewed_at")
+        .eq("proposal_id", proposal.id)
+        .eq("visitor_hash", visitorHash)
+        .order("viewed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (isSameSitting(last?.viewed_at ?? null, new Date())) return;
+    }
+
+    await admin.from("proposal_views").insert({
+      proposal_id: proposal.id,
+      visitor_hash: visitorHash,
+      viewed_at: new Date().toISOString(),
+    });
+  } catch {
+    // Deliberately silent. Nothing the client can see depends on this.
   }
 }

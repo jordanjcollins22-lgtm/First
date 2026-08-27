@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
+import { viewsForProposal } from "@/lib/data/proposal-views";
+import { isWarm, viewLabel } from "@/lib/proposal-views";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
@@ -325,6 +327,10 @@ export default async function JobPage({
     return <WorkOrderView jobId={jobId} {...sheet} />;
   }
 
+  // Whether the client has actually opened it. Loaded here rather than in
+  // the panel so a job with no proposal costs no query at all.
+  const proposalViews = proposal ? await viewsForProposal(proposal.id).catch(() => null) : null;
+
   const host = headersList.get("host") ?? "";
   const baseUrl = resolveBaseUrl({
     configured: env.appUrl,
@@ -523,6 +529,10 @@ export default async function JobPage({
           materialsCost={materialsCost}
           zones={zoneBreakdowns}
           discounts={discounts}
+          viewLabel={proposalViews ? viewLabel(proposalViews, new Date()) : null}
+          viewsWarm={
+            proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
+          }
         />
       ) : (
         <LockedPanel title="Proposal" reason={can.proposal.available ? "" : can.proposal.reason} />

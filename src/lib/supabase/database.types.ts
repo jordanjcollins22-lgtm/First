@@ -1461,6 +1461,27 @@ export interface Database {
           },
         ];
       };
+      proposal_views: {
+        Row: {
+          id: string;
+          proposal_id: string;
+          viewed_at: string;
+          visitor_hash: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["proposal_views"]["Row"]> & {
+          proposal_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["proposal_views"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "proposal_views_proposal_id_fkey";
+            columns: ["proposal_id"];
+            referencedRelation: "job_proposals";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       job_proposals: {
         Row: {
           id: string;

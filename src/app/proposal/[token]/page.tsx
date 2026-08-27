@@ -4,6 +4,7 @@ import { listPublicExternalMessages } from "@/lib/data/public-job-messages";
 import { ProposalView } from "@/components/proposal/proposal-view";
 import { LinkNotValid } from "@/components/proposal/link-not-valid";
 import { isPreview } from "@/lib/proposal-flow";
+import { ViewBeacon } from "@/components/proposal/view-beacon";
 
 export default async function ProposalPage({
   params,
@@ -28,5 +29,14 @@ export default async function ProposalPage({
 
   const messages = await listPublicExternalMessages(token);
 
-  return <ProposalView data={data} token={token} messages={messages} preview={isPreview(preview)} />;
+  const previewing = isPreview(preview);
+
+  return (
+    <>
+      {/* Internal only, and invisible. Not rendered for the office's own
+          preview, which would otherwise count as the client reading it. */}
+      {!previewing && <ViewBeacon token={token} />}
+      <ProposalView data={data} token={token} messages={messages} preview={previewing} />
+    </>
+  );
 }

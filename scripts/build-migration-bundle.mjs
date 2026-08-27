@@ -95,6 +95,7 @@ const CREATES = {
   "0123_service_performed_by.sql": [],
   "0124_acceptance_payment_path.sql": [],
   "0125_client_chosen_day.sql": [],
+  "0126_proposal_views.sql": ["proposal_views"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

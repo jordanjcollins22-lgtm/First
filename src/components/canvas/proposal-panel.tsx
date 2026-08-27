@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DiscountSelect } from "@/components/canvas/discount-select";
+import { ViewCount } from "@/components/proposal/view-count";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
@@ -44,6 +45,8 @@ export function ProposalPanel({
   materialsCost,
   zones,
   discounts,
+  viewLabel = null,
+  viewsWarm = false,
 }: {
   jobId: string;
   proposal: JobProposal | null;
@@ -52,6 +55,10 @@ export function ProposalPanel({
   materialsCost: number;
   zones: InternalZoneBreakdown[];
   discounts: Discount[];
+  /** How often the client has opened it. Null when there is nothing to say
+   * yet. Internal only — this never reaches the public page. */
+  viewLabel?: string | null;
+  viewsWarm?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -216,6 +223,14 @@ export function ProposalPanel({
               </Button>
             </div>
           </div>
+          {viewLabel && (
+            <div className="flex items-center justify-between gap-2">
+              <ViewCount label={viewLabel} warm={viewsWarm} />
+              {viewsWarm && (
+                <span className="text-[11px] text-amber-700">Worth a call</span>
+              )}
+            </div>
+          )}
           {proposal.client_response_note && (
             <p className="text-xs text-muted-foreground">
               Client note: <span className="italic">&ldquo;{proposal.client_response_note}&rdquo;</span>
