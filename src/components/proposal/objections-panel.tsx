@@ -21,7 +21,7 @@ function money(cents: number): string {
 }
 
 const RESOLUTION_LABEL: Record<ResolutionKind, string> = {
-  explain: "That answers it",
+  explain: "That answers it, thanks",
   payment_plan: "Split it into payments",
   reduce_scope: "Let me pick what to keep",
   talk: "I'd rather talk it through",
@@ -37,10 +37,13 @@ const RESOLUTION_ICON: Record<ResolutionKind, typeof CreditCard> = {
 /**
  * The questions section at the foot of a client's proposal.
  *
- * Every button is an objection this business already hears, and opening one
- * shows the answer it already gives. Where that answer is something we can do
- * — spread the payments, trim the work — the next tap does it rather than
- * promising an email.
+ * Every button is a question this business already fields, and opening one
+ * shows the answer it already gives. Where that answer is something we can do,
+ * like spreading the payments or trimming the work, the next tap does it
+ * rather than promising an email.
+ *
+ * Nothing here reads as a sales script. The client sees their own question,
+ * not the worry behind it, and the word "objection" never reaches the screen.
  */
 export function ObjectionsPanel({
   token,
@@ -69,7 +72,7 @@ export function ObjectionsPanel({
           Questions before you decide?
         </h2>
         <p className="text-sm text-muted-foreground">
-          Pick whichever is closest — most of these we can sort out right here.
+          Pick whichever is closest. Most of these we can answer right here.
         </p>
       </div>
 
@@ -107,7 +110,7 @@ export function ObjectionsPanel({
               onOpen={() => setShowOther(true)}
               onSent={() => {
                 setShowOther(false);
-                setSettled("Thanks — we've got that and someone will come back to you.");
+                setSettled("Thanks, we've got that and someone will come back to you.");
               }}
             />
           )}
@@ -189,9 +192,9 @@ function AnswerCard({
                 });
                 onSettled(
                   kind === "payment_plan"
-                    ? "Good — we'll send you the payment options to look over. Accept whenever you're ready."
+                    ? "Great. We'll send you the payment options to look over, and you can accept whenever you're ready."
                     : kind === "talk"
-                      ? "No problem — we'll call you to talk it through."
+                      ? "No problem at all. We'll give you a call to talk it through."
                       : "Glad that helped."
                 );
               }}
@@ -216,7 +219,7 @@ function AnswerCard({
             onRejected();
           }}
         >
-          That doesn&apos;t help
+          This didn&apos;t answer it
         </Button>
       </div>
     </div>
@@ -361,7 +364,7 @@ function OtherBox({
   if (!open) {
     return (
       <Button type="button" variant="ghost" className="w-full text-muted-foreground" onClick={onOpen}>
-        Something else
+        Ask something else
       </Button>
     );
   }

@@ -3,9 +3,9 @@
  *
  * These exist because of a specific, repeated problem: work gets added on the
  * day. Somebody meets the crew in the driveway, points at something that was
- * never quoted, and asks them to "just do this bit too" — and the crew, who
- * are there to be helpful and have no authority to price anything, do it. The
- * job runs long, the margin goes, and nobody has a record of why.
+ * never quoted, and asks them to "just do this bit too". The crew, who are
+ * there to be helpful and have no authority to price anything, do it. The job
+ * runs long, the margin goes, and nobody has a record of why.
  *
  * So the rule is stated in writing, in front of the client, at the one moment
  * they are paying attention to it: the screen where they accept. Changes go in
@@ -15,6 +15,13 @@
  * The third point is the one that actually stops it happening. The first two
  * are the policy; naming the crew as unable to authorise work takes the
  * decision off the person standing in the yard who cannot say no comfortably.
+ * The fourth sets an expectation nobody can control, so that a rained-out
+ * Tuesday is a thing that was always going to be possible rather than a thing
+ * that went wrong.
+ *
+ * Written plainly and warmly, with no dashes, because a client reads this
+ * paragraph in the ten seconds before they commit money and it should sound
+ * like a person rather than a contract.
  *
  * One constant rather than prose typed into a component, so the client page,
  * the internal preview and anything added later cannot end up quoting
@@ -28,25 +35,32 @@ export interface ProposalTerm {
 
 export const PROPOSAL_TERMS: ProposalTerm[] = [
   {
-    heading: "Changes to the scope happen now, not later",
+    heading: "Tell us about any changes before you sign",
     body:
-      "Everything we plan to do is listed above. If something is missing, or you would like " +
-      "work added, changed or removed, tell us before you accept — we will update this proposal " +
-      "and send it back to you.",
+      "Everything we plan to do is written out above. If something is missing, or you would " +
+      "like work added, changed or taken off, just say so before you accept. We will update " +
+      "this proposal and send it straight back to you, with the new price on it.",
   },
   {
-    heading: "Anything added afterwards is a separate visit",
+    heading: "After you sign, anything new becomes its own visit",
     body:
-      "Once this proposal is accepted, the scope above is what is booked and what is priced. " +
-      "Work that is not in it gets written up, quoted and scheduled as its own visit rather than " +
-      "added to this one.",
+      "Accepting sets both the work and the price. If you think of something else later, that " +
+      "is no problem at all. We will write it up, price it, and book it as a separate visit so " +
+      "you always know what you are paying for.",
   },
   {
-    heading: "Our crew cannot add work on the day",
+    heading: "Our crew cannot add work while they are there",
     body:
-      "They are there to carry out what is on this proposal, and they are not able to price or " +
-      "authorise anything else. If you would like something more done, contact us and we will get " +
-      "you a price for it.",
+      "They are on site to do what is on this proposal, and they are not able to price or " +
+      "approve anything beyond it. Please give us a call instead and we will get you a price " +
+      "for it the same day wherever we can.",
+  },
+  {
+    heading: "Our schedule moves with the weather",
+    body:
+      "We work outdoors, so heavy rain and frozen ground can push a day back. If yours has to " +
+      "move we will let you know as soon as we do, and you keep your place at the front of the " +
+      "schedule rather than going back to the end of it.",
   },
 ];
 
@@ -54,10 +68,10 @@ export const PROPOSAL_TERMS_TITLE = "Before you accept";
 
 /** Once they have answered, the same words are a record rather than a warning,
  * so the heading stops telling them to do something they have already done. */
-export const PROPOSAL_TERMS_TITLE_AGREED = "How changes to the scope work";
+export const PROPOSAL_TERMS_TITLE_AGREED = "How changes and scheduling work";
 
 /** Shown next to the accept button, so agreeing to the work and agreeing to
  * how changes are handled are the same action. */
 export const PROPOSAL_ACCEPT_NOTE =
-  "Accepting confirms the scope above is complete and correct, and that any work added later " +
-  "will be quoted and scheduled separately.";
+  "Accepting confirms the work above is complete and correct, and that anything added later " +
+  "will be priced and booked as its own visit.";

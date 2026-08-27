@@ -39,6 +39,33 @@ describe("the catalogue", () => {
     }
   });
 
+  it("phrases every label as the client's own question", () => {
+    // Never the worry behind it. "How did you come up with this price?" and
+    // "the price is too high" reach the same paragraph, but only one of them
+    // makes somebody feel read back to by a sales script.
+    for (const o of OBJECTIONS) {
+      expect(o.label.trim().endsWith("?")).toBe(true);
+    }
+  });
+
+  it("never says the word objection where a client can read it", () => {
+    const clientFacing = OBJECTIONS.map((o) => `${o.label} ${o.answer}`).join(" ").toLowerCase();
+    expect(clientFacing).not.toContain("objection");
+  });
+
+  it("answers the questions a landscaping client actually asks", () => {
+    const ids = OBJECTIONS.map((o) => o.id);
+    for (const id of ["weather_delay", "not_happy", "who_comes", "how_to_pay", "add_later"]) {
+      expect(ids).toContain(id);
+    }
+  });
+
+  it("keeps the weather answer honest about the schedule moving", () => {
+    const answer = objectionById("weather_delay")!.answer.toLowerCase();
+    expect(answer).toMatch(/rain|frozen/);
+    expect(answer).toContain("schedule");
+  });
+
   it("finds by id and returns nothing for a stranger", () => {
     expect(objectionById("price_high")?.id).toBe("price_high");
     expect(objectionById("nope")).toBeUndefined();
