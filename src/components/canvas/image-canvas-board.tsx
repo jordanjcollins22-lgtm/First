@@ -24,7 +24,6 @@ import {
   MousePointer2,
   PenTool,
   RotateCcw,
-  RotateCw,
   Route,
   Ruler,
   Satellite,
@@ -39,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
+import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
 import { nearbyRoads } from "@/lib/mapbox-roads";
 import { drawFrontTarget } from "@/lib/canvas-front-target";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
@@ -58,7 +58,15 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 const CLOSE_POINT_RADIUS = 12;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
-const METERS_TO_FEET = 3.28084;
+
+/** Mapbox's limit on a static image's side, and what we ask for. Square, so
+ * there is photo under the corners whichever way it is turned. */
+const SATELLITE_REQUEST_SIZE = 1280;
+
+/** How close in the photo was before it had to be scaled up to cover the
+ * corners. The fetch backs off from here by exactly that scaling, so the
+ * board still shows about the same amount of ground it always did. */
+const BASE_SATELLITE_ZOOM = 18.7;
 
 interface CanvasImage {
   element: HTMLImageElement;
@@ -561,11 +569,10 @@ export function ImageCanvasBoard({
 
   async function loadImageBlob(blob: Blob, realWidthFeet: number | null = null) {
     const element = await loadImageElement(blob);
-    const scale = Math.min(
-      (CANVAS_WIDTH * 0.9) / element.width,
-      (CANVAS_HEIGHT * 0.9) / element.height,
-      1
-    );
+    // Scaled to cover the board's diagonal rather than to fit inside it, so
+    // there is photo under every corner however far it is turned. Fitting is
+    // what put the white triangles there.
+    const scale = coverScale(element.width, element.height, CANVAS_WIDTH, CANVAS_HEIGHT);
     setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale, rotation: 0, realWidthFeet });
     setLocked(false);
     imageDirtyRef.current = true;
@@ -582,22 +589,35 @@ export function ImageCanvasBoard({
     lat: number,
     mapBearing = 0
   ): Promise<{ blob: Blob; realWidthFeet: number }> {
-    // Mapbox requires its logo/attribution on static images, anchored to the bottom
-    // edge. Fetch extra vertical padding, split evenly so the requested lat/lng stays
-    // vertically centered in the final crop (cropping only from the bottom would push
-    // the property off-center), and trim it back off after loading.
-    const zoom = 18.7;
+    // Mapbox requires its logo/attribution on static images, anchored to the
+    // bottom edge. Fetch extra vertical padding, split evenly so the requested
+    // lat/lng stays vertically centered in the final crop (cropping only from
+    // the bottom would push the property off-center), and trim it back off
+    // after loading.
+    //
+    // A square is requested rather than a board-shaped rectangle so there is
+    // photo under the corners when it turns. 1280 a side is Mapbox's limit.
     const padding = 220;
-    const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},${mapBearing}/${CANVAS_WIDTH}x${CANVAS_HEIGHT + padding}@2x?access_token=${env.mapboxToken}`;
+    const request = SATELLITE_REQUEST_SIZE;
+    const keptHeight = request - padding;
+
+    // Scaling up to fill the corners means seeing less ground, so the photo is
+    // fetched from further out by exactly that much. The badge then reads
+    // about the same as it always did.
+    const zoom = BASE_SATELLITE_ZOOM - zoomAdjustmentFor(
+      coverScale(request, keptHeight, CANVAS_WIDTH, CANVAS_HEIGHT)
+    );
+
+    const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},${mapBearing}/${request}x${request}@2x?access_token=${env.mapboxToken}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
     const rawBlob = await res.blob();
     const rawImage = await loadImageElement(rawBlob);
 
-    const pixelRatio = rawImage.width / CANVAS_WIDTH;
+    const pixelRatio = rawImage.width / request;
     const cropCanvas = document.createElement("canvas");
-    cropCanvas.width = CANVAS_WIDTH * pixelRatio;
-    cropCanvas.height = CANVAS_HEIGHT * pixelRatio;
+    cropCanvas.width = request * pixelRatio;
+    cropCanvas.height = keptHeight * pixelRatio;
     const cropCtx = cropCanvas.getContext("2d");
     if (!cropCtx) throw new Error("Couldn't process the satellite photo.");
     const cropTop = (padding * pixelRatio) / 2;
@@ -613,16 +633,23 @@ export function ImageCanvasBoard({
       cropCanvas.height
     );
 
-    // Web Mercator ground resolution at this zoom/latitude, applied to the
-    // requested (unscaled) width, gives the real-world span of the image —
-    // shown as an informational "≈X ft across" badge only. Zone area/perimeter
-    // are entered manually (see ZoneServiceDialog) since pixel-derived
-    // measurements weren't reliable enough to trust.
-    // Reference: standard XYZ/slippy-map tile scheme, 256px tiles doubling per
-    // zoom level (same convention Mapbox, Google Maps, and OSM all use).
+    // Web Mercator ground resolution at this zoom/latitude. Reference: the
+    // standard XYZ/slippy-map tile scheme, 256px tiles doubling per zoom level
+    // (the convention Mapbox, Google Maps and OSM all share).
+    //
+    // The badge is about what is on the board, not about the whole photo —
+    // those stopped being the same number when the photo grew past the board.
+    // Zone area/perimeter are still entered by hand (see ZoneServiceDialog);
+    // pixel-derived measurements were never reliable enough to trust.
     const metersPerPixel =
       (EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
-    const realWidthFeet = CANVAS_WIDTH * metersPerPixel * METERS_TO_FEET;
+    const drawnWidth = request * coverScale(request, keptHeight, CANVAS_WIDTH, CANVAS_HEIGHT);
+    const realWidthFeet = visibleWidthFeet({
+      canvasWidth: CANVAS_WIDTH,
+      imageMapWidth: request,
+      metresPerMapPixel: metersPerPixel,
+      drawnWidth,
+    });
 
     return new Promise((resolve, reject) => {
       cropCanvas.toBlob((blob) => {
@@ -678,37 +705,16 @@ export function ImageCanvasBoard({
   }
 
   /**
-   * Turns the map a bit further round.
+   * Turns the photo on the board.
    *
-   * A satellite photo is re-fetched at the new bearing so it stays full-frame.
-   * An uploaded photo has no map behind it, so that one is rotated on the
-   * canvas — the only case where the corners can show, and the evaluator can
-   * see that for themselves.
+   * No re-fetch any more: the photo is fetched big enough to cover the board
+   * at any angle, so turning it here is instant and shows nothing but photo.
+   * That is what makes a slider possible — a control you drag cannot be
+   * asking the network on every pixel.
    */
-  async function nudgeBearing(delta: number) {
-    if (!origin) {
-      setImage((prev) =>
-        prev ? { ...prev, rotation: normalizeDegrees(prev.rotation + delta) } : prev
-      );
-      imageDirtyRef.current = true;
-      return;
-    }
-
-    const next = normalizeDegrees(bearing + delta);
-    setSatelliteError(null);
-    setSatelliteLoading(true);
-    try {
-      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(origin.lng, origin.lat, next);
-      await loadImageBlob(blob, realWidthFeet);
-      setBearing(next);
-      // The house is still under the middle of the frame — the map turned
-      // around it, it did not move.
-      setHouseOutline([{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }]);
-    } catch (err) {
-      setSatelliteError(err instanceof Error ? err.message : "Couldn't turn the photo.");
-    } finally {
-      setSatelliteLoading(false);
-    }
+  function setRotation(degrees: number) {
+    setImage((prev) => (prev ? { ...prev, rotation: degrees } : prev));
+    imageDirtyRef.current = true;
   }
 
   /** Puts the photo back in the middle of the board. */
@@ -915,24 +921,37 @@ export function ImageCanvasBoard({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1">
-            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(-90)}>
-              <RotateCcw className="h-4 w-4" />
-              90°
-            </Button>
-            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(-15)}>
-              <RotateCcw className="h-4 w-4" />
-              15°
-            </Button>
-            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(15)}>
-              <RotateCw className="h-4 w-4" />
-              15°
-            </Button>
-            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(90)}>
-              <RotateCw className="h-4 w-4" />
-              90°
-            </Button>
-            {satelliteLoading && <Loader2 className="ml-1 h-4 w-4 animate-spin text-muted-foreground" />}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Turn it</span>
+              <span className="font-medium tabular-nums text-foreground">
+                {Math.round(image?.rotation ?? 0)}°
+              </span>
+            </div>
+            <input
+              type="range"
+              min={-180}
+              max={180}
+              step={1}
+              value={image?.rotation ?? 0}
+              onChange={(e) => setRotation(Number(e.target.value))}
+              aria-label="Turn the photo"
+              className="h-8 w-full accent-primary"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">Drag until the front faces the arrow</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setRotation(0)}
+              >
+                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                Back to auto
+              </Button>
+            </div>
+            {satelliteLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
 
           <label className="flex items-center gap-2 text-xs">
