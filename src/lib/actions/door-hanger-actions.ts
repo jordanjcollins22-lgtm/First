@@ -6,13 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { describeDbError } from "@/lib/setup-errors";
-import { SIDES, type HangerSide } from "@/lib/door-hanger";
+import { FACES, SIDES, type HangerFace, type HangerSide } from "@/lib/door-hanger";
 
 export type DoorHangerResult = { ok: true; message?: string } | { ok: false; message: string };
 
 /** Puts artwork on one half of the sheet, or renames what is there. */
 export async function saveDoorHanger(input: {
   side: HangerSide;
+  face: HangerFace;
   imagePath?: string | null;
   label?: string;
 }): Promise<DoorHangerResult> {
@@ -20,6 +21,7 @@ export async function saveDoorHanger(input: {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
     if (!SIDES.includes(input.side)) return { ok: false, message: "There is no such half." };
+    if (!FACES.includes(input.face)) return { ok: false, message: "There is no such face." };
 
     const [supabase, organizationId] = await Promise.all([
       createClient(),
@@ -30,12 +32,13 @@ export async function saveDoorHanger(input: {
       {
         organization_id: organizationId,
         side: input.side,
+        face: input.face,
         image_path: input.imagePath ?? null,
         label: input.label?.trim() || null,
         created_by: profile.id,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "organization_id,side" }
+      { onConflict: "organization_id,side,face" }
     );
 
     if (error) return { ok: false, message: describeDbError(error) };
@@ -49,13 +52,16 @@ export async function saveDoorHanger(input: {
 }
 
 /** Empties one half back to the bare die line. */
-export async function clearDoorHanger(side: HangerSide): Promise<DoorHangerResult> {
+export async function clearDoorHanger(
+  side: HangerSide,
+  face: HangerFace
+): Promise<DoorHangerResult> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
 
     const supabase = await createClient();
-    const { error } = await supabase.from("door_hanger_slots").delete().eq("side", side);
+    const { error } = await supabase.from("door_hanger_slots").delete().eq("side", side).eq("face", face);
     if (error) return { ok: false, message: describeDbError(error) };
 
     revalidatePath("/admin/door-hangers");

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isMissingTable } from "@/lib/setup-errors";
-import type { HangerSide, HangerSlot } from "@/lib/door-hanger";
+import type { HangerFace, HangerSide, HangerSlot } from "@/lib/door-hanger";
 
 /** The artwork on each half of the sheet. */
 export async function listDoorHangerSlots(): Promise<HangerSlot[]> {
@@ -8,16 +8,22 @@ export async function listDoorHangerSlots(): Promise<HangerSlot[]> {
 
   const { data, error } = await supabase
     .from("door_hanger_slots")
-    .select("side, image_path, label")
+    .select("side, face, image_path, label")
     .order("side");
 
   if (isMissingTable(error) || error) return [];
 
-  return ((data ?? []) as { side: string; image_path: string | null; label: string | null }[]).map(
-    (row) => ({
-      side: row.side as HangerSide,
-      imagePath: row.image_path,
-      label: row.label,
-    })
-  );
+  return (
+    (data ?? []) as {
+      side: string;
+      face: string;
+      image_path: string | null;
+      label: string | null;
+    }[]
+  ).map((row) => ({
+    side: row.side as HangerSide,
+    face: (row.face as HangerFace) ?? "front",
+    imagePath: row.image_path,
+    label: row.label,
+  }));
 }

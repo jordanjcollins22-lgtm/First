@@ -20,9 +20,15 @@ export const HANGER_HEIGHT_IN = SHEET_HEIGHT_IN;
 export const HOLE_DIAMETER_IN = 1.75;
 export const HOLE_CENTRE_FROM_TOP_IN = 2.25;
 
-/** The slot the door handle passes through on the way in. */
-export const SLOT_WIDTH_IN = 0.5;
-export const SLOT_TOP_FROM_TOP_IN = 0.5;
+/**
+ * The slit the handle passes through on the way in.
+ *
+ * One cut, not a slot: no paper is removed, the hanger just opens along the
+ * line and closes behind the handle. It runs down the left side of the hole,
+ * tangent to it, so the tab it leaves is the full width of the hanger rather
+ * than two thin strips either side of a gap.
+ */
+export const SLIT_SIDE: "left" | "right" = "left";
 
 /** What an advertiser or designer should send. 300dpi of the printed size. */
 export const ARTWORK_PIXEL_WIDTH = Math.round(HANGER_WIDTH_IN * 300);
@@ -30,6 +36,27 @@ export const ARTWORK_PIXEL_HEIGHT = Math.round(HANGER_HEIGHT_IN * 300);
 
 export type HangerSide = "left" | "right";
 export const SIDES: readonly HangerSide[] = ["left", "right"];
+
+/** Front of the sheet and back of the sheet. */
+export type HangerFace = "front" | "back";
+export const FACES: readonly HangerFace[] = ["front", "back"];
+
+/**
+ * Which half of the back sheet a hanger's back lands on.
+ *
+ * A duplex printer flips the paper left to right, so the back of the
+ * left-hand hanger comes out on the right-hand half. Printing the back in
+ * reading order would put each hanger's back on the other hanger — a mistake
+ * that only shows up after the guillotine.
+ */
+export function backHalfFor(side: HangerSide): HangerSide {
+  return side === "left" ? "right" : "left";
+}
+
+/** The halves of the back sheet, in the order they print. */
+export function backSheetOrder(): HangerSide[] {
+  return SIDES.map(backHalfFor);
+}
 
 /**
  * The die line as fractions of one hanger.
@@ -45,18 +72,41 @@ export interface DieLine {
   holeCentreY: number;
   /** Diameter as a fraction of the hanger's width. */
   holeSize: number;
-  slotWidth: number;
-  /** 0-1 down the hanger, where the slot meets the top edge. */
-  slotTop: number;
+  /** 0-1 across the hanger: where the single cut line runs. */
+  slitX: number;
+  /** 0-1 down the hanger: the top edge, where the slit starts. */
+  slitTop: number;
+  /** 0-1 down the hanger: where the slit meets the hole. */
+  slitBottom: number;
 }
 
-export function dieLine(): DieLine {
+/**
+ * The cut, as fractions of one hanger.
+ *
+ * Fractions rather than inches so the same numbers drive the screen preview
+ * and the printed sheet — the preview is scaled, the paper is not, and one of
+ * those two being drawn from different numbers is how they drift apart.
+ *
+ * Mirrored for the back of the sheet: a duplex printer flips the paper, so a
+ * back drawn the same way round as the front would cut on the wrong side.
+ */
+export function dieLine(face: HangerFace = "front"): DieLine {
+  const holeSize = HOLE_DIAMETER_IN / HANGER_WIDTH_IN;
+  const holeCentreY = HOLE_CENTRE_FROM_TOP_IN / HANGER_HEIGHT_IN;
+
+  // Tangent to the hole, on whichever side the slit runs.
+  const onLeft = face === "front" ? SLIT_SIDE === "left" : SLIT_SIDE !== "left";
+  const slitX = onLeft ? 0.5 - holeSize / 2 : 0.5 + holeSize / 2;
+
   return {
     holeCentreX: 0.5,
-    holeCentreY: HOLE_CENTRE_FROM_TOP_IN / HANGER_HEIGHT_IN,
-    holeSize: HOLE_DIAMETER_IN / HANGER_WIDTH_IN,
-    slotWidth: SLOT_WIDTH_IN / HANGER_WIDTH_IN,
-    slotTop: SLOT_TOP_FROM_TOP_IN / HANGER_HEIGHT_IN,
+    holeCentreY,
+    holeSize,
+    slitX,
+    slitTop: 0,
+    // Down to the middle of the hole, so the cut and the circle meet rather
+    // than stopping short of each other.
+    slitBottom: holeCentreY,
   };
 }
 
@@ -73,6 +123,7 @@ export function safeTopIn(): number {
 
 export interface HangerSlot {
   side: HangerSide;
+  face: HangerFace;
   imagePath: string | null;
   label: string | null;
 }
@@ -82,10 +133,20 @@ export function isFilled(slot: HangerSlot | undefined): boolean {
   return Boolean(slot?.imagePath);
 }
 
-/** Sides still empty. */
-export function emptySides(slots: HangerSlot[]): HangerSide[] {
-  const bySide = new Map(slots.map((slot) => [slot.side, slot]));
+/** Sides of one face still empty. */
+export function emptySides(slots: HangerSlot[], face: HangerFace = "front"): HangerSide[] {
+  const onFace = slots.filter((slot) => slot.face === face);
+  const bySide = new Map(onFace.map((slot) => [slot.side, slot]));
   return SIDES.filter((side) => !isFilled(bySide.get(side)));
+}
+
+/** The artwork for one half of one face, if there is any. */
+export function slotAt(
+  slots: HangerSlot[],
+  side: HangerSide,
+  face: HangerFace
+): HangerSlot | undefined {
+  return slots.find((slot) => slot.side === side && slot.face === face);
 }
 
 /**
@@ -96,7 +157,14 @@ export function emptySides(slots: HangerSlot[]): HangerSide[] {
  * worth saying out loud before five hundred go through the printer.
  */
 export function hangersPerSheet(slots: HangerSlot[]): number {
-  return SIDES.filter((side) => isFilled(slots.find((slot) => slot.side === side))).length;
+  // Counted off the front. A back with no front is not a hanger, and a front
+  // with no back is a perfectly good one-sided hanger.
+  return SIDES.filter((side) => isFilled(slotAt(slots, side, "front"))).length;
+}
+
+/** Whether anything is on the back at all, which decides if it prints. */
+export function hasBack(slots: HangerSlot[]): boolean {
+  return SIDES.some((side) => isFilled(slotAt(slots, side, "back")));
 }
 
 /** How many sheets to run for a given number of hangers. */

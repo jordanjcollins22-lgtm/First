@@ -5,17 +5,26 @@ import {
   HANGER_WIDTH_IN,
   HOLE_DIAMETER_IN,
   SHEET_WIDTH_IN,
+  backHalfFor,
+  backSheetOrder,
   dieLine,
   emptySides,
   hangersPerSheet,
+  hasBack,
   isFilled,
   safeTopIn,
   sheetsNeeded,
+  slotAt,
+  type HangerFace,
   type HangerSlot,
 } from "@/lib/door-hanger";
 
-function slot(side: HangerSlot["side"], imagePath: string | null = "art.png"): HangerSlot {
-  return { side, imagePath, label: null };
+function slot(
+  side: HangerSlot["side"],
+  imagePath: string | null = "art.png",
+  face: HangerFace = "front"
+): HangerSlot {
+  return { side, face, imagePath, label: null };
 }
 
 describe("the sheet", () => {
@@ -43,10 +52,34 @@ describe("the die line", () => {
     expect(HOLE_DIAMETER_IN).toBeGreaterThanOrEqual(1.5);
   });
 
-  it("runs the slot from the top edge down into the hole", () => {
-    // If the slot stops short of the hole the handle cannot get in.
-    expect(line.slotTop).toBeLessThan(line.holeCentreY);
-    expect(line.slotWidth).toBeLessThan(line.holeSize);
+  it("runs one cut from the top edge down into the hole", () => {
+    // If the cut stops short of the hole the handle cannot get in.
+    expect(line.slitTop).toBe(0);
+    expect(line.slitBottom).toBe(line.holeCentreY);
+    expect(line.slitBottom).toBeGreaterThan(line.slitTop);
+  });
+
+  it("puts the cut down the left side of the hole, touching it", () => {
+    // Tangent, not through the middle: the tab it leaves is the full width
+    // of the hanger rather than two thin strips either side of a gap.
+    expect(line.slitX).toBeCloseTo(line.holeCentreX - line.holeSize / 2, 10);
+    expect(line.slitX).toBeLessThan(line.holeCentreX);
+  });
+
+  it("mirrors the cut on the back, because the printer flips the paper", () => {
+    const back = dieLine("back");
+    expect(back.slitX).toBeCloseTo(line.holeCentreX + line.holeSize / 2, 10);
+    expect(back.slitX).toBeGreaterThan(back.holeCentreX);
+    // Same hole, same place — only the cut changes side.
+    expect(back.holeCentreX).toBe(line.holeCentreX);
+    expect(back.holeCentreY).toBe(line.holeCentreY);
+    expect(back.holeSize).toBe(line.holeSize);
+  });
+
+  it("puts front and back cuts on top of each other once flipped", () => {
+    // Flipping the back left-to-right must land its cut where the front's is.
+    const back = dieLine("back");
+    expect(1 - back.slitX).toBeCloseTo(line.slitX, 10);
   });
 
   it("keeps the hole in the top third, where artwork does not go", () => {
@@ -99,5 +132,37 @@ describe("how many sheets to run", () => {
   it("says nothing rather than dividing by an empty sheet", () => {
     expect(sheetsNeeded(500, [])).toBeNull();
     expect(sheetsNeeded(0, [slot("left")])).toBeNull();
+  });
+});
+
+describe("the back of the sheet", () => {
+  it("swaps the halves over", () => {
+    // A duplex printer flips left to right, so the left hanger's back comes
+    // out on the right-hand half.
+    expect(backHalfFor("left")).toBe("right");
+    expect(backHalfFor("right")).toBe("left");
+    expect(backSheetOrder()).toEqual(["right", "left"]);
+  });
+
+  it("keeps a front and a back apart on the same half", () => {
+    const slots = [slot("left", "front.png", "front"), slot("left", "back.png", "back")];
+    expect(slotAt(slots, "left", "front")?.imagePath).toBe("front.png");
+    expect(slotAt(slots, "left", "back")?.imagePath).toBe("back.png");
+  });
+
+  it("only prints a back when there is something on it", () => {
+    expect(hasBack([slot("left")])).toBe(false);
+    expect(hasBack([slot("left", "art.png", "back")])).toBe(true);
+  });
+
+  it("counts hangers off the front, never off the back", () => {
+    // A back with no front is not a hanger.
+    expect(hangersPerSheet([slot("left", "art.png", "back")])).toBe(0);
+    expect(hangersPerSheet([slot("left"), slot("left", "art.png", "back")])).toBe(1);
+  });
+
+  it("reports empty halves per face", () => {
+    expect(emptySides([slot("left")], "front")).toEqual(["right"]);
+    expect(emptySides([slot("left")], "back")).toEqual(["left", "right"]);
   });
 });

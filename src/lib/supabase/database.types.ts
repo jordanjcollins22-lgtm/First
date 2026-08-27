@@ -198,6 +198,7 @@ export interface Database {
           id: string;
           organization_id: string;
           side: string;
+          face: string;
           image_path: string | null;
           label: string | null;
           created_by: string | null;

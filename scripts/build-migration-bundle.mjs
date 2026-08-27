@@ -54,6 +54,7 @@ const CREATES = {
   "0106_knowledge_app_links.sql": [],
   "0107_canvas_orientation.sql": [],
   "0108_door_hangers.sql": ["door_hanger_slots"],
+  "0109_door_hanger_backs.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

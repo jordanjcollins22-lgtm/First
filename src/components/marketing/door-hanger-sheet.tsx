@@ -15,11 +15,15 @@ import {
   HANGER_HEIGHT_IN,
   HANGER_WIDTH_IN,
   SIDES,
+  backSheetOrder,
   dieLine,
   hangersPerSheet,
+  hasBack,
   isFilled,
   safeTopIn,
   sheetsNeeded,
+  slotAt,
+  type HangerFace,
   type HangerSide,
   type HangerSlot,
 } from "@/lib/door-hanger";
@@ -40,12 +44,12 @@ function publicUrlFor(path: string): string {
  */
 export function DoorHangerSheet({ slots }: { slots: HangerSlot[] }) {
   const router = useRouter();
-  const [editing, setEditing] = useState<HangerSide | null>(null);
+  const [editing, setEditing] = useState<{ side: HangerSide; face: HangerFace } | null>(null);
   const [runSize, setRunSize] = useState("500");
 
-  const bySide = new Map(slots.map((slot) => [slot.side, slot]));
   const perSheet = hangersPerSheet(slots);
   const sheets = sheetsNeeded(Number(runSize) || 0, slots);
+  const backPrints = hasBack(slots);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-4 sm:py-6">
@@ -54,7 +58,8 @@ export function DoorHangerSheet({ slots }: { slots: HangerSlot[] }) {
           <div>
             <h1 className="text-2xl font-bold">Door hangers</h1>
             <p className="text-sm text-muted-foreground">
-              Two to a letter sheet, cut down the middle. The knob hole and slot are drawn for you.
+              Two to a letter sheet, cut down the middle. The hole and its cut line are drawn for
+              you.
             </p>
           </div>
           <Button type="button" variant="outline" onClick={() => window.print()}>
@@ -98,38 +103,37 @@ export function DoorHangerSheet({ slots }: { slots: HangerSlot[] }) {
         </p>
 
         <p className="mt-2 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
-          Printing: set <span className="font-medium text-foreground">Margins</span> to None and{" "}
-          <span className="font-medium text-foreground">Scale</span> to 100%, or the hole ends up in
-          the wrong place.
+          Printing: two-sided, flip on the <span className="font-medium text-foreground">long edge</span>,
+          Margins <span className="font-medium text-foreground">None</span>, Scale{" "}
+          <span className="font-medium text-foreground">100%</span>. The back is already laid out for
+          that flip, so its cut lands on top of the front&apos;s.
         </p>
       </div>
 
-      <div className="print-root mt-5">
-        <div
-          className="print-sheet relative mx-auto flex w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"
-          style={{ aspectRatio: "8.5 / 11" }}
-        >
-          {SIDES.map((side) => (
-            <HangerHalf
-              key={side}
-              side={side}
-              slot={bySide.get(side)}
-              onPick={() => setEditing(side)}
-            />
-          ))}
-
-          {/* Where the guillotine goes. */}
-          <div
-            className="pointer-events-none absolute inset-y-0 left-1/2 w-0 border-l-2 border-dashed border-neutral-400"
-            aria-hidden
-          />
+      <div className="print-root mt-5 space-y-6">
+        <Face
+          face="front"
+          slots={slots}
+          onPick={(side) => setEditing({ side, face: "front" })}
+        />
+        {/* Always on screen so it can be filled; kept off the paper while it
+            is empty, since an empty back is a blank page through the printer
+            twice for every sheet. */}
+        <div className={backPrints ? undefined : "print-hide"}>
+          <Face face="back" slots={slots} onPick={(side) => setEditing({ side, face: "back" })} />
+          {!backPrints && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Nothing on the back yet, so it won&apos;t print. Tap a half to add something.
+            </p>
+          )}
         </div>
       </div>
 
       {editing && (
         <EditHalf
-          side={editing}
-          slot={bySide.get(editing)}
+          side={editing.side}
+          face={editing.face}
+          slot={slotAt(slots, editing.side, editing.face)}
           onClose={() => setEditing(null)}
           onDone={() => {
             setEditing(null);
@@ -137,6 +141,53 @@ export function DoorHangerSheet({ slots }: { slots: HangerSlot[] }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * One side of the paper.
+ *
+ * The back prints its halves swapped over, because a duplex printer flips the
+ * sheet left to right: printed in reading order, each hanger's back would
+ * come out on the other hanger. Its cut is mirrored for the same reason.
+ */
+function Face({
+  face,
+  slots,
+  onPick,
+}: {
+  face: HangerFace;
+  slots: HangerSlot[];
+  onPick: (side: HangerSide) => void;
+}) {
+  const order = face === "front" ? SIDES : backSheetOrder();
+
+  return (
+    <div>
+      <p className="print-hide mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {face === "front" ? "Front" : "Back — laid out for a long-edge flip"}
+      </p>
+      <div
+        className="print-sheet relative mx-auto flex w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+        style={{ aspectRatio: "8.5 / 11" }}
+      >
+        {order.map((side) => (
+          <HangerHalf
+            key={side}
+            side={side}
+            face={face}
+            slot={slotAt(slots, side, face)}
+            onPick={() => onPick(side)}
+          />
+        ))}
+
+        {/* Where the guillotine goes. */}
+        <div
+          className="pointer-events-none absolute inset-y-0 left-1/2 w-0 border-l-2 border-dashed border-neutral-400"
+          aria-hidden
+        />
+      </div>
     </div>
   );
 }
@@ -152,10 +203,12 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function HangerHalf({
   side,
+  face,
   slot,
   onPick,
 }: {
   side: HangerSide;
+  face: HangerFace;
   slot: HangerSlot | undefined;
   onPick: () => void;
 }) {
@@ -166,7 +219,7 @@ function HangerHalf({
       type="button"
       onClick={onPick}
       className="hanger-half group relative block h-full w-1/2 bg-white text-left"
-      aria-label={`${side} hanger`}
+      aria-label={`${side} hanger, ${face}`}
     >
       {filled ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -179,7 +232,7 @@ function HangerHalf({
         <EmptyHalf />
       )}
 
-      <DieLineOverlay />
+      <DieLineOverlay face={face} />
 
       <span className="print-hide pointer-events-none absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
         {side}
@@ -195,14 +248,17 @@ function HangerHalf({
  * Always on, artwork or not: it is the difference between a leaflet and a
  * door hanger, and a designer who cannot see where the hole goes will put the
  * logo through it.
+ *
+ * One line, not a slot. No paper comes out — the hanger opens along the cut
+ * and closes behind the handle — and it runs down the side of the hole rather
+ * than through the middle of it.
  */
-function DieLineOverlay() {
-  const line = dieLine();
+function DieLineOverlay({ face }: { face: HangerFace }) {
+  const line = dieLine(face);
   const holeWidthPct = line.holeSize * 100;
   // The hanger is taller than it is wide, so a circle needs its height in the
   // hanger's own proportions rather than the same percentage.
   const holeHeightPct = ((line.holeSize * HANGER_WIDTH_IN) / HANGER_HEIGHT_IN) * 100;
-  const slotWidthPct = line.slotWidth * 100;
   const holeTopPct = line.holeCentreY * 100 - holeHeightPct / 2;
 
   return (
@@ -216,24 +272,12 @@ function DieLineOverlay() {
           height: `${holeHeightPct}%`,
         }}
       />
-      {/* The slot's sides run from the top edge down to where the circle
-          starts — carrying on through it would draw a cut across the hole. */}
       <span
-        className="absolute border-x-2 border-dashed border-neutral-400"
+        className="absolute border-l-2 border-dashed border-neutral-400"
         style={{
-          left: `${(0.5 - line.slotWidth / 2) * 100}%`,
-          top: `${line.slotTop * 100}%`,
-          width: `${slotWidthPct}%`,
-          height: `${holeTopPct - line.slotTop * 100}%`,
-        }}
-      />
-      {/* The slot is open at the top — that is how the handle gets in. */}
-      <span
-        className="absolute border-t-2 border-dashed border-neutral-400"
-        style={{
-          left: `${(0.5 - line.slotWidth / 2) * 100}%`,
-          top: `${line.slotTop * 100}%`,
-          width: `${slotWidthPct}%`,
+          left: `${line.slitX * 100}%`,
+          top: `${line.slitTop * 100}%`,
+          height: `${(line.slitBottom - line.slitTop) * 100}%`,
         }}
       />
     </span>
@@ -254,11 +298,13 @@ function EmptyHalf() {
 
 function EditHalf({
   side,
+  face,
   slot,
   onClose,
   onDone,
 }: {
   side: HangerSide;
+  face: HangerFace;
   slot: HangerSlot | undefined;
   onClose: () => void;
   onDone: () => void;
@@ -277,7 +323,7 @@ function EditHalf({
     setError(null);
     try {
       const supabase = createClient();
-      const path = `door-hangers/${side}/${uuid()}-${file.name}`;
+      const path = `door-hangers/${face}/${side}/${uuid()}-${file.name}`;
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file);
       if (uploadError) throw uploadError;
       setImagePath(path);
@@ -300,7 +346,9 @@ function EditHalf({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
-        <h2 className="text-lg font-semibold capitalize">{side} half</h2>
+        <h2 className="text-lg font-semibold capitalize">
+          {side} half · {face}
+        </h2>
         <p className="mb-3 text-xs text-muted-foreground">
           {HANGER_WIDTH_IN}&Prime; &times; {HANGER_HEIGHT_IN}&Prime; ({ARTWORK_PIXEL_WIDTH} &times;{" "}
           {ARTWORK_PIXEL_HEIGHT}px). Nothing important in the top {safeTopIn()}&Prime;.
@@ -364,7 +412,7 @@ function EditHalf({
               type="button"
               className="flex-1"
               disabled={pending || uploading}
-              onClick={() => run(() => saveDoorHanger({ side, imagePath, label }))}
+              onClick={() => run(() => saveDoorHanger({ side, face, imagePath, label }))}
             >
               Save
             </Button>
@@ -378,9 +426,9 @@ function EditHalf({
                   // The usual case: one design, printed twice, two hangers a
                   // sheet. Copying beats uploading the same file again.
                   run(async () => {
-                    const mine = await saveDoorHanger({ side, imagePath, label });
+                    const mine = await saveDoorHanger({ side, face, imagePath, label });
                     if (!mine.ok) return mine;
-                    return saveDoorHanger({ side: other, imagePath, label });
+                    return saveDoorHanger({ side: other, face, imagePath, label });
                   })
                 }
               >
@@ -393,7 +441,7 @@ function EditHalf({
                 type="button"
                 variant="ghost"
                 disabled={pending}
-                onClick={() => run(() => clearDoorHanger(side))}
+                onClick={() => run(() => clearDoorHanger(side, face))}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
