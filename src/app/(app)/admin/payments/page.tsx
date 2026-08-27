@@ -10,6 +10,8 @@ import { PageTabs } from "@/components/ui/page-tabs";
 import { Timesheet } from "@/components/payments/timesheet";
 import { listDayEntries, listPayPeople } from "@/lib/data/time-clock";
 import { localDayKey } from "@/lib/data/crew-day";
+import { getReceivedPayments } from "@/lib/data/received-payments";
+import { ReceivedPanel } from "@/components/payments/received-panel";
 
 /**
  * Money in and out, all of it.
@@ -78,6 +80,15 @@ export default async function PaymentsPage({
               />
             ),
           },
+          // Money that arrived, and what we did for it. Separate from Money
+          // above because that tab answers "how are we doing" and this one
+          // answers "is every payment attached to the work it paid for" —
+          // which is a list of things to fix, not a number to read.
+          {
+            key: "received",
+            label: "Received",
+            content: await ReceivedTab(),
+          },
           // Hours are money: this is what the day cost in wages, and the only
           // honest input to what a job cost. Admin only — correcting a logged
           // time is not something the person who logged it should do.
@@ -91,6 +102,31 @@ export default async function PaymentsPage({
       />
     </div>
   );
+}
+
+/**
+ * Money in, gathered into the projects it paid for.
+ *
+ * Loaded on its own and allowed to fail on its own: it reads across payments,
+ * contacts, jobs and properties, and a problem in any of them should cost
+ * this tab rather than the whole Money page.
+ */
+async function ReceivedTab() {
+  const data = await getReceivedPayments().catch((err) => {
+    console.error("Received payments failed to load:", err);
+    return null;
+  });
+
+  if (!data) {
+    return (
+      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
+        Couldn&apos;t load received payments. If this is a fresh setup, run{" "}
+        <code>supabase/migrations/0116_payment_plans.sql</code>.
+      </p>
+    );
+  }
+
+  return <ReceivedPanel data={data} />;
 }
 
 /** Who was on what today, and what it cost. */
