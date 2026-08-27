@@ -57,6 +57,7 @@ const CREATES = {
   "0109_door_hanger_backs.sql": [],
   "0110_rank_grid.sql": ["rank_keywords", "rank_scans", "rank_points"],
   "0111_canvas_marks.sql": [],
+  "0112_photo_waivers.sql": ["job_photo_waivers"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

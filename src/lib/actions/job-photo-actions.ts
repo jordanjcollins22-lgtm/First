@@ -6,9 +6,9 @@ import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
-import { canCompleteJob, canReopenCompleted } from "@/lib/job-lifecycle";
+import { canCompleteJob, canReopenCompleted, type PhotoWaiver } from "@/lib/job-lifecycle";
 import { walkthroughGate } from "@/lib/walkthrough";
-import type { JobPhotoKind, JobStatus, WalkthroughStatus } from "@/types/domain";
+import type { JobPhotoKind, JobPhotoStage, JobStatus, WalkthroughStatus } from "@/types/domain";
 
 export type PhotoResult = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -146,13 +146,26 @@ export async function completeJob(
     );
     if (!walk.ok) return { ok: false, message: walk.reason };
 
+    const { data: waiverRows } = await supabase
+      .from("job_photo_waivers")
+      .select("zone_id, stage")
+      .eq("job_id", jobId);
+
+    const waivers: PhotoWaiver[] = ((waiverRows ?? []) as { zone_id: string | null; stage: string }[]).map(
+      (row) => ({ zoneId: row.zone_id, stage: row.stage as JobPhotoStage })
+    );
+
     const verdict = canCompleteJob(
       { status: job.status as JobStatus },
       ((photos ?? []) as { kind: string; zone_id: string | null }[]).map((p) => ({
         kind: p.kind as JobPhotoKind,
         zoneId: p.zone_id,
       })),
-      zones
+      zones,
+      // The waivers count here too. A stage somebody marked as having no
+      // photo has to let the job close, or "don't have one" only ever
+      // satisfies the screen and the sign-off still refuses.
+      waivers
     );
     if (!verdict.ok) return { ok: false, message: verdict.reason };
 

@@ -3,19 +3,35 @@
 import { useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Camera, Check, CheckCircle2, ImagePlus, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Camera,
+  Check,
+  CheckCircle2,
+  ImagePlus,
+  Loader2,
+  Minus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { adoptBeforesForJob } from "@/lib/actions/social-actions";
+import { unwaivePhotoStage, waivePhotoStage } from "@/lib/actions/photo-waiver-actions";
 import {
   attachJobPhoto,
   completeJob,
   deleteJobPhoto,
   reopenCompletedJob,
 } from "@/lib/actions/job-photo-actions";
-import { canCompleteJob, PHOTO_KIND_LABELS, zoneCoverage, type ZoneRef } from "@/lib/job-lifecycle";
+import {
+  canCompleteJob,
+  PHOTO_KIND_LABELS,
+  zoneCoverage,
+  type PhotoWaiver,
+  type ZoneRef,
+} from "@/lib/job-lifecycle";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
 import { REQUIRED_STAGES } from "@/types/domain";
 import type { JobPhotoKind, JobStatus } from "@/types/domain";
@@ -47,6 +63,7 @@ export function CompletionPanel({
   completedByName,
   completionNotes,
   evaluationBeforesAvailable = 0,
+  waivers = [],
 }: {
   jobId: string;
   status: JobStatus;
@@ -59,6 +76,8 @@ export function CompletionPanel({
    * Asking for a before while those are sitting there is asking twice.
    */
   evaluationBeforesAvailable?: number;
+  /** Stages somebody has said there is no photo of. */
+  waivers?: PhotoWaiver[];
   /** Which stages this job is far enough along to accept. A during or after
    * photo of work nobody has started is a record of something that did not
    * happen. */
@@ -72,6 +91,7 @@ export function CompletionPanel({
 }) {
   const [items, setItems] = useState(photos);
   const [notes, setNotes] = useState(completionNotes ?? "");
+  const router = useRouter();
   const [uploading, setUploading] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -88,11 +108,11 @@ export function CompletionPanel({
       (k === "after" && allowAfter)
   );
 
-  const coverageVerdict = canCompleteJob({ status }, items, zones);
+  const coverageVerdict = canCompleteJob({ status }, items, zones, waivers);
   const verdict = allowSignOff
     ? coverageVerdict
     : ({ ok: false, reason: signOffLockReason ?? "Not yet." } as const);
-  const coverage = zoneCoverage(zones, items);
+  const coverage = zoneCoverage(zones, items, waivers);
   const doneZones = coverage.filter((z) => z.complete).length;
 
   /**
@@ -216,6 +236,8 @@ export function CompletionPanel({
             offered={offered}
             onUpload={(files, kind) => upload(files, kind, zone)}
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
+            jobId={jobId}
+            onWaiverChanged={() => router.refresh()}
           />
         ))}
 
@@ -234,6 +256,8 @@ export function CompletionPanel({
             offered={allowDuring ? ["issue"] : []}
             onUpload={(files, kind) => upload(files, kind, null)}
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
+            jobId={jobId}
+            onWaiverChanged={() => router.refresh()}
           />
         )}
       </div>
@@ -315,6 +339,8 @@ function ZoneSection({
   offered,
   onUpload,
   onRemoved,
+  jobId,
+  onWaiverChanged,
 }: {
   zone: ZoneRef | null;
   coverage: ReturnType<typeof zoneCoverage>[number] | null;
@@ -325,10 +351,17 @@ function ZoneSection({
   offered: JobPhotoKind[];
   onUpload: (files: FileList | null, kind: JobPhotoKind) => void;
   onRemoved: (id: string) => void;
+  jobId: string;
+  onWaiverChanged: () => void;
 }) {
-  const [kind, setKind] = useState<JobPhotoKind>(
-    coverage?.missing.find((m) => offered.includes(m)) ?? offered[0] ?? "before"
-  );
+  // Derived, not seeded. Seeding state from coverage meant the picker stayed
+  // on whatever was missing when the panel first rendered — so a zone that
+  // had just been given its before went on asking for one.
+  const [chosen, setChosen] = useState<JobPhotoKind | null>(null);
+  const suggested: JobPhotoKind =
+    coverage?.missing.find((m) => offered.includes(m)) ?? offered[0] ?? "before";
+  const kind = chosen && offered.includes(chosen) ? chosen : suggested;
+  const setKind = setChosen;
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
 
@@ -346,16 +379,26 @@ function ZoneSection({
         <p className="text-sm font-semibold">{zone ? zone.name : "Site issues"}</p>
         {coverage && (
           <div className="flex items-center gap-1">
+            {/* Three states, not two. A waived stage lets the job close but
+                is not a photograph, and a badge that cannot tell them apart
+                quietly turns "we didn't take it" into "here it is". */}
             {REQUIRED_STAGES.map((stage) => (
               <span
                 key={stage}
+                title={coverage.waived[stage] ? "Marked as having no photo" : undefined}
                 className={`flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-                  coverage.have[stage]
-                    ? "border-emerald-600/40 bg-emerald-100 text-emerald-800"
-                    : "border-border text-muted-foreground"
+                  coverage.waived[stage]
+                    ? "border-dashed border-muted-foreground/50 text-muted-foreground"
+                    : coverage.have[stage]
+                      ? "border-emerald-600/40 bg-emerald-100 text-emerald-800"
+                      : "border-border text-muted-foreground"
                 }`}
               >
-                {coverage.have[stage] && <Check className="h-2.5 w-2.5" />}
+                {coverage.waived[stage] ? (
+                  <Minus className="h-2.5 w-2.5" />
+                ) : (
+                  coverage.have[stage] && <Check className="h-2.5 w-2.5" />
+                )}
                 {PHOTO_KIND_LABELS[stage]}
               </span>
             ))}
@@ -435,6 +478,20 @@ function ZoneSection({
               <ImagePlus className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* The third answer. Without it the only ways past a stage that
+              genuinely has no photo are to leave the job looking unfinished
+              forever, or to upload something that is not what it claims. */}
+          {REQUIRED_STAGES.includes(kind as (typeof REQUIRED_STAGES)[number]) && (
+            <WaiveStage
+              jobId={jobId}
+              zoneId={zone?.id ?? null}
+              stage={kind as (typeof REQUIRED_STAGES)[number]}
+              waived={coverage?.waived[kind as (typeof REQUIRED_STAGES)[number]] ?? false}
+              hasPhoto={coverage?.have[kind as (typeof REQUIRED_STAGES)[number]] ?? false}
+              onChanged={onWaiverChanged}
+            />
+          )}
         </>
       )}
 
@@ -542,6 +599,83 @@ function AdoptEvaluationBefores({ jobId, count }: { jobId: string; count: number
         <p className={`mt-1 text-xs ${failed ? "text-muted-foreground" : "text-emerald-700"}`}>
           {message}
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "There isn't one."
+ *
+ * Offered per stage rather than per job: the back bed having no during shot
+ * says nothing about the front. Undoable, because somebody who says there
+ * isn't one and then finds it should not be stuck with the waiver.
+ */
+function WaiveStage({
+  jobId,
+  zoneId,
+  stage,
+  waived,
+  hasPhoto,
+  onChanged,
+}: {
+  jobId: string;
+  zoneId: string | null;
+  stage: (typeof REQUIRED_STAGES)[number];
+  waived: boolean;
+  hasPhoto: boolean;
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  if (hasPhoto && !waived) return null;
+
+  return (
+    <div className="mt-2 flex items-center justify-between gap-2">
+      {waived ? (
+        <>
+          <span className="text-xs text-muted-foreground">
+            Marked as no {PHOTO_KIND_LABELS[stage].toLowerCase()} photo.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await unwaivePhotoStage({ jobId, zoneId, stage });
+                onChanged();
+              })
+            }
+          >
+            <RotateCcw className="mr-1 h-3.5 w-3.5" />
+            Undo
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="text-xs text-muted-foreground">
+            No {PHOTO_KIND_LABELS[stage].toLowerCase()} photo to add?
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await waivePhotoStage({ jobId, zoneId, stage });
+                onChanged();
+              })
+            }
+          >
+            {pending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+            Don&apos;t have one
+          </Button>
+        </>
       )}
     </div>
   );

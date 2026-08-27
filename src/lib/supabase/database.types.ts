@@ -193,6 +193,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
         Relationships: [];
       };
+      job_photo_waivers: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          zone_id: string | null;
+          stage: string;
+          reason: string | null;
+          waived_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_photo_waivers"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+          stage: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_photo_waivers"]["Row"]>;
+        Relationships: [];
+      };
       rank_keywords: {
         Row: {
           id: string;

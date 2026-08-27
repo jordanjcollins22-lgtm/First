@@ -274,3 +274,60 @@ describe("canReopenCompleted", () => {
     expect(canReopenCompleted({ status: "in_progress" }).ok).toBe(false);
   });
 });
+
+describe("saying there isn't a photo", () => {
+  const zones = [{ id: "z1", name: "Front bed" }];
+  const before = { id: "p1", kind: "before" as const, zoneId: "z1" };
+  const after = { id: "p2", kind: "after" as const, zoneId: "z1" };
+
+  it("lets a waived stage count as covered", () => {
+    const [coverage] = zoneCoverage(zones, [before, after], [{ zoneId: "z1", stage: "during" }]);
+    expect(coverage.have.during).toBe(true);
+    expect(coverage.missing).toEqual([]);
+    expect(coverage.complete).toBe(true);
+  });
+
+  it("keeps a waiver distinguishable from a photograph", () => {
+    // Both let the job close. One is a record of the work, the other is a
+    // record of somebody saying there isn't one, and a sheet that cannot
+    // tell them apart turns "we didn't take it" into "here it is".
+    const [coverage] = zoneCoverage(zones, [before, after], [{ zoneId: "z1", stage: "during" }]);
+    expect(coverage.waived.during).toBe(true);
+    expect(coverage.waived.before).toBe(false);
+  });
+
+  it("lets a photo overrule a waiver once it turns up", () => {
+    const during = { id: "p3", kind: "during" as const, zoneId: "z1" };
+    const [coverage] = zoneCoverage(zones, [before, during, after], [
+      { zoneId: "z1", stage: "during" },
+    ]);
+    expect(coverage.have.during).toBe(true);
+    expect(coverage.waived.during).toBe(false);
+  });
+
+  it("waives one zone without waiving another", () => {
+    // "No during shot of the back bed" says nothing about the front.
+    const twoZones = [...zones, { id: "z2", name: "Back bed" }];
+    const coverage = zoneCoverage(twoZones, [before, after], [{ zoneId: "z1", stage: "during" }]);
+    expect(coverage[0].complete).toBe(true);
+    expect(coverage[1].missing).toEqual(["before", "during", "after"]);
+  });
+
+  it("lets a job with a waived stage be signed off", () => {
+    const verdict = canCompleteJob({ status: "in_progress" }, [before, after], zones, [
+      { zoneId: "z1", stage: "during" },
+    ]);
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("still blocks a stage nobody photographed or waived", () => {
+    const verdict = canCompleteJob({ status: "in_progress" }, [before, after], zones);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toContain("Front bed");
+  });
+
+  it("ignores a waiver for a zone that is not there", () => {
+    const coverage = zoneCoverage(zones, [before, after], [{ zoneId: "gone", stage: "during" }]);
+    expect(coverage[0].missing).toEqual(["during"]);
+  });
+});

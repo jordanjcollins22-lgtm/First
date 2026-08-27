@@ -12,6 +12,7 @@ import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { listJobPhotos } from "@/lib/data/job-photos";
 import { listSocialPostsForJob } from "@/lib/data/social";
+import { listPhotoWaivers } from "@/lib/data/photo-waivers";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
@@ -101,6 +102,7 @@ export default async function JobPage({
     discounts,
     photos,
     socialPosts,
+    photoWaivers,
     schedule,
     crew,
     teamProfiles,
@@ -120,6 +122,8 @@ export default async function JobPage({
     // Empty until migration 0078 runs, so the rest of the page still loads.
     listJobPhotos(jobId).catch(() => []),
     listSocialPostsForJob(jobId).catch(() => []),
+    // Empty until migration 0112 runs; the panel just asks for every stage.
+    listPhotoWaivers(jobId).catch(() => []),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
@@ -362,6 +366,7 @@ export default async function JobPage({
         <CompletionPanel
           jobId={jobId}
           evaluationBeforesAvailable={evaluationBeforesAvailable}
+          waivers={photoWaivers}
           status={job.status}
           photos={photos}
           zones={photoZones}

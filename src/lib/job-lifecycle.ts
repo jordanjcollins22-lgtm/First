@@ -142,10 +142,38 @@ export interface ZoneRef {
 export interface ZoneCoverage {
   zoneId: string;
   zoneName: string;
-  /** Which of the three stages this zone has at least one photo of. */
+  /** Which of the three stages this zone has a photo of, or a waiver for. */
   have: Record<JobPhotoStage, boolean>;
+  /**
+   * Which were waived rather than photographed.
+   *
+   * Kept apart from `have` on purpose: both let the job close, but one is a
+   * record of the work and the other is a record of somebody saying there
+   * isn't one. A sheet that cannot tell them apart is a sheet that quietly
+   * turns "we didn't take it" into "here it is".
+   */
+  waived: Record<JobPhotoStage, boolean>;
   missing: JobPhotoStage[];
   complete: boolean;
+}
+
+/**
+ * A stage somebody has said there is no photo of.
+ *
+ * Per zone and per stage, because "no during shot of the back bed" says
+ * nothing about the front.
+ */
+export interface PhotoWaiver {
+  zoneId: string | null;
+  stage: JobPhotoStage;
+}
+
+export function waiverKey(zoneId: string | null, stage: JobPhotoStage): string {
+  return `${zoneId ?? ""}:${stage}`;
+}
+
+export function waiverSet(waivers: PhotoWaiver[]): Set<string> {
+  return new Set(waivers.map((w) => waiverKey(w.zoneId, w.stage)));
 }
 
 /**
@@ -155,16 +183,51 @@ export interface ZoneCoverage {
  * something happened somewhere, which is exactly the ambiguity per-zone
  * documentation exists to remove.
  */
-export function zoneCoverage(zones: ZoneRef[], photos: PhotoRecord[]): ZoneCoverage[] {
+export function zoneCoverage(
+  zones: ZoneRef[],
+  photos: PhotoRecord[],
+  waivers: PhotoWaiver[] = []
+): ZoneCoverage[] {
+  const waived = waiverSet(waivers);
+
   return zones.map((zone) => {
     const mine = photos.filter((p) => p.zoneId === zone.id);
-    const have = {
+
+    const photographed = {
       before: mine.some((p) => p.kind === "before"),
       during: mine.some((p) => p.kind === "during"),
       after: mine.some((p) => p.kind === "after"),
     };
+
+    const isWaived = {
+      before: waived.has(waiverKey(zone.id, "before")),
+      during: waived.has(waiverKey(zone.id, "during")),
+      after: waived.has(waiverKey(zone.id, "after")),
+    };
+
+    // A photo beats a waiver. Somebody who said there was none and then
+    // produced one has answered the question the better way, and the stage
+    // should stop reading as waived the moment the picture arrives.
+    const have = {
+      before: photographed.before || isWaived.before,
+      during: photographed.during || isWaived.during,
+      after: photographed.after || isWaived.after,
+    };
+    const waivedOnly = {
+      before: !photographed.before && isWaived.before,
+      during: !photographed.during && isWaived.during,
+      after: !photographed.after && isWaived.after,
+    };
+
     const missing = REQUIRED_STAGES.filter((stage) => !have[stage]);
-    return { zoneId: zone.id, zoneName: zone.name, have, missing, complete: missing.length === 0 };
+    return {
+      zoneId: zone.id,
+      zoneName: zone.name,
+      have,
+      waived: waivedOnly,
+      missing,
+      complete: missing.length === 0,
+    };
   });
 }
 
@@ -184,7 +247,8 @@ export function zoneCoverage(zones: ZoneRef[], photos: PhotoRecord[]): ZoneCover
 export function canCompleteJob(
   job: Pick<JobShape, "status">,
   photos: PhotoRecord[],
-  zones: ZoneRef[] = []
+  zones: ZoneRef[] = [],
+  waivers: PhotoWaiver[] = []
 ): Verdict {
   if (job.status === "completed") return { ok: false, reason: "This job is already marked complete." };
   if (job.status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
@@ -196,7 +260,7 @@ export function canCompleteJob(
     };
   }
 
-  const gaps = zoneCoverage(zones, photos).filter((z) => !z.complete);
+  const gaps = zoneCoverage(zones, photos, waivers).filter((z) => !z.complete);
   if (gaps.length === 0) return ALLOWED;
 
   // Name the specific zone when there is only one gap; past that a list is
