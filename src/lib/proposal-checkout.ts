@@ -12,7 +12,8 @@
  * already filled in and they confirm it with a thumb.
  */
 
-import { env, isStripeConfigured } from "@/lib/env";
+import { isStripeConfigured } from "@/lib/env";
+import { outboundBaseUrl } from "@/lib/base-url";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import { absolute, payPath, schedulePath } from "@/lib/proposal-flow";
@@ -52,6 +53,12 @@ export async function startProposalCheckout(
   const contact = await getJobCustomerContact(input.jobId);
   if (!contact) return null;
 
+  // Absolute, and worked out from the running deployment rather than from an
+  // env var somebody may not have set. Stripe refuses a relative return URL,
+  // and a checkout that will not open is a payment that does not happen.
+  const baseUrl = await outboundBaseUrl();
+  if (!baseUrl) return null;
+
   const stripe = stripeClient();
 
   // Reuse the contact's Stripe customer where we know it. A fresh customer
@@ -79,8 +86,8 @@ export async function startProposalCheckout(
     ],
     // Straight to picking a day. They have paid; asking them to find their
     // way back to a link in an email to book is how a paid job sits unbooked.
-    success_url: `${absolute(env.appUrl, schedulePath(input.token))}?paid=1`,
-    cancel_url: absolute(env.appUrl, payPath(input.token)),
+    success_url: `${absolute(baseUrl, schedulePath(input.token))}?paid=1`,
+    cancel_url: absolute(baseUrl, payPath(input.token)),
     metadata: {
       proposal_id: input.proposalId,
       organization_id: input.organizationId,

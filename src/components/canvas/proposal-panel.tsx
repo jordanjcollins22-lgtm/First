@@ -68,6 +68,17 @@ export function ProposalPanel({
   const [confirm, setConfirm] = useState<string | null>(null);
 
   const link = proposal ? `${baseUrl}/proposal/${proposal.token}` : null;
+  /**
+   * Preview opens on whatever host you are using right now, not on the
+   * canonical domain the client's link points at.
+   *
+   * Those are different addresses on a preview deployment, and often
+   * different databases, which is how tapping Preview landed on "this
+   * proposal link isn't valid" for a proposal that plainly exists. The
+   * canonical domain is right for the link a client receives and wrong for
+   * a page only we open.
+   */
+  const previewLink = proposal ? `/proposal/${proposal.token}?preview=1` : null;
 
   /**
    * Take a fresh snapshot of the site map.
@@ -194,7 +205,7 @@ export function ProposalPanel({
             <p className="min-w-0 truncate text-xs text-muted-foreground">{link}</p>
             <div className="flex shrink-0 gap-2">
               <Button type="button" variant="outline" size="sm" asChild>
-                <a href={`${link}?preview=1`} target="_blank" rel="noreferrer">
+                <a href={previewLink ?? "#"} target="_blank" rel="noreferrer">
                   <Eye className="h-3.5 w-3.5" />
                   Preview
                 </a>
