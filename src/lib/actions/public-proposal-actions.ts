@@ -7,6 +7,9 @@ import { createAndSendInvoice } from "@/lib/invoicing";
 import { notifyJobTeam } from "@/lib/notifications";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
+import { startProposalCheckout } from "@/lib/proposal-checkout";
+import { previewResult, schedulePath } from "@/lib/proposal-flow";
+import { offeredWorkDays } from "@/lib/data/work-day-offer";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
@@ -107,8 +110,12 @@ export async function recordObjection(input: {
   resolution?: "explain" | "payment_plan" | "reduce_scope" | "talk" | null;
   resolved?: boolean | null;
   note?: string | null;
+  /** Set by the internal preview, which reads the client's real proposal. */
+  preview?: boolean;
 }): Promise<PublicResult<{ id: string }>> {
   try {
+    if (input.preview) return previewResult();
+
     const proposal = await proposalForToken(input.token);
     if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
 
@@ -183,8 +190,12 @@ export async function recordObjection(input: {
 export async function requestScopeChange(input: {
   token: string;
   keepZones: string[];
+  /** Set by the internal preview, which reads the client's real proposal. */
+  preview?: boolean;
 }): Promise<PublicResult<{ applied: boolean; newTotalCents: number | null; reviewReason: string | null }>> {
   try {
+    if (input.preview) return previewResult();
+
     const proposal = await proposalForToken(input.token);
     if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
     if (proposal.status !== "sent") {
@@ -280,8 +291,12 @@ export async function choosePaymentPath(input: {
   pathId: string;
   /** How many payments to split it into. Ignored for paying in full. */
   instalments?: number;
-}): Promise<PublicResult<{ message: string }>> {
+  /** Set by the internal preview, which reads the client's real proposal. */
+  preview?: boolean;
+}): Promise<PublicResult<{ message: string; checkoutUrl?: string; next?: string }>> {
   try {
+    if (input.preview) return previewResult();
+
     const admin = createAdminClient();
 
     const { data: proposal } = await admin
@@ -321,12 +336,15 @@ export async function choosePaymentPath(input: {
       .maybeSingle();
     if (!claimed) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
 
-    if (option.id === "full") {
-      // Best-effort, like acceptance itself: the choice is recorded either
-      // way, and an invoice that failed to send is something the office can
-      // see and resend rather than a decision that got lost.
-      createAndSendInvoice(proposal.job_id, proposal.id, amountCents / 100).catch(() => {});
-    } else {
+    // What is owed right now, and what to call it on their receipt. Paying
+    // in full is the whole amount; a plan is its first payment, because a
+    // plan whose first payment is left for later is a promise, not a sale.
+    let dueNowCents = amountCents;
+    let description = "Landscaping services";
+    let planId: string | null = null;
+    let instalmentId: string | null = null;
+
+    if (option.id !== "full") {
       const built = await buildClientPlan({
         organizationId: proposal.organization_id,
         jobId: proposal.job_id,
@@ -337,6 +355,44 @@ export async function choosePaymentPath(input: {
         schedulesAfterFinalPayment: option.schedulesAfterFinalPayment,
       });
       if (!built.ok) return built;
+      dueNowCents = built.firstAmountCents;
+      description = `Landscaping services, payment 1 of ${built.instalments}`;
+      planId = built.planId;
+      instalmentId = built.instalmentId;
+    }
+
+    // Checkout rather than an emailed invoice. A card form in front of
+    // somebody who has already decided gets paid; a link in an inbox
+    // tomorrow is a second decision, and plenty of those never got made.
+    let checkoutUrl: string | undefined;
+    try {
+      const started = await startProposalCheckout({
+        token: input.token,
+        jobId: proposal.job_id,
+        proposalId: proposal.id,
+        organizationId: proposal.organization_id,
+        amountCents: dueNowCents,
+        description,
+        planId,
+        instalmentId,
+      });
+      if (started) {
+        checkoutUrl = started.url;
+        await admin
+          .from("job_proposals")
+          .update({ checkout_session_id: started.sessionId })
+          .eq("id", proposal.id);
+      }
+    } catch {
+      // Fall through to the invoice. The choice is already recorded, and a
+      // payment we could not start is not a reason to lose it.
+    }
+
+    if (!checkoutUrl && option.id === "full") {
+      // Best-effort, like acceptance itself: an invoice that failed to send
+      // is something the office can see and resend rather than a decision
+      // that got lost.
+      createAndSendInvoice(proposal.job_id, proposal.id, dueNowCents / 100).catch(() => {});
     }
 
     notifyJobTeam(
@@ -351,7 +407,12 @@ export async function choosePaymentPath(input: {
     revalidatePath(`/jobs/${proposal.job_id}`);
     revalidatePath("/proposals");
 
-    return { ok: true, message: confirmationFor(option) };
+    return {
+      ok: true,
+      message: confirmationFor(option),
+      checkoutUrl,
+      next: schedulePath(input.token),
+    };
   } catch (err) {
     return { ok: false, message: describe(err) };
   }
@@ -373,7 +434,16 @@ async function buildClientPlan(input: {
   instalments: number;
   keepsDiscount: boolean;
   schedulesAfterFinalPayment: boolean;
-}): Promise<{ ok: true } | { ok: false; message: string }> {
+}): Promise<
+  | {
+      ok: true;
+      planId: string;
+      instalmentId: string | null;
+      firstAmountCents: number;
+      instalments: number;
+    }
+  | { ok: false; message: string }
+> {
   const admin = createAdminClient();
 
   const { data: job } = await admin
@@ -421,20 +491,113 @@ async function buildClientPlan(input: {
   if (error || !plan) return { ok: false, message: describe(error) };
 
   const today = new Date();
-  const { error: scheduleError } = await admin.from("payment_plan_instalments").insert(
-    buildSchedule(planInput).map((item) => {
-      const due = new Date(today.getTime());
-      due.setDate(due.getDate() + item.dueInDays);
-      return {
-        plan_id: plan.id,
-        number: item.number,
-        amount_cents: item.amountCents,
-        due_on: due.toISOString().slice(0, 10),
-        is_deposit: item.isDeposit,
-      };
-    })
-  );
+  const schedule = buildSchedule(planInput);
+  const { data: written, error: scheduleError } = await admin
+    .from("payment_plan_instalments")
+    .insert(
+      schedule.map((item) => {
+        const due = new Date(today.getTime());
+        due.setDate(due.getDate() + item.dueInDays);
+        return {
+          plan_id: plan.id,
+          number: item.number,
+          amount_cents: item.amountCents,
+          due_on: due.toISOString().slice(0, 10),
+          is_deposit: item.isDeposit,
+        };
+      })
+    )
+    .select("id, number, amount_cents");
   if (scheduleError) return { ok: false, message: describe(scheduleError) };
 
-  return { ok: true };
+  // The one they pay on this screen: the deposit if there is one, otherwise
+  // payment one. Read back from what was written rather than recalculated,
+  // so the amount charged is the amount the schedule says is owed.
+  const first = (written ?? [])
+    .slice()
+    .sort((a, b) => a.number - b.number)[0] ?? null;
+
+  return {
+    ok: true,
+    planId: plan.id,
+    instalmentId: first?.id ?? null,
+    firstAmountCents: first?.amount_cents ?? schedule[0]?.amountCents ?? 0,
+    instalments: schedule.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Picking the day
+// ---------------------------------------------------------------------------
+
+/**
+ * The client choosing which day the crew comes.
+ *
+ * The day is checked against the same list the page drew rather than taken
+ * on trust. A date arriving from a form is just a string, and the two things
+ * it must not be are a day the crew is already full on and a day we have
+ * blocked for rain.
+ */
+export async function chooseWorkDay(input: {
+  token: string;
+  date: string;
+  preview?: boolean;
+}): Promise<PublicResult<{ message: string; date: string }>> {
+  try {
+    if (input.preview) return previewResult();
+
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from("job_proposals")
+      .select("id, job_id, organization_id, status, payment_path, client_chosen_day")
+      .eq("token", input.token)
+      .maybeSingle();
+
+    if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
+    if (proposal.status !== "accepted") return { ok: false, message: "Accept the proposal first." };
+    if (proposal.client_chosen_day) {
+      return { ok: false, message: "You have already picked a day. We will be in touch." };
+    }
+
+    const offer = await offeredWorkDays({
+      jobId: proposal.job_id,
+      organizationId: proposal.organization_id,
+    });
+    const day = offer.days.find((d) => d.date === input.date);
+    if (!day) return { ok: false, message: "That day isn't one we can offer. Pick another." };
+    if (day.status !== "open") {
+      return { ok: false, message: `${day.label} is ${day.reason?.toLowerCase() ?? "not available"}.` };
+    }
+
+    // Claim it before writing the job, so two taps on a slow connection do
+    // not book the crew twice.
+    const { data: claimed } = await admin
+      .from("job_proposals")
+      .update({ client_chosen_day: day.date, client_chosen_day_at: new Date().toISOString() })
+      .eq("id", proposal.id)
+      .is("client_chosen_day", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return { ok: false, message: "You have already picked a day. We will be in touch." };
+
+    const { error: jobError } = await admin
+      .from("jobs")
+      // Status stays "approved": the job is booked, not started. A start
+      // date is what the schedule reads, and moving the status here would
+      // tell the crew work is underway on a day nobody has been out.
+      .update({ project_start_date: day.date })
+      .eq("id", proposal.job_id);
+    if (jobError) return { ok: false, message: describe(jobError) };
+
+    notifyJobTeam(proposal.job_id, "proposal_responses", `A client booked themselves in for ${day.label}.`, {
+      dedupeKey: `${proposal.id}:day`,
+    }).catch(() => {});
+
+    revalidatePath(`/jobs/${proposal.job_id}`);
+    revalidatePath("/schedule");
+
+    return { ok: true, date: day.date, message: `You are booked in for ${day.label}.` };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
 }

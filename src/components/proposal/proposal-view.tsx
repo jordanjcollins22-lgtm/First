@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +21,7 @@ import { SiteMapImage } from "./site-map-image";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
 import { displayLabel } from "@/lib/zone-scope";
-import { PaymentChoice } from "@/components/proposal/payment-choice";
+import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
 import type { JobMessage, ProposalStatus } from "@/types/domain";
 
 function formatTotal(total: number | null): string {
@@ -58,14 +59,27 @@ export function ProposalView({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [senderName, setSenderName] = useState(customerName);
+  const router = useRouter();
 
   function respond(response: "accepted" | "declined", note = "") {
+    // Preview opens the client's real proposal on the client's real token,
+    // because that is the only honest way to see what they will see. It used
+    // to act on it too, so a staff member who tapped Accept to find out what
+    // happened accepted on the client's behalf.
+    if (preview) {
+      setError(PREVIEW_BLOCKED);
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
         await respondToProposal(token, response, note);
         setStatus(response);
         setRespondedAt(new Date().toISOString());
+        // Straight on to how they are paying, on its own page. Leaving them
+        // on the proposal with a panel underneath let somebody who had
+        // already decided scroll back up and talk themselves out of it.
+        if (response === "accepted") router.push(payPath(token));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
       }
@@ -167,6 +181,7 @@ export function ProposalView({
           an answer we already give on the phone. */}
       <ObjectionsPanel
         token={token}
+        readOnly={preview}
         disabled={status !== "sent"}
         lines={proposal.scope_snapshot.map<ScopeLine>((zone) => ({
           zoneName: zone.zoneName,
@@ -265,21 +280,30 @@ export function ProposalView({
             {error && <p className="text-sm text-destructive">{error}</p>}
           </>
         ) : status === "accepted" ? (
-          // Straight into the one question left rather than a thank-you and a
-          // wait. How they pay and when they get booked are one decision.
-          <div className="w-full">
-            <PaymentChoice
-              token={token}
-              alreadyChosen={proposal.payment_path}
-              context={{
-                discountCents: Math.round((proposal.discount_amount ?? 0) * 100),
-                totalCents: Math.max(
-                  0,
-                  Math.round((proposal.total_cost ?? 0) * 100) -
-                    Math.round((proposal.discount_amount ?? 0) * 100)
-                ),
-              }}
-            />
+          // Already accepted, so the only thing left is the next step. Kept
+          // as one button rather than a panel of choices, because the choices
+          // live on their own page where nothing else competes with them.
+          <div className="flex w-full flex-col items-center gap-2 text-center">
+            <CheckCircle2 className="h-8 w-8 text-primary" />
+            <p className="font-semibold">You accepted this proposal. Thank you.</p>
+            {proposal.payment_path ? (
+              <p className="text-sm text-muted-foreground">
+                We have your payment choice and we will be in touch to book you in.
+              </p>
+            ) : (
+              <Button
+                type="button"
+                size="xl"
+                className="w-full"
+                onClick={() => {
+                  if (preview) setError(PREVIEW_BLOCKED);
+                  else router.push(payPath(token));
+                }}
+              >
+                Choose how to pay
+              </Button>
+            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 text-center">
@@ -295,7 +319,12 @@ export function ProposalView({
       <MessageThread
         title="Questions? Send us a message"
         messages={messages}
-        onSend={(body) => postPublicClientMessage(token, senderName, body)}
+        onSend={async (body) => {
+          // Read-only in preview: a test message from the office would land
+          // in the client's thread looking like it came from them.
+          if (preview) return;
+          await postPublicClientMessage(token, senderName, body);
+        }}
         viewerAuthorType="client"
         showNameField
         nameValue={senderName}

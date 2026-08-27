@@ -163,7 +163,12 @@ interface OpenMeteoResponse {
  * Cached for half an hour: the forecast doesn't change faster than that, and
  * it keeps a page refresh from hitting the API every time.
  */
-export async function fetchForecasts(points: WeatherPoint[]): Promise<LocationForecast[]> {
+export async function fetchForecasts(
+  points: WeatherPoint[],
+  /** How many days ahead. Open-Meteo will go to 16; the dashboard wants a
+   * week and the client's day picker wants a fortnight. */
+  forecastDays = 7
+): Promise<LocationForecast[]> {
   if (points.length === 0) return [];
 
   const url = new URL("https://api.open-meteo.com/v1/forecast");
@@ -178,7 +183,7 @@ export async function fetchForecasts(points: WeatherPoint[]): Promise<LocationFo
   url.searchParams.set("wind_speed_unit", "mph");
   url.searchParams.set("precipitation_unit", "inch");
   url.searchParams.set("timezone", "auto");
-  url.searchParams.set("forecast_days", "7");
+  url.searchParams.set("forecast_days", String(Math.min(16, Math.max(1, forecastDays))));
 
   const res = await fetch(url, { next: { revalidate: 1800 } });
   if (!res.ok) throw new Error(`Weather service returned ${res.status}`);

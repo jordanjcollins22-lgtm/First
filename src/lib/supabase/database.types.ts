@@ -1470,6 +1470,10 @@ export interface Database {
           status: string;
           payment_path: string | null;
           payment_path_at: string | null;
+          client_chosen_day: string | null;
+          client_chosen_day_at: string | null;
+          checkout_session_id: string | null;
+          paid_at: string | null;
           total_cost: number | null;
           discount_id: string | null;
           discount_kind: string | null;

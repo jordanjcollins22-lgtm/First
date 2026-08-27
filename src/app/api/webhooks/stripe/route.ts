@@ -80,11 +80,25 @@ async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
 
   const customerId = await contactForStripeCustomer(stripeCustomerId);
 
-  // The organisation comes from the plan rather than from the session: a
-  // webhook has nobody signed in, so there is no org in context to fall back
-  // on, and guessing one would put a payment in somebody else's books.
-  const organizationId = planId ? await orgForPlan(planId) : null;
+  // The organisation is stamped on the session where we raised it, and read
+  // back off the plan for the older sessions that carry no metadata. A
+  // webhook has nobody signed in, so guessing one would put a payment in
+  // somebody else's books.
+  const organizationId =
+    session.metadata?.organization_id || (planId ? await orgForPlan(planId) : null);
   if (!organizationId) return;
+
+  // A proposal paid straight from the client's own screen. Recorded here
+  // rather than on the success page, because a client who closes the tab on
+  // the Stripe receipt has still paid.
+  const proposalId = session.metadata?.proposal_id ?? null;
+  if (proposalId) {
+    await admin
+      .from("job_proposals")
+      .update({ paid_at: new Date().toISOString() })
+      .eq("id", proposalId)
+      .is("paid_at", null);
+  }
 
   if (session.subscription && planId) {
     await admin

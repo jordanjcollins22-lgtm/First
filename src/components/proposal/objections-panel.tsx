@@ -50,11 +50,16 @@ export function ObjectionsPanel({
   token,
   lines,
   disabled,
+  readOnly = false,
 }: {
   token: string;
   lines: ScopeLine[];
   /** Already accepted or declined — the questions have had their moment. */
   disabled: boolean;
+  /** The internal preview, which reads the client's real proposal. Every
+   * question still opens and every answer still shows; nothing is recorded
+   * against the client and nothing changes their quote. */
+  readOnly?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -91,7 +96,7 @@ export function ObjectionsPanel({
                   onClick={() => {
                     setOpenId(objection.id);
                     setSettled(null);
-                    void recordObjection({ token, objectionId: objection.id });
+                    void recordObjection({ token, objectionId: objection.id, preview: readOnly });
                   }}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
                 >
@@ -107,6 +112,7 @@ export function ObjectionsPanel({
           {shouldOfferOther({ rejected }) && (
             <OtherBox
               token={token}
+              readOnly={readOnly}
               open={showOther}
               onOpen={() => setShowOther(true)}
               onSent={() => {
@@ -119,6 +125,7 @@ export function ObjectionsPanel({
       ) : (
         <AnswerCard
           token={token}
+          readOnly={readOnly}
           objection={open}
           lines={lines}
           onClose={() => setOpenId(null)}
@@ -161,6 +168,7 @@ function answerFor(objection: Objection, lines: ScopeLine[]): string {
 
 function AnswerCard({
   token,
+  readOnly,
   objection,
   lines,
   onClose,
@@ -168,6 +176,7 @@ function AnswerCard({
   onSettled,
 }: {
   token: string;
+  readOnly: boolean;
   objection: Objection;
   lines: ScopeLine[];
   onClose: () => void;
@@ -181,6 +190,7 @@ function AnswerCard({
     return (
       <ScopePicker
         token={token}
+        readOnly={readOnly}
         lines={lines}
         onCancel={() => setTrimming(false)}
         onDone={onSettled}
@@ -212,6 +222,7 @@ function AnswerCard({
                   objectionId: objection.id,
                   resolution: kind,
                   resolved: true,
+                  preview: readOnly,
                 });
                 onSettled(
                   kind === "payment_plan"
@@ -238,7 +249,7 @@ function AnswerCard({
           variant="ghost"
           className="flex-1 text-muted-foreground"
           onClick={() => {
-            void recordObjection({ token, objectionId: objection.id, resolved: false });
+            void recordObjection({ token, objectionId: objection.id, resolved: false, preview: readOnly });
             onRejected();
           }}
         >
@@ -260,11 +271,13 @@ function AnswerCard({
  */
 function ScopePicker({
   token,
+  readOnly,
   lines,
   onCancel,
   onDone,
 }: {
   token: string;
+  readOnly: boolean;
   lines: ScopeLine[];
   onCancel: () => void;
   onDone: (message: string) => void;
@@ -348,7 +361,7 @@ function ScopePicker({
           onClick={() => {
             setError(null);
             start(async () => {
-              const result = await requestScopeChange({ token, keepZones: keep });
+              const result = await requestScopeChange({ token, keepZones: keep, preview: readOnly });
               if (!result.ok) {
                 setError(result.message);
                 return;
@@ -372,11 +385,13 @@ function ScopePicker({
 /** The last resort, and deliberately the hardest thing on the page to reach. */
 function OtherBox({
   token,
+  readOnly,
   open,
   onOpen,
   onSent,
 }: {
   token: string;
+  readOnly: boolean;
   open: boolean;
   onOpen: () => void;
   onSent: () => void;
@@ -406,7 +421,7 @@ function OtherBox({
         disabled={pending || !note.trim()}
         onClick={() =>
           start(async () => {
-            await recordObjection({ token, objectionId: "other", note, resolved: false });
+            await recordObjection({ token, objectionId: "other", note, resolved: false, preview: readOnly });
             setNote("");
             onSent();
           })

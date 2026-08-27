@@ -646,6 +646,14 @@ export interface JobProposal {
    * accepted but not chosen yet, which is a job waiting on them, not on us. */
   payment_path: "full" | "plan" | "plan_no_discount" | null;
   payment_path_at: string | null;
+  /** The work day the client picked for themselves, YYYY-MM-DD. Distinct
+   * from jobs.project_start_date, which the office also writes: a day they
+   * chose is a promise, a day we moved them to is a conversation we owe. */
+  client_chosen_day: string | null;
+  client_chosen_day_at: string | null;
+  /** The Stripe Checkout we raised when they chose how to pay. */
+  checkout_session_id: string | null;
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
 }

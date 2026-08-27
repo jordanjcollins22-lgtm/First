@@ -52,6 +52,12 @@ describe("optionsAfterAccept", () => {
     expect(optionById(WITH_DISCOUNT, "plan_no_discount")!.keepsDiscount).toBe(false);
   });
 
+  it("names the ways they can actually pay, on the option they will tap", () => {
+    const full = optionById(WITH_DISCOUNT, "full")!;
+    expect(full.detail).toMatch(/Apple Pay/);
+    expect(full.detail).toMatch(/Google Pay/);
+  });
+
   it("explains the trade in the option itself", () => {
     const plan = optionById(WITH_DISCOUNT, "plan")!;
     expect(plan.detail.toLowerCase()).toContain("one month after your final payment");
@@ -122,8 +128,12 @@ describe("bookableFrom", () => {
 });
 
 describe("confirmationFor", () => {
-  it("promises the invoice when they pay now", () => {
-    expect(confirmationFor(optionById(WITH_DISCOUNT, "full")!)).toMatch(/invoice/i);
+  it("sends them straight on to picking a day when they have paid", () => {
+    // No promise of an invoice any more. They paid on the previous screen,
+    // so the only thing left to tell them is what to do next.
+    const text = confirmationFor(optionById(WITH_DISCOUNT, "full")!);
+    expect(text).not.toMatch(/invoice/i);
+    expect(text.toLowerCase()).toContain("pick the day");
   });
 
   it("says the discount is safe and names the booking rule", () => {
@@ -132,9 +142,9 @@ describe("confirmationFor", () => {
     expect(text.toLowerCase()).toContain("one month from that day");
   });
 
-  it("says we start now on the start-sooner option", () => {
+  it("sends the start-sooner option on to picking a day too", () => {
     const text = confirmationFor(optionById(WITH_DISCOUNT, "plan_no_discount")!);
-    expect(text.toLowerCase()).toContain("schedule now");
+    expect(text.toLowerCase()).toContain("pick the");
   });
 
   it("uses no dashes", () => {

@@ -67,7 +67,7 @@ export function optionsAfterAccept(context: AcceptanceContext): PaymentOption[] 
     {
       id: "full",
       label: "Pay in full now",
-      detail: "We invoice you today and get you on the schedule straight away.",
+      detail: "Card, Apple Pay or Google Pay on the next screen, then you pick your day.",
       keepsDiscount: true,
       schedulesAfterFinalPayment: false,
     },
@@ -100,7 +100,7 @@ export function optionsAfterAccept(context: AcceptanceContext): PaymentOption[] 
   options.push({
     id: "plan",
     label: "Split it into payments",
-    detail: "A deposit to get you booked, then the rest across monthly payments.",
+    detail: "Your first payment now, then the rest monthly. You pick your day straight after.",
     keepsDiscount: true,
     schedulesAfterFinalPayment: false,
   });
@@ -154,7 +154,7 @@ export function bookableFromKey(finalPaymentAt: Date): string {
  */
 export function confirmationFor(option: PaymentOption): string {
   if (option.id === "full") {
-    return "Thank you. Your invoice is on its way, and we will be in touch to get you booked in.";
+    return "Thank you. That is settled, so go ahead and pick the day you would like us.";
   }
   if (option.schedulesAfterFinalPayment) {
     return (
@@ -163,7 +163,7 @@ export function confirmationFor(option: PaymentOption): string {
     );
   }
   return (
-    "Thank you. We will email your payment schedule over and get you on the schedule now, so we " +
-    "can start before the balance is cleared."
+    "Thank you. We will email the rest of your payment schedule over, so go ahead and pick the " +
+    "day you would like us."
   );
 }
