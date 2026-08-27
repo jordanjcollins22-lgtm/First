@@ -88,14 +88,19 @@ export function FlyerBuilder({ ads }: { ads: FlyerAd[] }) {
           </span>{" "}
           for a clean print. Tap any square to fill it.
         </p>
+
+        <p className="mt-2 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
+          Printing: set <span className="font-medium text-foreground">Margins</span> to None and{" "}
+          <span className="font-medium text-foreground">Scale</span> to 100%. The sheet is already
+          laid out at 8.5&Prime; &times; 11&Prime;, so anything that shrinks it to fit shrinks the
+          ad squares with it.
+        </p>
       </div>
 
-      <div className="mt-5 space-y-6">
-        <Sheet
-          side="front"
-          bySlot={bySlot}
-          onPick={setEditing}
-        />
+      {/* Lifted out of the page's flow when printing, so the app's header,
+          nav and padding never end up between the sheet and the paper. */}
+      <div className="flyer-print-root mt-5 space-y-6">
+        <Sheet side="front" bySlot={bySlot} onPick={setEditing} />
         <Sheet side="back" bySlot={bySlot} onPick={setEditing} />
       </div>
 
@@ -153,7 +158,7 @@ function Sheet({
               />
             ))}
           </div>
-          <div className="mt-auto pt-[1.6%]">
+          <div className="flyer-banner mt-auto flex items-center pt-[1.6%]">
             <SupportBanner />
           </div>
         </div>
