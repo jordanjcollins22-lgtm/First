@@ -109,6 +109,8 @@ export interface Database {
           description: string | null;
           node_type: string;
           status: string;
+          is_issue: boolean;
+          image_path: string | null;
           importance: number | null;
           estimated_cost: number | null;
           unit: string;

@@ -94,7 +94,7 @@ export type RelationshipType =
   | "can_be_combined_with" | "enables" | "replaces" | "leads_to" | "sold_through"
   | "purchased_from" | "performed_by" | "used_by" | "located_at" | "requires_skill"
   | "requires_equipment" | "requires_material" | "has_cost" | "generates_revenue"
-  | "part_of" | "parent_of" | "child_of" | "related_to";
+  | "part_of" | "parent_of" | "child_of" | "related_to" | "solved_by";
 
 export interface RelationshipDef {
   value: RelationshipType;
@@ -146,6 +146,9 @@ export const RELATIONSHIP_TYPES: RelationshipDef[] = [
   { value: "shares_resource_with", label: "shares a resource with", inverse: "shares a resource with", directional: false },
   { value: "can_be_combined_with", label: "can be combined with", inverse: "can be combined with", directional: false },
   { value: "related_to", label: "related to", inverse: "related to", directional: false },
+  // Directional and one-way on purpose: the issue points at what fixes it.
+  // The reverse reads "this fix is solved by that problem", which nobody means.
+  { value: "solved_by", label: "solved by", inverse: "solves", directional: true },
 ];
 
 const REL_BY_VALUE = new Map(RELATIONSHIP_TYPES.map((r) => [r.value, r]));
@@ -159,6 +162,17 @@ export interface GraphNode {
   title: string;
   nodeType: NodeType;
   status: NodeStatus;
+  /**
+   * Something that is wrong and needs solving.
+   *
+   * A flag rather than a node type: a problem is always a problem *about*
+   * something — a machine, a process, a supplier — and that something keeps
+   * its own kind while being marked broken on top.
+   */
+  isIssue: boolean;
+  /** A photo in the knowledge-images bucket. On an issue it is usually the
+   * fastest description of the problem there is. */
+  imagePath: string | null;
   description: string | null;
   importance: number | null;
   /** What one unit costs — one sheet, one hour, one bag. Where the node is

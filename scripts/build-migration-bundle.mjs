@@ -67,6 +67,8 @@ const CREATES = {
   "0118_proposal_objections.sql": ["proposal_objections", "proposal_scope_requests"],
   "0119_early_start_requests.sql": ["early_start_requests"],
   "0120_email_sending.sql": ["email_domains", "email_senders"],
+  // Alters and a bucket — nothing new to probe for.
+  "0121_knowledge_issues.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

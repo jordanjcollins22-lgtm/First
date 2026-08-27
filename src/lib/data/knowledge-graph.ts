@@ -40,7 +40,7 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     supabase
       .from("knowledge_nodes")
       .select(
-        "id, title, description, node_type, status, importance, unit, cost_basis, output_per_unit, output_unit, run_size, run_unit, fixed_cost, duration_hours, hourly_rate, purchase_url, app_route, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
+        "id, title, description, node_type, status, is_issue, image_path, importance, unit, cost_basis, output_per_unit, output_unit, run_size, run_unit, fixed_cost, duration_hours, hourly_rate, purchase_url, app_route, material_id, tool_id, potential_value, notes, position_x, position_y, scheduled_for, recurrence, recurrence_interval, last_done_at, times_done, created_by, created_at, updated_at"
       )
       .order("created_at"),
     supabase
@@ -161,6 +161,8 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
       description: string | null;
       node_type: string;
       status: string;
+      is_issue: boolean | null;
+      image_path: string | null;
       importance: number | null;
       unit: string | null;
       cost_basis: string | null;
@@ -196,6 +198,10 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraphData> {
     description: n.description,
     nodeType: n.node_type as NodeType,
     status: n.status as NodeStatus,
+    // Null on a row written before issues existed, which is not the same as
+    // false only in that a coalesce is needed to say so.
+    isIssue: n.is_issue ?? false,
+    imagePath: n.image_path,
     importance: n.importance,
     // Only ever the real price of the real thing. A number somebody typed
     // into the graph is a guess that outlives whatever it was guessing about,

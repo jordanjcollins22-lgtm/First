@@ -22,6 +22,8 @@ function node(
     title,
     nodeType,
     status: "idea",
+    isIssue: false,
+    imagePath: null,
     description: null,
     importance: null,
     estimatedCost: cost,

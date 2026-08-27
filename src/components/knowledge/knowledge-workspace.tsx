@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import type { UnitOption } from "@/lib/data/knowledge-graph";
 import { GraphCanvas, type Point } from "@/components/knowledge/graph-canvas";
 import { NodePanel, TypeSelect } from "@/components/knowledge/node-panel";
 import { createNode, markNodeDone, saveNodePositions } from "@/lib/actions/knowledge-graph-actions";
+import { NodeImage } from "@/components/knowledge/node-image";
 import {
   costOf,
   costOfMany,
@@ -117,6 +119,9 @@ export function KnowledgeWorkspace({
   const [draft, setDraft] = useState("");
   const [draftType, setDraftType] = useState<NodeType>("idea");
   const [showType, setShowType] = useState(false);
+  /** Marking it broken as it goes in, rather than opening it again to say so. */
+  const [draftIssue, setDraftIssue] = useState(false);
+  const [draftImage, setDraftImage] = useState<string | null>(null);
 
   const visible = useMemo(
     () => (focusId ? localGraph(graph, focusId, depth) : applyFilters(graph, filters)),
@@ -287,12 +292,19 @@ export function KnowledgeWorkspace({
       const result = await createNode({
         title,
         nodeType,
+        isIssue: draftIssue,
+        imagePath: draftImage,
         positionX: point?.x ?? null,
         positionY: point?.y ?? null,
       });
       setMessage(result.message ?? null);
       if (result.ok) {
         setDraft("");
+        // The photo and the flag belong to the thing just added, not to the
+        // next one. Leaving them set is how the second node quietly inherits
+        // the first one's picture.
+        setDraftImage(null);
+        setDraftIssue(false);
         router.refresh();
       }
     });
@@ -319,7 +331,7 @@ export function KnowledgeWorkspace({
           </Button>
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setShowType((s) => !s)}
@@ -327,7 +339,25 @@ export function KnowledgeWorkspace({
           >
             {showType ? "Hide type" : `Type: ${nodeTypeDef(draftType).label}`}
           </button>
-          <span className="text-xs text-muted-foreground">Enter adds it. Everything else can wait.</span>
+          {/* Not a node type: a problem is always a problem about something,
+              and that something keeps its own kind. */}
+          <button
+            type="button"
+            onClick={() => setDraftIssue((v) => !v)}
+            aria-pressed={draftIssue}
+            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${
+              draftIssue
+                ? "border-transparent bg-red-500 text-white"
+                : "border-border text-muted-foreground"
+            }`}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            Issue
+          </button>
+          <NodeImage path={draftImage} onChange={setDraftImage} size="sm" />
+          <span className="text-xs text-muted-foreground">
+            {draftIssue ? "Goes on red until you link a fix." : "Enter adds it."}
+          </span>
         </div>
         {showType && (
           <div className="mt-2 max-w-xs">

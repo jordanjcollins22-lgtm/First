@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { radiusFor } from "@/lib/graph-layout";
 import { degreeMap, nodeTypeDef, relationshipDef, type Graph } from "@/lib/knowledge-graph";
+import { issueStateOf, ISSUE_COLORS } from "@/lib/knowledge-issues";
 
 export interface Point {
   x: number;
@@ -381,6 +382,10 @@ export function GraphCanvas({
               const point = positions.get(node.id);
               if (!point) return null;
               const def = nodeTypeDef(node.nodeType);
+              // A problem overrides its own kind on the board. What kind of
+              // thing a broken trailer gate is matters less, at a glance,
+              // than the fact that it is broken.
+              const issueState = issueStateOf(graph, node);
               const degree = degrees.get(node.id) ?? 0;
               const radius = radiusFor(degree);
               const lit = !focus || focus.has(node.id);
@@ -403,10 +408,25 @@ export function GraphCanvas({
                     cx={point.x}
                     cy={point.y}
                     r={radius}
-                    fill={def.color}
+                    fill={issueState ? ISSUE_COLORS[issueState] : def.color}
                     stroke={selected ? "#ffffff" : "rgba(15,23,42,0.8)"}
                     strokeWidth={selected ? 3 : 1.5}
                   />
+                  {/* An unsolved problem gets a halo as well as the colour.
+                      Red alone is one hue among twenty-six on this board, and
+                      the one thing that must never be missed cannot rely on
+                      being told apart from orange at 7px. */}
+                  {issueState === "open" && (
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={radius + 6}
+                      fill="none"
+                      stroke={ISSUE_COLORS.open}
+                      strokeOpacity={0.7}
+                      strokeWidth={2}
+                    />
+                  )}
                   {node.status === "archived" && (
                     <circle cx={point.x} cy={point.y} r={radius} fill="#0f172a" fillOpacity={0.55} />
                   )}

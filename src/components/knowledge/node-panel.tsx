@@ -71,6 +71,7 @@ import {
   todayKey,
   type Recurrence,
 } from "@/lib/knowledge-schedule";
+import { IssuePanel } from "@/components/knowledge/issue-panel";
 
 /**
  * One node, everything about it, and everything touching it.
@@ -506,6 +507,10 @@ export function NodePanel({
       </div>
 
       {message && <p className="mb-3 text-xs text-muted-foreground">{message}</p>}
+
+      {/* Near the top, above the costing and the breakdown: if this thing is
+          broken, that is the first fact about it. */}
+      <IssuePanel graph={graph} node={node} onChanged={onChanged} onSelect={onSelect} />
 
       {editing ? (
         <div className="mb-4 flex flex-col gap-2 rounded-lg border border-border bg-background/60 p-3">

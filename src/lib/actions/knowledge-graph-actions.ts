@@ -33,6 +33,11 @@ export interface NodeInput {
   title: string;
   nodeType?: NodeType;
   status?: NodeStatus;
+  /** Something that is wrong and needs solving. Drawn red until a solution
+   * is linked. */
+  isIssue?: boolean;
+  /** A photo already uploaded to the knowledge-images bucket. */
+  imagePath?: string | null;
   description?: string;
   notes?: string;
   importance?: number | null;
@@ -93,6 +98,8 @@ export async function createNode(input: NodeInput): Promise<GraphResult> {
         title,
         node_type: nodeType,
         status,
+        is_issue: input.isIssue ?? false,
+        image_path: input.imagePath ?? null,
         description: input.description?.trim() || null,
         notes: input.notes?.trim() || null,
         importance: clampScale(input.importance),
@@ -154,6 +161,8 @@ export async function updateNode(id: string, patch: Partial<NodeInput>): Promise
     }
     if (patch.nodeType !== undefined && VALID_TYPES.has(patch.nodeType)) update.node_type = patch.nodeType;
     if (patch.status !== undefined && VALID_STATUSES.has(patch.status)) update.status = patch.status;
+    if (patch.isIssue !== undefined) update.is_issue = Boolean(patch.isIssue);
+    if (patch.imagePath !== undefined) update.image_path = patch.imagePath || null;
     if (patch.description !== undefined) update.description = patch.description.trim() || null;
     if (patch.notes !== undefined) update.notes = patch.notes.trim() || null;
     if (patch.importance !== undefined) update.importance = clampScale(patch.importance);
@@ -874,4 +883,138 @@ function positiveOrNull(value: number | null | undefined): number | null {
 function numberOrNull(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null;
   return value;
+}
+
+// ---------------------------------------------------------------------------
+// Issues, and what solves them
+// ---------------------------------------------------------------------------
+
+/**
+ * Link something as the fix for an issue.
+ *
+ * One call rather than create-then-connect from the browser, so the halfway
+ * state — a solution in the graph that nothing points at, or an issue that
+ * looks answered because the edge landed but the node did not — never exists.
+ *
+ * Passing an existing node's id links to it; passing a title makes a new one.
+ * Somebody looking at a broken gate usually already knows the answer is the
+ * welder they have used twice before.
+ */
+export async function linkSolution(input: {
+  issueId: string;
+  /** An existing node to link. Wins over `title` when both are given. */
+  solutionId?: string | null;
+  /** A new node to create as the solution. */
+  title?: string | null;
+  nodeType?: NodeType;
+}): Promise<GraphResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+
+    const [supabase, organizationId] = await Promise.all([
+      createClient(),
+      getCurrentOrganizationId(),
+    ]);
+
+    const { data: issue } = await supabase
+      .from("knowledge_nodes")
+      .select("id, is_issue")
+      .eq("id", input.issueId)
+      .maybeSingle();
+    if (!issue) return { ok: false, message: "That issue is gone." };
+    if (!issue.is_issue) return { ok: false, message: "That isn't marked as an issue." };
+
+    let solutionId = input.solutionId ?? null;
+
+    if (!solutionId) {
+      const title = input.title?.trim();
+      if (!title) return { ok: false, message: "Name the solution, or pick one already on the graph." };
+
+      const created = await createNode({
+        title,
+        // A solution is a thing somebody does unless they say otherwise. The
+        // alternative default, "idea", is where fixes go to sit for a year.
+        nodeType: input.nodeType ?? "task",
+        status: "planned",
+      });
+      if (!created.ok) return created;
+      solutionId = created.id ?? null;
+      if (!solutionId) return { ok: false, message: "Couldn't create that solution." };
+    } else {
+      // A problem cannot be the answer to a problem. Allowed through, the
+      // graph would show the first issue as answered while nothing has
+      // actually been decided.
+      const { data: solution } = await supabase
+        .from("knowledge_nodes")
+        .select("id, is_issue")
+        .eq("id", solutionId)
+        .maybeSingle();
+      if (!solution) return { ok: false, message: "That solution is gone." };
+      if (solution.is_issue) {
+        return {
+          ok: false,
+          message: "That's another issue. Link something that fixes this one, not another problem.",
+        };
+      }
+    }
+
+    if (solutionId === input.issueId) {
+      return { ok: false, message: "Something can't be its own solution." };
+    }
+
+    const { error } = await supabase.from("knowledge_relationships").insert({
+      organization_id: organizationId,
+      source_node_id: input.issueId,
+      target_node_id: solutionId,
+      relationship_type: "solved_by",
+      strength: 5,
+      created_by: profile.id,
+    });
+
+    if (error) {
+      if (error.code === "23505") return { ok: false, message: "That's already linked as the fix." };
+      return { ok: false, message: describeDbError(error) };
+    }
+
+    revalidatePath(PATH);
+    return { ok: true, id: solutionId, message: "Linked as the solution." };
+  } catch (err) {
+    console.error("linkSolution failed:", err);
+    return { ok: false, message: "Couldn't link that." };
+  }
+}
+
+/**
+ * Attach a photo to a node.
+ *
+ * Takes an already-uploaded path rather than the file itself: a Server Action
+ * carrying image bytes goes through the request body size limit, and a photo
+ * off a phone camera is regularly over it. The browser puts it in the bucket
+ * and tells us where it went.
+ */
+export async function setNodeImage(id: string, imagePath: string | null): Promise<GraphResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const path = imagePath?.trim() || null;
+    // Only ever a path inside our own bucket. A URL here would have the panel
+    // render whatever somebody pasted.
+    if (path && (path.includes("://") || path.startsWith("/"))) {
+      return { ok: false, message: "That doesn't look like an uploaded image." };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("knowledge_nodes")
+      .update({ image_path: path })
+      .eq("id", id);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath(PATH);
+    return { ok: true, id, message: path ? "Photo added." : "Photo removed." };
+  } catch (err) {
+    console.error("setNodeImage failed:", err);
+    return { ok: false, message: "Couldn't save that photo." };
+  }
 }

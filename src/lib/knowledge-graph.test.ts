@@ -23,6 +23,8 @@ function node(id: string, title: string, nodeType: GraphNode["nodeType"] = "idea
     title,
     nodeType,
     status: "idea",
+    isIssue: false,
+    imagePath: null,
     description: null,
     importance: null,
     estimatedCost: null,
