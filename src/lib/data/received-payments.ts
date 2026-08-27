@@ -61,6 +61,7 @@ interface PaymentQueryRow {
   received_at: string;
   note: string | null;
   stripe_invoice_id: string | null;
+  source_invoice_ref: string | null;
   customers: { name: string } | null;
   jobs: { name: string } | null;
 }
@@ -79,7 +80,7 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
   const { data: paymentRows } = await supabase
     .from("payments")
     .select(
-      "id, customer_id, job_id, amount_cents, method, received_at, note, stripe_invoice_id, customers(name), jobs(name)"
+      "id, customer_id, job_id, amount_cents, method, received_at, note, stripe_invoice_id, source_invoice_ref, customers(name), jobs(name)"
     )
     .eq("organization_id", organizationId)
     .order("received_at", { ascending: false });
@@ -96,7 +97,9 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
     method: r.method,
     receivedAt: r.received_at,
     note: r.note,
-    stripeInvoiceId: r.stripe_invoice_id,
+    // Either invoice reference will do as a grouping key: what matters is
+    // that two payments settling one invoice carry the same string.
+    stripeInvoiceId: r.stripe_invoice_id ?? r.source_invoice_ref,
   }));
 
   const forGrouping: PaymentRow[] = payments.map((p) => ({

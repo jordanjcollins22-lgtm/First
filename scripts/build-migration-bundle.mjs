@@ -62,6 +62,8 @@ const CREATES = {
   "0114_photo_review.sql": ["job_photo_marks"],
   "0115_visit_labour.sql": [],
   "0116_payment_plans.sql": ["payment_plans", "payment_plan_instalments", "payments"],
+  // Alters only — nothing to probe for.
+  "0117_payment_invoice_ref.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
