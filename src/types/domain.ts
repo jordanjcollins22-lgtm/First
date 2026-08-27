@@ -539,6 +539,23 @@ export interface ProposalZoneSnapshot {
   /** Outline in the same fixed canvas coordinate space as site_image_transform. */
   points: { x: number; y: number }[];
   color: string;
+  /**
+   * What this area cost at the moment the proposal was generated, in cents.
+   *
+   * Snapshotted rather than recomputed, for the same reason the scope text is:
+   * a client trimming an area off next week must see the price they were
+   * quoted move, not today's rate card. Optional because proposals generated
+   * before this existed have no such number, and inventing one would be worse
+   * than admitting we cannot re-price them.
+   */
+  priceCents?: number | null;
+  /**
+   * Whether that price came off the rate card rather than out of somebody's
+   * head. A hand-entered price is a judgement — difficult access, a favour, a
+   * number agreed on the phone — which is exactly why dropping a neighbouring
+   * area must not silently re-derive it.
+   */
+  priceDerived?: boolean;
 }
 
 /** How the reference photo sits under the drawn zones — same transform the

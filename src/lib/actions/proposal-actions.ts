@@ -52,6 +52,10 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
 
   const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone) => {
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
+    // Priced one area at a time as well as all together, so that a client who
+    // later asks to drop an area can be shown the price they were quoted
+    // minus that area — rather than whatever today's rate card would say.
+    const own = computeProposalTotal([zone], catalog);
     return {
       zoneName: zone.name,
       serviceLabel: def?.label ?? zone.service?.typeId ?? "Service",
@@ -59,6 +63,10 @@ export async function generateProposal(jobId: string): Promise<{ token: string }
       photoPaths: zone.service?.photos ?? [],
       points: zone.points,
       color: zone.color,
+      priceCents: Math.round(own.total * 100),
+      // An hourly rate with no measurement, or a material we have no cost for,
+      // means this number is not something the rate card fully produced.
+      priceDerived: !own.hasNonFlatRate && !own.hasUnknownMaterialCost,
     };
   });
 

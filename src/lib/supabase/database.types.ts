@@ -247,6 +247,47 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["payment_plan_instalments"]["Row"]>;
         Relationships: [];
       };
+      proposal_objections: {
+        Row: {
+          id: string;
+          organization_id: string;
+          proposal_id: string;
+          objection_id: string;
+          note: string | null;
+          resolution: string | null;
+          resolved: boolean | null;
+          raised_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["proposal_objections"]["Row"]> & {
+          organization_id: string;
+          proposal_id: string;
+          objection_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["proposal_objections"]["Row"]>;
+        Relationships: [];
+      };
+      proposal_scope_requests: {
+        Row: {
+          id: string;
+          organization_id: string;
+          proposal_id: string;
+          kept_zones: string[];
+          dropped_zones: string[];
+          previous_total_cents: number | null;
+          new_total_cents: number | null;
+          status: string;
+          review_reason: string | null;
+          requested_at: string;
+          resolved_at: string | null;
+          resolved_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["proposal_scope_requests"]["Row"]> & {
+          organization_id: string;
+          proposal_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["proposal_scope_requests"]["Row"]>;
+        Relationships: [];
+      };
       payments: {
         Row: {
           id: string;

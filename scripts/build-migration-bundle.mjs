@@ -64,6 +64,7 @@ const CREATES = {
   "0116_payment_plans.sql": ["payment_plans", "payment_plan_instalments", "payments"],
   // Alters only — nothing to probe for.
   "0117_payment_invoice_ref.sql": [],
+  "0118_proposal_objections.sql": ["proposal_objections", "proposal_scope_requests"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

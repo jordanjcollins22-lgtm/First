@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
+import { ObjectionsPanel } from "@/components/proposal/objections-panel";
+import type { ScopeLine } from "@/lib/objections";
 import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
 import {
   PROPOSAL_ACCEPT_NOTE,
@@ -146,6 +148,20 @@ export function ProposalView({
           </>
         )}
       </div>
+
+      {/* Before the terms and the buttons: a client with an unanswered worry
+          does not read terms, they close the tab. Most of those worries have
+          an answer we already give on the phone. */}
+      <ObjectionsPanel
+        token={token}
+        disabled={status !== "sent"}
+        lines={proposal.scope_snapshot.map<ScopeLine>((zone) => ({
+          zoneName: zone.zoneName,
+          serviceLabel: zone.serviceLabel,
+          priceCents: zone.priceCents ?? null,
+          priceDerived: zone.priceDerived ?? false,
+        }))}
+      />
 
       {/* Between the price and the buttons deliberately. These terms exist
           because work gets added on the day, and a clause a client scrolls
