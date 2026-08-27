@@ -170,6 +170,8 @@ export function ProposalView({
         lines={proposal.scope_snapshot.map<ScopeLine>((zone) => ({
           zoneName: zone.zoneName,
           serviceLabel: labelFor(zone.serviceLabel),
+          performedBy: zone.performedBy ?? "own",
+          partnerName: zone.partnerName ?? null,
           priceCents: zone.priceCents ?? null,
           priceDerived: zone.priceDerived ?? false,
         }))}

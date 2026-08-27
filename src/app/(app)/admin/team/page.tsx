@@ -353,6 +353,8 @@ export default async function TeamServicesPage() {
                     initialCrewSize={s.crew_size ?? 1}
                     initialHowTo={s.how_to}
                     initialScopeTemplate={s.scope_template}
+                    initialPerformedBy={s.performed_by === "partner" ? "partner" : "own"}
+                    initialPartnerName={s.partner_name}
                     materials={materials}
                     materialRules={materialRules}
                     tools={tools}

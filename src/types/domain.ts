@@ -437,6 +437,10 @@ export interface ServicePricing {
    * back to the built-in wording; anything typed on the zone itself beats
    * both, because that was written standing in the garden. */
   scope_template: string | null;
+  /** Our own crew, or a local business we partner with. */
+  performed_by: "own" | "partner";
+  /** The partner's trading name, as a client would see it on their truck. */
+  partner_name: string | null;
   updated_at: string;
 }
 
@@ -562,6 +566,16 @@ export interface ProposalZoneSnapshot {
    * area must not silently re-derive it.
    */
   priceDerived?: boolean;
+  /**
+   * Who turns up for this area: our own crew, or a partner business.
+   *
+   * Snapshotted with everything else, so a client is told who was coming as
+   * of when the proposal was written rather than whatever the rate card says
+   * today. Optional because proposals generated before this existed have no
+   * such field, and those default to our own crew.
+   */
+  performedBy?: "own" | "partner";
+  partnerName?: string | null;
 }
 
 /** How the reference photo sits under the drawn zones — same transform the

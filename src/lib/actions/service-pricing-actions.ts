@@ -97,6 +97,35 @@ export async function updateServiceScopeTemplate(
 }
 
 /**
+ * Whether our own crew does this service, or a partner business does.
+ *
+ * Decides what a client is told about who will be standing on their property,
+ * so it is set at the service level: we do the mulch, somebody else does the
+ * tree work, and one flat answer for the whole business is wrong either way.
+ */
+export async function updateServicePerformedBy(
+  serviceTypeId: string,
+  performedBy: "own" | "partner",
+  partnerName: string | null
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({
+      performed_by: performedBy,
+      // Clearing the flag clears the name with it. A stale partner name on a
+      // service we have taken back in house is a name that reappears on a
+      // proposal the day somebody flips it again.
+      partner_name: performedBy === "partner" ? partnerName?.trim() || null : null,
+    })
+    .eq("service_type_id", serviceTypeId);
+  if (error) throw error;
+
+  revalidatePath("/admin/service-pricing");
+  revalidatePath("/canvas");
+}
+
+/**
  * How long one sq ft takes and how many people work it — together the labor
  * half of the COGS calculator (minutes x crew size = paid crew-minutes).
  */

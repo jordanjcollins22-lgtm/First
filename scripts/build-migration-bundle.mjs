@@ -70,6 +70,7 @@ const CREATES = {
   // Alters and a bucket — nothing new to probe for.
   "0121_knowledge_issues.sql": [],
   "0122_service_scope_template.sql": [],
+  "0123_service_performed_by.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

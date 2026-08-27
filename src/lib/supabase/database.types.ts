@@ -1156,6 +1156,8 @@ export interface Database {
           crew_size: number;
           how_to: string | null;
           scope_template: string | null;
+          performed_by: string;
+          partner_name: string | null;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["services"]["Row"]> & {

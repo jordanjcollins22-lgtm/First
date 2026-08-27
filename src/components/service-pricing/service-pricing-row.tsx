@@ -12,6 +12,7 @@ import {
   updateServiceCogs,
   updateServiceLabor,
   updateServiceHowTo,
+  updateServicePerformedBy,
   updateServiceScopeTemplate,
 } from "@/lib/actions/service-pricing-actions";
 import { linkMaterialToService, deleteServiceMaterialRule } from "@/lib/actions/material-actions";
@@ -33,6 +34,8 @@ interface ServicePricingRowProps {
   initialCrewSize: number;
   initialHowTo: string | null;
   initialScopeTemplate: string | null;
+  initialPerformedBy: "own" | "partner";
+  initialPartnerName: string | null;
   materials: Material[];
   materialRules: ServiceMaterialRule[];
   tools: Tool[];
@@ -53,6 +56,8 @@ export function ServicePricingRow({
   initialCrewSize,
   initialHowTo,
   initialScopeTemplate,
+  initialPerformedBy,
+  initialPartnerName,
   materials,
   materialRules,
   tools,
@@ -69,6 +74,8 @@ export function ServicePricingRow({
   const [crewSize, setCrewSize] = useState(initialCrewSize.toString());
   const [howTo, setHowTo] = useState(initialHowTo ?? "");
   const [scopeTemplate, setScopeTemplate] = useState(initialScopeTemplate ?? "");
+  const [performedBy, setPerformedBy] = useState<"own" | "partner">(initialPerformedBy);
+  const [partnerName, setPartnerName] = useState(initialPartnerName ?? "");
   const [showCalculator, setShowCalculator] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
   const [toolSearch, setToolSearch] = useState("");
@@ -169,6 +176,11 @@ export function ServicePricingRow({
 
   function saveHowTo() {
     startTransition(() => updateServiceHowTo(serviceTypeId, howTo.trim() || null));
+  }
+
+  function savePerformedBy(next: "own" | "partner", name: string) {
+    setPerformedBy(next);
+    startTransition(() => updateServicePerformedBy(serviceTypeId, next, name.trim() || null));
   }
 
   function saveScopeTemplate() {
@@ -306,6 +318,54 @@ export function ServicePricingRow({
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {/* What a client is told about who is coming. Per service,
+                because that is the level at which it is actually true: we do
+                the mulch, somebody else does the tree work. */}
+            <p className="text-xs text-muted-foreground">Who does this one?</p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => savePerformedBy("own", partnerName)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  performedBy === "own"
+                    ? "border-transparent bg-foreground text-background"
+                    : "border-border text-muted-foreground"
+                }`}
+              >
+                Our crew
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => savePerformedBy("partner", partnerName)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  performedBy === "partner"
+                    ? "border-transparent bg-foreground text-background"
+                    : "border-border text-muted-foreground"
+                }`}
+              >
+                A partner
+              </button>
+            </div>
+            {performedBy === "partner" && (
+              <>
+                <Input
+                  placeholder="Partner business name, as it reads on their truck"
+                  value={partnerName}
+                  disabled={isPending}
+                  onChange={(e) => setPartnerName(e.target.value)}
+                  onBlur={() => savePerformedBy("partner", partnerName)}
+                  className="mt-1 text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Named on the proposal, so a client knows whose truck is coming before they agree.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">

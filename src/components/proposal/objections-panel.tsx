@@ -15,6 +15,7 @@ import {
   type ScopeLine,
 } from "@/lib/objections";
 import { recordObjection, requestScopeChange } from "@/lib/actions/public-proposal-actions";
+import { summariseCrewing, whoAttendsAnswer } from "@/lib/who-attends";
 
 function money(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -136,6 +137,28 @@ export function ObjectionsPanel({
   );
 }
 
+/**
+ * The answer, tailored where a stock paragraph would be wrong.
+ *
+ * "Who will be at my property?" used to answer "our own crew, not
+ * subcontractors" on every proposal, which is true of most of the work and a
+ * lie about the rest. It is now built from the services actually quoted, so a
+ * client whose tree work goes to a partner is told the partner's name before
+ * they agree rather than when the truck arrives.
+ */
+function answerFor(objection: Objection, lines: ScopeLine[]): string {
+  if (objection.id !== "who_comes") return objection.answer;
+  return whoAttendsAnswer(
+    summariseCrewing(
+      lines.map((line) => ({
+        serviceLabel: line.serviceLabel,
+        performedBy: line.performedBy ?? "own",
+        partnerName: line.partnerName,
+      }))
+    )
+  );
+}
+
 function AnswerCard({
   token,
   objection,
@@ -168,7 +191,7 @@ function AnswerCard({
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-3">
       <p className="text-sm font-semibold">{objection.label}</p>
-      <p className="text-sm text-muted-foreground">{objection.answer}</p>
+      <p className="text-sm text-muted-foreground">{answerFor(objection, lines)}</p>
 
       <div className="flex flex-col gap-2">
         {resolutions.map((kind) => {

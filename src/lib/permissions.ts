@@ -61,7 +61,6 @@ export type TabKey = string;
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/login": "Sign-in page — nobody is signed in yet, so there are no roles to check.",
-  "/proposal/[token]": "Opened by a client from an emailed link. They have no account at all.",
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +
     "no pricing on the page — the token is the whole of their access.",

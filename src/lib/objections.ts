@@ -117,9 +117,13 @@ export const OBJECTIONS: Objection[] = [
   },
   {
     id: "who_comes",
+    // The only answer built per proposal rather than written here. Some work
+    // goes to a partner business, so a fixed paragraph would be true of most
+    // jobs and a lie about the rest. See lib/who-attends; this text is the
+    // fallback for a proposal with nothing priced on it yet.
     label: "Who will be at my property?",
     answer:
-      "Our own crew, not subcontractors, in company shirts and a marked truck. You will know the day before who is coming and roughly what time. If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.",
+      "Our own crew, in company shirts and a marked truck. You will know the day before who is coming and roughly what time. If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.",
     resolutions: ["explain", "talk"],
   },
   {
@@ -164,6 +168,9 @@ export function shouldOfferOther(state: {
 export interface ScopeLine {
   zoneName: string;
   serviceLabel: string;
+  /** Who does this one: our own crew, or a partner business. */
+  performedBy?: "own" | "partner";
+  partnerName?: string | null;
   /** Cents, at the moment the proposal was generated. Null when we never
    * captured one — an older proposal, or a price nobody could derive. */
   priceCents: number | null;
