@@ -442,6 +442,10 @@ export interface CanvasDesignRow {
   image_y: number;
   image_scale: number;
   image_rotation: number;
+  /** Compass degrees at the top of the satellite photo. 0 is north-up. */
+  image_bearing?: number;
+  /** Whether a person has said the house is the right way round. */
+  orientation_confirmed?: boolean;
   image_real_width_feet: number | null;
   locked: boolean;
   property_line: { x: number; y: number }[];

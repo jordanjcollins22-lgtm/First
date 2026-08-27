@@ -837,6 +837,8 @@ export interface Database {
           image_y: number;
           image_scale: number;
           image_rotation: number;
+          image_bearing: number;
+          orientation_confirmed: boolean;
           image_real_width_feet: number | null;
           locked: boolean;
           property_line: Json;

@@ -17,11 +17,14 @@ import {
   ClipboardList,
   Home,
   ImageUp,
+  Loader2,
   Lock,
   Maximize2,
   Minimize2,
   MousePointer2,
   PenTool,
+  RotateCcw,
+  RotateCw,
   Route,
   Ruler,
   Satellite,
@@ -35,6 +38,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
+import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
+import { nearbyRoads } from "@/lib/mapbox-roads";
+import { drawFrontTarget } from "@/lib/canvas-front-target";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
 import { createClient } from "@/lib/supabase/client";
 import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
@@ -152,6 +158,14 @@ export function ImageCanvasBoard({
   const [serviceDialogZoneId, setServiceDialogZoneId] = useState<string | null>(null);
   const [showSatelliteSearch, setShowSatelliteSearch] = useState(false);
   const [satelliteLoading, setSatelliteLoading] = useState(false);
+  // Where the photo came from and which way it is turned. Kept so the
+  // evaluator can nudge the turn and get a fresh, full-frame photo back
+  // rather than a rotated one with white corners.
+  const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
+  const [bearing, setBearing] = useState(0);
+  const [orientConfirmed, setOrientConfirmed] = useState(true);
+  const [keepCentered, setKeepCentered] = useState(true);
+  const [autoTurned, setAutoTurned] = useState<number | null>(null);
   const [satelliteError, setSatelliteError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [submittingEval, setSubmittingEval] = useState(false);
@@ -176,6 +190,12 @@ export function ImageCanvasBoard({
     };
   }, [isFullscreen, drawingPoints.length]);
 
+  // The target only makes sense while the question is open.
+  const showFrontTarget = Boolean(image) && !orientConfirmed;
+  // And so does holding the board still. Once the house is the right way
+  // round, moving the background is ordinary work again.
+  const holdCentered = keepCentered && !orientConfirmed;
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -195,6 +215,10 @@ export function ImageCanvasBoard({
       ctx.drawImage(element, -w / 2, -h / 2, w, h);
       ctx.restore();
     }
+
+    // While the house is being pointed the right way, a target at the bottom
+    // of the board saying which way is "the front".
+    if (showFrontTarget) drawFrontTarget(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     if (houseOutline.length > 0) {
       const point = houseOutline[0];
@@ -276,7 +300,7 @@ export function ImageCanvasBoard({
         ctx.fill();
       }
     }
-  }, [image, zones, propertyLine, houseOutline, tool, drawingPoints, cursorPos]);
+  }, [image, zones, propertyLine, houseOutline, tool, drawingPoints, cursorPos, showFrontTarget]);
 
   useEffect(() => {
     draw();
@@ -292,6 +316,14 @@ export function ImageCanvasBoard({
         uploadedImagePathRef.current = initialDesign?.image_path ?? null;
         if (initialDesign) {
           setLocked(initialDesign.locked);
+          setBearing(initialDesign.image_bearing ?? 0);
+          // Older designs have no flag. Anything with work already drawn on
+          // it was oriented by hand under the old flow, so asking again would
+          // put a step in front of finished work.
+          setOrientConfirmed(
+            initialDesign.orientation_confirmed ??
+              (initialDesign.locked || (initialDesign.property_line?.length ?? 0) > 0)
+          );
           // Prefer the live property address over whatever was saved with this
           // design snapshot — the property address can be corrected later
           // (e.g. from a bad webhook value) and the canvas should follow it.
@@ -414,7 +446,7 @@ export function ImageCanvasBoard({
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine, houseOutline]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, bearing, orientConfirmed]);
 
   // Debounced autosave to the database for job-scoped canvases. Zone photos
   // are uploaded to storage as soon as they're picked (see ZoneServiceDialog)
@@ -446,6 +478,8 @@ export function ImageCanvasBoard({
             imageScale: image?.scale ?? 1,
             imageRotation: image?.rotation ?? 0,
             imageRealWidthFeet: image?.realWidthFeet ?? null,
+            imageBearing: bearing,
+            orientationConfirmed: orientConfirmed,
             locked,
             propertyLine,
             houseOutline,
@@ -458,7 +492,7 @@ export function ImageCanvasBoard({
       })();
     }, 800);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine, houseOutline]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, bearing, orientConfirmed]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
@@ -545,7 +579,8 @@ export function ImageCanvasBoard({
 
   async function fetchSatelliteImageBlob(
     lng: number,
-    lat: number
+    lat: number,
+    mapBearing = 0
   ): Promise<{ blob: Blob; realWidthFeet: number }> {
     // Mapbox requires its logo/attribution on static images, anchored to the bottom
     // edge. Fetch extra vertical padding, split evenly so the requested lat/lng stays
@@ -553,7 +588,7 @@ export function ImageCanvasBoard({
     // the property off-center), and trim it back off after loading.
     const zoom = 18.7;
     const padding = 220;
-    const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},0/${CANVAS_WIDTH}x${CANVAS_HEIGHT + padding}@2x?access_token=${env.mapboxToken}`;
+    const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},${mapBearing}/${CANVAS_WIDTH}x${CANVAS_HEIGHT + padding}@2x?access_token=${env.mapboxToken}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
     const rawBlob = await res.blob();
@@ -601,8 +636,32 @@ export function ImageCanvasBoard({
     setSatelliteError(null);
     setSatelliteLoading(true);
     try {
-      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(suggestion.lng, suggestion.lat);
+      const point = { lat: suggestion.lat, lng: suggestion.lng };
+
+      // Turn the map before fetching rather than turning the photo after.
+      // A photo requested at a bearing fills its frame; a photo rotated on
+      // the canvas has white corners where the yard should be.
+      let turned = 0;
+      try {
+        const guess = autoBearing(point, await nearbyRoads(point));
+        if (guess != null) turned = guess;
+        setAutoTurned(guess);
+      } catch {
+        // No street data is not a failure — it just means the evaluator
+        // turns it themselves, which is the next thing they are asked to do.
+        setAutoTurned(null);
+      }
+
+      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
+        suggestion.lng,
+        suggestion.lat,
+        turned
+      );
       await loadImageBlob(blob, realWidthFeet);
+      setOrigin(point);
+      setBearing(turned);
+      setOrientConfirmed(false);
+      setKeepCentered(true);
       setAddress(suggestion.fullAddress);
       setShowSatelliteSearch(false);
       // The satellite photo is centered on the geocoded address, which for a
@@ -616,6 +675,46 @@ export function ImageCanvasBoard({
     } finally {
       setSatelliteLoading(false);
     }
+  }
+
+  /**
+   * Turns the map a bit further round.
+   *
+   * A satellite photo is re-fetched at the new bearing so it stays full-frame.
+   * An uploaded photo has no map behind it, so that one is rotated on the
+   * canvas — the only case where the corners can show, and the evaluator can
+   * see that for themselves.
+   */
+  async function nudgeBearing(delta: number) {
+    if (!origin) {
+      setImage((prev) =>
+        prev ? { ...prev, rotation: normalizeDegrees(prev.rotation + delta) } : prev
+      );
+      imageDirtyRef.current = true;
+      return;
+    }
+
+    const next = normalizeDegrees(bearing + delta);
+    setSatelliteError(null);
+    setSatelliteLoading(true);
+    try {
+      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(origin.lng, origin.lat, next);
+      await loadImageBlob(blob, realWidthFeet);
+      setBearing(next);
+      // The house is still under the middle of the frame — the map turned
+      // around it, it did not move.
+      setHouseOutline([{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }]);
+    } catch (err) {
+      setSatelliteError(err instanceof Error ? err.message : "Couldn't turn the photo.");
+    } finally {
+      setSatelliteLoading(false);
+    }
+  }
+
+  /** Puts the photo back in the middle of the board. */
+  function recenterImage() {
+    setImage((prev) => (prev ? { ...prev, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 } : prev));
+    imageDirtyRef.current = true;
   }
 
   function selectTool(next: Tool) {
@@ -665,7 +764,10 @@ export function ImageCanvasBoard({
       return;
     }
 
-    if (locked || !image) return;
+    // Held in the middle on purpose while orienting: the house is under the
+    // centre of the frame, and a board that drifts is one where "point the
+    // front at the bottom" stops meaning anything.
+    if (locked || holdCentered || !image) return;
     dragRef.current = { startX: point.x, startY: point.y, originX: image.x, originY: image.y };
     canvas.setPointerCapture(e.pointerId);
   }
@@ -680,7 +782,7 @@ export function ImageCanvasBoard({
       return;
     }
 
-    if (locked || !dragRef.current || !image) return;
+    if (locked || holdCentered || !dragRef.current || !image) return;
     setImage({
       ...image,
       x: dragRef.current.originX + (point.x - dragRef.current.startX),
@@ -743,9 +845,11 @@ export function ImageCanvasBoard({
   // each shown as the only prompt on screen. Once both are marked, the full
   // toolbar takes over — locking/rescaling/zones aren't single yes/no
   // questions, so that phase keeps the richer controls.
-  const guidedStep: "image" | "house" | "property-line" | "editing" = !image
+  const guidedStep: "image" | "orient" | "house" | "property-line" | "editing" = !image
     ? "image"
-    : houseOutline.length === 0
+    : !orientConfirmed
+      ? "orient"
+      : houseOutline.length === 0
       ? "house"
       : propertyLine.length === 0
         ? "property-line"
@@ -782,7 +886,7 @@ export function ImageCanvasBoard({
         </div>
       )}
 
-      {houseNeedsConfirmation && (
+      {houseNeedsConfirmation && guidedStep !== "orient" && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span>Is this the correct house?</span>
           <div className="flex gap-2">
@@ -791,6 +895,83 @@ export function ImageCanvasBoard({
             </Button>
             <Button type="button" size="sm" onClick={() => setHouseNeedsConfirmation(false)}>
               Yes
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {guidedStep === "orient" && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <div>
+            <p className="text-sm font-medium">Is the front of the house pointing down?</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {autoTurned != null
+                ? `Turned automatically — the street looked to be ${describeHeading(
+                    normalizeDegrees(autoTurned + 180)
+                  )} of the house. Check it against the arrow and nudge it if that is wrong.`
+                : origin
+                  ? "Couldn't find a street to go by, so this one is north-up. Turn it until the front faces the arrow."
+                  : "Turn the photo until the front of the house faces the arrow at the bottom."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1">
+            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(-90)}>
+              <RotateCcw className="h-4 w-4" />
+              90°
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(-15)}>
+              <RotateCcw className="h-4 w-4" />
+              15°
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(15)}>
+              <RotateCw className="h-4 w-4" />
+              15°
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={satelliteLoading} onClick={() => nudgeBearing(90)}>
+              <RotateCw className="h-4 w-4" />
+              90°
+            </Button>
+            {satelliteLoading && <Loader2 className="ml-1 h-4 w-4 animate-spin text-muted-foreground" />}
+          </div>
+
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={keepCentered}
+              onChange={(e) => {
+                setKeepCentered(e.target.checked);
+                if (e.target.checked) recenterImage();
+              }}
+              className="h-4 w-4 rounded border-input"
+            />
+            <span>
+              Keep the house in the middle
+              {!keepCentered && " — off, so you can drag the photo"}
+            </span>
+          </label>
+
+          {satelliteError && <p className="text-xs text-destructive">{satelliteError}</p>}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={satelliteLoading}
+              onClick={() => {
+                // Straight from "it is the right way up" to a locked
+                // background: nothing between those two is a decision.
+                recenterImage();
+                setOrientConfirmed(true);
+                setLocked(true);
+                setKeepCentered(true);
+              }}
+            >
+              <Lock className="h-4 w-4" />
+              Front is down — lock it
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setShowSatelliteSearch(true)}>
+              Different address
             </Button>
           </div>
         </div>

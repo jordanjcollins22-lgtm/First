@@ -12,6 +12,10 @@ export interface SaveCanvasDesignInput {
   imageScale: number;
   imageRotation: number;
   imageRealWidthFeet: number | null;
+  /** Compass degrees at the top of the satellite photo. */
+  imageBearing: number;
+  /** Whether a person has said the house is the right way round. */
+  orientationConfirmed: boolean;
   locked: boolean;
   propertyLine: { x: number; y: number }[];
   houseOutline: { x: number; y: number }[];
@@ -30,6 +34,8 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
       image_scale: input.imageScale,
       image_rotation: input.imageRotation,
       image_real_width_feet: input.imageRealWidthFeet,
+      image_bearing: input.imageBearing,
+      orientation_confirmed: input.orientationConfirmed,
       locked: input.locked,
       property_line: input.propertyLine,
       house_outline: input.houseOutline,
