@@ -27,6 +27,7 @@ import {
   Route,
   Ruler,
   Satellite,
+  StickyNote,
   Trash2,
   Undo2,
   Unlock,
@@ -35,12 +36,21 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
 import { nearbyRoads } from "@/lib/mapbox-roads";
 import { drawFrontTarget } from "@/lib/canvas-front-target";
+import {
+  addMark,
+  markAt,
+  removeMark,
+  updateMark,
+  withoutEmpty,
+  type CanvasMark,
+} from "@/lib/canvas-marks";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
 import { createClient } from "@/lib/supabase/client";
 import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
@@ -79,7 +89,7 @@ interface CanvasImage {
   realWidthFeet: number | null;
 }
 
-type Tool = "move" | "zone" | "property-line" | "house";
+type Tool = "move" | "zone" | "property-line" | "house" | "note";
 
 function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasElement): Point {
   const rect = canvas.getBoundingClientRect();
@@ -135,6 +145,8 @@ interface ImageCanvasBoardProps {
   initialLat?: number;
   initialLng?: number;
   initialEvaluationStatus?: EvaluationStatus;
+  /** Who is doing the evaluation, so a note has somebody to ask about it. */
+  evaluatorName?: string | null;
 }
 
 export function ImageCanvasBoard({
@@ -145,6 +157,7 @@ export function ImageCanvasBoard({
   initialLat,
   initialLng,
   initialEvaluationStatus,
+  evaluatorName,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -159,6 +172,8 @@ export function ImageCanvasBoard({
   const [address, setAddress] = useState("");
   const [zones, setZones] = useState<WorkZone[]>([]);
   const [propertyLine, setPropertyLine] = useState<Point[]>([]);
+  const [marks, setMarks] = useState<CanvasMark[]>([]);
+  const [editingMark, setEditingMark] = useState<CanvasMark | null>(null);
   const [houseOutline, setHouseOutline] = useState<Point[]>([]);
   const [houseNeedsConfirmation, setHouseNeedsConfirmation] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
@@ -227,6 +242,31 @@ export function ImageCanvasBoard({
     // While the house is being pointed the right way, a target at the bottom
     // of the board saying which way is "the front".
     if (showFrontTarget) drawFrontTarget(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Notes pinned to the picture. Numbered rather than captioned: the words
+    // go in the list underneath, where they can be read without covering the
+    // thing they are about.
+    withoutEmpty(marks).forEach((mark, index) => {
+      const radius = 15;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(mark.x, mark.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#7c3aed";
+      ctx.shadowColor = "rgba(0,0,0,0.45)";
+      ctx.shadowBlur = 6;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "700 16px system-ui, -apple-system, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(index + 1), mark.x, mark.y + 1);
+      ctx.restore();
+    });
 
     if (houseOutline.length > 0) {
       const point = houseOutline[0];
@@ -308,7 +348,7 @@ export function ImageCanvasBoard({
         ctx.fill();
       }
     }
-  }, [image, zones, propertyLine, houseOutline, tool, drawingPoints, cursorPos, showFrontTarget]);
+  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget]);
 
   useEffect(() => {
     draw();
@@ -339,6 +379,7 @@ export function ImageCanvasBoard({
           setZones(initialDesign.zones as unknown as WorkZone[]);
           setPropertyLine(initialDesign.property_line ?? []);
           setHouseOutline(initialDesign.house_outline ?? []);
+          setMarks(initialDesign.marks ?? []);
           if (initialDesign.image_path) {
             const supabase = createClient();
             const url = supabase.storage.from("canvas-images").getPublicUrl(initialDesign.image_path).data
@@ -417,6 +458,7 @@ export function ImageCanvasBoard({
             setZones(design.zones);
             setPropertyLine(design.propertyLine ?? []);
             setHouseOutline(design.houseOutline ?? []);
+            setMarks(design.marks ?? []);
           }
         }
       } catch {
@@ -449,12 +491,13 @@ export function ImageCanvasBoard({
         zones,
         propertyLine,
         houseOutline,
+        marks: withoutEmpty(marks),
       })
         .then(() => setLastSavedAt(Date.now()))
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, bearing, orientConfirmed]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed]);
 
   // Debounced autosave to the database for job-scoped canvases. Zone photos
   // are uploaded to storage as soon as they're picked (see ZoneServiceDialog)
@@ -491,6 +534,7 @@ export function ImageCanvasBoard({
             locked,
             propertyLine,
             houseOutline,
+            marks: withoutEmpty(marks),
             zones,
           });
           setLastSavedAt(Date.now());
@@ -500,7 +544,7 @@ export function ImageCanvasBoard({
       })();
     }, 800);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, bearing, orientConfirmed]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
@@ -760,6 +804,21 @@ export function ImageCanvasBoard({
       return;
     }
 
+    if (tool === "note") {
+      // Tapping an existing pin opens it rather than stacking another on top
+      // of it — two pins in one place is two notes nobody can tell apart.
+      const existing = markAt(marks, point);
+      if (existing) {
+        setEditingMark(existing);
+        return;
+      }
+      const id = uuid();
+      const next = addMark(marks, point, "", evaluatorName ?? null, id);
+      setMarks(next);
+      setEditingMark(next[next.length - 1]);
+      return;
+    }
+
     if (tool === "zone" || tool === "property-line") {
       if (drawingPoints.length >= 3 && distance(point, drawingPoints[0]) <= CLOSE_POINT_RADIUS) {
         if (tool === "zone") finalizeZone();
@@ -781,7 +840,7 @@ export function ImageCanvasBoard({
   function handlePointerMove(e: PointerEvent<HTMLCanvasElement>) {
     const point = toCanvasPoint(e.clientX, e.clientY, e.currentTarget);
 
-    if (tool === "house") return;
+    if (tool === "house" || tool === "note") return;
 
     if (tool === "zone" || tool === "property-line") {
       if (drawingPoints.length > 0) setCursorPos(point);
@@ -837,6 +896,7 @@ export function ImageCanvasBoard({
     setAddress(initialAddress ?? "");
     setZones([]);
     setPropertyLine([]);
+    setMarks([]);
     setDrawingPoints([]);
     setCursorPos(null);
     setLastSavedAt(null);
@@ -861,6 +921,7 @@ export function ImageCanvasBoard({
         ? "property-line"
         : "editing";
   const isDrawingNow = tool === "house" || tool === "property-line" || tool === "zone";
+  const noteCount = withoutEmpty(marks).length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -1037,6 +1098,17 @@ export function ImageCanvasBoard({
             >
               <Home className="h-4 w-4" />
               {houseOutline.length > 0 ? "Redraw House" : "Mark House"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={tool === "note" ? "default" : "ghost"}
+              disabled={!image}
+              onClick={() => selectTool("note")}
+              title="Tap the picture to pin a note to a spot"
+            >
+              <StickyNote className="h-4 w-4" />
+              Note{noteCount > 0 ? ` (${noteCount})` : ""}
             </Button>
             <Button
               type="button"
@@ -1277,6 +1349,53 @@ export function ImageCanvasBoard({
         </div>
       )}
 
+      {tool === "note" && (
+        <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          Tap the picture where the note belongs. Tap a pin again to change it.
+        </p>
+      )}
+
+      {/* The words go under the picture, not on it. A caption across a garden
+          covers the thing it is about, and the number is enough to find. */}
+      {noteCount > 0 && (
+        <div className="rounded-2xl border border-white/60 bg-card/70 p-3 backdrop-blur-xl">
+          <h3 className="mb-2 text-sm font-semibold">Notes on the picture</h3>
+          <ol className="space-y-1">
+            {withoutEmpty(marks).map((mark, index) => (
+              <li key={mark.id} className="flex items-start gap-2 text-sm">
+                <span
+                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                  style={{ background: "#7c3aed" }}
+                >
+                  {index + 1}
+                </span>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left hover:underline"
+                  onClick={() => setEditingMark(mark)}
+                >
+                  <span className="block">{mark.note}</span>
+                  {mark.authorName && (
+                    <span className="block text-[11px] text-muted-foreground">
+                      {mark.authorName}
+                    </span>
+                  )}
+                </button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-1.5"
+                  onClick={() => setMarks((prev) => removeMark(prev, mark.id))}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {guidedStep === "editing" && !isDrawingNow && (
         <p className="text-xs text-muted-foreground">
           {locked
@@ -1468,6 +1587,78 @@ export function ImageCanvasBoard({
         onCancel={() => setServiceDialogZoneId(null)}
       />
 
+      {editingMark && (
+        <MarkNoteDialog
+          mark={editingMark}
+          onSave={(note) => {
+            setMarks((prev) => withoutEmpty(updateMark(prev, editingMark.id, note)));
+            setEditingMark(null);
+          }}
+          onDelete={() => {
+            setMarks((prev) => removeMark(prev, editingMark.id));
+            setEditingMark(null);
+          }}
+          onCancel={() => {
+            // A pin closed without anything written on it never existed.
+            setMarks((prev) => withoutEmpty(prev));
+            setEditingMark(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a pin says.
+ *
+ * Opens the moment a pin is dropped, because a pin with nothing on it is not
+ * worth having and asking later means never asking.
+ */
+function MarkNoteDialog({
+  mark,
+  onSave,
+  onDelete,
+  onCancel,
+}: {
+  mark: CanvasMark;
+  onSave: (note: string) => void;
+  onDelete: () => void;
+  onCancel: () => void;
+}) {
+  const [note, setNote] = useState(mark.note);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
+        <h2 className="text-lg font-semibold">Note on this spot</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          What the crew needs to know about here — the thing that is neither a zone nor a
+          measurement.
+        </p>
+
+        <Textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={4}
+          autoFocus
+          placeholder="Gate stays shut — dog in the back."
+        />
+
+        <div className="mt-3 flex gap-2">
+          <Button type="button" className="flex-1" disabled={!note.trim()} onClick={() => onSave(note)}>
+            Save
+          </Button>
+          {mark.note.trim() && (
+            <Button type="button" variant="outline" onClick={onDelete}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import type { CanvasMark } from "@/lib/canvas-marks";
 /**
  * Core domain types. Mirrors the Supabase/Postgres schema in
  * supabase/migrations. Keep in sync manually (no codegen for MVP).
@@ -447,6 +448,8 @@ export interface CanvasDesignRow {
   /** Whether a person has said the house is the right way round. */
   orientation_confirmed?: boolean;
   image_real_width_feet: number | null;
+  /** Notes pinned to points on the picture. */
+  marks?: CanvasMark[];
   locked: boolean;
   property_line: { x: number; y: number }[];
   house_outline: { x: number; y: number }[];

@@ -1,3 +1,5 @@
+import type { CanvasMark } from "@/lib/canvas-marks";
+
 export interface Point {
   x: number;
   y: number;
@@ -43,6 +45,8 @@ export interface WorkZone {
 }
 
 export interface StoredDesign {
+  /** Notes pinned to points on the picture. */
+  marks?: CanvasMark[];
   imageBlob: Blob | null;
   imageX: number;
   imageY: number;

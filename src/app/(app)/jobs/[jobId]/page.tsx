@@ -479,6 +479,7 @@ export default async function JobPage({
         initialLat={job.property?.lat}
         initialLng={job.property?.lng}
         initialEvaluationStatus={job.evaluation_status}
+        evaluatorName={viewer?.full_name || viewer?.email || null}
       />
     </div>
   );

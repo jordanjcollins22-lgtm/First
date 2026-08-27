@@ -4,10 +4,13 @@ import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { buildWorkOrder, type WorkOrder } from "@/lib/work-order";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
+import { withoutEmpty, type CanvasMark } from "@/lib/canvas-marks";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform } from "@/types/domain";
 
 export interface WorkOrderPageData {
+  /** Notes the evaluator pinned to the picture, in the order they are numbered. */
+  marks: CanvasMark[];
   order: WorkOrder;
   jobNumber: number | null;
   address: string;
@@ -63,6 +66,9 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     : null;
 
   const zones = design ? (design.zones as unknown as WorkZone[]).filter((z) => z.service) : [];
+  // The notes the evaluator pinned to the picture. They are for the crew, so
+  // they belong on the crew's sheet as much as on the evaluation.
+  const marks = design ? withoutEmpty((design.marks ?? []) as CanvasMark[]) : [];
 
   const order = buildWorkOrder(zones, catalog, (typeId, key) => {
     const field = serviceTypeById(typeId)?.fields?.find((f) => f.key === key);
@@ -87,5 +93,6 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
           canvasHeight: CANVAS_HEIGHT,
         }
       : null,
+    marks,
   };
 }

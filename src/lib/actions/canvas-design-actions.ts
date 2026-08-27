@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import type { CanvasMark } from "@/lib/canvas-marks";
 
 export interface SaveCanvasDesignInput {
   address: string;
@@ -19,6 +20,7 @@ export interface SaveCanvasDesignInput {
   locked: boolean;
   propertyLine: { x: number; y: number }[];
   houseOutline: { x: number; y: number }[];
+  marks: CanvasMark[];
   zones: unknown[];
 }
 
@@ -39,6 +41,7 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
       locked: input.locked,
       property_line: input.propertyLine,
       house_outline: input.houseOutline,
+      marks: input.marks,
       zones: input.zones,
     },
     { onConflict: "job_id" }

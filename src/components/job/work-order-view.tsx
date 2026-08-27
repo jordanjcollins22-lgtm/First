@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 
+import type { CanvasMark } from "@/lib/canvas-marks";
 import { SiteMapImage } from "@/components/proposal/site-map-image";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { formatJobNumber } from "@/lib/job-number";
@@ -29,6 +30,7 @@ export function WorkOrderView({
   jobName,
   siteImagePath,
   imageTransform,
+  marks,
   accountManager,
   back,
 }: {
@@ -42,6 +44,8 @@ export function WorkOrderView({
   siteImagePath: string | null;
   /** How the satellite photo sits under the zones, from the saved design. */
   imageTransform: ProposalSiteImageTransform | null;
+  /** Notes the evaluator pinned to the picture. Written for this sheet. */
+  marks: CanvasMark[];
   /** Who to ring when something on site does not match the sheet. */
   accountManager: { name: string; phone: string | null } | null;
   /** Where the back link goes. Defaults to the crew's day, which is where a
@@ -106,6 +110,30 @@ export function WorkOrderView({
             points: zone.points,
           }))}
         />
+      )}
+
+      {/* Whatever is neither a zone nor a measurement — the gate that stays
+          shut, the bank too steep to mow. Above the work rather than below
+          it: these are the things to know before starting, not after. */}
+      {marks.length > 0 && (
+        <section className="rounded-xl border border-violet-400/60 bg-violet-50/60 p-4">
+          <h2 className="mb-2 text-sm font-semibold">Notes from the walkthrough</h2>
+          <ol className="flex flex-col gap-2">
+            {marks.map((mark, index) => (
+              <li key={mark.id} className="flex items-start gap-2 text-sm">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[11px] font-bold text-white">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {mark.note}
+                  {mark.authorName && (
+                    <span className="text-muted-foreground"> — {mark.authorName}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
 
       {/* ----------------------------------------------------------- the work */}
