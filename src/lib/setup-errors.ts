@@ -32,6 +32,9 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   flyer_ad_spots: "0104_flyer_ad_spots.sql",
   social_posts: "0105_social_posts.sql",
   door_hanger_slots: "0108_door_hangers.sql",
+  rank_keywords: "0110_rank_grid.sql",
+  rank_scans: "0110_rank_grid.sql",
+  rank_points: "0110_rank_grid.sql",
 };
 
 /**

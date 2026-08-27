@@ -34,6 +34,12 @@ export const env = {
   // Buffer, anything that takes a JSON body. Unset means posts still get a
   // time, they just wait for somebody to press send.
   socialWebhookUrl: process.env.SOCIAL_WEBHOOK_URL ?? "",
+  // Google Places, for checking where we come in local results from a given
+  // point. Unset means the grid is filled in by hand instead.
+  googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY ?? "",
+  // Which listing is ours. Without it a scan cannot tell us apart from
+  // another landscaper with a similar name.
+  googlePlaceId: process.env.GOOGLE_PLACE_ID ?? "",
 };
 
 export function assertSupabaseConfigured() {

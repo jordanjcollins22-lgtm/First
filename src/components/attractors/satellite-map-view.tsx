@@ -45,6 +45,13 @@ interface SatelliteMapViewProps {
     rank: number;
     label: string;
   }[];
+  /**
+   * Where we come in local results, point by point.
+   *
+   * Drawn over everything else on purpose: it is a question about the map
+   * itself, and half of the answer is which streets the good points are on.
+   */
+  rankPoints: { lat: number; lng: number; rank: number | null; label: string; colour: string }[];
   visibleWaveIds: Set<string>;
   selectedWaveId: string | null;
   onSelectWave: (id: string | null) => void;
@@ -67,6 +74,8 @@ const LEADS_SOURCE = "attractor-leads";
 const LEADS_LAYER = "attractor-leads-circle";
 const DENSITY_SOURCE = "attractor-density";
 const DENSITY_LAYER = "attractor-density-circle";
+const RANK_SOURCE = "rank-grid";
+const RANK_LAYER = "rank-grid-circle";
 const AREAS_SOURCE = "location-areas";
 const AREAS_FILL_LAYER = "location-areas-fill";
 const AREAS_LINE_LAYER = "location-areas-line";
@@ -89,6 +98,7 @@ export function SatelliteMapView({
   jobs,
   leadProperties,
   densityCells,
+  rankPoints,
   visibleWaveIds,
   selectedWaveId,
   onSelectWave,
@@ -218,6 +228,39 @@ export function SatelliteMapView({
           "text-color": "#ffffff",
           "text-halo-color": "#000000",
           "text-halo-width": 1.5,
+        },
+      });
+
+      // The rank grid, added last so it sits over everything: it is a
+      // question about the map itself, and half the answer is which streets
+      // the good points are on.
+      map.addSource(RANK_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: RANK_LAYER,
+        type: "circle",
+        source: RANK_SOURCE,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 11, 14, 20],
+          "circle-color": ["get", "colour"],
+          "circle-opacity": 0.9,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+      map.addLayer({
+        id: `${RANK_LAYER}-label`,
+        type: "symbol",
+        source: RANK_SOURCE,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 8, 11, 14, 15],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "rgba(0,0,0,0.55)",
+          "text-halo-width": 1.2,
         },
       });
 
@@ -400,6 +443,23 @@ export function SatelliteMapView({
       })),
     });
   }, [densityCells, mapLoaded]);
+
+  // Keep the rank grid in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(RANK_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    source.setData({
+      type: "FeatureCollection",
+      features: rankPoints.map((point) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [point.lng, point.lat] },
+        properties: { label: point.label, colour: point.colour },
+      })),
+    });
+  }, [rankPoints, mapLoaded]);
 
   // Keep the lead markers in sync.
   useEffect(() => {

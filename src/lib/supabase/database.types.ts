@@ -193,6 +193,67 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
         Relationships: [];
       };
+      rank_keywords: {
+        Row: {
+          id: string;
+          organization_id: string;
+          phrase: string;
+          active: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["rank_keywords"]["Row"]> & {
+          organization_id: string;
+          phrase: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["rank_keywords"]["Row"]>;
+        Relationships: [];
+      };
+      rank_scans: {
+        Row: {
+          id: string;
+          organization_id: string;
+          keyword_id: string;
+          centre_lat: number;
+          centre_lng: number;
+          grid_size: number;
+          spacing_miles: number;
+          source: string;
+          note: string | null;
+          ran_at: string;
+          ran_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["rank_scans"]["Row"]> & {
+          organization_id: string;
+          keyword_id: string;
+          centre_lat: number;
+          centre_lng: number;
+          grid_size: number;
+          spacing_miles: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["rank_scans"]["Row"]>;
+        Relationships: [];
+      };
+      rank_points: {
+        Row: {
+          id: string;
+          scan_id: string;
+          grid_row: number;
+          grid_col: number;
+          lat: number;
+          lng: number;
+          rank: number | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["rank_points"]["Row"]> & {
+          scan_id: string;
+          grid_row: number;
+          grid_col: number;
+          lat: number;
+          lng: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["rank_points"]["Row"]>;
+        Relationships: [];
+      };
       door_hanger_slots: {
         Row: {
           id: string;

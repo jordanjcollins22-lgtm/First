@@ -4,6 +4,7 @@ import { listBusinessLocations, listLocationAreas } from "@/lib/data/locations";
 import { listProperties } from "@/lib/data/properties";
 import { listProspectAddresses } from "@/lib/data/prospects";
 import { getDensityPoints } from "@/lib/data/density";
+import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
 import { listProfiles } from "@/lib/data/team";
 import { checkTabAccess } from "@/lib/data/access";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -76,14 +77,20 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles, prospectAddresses, densityPoints] = await Promise.all([
-    listProperties(),
-    listProfiles().catch(() => [] as Profile[]),
-    // Coordinates only, for counting doors inside a drawn area. Empty until
-    // somebody imports parcels, which the count itself then says.
-    listProspectAddresses().catch(() => []),
-    getDensityPoints().catch(() => []),
-  ]);
+  const [properties, profiles, prospectAddresses, densityPoints, keywords, rankScans, previousRankPoints] =
+    await Promise.all([
+      listProperties(),
+      listProfiles().catch(() => [] as Profile[]),
+      // Coordinates only, for counting doors inside a drawn area. Empty until
+      // somebody imports parcels, which the count itself then says.
+      listProspectAddresses().catch(() => []),
+      getDensityPoints().catch(() => []),
+      // Empty until migration 0110 runs; the panel says so rather than the
+      // page falling over.
+      listKeywords().catch(() => []),
+      listLatestScans().catch(() => []),
+      listPreviousScanPoints().catch(() => new Map()),
+    ]);
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
@@ -96,6 +103,9 @@ export default async function AttractorsPage({
       )}
       <AttractorsDashboard
         types={types}
+        keywords={keywords}
+        rankScans={rankScans}
+        previousRankPoints={Object.fromEntries(previousRankPoints)}
         variants={variants}
         waves={waves}
         jobs={jobs}

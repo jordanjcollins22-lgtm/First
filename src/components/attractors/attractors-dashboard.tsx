@@ -31,6 +31,9 @@ import { WaveDetailPanel } from "./wave-detail-panel";
 import { JobDetailPanel } from "./job-detail-panel";
 import { ManageAttractorTypes } from "./manage-attractor-types";
 import { ManageLocations } from "./manage-locations";
+import { RankGridPanel } from "./rank-grid-panel";
+import { bandColour, rankLabel, type ScanPoint } from "@/lib/rank-grid";
+import type { Keyword, Scan } from "@/lib/data/rank-grid";
 import type {
   AttractorType,
   AttractorVariant,
@@ -59,6 +62,9 @@ export function AttractorsDashboard({
   properties,
   prospectAddresses,
   densityPoints,
+  keywords,
+  rankScans,
+  previousRankPoints,
   profiles,
   currentProfileId,
 }: {
@@ -73,6 +79,10 @@ export function AttractorsDashboard({
   prospectAddresses: { lat: number | null; lng: number | null; zip: string | null; doNotContact: boolean }[];
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
+  /** Phrases we track, and the latest grid for each. */
+  keywords: Keyword[];
+  rankScans: Scan[];
+  previousRankPoints: Record<string, ScanPoint[]>;
   profiles: Profile[];
   currentProfileId: string | null;
 }) {
@@ -115,6 +125,7 @@ export function AttractorsDashboard({
 
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
+  const [rankKeywordId, setRankKeywordId] = useState<string | null>(null);
   const [managingTypes, setManagingTypes] = useState(false);
   const [managingLocations, setManagingLocations] = useState(false);
 
@@ -127,6 +138,22 @@ export function AttractorsDashboard({
   // Off by default: a book of a few thousand imported addresses would bury the
   // handful of real jobs under dots the first time somebody opened the page.
   const [showLeads, setShowLeads] = useState(false);
+  // The grid for whichever phrase is selected, ready for the map. Nothing
+  // selected means nothing drawn — every phrase at once would be a mess of
+  // overlapping dots saying nothing.
+  const rankOverlay = useMemo(() => {
+    if (!rankKeywordId) return [];
+    const scan = rankScans.find((s) => s.keywordId === rankKeywordId);
+    if (!scan) return [];
+    return scan.points.map((point) => ({
+      lat: point.lat,
+      lng: point.lng,
+      rank: point.rank,
+      label: rankLabel(point.rank),
+      colour: bandColour(point.rank),
+    }));
+  }, [rankKeywordId, rankScans]);
+
   const [densityMode, setDensityMode] = useState<DensityMode | null>(null);
 
   // Ranked once per mode change rather than per render: this walks every
@@ -328,6 +355,19 @@ export function AttractorsDashboard({
 
       <DensityPanel mode={densityMode} onModeChange={setDensityMode} cells={rankedCells} />
 
+      <Card>
+        <CardContent className="pt-6">
+          <RankGridPanel
+            keywords={keywords}
+            scans={rankScans}
+            previousPoints={previousRankPoints}
+            selectedKeywordId={rankKeywordId}
+            onSelectKeyword={setRankKeywordId}
+            base={locations[0] ? { lat: locations[0].lat, lng: locations[0].lng } : null}
+          />
+        </CardContent>
+      </Card>
+
       <FilterBar
         showLeads={showLeads}
         leadCount={leadProperties.length}
@@ -387,6 +427,7 @@ export function AttractorsDashboard({
                 jobs={filteredJobs}
                 leadProperties={showLeads ? leadProperties : []}
                 densityCells={mapCells}
+                rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
                 selectedWaveId={selectedWaveId}
                 onSelectWave={selectWave}
