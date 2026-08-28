@@ -8,11 +8,14 @@ import {
   type LeadReason,
   type TicketCalibration,
 } from "@/lib/leads";
+import { checkHarford } from "@/lib/harford";
 
 export interface LeadRow {
   jobId: string;
   contactName: string;
   address: string;
+  lat: number | null;
+  lng: number | null;
   reason: LeadReason;
   reasonLabel: string;
   ticket: number | null;
@@ -50,6 +53,22 @@ export interface LeadEngineData {
   /** Won work at or above the target, over all time. */
   qualifiedWon: number;
   averageWonTicket: number | null;
+  /**
+   * Leads whose address is definitely not in Harford County.
+   *
+   * Almost always a bad address rather than a customer three states away: a
+   * geocoder that guessed, or a town name that exists everywhere. They look
+   * real in the list, and somebody eventually drives to one.
+   */
+  outOfArea: OutOfAreaLead[];
+}
+
+export interface OutOfAreaLead {
+  jobId: string;
+  contactName: string;
+  address: string;
+  /** What gave it away, so it can be judged without opening the job. */
+  reason: string;
 }
 
 /** Best-effort town from a free-text address: the part before the state. */
@@ -74,6 +93,7 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
       areas: [],
       qualifiedWon: 0,
       averageWonTicket: null,
+      outOfArea: [],
     };
   }
 
@@ -132,6 +152,8 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
       jobId: job.id,
       contactName: job.property.customer.name,
       address: job.property.address,
+      lat: job.property.lat ?? null,
+      lng: job.property.lng ?? null,
       reason: assessment.reason,
       reasonLabel: REASON_LABELS[assessment.reason],
       ticket: assessment.ticket,
@@ -193,6 +215,21 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
 
   const allWon = [...sourceBuckets.values()].flatMap((b) => b.wonTotals);
 
+  // Only the ones a check can be sure about. An address it cannot read is
+  // not evidence of anything, and a list of two hundred fine addresses is a
+  // list nobody opens.
+  const outOfArea: OutOfAreaLead[] = [];
+  for (const lead of leads) {
+    const check = checkHarford({ address: lead.address, lat: lead.lat, lng: lead.lng });
+    if (check.verdict !== "outside") continue;
+    outOfArea.push({
+      jobId: lead.jobId,
+      contactName: lead.contactName,
+      address: lead.address,
+      reason: check.reason,
+    });
+  }
+
   return {
     calibration,
     leads,
@@ -200,5 +237,6 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
     areas,
     qualifiedWon: allWon.filter((t) => t >= TARGET_TICKET).length,
     averageWonTicket: average(allWon),
+    outOfArea,
   };
 }

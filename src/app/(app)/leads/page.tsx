@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MapPinOff } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
@@ -206,6 +207,37 @@ export default async function LeadsPage() {
           </ul>
         )}
       </section>
+
+      {/* Bad addresses, not distant customers. A lead outside the county is
+          almost always a geocoder that guessed or a town name typed without
+          its state, and it sits in the list looking real until somebody
+          drives to it. */}
+      {data.outOfArea.length > 0 && (
+        <section className="mb-6 rounded-xl border border-amber-400/60 bg-amber-50/60 p-4">
+          <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-amber-900">
+            <MapPinOff className="h-4 w-4" />
+            {data.outOfArea.length} address{data.outOfArea.length === 1 ? "" : "es"} to check
+          </h2>
+          <p className="mb-3 text-xs text-amber-900">
+            Outside Harford County, so the address is probably wrong. Open each one and fix it, or
+            confirm it really is out of area.
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {data.outOfArea.map((lead) => (
+              <li key={lead.jobId}>
+                <Link
+                  href={`/jobs/${lead.jobId}`}
+                  className="block rounded-lg border border-amber-300/70 bg-white/70 p-2.5 hover:bg-white"
+                >
+                  <p className="text-sm font-medium">{lead.contactName}</p>
+                  <p className="truncate text-xs text-muted-foreground">{lead.address}</p>
+                  <p className="mt-0.5 text-xs font-medium text-amber-800">{lead.reason}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <h2 className="mb-1 text-sm font-semibold">Best areas</h2>
