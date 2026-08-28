@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isMissingTable } from "@/lib/setup-errors";
 import { composeSheet, type SheetSquare } from "@/lib/flyer-sheet";
 import { listFlyerAds } from "@/lib/data/flyer";
+import { settleFlyerBookings } from "@/lib/actions/public-flyer-actions";
 
 export interface FlyerBookingRow {
   id: string;
@@ -69,16 +70,33 @@ export async function listFlyerRuns(): Promise<FlyerRunRow[]> {
   }[];
   if (runRows.length === 0) return [];
 
-  const { data: bookings } = await supabase
+  const runIds = runRows.map((r) => r.id);
+  const columns =
+    "id, run_id, business_name, contact_name, email, phone, image_path, status, slot, amount_cents, paid_at, created_at";
+
+  const first = await supabase
     .from("flyer_bookings")
-    .select(
-      "id, run_id, business_name, contact_name, email, phone, image_path, status, slot, amount_cents, paid_at, created_at"
-    )
-    .in(
-      "run_id",
-      runRows.map((r) => r.id)
-    )
+    .select(columns)
+    .in("run_id", runIds)
     .order("created_at", { ascending: false });
+
+  // Anybody who paid and whose news never reached us. Asked about before the
+  // page is drawn rather than after, so a payment shows as paid on the first
+  // look rather than the second, with or without a webhook.
+  const outstanding = ((first.data ?? []) as { id: string; status: string }[])
+    .filter((b) => b.status === "approved")
+    .map((b) => b.id);
+
+  let bookings = first.data;
+  if (outstanding.length > 0) {
+    await settleFlyerBookings(outstanding);
+    const again = await supabase
+      .from("flyer_bookings")
+      .select(columns)
+      .in("run_id", runIds)
+      .order("created_at", { ascending: false });
+    if (again.data) bookings = again.data;
+  }
 
   const byRun = new Map<string, FlyerBookingRow[]>();
   for (const row of ((bookings ?? []) as {

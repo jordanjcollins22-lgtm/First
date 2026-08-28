@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/env";
 import { FlyerSpotStatus } from "@/components/flyer/flyer-spot-status";
+import { settleFlyerBookings } from "@/lib/actions/public-flyer-actions";
 
 /**
  * An advertiser's own booking, by their link.
@@ -20,12 +21,24 @@ export default async function FlyerSpotPage({
   if (!isSupabaseConfigured) return <NotValid />;
 
   const admin = createAdminClient();
-  const { data: booking } = await admin
+  const { data: found } = await admin
     .from("flyer_bookings")
-    .select("business_name, image_path, status, slot, amount_cents, run_id")
+    .select("id, business_name, image_path, status, slot, amount_cents, run_id")
     .eq("token", token)
     .maybeSingle();
-  if (!booking) return <NotValid />;
+  if (!found) return <NotValid />;
+
+  // Ask Stripe on the way back from the card form, so the booking is settled
+  // without a webhook having to carry the news. Reading it again afterwards
+  // rather than trusting the ?paid flag: the flag says where they came from,
+  // Stripe says whether they paid.
+  await settleFlyerBookings([found.id]);
+  const { data: fresh } = await admin
+    .from("flyer_bookings")
+    .select("business_name, image_path, status, slot, amount_cents, run_id")
+    .eq("id", found.id)
+    .maybeSingle();
+  const booking = fresh ?? found;
 
   const { data: run } = await admin
     .from("flyer_runs")

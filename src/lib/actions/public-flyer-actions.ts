@@ -9,7 +9,8 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
 import { openFlyerRun } from "@/lib/data/public-flyer";
 import { isSoldOut, ACCEPTED_TYPES } from "@/lib/flyer-offer";
-import { HOUSE_SLOT, SLOTS } from "@/lib/flyer";
+import { HOUSE_SLOTS, SLOTS } from "@/lib/flyer";
+import { needsChecking, settlementFor, MAX_CHECKS_PER_LOAD } from "@/lib/flyer-settlement";
 
 /** Results rather than throws: a thrown Server Action loses its message in
  * production and reaches a paying advertiser as an unexplained crash. */
@@ -223,7 +224,7 @@ export async function placePaidBooking(bookingId: string): Promise<void> {
     .eq("run_id", booking.run_id)
     .not("slot", "is", null);
 
-  const used = new Set<number>([HOUSE_SLOT, ...((taken ?? []) as { slot: number }[]).map((t) => t.slot)]);
+  const used = new Set<number>([...HOUSE_SLOTS, ...((taken ?? []) as { slot: number }[]).map((t) => t.slot)]);
   const free = SLOTS.find((s) => s.forSale && !used.has(s.slot));
 
   await admin
@@ -234,4 +235,62 @@ export async function placePaidBooking(bookingId: string): Promise<void> {
       paid_at: new Date().toISOString(),
     })
     .eq("id", booking.id);
+}
+
+/**
+ * Ask Stripe whether an outstanding checkout was paid, and settle it.
+ *
+ * Stripe knows who has paid; it just does not tell this app unless a webhook
+ * is set up to carry the news. Asking needs nothing set up: the checkout we
+ * opened is recorded against the booking, so it can be read back at any time.
+ *
+ * Called when somebody looks at their own booking and when the office loads
+ * the run, so no payment can stay unnoticed for longer than it takes anybody
+ * to glance at the page. Silent and best-effort throughout: a booking that
+ * could not be checked is one to check again next time, not an error to put
+ * on a screen.
+ */
+export async function settleFlyerBookings(bookingIds: string[]): Promise<void> {
+  try {
+    if (!isStripeConfigured || bookingIds.length === 0) return;
+
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("flyer_bookings")
+      .select("id, status, checkout_session_id")
+      .in("id", bookingIds);
+
+    const outstanding = needsChecking(
+      ((data ?? []) as { id: string; status: string; checkout_session_id: string | null }[]).map(
+        (b) => ({ id: b.id, status: b.status, checkoutSessionId: b.checkout_session_id })
+      )
+    ).slice(0, MAX_CHECKS_PER_LOAD);
+
+    const stripe = stripeClient();
+    for (const booking of outstanding) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(booking.checkoutSessionId!);
+        const verdict = settlementFor({
+          paymentStatus: session.payment_status ?? null,
+          status: session.status ?? null,
+        });
+
+        if (verdict === "settle") {
+          await admin.from("flyer_bookings").update({ status: "paid" }).eq("id", booking.id);
+          await placePaidBooking(booking.id);
+        } else if (verdict === "expired") {
+          // The link died with nothing paid. Clearing it lets them start
+          // again rather than being told their spot is already pending.
+          await admin
+            .from("flyer_bookings")
+            .update({ checkout_session_id: null })
+            .eq("id", booking.id);
+        }
+      } catch {
+        // One session we could not read is one to read next time.
+      }
+    }
+  } catch {
+    // Nothing here is allowed to be visible.
+  }
 }

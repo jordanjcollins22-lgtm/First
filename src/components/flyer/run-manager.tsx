@@ -67,7 +67,8 @@ export function FlyerRunManager({
         {stripeReady ? (
           <>
             <span className="font-semibold">Card payments are on.</span> Following the link,
-            uploading an advert and paying by card all work.
+            uploading an advert and paying by card all work. Payments are checked against Stripe
+            whenever you open this page, so nothing needs setting up to see them.
           </>
         ) : (
           <>

@@ -35,7 +35,7 @@ export function PaymentReadiness({
       label: "Stripe webhook",
       ok: hasWebhookSecret,
       blocking: false,
-      fix: "Add STRIPE_WEBHOOK_SECRET in Vercel. Clients can still pay without it, but the payment will not be recorded here.",
+      fix: "Optional. Without it payments are still recorded, just when somebody next opens the job or the run rather than the second they happen. Add STRIPE_WEBHOOK_SECRET in Vercel to have Stripe tell us immediately.",
     },
   ];
 
