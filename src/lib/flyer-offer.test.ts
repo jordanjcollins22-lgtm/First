@@ -21,6 +21,7 @@ import {
   SPOTS_PER_RUN,
   spotsLabel,
   spotsLeft,
+  availabilityLine,
 } from "./flyer-offer";
 
 describe("the offer itself", () => {
@@ -29,9 +30,10 @@ describe("the offer itself", () => {
     expect(SPOT_PRICE_CENTS).toBe(30_000);
   });
 
-  it("sells seven spots, keeping ours", () => {
-    // The eighth carries the postage indicia and is never for sale.
-    expect(SPOTS_PER_RUN).toBe(7);
+  it("keeps the top right of each side for us", () => {
+    // The front's carries the postage indicia; the back's is where an eye
+    // lands on a page nobody chose to read.
+    expect(SPOTS_PER_RUN).toBe(6);
   });
 });
 
@@ -49,7 +51,7 @@ describe("cost per home", () => {
 describe("offerStats", () => {
   it("gives the three numbers somebody actually asks about", () => {
     const stats = offerStats();
-    expect(stats.map((s) => s.label)).toEqual(["Homes reached", "Cost per home", "Spots on a run"]);
+    expect(stats.map((s) => s.label)).toEqual(["Homes reached", "Cost per home", "Availability"]);
   });
 
   it("quotes no industry statistics", () => {
@@ -161,28 +163,26 @@ describe("checkArtwork", () => {
 });
 
 describe("spots left", () => {
-  it("counts down from seven", () => {
-    expect(spotsLeft(0)).toBe(7);
-    expect(spotsLeft(6)).toBe(1);
-    expect(spotsLeft(7)).toBe(0);
+  it("counts down from six", () => {
+    expect(spotsLeft(0)).toBe(6);
+    expect(spotsLeft(5)).toBe(1);
+    expect(spotsLeft(6)).toBe(0);
   });
 
   it("never goes negative or above the total", () => {
     expect(spotsLeft(99)).toBe(0);
-    expect(spotsLeft(-3)).toBe(7);
+    expect(spotsLeft(-3)).toBe(6);
   });
 
-  it("tells the truth about how many are left", () => {
-    // Saying "only 2 left" when there are seven is the fastest way to make a
-    // local business stop believing anything else on the page.
-    expect(spotsLabel(0)).toBe("7 of 7 spots left on this run.");
-    expect(spotsLabel(6)).toBe("One spot left on this run.");
+  it("gives the office the real count, since they decide whether to keep selling", () => {
+    expect(spotsLabel(0)).toBe("6 of 6 spots left on this run.");
+    expect(spotsLabel(5)).toBe("One spot left on this run.");
   });
 
   it("says so plainly when the run is full", () => {
-    expect(spotsLabel(7)).toBe("This run is full. Ask us about the next one.");
-    expect(isSoldOut(7)).toBe(true);
-    expect(isSoldOut(6)).toBe(false);
+    expect(spotsLabel(6)).toBe("This run is full. Ask us about the next one.");
+    expect(isSoldOut(6)).toBe(true);
+    expect(isSoldOut(5)).toBe(false);
   });
 });
 
@@ -260,5 +260,26 @@ describe("what they are sending us", () => {
       expect(`${artworkKindLabel(kind)} ${artworkKindBlurb(kind)} ${artworkKindPromise(kind)}`)
         .not.toMatch(/[—–]/);
     }
+  });
+});
+
+describe("availabilityLine", () => {
+  it("never counts down at an advertiser", () => {
+    // A number that drops as somebody reads is a countdown, and a countdown
+    // on a page taking card payments reads as pressure whether it is true or
+    // not. It also tells a competitor how the run is selling.
+    for (const taken of [0, 1, 3, 5]) {
+      const line = availabilityLine(taken);
+      expect(line, `taken ${taken}`).toBe("Limited availability on this run.");
+      expect(line).not.toMatch(/\d/);
+    }
+  });
+
+  it("still says plainly when there is nothing left to sell", () => {
+    expect(availabilityLine(6)).toBe("This run is full. Ask us about the next one.");
+  });
+
+  it("uses no dashes", () => {
+    expect(availabilityLine(2)).not.toMatch(/[—–]/);
   });
 });

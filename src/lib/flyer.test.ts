@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   HOUSE_SLOT,
+  HOUSE_SLOTS,
   SELLABLE_SLOT_COUNT,
   SLOTS,
   bookedRevenue,
@@ -32,8 +33,8 @@ describe("the sheet", () => {
     expect(slotsForSide("back")).toHaveLength(4);
   });
 
-  it("sells seven of them", () => {
-    expect(SELLABLE_SLOT_COUNT).toBe(7);
+  it("sells six of them", () => {
+    expect(SELLABLE_SLOT_COUNT).toBe(6);
   });
 
   it("keeps the front top-right for us", () => {
@@ -53,8 +54,8 @@ describe("the sheet", () => {
 });
 
 describe("open squares", () => {
-  it("counts an empty sheet as seven open", () => {
-    expect(openSlots([])).toHaveLength(7);
+  it("counts an empty sheet as six open", () => {
+    expect(openSlots([])).toHaveLength(6);
   });
 
   it("never offers our own square", () => {
@@ -63,7 +64,7 @@ describe("open squares", () => {
 
   it("treats a booking with no artwork as still open", () => {
     // A name without a picture is a conversation, not a sale.
-    expect(openSlots([ad(1, { imagePath: null })])).toHaveLength(7);
+    expect(openSlots([ad(1, { imagePath: null })])).toHaveLength(6);
   });
 
   it("fills the front before the back", () => {
@@ -94,11 +95,35 @@ describe("money", () => {
   });
 
   it("prices the full sheet off what has actually been charged", () => {
-    // One at 100, one at 200 — average 150 across seven squares.
-    expect(potentialRevenue([ad(1, { price: 100 }), ad(3, { price: 200 })])).toBe(1050);
+    // One at 100, one at 200, average 150 across six squares.
+    expect(potentialRevenue([ad(1, { price: 100 }), ad(3, { price: 200 })])).toBe(900);
   });
 
   it("says nothing rather than guessing when none have sold", () => {
     expect(potentialRevenue([])).toBeNull();
+  });
+});
+
+describe("the squares we keep", () => {
+  it("keeps the top right of both sides", () => {
+    // Front carries the postage indicia. Back is where an eye lands on a page
+    // nobody chose to read.
+    for (const slot of HOUSE_SLOTS) {
+      const position = SLOTS.find((s) => s.slot === slot)!;
+      expect(position.row, `slot ${slot}`).toBe(0);
+      expect(position.col, `slot ${slot}`).toBe(1);
+      expect(position.forSale, `slot ${slot}`).toBe(false);
+    }
+  });
+
+  it("keeps one on each side, not two on one", () => {
+    const sides = HOUSE_SLOTS.map((slot) => SLOTS.find((s) => s.slot === slot)!.side);
+    expect(new Set(sides).size).toBe(2);
+  });
+
+  it("never offers one of ours for sale", () => {
+    for (const slot of HOUSE_SLOTS) {
+      expect(openSlots([]).some((s) => s.slot === slot), `slot ${slot}`).toBe(false);
+    }
   });
 });

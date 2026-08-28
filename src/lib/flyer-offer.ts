@@ -75,9 +75,9 @@ export function offerStats(): OfferStat[] {
       detail: "The whole price divided by the doors. Nothing else to add on.",
     },
     {
-      label: "Spots on a run",
-      value: String(SPOTS_PER_RUN),
-      detail: "Once they are gone the run is printed and that is that.",
+      label: "Availability",
+      value: "Limited",
+      detail: "A handful of spots on each run. Once they are taken it prints.",
     },
   ];
 }
@@ -233,17 +233,27 @@ export function spotsLeft(taken: number): number {
 }
 
 /**
- * Scarcity, but only the true kind.
- *
- * There really are seven, and when they are gone the run really is printed.
- * Saying "only 2 left!" when there are seven is the fastest way to make a
- * local business stop believing anything else on the page.
+ * What the office sees. The real count, because they are the ones who have
+ * to decide whether to keep selling.
  */
 export function spotsLabel(taken: number): string {
   const left = spotsLeft(taken);
   if (left === 0) return "This run is full. Ask us about the next one.";
   if (left === 1) return "One spot left on this run.";
   return `${left} of ${SPOTS_PER_RUN} spots left on this run.`;
+}
+
+/**
+ * What an advertiser sees.
+ *
+ * No count. A number that goes down as they read is a countdown, and a
+ * countdown on a page taking card payments reads as pressure whether it is
+ * true or not. "Limited" is honest, says the thing that matters, and does
+ * not tell a competitor how the run is selling.
+ */
+export function availabilityLine(taken: number): string {
+  if (isSoldOut(taken)) return "This run is full. Ask us about the next one.";
+  return "Limited availability on this run.";
 }
 
 export function isSoldOut(taken: number): boolean {

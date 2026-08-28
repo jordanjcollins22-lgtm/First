@@ -13,13 +13,13 @@ import {
   isSoldOut,
   money,
   offerStats,
-  spotsLabel,
+  availabilityLine,
   type ArtworkCheck,
   type ArtworkKind,
 } from "@/lib/flyer-offer";
 import { startFlyerBooking, payForFlyerSpot } from "@/lib/actions/public-flyer-actions";
 import type { PublicFlyerRun } from "@/lib/data/public-flyer";
-import { FlyerSheetPreview } from "@/components/flyer/sheet-preview";
+import { FlyerSheetPreview, type SheetAd } from "@/components/flyer/sheet-preview";
 
 /**
  * The whole funnel: what it is, upload, look at it, pay.
@@ -28,7 +28,16 @@ import { FlyerSheetPreview } from "@/components/flyer/sheet-preview";
  * going to make an account or come back tomorrow, so anything costing a
  * return visit costs the sale.
  */
-export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }) {
+export function FlyerFunnel({
+  run,
+  slug,
+  sheetAds = [],
+}: {
+  run: PublicFlyerRun;
+  slug: string;
+  /** What is already printed on the sheet, so the mock-up is the real flyer. */
+  sheetAds?: SheetAd[];
+}) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
 
@@ -139,7 +148,7 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
       </div>
 
       <p className="rounded-lg bg-muted/40 p-3 text-center text-sm">
-        {spotsLabel(run.taken)}
+        {availabilityLine(run.taken)}
         {mailsOnLabel && ` Goes out ${mailsOnLabel}.`}
       </p>
 
@@ -276,6 +285,7 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
               artwork={kind === "reference" ? null : artwork}
               businessName={businessName}
               isPdf={fileType === "application/pdf"}
+              ads={sheetAds}
             />
           </section>
 

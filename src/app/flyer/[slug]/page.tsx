@@ -19,7 +19,7 @@ export default async function FlyerOfferPage({
   const run = await openFlyerRun(slug);
   if (!run) return <NotRunning />;
 
-  return <FlyerFunnel run={run} slug={slug} />;
+  return <FlyerFunnel run={run} slug={slug} sheetAds={run.sheetAds} />;
 }
 
 function NotRunning() {

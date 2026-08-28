@@ -1,5 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export interface SheetAdRow {
+  slot: number;
+  imageUrl: string;
+}
+
 export interface PublicFlyerRun {
   runId: string;
   organizationId: string;
@@ -10,6 +15,13 @@ export interface PublicFlyerRun {
   spotPriceCents: number;
   /** Spots already paid for on this run. */
   taken: number;
+  /**
+   * The artwork already on the sheet, ours included.
+   *
+   * So the mock-up shows the flyer that actually lands on a doormat rather
+   * than a wireframe of grey rectangles.
+   */
+  sheetAds: SheetAdRow[];
 }
 
 /**
@@ -47,6 +59,22 @@ export async function openFlyerRun(orgSlug: string): Promise<PublicFlyerRun | nu
     .eq("run_id", run.id)
     .in("status", ["paid", "placed"]);
 
+  // What is already on the printed sheet. Best effort: a mock-up with grey
+  // squares in it still sells, an error page does not.
+  const { data: spots } = await admin
+    .from("flyer_ad_spots")
+    .select("slot, image_path")
+    .eq("organization_id", org.id);
+
+  const sheetAds: SheetAdRow[] = [];
+  for (const spot of ((spots ?? []) as { slot: number; image_path: string | null }[])) {
+    if (!spot.image_path) continue;
+    sheetAds.push({
+      slot: spot.slot,
+      imageUrl: admin.storage.from("flyer-ads").getPublicUrl(spot.image_path).data.publicUrl,
+    });
+  }
+
   return {
     runId: run.id,
     organizationId: org.id,
@@ -56,5 +84,6 @@ export async function openFlyerRun(orgSlug: string): Promise<PublicFlyerRun | nu
     flyerCount: run.flyer_count,
     spotPriceCents: run.spot_price_cents,
     taken: sold?.length ?? 0,
+    sheetAds,
   };
 }
