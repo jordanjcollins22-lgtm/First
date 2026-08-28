@@ -529,6 +529,60 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["door_hanger_slots"]["Row"]>;
         Relationships: [];
       };
+      flyer_runs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          mails_on: string | null;
+          flyer_count: number;
+          spot_price_cents: number;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["flyer_runs"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["flyer_runs"]["Row"]>;
+        Relationships: [];
+      };
+      flyer_bookings: {
+        Row: {
+          id: string;
+          organization_id: string;
+          run_id: string;
+          business_name: string;
+          contact_name: string | null;
+          email: string | null;
+          phone: string | null;
+          image_path: string | null;
+          status: string;
+          slot: number | null;
+          amount_cents: number | null;
+          checkout_session_id: string | null;
+          paid_at: string | null;
+          token: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["flyer_bookings"]["Row"]> & {
+          organization_id: string;
+          run_id: string;
+          business_name: string;
+          token: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["flyer_bookings"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "flyer_bookings_run_id_fkey";
+            columns: ["run_id"];
+            referencedRelation: "flyer_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       flyer_ad_spots: {
         Row: {
           id: string;

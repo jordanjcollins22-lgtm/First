@@ -39,6 +39,8 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   payment_plan_instalments: "0116_payment_plans.sql",
   payments: "0116_payment_plans.sql",
   proposal_views: "0126_proposal_views.sql",
+  flyer_runs: "0127_flyer_bookings.sql",
+  flyer_bookings: "0127_flyer_bookings.sql",
   rank_keywords: "0110_rank_grid.sql",
   rank_scans: "0110_rank_grid.sql",
   rank_points: "0110_rank_grid.sql",

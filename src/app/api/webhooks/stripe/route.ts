@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
@@ -91,6 +92,16 @@ async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
   // A proposal paid straight from the client's own screen. Recorded here
   // rather than on the success page, because a client who closes the tab on
   // the Stripe receipt has still paid.
+  // A flyer spot bought from the public link. Placed here rather than on the
+  // success page: an advertiser who closes the tab on the Stripe receipt has
+  // still paid, and their tile still has to be theirs.
+  const flyerBookingId = session.metadata?.flyer_booking_id ?? null;
+  if (flyerBookingId) {
+    await placePaidBooking(flyerBookingId).catch((err) =>
+      console.error("placePaidBooking failed:", err)
+    );
+  }
+
   const proposalId = session.metadata?.proposal_id ?? null;
   if (proposalId) {
     await admin
