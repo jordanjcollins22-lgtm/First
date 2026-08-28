@@ -97,6 +97,8 @@ const CREATES = {
   "0125_client_chosen_day.sql": [],
   "0126_proposal_views.sql": ["proposal_views"],
   "0127_flyer_bookings.sql": ["flyer_runs", "flyer_bookings"],
+  // Constraint only — nothing to probe for.
+  "0128_business_contact_type.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

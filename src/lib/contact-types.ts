@@ -12,7 +12,14 @@
  * everywhere, so no screen has to remember the rule.
  */
 
-export type ContactType = "client" | "lead" | "supplier" | "subcontractor" | "referral_partner" | "other";
+export type ContactType =
+  | "client"
+  | "lead"
+  | "supplier"
+  | "subcontractor"
+  | "referral_partner"
+  | "business"
+  | "other";
 
 export const CONTACT_TYPES: { value: ContactType; label: string; blurb: string }[] = [
   { value: "client", label: "Client", blurb: "Somebody we have worked for, or are working for now." },
@@ -23,6 +30,11 @@ export const CONTACT_TYPES: { value: ContactType; label: string; blurb: string }
     value: "referral_partner",
     label: "Referral partner",
     blurb: "Realtors, property managers, builders — people who send us work.",
+  },
+  {
+    value: "business",
+    label: "Business",
+    blurb: "Local businesses we approach about advertising on the flyer.",
   },
   { value: "other", label: "Unsorted", blurb: "Not decided yet. Kept out of client lists until it is." },
 ];

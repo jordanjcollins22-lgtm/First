@@ -54,9 +54,16 @@ describe("the two groups do not overlap", () => {
   it("puts every type on exactly one side, or deliberately neither", () => {
     const overlap = CLIENT_SIDE_TYPES.filter((t) => TRADE_TYPES.includes(t));
     expect(overlap).toEqual([]);
-    // "other" is on neither side on purpose.
+    // Two are on neither side on purpose. "other" because nobody has decided
+    // yet, and "business" because a local shop we are selling a flyer tile to
+    // is neither somebody who buys landscaping nor somebody we buy from, and
+    // putting them in either list is how a call list ends up in a client
+    // picker.
     const covered = new Set([...CLIENT_SIDE_TYPES, ...TRADE_TYPES]);
-    expect(CONTACT_TYPES.filter((t) => !covered.has(t.value)).map((t) => t.value)).toEqual(["other"]);
+    expect(CONTACT_TYPES.filter((t) => !covered.has(t.value)).map((t) => t.value)).toEqual([
+      "business",
+      "other",
+    ]);
   });
 });
 
