@@ -58,11 +58,20 @@ export function ScheduleView({
       <p className="text-sm font-semibold uppercase tracking-wide text-primary">
         {organizationName}
       </p>
+      {/* The moment the money lands, say what has happened to their job and
+          who is picking it up. "Payment received" tells somebody their card
+          worked and nothing about whether anybody is coming. */}
       {justPaid && !booked && (
-        <p className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary">
-          <CheckCircle2 className="h-4 w-4" />
-          Payment received, thank you.
-        </p>
+        <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+          <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-primary">
+            <CheckCircle2 className="h-4 w-4" />
+            Your booking is processed.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A team member will reach out to get your service booked in as soon as possible. Pick a
+            day below if you already know one that suits you.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -74,8 +83,9 @@ export function ScheduleView({
         <CalendarCheck className="h-10 w-10 text-primary" />
         <h1 className="text-2xl font-bold">You are booked in.</h1>
         <p className="text-muted-foreground">
-          We have you down for {dayLabel(booked)}. We will confirm the crew&apos;s arrival window the
-          day before, and if the weather turns we will call you rather than leave you waiting.
+          We have you down for {dayLabel(booked)}. A team member will reach out to confirm the
+          crew&apos;s arrival window, and if the weather turns we will call you rather than leave
+          you waiting.
         </p>
       </div>
     );
@@ -86,10 +96,11 @@ export function ScheduleView({
       <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-3 px-4 py-10 text-center">
         {heading}
         <CheckCircle2 className="h-10 w-10 text-primary" />
-        <h1 className="text-2xl font-bold">That is all set.</h1>
+        <h1 className="text-2xl font-bold">Your booking is processed.</h1>
         <p className="text-muted-foreground">
-          Your discount is safe. We will email your payment schedule, and once the final payment
-          lands we will send you the days you can choose from, starting one month after that.
+          Your discount is safe. A team member will reach out to get your service booked in, and we
+          will email your payment schedule. Once the final payment lands we will send you the days
+          you can choose from, starting one month after that.
         </p>
       </div>
     );

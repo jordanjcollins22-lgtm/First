@@ -8,6 +8,7 @@ import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
 import { viewsForJob } from "@/lib/data/proposal-views";
+import { settleProposalForJob } from "@/lib/actions/proposal-settlement";
 import { JobSummary } from "@/components/job/job-summary";
 import { JobSections } from "@/components/job/job-sections";
 import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
@@ -236,6 +237,11 @@ export default async function JobPage({
   const accountManagerId = owner?.customers?.account_manager_id ?? null;
 
   const proposalViewHint = proposalViews ? viewLabel(proposalViews, new Date()) : null;
+
+  // Covers the client who paid and closed the tab on Stripe's receipt without
+  // ever landing back on our page. Their money is in and nothing here knew
+  // it, which is the case a webhook is usually bought for.
+  await settleProposalForJob(jobId).catch(() => {});
 
   const canReviewWalk = Boolean(
     viewer &&

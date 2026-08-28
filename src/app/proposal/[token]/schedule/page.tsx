@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ScheduleView } from "@/components/proposal/schedule-view";
 import { LinkNotValid } from "@/components/proposal/link-not-valid";
 import { isPreview, payPath, proposalPath } from "@/lib/proposal-flow";
+import { settleProposalPayment } from "@/lib/actions/proposal-settlement";
 
 /**
  * Picking the day, once the money is sorted.
@@ -27,6 +28,11 @@ export default async function ProposalSchedulePage({
   const { token } = await params;
   const { preview, paid } = await searchParams;
   const previewing = isPreview(preview);
+
+  // Ask Stripe on the way back from the card form, so the payment is
+  // recorded without a webhook having to carry the news. Before the proposal
+  // is read, so this page can say it is settled on the first look.
+  if (paid === "1") await settleProposalPayment(token);
 
   const data = await getProposalByToken(token);
   if (!data) return <LinkNotValid />;
