@@ -9,6 +9,13 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { findDuplicateCustomer } from "@/lib/dedupe";
 import { parseContactCsv, type ContactDraft } from "@/lib/contact-import";
 import { isContactType, type ContactType } from "@/lib/contact-types";
+import {
+  describeChanges,
+  mergeContact,
+  type ExistingContact,
+  type IncomingContact,
+  type MergeMode,
+} from "@/lib/contact-merge";
 
 export interface ImportPreview {
   ok: true;
@@ -22,6 +29,15 @@ export interface ImportPreview {
    * for, and the thing worth confirming before they commit to three thousand
    * rows a second time. */
   gainingAddress: number;
+  /**
+   * Contacts where the file disagrees with what is here and would replace it.
+   * Zero in fill mode by definition, and the number to look hardest at in
+   * overwrite mode.
+   */
+  correcting: number;
+  /** The first few real replacements, with both values, so a mis-mapped
+   * column is caught before it is three thousand of them. */
+  corrections: { name: string; label: string; from: string; to: string }[];
   optedOut: number;
   skipped: { row: number; reason: string }[];
   unmatchedHeaders: string[];
@@ -77,40 +93,21 @@ async function loadExisting(): Promise<ExistingRow[]> {
  *
  * The opt-out is the one exception, and it only ever moves towards silence.
  */
-interface ContactPatch {
-  email?: string;
-  phone?: string;
-  external_id?: string;
-  import_address?: string;
-  notes?: string;
-  source?: string;
-  pipeline?: string;
-  pipeline_stage?: string;
-  opportunity_value?: number;
-  do_not_contact?: boolean;
-  tags?: string[];
-}
-
-function fillBlanks(match: ExistingRow, draft: ContactDraft): ContactPatch {
-  const patch: ContactPatch = {};
-
-  if (!match.email && draft.email) patch.email = draft.email;
-  if (!match.phone && draft.phone) patch.phone = draft.phone;
-  if (!match.external_id && draft.externalId) patch.external_id = draft.externalId;
-  if (!match.import_address && draft.address) patch.import_address = draft.address;
-  if (!match.notes && draft.notes) patch.notes = draft.notes;
-  if (!match.source && draft.source) patch.source = draft.source;
-  if (!match.pipeline && draft.pipeline) patch.pipeline = draft.pipeline;
-  if (!match.pipeline_stage && draft.pipelineStage) patch.pipeline_stage = draft.pipelineStage;
-  if (match.opportunity_value == null && draft.opportunityValue != null) {
-    patch.opportunity_value = draft.opportunityValue;
-  }
-
-  // Only ever towards silence.
-  if (draft.doNotContact) patch.do_not_contact = true;
-  if (draft.tags.length > 0) patch.tags = draft.tags;
-
-  return patch;
+/** The import's own row shape, as the merge module wants it. */
+function asIncoming(draft: ContactDraft): IncomingContact {
+  return {
+    email: draft.email,
+    phone: draft.phone,
+    externalId: draft.externalId,
+    address: draft.address,
+    notes: draft.notes,
+    source: draft.source,
+    pipeline: draft.pipeline,
+    pipelineStage: draft.pipelineStage,
+    opportunityValue: draft.opportunityValue,
+    doNotContact: draft.doNotContact,
+    tags: draft.tags,
+  };
 }
 
 /**
@@ -143,7 +140,10 @@ function matchExisting(draft: ContactDraft, existing: ExistingRow[]): ExistingRo
  * few parsed rows first costs one extra tap and catches a mis-mapped column
  * before it is three thousand mistakes.
  */
-export async function previewContactImport(csvText: string): Promise<PreviewResult> {
+export async function previewContactImport(
+  csvText: string,
+  mode: MergeMode = "fill"
+): Promise<PreviewResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
     if (!csvText.trim()) return { ok: false, message: "Paste or upload a file first." };
@@ -161,15 +161,25 @@ export async function previewContactImport(csvText: string): Promise<PreviewResu
     let updating = 0;
     let unchanged = 0;
     let gainingAddress = 0;
+    let correcting = 0;
+    const corrections: ImportPreview["corrections"] = [];
     const sample: ImportPreview["sample"] = [];
 
     for (const draft of report.drafts) {
       const match = matchExisting(draft, existing);
       if (match) {
-        const patch = fillBlanks(match, draft);
+        const patch = mergeContact(match as ExistingContact, asIncoming(draft), mode);
         if (Object.keys(patch).length > 0) updating++;
         else unchanged++;
         if (patch.import_address) gainingAddress++;
+
+        const changed = describeChanges(match as ExistingContact, patch);
+        if (changed.length > 0) {
+          correcting++;
+          for (const change of changed) {
+            if (corrections.length < 5) corrections.push({ name: draft.name, ...change });
+          }
+        }
       } else {
         creating++;
         if (draft.address) gainingAddress++;
@@ -190,6 +200,8 @@ export async function previewContactImport(csvText: string): Promise<PreviewResu
       updating,
       unchanged,
       gainingAddress,
+      correcting,
+      corrections,
       optedOut: report.drafts.filter((d) => d.doNotContact).length,
       skipped: report.skipped,
       unmatchedHeaders: report.unmatchedHeaders,
@@ -217,7 +229,8 @@ export async function previewContactImport(csvText: string): Promise<PreviewResu
 export async function importContacts(
   csvText: string,
   contactType: string,
-  batchName: string
+  batchName: string,
+  mode: MergeMode = "fill"
 ): Promise<ImportResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
@@ -242,7 +255,7 @@ export async function importContacts(
       const match = matchExisting(draft, existing);
 
       if (match) {
-        const patch = fillBlanks(match, draft);
+        const patch = mergeContact(match as ExistingContact, asIncoming(draft), mode);
         if (Object.keys(patch).length > 0) {
           await supabase.from("customers").update(patch).eq("id", match.id);
           updated++;

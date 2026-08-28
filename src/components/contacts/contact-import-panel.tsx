@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { importContacts, previewContactImport, type ImportPreview } from "@/lib/actions/contact-import-actions";
+import { modeBlurb, modeLabel, type MergeMode } from "@/lib/contact-merge";
 import { CONTACT_TYPES, type ContactType } from "@/lib/contact-types";
 
 /**
@@ -30,6 +31,7 @@ export function ContactImportPanel() {
   const [csv, setCsv] = useState("");
   const [contactType, setContactType] = useState<ContactType>("client");
   const [batch, setBatch] = useState("");
+  const [mode, setMode] = useState<MergeMode>("fill");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function ContactImportPanel() {
     setError(null);
     setDone(null);
     startTransition(async () => {
-      const result = await previewContactImport(csv);
+      const result = await previewContactImport(csv, mode);
       if (result.ok) setPreview(result);
       else setError(result.message);
     });
@@ -62,7 +64,7 @@ export function ContactImportPanel() {
   function commit() {
     setError(null);
     startTransition(async () => {
-      const result = await importContacts(csv, contactType, batch);
+      const result = await importContacts(csv, contactType, batch, mode);
       if (result.ok) {
         setDone(result.message);
         setCsv("");
@@ -136,10 +138,35 @@ export function ContactImportPanel() {
           className="h-20 text-xs"
         />
 
+        {/* The choice that decides whether a re-import is any use. Filling
+            blanks cannot correct a wrong address, because the field was not
+            blank, it was wrong. */}
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-medium">What should happen to contacts already here?</p>
+          {(["fill", "overwrite"] as MergeMode[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                setMode(option);
+                setPreview(null);
+              }}
+              className={`rounded-lg border p-2.5 text-left ${
+                mode === option ? "border-primary bg-primary/5" : "border-border"
+              }`}
+            >
+              <span className="block text-xs font-semibold">{modeLabel(option)}</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                {modeBlurb(option)}
+              </span>
+            </button>
+          ))}
+        </div>
+
         {preview && (
           <div className="rounded-lg border border-border bg-background/60 p-3 text-sm">
             <p className="font-semibold">
-              {preview.creating} new · {preview.updating} to fill in
+              {preview.creating} new · {preview.updating} to {mode === "overwrite" ? "update" : "fill in"}
               {preview.unchanged > 0 && ` · ${preview.unchanged} already complete`}
               {preview.skipped.length > 0 && ` · ${preview.skipped.length} skipped`}
             </p>
@@ -160,6 +187,27 @@ export function ContactImportPanel() {
                 </p>
               )
             )}
+            {/* Real replacements, with both values. A mis-mapped column is
+                obvious here and invisible in a count, and this is the one
+                place somebody can catch it before it is three thousand
+                overwritten addresses. */}
+            {preview.correcting > 0 && (
+              <div className="mt-1.5 rounded-md border border-amber-300/70 bg-amber-50/70 p-2">
+                <p className="text-xs font-semibold text-amber-900">
+                  {preview.correcting} contact{preview.correcting === 1 ? "" : "s"} will have
+                  something replaced
+                </p>
+                <ul className="mt-1 flex flex-col gap-0.5">
+                  {preview.corrections.map((c, i) => (
+                    <li key={i} className="text-[11px] text-amber-900">
+                      <span className="font-medium">{c.name}</span> {c.label.toLowerCase()}:{" "}
+                      <span className="line-through opacity-70">{c.from}</span> → {c.to}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {preview.optedOut > 0 && (
               <p className="mt-0.5 text-xs font-medium text-amber-800">
                 {preview.optedOut} marked do-not-contact — that flag comes across with them.
