@@ -8,6 +8,9 @@ import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
 import { viewsForJob } from "@/lib/data/proposal-views";
+import { JobSummary } from "@/components/job/job-summary";
+import { JobSections } from "@/components/job/job-sections";
+import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
 import { isWarm, viewLabel } from "@/lib/proposal-views";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
@@ -24,7 +27,7 @@ import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
 import { isAccountManager as isManagerRole } from "@/lib/affiliate-roles";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
 import { getJobSchedule } from "@/lib/data/work-sessions";
-import { capabilities, deriveStage, nextStep } from "@/lib/job-stage";
+import { capabilities, deriveStage } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
@@ -38,7 +41,6 @@ import { SchedulePanel } from "@/components/job/schedule-panel";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { BeforeAfterPanel } from "@/components/marketing/before-after-panel";
 import { VisitsPanel } from "@/components/job/visits-panel";
-import { LockedPanel, StageHeader } from "@/components/job/stage-header";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
 import { ObserversPanel, type ObserverRow } from "@/components/job/observers-panel";
@@ -233,6 +235,8 @@ export default async function JobPage({
   const customerId = owner?.customer_id ?? "";
   const accountManagerId = owner?.customers?.account_manager_id ?? null;
 
+  const proposalViewHint = proposalViews ? viewLabel(proposalViews, new Date()) : null;
+
   const canReviewWalk = Boolean(
     viewer &&
       (viewer.roles.includes("admin") ||
@@ -322,6 +326,32 @@ export default async function JobPage({
   // stage it is at. Gating that behind an accepted proposal strands anything
   // scheduled by mistake, imported wrong, or booked before the paperwork.
   const alreadyScheduled = liveSessions > 0 || Boolean(job.project_start_date || job.project_end_date);
+  // What the job still owes, worked out from what already exists. The page
+  // leads with this: somebody opening a job on a phone is nearly always
+  // answering one question, and it should not take a scroll.
+  const photosByZone: Record<string, string[]> = {};
+  for (const photo of photos) {
+    const zone = photo.zone_name;
+    if (!zone) continue;
+    photosByZone[zone] = [...(photosByZone[zone] ?? []), photo.kind];
+  }
+
+  const outstanding = outstandingFor({
+    stage,
+    evaluationBooked: Boolean(job.evaluation_date),
+    evaluationDone: job.evaluation_status === "completed",
+    zonesMeasured: photoZones.length,
+    proposalStatus: proposal?.status ?? null,
+    scheduled: Boolean(job.project_start_date || job.project_end_date),
+    visitsBooked: schedule.sessions.length,
+    zoneNames: photoZones.map((z) => z.name),
+    photosByZone,
+    walkthroughRequested: schedule.walkthroughs.some((w) => w.status === "requested"),
+    walkthroughApproved: schedule.walkthroughs.some((w) => w.status === "approved"),
+    signedOff: job.status === "completed",
+    invoiced: Boolean(invoice),
+  });
+
   const canManageVisits = can.visits.available || alreadyScheduled;
 
   // Field-only people get the work order, not the office's view of the job.
@@ -375,209 +405,286 @@ export default async function JobPage({
         </Link>
       </div>
 
-      <StageHeader stage={stage} next={nextStep(stageInput)} />
+      <JobSummary items={outstanding} />
 
-      {/* Above the work panels because who is on the job decides whose Today
-          screen it lands on — an unassigned job is invisible to the field. */}
-      <CrewPanel
-        jobId={jobId}
-        status={job.status}
-        crew={crew.rows}
-        setupNeeded={crew.missing}
-        customerId={customerId}
-        accountManagerId={accountManagerId}
-        profiles={teamProfiles}
-        editable={job.status !== "completed" && job.status !== "cancelled"}
+      <JobSections
+        defaultOpen={sectionToOpen(outstanding)}
+        sections={[
+          {
+            id: "map",
+            title: "Site map and measurements",
+            hint: `${photoZones.length} zone${photoZones.length === 1 ? "" : "s"} drawn`,
+            body: (
+              <ImageCanvasBoard
+                catalog={catalog}
+                jobId={jobId}
+                initialDesign={design}
+                initialAddress={job.property?.address ?? ""}
+                initialLat={job.property?.lat}
+                initialLng={job.property?.lng}
+                initialEvaluationStatus={job.evaluation_status}
+                evaluatorName={viewer?.full_name || viewer?.email || null}
+              />
+            ),
+          },
+          {
+            id: "proposal",
+            title: "Proposal",
+            hint: proposal ? (proposalViewHint ?? proposal.status) : "Not built yet",
+            lockedReason:
+              can.proposal.available || proposal ? null : can.proposal.reason,
+            body: (
+              <ProposalPanel
+                jobId={jobId}
+                proposal={proposal}
+                baseUrl={baseUrl}
+                serviceCost={serviceCost}
+                materialsCost={materialsCost}
+                zones={zoneBreakdowns}
+                discounts={discounts}
+                viewLabel={proposalViewHint}
+                viewsWarm={
+                  proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
+                }
+              />
+            ),
+          },
+          {
+            id: "schedule",
+            title: "Schedule",
+            hint: job.project_start_date ?? job.evaluation_date ?? "Nothing booked",
+            body: (
+              <SchedulePanel
+                jobId={jobId}
+                status={job.status}
+                evaluationStatus={job.evaluation_status}
+                evaluationDate={job.evaluation_date}
+                evaluationEndDate={job.evaluation_end_date}
+                projectStartDate={job.project_start_date}
+                projectEndDate={job.project_end_date}
+                sessionCount={liveSessions}
+                cancellationReason={job.cancellation_reason}
+              />
+            ),
+          },
+          {
+            id: "photos",
+            title: "Photos and sign-off",
+            hint: `${photos.length} photo${photos.length === 1 ? "" : "s"} submitted`,
+            lockedReason:
+              can.photoBefore.available || photos.length > 0 ? null : can.photoBefore.reason,
+            body: (
+              <CompletionPanel
+                jobId={jobId}
+                evaluationBeforesAvailable={evaluationBeforesAvailable}
+                waivers={photoWaivers}
+                lockedStageReason={can.photoDuring.available ? null : can.photoDuring.reason}
+                status={job.status}
+                photos={photos}
+                zones={photoZones}
+                allowDuring={can.photoDuring.available}
+                allowAfter={can.photoAfter.available}
+                allowSignOff={can.signOff.available}
+                signOffLockReason={can.signOff.available ? null : can.signOff.reason}
+                completedAt={job.completed_at}
+                completedByName={completedByName}
+                completionNotes={job.completion_notes}
+              />
+            ),
+          },
+          {
+            id: "walkthrough",
+            title: "Manager walkthrough",
+            hint: schedule.walkthroughs.length > 0 ? null : "Not requested",
+            lockedReason:
+              can.requestWalkthrough.available || schedule.walkthroughs.length > 0
+                ? null
+                : "Not until there is finished work to walk.",
+            body: (
+              <WalkthroughPanel
+                jobId={jobId}
+                walkthroughs={schedule.walkthroughs}
+                canRequest={can.requestWalkthrough.available}
+                requestLockReason={
+                  can.requestWalkthrough.available ? null : can.requestWalkthrough.reason
+                }
+                canReview={canReviewWalk}
+                namesById={namesById}
+              />
+            ),
+          },
+          {
+            id: "review",
+            title: "Photo review",
+            hint: job.photos_approved_at ? "Approved" : "Not reviewed",
+            body: (
+              <PhotoReviewPanel
+                jobId={jobId}
+                photos={photos.filter((photo) => photo.kind === "after")}
+                marks={photoMarks}
+                crewSignedOff={job.status === "completed"}
+                approvedAt={job.photos_approved_at ?? null}
+                approvedByName={photosApprovedByName}
+                canReview={canReviewPhotos}
+              />
+            ),
+          },
+          {
+            id: "visits",
+            title: "Visits and tickets",
+            hint: `${schedule.sessions.length} visit${schedule.sessions.length === 1 ? "" : "s"}`,
+            lockedReason:
+              canManageVisits || schedule.tickets.length > 0
+                ? null
+                : can.visits.available
+                  ? ""
+                  : can.visits.reason,
+            body: (
+              <VisitsPanel
+                jobId={jobId}
+                sessions={schedule.sessions}
+                timeEntries={jobTimeEntries}
+                people={payPeople}
+                canLogWork={Boolean(viewer?.roles.includes("admin"))}
+                canSeePay={Boolean(viewer?.roles.includes("admin"))}
+                tickets={schedule.tickets}
+                allowTickets={can.tickets.available}
+              />
+            ),
+          },
+          {
+            id: "crew",
+            title: "Crew and who can watch",
+            hint: `${crew.rows.length} on the job`,
+            body: (
+              <div className="flex flex-col gap-4">
+                <CrewPanel
+                  jobId={jobId}
+                  status={job.status}
+                  crew={crew.rows}
+                  setupNeeded={crew.missing}
+                  customerId={customerId}
+                  accountManagerId={accountManagerId}
+                  profiles={teamProfiles}
+                  editable={job.status !== "completed" && job.status !== "cancelled"}
+                />
+                <ObserversPanel
+                  jobId={jobId}
+                  baseUrl={baseUrl}
+                  setupNeeded={observerRows.missing}
+                  observers={observerRows.rows.map(
+                    (o): ObserverRow => ({
+                      id: o.id,
+                      name: o.name,
+                      email: o.email,
+                      phone: o.phone,
+                      relationship: o.relationship,
+                      token: o.token,
+                      revokedAt: o.revoked_at,
+                      lastViewedAt: o.last_viewed_at,
+                    })
+                  )}
+                />
+              </div>
+            ),
+          },
+          {
+            id: "payment",
+            title: "Payment",
+            hint: `${paymentPlans.length} plan${paymentPlans.length === 1 ? "" : "s"}`,
+            body: (
+              <div className="flex flex-col gap-4">
+                <PaymentPlanPanel
+                  jobId={jobId}
+                  customerId={job.property?.customers?.id ?? null}
+                  plans={paymentPlans}
+                  suggestedTotal={proposal?.total_cost ?? null}
+                  stripeReady={isStripeConfigured}
+                />
+                {(can.invoice.available || invoice) && <InvoicePanel invoice={invoice} />}
+              </div>
+            ),
+          },
+          {
+            id: "invoice",
+            title: "Invoice",
+            hint: invoice ? "Raised" : "Not raised",
+            lockedReason: can.invoice.available || invoice ? null : "Not until the work is done.",
+            body: <InvoicePanel invoice={invoice} />,
+          },
+          {
+            id: "messages",
+            title: "Notes and client conversation",
+            hint: `${internalMessages.length + externalMessages.length} message${
+              internalMessages.length + externalMessages.length === 1 ? "" : "s"
+            }`,
+            body: (
+              <div className="flex flex-col gap-4">
+                {isTwilioConfigured && <CallClientButton jobId={jobId} />}
+                <MessageThread
+                  title="Internal Notes"
+                  messages={internalMessages}
+                  onSend={postJobMessage.bind(null, jobId, "internal")}
+                  viewerAuthorType="team"
+                  placeholder="Note for the team..."
+                  emptyLabel="No internal notes yet."
+                />
+                <MessageThread
+                  title="Client Conversation"
+                  messages={externalMessages}
+                  onSend={postJobMessage.bind(null, jobId, "external")}
+                  viewerAuthorType="team"
+                  placeholder="Message the client..."
+                  emptyLabel="No messages with the client yet."
+                  footnote={
+                    isTwilioConfigured
+                      ? "Also sent as a text message."
+                      : "Add Twilio to also send this as a text."
+                  }
+                />
+              </div>
+            ),
+          },
+          {
+            id: "marketing",
+            title: "Before and after posts",
+            hint: `${socialPosts.length} post${socialPosts.length === 1 ? "" : "s"}`,
+            body: <BeforeAfterPanel posts={socialPosts} />,
+          },
+          ...(hasClientRequest
+            ? [
+                {
+                  id: "request",
+                  title: "What the client asked for",
+                  hint: requestedServiceNames.join(", ") || null,
+                  body: (
+                    <div className="flex flex-col gap-1 text-sm">
+                      {requestedServiceNames.length > 0 && (
+                        <p>
+                          <span className="text-muted-foreground">Services: </span>
+                          {requestedServiceNames.join(", ")}
+                        </p>
+                      )}
+                      {job.budget_range && (
+                        <p>
+                          <span className="text-muted-foreground">Budget: </span>
+                          {job.budget_range}
+                        </p>
+                      )}
+                      {job.client_notes && (
+                        <p>
+                          <span className="text-muted-foreground">Notes: </span>
+                          {job.client_notes}
+                        </p>
+                      )}
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+        ]}
       />
 
-      {/* Sits with the crew, because both answer "who is on this job" — one
-          inside the business and one outside it. */}
-      <ObserversPanel
-        jobId={jobId}
-        baseUrl={baseUrl}
-        setupNeeded={observerRows.missing}
-        observers={observerRows.rows.map(
-          (o): ObserverRow => ({
-            id: o.id,
-            name: o.name,
-            email: o.email,
-            phone: o.phone,
-            relationship: o.relationship,
-            token: o.token,
-            revokedAt: o.revoked_at,
-            lastViewedAt: o.last_viewed_at,
-          })
-        )}
-      />
-
-      {/* Photos and sign-off. Which stages are offered depends on where the
-          job is: there is no finished work to photograph before anyone has
-          been on site. Shown whenever any stage is open, or whenever photos
-          already exist, so a finished job never hides its own record. */}
-      {can.photoBefore.available || photos.length > 0 ? (
-        <CompletionPanel
-          jobId={jobId}
-          evaluationBeforesAvailable={evaluationBeforesAvailable}
-          waivers={photoWaivers}
-          lockedStageReason={can.photoDuring.available ? null : can.photoDuring.reason}
-          status={job.status}
-          photos={photos}
-          zones={photoZones}
-          allowDuring={can.photoDuring.available}
-          allowAfter={can.photoAfter.available}
-          allowSignOff={can.signOff.available}
-          signOffLockReason={can.signOff.available ? null : can.signOff.reason}
-          completedAt={job.completed_at}
-          completedByName={completedByName}
-          completionNotes={job.completion_notes}
-        />
-      ) : (
-        <LockedPanel
-          title="Photos"
-          reason={can.photoBefore.available ? "" : can.photoBefore.reason}
-        />
-      )}
-
-      {/* What went out about this job, once somebody approved it going out. */}
-      {/* The manager's check on the finished work, before the client sees
-          it. Nobody senior has been back since the crew signed off. */}
-      <PhotoReviewPanel
-        jobId={jobId}
-        photos={photos.filter((photo) => photo.kind === "after")}
-        marks={photoMarks}
-        crewSignedOff={job.status === "completed"}
-        approvedAt={job.photos_approved_at ?? null}
-        approvedByName={photosApprovedByName}
-        canReview={canReviewPhotos}
-      />
-
-      {/* How the job gets paid for: one-off, split up, or recurring. */}
-      <PaymentPlanPanel
-        jobId={jobId}
-        customerId={job.property?.customers?.id ?? null}
-        plans={paymentPlans}
-        suggestedTotal={proposal?.total_cost ?? null}
-        stripeReady={isStripeConfigured}
-      />
-
-      <BeforeAfterPanel posts={socialPosts} />
-
-      {/* Sits above Visits because on a live job it is the thing holding
-          everything else up. */}
-      {(can.requestWalkthrough.available || schedule.walkthroughs.length > 0) && (
-        <WalkthroughPanel
-          jobId={jobId}
-          walkthroughs={schedule.walkthroughs}
-          canRequest={can.requestWalkthrough.available}
-          requestLockReason={can.requestWalkthrough.available ? null : can.requestWalkthrough.reason}
-          canReview={canReviewWalk}
-          namesById={namesById}
-        />
-      )}
-
-      {canManageVisits || schedule.tickets.length > 0 ? (
-        <VisitsPanel
-          jobId={jobId}
-          sessions={schedule.sessions}
-          timeEntries={jobTimeEntries}
-          people={payPeople}
-          canLogWork={Boolean(viewer?.roles.includes("admin"))}
-          canSeePay={Boolean(viewer?.roles.includes("admin"))}
-          tickets={schedule.tickets}
-          allowTickets={can.tickets.available}
-        />
-      ) : (
-        <LockedPanel title="Visits & tickets" reason={can.visits.available ? "" : can.visits.reason} />
-      )}
-
-      <SchedulePanel
-        jobId={jobId}
-        status={job.status}
-        evaluationStatus={job.evaluation_status}
-        evaluationDate={job.evaluation_date}
-        evaluationEndDate={job.evaluation_end_date}
-        projectStartDate={job.project_start_date}
-        projectEndDate={job.project_end_date}
-        sessionCount={liveSessions}
-        cancellationReason={job.cancellation_reason}
-      />
-
-      {hasClientRequest && (
-        <div className="rounded-lg border border-white/60 bg-card/60 px-4 py-3 text-sm backdrop-blur-md">
-          <p className="mb-1.5 font-semibold">What the client asked for</p>
-          {requestedServiceNames.length > 0 && (
-            <p>
-              <span className="text-muted-foreground">Services: </span>
-              {requestedServiceNames.join(", ")}
-            </p>
-          )}
-          {job.budget_range && (
-            <p>
-              <span className="text-muted-foreground">Budget: </span>
-              {job.budget_range}
-            </p>
-          )}
-          {job.client_notes && (
-            <p>
-              <span className="text-muted-foreground">Notes: </span>
-              {job.client_notes}
-            </p>
-          )}
-        </div>
-      )}
-
-      {can.proposal.available || proposal ? (
-        <ProposalPanel
-          jobId={jobId}
-          proposal={proposal}
-          baseUrl={baseUrl}
-          serviceCost={serviceCost}
-          materialsCost={materialsCost}
-          zones={zoneBreakdowns}
-          discounts={discounts}
-          viewLabel={proposalViews ? viewLabel(proposalViews, new Date()) : null}
-          viewsWarm={
-            proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
-          }
-        />
-      ) : (
-        <LockedPanel title="Proposal" reason={can.proposal.available ? "" : can.proposal.reason} />
-      )}
-
-      {(can.invoice.available || invoice) && <InvoicePanel invoice={invoice} />}
-
-      {isTwilioConfigured && <CallClientButton jobId={jobId} />}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <MessageThread
-          title="Internal Notes"
-          messages={internalMessages}
-          onSend={postJobMessage.bind(null, jobId, "internal")}
-          viewerAuthorType="team"
-          placeholder="Note for the team..."
-          emptyLabel="No internal notes yet."
-        />
-        <MessageThread
-          title="Client Conversation"
-          messages={externalMessages}
-          onSend={postJobMessage.bind(null, jobId, "external")}
-          viewerAuthorType="team"
-          placeholder="Message the client..."
-          emptyLabel="No messages with the client yet."
-          footnote={isTwilioConfigured ? "Also sent as a text message." : "Add Twilio to also send this as a text."}
-        />
-      </div>
-
-      <ImageCanvasBoard
-        catalog={catalog}
-        jobId={jobId}
-        initialDesign={design}
-        initialAddress={job.property?.address ?? ""}
-        initialLat={job.property?.lat}
-        initialLng={job.property?.lng}
-        initialEvaluationStatus={job.evaluation_status}
-        evaluatorName={viewer?.full_name || viewer?.email || null}
-      />
     </div>
   );
 }
