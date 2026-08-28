@@ -27,7 +27,7 @@ export const TABS: readonly TabDefinition[] = [
 
   // Added after the matrix existed.
   { key: "proposals", label: "Proposals (Pipeline tab)", href: "/proposals" },
-  { key: "contacts", label: "Contacts (Pipeline tab)", href: "/contacts" },
+  { key: "contacts", label: "Contacts", href: "/contacts" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
   { key: "leads", label: "Lead Generation", href: "/leads" },
   { key: "conversations", label: "Conversations", href: "/conversations" },

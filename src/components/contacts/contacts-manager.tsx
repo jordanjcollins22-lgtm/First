@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, Loader2, Merge, Pencil, Trash2, UserPlus } from "lucide-react";
+import { ArrowRight, Loader2, Merge, Pencil, Search, Trash2, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
 } from "@/lib/actions/contact-actions";
 import type { ContactsData, ContactRow } from "@/lib/data/contacts";
 import { CONTACT_TYPES, contactTypeLabel } from "@/lib/contact-types";
-import { ContactImportPanel } from "./contact-import-panel";
+import { emptyLabel, searchContacts } from "@/lib/contact-search";
 import { GeocodePanel } from "./geocode-panel";
 import { RecentMergesPanel } from "./recent-merges-panel";
 
@@ -44,6 +44,7 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
   const { contacts, duplicates } = data;
   const [adding, setAdding] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [query, setQuery] = useState("");
 
   // Counted before filtering, so a tab reading zero is a fact about the book
   // rather than about the tab that happens to be selected.
@@ -51,7 +52,8 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
   for (const contact of contacts) {
     counts.set(contact.contactType, (counts.get(contact.contactType) ?? 0) + 1);
   }
-  const shown = typeFilter === "all" ? contacts : contacts.filter((c) => c.contactType === typeFilter);
+  const byType = typeFilter === "all" ? contacts : contacts.filter((c) => c.contactType === typeFilter);
+  const shown = searchContacts(byType, query);
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,8 +84,6 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
 
       <GeocodePanel pending={data.pendingGeocodes} failed={data.failedGeocodes} />
 
-      <ContactImportPanel />
-
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">All contacts ({shown.length})</h2>
@@ -91,6 +91,19 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
             <UserPlus className="mr-1.5 h-3.5 w-3.5" />
             {adding ? "Cancel" : "Add contact"}
           </Button>
+        </div>
+
+        {/* Scrolling is fine at fifty contacts and useless at three thousand.
+            Searches the name, email, phone and addresses, because "who was
+            the Elm Road one" is how people remember a customer. */}
+        <div className="relative mb-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, email, phone or address"
+            className="pl-9"
+          />
         </div>
 
         {/* Only the kinds actually present. Offering six tabs to a book that
@@ -111,7 +124,11 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
 
         {shown.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            {contacts.length === 0 ? "No contacts yet." : "None of that kind."}
+            {contacts.length === 0
+              ? "No contacts yet."
+              : query.trim()
+                ? emptyLabel(query)
+                : "None of that kind."}
           </p>
         ) : (
           <ul className="flex flex-col gap-1.5">

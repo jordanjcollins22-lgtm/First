@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { importContacts, previewContactImport, type ImportPreview } from "@/lib/actions/contact-import-actions";
-import { modeBlurb, modeLabel, type MergeMode } from "@/lib/contact-merge";
+import { type MergeMode } from "@/lib/contact-merge";
 import { CONTACT_TYPES, type ContactType } from "@/lib/contact-types";
 
 /**
@@ -138,30 +138,30 @@ export function ContactImportPanel() {
           className="h-20 text-xs"
         />
 
-        {/* The choice that decides whether a re-import is any use. Filling
-            blanks cannot correct a wrong address, because the field was not
-            blank, it was wrong. */}
-        <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium">What should happen to contacts already here?</p>
-          {(["fill", "overwrite"] as MergeMode[]).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => {
-                setMode(option);
-                setPreview(null);
-              }}
-              className={`rounded-lg border p-2.5 text-left ${
-                mode === option ? "border-primary bg-primary/5" : "border-border"
-              }`}
-            >
-              <span className="block text-xs font-semibold">{modeLabel(option)}</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                {modeBlurb(option)}
-              </span>
-            </button>
-          ))}
-        </div>
+        {/* The whole question, as one box. Off, an import only adds people
+            it has never seen; on, the ones already here are corrected too.
+            Filling blanks cannot fix a wrong address, because the field was
+            not blank, it was wrong. */}
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-3">
+          <input
+            type="checkbox"
+            checked={mode === "overwrite"}
+            onChange={(e) => {
+              setMode(e.target.checked ? "overwrite" : "fill");
+              setPreview(null);
+            }}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span>
+            <span className="block text-xs font-semibold">
+              Some of these may already be in here
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              Updates the ones we already have and adds the new ones. A column left blank in the
+              file never clears anything here.
+            </span>
+          </span>
+        </label>
 
         {preview && (
           <div className="rounded-lg border border-border bg-background/60 p-3 text-sm">

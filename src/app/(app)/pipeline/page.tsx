@@ -7,9 +7,6 @@ import { getPipeline, type PipelineCard } from "@/lib/data/pipeline";
 import { STAGES, STAGE_STATUSES } from "@/lib/pipeline";
 import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { getCurrentProfile } from "@/lib/data/team";
-import { getContacts, type ContactsData } from "@/lib/data/contacts";
-import { ContactsManager } from "@/components/contacts/contacts-manager";
 import { listAllProposals } from "@/lib/data/all-proposals";
 import { ProposalsView } from "@/components/proposal/proposals-view";
 
@@ -37,10 +34,7 @@ export default async function PipelinePage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("pipeline", "/attractors");
 
-  const [proposalAccess, contactAccess] = await Promise.all([
-    checkTabAccess("proposals"),
-    checkTabAccess("contacts"),
-  ]);
+  const proposalAccess = await checkTabAccess("proposals");
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
@@ -52,12 +46,6 @@ export default async function PipelinePage() {
             label: "Proposals",
             content: proposalAccess.allowed ? await ProposalsTab() : null,
             visible: proposalAccess.allowed,
-          },
-          {
-            key: "contacts",
-            label: "Contacts",
-            content: contactAccess.allowed ? await ContactsTab() : null,
-            visible: contactAccess.allowed,
           },
         ]}
       />
@@ -214,32 +202,3 @@ async function ProposalsTab() {
 }
 
 /** Everyone in the book, and the records that look like one person twice. */
-async function ContactsTab() {
-  const profile = await getCurrentProfile();
-  // Merging is irreversible, so it stays with admins even where the page
-  // itself is open to more people.
-  const canMerge = Boolean(profile?.roles.includes("admin"));
-
-  let data: ContactsData = {
-    contacts: [],
-    duplicates: [],
-    pendingGeocodes: 0,
-    failedGeocodes: 0,
-    recentMerges: [],
-  };
-  try {
-    data = await getContacts();
-  } catch (err) {
-    console.error("Contacts failed to load:", err);
-  }
-
-  return (
-    <div className="max-w-3xl">
-      <h1 className="mb-1 text-2xl font-bold">Contacts</h1>
-      <p className="mb-6 text-muted-foreground">
-        Everyone in the book, and any records that look like the same person entered twice.
-      </p>
-      <ContactsManager data={data} canMerge={canMerge} />
-    </div>
-  );
-}
