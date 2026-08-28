@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateJobViews } from "@/lib/revalidate-job";
+
 import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
@@ -16,9 +18,7 @@ import type { JobCrewMember, JobStatus } from "@/types/domain";
 export type CrewResult = { ok: true; message?: string } | { ok: false; message: string };
 
 function refresh(jobId: string) {
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/attractors");
-  revalidatePath("/today");
+  revalidateJobViews(jobId);
 }
 
 /** The job and its roster, read fresh — decisions are never made on what the

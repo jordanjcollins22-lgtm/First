@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
-import { viewsForProposals } from "@/lib/data/proposal-views";
+import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
 import { isWarm, viewLabel, type ViewSummary } from "@/lib/proposal-views";
 import type { JobProposal } from "@/types/domain";
 
@@ -15,9 +15,12 @@ export interface ProposalWithJob {
 
 export async function listAllProposals(): Promise<ProposalWithJob[]> {
   const supabase = await createClient();
-  const [{ data: proposals, error }, jobs] = await Promise.all([
+  // All three together. Views used to run after the proposals came back,
+  // which is a round trip spent waiting for ids this query does not need.
+  const [{ data: proposals, error }, jobs, views] = await Promise.all([
     supabase.from("job_proposals").select("*").order("generated_at", { ascending: false }),
     listJobsWithLocation(),
+    viewsForAllProposals().catch(() => ({}) as Record<string, ViewSummary>),
   ]);
   if (error) throw error;
 
@@ -29,15 +32,11 @@ export async function listAllProposals(): Promise<ProposalWithJob[]> {
     if (job) rows.push({ proposal, job });
   }
 
-  // One query for the whole list rather than one per row. Worded here so the
-  // list and the job page can never say it differently.
-  const views: Record<string, ViewSummary> = await viewsForProposals(
-    rows.map((r) => r.proposal.id)
-  ).catch(() => ({}));
+  // Worded here so the list and the job page can never say it differently.
   const now = new Date();
 
   return rows.map(({ proposal, job }) => {
-    const summary = views[proposal.id] ?? { opens: 0, people: 0, firstAt: null, lastAt: null };
+    const summary = views[proposal.id] ?? NO_VIEWS;
     return {
       proposal,
       job,

@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 
-import { revalidatePath } from "next/cache";
+import { revalidateJobViews } from "@/lib/revalidate-job";
 import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -67,8 +67,10 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     // they answer raises the right paperwork.
   }
 
-  revalidatePath(`/jobs/${proposal.job_id}`);
-  revalidatePath("/proposals");
+  // Every screen, not just this job and the list. The pipeline reads the
+  // proposal status too, and a card left in the old column is what a client
+  // signing looks like when only half the caches are cleared.
+  revalidateJobViews(proposal.job_id);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,8 +270,7 @@ export async function requestScopeChange(input: {
       { dedupeKey: `${proposal.id}:scope` }
     ).catch(() => {});
 
-    revalidatePath(`/jobs/${proposal.job_id}`);
-    revalidatePath("/proposals");
+    revalidateJobViews(proposal.job_id);
 
     return {
       ok: true,
@@ -414,8 +415,7 @@ export async function choosePaymentPath(input: {
       { dedupeKey: `${proposal.id}:path` }
     ).catch(() => {});
 
-    revalidatePath(`/jobs/${proposal.job_id}`);
-    revalidatePath("/proposals");
+    revalidateJobViews(proposal.job_id);
 
     return {
       ok: true,
@@ -603,8 +603,7 @@ export async function chooseWorkDay(input: {
       dedupeKey: `${proposal.id}:day`,
     }).catch(() => {});
 
-    revalidatePath(`/jobs/${proposal.job_id}`);
-    revalidatePath("/schedule");
+    revalidateJobViews(proposal.job_id);
 
     return { ok: true, date: day.date, message: `You are booked in for ${day.label}.` };
   } catch (err) {

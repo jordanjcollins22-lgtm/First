@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateJobViews } from "@/lib/revalidate-job";
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
@@ -385,6 +387,7 @@ function stripeInterval(days: number): "day" | "week" | "month" | "year" {
 }
 
 function refresh(jobId: string) {
-  revalidatePath(`/jobs/${jobId}`);
+  // A plan paying off can set the project start date, which moves the card.
+  revalidateJobViews(jobId);
   revalidatePath("/admin/payments");
 }

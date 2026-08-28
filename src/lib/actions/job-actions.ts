@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateJobViews } from "@/lib/revalidate-job";
+
 import { createClient } from "@/lib/supabase/server";
 import { getBusyBlocks } from "@/lib/data/busy";
 import { conflictFor, describeConflict } from "@/lib/busy";
@@ -49,8 +51,7 @@ export async function updateEvaluationStatus(
     await adoptEvaluationPhotosAsBefores(jobId).catch(() => {});
   }
 
-  revalidatePath("/attractors");
-  revalidatePath(`/jobs/${jobId}`);
+  revalidateJobViews(jobId);
   return outcome;
 }
 
@@ -197,10 +198,7 @@ async function findClashFor(
 }
 
 function refresh(jobId: string) {
-  revalidatePath("/attractors");
-  revalidatePath("/evaluations");
-  revalidatePath("/pipeline");
-  revalidatePath(`/jobs/${jobId}`);
+  revalidateJobViews(jobId);
 }
 
 /**
@@ -230,8 +228,7 @@ export async function createJobAtProperty(propertyId: string, name: string): Pro
       .single();
     if (error || !job) return { ok: false, message: error?.message ?? "Couldn't create that job." };
 
-    revalidatePath("/attractors");
-    revalidatePath("/pipeline");
+    revalidateJobViews();
     return { ok: true, message: job.id };
   } catch (err) {
     console.error("createJobAtProperty failed:", err);

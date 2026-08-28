@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateJobViews } from "@/lib/revalidate-job";
 
 import { createClient } from "@/lib/supabase/server";
 import type { CanvasMark } from "@/lib/canvas-marks";
@@ -47,5 +47,5 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
     { onConflict: "job_id" }
   );
   if (error) throw error;
-  revalidatePath(`/jobs/${jobId}`);
+  revalidateJobViews(jobId);
 }

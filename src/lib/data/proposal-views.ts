@@ -30,22 +30,22 @@ export async function viewsForProposal(proposalId: string): Promise<ViewSummary>
   );
 }
 
-/** The same, for a list of proposals in one query. */
-export async function viewsForProposals(
-  proposalIds: string[]
-): Promise<Record<string, ViewSummary>> {
-  if (proposalIds.length === 0) return {};
-
+/**
+ * Every proposal's views, grouped, in one query.
+ *
+ * Takes no ids on purpose. The list page would otherwise have to wait for its
+ * proposals to come back before it could ask about views, which is a round
+ * trip spent waiting; row level security already limits this to the caller's
+ * own organisation, so asking for all of them is both cheaper and no wider.
+ */
+export async function viewsForAllProposals(): Promise<Record<string, ViewSummary>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("proposal_views")
-    .select("proposal_id, viewed_at, visitor_hash")
-    .in("proposal_id", proposalIds);
+    .select("proposal_id, viewed_at, visitor_hash");
 
-  const byProposal: Record<string, ViewSummary> = {};
-  for (const id of proposalIds) byProposal[id] = EMPTY;
   if (error) {
-    if (isMissingTable(error)) return byProposal;
+    if (isMissingTable(error)) return {};
     throw error;
   }
 
@@ -55,7 +55,35 @@ export async function viewsForProposals(
     list.push({ viewedAt: row.viewed_at, visitorHash: row.visitor_hash });
     grouped.set(row.proposal_id, list);
   }
-  for (const [id, rows] of grouped) byProposal[id] = summariseViews(rows);
 
+  const byProposal: Record<string, ViewSummary> = {};
+  for (const [id, rows] of grouped) byProposal[id] = summariseViews(rows);
   return byProposal;
+}
+
+/** The empty summary, for a proposal nobody has opened. */
+export const NO_VIEWS = EMPTY;
+
+/**
+ * The same, reached through the job rather than the proposal.
+ *
+ * Saves the job page a round trip: it no longer has to wait for the proposal
+ * to come back before it can ask about views, so this joins the batch that
+ * loads everything else instead of running after it.
+ */
+export async function viewsForJob(jobId: string): Promise<ViewSummary> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("proposal_views")
+    .select("viewed_at, visitor_hash, job_proposals!inner(job_id)")
+    .eq("job_proposals.job_id", jobId);
+
+  if (error) {
+    if (isMissingTable(error)) return EMPTY;
+    throw error;
+  }
+
+  return summariseViews(
+    (data ?? []).map((row) => ({ viewedAt: row.viewed_at, visitorHash: row.visitor_hash }))
+  );
 }

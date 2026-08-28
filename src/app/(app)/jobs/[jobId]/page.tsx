@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getProposalForJob } from "@/lib/data/proposals";
-import { viewsForProposal } from "@/lib/data/proposal-views";
+import { viewsForJob } from "@/lib/data/proposal-views";
 import { isWarm, viewLabel } from "@/lib/proposal-views";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
@@ -128,6 +128,9 @@ export default async function JobPage({
     crew,
     teamProfiles,
     observerRows,
+    ownerRow,
+    viewer,
+    proposalViews,
   ] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
@@ -186,6 +189,19 @@ export default async function JobPage({
         }[],
         missing: isMissingTable(error),
       })),
+    // The three below used to run one after another once the batch was done,
+    // which cost three round trips nobody was waiting on. None of them
+    // depends on anything in the batch, so they belong in it.
+    supabase
+      .from("properties")
+      .select("customer_id, customers(account_manager_id)")
+      .eq("id", job.property_id)
+      .maybeSingle()
+      .then(({ data }) => data),
+    getCurrentProfile(),
+    // Reached through the job rather than the proposal, so it does not have
+    // to wait for the proposal to come back first.
+    viewsForJob(jobId).catch(() => null),
   ]);
 
   // Names for whoever asked for or decided a walkthrough, plus the sign-off.
@@ -210,11 +226,6 @@ export default async function JobPage({
 
   // The manager who rules on the walk is the customer's account manager;
   // admins can always decide, so a job never stalls because one person is out.
-  const { data: ownerRow } = await supabase
-    .from("properties")
-    .select("customer_id, customers(account_manager_id)")
-    .eq("id", job.property_id)
-    .maybeSingle();
   const owner = ownerRow as unknown as {
     customer_id: string;
     customers: { account_manager_id: string | null } | null;
@@ -222,7 +233,6 @@ export default async function JobPage({
   const customerId = owner?.customer_id ?? "";
   const accountManagerId = owner?.customers?.account_manager_id ?? null;
 
-  const viewer = await getCurrentProfile();
   const canReviewWalk = Boolean(
     viewer &&
       (viewer.roles.includes("admin") ||
@@ -326,10 +336,6 @@ export default async function JobPage({
     if (!sheet) notFound();
     return <WorkOrderView jobId={jobId} {...sheet} />;
   }
-
-  // Whether the client has actually opened it. Loaded here rather than in
-  // the panel so a job with no proposal costs no query at all.
-  const proposalViews = proposal ? await viewsForProposal(proposal.id).catch(() => null) : null;
 
   const host = headersList.get("host") ?? "";
   const baseUrl = resolveBaseUrl({

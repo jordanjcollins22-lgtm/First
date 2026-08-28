@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { revalidatePath } from "next/cache";
+import { revalidateJobViews } from "@/lib/revalidate-job";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
@@ -163,8 +163,7 @@ export async function generateProposal(
   );
   if (error) throw error;
 
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/proposals");
+  revalidateJobViews(jobId);
 
   // What actually moved, so "the paperwork is stuck on lawn care" is
   // something the evaluator can check on the spot rather than days later.
@@ -224,8 +223,7 @@ export async function updateProposalDraft(
   const { error } = await supabase.from("job_proposals").update(patch).eq("job_id", jobId);
   if (error) throw error;
 
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/proposals");
+  revalidateJobViews(jobId);
 }
 
 /** The account manager's sign-off — this is what actually makes the
@@ -242,6 +240,5 @@ export async function approveProposal(jobId: string) {
     .eq("status", "needs_approval");
   if (error) throw error;
 
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/proposals");
+  revalidateJobViews(jobId);
 }
