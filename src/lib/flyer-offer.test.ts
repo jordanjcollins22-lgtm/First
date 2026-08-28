@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACCEPTED_TYPES,
+  inviteText,
   artworkSpec,
   breakEvenJobs,
   breakEvenLine,
@@ -179,5 +180,47 @@ describe("spots left", () => {
     expect(spotsLabel(7)).toBe("This run is full. Ask us about the next one.");
     expect(isSoldOut(7)).toBe(true);
     expect(isSoldOut(6)).toBe(false);
+  });
+});
+
+describe("inviteText", () => {
+  const text = inviteText({
+    organizationName: "JS Landscaping",
+    link: "https://app.example.com/flyer/js",
+  });
+
+  it("says who it is from, since it lands after a phone call", () => {
+    expect(text).toContain("JS Landscaping");
+  });
+
+  it("carries the two numbers that decide it", () => {
+    expect(text).toContain("2,500");
+    expect(text).toContain("$300.00");
+  });
+
+  it("puts the link last", () => {
+    // A link in the middle of a text is a text nobody finishes reading.
+    expect(text.endsWith("https://app.example.com/flyer/js")).toBe(true);
+  });
+
+  it("promises only what the page delivers", () => {
+    // Upload, look, pay. Two minutes is a claim we can keep.
+    expect(text).toContain("two minutes");
+    expect(text).toContain("upload your ad");
+  });
+
+  it("uses the run's own figures when they differ", () => {
+    const custom = inviteText({
+      organizationName: "X",
+      link: "l",
+      flyerCount: 5000,
+      priceCents: 50_000,
+    });
+    expect(custom).toContain("5,000");
+    expect(custom).toContain("$500.00");
+  });
+
+  it("uses no dashes", () => {
+    expect(text).not.toMatch(/[—–]/);
   });
 });

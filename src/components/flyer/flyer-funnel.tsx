@@ -16,6 +16,7 @@ import {
 } from "@/lib/flyer-offer";
 import { startFlyerBooking, payForFlyerSpot } from "@/lib/actions/public-flyer-actions";
 import type { PublicFlyerRun } from "@/lib/data/public-flyer";
+import { FlyerSheetPreview } from "@/components/flyer/sheet-preview";
 
 /**
  * The whole funnel: what it is, upload, look at it, pay.
@@ -203,6 +204,18 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
                 Use a different design
               </button>
             )}
+          </section>
+
+          {/* On the actual sheet. A tile floating on its own tells somebody
+              nothing about what a neighbour will see, and this is the moment
+              the sale is made or lost. */}
+          <section className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold">How it will look</h2>
+            <FlyerSheetPreview
+              artwork={artwork}
+              businessName={businessName}
+              isPdf={fileType === "application/pdf"}
+            />
           </section>
 
           <section className="flex flex-col gap-2">
