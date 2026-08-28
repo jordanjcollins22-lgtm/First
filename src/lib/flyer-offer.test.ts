@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACCEPTED_TYPES,
+  artworkKindBlurb,
+  artworkKindLabel,
+  artworkKindPromise,
   inviteText,
   artworkSpec,
   breakEvenJobs,
@@ -222,5 +225,40 @@ describe("inviteText", () => {
 
   it("uses no dashes", () => {
     expect(text).not.toMatch(/[—–]/);
+  });
+});
+
+describe("what they are sending us", () => {
+  it("offers the second option as plainly as the first", () => {
+    // Most local businesses do not have a print-ready file. Refusing those
+    // loses the sale.
+    expect(artworkKindLabel("ready")).toBe("I have my advert ready");
+    expect(artworkKindLabel("reference")).toBe("Make the advert for me");
+  });
+
+  it("names the size only where the size matters", () => {
+    expect(artworkKindBlurb("ready")).toContain("1200 by 1425");
+    expect(artworkKindBlurb("reference")).not.toContain("1200");
+  });
+
+  it("says what counts as a reference, in things a business actually has", () => {
+    const blurb = artworkKindBlurb("reference").toLowerCase();
+    for (const thing of ["old advert", "van", "logo"]) {
+      expect(blurb, thing).toContain(thing);
+    }
+  });
+
+  it("promises an approval before printing when we are designing it", () => {
+    // The preview cannot show them what they are getting, so the promise has
+    // to replace it.
+    expect(artworkKindPromise("reference")).toContain("approve before");
+    expect(artworkKindPromise("ready")).toContain("exactly what will print");
+  });
+
+  it("uses no dashes", () => {
+    for (const kind of ["ready", "reference"] as const) {
+      expect(`${artworkKindLabel(kind)} ${artworkKindBlurb(kind)} ${artworkKindPromise(kind)}`)
+        .not.toMatch(/[—–]/);
+    }
   });
 });

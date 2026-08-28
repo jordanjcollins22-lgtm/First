@@ -39,6 +39,8 @@ export async function startFlyerBooking(input: {
   /** Base64 data URL of the artwork. */
   artwork: string;
   fileType: string;
+  /** Whether this is finished artwork or something for us to design from. */
+  artworkKind?: "ready" | "reference";
 }): Promise<FlyerResult<{ token: string; imageUrl: string }>> {
   try {
     const businessName = input.businessName.trim();
@@ -78,6 +80,7 @@ export async function startFlyerBooking(input: {
       email: input.email?.trim() || null,
       phone: input.phone?.trim() || null,
       image_path: path,
+      artwork_kind: input.artworkKind === "reference" ? "reference" : "ready",
       amount_cents: run.spotPriceCents,
       status: "approved",
       token,

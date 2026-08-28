@@ -6,13 +6,16 @@ import { Check, Loader2, Lock, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  artworkKindBlurb,
+  artworkKindLabel,
+  artworkKindPromise,
   checkArtwork,
   isSoldOut,
   money,
   offerStats,
-  specLine,
   spotsLabel,
   type ArtworkCheck,
+  type ArtworkKind,
 } from "@/lib/flyer-offer";
 import { startFlyerBooking, payForFlyerSpot } from "@/lib/actions/public-flyer-actions";
 import type { PublicFlyerRun } from "@/lib/data/public-flyer";
@@ -30,13 +33,12 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
   const [pending, start] = useTransition();
 
   const [businessName, setBusinessName] = useState("");
-  const [contactName, setContactName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
   const [artwork, setArtwork] = useState<string | null>(null);
   const [fileType, setFileType] = useState("");
   const [check, setCheck] = useState<ArtworkCheck | null>(null);
+  const [kind, setKind] = useState<ArtworkKind>("ready");
   const [error, setError] = useState<string | null>(null);
 
   const soldOut = isSoldOut(run.taken);
@@ -60,7 +62,13 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
       img.src = dataUrl;
     });
 
-    const verdict = checkArtwork({ type: file.type, bytes: file.size, ...size });
+    // A reference is not going to print, so its resolution is not a fault.
+    // Warning somebody their own photo is too small to print is how they
+    // abandon a form that was about to take their money.
+    const verdict =
+      kind === "reference"
+        ? checkArtwork({ type: file.type, bytes: file.size, width: null, height: null })
+        : checkArtwork({ type: file.type, bytes: file.size, ...size });
     setCheck(verdict);
     if (verdict.verdict === "reject") {
       setArtwork(null);
@@ -77,11 +85,10 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
       const booked = await startFlyerBooking({
         orgSlug: slug,
         businessName,
-        contactName,
-        email,
         phone,
         artwork,
         fileType,
+        artworkKind: kind,
       });
       if (!booked.ok) {
         setError(booked.message);
@@ -143,9 +150,39 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
       ) : (
         <>
           <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Send us your design</h2>
-              <p className="text-xs text-muted-foreground">{specLine()}</p>
+            <h2 className="text-lg font-semibold">Your advert</h2>
+
+            {/* Two ways in, offered as plainly as each other. Most local
+                businesses do not have a print-ready file, and a form that
+                only accepts one loses them at the last step. */}
+            <div className="flex flex-col gap-2">
+              {(["ready", "reference"] as ArtworkKind[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    setKind(option);
+                    setCheck(null);
+                  }}
+                  className={`flex items-start gap-2.5 rounded-xl border p-3 text-left ${
+                    kind === option ? "border-primary bg-primary/5" : "border-border"
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                      kind === option ? "border-primary" : "border-muted-foreground/40"
+                    }`}
+                  >
+                    {kind === option && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold">{artworkKindLabel(option)}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {artworkKindBlurb(option)}
+                    </span>
+                  </span>
+                </button>
+              ))}
             </div>
 
             <input
@@ -168,19 +205,27 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
             >
               {artwork && fileType !== "application/pdf" ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={artwork} alt="Your advert" className="h-full w-full object-cover" />
+                <img
+                  src={artwork}
+                  alt="Your advert"
+                  className={`h-full w-full ${kind === "reference" ? "object-contain p-2" : "object-cover"}`}
+                />
               ) : artwork ? (
                 <span className="flex flex-col items-center gap-1 text-sm text-muted-foreground">
                   <Check className="h-6 w-6 text-primary" />
                   PDF ready
                 </span>
               ) : (
-                <span className="flex flex-col items-center gap-1 text-sm text-muted-foreground">
+                <span className="flex flex-col items-center gap-1 px-4 text-center text-sm text-muted-foreground">
                   <Upload className="h-6 w-6" />
-                  Tap to upload your design
+                  {kind === "ready" ? "Tap to upload your advert" : "Tap to upload your reference"}
                 </span>
               )}
             </button>
+
+            {artwork && (
+              <p className="text-xs font-medium text-primary">{artworkKindPromise(kind)}</p>
+            )}
 
             {check && (
               <p
@@ -201,7 +246,7 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
                 onClick={() => fileInput.current?.click()}
                 className="text-xs font-medium text-primary underline"
               >
-                Use a different design
+                Upload a different file
               </button>
             )}
           </section>
@@ -212,34 +257,27 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
           <section className="flex flex-col gap-2">
             <h2 className="text-lg font-semibold">How it will look</h2>
             <FlyerSheetPreview
-              artwork={artwork}
+              // A reference is not the advert, so showing it in the square
+              // would be showing them something that will never print.
+              artwork={kind === "reference" ? null : artwork}
               businessName={businessName}
               isPdf={fileType === "application/pdf"}
             />
           </section>
 
+          {/* Two boxes. Every extra field on a form somebody fills in on a
+              phone between jobs is a chance to put it down and not come back,
+              and Stripe collects the rest at the card form anyway. */}
           <section className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold">Who is it for?</h2>
             <Input
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
               placeholder="Business name"
             />
             <Input
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              placeholder="Your name (optional)"
-            />
-            <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email for the receipt (optional)"
-              type="email"
-            />
-            <Input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Phone (optional)"
+              placeholder="Best number to reach you"
               type="tel"
             />
           </section>

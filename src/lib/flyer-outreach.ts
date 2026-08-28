@@ -142,3 +142,84 @@ export function outreachTotals(summaries: OutreachSummary[]): {
     sold: summaries.filter((s) => s.lastOutcome === "booked").length,
   };
 }
+
+// ---------------------------------------------------------------------------
+// The pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a business sits, read off the last thing they said.
+ *
+ * One flat list of everybody is fine at ten businesses and unusable at two
+ * hundred: the four who said "interested" are the only ones that matter this
+ * week, and they are scattered through it. So the list is grouped by the
+ * answer, which is the only stage a phone call actually has.
+ *
+ * Derived, never stored. A stage column would be a second thing to keep in
+ * step with the calls, and it would start lying the first time somebody
+ * corrected a mis-tap.
+ */
+export type CallStage = "new" | "tried" | "talking" | "interested" | "sold" | "no" | "stop";
+
+export const CALL_STAGES: { key: CallStage; label: string; blurb: string }[] = [
+  { key: "interested", label: "Interested", blurb: "Warm. These are the calls to make first." },
+  { key: "talking", label: "Spoke to them", blurb: "Got hold of somebody, no decision yet." },
+  { key: "tried", label: "No answer yet", blurb: "Tried, nobody picked up. Try a different time." },
+  { key: "new", label: "Not contacted", blurb: "Nobody has rung them." },
+  { key: "sold", label: "Bought a spot", blurb: "Done. On the run." },
+  { key: "no", label: "Not interested", blurb: "A no for now. Worth another go next run." },
+  { key: "stop", label: "Do not contact", blurb: "Asked us not to call again." },
+];
+
+const STAGE_BY_OUTCOME: Record<string, CallStage> = {
+  attempted: "tried",
+  reached: "talking",
+  interested: "interested",
+  booked: "sold",
+  not_interested: "no",
+  do_not_contact: "stop",
+};
+
+export function stageFor(summary: OutreachSummary): CallStage {
+  if (summary.count === 0 || !summary.lastOutcome) return "new";
+  return STAGE_BY_OUTCOME[summary.lastOutcome] ?? "talking";
+}
+
+export interface StageGroup<T> {
+  key: CallStage;
+  label: string;
+  blurb: string;
+  rows: T[];
+}
+
+/**
+ * The list, split into stages, ready to draw.
+ *
+ * Empty stages are dropped: a heading with nothing under it is a heading
+ * somebody scrolls past every day for no reason. Within a stage the order is
+ * the call order, so the top of each group is the one to ring.
+ */
+export function groupByStage<T extends { summary: OutreachSummary }>(
+  rows: T[]
+): StageGroup<T>[] {
+  const byStage = new Map<CallStage, T[]>();
+  for (const row of rows) {
+    const stage = stageFor(row.summary);
+    byStage.set(stage, [...(byStage.get(stage) ?? []), row]);
+  }
+
+  const groups: StageGroup<T>[] = [];
+  for (const stage of CALL_STAGES) {
+    const inStage = byStage.get(stage.key);
+    if (!inStage || inStage.length === 0) continue;
+    groups.push({
+      key: stage.key,
+      label: stage.label,
+      blurb: stage.blurb,
+      // Never-tried first, then longest waiting. Sorting by most promising
+      // sounds better and is how the bottom of a group never gets rung.
+      rows: stage.key === "sold" || stage.key === "stop" ? inStage : callOrder(inStage),
+    });
+  }
+  return groups;
+}

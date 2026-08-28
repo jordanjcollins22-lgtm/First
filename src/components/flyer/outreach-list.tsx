@@ -14,7 +14,7 @@ import {
   updateFlyerTouch,
 } from "@/lib/actions/flyer-outreach-actions";
 import {
-  callOrder,
+  groupByStage,
   outcomeLabel,
   OUTCOMES,
   outreachLabel,
@@ -37,10 +37,11 @@ export function FlyerOutreachList({ businesses }: { businesses: FlyerBusiness[] 
   const [openId, setOpenId] = useState<string | null>(null);
 
   const totals = outreachTotals(businesses.map((b) => b.summary));
-  // Never tried first, then whoever has waited longest. Sorting by "most
-  // promising" sounds better and is how the bottom of a list never gets rung.
-  const toCall = callOrder(businesses);
-  const done = businesses.filter((b) => !toCall.some((c) => c.id === b.id));
+  // Grouped by the last thing they said, because that is the only stage a
+  // phone call really has. One flat list is fine at ten businesses and
+  // unusable at two hundred, where the four warm ones are scattered through
+  // it.
+  const groups = groupByStage(businesses);
 
   return (
     <section className="flex flex-col gap-3">
@@ -66,24 +67,16 @@ export function FlyerOutreachList({ businesses }: { businesses: FlyerBusiness[] 
         </p>
       )}
 
-      <ul className="flex flex-col gap-2">
-        {toCall.map((business) => (
-          <BusinessRow
-            key={business.id}
-            business={business}
-            open={openId === business.id}
-            onToggle={() => setOpenId(openId === business.id ? null : business.id)}
-          />
-        ))}
-      </ul>
-
-      {done.length > 0 && (
-        <>
-          <p className="mt-2 text-xs font-medium text-muted-foreground">
-            Sold or asked not to be called ({done.length})
-          </p>
+      {groups.map((group) => (
+        <div key={group.key} className="flex flex-col gap-2">
+          <div className="mt-2 flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold">
+              {group.label} ({group.rows.length})
+            </h3>
+            <p className="text-[11px] text-muted-foreground">{group.blurb}</p>
+          </div>
           <ul className="flex flex-col gap-2">
-            {done.map((business) => (
+            {group.rows.map((business) => (
               <BusinessRow
                 key={business.id}
                 business={business}
@@ -92,8 +85,8 @@ export function FlyerOutreachList({ businesses }: { businesses: FlyerBusiness[] 
               />
             ))}
           </ul>
-        </>
-      )}
+        </div>
+      ))}
     </section>
   );
 }

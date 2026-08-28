@@ -129,6 +129,33 @@ export function specLine(): string {
   return `${spec.widthIn}" wide by ${spec.heightIn}" tall, ${spec.pixelWidth} by ${spec.pixelHeight} pixels at ${spec.dpi} DPI. PNG, JPG or PDF.`;
 }
 
+/**
+ * What an advertiser is sending us.
+ *
+ * Most local businesses do not have a print-ready file. They have a photo of
+ * last year's newspaper ad, a logo, and a van with the number on the side.
+ * Refusing those loses the sale, so the second option exists and is offered
+ * as plainly as the first.
+ */
+export type ArtworkKind = "ready" | "reference";
+
+export function artworkKindLabel(kind: ArtworkKind): string {
+  return kind === "ready" ? "I have my advert ready" : "Make the advert for me";
+}
+
+export function artworkKindBlurb(kind: ArtworkKind): string {
+  return kind === "ready"
+    ? `Print it exactly as sent. ${specLine()}`
+    : "Send anything that shows what you do: an old advert, a flyer, a photo of your van, a logo. We design it to fit and send it back before it prints.";
+}
+
+/** What to promise once they have uploaded, for each kind. */
+export function artworkKindPromise(kind: ArtworkKind): string {
+  return kind === "ready"
+    ? "This is exactly what will print."
+    : "We will design your advert from this and send it to you to approve before anything is printed.";
+}
+
 export type ArtworkVerdict = "ok" | "warn" | "reject";
 
 export interface ArtworkCheck {

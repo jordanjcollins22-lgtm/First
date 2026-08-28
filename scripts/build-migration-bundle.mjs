@@ -99,6 +99,7 @@ const CREATES = {
   "0127_flyer_bookings.sql": ["flyer_runs", "flyer_bookings"],
   // Constraint only — nothing to probe for.
   "0128_business_contact_type.sql": [],
+  "0129_flyer_artwork_kind.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

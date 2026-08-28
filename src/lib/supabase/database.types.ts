@@ -558,6 +558,7 @@ export interface Database {
           email: string | null;
           phone: string | null;
           image_path: string | null;
+          artwork_kind: string;
           status: string;
           slot: number | null;
           amount_cents: number | null;

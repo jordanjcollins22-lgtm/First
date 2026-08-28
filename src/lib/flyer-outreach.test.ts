@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   callOrder,
+  CALL_STAGES,
+  groupByStage,
+  stageFor,
   isFinal,
   outcomeLabel,
   OUTCOMES,
@@ -180,5 +183,99 @@ describe("outreachTotals", () => {
       summariseOutreach([touch({ outcome: "booked" })]),
     ]);
     expect(totals).toEqual({ businesses: 4, contacted: 3, interested: 1, sold: 1 });
+  });
+});
+
+describe("stageFor", () => {
+  it("puts somebody nobody has rung in new", () => {
+    expect(stageFor(summariseOutreach([]))).toBe("new");
+  });
+
+  it("reads the stage off the last thing they said", () => {
+    const cases: [string, string][] = [
+      ["attempted", "tried"],
+      ["reached", "talking"],
+      ["interested", "interested"],
+      ["booked", "sold"],
+      ["not_interested", "no"],
+      ["do_not_contact", "stop"],
+    ];
+    for (const [outcome, stage] of cases) {
+      expect(stageFor(summariseOutreach([touch({ outcome })])), outcome).toBe(stage);
+    }
+  });
+
+  it("moves with the latest call, not the first", () => {
+    // A stage column would be a second thing to keep in step; this cannot
+    // drift because it is read off the calls themselves.
+    const summary = summariseOutreach([
+      touch({ outcome: "attempted", at: daysAgo(9) }),
+      touch({ outcome: "interested", at: daysAgo(1) }),
+    ]);
+    expect(stageFor(summary)).toBe("interested");
+  });
+
+  it("falls back rather than inventing a stage", () => {
+    expect(stageFor(summariseOutreach([touch({ outcome: "nonsense" })]))).toBe("talking");
+  });
+});
+
+describe("groupByStage", () => {
+  const rows = [
+    { id: "cold", summary: summariseOutreach([]) },
+    { id: "warm", summary: summariseOutreach([touch({ outcome: "interested" })]) },
+    { id: "sold", summary: summariseOutreach([touch({ outcome: "booked" })]) },
+    { id: "tried", summary: summariseOutreach([touch({ outcome: "attempted" })]) },
+  ];
+
+  it("leads with the interested, because those are this week's calls", () => {
+    expect(groupByStage(rows)[0].key).toBe("interested");
+  });
+
+  it("drops the stages nobody is in", () => {
+    // A heading with nothing under it is a heading somebody scrolls past
+    // every day for no reason.
+    const keys = groupByStage(rows).map((g) => g.key);
+    expect(keys).not.toContain("stop");
+    expect(keys).not.toContain("no");
+  });
+
+  it("keeps everybody exactly once", () => {
+    const all = groupByStage(rows).flatMap((g) => g.rows.map((r) => r.id));
+    expect(all.sort()).toEqual(["cold", "sold", "tried", "warm"]);
+  });
+
+  it("still shows the ones who bought or opted out, in their own group", () => {
+    // callOrder drops them from a call list; a pipeline still has to show
+    // them or the numbers stop adding up.
+    const stop = [{ id: "x", summary: summariseOutreach([touch({ outcome: "do_not_contact" })]) }];
+    expect(groupByStage(stop)[0].rows).toHaveLength(1);
+  });
+
+  it("orders within a stage by who has waited longest", () => {
+    const two = [
+      { id: "recent", summary: summariseOutreach([touch({ outcome: "reached", at: daysAgo(1) })]) },
+      { id: "old", summary: summariseOutreach([touch({ outcome: "reached", at: daysAgo(20) })]) },
+    ];
+    expect(groupByStage(two)[0].rows.map((r) => r.id)).toEqual(["old", "recent"]);
+  });
+
+  it("is empty for an empty list", () => {
+    expect(groupByStage([])).toEqual([]);
+  });
+});
+
+describe("the stages themselves", () => {
+  it("names every outcome's destination", () => {
+    const keys = CALL_STAGES.map((s) => s.key);
+    for (const outcome of OUTCOMES) {
+      expect(keys, outcome.value).toContain(stageFor(summariseOutreach([touch({ outcome: outcome.value })])));
+    }
+  });
+
+  it("uses no dashes", () => {
+    for (const stage of CALL_STAGES) {
+      expect(`${stage.label} ${stage.blurb}`).not.toMatch(/[—–]/);
+    }
   });
 });
