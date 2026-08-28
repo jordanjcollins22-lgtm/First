@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { isMissingTable } from "@/lib/setup-errors";
+import { summariseBatches, type BatchSummary } from "@/lib/import-batches";
 
 export interface ProspectRow {
   id: string;
@@ -92,4 +94,48 @@ export async function listProspectAddresses(): Promise<
     zip: string | null;
     do_not_contact: boolean;
   }[]).map((p) => ({ lat: p.lat, lng: p.lng, zip: p.zip, doNotContact: p.do_not_contact }));
+}
+
+/**
+ * Every import batch, with what can safely come back out.
+ *
+ * Reads every prospect rather than the first page: the whole point is to
+ * count a three thousand row import, and a page of a hundred would tell
+ * somebody they had imported a hundred.
+ */
+export async function listImportBatches(): Promise<BatchSummary[]> {
+  const supabase = await createClient();
+
+  const [{ data: prospects, error }, { data: touches }] = await Promise.all([
+    supabase.from("lead_prospects").select("id, source_batch, status, do_not_contact"),
+    supabase.from("outreach_touches").select("prospect_id"),
+  ]);
+
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+
+  // Anybody we have actually reached out to. Their row is history now, not
+  // import data, so no cleanup is allowed to take it.
+  const touched = new Set(
+    ((touches ?? []) as { prospect_id: string | null }[])
+      .map((t) => t.prospect_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  return summariseBatches(
+    ((prospects ?? []) as {
+      id: string;
+      source_batch: string | null;
+      status: string;
+      do_not_contact: boolean;
+    }[]).map((p) => ({
+      id: p.id,
+      batch: p.source_batch,
+      status: p.status,
+      doNotContact: p.do_not_contact,
+      touched: touched.has(p.id),
+    }))
+  );
 }

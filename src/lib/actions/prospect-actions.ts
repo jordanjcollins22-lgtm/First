@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { describeDbError } from "@/lib/setup-errors";
+import { listImportBatches } from "@/lib/data/prospects";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -311,5 +312,43 @@ export async function growProspectsNow(): Promise<SimpleResult> {
   } catch (err) {
     console.error("growProspectsNow failed:", err);
     return { ok: false, message: "Couldn't grow the list." };
+  }
+}
+
+/**
+ * Take a bad import back out.
+ *
+ * Re-importing a corrected list does not replace a wrong one: prospects are
+ * matched on their address, so corrected addresses arrive as new rows and the
+ * wrong ones stay. Removing the batch first is what makes a re-import clean.
+ *
+ * Only rows nobody has done anything with. The ids are worked out here rather
+ * than taken from the caller, so a stale page cannot delete somebody who was
+ * contacted after it loaded.
+ */
+export async function removeImportBatch(
+  batchName: string
+): Promise<{ ok: true; removed: number; kept: number } | { ok: false; message: string }> {
+  try {
+    if (!(await requireAdmin())) {
+      return { ok: false, message: "Only admins can remove an import." };
+    }
+
+    const batches = await listImportBatches();
+    const batch = batches.find((b) => b.name === batchName);
+    if (!batch) return { ok: false, message: "That import is not there any more." };
+    if (batch.removable.length === 0) {
+      return { ok: false, message: "Nothing in that import can be removed." };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("lead_prospects").delete().in("id", batch.removable);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath("/leads");
+    return { ok: true, removed: batch.removable.length, kept: batch.keeping };
+  } catch (err) {
+    console.error("removeImportBatch failed:", err);
+    return { ok: false, message: "Could not remove that import." };
   }
 }

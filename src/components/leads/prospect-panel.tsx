@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Ban, Loader2, Sprout, Upload, UserCheck, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ImportBatches } from "@/components/leads/import-batches";
+import type { BatchSummary } from "@/lib/import-batches";
 import { Input } from "@/components/ui/input";
 import {
   deleteProspectBatch,
@@ -23,16 +25,20 @@ function money(n: number): string {
 export function ProspectPanel({
   prospects,
   batches,
+  importBatches,
   rentcastReady,
 }: {
   prospects: ProspectRow[];
   batches: string[];
+  /** What has been imported, and what of it can safely come back out. */
+  importBatches: BatchSummary[];
   rentcastReady: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4">
       <GrowthPanel rentcastReady={rentcastReady} />
       <ProspectList prospects={prospects} />
+      <ImportBatches batches={importBatches} />
       <details className="rounded-xl border border-white/60 bg-card/60 backdrop-blur-md">
         <summary className="cursor-pointer p-4 text-sm font-semibold">Import a list instead</summary>
         <div className="border-t border-border p-4 pt-3">

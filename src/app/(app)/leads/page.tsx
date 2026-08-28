@@ -6,7 +6,7 @@ import { requireTab } from "@/lib/data/access";
 import { getLeadEngine, type LeadEngineData } from "@/lib/data/leads";
 import { TARGET_TICKET } from "@/lib/leads";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { getProspects, type ProspectsData } from "@/lib/data/prospects";
+import { getProspects, listImportBatches, type ProspectsData } from "@/lib/data/prospects";
 import { ProspectPanel } from "@/components/leads/prospect-panel";
 import { OutreachBoard } from "@/components/leads/outreach-board";
 import { CoveragePanel } from "@/components/leads/coverage-panel";
@@ -52,6 +52,13 @@ export default async function LeadsPage() {
   } catch (err) {
     console.error("Prospects failed to load:", err);
   }
+
+  // Its own load, so an un-migrated outreach table costs the cleanup panel
+  // rather than the whole page.
+  const importBatches = await listImportBatches().catch((err) => {
+    console.error("Import batches failed to load:", err);
+    return [];
+  });
 
   // Loaded on its own so an un-migrated outreach table costs this section
   // rather than the whole page.
@@ -289,6 +296,7 @@ export default async function LeadsPage() {
           <ProspectPanel
             prospects={prospects.prospects}
             batches={prospects.batches}
+            importBatches={importBatches}
             rentcastReady={isRentcastConfigured}
           />
         </>
