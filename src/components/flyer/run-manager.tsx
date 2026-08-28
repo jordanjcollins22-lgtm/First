@@ -52,16 +52,31 @@ export function FlyerRunManager({
 
       {adding && <NewRun onDone={() => setAdding(false)} />}
 
-      {/* The thing to know before handing the link out. Without a key the
-          pay button opens nothing, and an advertiser finds that out at the
-          moment they were about to hand over three hundred dollars. */}
-      {!stripeReady && (
-        <p className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-xs text-destructive">
-          Card payments are off. Anybody following the link can upload their advert, but the pay
-          button will tell them to ring you instead of taking a card. Add STRIPE_SECRET_KEY in
-          Vercel and redeploy.
-        </p>
-      )}
+      {/* Said either way, on purpose. A warning that only appears when
+          something is broken cannot be trusted when it is absent: not seeing
+          it means "all is well" and "this build is not live yet" equally, and
+          those are very different things to know before texting the link to
+          fifty businesses. */}
+      <p
+        className={`rounded-lg border p-3 text-xs ${
+          stripeReady
+            ? "border-emerald-600/40 bg-emerald-50/60 text-emerald-900"
+            : "border-destructive/50 bg-destructive/5 text-destructive"
+        }`}
+      >
+        {stripeReady ? (
+          <>
+            <span className="font-semibold">Card payments are on.</span> Following the link,
+            uploading an advert and paying by card all work.
+          </>
+        ) : (
+          <>
+            <span className="font-semibold">Card payments are off.</span> Anybody following the
+            link can upload their advert, but the pay button will tell them to ring you instead of
+            taking a card. Add STRIPE_SECRET_KEY in Vercel and redeploy.
+          </>
+        )}
+      </p>
 
       {!orgSlug && (
         <p className="rounded-lg border border-amber-400/60 bg-amber-50/60 p-3 text-xs text-amber-900">
