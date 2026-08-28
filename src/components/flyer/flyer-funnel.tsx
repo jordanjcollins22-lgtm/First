@@ -198,10 +198,19 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
 
             {/* The tile at the shape it actually prints, so what they approve
                 here is what lands on the doormat. */}
+            {/* Compact until there is something in it. At the tile's real
+                shape an empty box is taller than a phone screen, so the page
+                opens with a dashed rectangle where the sales pitch should be.
+                Once they have uploaded it goes to the printed shape, because
+                then the shape is the thing they are judging. */}
             <button
               type="button"
               onClick={() => fileInput.current?.click()}
-              className="flex aspect-[4/4.75] w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border bg-muted/20"
+              className={`flex w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed bg-muted/20 ${
+                artwork
+                  ? "aspect-[4/4.75] border-primary/40"
+                  : "h-32 border-border hover:border-primary/50 hover:bg-primary/5"
+              }`}
             >
               {artwork && fileType !== "application/pdf" ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -216,9 +225,12 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
                   PDF ready
                 </span>
               ) : (
-                <span className="flex flex-col items-center gap-1 px-4 text-center text-sm text-muted-foreground">
-                  <Upload className="h-6 w-6" />
-                  {kind === "ready" ? "Tap to upload your advert" : "Tap to upload your reference"}
+                <span className="flex flex-col items-center gap-1.5 px-4 text-center">
+                  <Upload className="h-6 w-6 text-primary" />
+                  <span className="text-sm font-semibold">
+                    {kind === "ready" ? "Upload your advert" : "Upload your reference"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">PNG, JPG or PDF</span>
                 </span>
               )}
             </button>
@@ -254,8 +266,10 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
           {/* On the actual sheet. A tile floating on its own tells somebody
               nothing about what a neighbour will see, and this is the moment
               the sale is made or lost. */}
-          <section className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold">How it will look</h2>
+          <section className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-4">
+            <h2 className="text-center text-sm font-semibold">
+              {artwork && kind === "ready" ? "Here it is on the flyer" : "Where your advert goes"}
+            </h2>
             <FlyerSheetPreview
               // A reference is not the advert, so showing it in the square
               // would be showing them something that will never print.
@@ -269,6 +283,7 @@ export function FlyerFunnel({ run, slug }: { run: PublicFlyerRun; slug: string }
               phone between jobs is a chance to put it down and not come back,
               and Stripe collects the rest at the card form anyway. */}
           <section className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold">Who is it for?</h2>
             <Input
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
