@@ -21,10 +21,13 @@ export function FlyerRunManager({
   runs,
   baseUrl,
   orgSlug,
+  stripeReady,
 }: {
   runs: FlyerRunRow[];
   baseUrl: string;
   orgSlug: string | null;
+  /** Whether the pay button on the public link actually takes a card. */
+  stripeReady: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const open = runs.find((r) => r.status === "open") ?? null;
@@ -48,6 +51,17 @@ export function FlyerRunManager({
       </div>
 
       {adding && <NewRun onDone={() => setAdding(false)} />}
+
+      {/* The thing to know before handing the link out. Without a key the
+          pay button opens nothing, and an advertiser finds that out at the
+          moment they were about to hand over three hundred dollars. */}
+      {!stripeReady && (
+        <p className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-xs text-destructive">
+          Card payments are off. Anybody following the link can upload their advert, but the pay
+          button will tell them to ring you instead of taking a card. Add STRIPE_SECRET_KEY in
+          Vercel and redeploy.
+        </p>
+      )}
 
       {!orgSlug && (
         <p className="rounded-lg border border-amber-400/60 bg-amber-50/60 p-3 text-xs text-amber-900">

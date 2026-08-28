@@ -11,6 +11,7 @@ import { listFlyerRuns } from "@/lib/data/flyer-runs";
 import { FlyerRunManager } from "@/components/flyer/run-manager";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
+import { isStripeConfigured } from "@/lib/env";
 
 export default async function FlyerPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -36,6 +37,7 @@ export default async function FlyerPage() {
           runs={runs}
           baseUrl={baseUrl}
           orgSlug={organization?.slug ?? null}
+          stripeReady={isStripeConfigured}
         />
         <FlyerOutreachList businesses={businesses} />
       </div>

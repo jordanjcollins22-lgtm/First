@@ -8,7 +8,7 @@ import { stripeClient } from "@/lib/stripe-customer";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
 import { openFlyerRun } from "@/lib/data/public-flyer";
-import { isSoldOut, MAX_UPLOAD_BYTES, ACCEPTED_TYPES } from "@/lib/flyer-offer";
+import { isSoldOut, ACCEPTED_TYPES } from "@/lib/flyer-offer";
 import { HOUSE_SLOT, SLOTS } from "@/lib/flyer";
 
 /** Results rather than throws: a thrown Server Action loses its message in
@@ -20,6 +20,45 @@ export type FlyerResult<T = Record<string, never>> =
 function describe(err: unknown): string {
   console.error("public flyer action failed:", err);
   return "Something went wrong on our end. Please try again.";
+}
+
+/**
+ * Somewhere for the browser to put the artwork.
+ *
+ * The file used to travel to the server inside the form submission, as
+ * base64 in a Server Action. Server Actions carry a one megabyte body by
+ * default and base64 adds a third on top, so any photo taken on a phone,
+ * which is most of them, failed before it reached us. The advertiser saw
+ * "something went wrong" at the moment they were handing over three hundred
+ * dollars.
+ *
+ * So the browser uploads straight to storage with a short-lived signed URL
+ * and only the path comes through the action. No size ceiling to trip over,
+ * and the file never passes through the app at all.
+ */
+export async function createArtworkUpload(input: {
+  orgSlug: string;
+  fileType: string;
+}): Promise<FlyerResult<{ path: string; token: string }>> {
+  try {
+    if (!ACCEPTED_TYPES.includes(input.fileType)) {
+      return { ok: false, message: "That file type will not print. Send a PNG, JPG or PDF." };
+    }
+
+    const run = await openFlyerRun(input.orgSlug);
+    if (!run) return { ok: false, message: "There is no run taking bookings right now." };
+
+    const admin = createAdminClient();
+    const extension = input.fileType === "application/pdf" ? "pdf" : input.fileType.split("/")[1];
+    const path = `${run.organizationId}/${run.runId}/${randomBytes(16).toString("hex")}.${extension}`;
+
+    const { data, error } = await admin.storage.from("flyer-ads").createSignedUploadUrl(path);
+    if (error || !data) return { ok: false, message: describe(error) };
+
+    return { ok: true, path, token: data.token };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
 }
 
 /**
@@ -36,18 +75,15 @@ export async function startFlyerBooking(input: {
   contactName?: string;
   email?: string;
   phone?: string;
-  /** Base64 data URL of the artwork. */
-  artwork: string;
-  fileType: string;
+  /** Where the browser already put the file, from createArtworkUpload. */
+  imagePath: string;
   /** Whether this is finished artwork or something for us to design from. */
   artworkKind?: "ready" | "reference";
 }): Promise<FlyerResult<{ token: string; imageUrl: string }>> {
   try {
     const businessName = input.businessName.trim();
     if (!businessName) return { ok: false, message: "Tell us the business name." };
-    if (!ACCEPTED_TYPES.includes(input.fileType)) {
-      return { ok: false, message: "That file type will not print. Send a PNG, JPG or PDF." };
-    }
+    if (!input.imagePath) return { ok: false, message: "Upload your artwork first." };
 
     const run = await openFlyerRun(input.orgSlug);
     if (!run) return { ok: false, message: "There is no run taking bookings right now." };
@@ -55,22 +91,16 @@ export async function startFlyerBooking(input: {
       return { ok: false, message: "This run just filled up. Get in touch about the next one." };
     }
 
-    const base64 = input.artwork.split(",")[1] ?? "";
-    const bytes = Buffer.from(base64, "base64");
-    if (bytes.length === 0) return { ok: false, message: "That file came through empty." };
-    if (bytes.length > MAX_UPLOAD_BYTES) {
-      return { ok: false, message: "That file is over 25MB. Export it a little smaller." };
+    // The path is checked against this run rather than trusted, so a stale or
+    // hand-edited one cannot attach somebody else's file to a booking.
+    const prefix = `${run.organizationId}/${run.runId}/`;
+    if (!input.imagePath.startsWith(prefix)) {
+      return { ok: false, message: "Upload your artwork again and try once more." };
     }
 
     const admin = createAdminClient();
+    const path = input.imagePath;
     const token = randomBytes(16).toString("hex");
-    const extension = input.fileType === "application/pdf" ? "pdf" : input.fileType.split("/")[1];
-    const path = `${run.organizationId}/${run.runId}/${token}.${extension}`;
-
-    const { error: uploadError } = await admin.storage
-      .from("flyer-ads")
-      .upload(path, bytes, { contentType: input.fileType, upsert: true });
-    if (uploadError) return { ok: false, message: describe(uploadError) };
 
     const { error } = await admin.from("flyer_bookings").insert({
       organization_id: run.organizationId,

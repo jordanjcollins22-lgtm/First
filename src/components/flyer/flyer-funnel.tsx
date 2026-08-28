@@ -17,7 +17,12 @@ import {
   type ArtworkCheck,
   type ArtworkKind,
 } from "@/lib/flyer-offer";
-import { startFlyerBooking, payForFlyerSpot } from "@/lib/actions/public-flyer-actions";
+import {
+  createArtworkUpload,
+  payForFlyerSpot,
+  startFlyerBooking,
+} from "@/lib/actions/public-flyer-actions";
+import { createClient } from "@/lib/supabase/client";
 import type { PublicFlyerRun } from "@/lib/data/public-flyer";
 import { FlyerSheetPreview, type SheetAd } from "@/components/flyer/sheet-preview";
 
@@ -44,7 +49,11 @@ export function FlyerFunnel({
   const [businessName, setBusinessName] = useState("");
   const [phone, setPhone] = useState("");
 
+  // The preview, and the file itself. The preview is a data URL for the
+  // browser to draw; the file goes straight to storage without passing
+  // through the app.
   const [artwork, setArtwork] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState("");
   const [check, setCheck] = useState<ArtworkCheck | null>(null);
   const [kind, setKind] = useState<ArtworkKind>("ready");
@@ -53,18 +62,18 @@ export function FlyerFunnel({
   const soldOut = isSoldOut(run.taken);
   const stats = offerStats();
 
-  async function onFile(file: File) {
+  async function onFile(chosen: File) {
     setError(null);
     const dataUrl = await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(chosen);
     });
 
     // Measured in the browser, because the only way to tell somebody their
     // design will print soft is to look at it before they pay for it.
     const size = await new Promise<{ width: number | null; height: number | null }>((resolve) => {
-      if (file.type === "application/pdf") return resolve({ width: null, height: null });
+      if (chosen.type === "application/pdf") return resolve({ width: null, height: null });
       const img = new window.Image();
       img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
       img.onerror = () => resolve({ width: null, height: null });
@@ -76,27 +85,46 @@ export function FlyerFunnel({
     // abandon a form that was about to take their money.
     const verdict =
       kind === "reference"
-        ? checkArtwork({ type: file.type, bytes: file.size, width: null, height: null })
-        : checkArtwork({ type: file.type, bytes: file.size, ...size });
+        ? checkArtwork({ type: chosen.type, bytes: chosen.size, width: null, height: null })
+        : checkArtwork({ type: chosen.type, bytes: chosen.size, ...size });
     setCheck(verdict);
     if (verdict.verdict === "reject") {
       setArtwork(null);
       return;
     }
     setArtwork(dataUrl);
-    setFileType(file.type);
+    setFile(chosen);
+    setFileType(chosen.type);
   }
 
   function approveAndPay() {
-    if (!artwork) return;
+    if (!file) return;
     setError(null);
     start(async () => {
+      // Straight to storage. Sending the file through the action put it in a
+      // one megabyte request body, which is smaller than most photographs
+      // taken on a phone.
+      const slotForFile = await createArtworkUpload({ orgSlug: slug, fileType });
+      if (!slotForFile.ok) {
+        setError(slotForFile.message);
+        return;
+      }
+
+      const uploaded = await createClient()
+        .storage.from("flyer-ads")
+        .uploadToSignedUrl(slotForFile.path, slotForFile.token, file, {
+          contentType: fileType,
+        });
+      if (uploaded.error) {
+        setError("That file would not upload. Try a smaller one, or send it to us directly.");
+        return;
+      }
+
       const booked = await startFlyerBooking({
         orgSlug: slug,
         businessName,
         phone,
-        artwork,
-        fileType,
+        imagePath: slotForFile.path,
         artworkKind: kind,
       });
       if (!booked.ok) {
@@ -112,7 +140,7 @@ export function FlyerFunnel({
     });
   }
 
-  const ready = businessName.trim().length > 0 && Boolean(artwork);
+  const ready = businessName.trim().length > 0 && Boolean(file);
   const mailsOnLabel = run.mailsOn
     ? new Date(`${run.mailsOn}T12:00:00Z`).toLocaleDateString("en-US", {
         month: "long",
