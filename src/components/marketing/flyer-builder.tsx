@@ -48,7 +48,15 @@ function publicUrlFor(path: string): string {
  * seven are stock: the sheet is the stock list, because the fastest way to
  * know what is left to sell is to look at the thing being sold.
  */
-export function FlyerBuilder({ ads }: { ads: FlyerAd[] }) {
+export function FlyerBuilder({
+  ads,
+  bookingQrSvg = null,
+}: {
+  ads: FlyerAd[];
+  /** The scan-to-book square, rendered on the server. Null when there is no
+   * public link yet, and the empty squares fall back to the phone number. */
+  bookingQrSvg?: string | null;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState<number | null>(null);
 
@@ -100,8 +108,8 @@ export function FlyerBuilder({ ads }: { ads: FlyerAd[] }) {
       {/* Lifted out of the page's flow when printing, so the app's header,
           nav and padding never end up between the sheet and the paper. */}
       <div className="print-root mt-5 space-y-6">
-        <Sheet side="front" bySlot={bySlot} onPick={setEditing} />
-        <Sheet side="back" bySlot={bySlot} onPick={setEditing} />
+        <Sheet side="front" bySlot={bySlot} bookingQrSvg={bookingQrSvg} onPick={setEditing} />
+        <Sheet side="back" bySlot={bySlot} bookingQrSvg={bookingQrSvg} onPick={setEditing} />
       </div>
 
       {editing != null && (
@@ -131,10 +139,12 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Sheet({
   side,
   bySlot,
+  bookingQrSvg,
   onPick,
 }: {
   side: Side;
   bySlot: Map<number, FlyerAd>;
+  bookingQrSvg: string | null;
   onPick: (slot: number) => void;
 }) {
   return (
@@ -154,6 +164,7 @@ function Sheet({
                 slot={position.slot}
                 forSale={position.forSale}
                 ad={bySlot.get(position.slot)}
+                bookingQrSvg={bookingQrSvg}
                 onPick={onPick}
               />
             ))}
@@ -172,11 +183,13 @@ function TileButton({
   slot,
   forSale,
   ad,
+  bookingQrSvg,
   onPick,
 }: {
   slot: number;
   forSale: boolean;
   ad: FlyerAd | undefined;
+  bookingQrSvg: string | null;
   onPick: (slot: number) => void;
 }) {
   const filled = isFilled(ad);
@@ -197,7 +210,7 @@ function TileButton({
           className="h-full w-full object-cover"
         />
       ) : (
-        <EmptyAdTile />
+        <EmptyAdTile bookingQrSvg={bookingQrSvg} />
       )}
 
       {/* Screen-only chrome. None of this reaches the paper. */}

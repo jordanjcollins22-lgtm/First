@@ -8,7 +8,7 @@ import { stripeClient } from "@/lib/stripe-customer";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
 import { openFlyerRun } from "@/lib/data/public-flyer";
-import { isSoldOut, ACCEPTED_TYPES } from "@/lib/flyer-offer";
+import { isSoldOut, nextRunName, ACCEPTED_TYPES } from "@/lib/flyer-offer";
 import { HOUSE_SLOTS, SLOTS } from "@/lib/flyer";
 import { needsChecking, settlementFor, MAX_CHECKS_PER_LOAD } from "@/lib/flyer-settlement";
 
@@ -63,6 +63,51 @@ export async function createArtworkUpload(input: {
 }
 
 /**
+ * The run a new booking should go on, opening one if the last is full.
+ *
+ * A full run used to turn somebody away at the moment they had their card
+ * out: "this run just filled up, get in touch about the next one". There is
+ * no reason to lose that sale. The full run closes, the next one opens, and
+ * they carry on without noticing anything happened.
+ *
+ * The new run inherits the old one's price and quantity, because those are
+ * what was advertised on the page they are standing on. It gets no mail date:
+ * that is the office's to set, and a date invented here would be a promise
+ * nobody made.
+ */
+async function runWithRoom(orgSlug: string) {
+  const run = await openFlyerRun(orgSlug);
+  if (!run) return null;
+  if (!isSoldOut(run.taken)) return run;
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("flyer_runs")
+    .select("name")
+    .eq("organization_id", run.organizationId);
+
+  const { error: closeError } = await admin
+    .from("flyer_runs")
+    .update({ status: "closed" })
+    .eq("id", run.runId)
+    .eq("status", "open");
+  if (closeError) return null;
+
+  const { error } = await admin.from("flyer_runs").insert({
+    organization_id: run.organizationId,
+    name: nextRunName(run.runName, ((existing ?? []) as { name: string }[]).map((r) => r.name)),
+    flyer_count: run.flyerCount,
+    spot_price_cents: run.spotPriceCents,
+    status: "open",
+  });
+  if (error) return null;
+
+  // Read it back rather than assembling it here, so the caller gets the same
+  // shape and the same counts as any other run.
+  return openFlyerRun(orgSlug);
+}
+
+/**
  * Take the artwork and the advertiser's details, before any money.
  *
  * Deliberately separate from paying. Somebody who uploads a design and then
@@ -86,16 +131,17 @@ export async function startFlyerBooking(input: {
     if (!businessName) return { ok: false, message: "Tell us the business name." };
     if (!input.imagePath) return { ok: false, message: "Upload your artwork first." };
 
-    const run = await openFlyerRun(input.orgSlug);
+    // Rolls onto a fresh run if this one filled while they were uploading,
+    // rather than turning somebody away with their card already out.
+    const run = await runWithRoom(input.orgSlug);
     if (!run) return { ok: false, message: "There is no run taking bookings right now." };
-    if (isSoldOut(run.taken)) {
-      return { ok: false, message: "This run just filled up. Get in touch about the next one." };
-    }
 
-    // The path is checked against this run rather than trusted, so a stale or
-    // hand-edited one cannot attach somebody else's file to a booking.
-    const prefix = `${run.organizationId}/${run.runId}/`;
-    if (!input.imagePath.startsWith(prefix)) {
+    // Checked against the business rather than trusted, so a hand-edited path
+    // cannot attach somebody else's file to a booking. Deliberately not
+    // checked against the run: a booking that rolled onto a fresh run carries
+    // a path made for the old one, and which folder a file sits in is
+    // housekeeping, not access.
+    if (!input.imagePath.startsWith(`${run.organizationId}/`)) {
       return { ok: false, message: "Upload your artwork again and try once more." };
     }
 

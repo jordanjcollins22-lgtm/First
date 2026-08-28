@@ -259,3 +259,31 @@ export function availabilityLine(taken: number): string {
 export function isSoldOut(taken: number): boolean {
   return spotsLeft(taken) === 0;
 }
+
+// ---------------------------------------------------------------------------
+// Rolling over to the next run
+// ---------------------------------------------------------------------------
+
+/**
+ * What to call the run that opens when the last one fills.
+ *
+ * Numbered off the one it follows, so the office reads a sequence rather than
+ * a pile of dates. "October run" becomes "October run 2", and if that fills
+ * too, "October run 3". Anything already taken is skipped, because two runs
+ * with one name is two runs nobody can tell apart on a printer's invoice.
+ */
+export function nextRunName(previous: string, existing: string[]): string {
+  const taken = new Set(existing.map((name) => name.trim().toLowerCase()));
+
+  // Strip a trailing number so a third run is "run 3" rather than "run 2 2".
+  // A name that is nothing but a number leaves no base at all, so it falls
+  // back rather than producing "2 2".
+  const stripped = previous.trim().replace(/\s*\d+$/, "").trim();
+  const base = stripped || "Run";
+
+  for (let n = 2; n < 200; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${base} ${Date.now()}`;
+}

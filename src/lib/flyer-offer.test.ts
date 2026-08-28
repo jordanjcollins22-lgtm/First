@@ -21,6 +21,7 @@ import {
   spotsLabel,
   spotsLeft,
   availabilityLine,
+  nextRunName,
 } from "./flyer-offer";
 
 describe("the offer itself", () => {
@@ -238,5 +239,37 @@ describe("availabilityLine", () => {
 
   it("uses no dashes", () => {
     expect(availabilityLine(2)).not.toMatch(/[—–]/);
+  });
+});
+
+describe("nextRunName", () => {
+  it("numbers off the run it follows", () => {
+    expect(nextRunName("October run", ["October run"])).toBe("October run 2");
+  });
+
+  it("keeps counting rather than restarting", () => {
+    // A third run is "October run 3", not "October run 2 2".
+    expect(nextRunName("October run 2", ["October run", "October run 2"])).toBe("October run 3");
+  });
+
+  it("skips a name somebody already used", () => {
+    // Two runs with one name is two runs nobody can tell apart on a
+    // printer's invoice.
+    expect(nextRunName("October run", ["October run", "October run 2", "October run 3"])).toBe(
+      "October run 4"
+    );
+  });
+
+  it("is not confused by casing or stray spaces", () => {
+    expect(nextRunName("  October run  ", ["october run 2"])).toBe("October run 3");
+  });
+
+  it("copes with a run named only a number", () => {
+    expect(nextRunName("2", ["2"])).toBe("Run 2");
+  });
+
+  it("always returns something usable", () => {
+    const crowded = Array.from({ length: 250 }, (_, i) => `Run ${i + 1}`);
+    expect(nextRunName("Run", crowded).length).toBeGreaterThan(0);
   });
 });

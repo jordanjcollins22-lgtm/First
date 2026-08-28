@@ -13,7 +13,7 @@ const CHARCOAL = "#414141";
  * it says what the space is, who it reaches, and the number to ring. An empty
  * square that says nothing is postage spent on white paper.
  */
-export function EmptyAdTile() {
+export function EmptyAdTile({ bookingQrSvg }: { bookingQrSvg?: string | null }) {
   return (
     <div
       className="flex h-full w-full flex-col items-center justify-center bg-white px-[7%] text-center"
@@ -35,9 +35,28 @@ export function EmptyAdTile() {
       <p className="mt-[4%] text-[4.6cqw] leading-snug" style={{ color: CHARCOAL }}>
         Get your business in front of local homeowners.
       </p>
-      <p className="mt-[2%] text-[6.6cqw] font-bold" style={{ color: LIGHT_GREEN }}>
-        CALL: {AD_CONTACT_PHONE}
-      </p>
+
+      {/* A square somebody can scan beats a number they have to ring during
+          office hours. Whoever is holding this flyer is holding it now, and
+          the page it opens takes their advert and their card without anybody
+          picking up a phone. The number stays as the fallback for a flyer
+          printed before there was a link to point at. */}
+      {bookingQrSvg ? (
+        <>
+          <span
+            className="mt-[3%] block h-[26%] w-auto [&>svg]:h-full [&>svg]:w-auto"
+            dangerouslySetInnerHTML={{ __html: bookingQrSvg }}
+            aria-hidden
+          />
+          <p className="mt-[2%] text-[5.2cqw] font-bold" style={{ color: LIGHT_GREEN }}>
+            SCAN TO BOOK YOUR SPOT
+          </p>
+        </>
+      ) : (
+        <p className="mt-[2%] text-[6.6cqw] font-bold" style={{ color: LIGHT_GREEN }}>
+          CALL: {AD_CONTACT_PHONE}
+        </p>
+      )}
     </div>
   );
 }

@@ -12,6 +12,8 @@ import { FlyerRunManager } from "@/components/flyer/run-manager";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { isStripeConfigured } from "@/lib/env";
+import { qrSvg } from "@/lib/qr";
+import { absolute } from "@/lib/proposal-flow";
 
 export default async function FlyerPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -29,9 +31,16 @@ export default async function FlyerPage() {
     outboundBaseUrl(),
   ]);
 
+  // The square an empty tile carries. Made here rather than in the browser
+  // so it is in the HTML the printer receives, with nothing to load.
+  const bookingLink = organization?.slug
+    ? absolute(baseUrl, `/flyer/${organization.slug}`)
+    : null;
+  const bookingQrSvg = bookingLink ? await qrSvg(bookingLink, 200).catch(() => null) : null;
+
   return (
     <div className="flex flex-col gap-8">
-      <FlyerBuilder ads={ads} />
+      <FlyerBuilder ads={ads} bookingQrSvg={bookingQrSvg} />
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-4 pb-10">
         <FlyerRunManager
           runs={runs}
