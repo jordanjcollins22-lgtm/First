@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { createFlyerRun, setFlyerRunDate, setFlyerRunStatus } from "@/lib/actions/flyer-run-actions";
 import { money, spotsLabel } from "@/lib/flyer-offer";
 import type { FlyerRunRow } from "@/lib/data/flyer-runs";
+import { RunSheet } from "@/components/flyer/run-sheet";
 
 /**
  * Opening a run and working it.
@@ -155,6 +156,11 @@ function OpenRun({ run, link }: { run: FlyerRunRow; link: string | null }) {
           )}
         </div>
       )}
+
+      {/* Both sides, as they would print. The office was told how many
+          spots were sold and never shown the sheet, so the only way to know
+          what a run looked like was to wait for the printer. */}
+      <RunSheet runId={run.id} squares={run.squares} />
 
       <Bookings run={run} />
 

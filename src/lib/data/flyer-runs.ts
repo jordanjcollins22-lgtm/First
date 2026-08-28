@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { isMissingTable } from "@/lib/setup-errors";
+import { composeSheet, type SheetSquare } from "@/lib/flyer-sheet";
+import { listFlyerAds } from "@/lib/data/flyer";
 
 export interface FlyerBookingRow {
   id: string;
@@ -27,6 +29,11 @@ export interface FlyerRunRow {
   sold: number;
   /** Money in, in cents. */
   takenCents: number;
+  /**
+   * The eight squares as they would print: the standing flyer, with this
+   * run's paid bookings on top of it.
+   */
+  squares: SheetSquare[];
 }
 
 /**
@@ -38,6 +45,10 @@ export interface FlyerRunRow {
  */
 export async function listFlyerRuns(): Promise<FlyerRunRow[]> {
   const supabase = await createClient();
+
+  // The standing flyer. Every run starts as this, so a run nobody has sold
+  // into still prints something sensible.
+  const template = await listFlyerAds().catch(() => []);
 
   const { data: runs, error } = await supabase
     .from("flyer_runs")
@@ -110,6 +121,17 @@ export async function listFlyerRuns(): Promise<FlyerRunRow[]> {
     // counting it would show a run as full while it is empty.
     const paid = list.filter((b) => b.status === "paid" || b.status === "placed");
     return {
+      squares: composeSheet({
+        template,
+        bookings: list.map((b) => ({
+          id: b.id,
+          slot: b.slot,
+          businessName: b.businessName,
+          imageUrl: b.imageUrl,
+          status: b.status,
+        })),
+        imageUrlFor: (path) => supabase.storage.from("flyer-ads").getPublicUrl(path).data.publicUrl,
+      }),
       id: run.id,
       name: run.name,
       mailsOn: run.mails_on,
