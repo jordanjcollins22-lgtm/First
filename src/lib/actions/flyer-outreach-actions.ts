@@ -172,3 +172,76 @@ export async function logFlyerTouch(input: {
     return { ok: false, message: "Could not save that." };
   }
 }
+
+/**
+ * Correct or remove one logged call.
+ *
+ * The buttons are big and thumbs are inaccurate, so a mis-tap is not an edge
+ * case, it is Tuesday. Because the count is derived from the rows rather than
+ * stored, deleting the row fixes the count with nothing else to remember.
+ */
+export async function deleteFlyerTouch(touchId: string): Promise<OutreachResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+    const supabase = await createClient();
+    const { error } = await supabase.from("outreach_touches").delete().eq("id", touchId);
+    if (error) return { ok: false, message: describeDbError(error) };
+    revalidatePath(PATH);
+    return { ok: true };
+  } catch (err) {
+    console.error("deleteFlyerTouch failed:", err);
+    return { ok: false, message: "Could not remove that." };
+  }
+}
+
+/** Change what a call was recorded as, or fix its note. */
+export async function updateFlyerTouch(input: {
+  touchId: string;
+  outcome: string;
+  note?: string;
+}): Promise<OutreachResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+    if (!OUTCOMES.some((o) => o.value === input.outcome)) {
+      return { ok: false, message: "Pick what they said." };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("outreach_touches")
+      .update({ outcome: input.outcome, note: input.note?.trim() || null })
+      .eq("id", input.touchId);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath(PATH);
+    return { ok: true };
+  } catch (err) {
+    console.error("updateFlyerTouch failed:", err);
+    return { ok: false, message: "Could not save that." };
+  }
+}
+
+/**
+ * Take the do-not-contact mark off a business.
+ *
+ * Its own deliberate action rather than something that happens when a
+ * do-not-contact call is deleted. The flag can also arrive from a CRM import,
+ * and quietly clearing an imported one because somebody tidied up a mis-tap
+ * is how a business we were told never to ring gets rung.
+ */
+export async function clearDoNotContact(customerId: string): Promise<OutreachResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("customers")
+      .update({ do_not_contact: false })
+      .eq("id", customerId);
+    if (error) return { ok: false, message: describeDbError(error) };
+    revalidatePath(PATH);
+    return { ok: true, message: "They can be contacted again." };
+  } catch (err) {
+    console.error("clearDoNotContact failed:", err);
+    return { ok: false, message: "Could not change that." };
+  }
+}

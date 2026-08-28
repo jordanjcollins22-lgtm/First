@@ -46,6 +46,7 @@ export function isFinal(outcome: string | null): boolean {
 }
 
 export interface Touch {
+  id: string;
   outcome: string;
   note: string | null;
   at: string;

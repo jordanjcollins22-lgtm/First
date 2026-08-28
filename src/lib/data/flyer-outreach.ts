@@ -8,6 +8,8 @@ export interface FlyerBusiness {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  /** Asked us not to call again. Set from a touch, or carried in on import. */
+  doNotContact: boolean;
   summary: OutreachSummary;
   /** Every touch, newest first, for the history under a row. */
   touches: Touch[];
@@ -24,7 +26,7 @@ export async function listFlyerBusinesses(): Promise<FlyerBusiness[]> {
 
   const { data: businesses, error } = await supabase
     .from("customers")
-    .select("id, name, phone, email, notes")
+    .select("id, name, phone, email, notes, do_not_contact")
     .eq("contact_type", "business")
     .order("name");
 
@@ -38,12 +40,13 @@ export async function listFlyerBusinesses(): Promise<FlyerBusiness[]> {
     phone: string | null;
     email: string | null;
     notes: string | null;
+    do_not_contact: boolean;
   }[];
   if (rows.length === 0) return [];
 
   const { data: touches } = await supabase
     .from("outreach_touches")
-    .select("customer_id, outcome, note, at")
+    .select("id, customer_id, outcome, note, at")
     .in(
       "customer_id",
       rows.map((r) => r.id)
@@ -51,6 +54,7 @@ export async function listFlyerBusinesses(): Promise<FlyerBusiness[]> {
 
   const byCustomer = new Map<string, Touch[]>();
   for (const row of ((touches ?? []) as {
+    id: string;
     customer_id: string | null;
     outcome: string;
     note: string | null;
@@ -58,7 +62,7 @@ export async function listFlyerBusinesses(): Promise<FlyerBusiness[]> {
   }[])) {
     if (!row.customer_id) continue;
     const list = byCustomer.get(row.customer_id) ?? [];
-    list.push({ outcome: row.outcome, note: row.note, at: row.at });
+    list.push({ id: row.id, outcome: row.outcome, note: row.note, at: row.at });
     byCustomer.set(row.customer_id, list);
   }
 
@@ -70,6 +74,7 @@ export async function listFlyerBusinesses(): Promise<FlyerBusiness[]> {
       phone: row.phone,
       email: row.email,
       notes: row.notes,
+      doNotContact: row.do_not_contact,
       summary: summariseOutreach(list),
       touches: list,
     };

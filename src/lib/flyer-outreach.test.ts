@@ -18,8 +18,9 @@ function daysAgo(days: number): string {
   return new Date(NOW.getTime() - days * 86_400_000).toISOString();
 }
 
+let nextId = 0;
 function touch(over: Partial<Touch> = {}): Touch {
-  return { outcome: "attempted", note: null, at: daysAgo(1), ...over };
+  return { id: `t${nextId++}`, outcome: "attempted", note: null, at: daysAgo(1), ...over };
 }
 
 describe("the replies we record", () => {
