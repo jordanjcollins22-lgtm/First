@@ -21,7 +21,7 @@ export default async function InventorySetupPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
-      <h1 className="mb-1 text-2xl font-bold">Set up your inventory</h1>
+      <h1 className="mb-1 text-2xl font-bold">Inventory Setup</h1>
       <p className="mb-6 text-muted-foreground">
         Add what you already have — you can fill in the rest later, and anything new gets added automatically
         the first time you quote it.

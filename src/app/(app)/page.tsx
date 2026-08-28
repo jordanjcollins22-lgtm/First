@@ -66,7 +66,7 @@ export default async function Home({
 
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6 sm:py-10">
-        <h1 className="text-2xl font-bold">New Property Estimate</h1>
+        <h1 className="text-2xl font-bold">New Estimate</h1>
         <p className="text-sm text-muted-foreground">
           Your account doesn&apos;t have access to this page. Ask an admin to grant it under Databases &rarr;
           Permissions.
@@ -78,7 +78,7 @@ export default async function Home({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-6 sm:py-10">
       <div>
-        <h1 className="text-2xl font-bold">New Property Estimate</h1>
+        <h1 className="text-2xl font-bold">New Estimate</h1>
         <p className="text-muted-foreground">
           Enter an address to load satellite imagery and start mapping work areas.
         </p>

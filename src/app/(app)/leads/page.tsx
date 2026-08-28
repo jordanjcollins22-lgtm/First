@@ -83,7 +83,7 @@ export default async function LeadsPage() {
   if (!data) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-        <h1 className="mb-1 text-2xl font-bold">Leads</h1>
+        <h1 className="mb-1 text-2xl font-bold">Lead Generation</h1>
         <p className="text-sm text-muted-foreground">Couldn&apos;t load leads. Try again in a moment.</p>
       </div>
     );
@@ -94,7 +94,7 @@ export default async function LeadsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-      <h1 className="mb-1 text-2xl font-bold">Lead generation</h1>
+      <h1 className="mb-1 text-2xl font-bold">Lead Generation</h1>
       <p className="mb-4 text-muted-foreground">
         Every way we know how to get an evaluation booked, written down so anybody can run it.
       </p>

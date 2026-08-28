@@ -11,33 +11,52 @@
 
 export interface TabDefinition {
   key: string;
+  /**
+   * What this page is called, everywhere.
+   *
+   * The permissions matrix, the sidebar and the page's own heading all read
+   * this, so they cannot drift. Labels used to carry a parenthetical saying
+   * where a page lived, like "Proposals (Pipeline tab)", which meant the
+   * permission and the page it governed were called different things and
+   * somebody ticking a box had to work out which page they had just opened.
+   */
   label: string;
   href: string;
+  /**
+   * The tab whose page this one is reached through, when it is a tab on
+   * another page rather than a destination of its own.
+   *
+   * Ticking a permission is meant to grant access. It did not, quite: a role
+   * given Contacts but not Project Data had no way to reach Contacts at all,
+   * because the only door to it was a page they could not open. So a tab with
+   * a parent the viewer cannot see gets its own place in the sidebar.
+   */
+  parent?: string;
 }
 
 export const TABS: readonly TabDefinition[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
-  { key: "new-property", label: "New Property (Home)", href: "/" },
+  { key: "new-property", label: "New Estimate", href: "/" },
   { key: "project-data", label: "Project Data", href: "/attractors" },
   { key: "evaluations", label: "Calendar", href: "/evaluations" },
-  { key: "tools", label: "Tool Database", href: "/admin/tools" },
-  { key: "materials", label: "Material Database", href: "/admin/materials" },
-  { key: "services", label: "Services Database", href: "/admin/team" },
-  { key: "team", label: "Team Database", href: "/admin/team" },
+  { key: "tools", label: "Inventory", href: "/admin/tools" },
+  { key: "materials", label: "Materials", href: "/admin/materials", parent: "tools" },
+  { key: "services", label: "Services", href: "/admin/team", parent: "team" },
+  { key: "team", label: "Team & Services", href: "/admin/team" },
 
   // Added after the matrix existed.
-  { key: "proposals", label: "Proposals (Pipeline tab)", href: "/proposals" },
-  { key: "contacts", label: "Contacts", href: "/contacts" },
+  { key: "proposals", label: "Proposals", href: "/proposals", parent: "pipeline" },
+  { key: "contacts", label: "Contacts", href: "/contacts", parent: "project-data" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
   { key: "leads", label: "Lead Generation", href: "/leads" },
   { key: "conversations", label: "Conversations", href: "/conversations" },
-  { key: "notifications", label: "Alerts (My Day tab)", href: "/notifications" },
-  { key: "weather", label: "Weather (Calendar tab)", href: "/weather" },
+  { key: "notifications", label: "Alerts", href: "/notifications" },
+  { key: "weather", label: "Weather", href: "/weather", parent: "evaluations" },
   { key: "knowledge-graph", label: "Knowledge Graph", href: "/knowledge-graph" },
 
   // Money and admin tooling — closed until somebody says otherwise.
   { key: "payments", label: "Money", href: "/admin/payments" },
-  { key: "journeys", label: "Journeys (Dashboard tab)", href: "/admin/journeys" },
+  { key: "journeys", label: "Journeys", href: "/admin/journeys", parent: "dashboard" },
 
   // Detail and sub-pages. Each still has its own guard; the checkbox layers
   // on top.
@@ -45,12 +64,12 @@ export const TABS: readonly TabDefinition[] = [
   { key: "client-detail", label: "Contact Detail", href: "/clients/[customerId]" },
   { key: "conversation-thread", label: "Conversation Thread", href: "/conversations/[channelId]" },
   { key: "conversation-call", label: "Video Call", href: "/conversations/[channelId]/call" },
-  { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup" },
-  { key: "labels", label: "Labels & Codes", href: "/admin/labels" },
+  { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup", parent: "tools" },
+  { key: "labels", label: "Labels & Codes", href: "/admin/labels", parent: "tools" },
   { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
-  { key: "organizations", label: "Organizations (Settings tab)", href: "/admin/organizations" },
+  { key: "organizations", label: "Organizations", href: "/admin/organizations" },
 ];
 
 export type TabKey = string;
@@ -122,4 +141,30 @@ export function tabsAllowedForRoles(
 export function unconfiguredTabKeys(permissions: { tab_key: string }[]): Set<string> {
   const configured = new Set(permissions.map((p) => p.tab_key));
   return new Set(TABS.filter((t) => !configured.has(t.key)).map((t) => t.key));
+}
+
+const BY_KEY = new Map(TABS.map((t) => [t.key, t]));
+
+/** What a page is called. One answer, used by the matrix, the nav and the page. */
+export function tabLabel(key: string): string {
+  return BY_KEY.get(key)?.label ?? key;
+}
+
+export function tabFor(key: string): TabDefinition | undefined {
+  return BY_KEY.get(key);
+}
+
+/**
+ * Tabs somebody is allowed into but has no door to.
+ *
+ * A tab that lives on another page is normally reached by opening that page.
+ * Grant the tab without the page it sits on and the permission does nothing
+ * at all, which is the opposite of what ticking a box looks like it does.
+ * These get their own entry in the sidebar so the grant means something.
+ */
+export function orphanedTabs(allowed: string[]): TabDefinition[] {
+  const has = new Set(allowed);
+  return TABS.filter(
+    (tab) => tab.parent != null && has.has(tab.key) && !has.has(tab.parent)
+  );
 }

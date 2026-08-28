@@ -1,9 +1,9 @@
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { TABS, UNGOVERNED_ROUTES, tabsAllowedForRoles, unconfiguredTabKeys } from "@/lib/permissions";
+import { orphanedTabs, tabFor, tabLabel, TABS, UNGOVERNED_ROUTES, tabsAllowedForRoles, unconfiguredTabKeys } from "@/lib/permissions";
 
 const APP_DIR = join(process.cwd(), "src", "app", "(app)");
 
@@ -115,5 +115,117 @@ describe("detail pages reachable from a list", () => {
     // requireAnyTab at the page, not by widening the grant set here.
     expect(allowed.has("job-detail")).toBe(false);
     expect(DETAIL_INHERITS["job-detail"]).toContain("evaluations");
+  });
+});
+
+describe("what each page is called", () => {
+  it("names every tab without saying where it lives", () => {
+    // Labels used to read "Proposals (Pipeline tab)", so the permission and
+    // the page it governed were called different things and somebody ticking
+    // a box had to work out which page they had just opened.
+    for (const tab of TABS) {
+      expect(tab.label, tab.key).not.toMatch(/\(.*tab\)|\(Home\)/i);
+    }
+  });
+
+  it("gives one answer for a name, whoever asks", () => {
+    for (const tab of TABS) {
+      expect(tabLabel(tab.key)).toBe(tab.label);
+    }
+  });
+
+  it("falls back to the key rather than showing nothing", () => {
+    expect(tabLabel("not-a-tab")).toBe("not-a-tab");
+    expect(tabFor("not-a-tab")).toBeUndefined();
+  });
+
+  it("uses the same name the sidebar does for the home page", () => {
+    // The example that started this: the permission said "New Property" and
+    // the sidebar said "New Estimate".
+    expect(tabLabel("new-property")).toBe("New Estimate");
+  });
+
+  it("has no two tabs claiming the same name", () => {
+    const labels = TABS.map((t) => t.label);
+    expect(new Set(labels).size, labels.join(", ")).toBe(labels.length);
+  });
+});
+
+describe("orphanedTabs", () => {
+  it("finds a tab somebody is allowed into but has no door to", () => {
+    // Contacts lives on Project Data. Granted without it, the permission did
+    // nothing at all, which is the opposite of what ticking a box looks like.
+    const orphans = orphanedTabs(["contacts"]).map((t) => t.key);
+    expect(orphans).toContain("contacts");
+  });
+
+  it("stays quiet when they can reach it the normal way", () => {
+    expect(orphanedTabs(["contacts", "project-data"]).map((t) => t.key)).not.toContain("contacts");
+  });
+
+  it("says nothing about a tab they were never granted", () => {
+    expect(orphanedTabs(["project-data"])).toEqual([]);
+    expect(orphanedTabs([])).toEqual([]);
+  });
+
+  it("only ever names tabs that live inside another", () => {
+    for (const tab of orphanedTabs(TABS.map((t) => t.key).filter((k) => k !== "pipeline"))) {
+      expect(tab.parent, tab.key).toBeTruthy();
+    }
+  });
+
+  it("points every parent at a tab that exists", () => {
+    // A parent naming nothing would make its child permanently an orphan.
+    const keys = new Set(TABS.map((t) => t.key));
+    for (const tab of TABS) {
+      if (!tab.parent) continue;
+      expect(keys.has(tab.parent), `${tab.key} -> ${tab.parent}`).toBe(true);
+    }
+  });
+
+  it("has no tab parented to itself", () => {
+    for (const tab of TABS) {
+      expect(tab.parent, tab.key).not.toBe(tab.key);
+    }
+  });
+});
+
+describe("one name for a page, everywhere", () => {
+  /**
+   * A governed page should carry its own name.
+   *
+   * The permission, the sidebar and the page all read TABS, so those three
+   * cannot drift. What can still drift is a heading typed by hand: the
+   * permission said "New Property" while the sidebar said "New Estimate",
+   * and Money was called Payments on the page it opened.
+   */
+  const pageFor = (href: string): string | null => {
+    if (href.includes("[")) return null;
+    const route = href.replace(/^\/+|\/+$/g, "");
+    const path = route ? join(APP_DIR, route, "page.tsx") : join(APP_DIR, "page.tsx");
+    return existsSync(path) ? path : null;
+  };
+
+  it("checks a meaningful number of pages, not zero", () => {
+    const checked = TABS.filter((t) => pageFor(t.href));
+    expect(checked.length).toBeGreaterThan(8);
+  });
+
+  it("finds each page's own name in it", () => {
+    for (const tab of TABS) {
+      const path = pageFor(tab.href);
+      if (!path) continue;
+
+      const body = readFileSync(path, "utf8");
+      // Thin pages hand straight off to a component, which carries the
+      // wording. There is nothing to compare against here.
+      if (!body.includes("<h1")) continue;
+
+      const escaped = tab.label.replace(/&/g, "&amp;");
+      expect(
+        body.includes(tab.label) || body.includes(escaped),
+        `${path} never says "${tab.label}", which is what the permission and the sidebar call it`
+      ).toBe(true);
+    }
   });
 });

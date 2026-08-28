@@ -6,6 +6,7 @@ import { Menu, X } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
+import { orphanedTabs, tabLabel } from "@/lib/permissions";
 
 /**
  * The whole navigation, at both sizes.
@@ -45,18 +46,20 @@ export function SiteNav({
         { href: "/my-day", label: "My Day" },
         // ?new=1 because the root redirects admins to the dashboard, and this
         // is the link that has to get past that.
-        ...(can("new-property") ? [{ href: "/?new=1", label: "New Estimate" }] : []),
-        ...(can("project-data") ? [{ href: "/attractors", label: "Project Data" }] : []),
-        ...(can("pipeline") ? [{ href: "/pipeline", label: "Pipeline" }] : []),
-        ...(can("leads") ? [{ href: "/leads", label: "Lead Generation" }] : []),
-        ...(can("conversations") ? [{ href: "/conversations", label: "Conversations" }] : []),
-        ...(can("evaluations") ? [{ href: "/evaluations", label: "Calendar" }] : []),
-        ...(can("knowledge-graph") ? [{ href: "/knowledge-graph", label: "Knowledge Graph" }] : []),
+        ...(can("new-property") ? [{ href: "/?new=1", label: tabLabel("new-property") }] : []),
+        ...(can("project-data") ? [{ href: "/attractors", label: tabLabel("project-data") }] : []),
+        ...(can("pipeline") ? [{ href: "/pipeline", label: tabLabel("pipeline") }] : []),
+        ...(can("leads") ? [{ href: "/leads", label: tabLabel("leads") }] : []),
+        ...(can("conversations") ? [{ href: "/conversations", label: tabLabel("conversations") }] : []),
+        ...(can("evaluations") ? [{ href: "/evaluations", label: tabLabel("evaluations") }] : []),
+        ...(can("knowledge-graph")
+          ? [{ href: "/knowledge-graph", label: tabLabel("knowledge-graph") }]
+          : []),
         ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
         ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
         // Overhead folded in here as a tab, so one link covers all of it.
         ...(can("payments") || roles.includes("overhead")
-          ? [{ href: "/admin/payments", label: "Money" }]
+          ? [{ href: "/admin/payments", label: tabLabel("payments") }]
           : []),
         // Gated on the admin role itself, never on the table it edits —
         // otherwise one stray uncheck would take away the way back in.
@@ -67,6 +70,12 @@ export function SiteNav({
           : []),
         // Organizations is a tab on Settings now, shown only to the one
         // account that can reach it — so it needs no nav entry of its own.
+
+        // Anything they were granted that lives on a page they cannot open.
+        // Ticking a box is meant to grant access; without this a role given
+        // Contacts but not Project Data had no way to reach Contacts at all,
+        // because the only door to it was a page they could not open.
+        ...orphanedTabs(allowedTabs).map((tab) => ({ href: tab.href, label: tab.label })),
       ];
 
   useEffect(() => {
