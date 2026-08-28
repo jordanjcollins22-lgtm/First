@@ -5,7 +5,6 @@ import {
   artworkKindBlurb,
   artworkKindLabel,
   artworkKindPromise,
-  inviteText,
   artworkSpec,
   breakEvenJobs,
   breakEvenLine,
@@ -30,10 +29,10 @@ describe("the offer itself", () => {
     expect(SPOT_PRICE_CENTS).toBe(30_000);
   });
 
-  it("keeps the top right of each side for us", () => {
-    // The front's carries the postage indicia; the back's is where an eye
-    // lands on a page nobody chose to read.
-    expect(SPOTS_PER_RUN).toBe(6);
+  it("keeps the front top right for us and sells the rest", () => {
+    // That corner carries the postage indicia, so our artwork is the one cut
+    // to leave room for it.
+    expect(SPOTS_PER_RUN).toBe(7);
   });
 });
 
@@ -163,68 +162,26 @@ describe("checkArtwork", () => {
 });
 
 describe("spots left", () => {
-  it("counts down from six", () => {
-    expect(spotsLeft(0)).toBe(6);
-    expect(spotsLeft(5)).toBe(1);
-    expect(spotsLeft(6)).toBe(0);
+  it("counts down from seven", () => {
+    expect(spotsLeft(0)).toBe(7);
+    expect(spotsLeft(6)).toBe(1);
+    expect(spotsLeft(7)).toBe(0);
   });
 
   it("never goes negative or above the total", () => {
     expect(spotsLeft(99)).toBe(0);
-    expect(spotsLeft(-3)).toBe(6);
+    expect(spotsLeft(-3)).toBe(7);
   });
 
   it("gives the office the real count, since they decide whether to keep selling", () => {
-    expect(spotsLabel(0)).toBe("6 of 6 spots left on this run.");
-    expect(spotsLabel(5)).toBe("One spot left on this run.");
+    expect(spotsLabel(0)).toBe("7 of 7 spots left on this run.");
+    expect(spotsLabel(6)).toBe("One spot left on this run.");
   });
 
   it("says so plainly when the run is full", () => {
-    expect(spotsLabel(6)).toBe("This run is full. Ask us about the next one.");
-    expect(isSoldOut(6)).toBe(true);
-    expect(isSoldOut(5)).toBe(false);
-  });
-});
-
-describe("inviteText", () => {
-  const text = inviteText({
-    organizationName: "JS Landscaping",
-    link: "https://app.example.com/flyer/js",
-  });
-
-  it("says who it is from, since it lands after a phone call", () => {
-    expect(text).toContain("JS Landscaping");
-  });
-
-  it("carries the two numbers that decide it", () => {
-    expect(text).toContain("2,500");
-    expect(text).toContain("$300.00");
-  });
-
-  it("puts the link last", () => {
-    // A link in the middle of a text is a text nobody finishes reading.
-    expect(text.endsWith("https://app.example.com/flyer/js")).toBe(true);
-  });
-
-  it("promises only what the page delivers", () => {
-    // Upload, look, pay. Two minutes is a claim we can keep.
-    expect(text).toContain("two minutes");
-    expect(text).toContain("upload your ad");
-  });
-
-  it("uses the run's own figures when they differ", () => {
-    const custom = inviteText({
-      organizationName: "X",
-      link: "l",
-      flyerCount: 5000,
-      priceCents: 50_000,
-    });
-    expect(custom).toContain("5,000");
-    expect(custom).toContain("$500.00");
-  });
-
-  it("uses no dashes", () => {
-    expect(text).not.toMatch(/[—–]/);
+    expect(spotsLabel(7)).toBe("This run is full. Ask us about the next one.");
+    expect(isSoldOut(7)).toBe(true);
+    expect(isSoldOut(6)).toBe(false);
   });
 });
 
@@ -276,7 +233,7 @@ describe("availabilityLine", () => {
   });
 
   it("still says plainly when there is nothing left to sell", () => {
-    expect(availabilityLine(6)).toBe("This run is full. Ask us about the next one.");
+    expect(availabilityLine(7)).toBe("This run is full. Ask us about the next one.");
   });
 
   it("uses no dashes", () => {

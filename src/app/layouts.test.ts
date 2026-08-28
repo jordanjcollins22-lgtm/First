@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+
+import { isPublic, PUBLIC_PREFIXES } from "@/lib/supabase/middleware";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -46,5 +48,48 @@ describe("public route layouts", () => {
     for (const path of ["src/app/proposal/layout.tsx", "src/app/flyer/layout.tsx", "src/app/book/layout.tsx"]) {
       expect(LAYOUTS, path).toContain(path);
     }
+  });
+});
+
+describe("routes a customer opens", () => {
+  /**
+   * A page outside the (app) group is one we send to somebody with no
+   * account. It has to be let past the sign-in redirect as well as given its
+   * own stylesheet, and the flyer page proved what happens when only one of
+   * those is remembered: we texted local businesses a link that took them
+   * straight to a staff sign-in screen.
+   */
+  const TOP_LEVEL = readdirSync("src/app", { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith("(") && e.name !== "api")
+    .map((e) => `/${e.name}`);
+
+  it("finds the public route folders", () => {
+    expect(TOP_LEVEL).toContain("/flyer");
+    expect(TOP_LEVEL).toContain("/proposal");
+    expect(TOP_LEVEL).toContain("/book");
+  });
+
+  it("lets every one of them past the sign-in redirect", () => {
+    for (const route of TOP_LEVEL) {
+      expect(isPublic(route), `${route} redirects to sign-in`).toBe(true);
+      expect(isPublic(`${route}/anything`), `${route}/anything redirects to sign-in`).toBe(true);
+    }
+  });
+
+  it("still guards everything else", () => {
+    for (const path of ["/dashboard", "/admin/flyer", "/jobs/abc", "/", "/leads"]) {
+      expect(isPublic(path), `${path} is open to anybody`).toBe(false);
+    }
+  });
+
+  it("does not open a path that merely starts with a public word", () => {
+    // "/bookkeeping" is not "/book".
+    expect(isPublic("/bookkeeping")).toBe(false);
+    expect(isPublic("/flyers-admin")).toBe(false);
+  });
+
+  it("keeps the sign-in page itself reachable", () => {
+    expect(PUBLIC_PREFIXES).toContain("/login");
+    expect(isPublic("/login")).toBe(true);
   });
 });

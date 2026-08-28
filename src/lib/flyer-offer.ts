@@ -259,34 +259,3 @@ export function availabilityLine(taken: number): string {
 export function isSoldOut(taken: number): boolean {
   return spotsLeft(taken) === 0;
 }
-
-// ---------------------------------------------------------------------------
-// The text somebody sends after the call
-// ---------------------------------------------------------------------------
-
-/**
- * The message that follows a phone call.
- *
- * Written to be sent as one text, so it has to survive being read on a lock
- * screen: who it is from, what it is, what it costs, and how little work it
- * is. The link goes last because a link in the middle of a message is a
- * message nobody finishes reading.
- *
- * "Two minutes" is a claim we can keep. The page is upload, look, pay.
- */
-export function inviteText(input: {
-  organizationName: string;
-  link: string;
-  flyerCount?: number;
-  priceCents?: number;
-}): string {
-  const homes = (input.flyerCount ?? FLYERS_PER_RUN).toLocaleString();
-  const price = money(input.priceCents ?? SPOT_PRICE_CENTS);
-
-  return (
-    `Hi, it's ${input.organizationName}. Thanks for the chat. ` +
-    `We mail ${homes} flyers to local homes and there is a spot on the next one for ${price}. ` +
-    `It takes about two minutes: upload your ad, see exactly how it will look on the flyer, and pay online. ` +
-    input.link
-  );
-}

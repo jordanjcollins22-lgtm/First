@@ -6,7 +6,7 @@ import { Check, Copy, ExternalLink, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createFlyerRun, setFlyerRunDate, setFlyerRunStatus } from "@/lib/actions/flyer-run-actions";
-import { inviteText, money, spotsLabel } from "@/lib/flyer-offer";
+import { money, spotsLabel } from "@/lib/flyer-offer";
 import type { FlyerRunRow } from "@/lib/data/flyer-runs";
 
 /**
@@ -20,12 +20,10 @@ export function FlyerRunManager({
   runs,
   baseUrl,
   orgSlug,
-  organizationName,
 }: {
   runs: FlyerRunRow[];
   baseUrl: string;
   orgSlug: string | null;
-  organizationName: string;
 }) {
   const [adding, setAdding] = useState(false);
   const open = runs.find((r) => r.status === "open") ?? null;
@@ -58,7 +56,7 @@ export function FlyerRunManager({
       )}
 
       {open ? (
-        <OpenRun run={open} link={link} organizationName={organizationName} />
+        <OpenRun run={open} link={link} />
       ) : (
         !adding && (
           <p className="rounded-xl border border-border p-4 text-center text-sm text-muted-foreground">
@@ -89,15 +87,7 @@ export function FlyerRunManager({
   );
 }
 
-function OpenRun({
-  run,
-  link,
-  organizationName,
-}: {
-  run: FlyerRunRow;
-  link: string | null;
-  organizationName: string;
-}) {
+function OpenRun({ run, link }: { run: FlyerRunRow; link: string | null }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [date, setDate] = useState(run.mailsOn ?? "");
@@ -111,15 +101,6 @@ function OpenRun({
       setCopied("failed");
     }
   }
-
-  const message = link
-    ? inviteText({
-        organizationName,
-        link,
-        flyerCount: run.flyerCount,
-        priceCents: run.spotPriceCents,
-      })
-    : "";
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
@@ -162,18 +143,6 @@ function OpenRun({
               {copied === "link" ? "Copied" : "Copy link"}
             </Button>
 
-            {/* The message that follows the call. Copying the whole text
-                rather than the link is the difference between an employee
-                sending it and an employee writing it. */}
-            <Button type="button" size="sm" onClick={() => copy(message, "text")}>
-              {copied === "text" ? (
-                <Check className="mr-1.5 h-3.5 w-3.5" />
-              ) : (
-                <Copy className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {copied === "text" ? "Copied" : "Copy the text to send"}
-            </Button>
-
             <Button type="button" variant="ghost" size="sm" asChild>
               <a href={link} target="_blank" rel="noreferrer">
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
@@ -184,9 +153,6 @@ function OpenRun({
           {copied === "failed" && (
             <p className="text-xs text-destructive">Couldn&apos;t copy. Select it by hand.</p>
           )}
-          <p className="rounded-lg bg-background/60 p-2.5 text-xs italic text-muted-foreground">
-            {message}
-          </p>
         </div>
       )}
 

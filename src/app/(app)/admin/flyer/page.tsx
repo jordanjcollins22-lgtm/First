@@ -36,7 +36,6 @@ export default async function FlyerPage() {
           runs={runs}
           baseUrl={baseUrl}
           orgSlug={organization?.slug ?? null}
-          organizationName={organization?.name ?? "us"}
         />
         <FlyerOutreachList businesses={businesses} />
       </div>

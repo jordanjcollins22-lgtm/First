@@ -19,17 +19,15 @@ export const AD_PIXEL_HEIGHT = Math.round(AD_HEIGHT_IN * 300);
 /**
  * Ours, and never for sale.
  *
- * The top right of each side. On the front that corner carries the postage
- * indicia, so our artwork is the one cut to leave room for it — moving it
- * would mean redoing the artwork and would put a paying advert under a
- * stamp. The back's top right is ours by the same logic: the eye lands
- * top-right on a page it did not choose to read, and that is the square
- * worth keeping.
+ * Front page, top right, and only that one. It is the corner the postage
+ * indicia sits in, so our artwork is the one cut to leave room for it:
+ * moving it would mean redoing the artwork and would put a paying advert
+ * under a stamp. Every other square, both sides, is for sale.
  */
-export const HOUSE_SLOTS: readonly number[] = [2, 6];
+export const HOUSE_SLOT = 2;
 
-/** The front one, for anything that only deals with the postage side. */
-export const HOUSE_SLOT = HOUSE_SLOTS[0];
+/** As a list, for the several places that check membership. */
+export const HOUSE_SLOTS: readonly number[] = [HOUSE_SLOT];
 
 /** What the empty squares tell people to ring. */
 export const AD_CONTACT_PHONE = "443-819-1521";

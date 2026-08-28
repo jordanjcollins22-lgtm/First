@@ -6,6 +6,26 @@ import { decideAccess } from "@/lib/supabase/auth-guard";
 
 import type { Database } from "./database.types";
 
+/**
+ * The paths somebody with no account is meant to reach.
+ *
+ * Each is a page we send to a customer: a booking form, a proposal, a flyer
+ * spot for sale. They live outside the (app) route group and have their own
+ * root layout, which is the tell.
+ *
+ * Kept as a list rather than four conditions because adding a public page
+ * means remembering two separate places, and the flyer page proved how that
+ * ends: we texted local businesses a link that took them straight to a staff
+ * sign-in screen.
+ */
+export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer"] as const;
+
+export function isPublic(pathname: string): boolean {
+  return PUBLIC_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -34,10 +54,7 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const isPublicPath =
-    request.nextUrl.pathname === "/login" ||
-    request.nextUrl.pathname.startsWith("/book") ||
-    request.nextUrl.pathname.startsWith("/proposal");
+  const isPublicPath = isPublic(request.nextUrl.pathname);
 
   // getUser() calls Supabase's auth server, so it can fail for reasons that
   // have nothing to do with the session — a cold start, a dead spot, a blip at
