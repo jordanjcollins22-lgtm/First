@@ -5,8 +5,10 @@ import {
   describeDiff,
   diffScope,
   regenDecision,
+  statusAfterRegen,
   submitLabel,
 } from "./evaluation-resubmit";
+import type { ExistingProposal } from "./evaluation-resubmit";
 
 function zone(zoneName: string, serviceLabel: string) {
   return { zoneName, serviceLabel };
@@ -33,12 +35,12 @@ describe("regenDecision", () => {
   });
 
   it("does not ask about a sent one, but says what happens to the link", () => {
-    // Dropping back to unapproved is the safe outcome; a client reading a
+    // The client's link stays live; a client reading a
     // stale price is the unsafe one.
     const d = regenDecision({ status: "sent", respondedAt: null });
     expect(d.allowed).toBe(true);
     expect(d.confirm).toBeNull();
-    expect(d.note).toMatch(/unapproved/);
+    expect(d.note).toMatch(/stays live/);
   });
 
   it("does not ask about a declined one", () => {
@@ -141,5 +143,40 @@ describe("canSubmit", () => {
   it("is off with nothing to submit against", () => {
     expect(canSubmit(null, false)).toBe(false);
     expect(canSubmit(undefined, false)).toBe(false);
+  });
+});
+
+describe("statusAfterRegen", () => {
+  it("holds a brand new proposal for approval", () => {
+    expect(statusAfterRegen(null)).toBe("needs_approval");
+  });
+
+  it("keeps a sent proposal live, so the client's link never goes dark", () => {
+    expect(statusAfterRegen({ status: "sent", respondedAt: null })).toBe("sent");
+  });
+
+  it("puts the new version straight in front of a client who had accepted", () => {
+    expect(statusAfterRegen({ status: "accepted", respondedAt: "2026-08-01T00:00:00Z" })).toBe("sent");
+  });
+
+  it("does the same for one they declined", () => {
+    expect(statusAfterRegen({ status: "declined", respondedAt: "2026-08-01T00:00:00Z" })).toBe("sent");
+  });
+
+  it("leaves an unapproved draft unapproved", () => {
+    expect(statusAfterRegen({ status: "needs_approval", respondedAt: null })).toBe("needs_approval");
+  });
+
+  it("never produces a status the client page treats as a dead link", () => {
+    const every: (ExistingProposal | null)[] = [
+      null,
+      { status: "needs_approval", respondedAt: null },
+      { status: "sent", respondedAt: null },
+      { status: "accepted", respondedAt: "2026-08-01T00:00:00Z" },
+      { status: "declined", respondedAt: "2026-08-01T00:00:00Z" },
+    ];
+    for (const existing of every) {
+      expect(["needs_approval", "sent"]).toContain(statusAfterRegen(existing));
+    }
   });
 });

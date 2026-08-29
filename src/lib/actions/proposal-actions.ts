@@ -9,6 +9,7 @@ import {
   describeDiff,
   diffScope,
   regenDecision,
+  statusAfterRegen,
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -124,7 +125,7 @@ export async function generateProposal(
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
     .from("job_proposals")
-    .select("token, status, responded_at, scope_snapshot")
+    .select("token, status, responded_at, approved_at, scope_snapshot")
     .eq("job_id", jobId)
     .maybeSingle();
   if (existingError) throw existingError;
@@ -143,19 +144,28 @@ export async function generateProposal(
 
   const previous = (existing?.scope_snapshot ?? []) as unknown as ProposalZoneSnapshot[];
   const token = existing?.token ?? generateToken();
+  const nextStatus = statusAfterRegen(
+    existing ? { status: existing.status as ProposalStatus, respondedAt: existing.responded_at } : null
+  );
 
   const { error } = await supabase.from("job_proposals").upsert(
     {
       job_id: jobId,
       organization_id: organizationId,
       token,
-      status: "needs_approval",
+      // The same token, and — once a client has it — the same live page.
+      // Updating a proposal updates what their link shows; it does not take
+      // the link away while somebody re-approves it.
+      status: nextStatus,
       total_cost: total,
       scope_snapshot: scopeSnapshot,
       site_image_path: design.image_path,
       site_image_transform: siteImageTransform,
       generated_at: new Date().toISOString(),
-      approved_at: null,
+      // A proposal that stays live stays approved — clearing this would leave
+      // a sent proposal claiming nobody ever approved it.
+      approved_at:
+        nextStatus === "sent" ? existing?.approved_at ?? new Date().toISOString() : null,
       responded_at: null,
       client_response_note: null,
     },

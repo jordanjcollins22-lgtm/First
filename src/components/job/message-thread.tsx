@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { cn } from "@/lib/utils";
 import type { JobMessage, MessageAuthorType } from "@/types/domain";
 
@@ -93,7 +93,7 @@ export function MessageThread({
             className="h-9 text-sm"
           />
         )}
-        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} rows={2} />
+        <AutoTextarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} rows={2} />
         <div className="flex items-center justify-between gap-2">
           {footnote ? <p className="text-[10px] text-muted-foreground">{footnote}</p> : <span />}
           <Button type="button" size="sm" disabled={isPending || !body.trim()} onClick={handleSend}>

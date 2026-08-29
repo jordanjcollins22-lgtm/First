@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronUp, MessageSquare, Send, User, Users } from "lucide-react";
 
-import { Textarea } from "@/components/ui/textarea";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { channelLabel, groupByDay, messageTime, reachLine, type ThreadMessage } from "@/lib/message-thread";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
@@ -172,12 +172,12 @@ export function ClientThread({
             <ChevronUp className={`h-3 w-3 transition-transform ${pickerOpen ? "rotate-180" : ""}`} />
           </button>
 
-          <Textarea
+          <AutoTextarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={1}
             placeholder={channel === "external" ? "Message the client…" : "Note for the team…"}
-            className="min-h-10 flex-1 resize-none py-2.5"
+            className="min-h-10 flex-1 py-2.5"
           />
 
           <button

@@ -61,9 +61,7 @@ export function regenDecision(existing: ExistingProposal | null): RegenDecision 
     return {
       allowed: true,
       confirm: null,
-      // Not a confirmation: dropping back to needs_approval is the correct
-      // and safe outcome, and a client seeing a stale price is the worse one.
-      note: "The client's link goes back to unapproved until somebody approves the new version.",
+      note: "The client's existing link stays live and shows the new version straight away.",
     };
   }
 
@@ -71,11 +69,33 @@ export function regenDecision(existing: ExistingProposal | null): RegenDecision 
     return {
       allowed: true,
       confirm: null,
-      note: "This one was declined. The new version replaces it and their decline is cleared.",
+      note: "This one was declined. Their existing link now shows the new version and their decline is cleared.",
     };
   }
 
   return { allowed: true, confirm: null, note: "The draft awaiting approval will be replaced." };
+}
+
+/**
+ * What the status becomes once the new snapshot is written.
+ *
+ * A proposal used to drop back to `needs_approval` on every regeneration,
+ * which is safe on paper and wrong in practice: the client's page stops
+ * showing the proposal and says "your proposal is being finalized" instead.
+ * The link had not changed, but from the client's side — and from ours —
+ * it had stopped working, and nobody knew until they said so.
+ *
+ * So a proposal that a client has already been given stays given. Updating
+ * it updates what that link shows, which is the whole point of a link that
+ * does not change. Only a proposal that has never been in front of anybody
+ * waits for approval, and there is nothing live to break in that case.
+ */
+export function statusAfterRegen(existing: ExistingProposal | null): ProposalStatus {
+  if (!existing) return "needs_approval";
+  // accepted and declined are both cleared by a regeneration, but both mean
+  // the client has the link open — so the new version goes straight to them.
+  if (existing.status === "needs_approval") return "needs_approval";
+  return "sent";
 }
 
 // ---------------------------------------------------------------------------

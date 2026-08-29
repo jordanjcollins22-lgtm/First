@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ImagePlus, Loader2, Mic, Square, Video, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import {
   postTeamMessage,
   setTeamChannelMember,
@@ -464,7 +464,7 @@ export function TeamChannelThread({
             </div>
           )}
 
-          <Textarea
+          <AutoTextarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={isMember ? "Message the group..." : "Add yourself as a member to post"}
