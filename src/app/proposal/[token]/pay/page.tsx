@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
-import { isStripeConfigured, isSupabaseConfigured } from "@/lib/env";
+import { env, isStripeConfigured, isStripeInPageReady, isSupabaseConfigured } from "@/lib/env";
+import { outboundBaseUrl } from "@/lib/base-url";
+import { absolute } from "@/lib/proposal-flow";
 import { getProposalByToken } from "@/lib/data/public-proposal";
 import { PayView } from "@/components/proposal/pay-view";
 import { isPreview, proposalPath, schedulePath } from "@/lib/proposal-flow";
@@ -44,6 +46,11 @@ export default async function ProposalPayPage({
 
   const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
 
+  // Where Stripe sends them once the wallet sheet closes. Absolute, because
+  // it is a redirect out of somebody else's payment sheet.
+  const baseUrl = await outboundBaseUrl();
+  const returnUrl = `${absolute(baseUrl, schedulePath(token))}?paid=1`;
+
   return (
     <PayView
       token={token}
@@ -52,6 +59,10 @@ export default async function ProposalPayPage({
       // keys it raises an invoice instead, and a button that says "Pay" and
       // then does not is worse than one that says what it does.
       canCharge={isStripeConfigured}
+      // Empty falls back to the hosted checkout, which still works and still
+      // offers the wallets, just on Stripe's page instead of ours.
+      publishableKey={isStripeInPageReady ? env.stripePublishableKey : ""}
+      returnUrl={returnUrl}
       organizationName={data.organizationName}
       context={{
         discountCents,

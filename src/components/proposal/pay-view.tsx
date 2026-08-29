@@ -10,8 +10,12 @@ import {
   type AcceptanceContext,
   type PaymentOption,
 } from "@/lib/acceptance-path";
-import { choosePaymentPath } from "@/lib/actions/public-proposal-actions";
+import {
+  choosePaymentPath,
+  startProposalPayment,
+} from "@/lib/actions/public-proposal-actions";
 import { PREVIEW_BLOCKED, schedulePath } from "@/lib/proposal-flow";
+import { PayInPlace } from "@/components/proposal/pay-in-place";
 
 function money(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -32,6 +36,8 @@ export function PayView({
   organizationName,
   preview,
   canCharge,
+  publishableKey,
+  returnUrl,
 }: {
   token: string;
   context: AcceptanceContext;
@@ -39,12 +45,19 @@ export function PayView({
   preview: boolean;
   /** False when we cannot take a card yet and will invoice instead. */
   canCharge: boolean;
+  /** Empty when we cannot take a card on this page and must redirect. */
+  publishableKey: string;
+  returnUrl: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [instalments, setInstalments] = useState(3);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Once this is set the wallets are on screen and the options are behind
+  // them, because a list of choices above a card form is a chance to change
+  // your mind while holding your phone to your face.
+  const [paying, setPaying] = useState<{ clientSecret: string; amount: number } | null>(null);
 
   const options = optionsAfterAccept(context);
 
@@ -55,6 +68,23 @@ export function PayView({
     }
     setError(null);
     setBusyId(option.id);
+
+    // Straight to the wallet sheet where we can. The redirect below is the
+    // fallback for a business that has not put its publishable key in yet.
+    if (publishableKey) {
+      start(async () => {
+        const result = await startProposalPayment({
+          token,
+          pathId: option.id,
+          instalments,
+        });
+        setBusyId(null);
+        if (result.ok) setPaying({ clientSecret: result.clientSecret, amount: result.amountCents });
+        else setError(result.message);
+      });
+      return;
+    }
+
     start(async () => {
       const result = await choosePaymentPath({
         token,
@@ -94,6 +124,15 @@ export function PayView({
         </div>
       )}
 
+      {paying ? (
+        <PayInPlace
+          publishableKey={publishableKey}
+          clientSecret={paying.clientSecret}
+          amountLabel={money(paying.amount)}
+          returnUrl={returnUrl}
+        />
+      ) : (
+        <>
       {options.map((option) => {
         const amount = option.keepsDiscount
           ? context.totalCents
@@ -159,6 +198,9 @@ export function PayView({
           </div>
         );
       })}
+
+        </>
+      )}
 
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
 

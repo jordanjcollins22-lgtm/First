@@ -118,6 +118,7 @@ async function DatabaseTab() {
       <PaymentReadiness
         columnsApplied={paymentColumnsApplied(migrations)}
         hasStripeKey={isStripeConfigured}
+        hasPublishableKey={Boolean(env.stripePublishableKey)}
         hasWebhookSecret={Boolean(env.stripeWebhookSecret)}
       />
 

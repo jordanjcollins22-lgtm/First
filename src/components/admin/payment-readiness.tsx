@@ -11,11 +11,14 @@ import { AlertCircle, Check, X } from "lucide-react";
 export function PaymentReadiness({
   columnsApplied,
   hasStripeKey,
+  hasPublishableKey,
   hasWebhookSecret,
 }: {
   /** Null when the schema could not be checked at all. */
   columnsApplied: boolean | null;
   hasStripeKey: boolean;
+  /** Lets a client pay on our page rather than being sent to Stripe's. */
+  hasPublishableKey: boolean;
   hasWebhookSecret: boolean;
 }) {
   const checks = [
@@ -30,6 +33,12 @@ export function PaymentReadiness({
       ok: hasStripeKey,
       blocking: true,
       fix: "Add STRIPE_SECRET_KEY in Vercel, then redeploy.",
+    },
+    {
+      label: "Apple Pay and Google Pay in the page",
+      ok: hasPublishableKey,
+      blocking: false,
+      fix: "Add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY in Vercel. Without it a client is sent to Stripe's own page to pay, which works but is a redirect rather than the wallet sheet opening in place.",
     },
     {
       label: "Stripe webhook",

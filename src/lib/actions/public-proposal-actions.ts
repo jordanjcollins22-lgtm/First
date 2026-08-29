@@ -7,6 +7,9 @@ import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice } from "@/lib/invoicing";
+import { isStripeConfigured } from "@/lib/env";
+import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
+import { getJobCustomerContact } from "@/lib/job-customer";
 import { notifyJobTeam } from "@/lib/notifications";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
@@ -674,5 +677,110 @@ export async function recordProposalView(input: {
     });
   } catch {
     // Deliberately silent. Nothing the client can see depends on this.
+  }
+}
+
+/**
+ * Start a payment the client can finish without leaving the page.
+ *
+ * The hosted checkout worked, but it is a redirect to somebody else's page
+ * where the wallet buttons are one row among several. What a client actually
+ * wants is the sheet their phone already has their card, name and address
+ * in, opening the moment they say how they are paying. That needs a payment
+ * intent rather than a checkout session, so the browser can raise Apple Pay
+ * or Google Pay itself.
+ *
+ * The same claim on payment_path as choosePaymentPath, and the same plan
+ * built behind it, so the two ways of paying cannot produce two different
+ * pieces of paperwork.
+ */
+export async function startProposalPayment(input: {
+  token: string;
+  pathId: string;
+  instalments?: number;
+  preview?: boolean;
+}): Promise<PublicResult<{ clientSecret: string; amountCents: number }>> {
+  try {
+    if (input.preview) return previewResult();
+    if (!isStripeConfigured) {
+      return { ok: false, message: "Card payments aren't switched on yet. Give us a ring." };
+    }
+
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from("job_proposals")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path")
+      .eq("token", input.token)
+      .maybeSingle();
+
+    if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
+    if (proposal.status !== "accepted") return { ok: false, message: "Accept the proposal first." };
+
+    const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+    const context = {
+      discountCents,
+      totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+    };
+    const option = optionById(context, input.pathId);
+    if (!option) return { ok: false, message: "Pick one of the options." };
+
+    const amountCents = amountForPath(context, option);
+    if (!(amountCents > 0)) return { ok: false, message: "There is nothing to pay on this one." };
+
+    // Claimed before any money is raised, exactly as the redirect path does,
+    // so two taps cannot produce two plans.
+    if (!proposal.payment_path) {
+      const { data: claimed } = await admin
+        .from("job_proposals")
+        .update({ payment_path: option.id, payment_path_at: new Date().toISOString() })
+        .eq("id", proposal.id)
+        .is("payment_path", null)
+        .select("id")
+        .maybeSingle();
+
+      if (claimed && option.id !== "full") {
+        const built = await buildClientPlan({
+          organizationId: proposal.organization_id,
+          jobId: proposal.job_id,
+          proposalId: proposal.id,
+          amountCents,
+          instalments: input.instalments ?? 3,
+          keepsDiscount: option.keepsDiscount,
+          schedulesAfterFinalPayment: option.schedulesAfterFinalPayment,
+        });
+        if (!built.ok) return built;
+      }
+    }
+
+    const contact = await getJobCustomerContact(proposal.job_id);
+    const existing = contact?.customerId ? await stripeCustomerFor(contact.customerId) : null;
+
+    const intent = await stripeClient().paymentIntents.create({
+      amount: amountCents,
+      currency: "usd",
+      // Lets Stripe offer the wallets and Link the browser can actually use,
+      // rather than us guessing which and hiding the rest.
+      automatic_payment_methods: { enabled: true },
+      ...(existing ? { customer: existing } : {}),
+      ...(contact?.email ? { receipt_email: contact.email } : {}),
+      metadata: {
+        proposal_id: proposal.id,
+        organization_id: proposal.organization_id,
+        job_id: proposal.job_id,
+      },
+    });
+
+    if (!intent.client_secret) {
+      return { ok: false, message: "Couldn't start that payment. Try again." };
+    }
+
+    await admin
+      .from("job_proposals")
+      .update({ checkout_session_id: intent.id })
+      .eq("id", proposal.id);
+
+    return { ok: true, clientSecret: intent.client_secret, amountCents };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
   }
 }

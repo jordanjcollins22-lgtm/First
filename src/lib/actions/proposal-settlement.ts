@@ -33,11 +33,29 @@ export async function settleProposalPayment(token: string): Promise<void> {
 
     if (!proposal?.checkout_session_id || proposal.paid_at) return;
 
-    const session = await stripeClient().checkout.sessions.retrieve(proposal.checkout_session_id);
-    const verdict = settlementFor({
-      paymentStatus: session.payment_status ?? null,
-      status: session.status ?? null,
-    });
+    // Two shapes live in this column now. A redirect to the hosted page
+    // leaves a checkout session; paying in place leaves a payment intent.
+    // Stripe's own prefixes say which, so nothing has to be remembered.
+    const reference = proposal.checkout_session_id;
+    const stripe = stripeClient();
+
+    const verdict = reference.startsWith("pi_")
+      ? await (async () => {
+          const intent = await stripe.paymentIntents.retrieve(reference);
+          return settlementFor({
+            // An intent says "succeeded" where a session says "paid", so it
+            // is mapped rather than passed through and quietly never matching.
+            paymentStatus: intent.status === "succeeded" ? "paid" : intent.status,
+            status: intent.status === "canceled" ? "expired" : null,
+          });
+        })()
+      : await (async () => {
+          const session = await stripe.checkout.sessions.retrieve(reference);
+          return settlementFor({
+            paymentStatus: session.payment_status ?? null,
+            status: session.status ?? null,
+          });
+        })();
 
     if (verdict === "settle") {
       await admin

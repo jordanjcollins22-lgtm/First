@@ -24,6 +24,9 @@ export const env = {
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
+  /** Needed in the browser to draw Apple Pay, Google Pay and the card form.
+   * Public by design: it can only start a payment we have already priced. */
+  stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
@@ -62,6 +65,14 @@ export const isRentcastConfigured = Boolean(env.rentcastApiKey);
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
+/**
+ * Whether a client can pay without leaving our page.
+ *
+ * The secret key alone is enough to raise a hosted checkout and send them to
+ * it. Paying in place, with the wallet sheet their phone already has their
+ * card in, also needs the publishable key in the browser.
+ */
+export const isStripeInPageReady = Boolean(env.stripeSecretKey && env.stripePublishableKey);
 export const isLivekitConfigured = Boolean(env.livekitApiKey && env.livekitApiSecret && env.livekitUrl);
 /** Sending email at all. Domains and addresses are configured in the app. */
 export const isResendConfigured = Boolean(env.resendApiKey);
