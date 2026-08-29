@@ -55,6 +55,7 @@ export default async function JobThreadPage({
     fromClient: m.author_type === "client",
     authorName: m.author_name,
     channel: m.channel,
+    reference: m.reference_label ?? null,
   }));
 
   return (

@@ -18,6 +18,8 @@ export interface ThreadMessage {
   authorName: string;
   /** Which way it went out, for the line above the bubble. */
   channel: string;
+  /** What the client was writing about, when they said. */
+  reference?: string | null;
 }
 
 export interface ThreadDay {

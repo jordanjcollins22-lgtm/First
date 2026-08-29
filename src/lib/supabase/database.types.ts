@@ -337,6 +337,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["proposal_objections"]["Row"]>;
         Relationships: [];
       };
+      conversation_reads: {
+        Row: {
+          id: string;
+          job_id: string;
+          channel: string;
+          organization_id: string;
+          read_through: string;
+          read_by: string | null;
+          read_by_name: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["conversation_reads"]["Row"]> & {
+          job_id: string;
+          channel: string;
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["conversation_reads"]["Row"]>;
+        Relationships: [];
+      };
       proposal_edits: {
         Row: {
           id: string;
@@ -2040,6 +2059,8 @@ export interface Database {
           author_profile_id: string | null;
           author_name: string;
           body: string;
+          reference_label: string | null;
+          reference_kind: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["job_messages"]["Row"]> & {

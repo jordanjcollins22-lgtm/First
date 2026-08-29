@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, XCircle } from "lucide-react";
 
@@ -11,6 +11,7 @@ import { respondToProposal } from "@/lib/actions/public-proposal-actions";
 import { ObjectionsPanel } from "@/components/proposal/objections-panel";
 import type { ScopeLine } from "@/lib/objections";
 import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
+import { PROPOSAL_REFERENCE, zoneReference } from "@/lib/needs-reply";
 import {
   PROPOSAL_ACCEPT_NOTE,
   PROPOSAL_TERMS,
@@ -59,6 +60,10 @@ export function ProposalView({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [senderName, setSenderName] = useState(customerName);
+  // What they tapped "Ask about this" on, if anything. Sent with the message
+  // so the office knows which area a one-line question is about.
+  const [reference, setReference] = useState<string | null>(null);
+  const messageBoxRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   function respond(response: "accepted" | "declined", note = "") {
@@ -133,9 +138,24 @@ export function ProposalView({
         ) : (
           proposal.scope_snapshot.map((zone, i) => (
             <div key={i} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
-              <div>
-                <p className="font-semibold">{zone.zoneName}</p>
-                <p className="text-sm text-primary">{labelFor(zone.serviceLabel)}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold">{zone.zoneName}</p>
+                  <p className="text-sm text-primary">{labelFor(zone.serviceLabel)}</p>
+                </div>
+                {/* One tap to ask about this area specifically. The
+                    alternative is a client typing "the one by the fence" and
+                    somebody in the office guessing which that is. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReference(zoneReference(zone.zoneName, labelFor(zone.serviceLabel)));
+                    messageBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  className="shrink-0 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  Ask about this
+                </button>
               </div>
               {zone.scopeText && <p className="text-sm text-muted-foreground">{zone.scopeText}</p>}
               {zone.photoPaths.length > 0 && (
@@ -316,15 +336,25 @@ export function ProposalView({
         )}
       </div>
 
+      <div ref={messageBoxRef}>
       <MessageThread
         title="Questions? Send us a message"
         messages={messages}
-        onSend={async (body) => {
+        onSend={async (body, sentReference) => {
           // Read-only in preview: a test message from the office would land
           // in the client's thread looking like it came from them.
           if (preview) return;
-          await postPublicClientMessage(token, senderName, body);
+          // Falls back to the proposal itself, so every message from this
+          // page arrives with something to hang it on.
+          await postPublicClientMessage(
+            token,
+            senderName,
+            body,
+            sentReference ?? PROPOSAL_REFERENCE
+          );
         }}
+        reference={reference}
+        onClearReference={() => setReference(null)}
         viewerAuthorType="client"
         showNameField
         nameValue={senderName}
@@ -332,6 +362,7 @@ export function ProposalView({
         placeholder="Ask us anything about this proposal..."
         emptyLabel="No messages yet — ask us anything."
       />
+      </div>
     </div>
   );
 }

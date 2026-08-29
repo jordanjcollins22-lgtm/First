@@ -12,6 +12,10 @@ export interface ConversationSummary {
   /** Whose job this is, so a row can say who is carrying it. */
   assignedToId: string | null;
   assignedToName: string | null;
+  /** How far the office has marked this conversation read. Null means never. */
+  readThrough: string | null;
+  /** Who last marked it read, so "dealt with" has a name against it. */
+  readByName: string | null;
 }
 
 /** One row per job+channel that has at least one message, most recently
@@ -19,9 +23,10 @@ export interface ConversationSummary {
  * having to open every job to check. */
 export async function listConversations(): Promise<ConversationSummary[]> {
   const supabase = await createClient();
-  const [{ data: messages, error }, jobs] = await Promise.all([
+  const [{ data: messages, error }, jobs, reads] = await Promise.all([
     supabase.from("job_messages").select("*").order("created_at", { ascending: false }),
     listJobsWithLocation(),
+    listConversationReads(),
   ]);
   if (error) throw error;
   if (!messages || messages.length === 0) return [];
@@ -58,6 +63,7 @@ export async function listConversations(): Promise<ConversationSummary[]> {
       continue;
     }
     const info = jobInfoById.get(message.job_id);
+    const read = reads.get(key);
     grouped.set(key, {
       jobId: message.job_id,
       propertyAddress: info?.address ?? "",
@@ -67,8 +73,42 @@ export async function listConversations(): Promise<ConversationSummary[]> {
       messageCount: 1,
       assignedToId: info?.assignedToId ?? null,
       assignedToName: info?.assignedToName ?? null,
+      readThrough: read?.readThrough ?? null,
+      readByName: read?.readByName ?? null,
     });
   }
 
   return Array.from(grouped.values()).sort((a, b) => b.lastMessage.created_at.localeCompare(a.lastMessage.created_at));
+}
+
+/**
+ * How far each conversation has been read, keyed the same way the inbox
+ * groups them.
+ *
+ * Tolerated rather than required: before migration 0132 the table does not
+ * exist, and an inbox that refuses to load because nothing has been marked
+ * read yet is worse than one that shows everything as outstanding.
+ */
+async function listConversationReads(): Promise<
+  Map<string, { readThrough: string; readByName: string | null }>
+> {
+  const out = new Map<string, { readThrough: string; readByName: string | null }>();
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.from("conversation_reads").select("*");
+    for (const row of (data ?? []) as unknown as {
+      job_id: string;
+      channel: string;
+      read_through: string;
+      read_by_name: string | null;
+    }[]) {
+      out.set(`${row.job_id}:${row.channel}`, {
+        readThrough: row.read_through,
+        readByName: row.read_by_name,
+      });
+    }
+  } catch {
+    // Nothing read yet, as far as anybody can tell.
+  }
+  return out;
 }

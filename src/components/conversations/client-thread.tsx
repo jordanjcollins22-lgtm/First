@@ -8,6 +8,7 @@ import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { channelLabel, groupByDay, messageTime, reachLine, type ThreadMessage } from "@/lib/message-thread";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
+import { referenceLine } from "@/lib/needs-reply";
 
 /**
  * One conversation, as a conversation.
@@ -121,6 +122,11 @@ export function ClientThread({
                       {channelLabel(message.channel)} · {messageTime(message.createdAt)}
                       {message.fromClient ? "" : ` · ${message.authorName}`}
                     </p>
+                    {referenceLine(message.reference) && (
+                      <p className="mt-1 text-[11px] font-semibold text-primary">
+                        {referenceLine(message.reference)}
+                      </p>
+                    )}
                     <p className="mt-1.5 whitespace-pre-wrap text-sm">{message.body}</p>
                   </div>
                 ))}

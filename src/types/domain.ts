@@ -603,6 +603,10 @@ export interface JobMessage {
   author_type: MessageAuthorType;
   author_profile_id: string | null;
   author_name: string;
+  /** What the client was looking at when they wrote — an area of their
+   * proposal, or the proposal itself. Null on anything the office sends. */
+  reference_label?: string | null;
+  reference_kind?: string | null;
   body: string;
   created_at: string;
 }

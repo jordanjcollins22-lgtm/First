@@ -1,22 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Mail, MessageSquare, Search, Users } from "lucide-react";
+import { Check, Mail, MessageSquare, Search, Users } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { ChipRow } from "@/components/ui/chip-row";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { listDate, previewOf } from "@/lib/initials";
+import { canMarkRead, countNeedsReply, needsReply, referenceLine } from "@/lib/needs-reply";
+import { markConversationRead } from "@/lib/actions/conversation-read-actions";
 import type { ConversationSummary } from "@/lib/data/conversations";
 
-type Sort = "recent" | "needs_reply" | "oldest";
+type View = "recent" | "needs_reply" | "oldest";
 
-const SORTS: { value: Sort; label: string }[] = [
-  { value: "recent", label: "Recent" },
-  { value: "needs_reply", label: "Needs a reply" },
-  { value: "oldest", label: "Oldest" },
-];
+/** What one row is, as far as "is this waiting on us" is concerned. */
+function replyState(conversation: ConversationSummary) {
+  return {
+    lastAuthorType: conversation.lastMessage.author_type,
+    lastMessageAt: conversation.lastMessage.created_at,
+    readThrough: conversation.readThrough,
+  };
+}
 
 /**
  * An inbox: search at the top, a way to narrow it, then the rows.
@@ -34,29 +39,57 @@ export function InboxList({
   emptyLabel: string;
 }) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<Sort>("recent");
+  const [view, setView] = useState<View>("recent");
+  // Cleared here as well as on the server, so the row leaves the list on the
+  // tap rather than after a round trip on a phone signal.
+  const [cleared, setCleared] = useState<string[]>([]);
+  const [pending, start] = useTransition();
   const now = new Date();
+
+  const outstanding = conversations.filter(
+    (c) => needsReply(replyState(c)) && !cleared.includes(`${c.jobId}:${c.channel}`)
+  );
+
+  const VIEWS: { value: View; label: string }[] = [
+    { value: "recent", label: "Recent" },
+    { value: "needs_reply", label: `Needs a reply (${countNeedsReply(outstanding.map(replyState))})` },
+    { value: "oldest", label: "Oldest" },
+  ];
+
+  function clear(conversation: ConversationSummary) {
+    const key = `${conversation.jobId}:${conversation.channel}`;
+    setCleared((current) => [...current, key]);
+    start(async () => {
+      const result = await markConversationRead(
+        conversation.jobId,
+        conversation.channel,
+        conversation.lastMessage.created_at
+      );
+      // Put it back rather than pretend: an inbox that quietly drops
+      // something is the failure this whole screen exists to avoid.
+      if (!result.ok) setCleared((current) => current.filter((k) => k !== key));
+    });
+  }
+
+  // A filter, not a sort. It used to name a section that contained the whole
+  // inbox, which is how somebody learns to stop reading the label.
+  const base = view === "needs_reply" ? outstanding : conversations;
 
   const q = query.trim().toLowerCase();
   const matching = q
-    ? conversations.filter((c) =>
+    ? base.filter((c) =>
         [c.customerName, c.propertyAddress, c.lastMessage.body, c.assignedToName ?? ""]
           .join(" ")
           .toLowerCase()
           .includes(q)
       )
-    : conversations;
+    : base;
 
-  // "Needs a reply" is the client having spoken last. Sorted rather than
-  // filtered away, so the count on screen is still the whole inbox.
+  // Oldest first under "Needs a reply" too: the one that has been waiting
+  // longest is the one somebody should open.
   const shown = [...matching].sort((a, b) => {
-    if (sort === "needs_reply") {
-      const aWaiting = a.lastMessage.author_type === "client" ? 0 : 1;
-      const bWaiting = b.lastMessage.author_type === "client" ? 0 : 1;
-      if (aWaiting !== bWaiting) return aWaiting - bWaiting;
-    }
     const order = a.lastMessage.created_at.localeCompare(b.lastMessage.created_at);
-    return sort === "oldest" ? order : -order;
+    return view === "recent" ? -order : order;
   });
 
   return (
@@ -71,21 +104,27 @@ export function InboxList({
         />
       </div>
 
-      <ChipRow options={SORTS} value={sort} onChange={setSort} />
+      <ChipRow options={VIEWS} value={view} onChange={setView} />
 
       {shown.length === 0 ? (
         <p className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">
-          {q ? `Nothing matching "${query}".` : emptyLabel}
+          {q
+            ? `Nothing matching "${query}".`
+            : view === "needs_reply"
+              ? "Nobody is waiting on you."
+              : emptyLabel}
         </p>
       ) : (
         <ul className="flex flex-col">
           {shown.map((conversation) => {
-            const waiting = conversation.lastMessage.author_type === "client";
+            const key = `${conversation.jobId}:${conversation.channel}`;
+            const waiting = needsReply(replyState(conversation)) && !cleared.includes(key);
+            const reference = referenceLine(conversation.lastMessage.reference_label);
             return (
-              <li key={`${conversation.jobId}:${conversation.channel}`}>
+              <li key={key} className="border-b border-border/60">
                 <Link
                   href={`/conversations/job/${conversation.jobId}`}
-                  className="flex items-start gap-3 border-b border-border/60 py-3 hover:bg-accent/30"
+                  className="flex items-start gap-3 py-3 hover:bg-accent/30"
                 >
                   <ContactAvatar
                     name={conversation.customerName || conversation.propertyAddress}
@@ -105,6 +144,15 @@ export function InboxList({
                       </span>
                     </span>
 
+                    {/* What they were looking at when they wrote it. A
+                        message from a proposal used to arrive with no way to
+                        tell which area "can we skip that one?" meant. */}
+                    {reference && (
+                      <span className="mt-0.5 block truncate text-xs font-medium text-primary">
+                        {reference}
+                      </span>
+                    )}
+
                     <span className="mt-0.5 block truncate text-sm text-muted-foreground">
                       {previewOf(conversation.lastMessage.body)}
                     </span>
@@ -116,6 +164,20 @@ export function InboxList({
                     )}
                   </span>
                 </Link>
+
+                {/* For the answer that went out some other way — a phone call,
+                    a conversation in a driveway. */}
+                {canMarkRead(replyState(conversation)) && !cleared.includes(key) && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => clear(conversation)}
+                    className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground disabled:opacity-50"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Mark as read
+                  </button>
+                )}
               </li>
             );
           })}

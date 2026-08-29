@@ -9,7 +9,15 @@ import { notifyJobTeam } from "@/lib/notifications";
 
 /** The client's own message on the external thread — no logged-in user, so
  * this runs on the service-role client like the rest of the public flows. */
-export async function postPublicClientMessage(token: string, authorName: string, body: string) {
+export async function postPublicClientMessage(
+  token: string,
+  authorName: string,
+  body: string,
+  /** What they were looking at when they wrote — an area of their proposal,
+   * or the proposal itself. Snapshotted here rather than resolved later: an
+   * area renamed next week does not change what they were asking about. */
+  reference?: string | null
+) {
   const trimmedBody = body.trim();
   if (!trimmedBody) throw new Error("Write a message first.");
 
@@ -31,6 +39,8 @@ export async function postPublicClientMessage(token: string, authorName: string,
       author_type: "client",
       author_name: authorName.trim() || "Client",
       body: trimmedBody,
+      reference_label: reference?.trim() || null,
+      reference_kind: reference?.trim() ? "proposal" : null,
     })
     .select("id")
     .maybeSingle();
@@ -43,7 +53,8 @@ export async function postPublicClientMessage(token: string, authorName: string,
     proposal.job_id,
     authorName,
     trimmedBody,
-    (saved as { id: string } | null)?.id ?? null
+    (saved as { id: string } | null)?.id ?? null,
+    reference?.trim() || null
   ).catch(() => {});
 
   revalidatePath(`/proposal/${token}`);
@@ -56,7 +67,8 @@ async function notifyTeamAboutClientMessage(
   jobId: string,
   authorName: string,
   body: string,
-  messageId: string | null
+  messageId: string | null,
+  reference: string | null
 ): Promise<void> {
   const context = await jobThreadContext(jobId);
   await notifyJobTeam(
@@ -64,7 +76,10 @@ async function notifyTeamAboutClientMessage(
     "client_messages",
     teamMessageText({
       clientName: authorName.trim() || context?.clientName || "",
-      body,
+      // What they were asking about goes in the text too. A crew member
+      // reading it on a phone should not have to open the app to find out
+      // which area "can we skip that one?" meant.
+      body: reference ? `(${reference}) ${body}` : body,
       link: context?.teamLink ?? null,
     }),
     { dedupeKey: messageId ? messageDedupeKey(messageId) : undefined }

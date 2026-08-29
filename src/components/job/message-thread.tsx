@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { cn } from "@/lib/utils";
+import { referenceLine } from "@/lib/needs-reply";
 import type { JobMessage, MessageAuthorType } from "@/types/domain";
 
 function formatTimestamp(iso: string): string {
@@ -28,10 +29,12 @@ export function MessageThread({
   placeholder = "Write a message...",
   emptyLabel = "No messages yet.",
   footnote,
+  reference,
+  onClearReference,
 }: {
   title: string;
   messages: JobMessage[];
-  onSend: (body: string) => Promise<void>;
+  onSend: (body: string, reference?: string | null) => Promise<void>;
   viewerAuthorType: MessageAuthorType;
   showNameField?: boolean;
   nameValue?: string;
@@ -39,18 +42,30 @@ export function MessageThread({
   placeholder?: string;
   emptyLabel?: string;
   footnote?: string;
+  /** What the sender is writing about, shown above the box and sent with the
+   * message. Set when they tapped "Ask about this" on one part of a page. */
+  reference?: string | null;
+  onClearReference?: () => void;
 }) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const boxRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Tapping "Ask about this" somewhere up the page has to land them in the
+  // box, or the reference appears and nothing else happens.
+  useEffect(() => {
+    if (reference) boxRef.current?.focus();
+  }, [reference]);
 
   function handleSend() {
     if (!body.trim()) return;
     setError(null);
     startTransition(async () => {
       try {
-        await onSend(body);
+        await onSend(body, reference ?? null);
         setBody("");
+        onClearReference?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't send that.");
       }
@@ -73,6 +88,11 @@ export function MessageThread({
                 m.author_type === viewerAuthorType ? "self-end bg-primary/10" : "self-start bg-muted/40"
               )}
             >
+              {referenceLine(m.reference_label) && (
+                <p className="text-[10px] font-semibold text-primary">
+                  {referenceLine(m.reference_label)}
+                </p>
+              )}
               <p className="whitespace-pre-wrap">{m.body}</p>
               <p className="text-[10px] text-muted-foreground">
                 {m.author_name} · {formatTimestamp(m.created_at)}
@@ -85,6 +105,22 @@ export function MessageThread({
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-2">
+        {reference && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-2.5 py-1.5">
+            <span className="min-w-0 truncate text-xs font-semibold text-primary">
+              {referenceLine(reference)}
+            </span>
+            {onClearReference && (
+              <button
+                type="button"
+                onClick={onClearReference}
+                className="shrink-0 text-xs font-semibold text-muted-foreground"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
         {showNameField && (
           <Input
             value={nameValue ?? ""}
@@ -93,7 +129,13 @@ export function MessageThread({
             className="h-9 text-sm"
           />
         )}
-        <AutoTextarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} rows={2} />
+        <AutoTextarea
+          ref={boxRef}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder={placeholder}
+          rows={2}
+        />
         <div className="flex items-center justify-between gap-2">
           {footnote ? <p className="text-[10px] text-muted-foreground">{footnote}</p> : <span />}
           <Button type="button" size="sm" disabled={isPending || !body.trim()} onClick={handleSend}>
