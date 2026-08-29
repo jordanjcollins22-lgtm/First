@@ -33,6 +33,13 @@ import {
 import { nearbyRoads } from "@/lib/mapbox-roads";
 import { drawFrontTarget } from "@/lib/canvas-front-target";
 import {
+  addDrawingPoint,
+  canClose,
+  closeLabel,
+  drawingHint,
+  shouldClose,
+} from "@/lib/zone-drawing";
+import {
   addMark,
   markAt,
   removeMark,
@@ -54,7 +61,6 @@ import { updateEvaluationStatus } from "@/lib/actions/job-actions";
 import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 
-const CLOSE_POINT_RADIUS = 12;
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
 
@@ -86,10 +92,6 @@ function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasEleme
     x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
     y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height),
   };
-}
-
-function distance(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
@@ -902,11 +904,14 @@ export function ImageCanvasBoard({
     }
 
     if (tool === "zone" || tool === "property-line") {
-      if (drawingPoints.length >= 3 && distance(point, drawingPoints[0]) <= CLOSE_POINT_RADIUS) {
+      if (shouldClose(drawingPoints, point)) {
         if (tool === "zone") finalizeZone();
         else finalizePropertyLine();
       } else {
-        setDrawingPoints((prev) => [...prev, point]);
+        // addDrawingPoint drops a tap that landed on the one just placed. A
+        // finger on a phone held at arm's length reports two, and the second
+        // used to become a corner sitting on top of the first.
+        setDrawingPoints((prev) => addDrawingPoint(prev, point));
       }
       return;
     }
@@ -1569,23 +1574,38 @@ export function ImageCanvasBoard({
 
       {isDrawingNow && (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
             {tool === "house"
               ? "Click once on the map to drop a pin on the house."
-              : `Click to add points. Click the first point (or press Enter) to close the ${
-                  tool === "property-line" ? "property line" : "zone"
-                }. Backspace undoes a point, Escape cancels.`}
+              : drawingHint(tool === "property-line" ? "property-line" : "zone", drawingPoints.length)}
           </p>
           {tool !== "house" && drawingPoints.length > 0 && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
-            >
-              <Undo2 className="h-4 w-4" />
-              Undo Point
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+              >
+                <Undo2 className="h-4 w-4" />
+                Undo
+              </Button>
+              {/* The move that always works. Closing used to depend on
+                  landing a tap back on the first point, which outdoors on a
+                  phone is how a shape ends up with a pile of stray corners. */}
+              <Button
+                type="button"
+                size="sm"
+                disabled={!canClose(drawingPoints)}
+                onClick={() => {
+                  if (tool === "zone") finalizeZone();
+                  else finalizePropertyLine();
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {closeLabel(tool === "property-line" ? "property-line" : "zone")}
+              </Button>
+            </div>
           )}
         </div>
       )}
