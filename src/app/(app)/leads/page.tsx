@@ -6,6 +6,8 @@ import { getLeadEngine, type LeadEngineData } from "@/lib/data/leads";
 import { TARGET_TICKET } from "@/lib/leads";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getProspects, listImportBatches, type ProspectsData } from "@/lib/data/prospects";
+import { getContactTree } from "@/lib/data/contact-tree";
+import { PeopleList } from "@/components/leads/people-list";
 import { ProspectPanel } from "@/components/leads/prospect-panel";
 import { OutreachBoard } from "@/components/leads/outreach-board";
 import { CoveragePanel } from "@/components/leads/coverage-panel";
@@ -61,6 +63,13 @@ export default async function LeadsPage() {
 
   // Loaded on its own so an un-migrated outreach table costs this section
   // rather than the whole page.
+  // The real shape: a person, their properties, the work on each. Loaded on
+  // its own so a failure costs this section rather than the page.
+  const people = await getContactTree().catch((err) => {
+    console.error("Contact tree failed to load:", err);
+    return [];
+  });
+
   const outreach: OutreachData | null = await getOutreach().catch((err) => {
     console.error("Outreach failed to load:", err);
     return null;
@@ -152,10 +161,26 @@ export default async function LeadsPage() {
         </section>
       )}
 
+      {/* People, not rows of work. Every other screen hangs off a job, which
+          is one piece of work at one address: the right unit for doing the
+          work and the wrong one for deciding who to ring. Somebody with three
+          properties appeared three times, scored separately, and the fact
+          that they were one customer worth more than any of the three was
+          nowhere on the page. */}
       <h2 className="mb-1 text-lg font-bold">Who to call</h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        Homeowners already in the book who look worth {money(TARGET_TICKET)} or more — ranked by who to call
-        first.
+        Everyone on the books, with their properties and the work on each. Whoever has something
+        live comes first, then whoever has spent the most.
+      </p>
+
+      <div className="mb-8">
+        <PeopleList contacts={people} />
+      </div>
+
+      <h2 className="mb-1 text-lg font-bold">Worth chasing</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        The same book, scored one property at a time, for anything that looks worth{" "}
+        {money(TARGET_TICKET)} or more.
       </p>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
