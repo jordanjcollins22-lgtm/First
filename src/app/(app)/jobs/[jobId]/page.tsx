@@ -6,6 +6,9 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
+import { listEvaluationEdits } from "@/lib/data/evaluation-edits";
+import { EvaluationChangesPanel } from "@/components/job/evaluation-changes-panel";
+import type { EditableZone } from "@/lib/evaluation-edit";
 import { getProposalForJob } from "@/lib/data/proposals";
 import { viewsForJob } from "@/lib/data/proposal-views";
 import { settleProposalForJob } from "@/lib/actions/proposal-settlement";
@@ -294,6 +297,15 @@ export default async function JobPage({
 
   const pricingByType = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
 
+  // Every zone, not only the priced ones: a shape drawn with no service on it
+  // is still something somebody may need to correct or take off.
+  const allZones = design ? ((design.zones ?? []) as unknown as WorkZone[]) : [];
+  const evaluationEdits = await listEvaluationEdits(jobId);
+  const serviceOptions = catalog.servicePricing.map((p) => ({
+    id: p.service_type_id,
+    name: p.name,
+  }));
+
   const zoneBreakdowns: InternalZoneBreakdown[] = zones.map((zone) => {
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
     // A service this business added itself has no built-in definition; its
@@ -421,16 +433,27 @@ export default async function JobPage({
             title: "Site map and measurements",
             hint: `${photoZones.length} zone${photoZones.length === 1 ? "" : "s"} drawn`,
             body: (
-              <ImageCanvasBoard
-                catalog={catalog}
-                jobId={jobId}
-                initialDesign={design}
-                initialAddress={job.property?.address ?? ""}
-                initialLat={job.property?.lat}
-                initialLng={job.property?.lng}
-                initialEvaluationStatus={job.evaluation_status}
-                evaluatorName={viewer?.full_name || viewer?.email || null}
-              />
+              <div className="flex flex-col gap-4">
+                <ImageCanvasBoard
+                  catalog={catalog}
+                  jobId={jobId}
+                  initialDesign={design}
+                  initialAddress={job.property?.address ?? ""}
+                  initialLat={job.property?.lat}
+                  initialLng={job.property?.lng}
+                  initialEvaluationStatus={job.evaluation_status}
+                  evaluatorName={viewer?.full_name || viewer?.email || null}
+                />
+
+                {/* For what comes in afterwards. A client texting a new
+                    measurement should not mean redrawing the map on a phone. */}
+                <EvaluationChangesPanel
+                  jobId={jobId}
+                  zones={allZones as unknown as EditableZone[]}
+                  services={serviceOptions}
+                  history={evaluationEdits}
+                />
+              </div>
             ),
           },
           {

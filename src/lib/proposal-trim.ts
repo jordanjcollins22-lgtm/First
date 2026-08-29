@@ -19,6 +19,7 @@
  */
 
 import type { ProposalZoneSnapshot } from "@/types/domain";
+import { sourceLabel } from "@/lib/change-source";
 
 /**
  * The written lines of an area's scope, as separate removable things.
@@ -154,25 +155,9 @@ export function trimProposal(input: TrimInput): TrimResult {
 // Who asked, and a change with nothing removed
 // ---------------------------------------------------------------------------
 
-/**
- * How the client asked for this.
- *
- * Most changes arrive as a text message rather than through the buttons on
- * the proposal, and a record that says only "the office changed it" reads,
- * months later, like we took work off a quote nobody asked us to change.
- */
-export type RequestSource = "text" | "call" | "in_person" | "office";
-
-export const REQUEST_SOURCES: { value: RequestSource; label: string }[] = [
-  { value: "text", label: "They texted" },
-  { value: "call", label: "They called" },
-  { value: "in_person", label: "In person" },
-  { value: "office", label: "Our call" },
-];
-
-export function sourceLabel(source: string | null | undefined): string | null {
-  return REQUEST_SOURCES.find((s) => s.value === source)?.label ?? null;
-}
+// How the client asked lives in change-source, since the evaluation asks the
+// same question and two lists of the same four options drift apart.
+export { REQUEST_SOURCES, sourceLabel, type RequestSource } from "@/lib/change-source";
 
 /**
  * Whether there is anything to save.

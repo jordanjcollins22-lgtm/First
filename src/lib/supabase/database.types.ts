@@ -356,6 +356,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["conversation_reads"]["Row"]>;
         Relationships: [];
       };
+      evaluation_edits: {
+        Row: {
+          id: string;
+          job_id: string;
+          organization_id: string;
+          edited_by: string | null;
+          edited_by_name: string | null;
+          changes: string[];
+          requested_via: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["evaluation_edits"]["Row"]> & {
+          job_id: string;
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["evaluation_edits"]["Row"]>;
+        Relationships: [];
+      };
       proposal_edits: {
         Row: {
           id: string;
