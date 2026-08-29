@@ -63,6 +63,12 @@ export const TABS: readonly TabDefinition[] = [
   { key: "job-detail", label: "Job Detail", href: "/jobs/[jobId]" },
   { key: "client-detail", label: "Contact Detail", href: "/clients/[customerId]" },
   { key: "conversation-thread", label: "Conversation Thread", href: "/conversations/[channelId]" },
+  {
+    key: "conversation-job",
+    label: "Client Conversation",
+    href: "/conversations/job/[jobId]",
+    parent: "conversations",
+  },
   { key: "conversation-call", label: "Video Call", href: "/conversations/[channelId]/call" },
   { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup", parent: "tools" },
   { key: "labels", label: "Labels & Codes", href: "/admin/labels", parent: "tools" },

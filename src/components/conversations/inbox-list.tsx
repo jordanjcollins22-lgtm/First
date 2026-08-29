@@ -84,7 +84,7 @@ export function InboxList({
             return (
               <li key={`${conversation.jobId}:${conversation.channel}`}>
                 <Link
-                  href={`/jobs/${conversation.jobId}`}
+                  href={`/conversations/job/${conversation.jobId}`}
                   className="flex items-start gap-3 border-b border-border/60 py-3 hover:bg-accent/30"
                 >
                   <ContactAvatar
