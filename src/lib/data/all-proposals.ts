@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
-import { isWarm, viewLabel, type ViewSummary } from "@/lib/proposal-views";
+import { activityLabel, isWarm, type ViewSummary } from "@/lib/proposal-views";
 import type { JobProposal } from "@/types/domain";
 
 /** One trim the office made after the proposal went out. */
@@ -76,7 +76,9 @@ export async function listAllProposals(): Promise<ProposalWithJob[]> {
     return {
       proposal,
       job,
-      viewLabel: viewLabel(summary, now),
+      // Same wording as the pipeline card. The same fact reading two ways on
+      // two screens is how somebody stops trusting either.
+      viewLabel: activityLabel(summary, now),
       viewsWarm: isWarm(summary, proposal.status),
       edits: editsByProposal.get(proposal.id) ?? [],
     };

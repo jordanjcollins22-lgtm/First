@@ -29,12 +29,30 @@ export interface ViewSummary {
   people: number;
   firstAt: string | null;
   lastAt: string | null;
+  /** Opens in the last hour. Somebody reading it right now. */
+  inLastHour: number;
+  /** Opens in the last day. */
+  inLastDay: number;
 }
 
-export function summariseViews(rows: ViewRow[]): ViewSummary {
-  if (rows.length === 0) {
-    return { opens: 0, people: 0, firstAt: null, lastAt: null };
-  }
+const EMPTY_SUMMARY: ViewSummary = {
+  opens: 0,
+  people: 0,
+  firstAt: null,
+  lastAt: null,
+  inLastHour: 0,
+  inLastDay: 0,
+};
+
+function opensSince(rows: ViewRow[], since: number): number {
+  return rows.filter((row) => {
+    const at = new Date(row.viewedAt).getTime();
+    return !Number.isNaN(at) && at >= since;
+  }).length;
+}
+
+export function summariseViews(rows: ViewRow[], now: Date = new Date()): ViewSummary {
+  if (rows.length === 0) return EMPTY_SUMMARY;
 
   const times = rows
     .map((r) => r.viewedAt)
@@ -56,6 +74,8 @@ export function summariseViews(rows: ViewRow[]): ViewSummary {
     people: hashes.size + unknown,
     firstAt: times[0] ?? null,
     lastAt: times[times.length - 1] ?? null,
+    inLastHour: opensSince(rows, now.getTime() - 60 * 60_000),
+    inLastDay: opensSince(rows, now.getTime() - 24 * 60 * 60_000),
   };
 }
 
@@ -121,4 +141,49 @@ export function viewLabel(summary: ViewSummary, now: Date): string {
  */
 export function isWarm(summary: ViewSummary, status: string): boolean {
   return status === "sent" && summary.opens >= KEEN_OPENS;
+}
+
+
+// ---------------------------------------------------------------------------
+// On the pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * What the pipeline shows under a quote that is out and unanswered.
+ *
+ * A card saying only "proposal sent" is the same card for a week, whether
+ * the client has read it four times this morning or never opened it at all.
+ * Those are different jobs to do — one is a phone call today, the other is a
+ * quote that never arrived — and the board could not tell them apart.
+ *
+ * So the recent window leads. "Opened 3 times in the last hour" is somebody
+ * sitting with it right now, and that is the whole point of putting it on a
+ * board somebody glances at.
+ */
+export function activityLabel(summary: ViewSummary, now: Date): string {
+  if (summary.opens === 0) return "Not opened yet";
+
+  if (summary.inLastHour >= 2) return `Opened ${summary.inLastHour} times in the last hour`;
+  if (summary.inLastHour === 1) return "Opened in the last hour";
+  if (summary.inLastDay >= 2) return `Opened ${summary.inLastDay} times today`;
+  if (summary.inLastDay === 1) return "Opened today";
+
+  return viewLabel(summary, now);
+}
+
+/**
+ * Reading it right now, or near enough.
+ *
+ * Worth a different colour from a quote opened four times last week: the
+ * useful thing about somebody being on the page is that they can be rung
+ * while they are still on it.
+ */
+export function isHot(summary: ViewSummary, status: string): boolean {
+  return status === "sent" && summary.inLastHour > 0;
+}
+
+/** Whether this card is worth showing activity on at all: a quote that is
+ * out, and neither answered nor paid. */
+export function watchingFor(status: string | null, paidAt: string | null): boolean {
+  return status === "sent" && !paidAt;
 }

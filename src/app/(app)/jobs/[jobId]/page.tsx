@@ -15,7 +15,7 @@ import { settleProposalForJob } from "@/lib/actions/proposal-settlement";
 import { JobSummary } from "@/components/job/job-summary";
 import { JobSections } from "@/components/job/job-sections";
 import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
-import { isWarm, viewLabel } from "@/lib/proposal-views";
+import { activityLabel, isWarm } from "@/lib/proposal-views";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
@@ -239,7 +239,8 @@ export default async function JobPage({
   const customerId = owner?.customer_id ?? "";
   const accountManagerId = owner?.customers?.account_manager_id ?? null;
 
-  const proposalViewHint = proposalViews ? viewLabel(proposalViews, new Date()) : null;
+  // The same wording as the pipeline card and the proposals list.
+  const proposalViewHint = proposalViews ? activityLabel(proposalViews, new Date()) : null;
 
   // Covers the client who paid and closed the tab on Stripe's receipt without
   // ever landing back on our page. Their money is in and nothing here knew

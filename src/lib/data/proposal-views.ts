@@ -2,7 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { isMissingTable } from "@/lib/setup-errors";
 import { summariseViews, type ViewSummary } from "@/lib/proposal-views";
 
-const EMPTY: ViewSummary = { opens: 0, people: 0, firstAt: null, lastAt: null };
+const EMPTY: ViewSummary = {
+  opens: 0,
+  people: 0,
+  firstAt: null,
+  lastAt: null,
+  inLastHour: 0,
+  inLastDay: 0,
+};
 
 /**
  * How often one proposal has been opened.

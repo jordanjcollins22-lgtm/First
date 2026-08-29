@@ -146,6 +146,22 @@ async function PipelineTab() {
                                   {card.date && (
                                     <p className="text-[11px] text-muted-foreground">{formatDate(card.date)}</p>
                                   )}
+                                  {/* Whether they are actually reading it, on
+                                      the cards where that is still an open
+                                      question. Sent and read are different
+                                      facts, and the board only had the first. */}
+                                  {card.activity && (
+                                    <p
+                                      className={`text-[11px] ${
+                                        card.activityHot
+                                          ? "font-semibold text-primary"
+                                          : "text-muted-foreground"
+                                      }`}
+                                    >
+                                      {card.activityHot && "● "}
+                                      {card.activity}
+                                    </p>
+                                  )}
                                 </Link>
                               </li>
                             ))}

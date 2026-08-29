@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEDUPE_MINUTES,
+  activityLabel,
+  isHot,
   isSameSitting,
   isWarm,
   summariseViews,
   timeAgo,
   viewLabel,
+  watchingFor,
   type ViewRow,
+  type ViewSummary,
 } from "./proposal-views";
 
 const NOW = new Date("2026-09-07T12:00:00Z");
@@ -22,7 +26,14 @@ function row(minutes: number, visitorHash: string | null = "client"): ViewRow {
 
 describe("summariseViews", () => {
   it("is empty when nobody has opened it", () => {
-    expect(summariseViews([])).toEqual({ opens: 0, people: 0, firstAt: null, lastAt: null });
+    expect(summariseViews([])).toEqual({
+      opens: 0,
+      people: 0,
+      firstAt: null,
+      lastAt: null,
+      inLastHour: 0,
+      inLastDay: 0,
+    });
   });
 
   it("counts the opens", () => {
@@ -132,5 +143,93 @@ describe("isWarm", () => {
     expect(isWarm(keen, "accepted")).toBe(false);
     expect(isWarm(keen, "declined")).toBe(false);
     expect(isWarm(keen, "needs_approval")).toBe(false);
+  });
+});
+
+
+describe("recent windows", () => {
+  const now = new Date("2026-08-29T12:00:00Z");
+  const rows = [
+    { viewedAt: "2026-08-29T11:40:00Z", visitorHash: "a" },
+    { viewedAt: "2026-08-29T11:50:00Z", visitorHash: "a" },
+    { viewedAt: "2026-08-29T04:00:00Z", visitorHash: "a" },
+    { viewedAt: "2026-08-20T09:00:00Z", visitorHash: "b" },
+  ];
+
+  it("counts the last hour and the last day separately", () => {
+    const summary = summariseViews(rows, now);
+    expect(summary.inLastHour).toBe(2);
+    expect(summary.inLastDay).toBe(3);
+    expect(summary.opens).toBe(4);
+  });
+
+  it("ignores an unreadable timestamp rather than counting it as now", () => {
+    const summary = summariseViews([{ viewedAt: "not a date", visitorHash: null }], now);
+    expect(summary.inLastHour).toBe(0);
+  });
+});
+
+describe("activityLabel", () => {
+  const now = new Date("2026-08-29T12:00:00Z");
+  function summary(over: Partial<ViewSummary>): ViewSummary {
+    return { opens: 1, people: 1, firstAt: null, lastAt: null, inLastHour: 0, inLastDay: 0, ...over };
+  }
+
+  it("leads with the last hour, which is somebody reading it now", () => {
+    expect(activityLabel(summary({ opens: 5, inLastHour: 3, inLastDay: 5 }), now)).toBe(
+      "Opened 3 times in the last hour"
+    );
+  });
+
+  it("says so for a single open in the last hour", () => {
+    expect(activityLabel(summary({ inLastHour: 1, inLastDay: 1 }), now)).toBe("Opened in the last hour");
+  });
+
+  it("falls back to today", () => {
+    expect(activityLabel(summary({ opens: 4, inLastDay: 2 }), now)).toBe("Opened 2 times today");
+    expect(activityLabel(summary({ inLastDay: 1 }), now)).toBe("Opened today");
+  });
+
+  it("falls back to the older wording when nothing is recent", () => {
+    const older = summary({ opens: 3, lastAt: "2026-08-27T12:00:00Z" });
+    expect(activityLabel(older, now)).toBe("Opened 3 times, last 2 days ago");
+  });
+
+  it("says plainly when it has never been opened", () => {
+    expect(activityLabel(summary({ opens: 0 }), now)).toBe("Not opened yet");
+  });
+});
+
+describe("isHot", () => {
+  function summary(inLastHour: number): ViewSummary {
+    return { opens: 1, people: 1, firstAt: null, lastAt: null, inLastHour, inLastDay: inLastHour };
+  }
+
+  it("is somebody on the page while a quote is out", () => {
+    expect(isHot(summary(1), "sent")).toBe(true);
+  });
+
+  it("is not an accepted proposal being re-read as a receipt", () => {
+    expect(isHot(summary(3), "accepted")).toBe(false);
+  });
+
+  it("is not a quote nobody has touched this hour", () => {
+    expect(isHot(summary(0), "sent")).toBe(false);
+  });
+});
+
+describe("watchingFor", () => {
+  it("watches a quote that is out and unpaid", () => {
+    expect(watchingFor("sent", null)).toBe(true);
+  });
+
+  it("stops once it is paid", () => {
+    expect(watchingFor("sent", "2026-08-29T12:00:00Z")).toBe(false);
+  });
+
+  it("stops once it is answered", () => {
+    expect(watchingFor("accepted", null)).toBe(false);
+    expect(watchingFor("declined", null)).toBe(false);
+    expect(watchingFor(null, null)).toBe(false);
   });
 });
