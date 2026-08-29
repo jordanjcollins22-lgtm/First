@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Minus, RotateCcw } from "lucide-react";
+import { ChevronLeft, Minus, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,10 @@ import {
   saveLabel,
   scopeLines,
   trimProposal,
+  trimSummary,
   type RequestSource,
 } from "@/lib/proposal-trim";
+import { priceSentence } from "@/lib/proposal-update-notice";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 function money(cents: number): string {
@@ -59,6 +61,11 @@ export function TrimPanel({
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [source, setSource] = useState<RequestSource>("text");
+  // Nothing goes to a client straight off an edit screen. The second step is
+  // what they will actually be looking at, and the button on it is the one
+  // that sends.
+  const [reviewing, setReviewing] = useState(false);
+  const [tellClient, setTellClient] = useState(true);
   // Null while the office has not overruled the arithmetic.
   const [priceOverride, setPriceOverride] = useState<string | null>(null);
 
@@ -113,10 +120,31 @@ export function TrimPanel({
         totalCents: savingCents,
         note,
         requestedVia: source,
+        notifyClient: tellClient,
       });
       if (response.ok) onDone();
       else setError(response.message);
     });
+  }
+
+  if (reviewing) {
+    return (
+      <ClientPreview
+        zones={result.zones}
+        newTotalCents={savingCents}
+        previousTotalCents={totalCents}
+        summary={trimSummary({
+          removedZones: result.removedZones,
+          removedLines: result.removedLines,
+        })}
+        tellClient={tellClient}
+        onTellClientChange={setTellClient}
+        pending={pending}
+        error={error}
+        onBack={() => setReviewing(false)}
+        onApprove={save}
+      />
+    );
   }
 
   return (
@@ -223,15 +251,16 @@ export function TrimPanel({
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" disabled={pending || !changed} onClick={save}>
-          {pending
-            ? "Saving…"
-            : saveLabel({
-                removedZones: result.removedZones,
-                removedLines: result.removedLines,
-                statedTotalCents: totalCents,
-                newTotalCents: savingCents,
-              })}
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending || !changed}
+          onClick={() => {
+            setError(null);
+            setReviewing(true);
+          }}
+        >
+          Preview what they&apos;ll see
         </Button>
         <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onDone}>
           Cancel
@@ -239,8 +268,112 @@ export function TrimPanel({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        The client&apos;s link stays the same. They see this the next time they open it.
+        Nothing is saved yet — the next screen shows what they will see.{" "}
+        {saveLabel({
+          removedZones: result.removedZones,
+          removedLines: result.removedLines,
+          statedTotalCents: totalCents,
+          newTotalCents: savingCents,
+        })}
+        {" is the step after that."}
       </p>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * The second step: the proposal as the client will read it.
+ *
+ * Built from the same pending change rather than from what is saved, because
+ * a preview of the old thing is not a preview. Deliberately styled like their
+ * page rather than like the editor above it — the question being answered is
+ * "is this what I want them to see", and an editor answers a different one.
+ */
+function ClientPreview({
+  zones,
+  newTotalCents,
+  previousTotalCents,
+  summary,
+  tellClient,
+  onTellClientChange,
+  pending,
+  error,
+  onBack,
+  onApprove,
+}: {
+  zones: ProposalZoneSnapshot[];
+  newTotalCents: number;
+  previousTotalCents: number;
+  summary: string;
+  tellClient: boolean;
+  onTellClientChange: (value: boolean) => void;
+  pending: boolean;
+  error: string | null;
+  onBack: () => void;
+  onApprove: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onBack} className="text-muted-foreground" aria-label="Back to editing">
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <p className="text-sm font-semibold">What they&apos;ll see</p>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Scope of work</p>
+        {zones.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing left on this proposal. That is not something to send.
+          </p>
+        ) : (
+          zones.map((zone) => (
+            <div key={zone.zoneName} className="rounded-lg border border-border p-2.5">
+              <p className="text-sm font-semibold">{zone.zoneName}</p>
+              <p className="text-xs text-primary">{zone.serviceLabel}</p>
+              {zone.scopeText && (
+                <p className="mt-1 text-xs text-muted-foreground">{zone.scopeText}</p>
+              )}
+            </div>
+          ))
+        )}
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-center">
+          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="text-xl font-bold">{money(newTotalCents)}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-white/60 bg-card/70 p-2.5">
+        <p className="text-xs font-semibold">{summary}</p>
+        <p className="text-xs text-muted-foreground">
+          {priceSentence(previousTotalCents, newTotalCents)}
+        </p>
+      </div>
+
+      <label className="flex items-start gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={tellClient}
+          onChange={(e) => onTellClientChange(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          Text the client that it changed, pointing them back at the same link they already
+          have. Leave this off for a correction nobody needs to hear about.
+        </span>
+      </label>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={pending || zones.length === 0} onClick={onApprove}>
+          {pending ? "Sending…" : tellClient ? "Approve and send" : "Approve"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onBack}>
+          Back
+        </Button>
+      </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>

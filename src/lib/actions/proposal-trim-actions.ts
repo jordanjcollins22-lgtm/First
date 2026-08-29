@@ -7,11 +7,23 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { proposalPath } from "@/lib/proposal-flow";
-import { hasChange, trimProposal } from "@/lib/proposal-trim";
+import { hasChange, trimProposal, trimSummary } from "@/lib/proposal-trim";
+import { updateNoticeText, updateThreadNote, worthSending } from "@/lib/proposal-update-notice";
+import { jobThreadContext } from "@/lib/message-context";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendSms, toE164 } from "@/lib/sms";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 export type TrimResponse =
-  | { ok: true; newTotalCents: number; removedZones: number; removedLines: number }
+  | {
+      ok: true;
+      newTotalCents: number;
+      removedZones: number;
+      removedLines: number;
+      /** Whether the client was actually told. False when nothing reached a
+       * phone — no number on file, or the office chose not to send. */
+      notified: boolean;
+    }
   | { ok: false; message: string };
 
 /**
@@ -38,6 +50,10 @@ export async function trimSentProposal(input: {
    * was our own decision. Most changes arrive as a text message rather than
    * through the buttons on the proposal. */
   requestedVia?: string;
+  /** Tell the client it changed. On by default from the panel: a price that
+   * moved on a page nobody is looking at is a price they find out about at
+   * the door. Off for a typo nobody needs texting about. */
+  notifyClient?: boolean;
 }): Promise<TrimResponse> {
   try {
     const profile = await getCurrentProfile();
@@ -113,13 +129,80 @@ export async function trimSentProposal(input: {
     revalidatePath(proposalPath(proposal.token));
     revalidateJobViews(proposal.job_id);
 
+    // Approved and sent, rather than saved quietly. The link does not change,
+    // so without this the client finds out the next time they happen to open
+    // it — or at the door.
+    const changes = [
+      trimSummary({ removedZones: result.removedZones, removedLines: result.removedLines }),
+    ].filter((line) => line !== "Nothing removed");
+    let notified = false;
+    if (input.notifyClient && worthSending({ changes, previousTotalCents: statedTotalCents, newTotalCents })) {
+      notified = await tellClient({
+        jobId: proposal.job_id,
+        organizationId,
+        changes,
+        previousTotalCents: statedTotalCents,
+        newTotalCents,
+      }).catch(() => false);
+    }
+
     return {
       ok: true,
       newTotalCents,
       removedZones: result.removedZones.length,
       removedLines: result.removedLines.length,
+      notified,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Couldn't update that." };
   }
+}
+
+/**
+ * Texts the client that their proposal moved, and leaves the same words on
+ * the job's thread so the office can see what they were told.
+ *
+ * Best-effort in both directions: the change is already saved and live on
+ * their link, and a text that failed is not a reason to tell somebody their
+ * update did not go through.
+ */
+async function tellClient(input: {
+  jobId: string;
+  organizationId: string;
+  changes: string[];
+  previousTotalCents: number;
+  newTotalCents: number;
+}): Promise<boolean> {
+  const context = await jobThreadContext(input.jobId);
+  if (!context) return false;
+
+  const notice = updateNoticeText({
+    businessName: context.businessName,
+    changes: input.changes,
+    previousTotalCents: input.previousTotalCents,
+    newTotalCents: input.newTotalCents,
+    link: context.clientLink,
+  });
+
+  const admin = createAdminClient();
+  await admin.from("job_messages").insert({
+    job_id: input.jobId,
+    organization_id: input.organizationId,
+    channel: "external",
+    author_type: "team",
+    author_name: context.businessName || "Office",
+    body: updateThreadNote({
+      businessName: context.businessName,
+      changes: input.changes,
+      previousTotalCents: input.previousTotalCents,
+      newTotalCents: input.newTotalCents,
+    }),
+    reference_label: "Their proposal",
+    reference_kind: "proposal",
+  });
+
+  const e164 = context.clientPhone ? toE164(context.clientPhone) : null;
+  if (!e164) return false;
+  await sendSms(e164, notice);
+  return true;
 }
