@@ -337,6 +337,27 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["proposal_objections"]["Row"]>;
         Relationships: [];
       };
+      proposal_edits: {
+        Row: {
+          id: string;
+          proposal_id: string;
+          organization_id: string;
+          edited_by: string | null;
+          edited_by_name: string | null;
+          removed_zones: { zoneName: string; serviceLabel: string; priceCents: number | null }[];
+          removed_lines: { zoneName: string; line: string }[];
+          previous_total_cents: number | null;
+          new_total_cents: number | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["proposal_edits"]["Row"]> & {
+          proposal_id: string;
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["proposal_edits"]["Row"]>;
+        Relationships: [];
+      };
       proposal_scope_requests: {
         Row: {
           id: string;

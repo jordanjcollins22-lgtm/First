@@ -102,6 +102,7 @@ const CREATES = {
   "0129_flyer_artwork_kind.sql": [],
   // Bucket settings only — nothing to probe for.
   "0130_flyer_upload_limit.sql": [],
+  "0131_proposal_edits.sql": ["proposal_edits"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

@@ -9,17 +9,20 @@ import { Input } from "@/components/ui/input";
 import { updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import type { ProposalWithJob } from "@/lib/data/all-proposals";
 import { ViewCount } from "@/components/proposal/view-count";
+import { TrimPanel } from "@/components/proposal/trim-panel";
+import { priceMoveLabel, trimSummary } from "@/lib/proposal-trim";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove: boolean }) {
-  const { proposal, job, viewLabel, viewsWarm } = item;
+  const { proposal, job, viewLabel, viewsWarm, edits } = item;
   const [total, setTotal] = useState(String(Math.round(proposal.total_cost ?? 0)));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [trimming, setTrimming] = useState(false);
 
   function saveTotal() {
     setError(null);
@@ -80,6 +83,20 @@ function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove
             </Button>
           </>
         )}
+        {/* Available after it has gone out too: a client ringing up to drop
+            an area is the whole reason this exists. Not on an accepted one,
+            where the price is something they already agreed to. */}
+        {proposal.status !== "accepted" && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            onClick={() => setTrimming((v) => !v)}
+          >
+            {trimming ? "Close" : "Remove items"}
+          </Button>
+        )}
         <Button type="button" size="sm" variant="ghost" asChild>
           <a href={`/proposal/${proposal.token}?preview=1`} target="_blank" rel="noreferrer">
             Preview
@@ -89,6 +106,42 @@ function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove
           <Link href={`/jobs/${job.id}`}>Open job</Link>
         </Button>
       </div>
+
+      {trimming && (
+        <TrimPanel
+          proposalId={proposal.id}
+          zones={proposal.scope_snapshot ?? []}
+          totalCents={Math.round((proposal.total_cost ?? 0) * 100)}
+          onDone={() => setTrimming(false)}
+        />
+      )}
+
+      {/* What has come off since it went out. Ours only: the client sees the
+          shorter proposal, not the history of how it got shorter. */}
+      {edits.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-lg border border-white/60 bg-card/50 p-2.5">
+          <p className="text-xs font-semibold text-muted-foreground">Removed since it went out</p>
+          {edits.map((edit) => (
+            <div key={edit.id} className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {trimSummary({ removedZones: edit.removedZones, removedLines: edit.removedLines })}
+              </span>
+              {" — "}
+              {priceMoveLabel(edit.previousTotalCents ?? 0, edit.newTotalCents ?? 0)}
+              {edit.editedByName ? `, by ${edit.editedByName}` : ""} on {formatDate(edit.createdAt)}
+              {edit.removedLines.length > 0 && (
+                <ul className="mt-0.5 list-disc pl-4">
+                  {edit.removedLines.map((line) => (
+                    <li key={`${line.zoneName}:${line.line}`}>
+                      <span className="italic">&ldquo;{line.line}&rdquo;</span> from {line.zoneName}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {proposal.client_response_note && (
         <p className="text-xs text-muted-foreground">
