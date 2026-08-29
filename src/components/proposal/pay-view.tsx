@@ -208,7 +208,7 @@ export function PayView({
         <Lock className="h-3.5 w-3.5" />
         {canCharge
           ? "Card, Apple Pay and Google Pay, handled by Stripe."
-          : "We will email your invoice, and nothing is due until we have your day booked."}
+          : "We will email your invoice, and a team member will reach out to get you booked in."}
       </p>
     </div>
   );

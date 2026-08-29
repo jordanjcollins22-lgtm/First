@@ -67,7 +67,7 @@ export function optionsAfterAccept(context: AcceptanceContext): PaymentOption[] 
     {
       id: "full",
       label: "Pay in full now",
-      detail: "Card, Apple Pay or Google Pay on the next screen, then you pick your day.",
+      detail: "Card, Apple Pay or Google Pay on the next screen. We book you in from there.",
       keepsDiscount: true,
       schedulesAfterFinalPayment: false,
     },
@@ -100,7 +100,7 @@ export function optionsAfterAccept(context: AcceptanceContext): PaymentOption[] 
   options.push({
     id: "plan",
     label: "Split it into payments",
-    detail: "Your first payment now, then the rest monthly. You pick your day straight after.",
+    detail: "Your first payment now, then the rest monthly. We book you in from there.",
     keepsDiscount: true,
     schedulesAfterFinalPayment: false,
   });

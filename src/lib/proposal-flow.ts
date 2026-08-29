@@ -2,7 +2,8 @@
  * The road a client walks after they open their proposal link.
  *
  * Three screens, one decision each: read it and accept, say how you are
- * paying, pick your day. They were one long scrolling page, which meant a
+ * paying, and a confirmation that a team member is picking it up. They were
+ * one long scrolling page, which meant a
  * client who had already decided could scroll back up, re-read the price and
  * talk themselves out of it. Each step is its own URL now, and none of them
  * offers a way back to the one before.
@@ -20,7 +21,13 @@ export function payPath(token: string): string {
   return `/proposal/${token}/pay`;
 }
 
-/** Which day they want us, once the money is sorted. */
+/**
+ * What happens next, once the money is sorted.
+ *
+ * Still called the schedule path because it is the same URL clients and
+ * Stripe already have. It no longer lets anybody choose a day: the office
+ * books the crew, once the proposal is accepted and paid.
+ */
 export function schedulePath(token: string): string {
   return `/proposal/${token}/schedule`;
 }

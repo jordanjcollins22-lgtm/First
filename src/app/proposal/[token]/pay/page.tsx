@@ -7,6 +7,7 @@ import { getProposalByToken } from "@/lib/data/public-proposal";
 import { PayView } from "@/components/proposal/pay-view";
 import { isPreview, proposalPath, schedulePath } from "@/lib/proposal-flow";
 import { LinkNotValid } from "@/components/proposal/link-not-valid";
+import { confirmationFor } from "@/lib/booking-confirmation";
 
 /**
  * How they are paying, on a page of its own.
@@ -40,9 +41,23 @@ export default async function ProposalPayPage({
     redirect(`${proposalPath(token)}${previewing ? "?preview=1" : ""}`);
   }
 
-  // Answered already, on another device or an earlier visit. Asking again is
+  // Settled already, on another device or an earlier visit. Asking again is
   // how a client ends up with two invoices.
-  if (proposal.payment_path && !previewing) redirect(schedulePath(token));
+  //
+  // Keyed on the money rather than on the choice: picking how to pay claims
+  // payment_path immediately, so bouncing on that sent anybody who closed
+  // the card sheet to a confirmation for a job nobody had paid for. The
+  // confirmation screen decides — it is the same call it makes itself, so
+  // the two pages cannot disagree and send a client round in a loop.
+  const settled = confirmationFor({
+    status: proposal.status,
+    paymentPath: proposal.payment_path,
+    paidAt: proposal.paid_at,
+    // Only changes the wording on the confirmation, not whether there is one.
+    schedulesAfterFinalPayment: false,
+    canCharge: isStripeConfigured,
+  });
+  if (settled.redirectTo === null && !previewing) redirect(schedulePath(token));
 
   const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
 

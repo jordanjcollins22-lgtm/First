@@ -16,7 +16,6 @@ import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-pat
 import { startProposalCheckout } from "@/lib/proposal-checkout";
 import { previewResult, schedulePath } from "@/lib/proposal-flow";
 import { isSameSitting } from "@/lib/proposal-views";
-import { offeredWorkDays } from "@/lib/data/work-day-offer";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
@@ -542,77 +541,6 @@ async function buildClientPlan(input: {
 // ---------------------------------------------------------------------------
 // Picking the day
 // ---------------------------------------------------------------------------
-
-/**
- * The client choosing which day the crew comes.
- *
- * The day is checked against the same list the page drew rather than taken
- * on trust. A date arriving from a form is just a string, and the two things
- * it must not be are a day the crew is already full on and a day we have
- * blocked for rain.
- */
-export async function chooseWorkDay(input: {
-  token: string;
-  date: string;
-  preview?: boolean;
-}): Promise<PublicResult<{ message: string; date: string }>> {
-  try {
-    if (input.preview) return previewResult();
-
-    const admin = createAdminClient();
-    const { data: proposal } = await admin
-      .from("job_proposals")
-      .select("id, job_id, organization_id, status, payment_path, client_chosen_day")
-      .eq("token", input.token)
-      .maybeSingle();
-
-    if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
-    if (proposal.status !== "accepted") return { ok: false, message: "Accept the proposal first." };
-    if (proposal.client_chosen_day) {
-      return { ok: false, message: "You have already picked a day. We will be in touch." };
-    }
-
-    const offer = await offeredWorkDays({
-      jobId: proposal.job_id,
-      organizationId: proposal.organization_id,
-    });
-    const day = offer.days.find((d) => d.date === input.date);
-    if (!day) return { ok: false, message: "That day isn't one we can offer. Pick another." };
-    if (day.status !== "open") {
-      return { ok: false, message: `${day.label} is ${day.reason?.toLowerCase() ?? "not available"}.` };
-    }
-
-    // Claim it before writing the job, so two taps on a slow connection do
-    // not book the crew twice.
-    const { data: claimed } = await admin
-      .from("job_proposals")
-      .update({ client_chosen_day: day.date, client_chosen_day_at: new Date().toISOString() })
-      .eq("id", proposal.id)
-      .is("client_chosen_day", null)
-      .select("id")
-      .maybeSingle();
-    if (!claimed) return { ok: false, message: "You have already picked a day. We will be in touch." };
-
-    const { error: jobError } = await admin
-      .from("jobs")
-      // Status stays "approved": the job is booked, not started. A start
-      // date is what the schedule reads, and moving the status here would
-      // tell the crew work is underway on a day nobody has been out.
-      .update({ project_start_date: day.date })
-      .eq("id", proposal.job_id);
-    if (jobError) return { ok: false, message: describe(jobError) };
-
-    notifyJobTeam(proposal.job_id, "proposal_responses", `A client booked themselves in for ${day.label}.`, {
-      dedupeKey: `${proposal.id}:day`,
-    }).catch(() => {});
-
-    revalidateJobViews(proposal.job_id);
-
-    return { ok: true, date: day.date, message: `You are booked in for ${day.label}.` };
-  } catch (err) {
-    return { ok: false, message: describe(err) };
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Did they actually open it

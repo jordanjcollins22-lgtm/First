@@ -98,7 +98,7 @@ export const OBJECTIONS: Objection[] = [
     id: "getting_other_quotes",
     label: "How do you compare with other quotes?",
     answer:
-      "You should get other quotes. It is your money and a good contractor will not mind. Two things worth checking on the others: whether they are licensed and insured in Maryland, and whether their number includes hauling the waste away, because that is the one that usually shows up later as an extra. Ours does. If somebody comes in lower, tell us what is on their sheet and we will tell you straight whether we can match it or why we cannot.",
+      "You should get other quotes. It is your money and a good contractor will not mind. Two things worth checking on the others: whether they are licensed and insured in Maryland, and whether their price includes hauling the waste away, because that is the one that usually shows up later as an extra. Our price already includes it. If somebody comes in lower, tell us what is on their sheet and we will tell you straight whether we can match it or why we cannot.",
     resolutions: ["explain", "talk"],
   },
   {
@@ -130,7 +130,7 @@ export const OBJECTIONS: Objection[] = [
     id: "how_to_pay",
     label: "How do I pay?",
     answer:
-      "Card, check or bank transfer, whichever suits you. Once you accept, we email you an invoice with a link to pay online, and nothing is due until the work is scheduled. If you would rather spread it out, we can set that up before you accept.",
+      "Card, Apple Pay, Google Pay, check or bank transfer, whichever suits you. Accepting takes you straight to the payment screen, and once that is settled a team member reaches out to get your service booked in. If you would rather spread it out, you can pick that on the same screen.",
     resolutions: ["payment_plan", "explain"],
   },
   {
