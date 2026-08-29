@@ -150,6 +150,64 @@ export function trimProposal(input: TrimInput): TrimResult {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Who asked, and a change with nothing removed
+// ---------------------------------------------------------------------------
+
+/**
+ * How the client asked for this.
+ *
+ * Most changes arrive as a text message rather than through the buttons on
+ * the proposal, and a record that says only "the office changed it" reads,
+ * months later, like we took work off a quote nobody asked us to change.
+ */
+export type RequestSource = "text" | "call" | "in_person" | "office";
+
+export const REQUEST_SOURCES: { value: RequestSource; label: string }[] = [
+  { value: "text", label: "They texted" },
+  { value: "call", label: "They called" },
+  { value: "in_person", label: "In person" },
+  { value: "office", label: "Our call" },
+];
+
+export function sourceLabel(source: string | null | undefined): string | null {
+  return REQUEST_SOURCES.find((s) => s.value === source)?.label ?? null;
+}
+
+/**
+ * Whether there is anything to save.
+ *
+ * Removing something is the usual case, but not the only one. A client who
+ * texts "can you add the stone edging, what would that be" ends with a price
+ * that moved and nothing taken off, and that has to be recordable too — the
+ * alternative is somebody editing the price with no note of why, which is the
+ * thing this whole record exists to prevent.
+ */
+export function hasChange(input: {
+  removedZones: unknown[];
+  removedLines: unknown[];
+  statedTotalCents: number;
+  newTotalCents: number;
+  note?: string;
+}): boolean {
+  if (input.removedZones.length > 0 || input.removedLines.length > 0) return true;
+  if (input.newTotalCents !== input.statedTotalCents) return true;
+  return Boolean(input.note?.trim());
+}
+
+/** What to call the button, so it never says "remove" for a price rise. */
+export function saveLabel(input: {
+  removedZones: unknown[];
+  removedLines: unknown[];
+  statedTotalCents: number;
+  newTotalCents: number;
+}): string {
+  const removing = input.removedZones.length > 0 || input.removedLines.length > 0;
+  if (removing) return "Update proposal";
+  if (input.newTotalCents !== input.statedTotalCents) return "Update the price";
+  return "Save the note";
+}
+
 /** Dollars, for the box the office types the new price into. */
 export function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2);
@@ -174,6 +232,24 @@ export function trimSummary(entry: {
     );
   }
   return parts.length > 0 ? `Removed ${parts.join(", ")}` : "Nothing removed";
+}
+
+/** The one line a saved change reads as, source and all. */
+export function editHeadline(entry: {
+  removedZones: { zoneName: string; serviceLabel: string }[];
+  removedLines: { zoneName: string }[];
+  requestedVia?: string | null;
+  previousTotalCents?: number | null;
+  newTotalCents?: number | null;
+}): string {
+  const removing = entry.removedZones.length > 0 || entry.removedLines.length > 0;
+  const what = removing
+    ? trimSummary(entry)
+    : entry.previousTotalCents !== entry.newTotalCents
+      ? "Price changed"
+      : "Note added";
+  const via = sourceLabel(entry.requestedVia);
+  return via ? `${what} — ${via.toLowerCase()}` : what;
 }
 
 /** A signed dollar figure for the history row. */

@@ -5,8 +5,18 @@ import { Minus, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
+import { ChipRow } from "@/components/ui/chip-row";
 import { trimSentProposal } from "@/lib/actions/proposal-trim-actions";
-import { centsToInput, scopeLines, trimProposal } from "@/lib/proposal-trim";
+import {
+  REQUEST_SOURCES,
+  centsToInput,
+  hasChange,
+  saveLabel,
+  scopeLines,
+  trimProposal,
+  type RequestSource,
+} from "@/lib/proposal-trim";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 function money(cents: number): string {
@@ -14,12 +24,19 @@ function money(cents: number): string {
 }
 
 /**
- * Taking things off a proposal that is already out.
+ * Changing a proposal that is already out, on the client's behalf.
  *
  * Tap what goes, watch the price move, save. The removed things stay on
  * screen greyed out with a way back, because the most common mistake here is
  * removing one line too many and the second most common is not being sure
  * whether you did.
+ *
+ * Removing is not the only change. Most of these arrive as a text message —
+ * the client reads the proposal on their phone, does not touch the buttons on
+ * it, and texts instead — so the price can be changed on its own, a note of
+ * what they actually said goes with it, and the record says how they asked.
+ * Without that, months later, it reads like we quietly changed a quote
+ * nobody asked us to change.
  *
  * The total is worked out live but stays editable: a hand-priced area or a
  * discount means the subtraction is a suggestion rather than an answer, and
@@ -40,6 +57,8 @@ export function TrimPanel({
   const [removedLines, setRemovedLines] = useState<{ zoneName: string; line: string }[]>([]);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [source, setSource] = useState<RequestSource>("text");
   // Null while the office has not overruled the arithmetic.
   const [priceOverride, setPriceOverride] = useState<string | null>(null);
 
@@ -56,6 +75,13 @@ export function TrimPanel({
 
   const priceValue = priceOverride ?? centsToInput(result.newTotalCents);
   const savingCents = Math.round((Number(priceValue) || 0) * 100);
+  const changed = hasChange({
+    removedZones: result.removedZones,
+    removedLines: result.removedLines,
+    statedTotalCents: totalCents,
+    newTotalCents: savingCents,
+    note,
+  });
 
   function toggleZone(zoneName: string) {
     setRemovedZones((current) =>
@@ -85,6 +111,8 @@ export function TrimPanel({
         removeZones: removedZones,
         removeLines: removedLines,
         totalCents: savingCents,
+        note,
+        requestedVia: source,
       });
       if (response.ok) onDone();
       else setError(response.message);
@@ -94,9 +122,13 @@ export function TrimPanel({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold">Remove from this quote</p>
+        <p className="text-sm font-semibold">Change this quote</p>
         <p className="text-xs text-muted-foreground">Was {money(totalCents)}</p>
       </div>
+
+      {/* How they asked. Most of these are a text message, which is why it
+          is the one already picked. */}
+      <ChipRow options={REQUEST_SOURCES} value={source} onChange={setSource} />
 
       <div className="flex flex-col gap-2">
         {zones.map((zone) => {
@@ -180,9 +212,26 @@ export function TrimPanel({
 
       {result.totalNote && <p className="text-xs text-amber-600">{result.totalNote}</p>}
 
+      {/* What they actually said, in their words where possible. This is the
+          part somebody will want in six months, not the arithmetic. */}
+      <AutoTextarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={1}
+        placeholder="What did they say? (optional)"
+        className="min-h-10 py-2 text-sm"
+      />
+
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" disabled={pending || result.empty} onClick={save}>
-          {pending ? "Updating…" : "Update proposal"}
+        <Button type="button" size="sm" disabled={pending || !changed} onClick={save}>
+          {pending
+            ? "Saving…"
+            : saveLabel({
+                removedZones: result.removedZones,
+                removedLines: result.removedLines,
+                statedTotalCents: totalCents,
+                newTotalCents: savingCents,
+              })}
         </Button>
         <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onDone}>
           Cancel

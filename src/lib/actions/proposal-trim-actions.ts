@@ -7,7 +7,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { proposalPath } from "@/lib/proposal-flow";
-import { trimProposal } from "@/lib/proposal-trim";
+import { hasChange, trimProposal } from "@/lib/proposal-trim";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 export type TrimResponse =
@@ -34,6 +34,10 @@ export async function trimSentProposal(input: {
    * discount means the subtraction is a suggestion, not an answer. */
   totalCents?: number;
   note?: string;
+  /** How the client asked: "text", "call", "in_person", or "office" when it
+   * was our own decision. Most changes arrive as a text message rather than
+   * through the buttons on the proposal. */
+  requestedVia?: string;
 }): Promise<TrimResponse> {
   try {
     const profile = await getCurrentProfile();
@@ -63,9 +67,23 @@ export async function trimSentProposal(input: {
       removeLines: input.removeLines,
       statedTotalCents,
     });
-    if (result.empty) return { ok: false, message: "Pick something to remove first." };
-
     const newTotalCents = Math.max(0, Math.round(input.totalCents ?? result.newTotalCents));
+
+    // Not only removals. A client who texts "can you add the stone edging"
+    // ends with a price that moved and nothing taken off, and a note on its
+    // own is worth recording too — the alternative is somebody editing a
+    // price with nothing saying why.
+    if (
+      !hasChange({
+        removedZones: result.removedZones,
+        removedLines: result.removedLines,
+        statedTotalCents,
+        newTotalCents,
+        note: input.note,
+      })
+    ) {
+      return { ok: false, message: "Nothing to save yet — remove something, change the price, or write a note." };
+    }
 
     const organizationId = await getCurrentOrganizationId();
     const { error: logError } = await supabase.from("proposal_edits").insert({
@@ -78,6 +96,7 @@ export async function trimSentProposal(input: {
       previous_total_cents: statedTotalCents,
       new_total_cents: newTotalCents,
       note: input.note?.trim() || null,
+      requested_via: input.requestedVia || null,
     });
     // Recorded first, on purpose. A trim nobody can account for later is
     // worse than a trim that did not happen.

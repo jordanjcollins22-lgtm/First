@@ -368,6 +368,7 @@ export interface Database {
           previous_total_cents: number | null;
           new_total_cents: number | null;
           note: string | null;
+          requested_via: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["proposal_edits"]["Row"]> & {

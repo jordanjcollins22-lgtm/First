@@ -104,6 +104,7 @@ const CREATES = {
   "0130_flyer_upload_limit.sql": [],
   "0131_proposal_edits.sql": ["proposal_edits"],
   "0132_conversation_reads.sql": ["conversation_reads"],
+  "0133_proposal_edit_source.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

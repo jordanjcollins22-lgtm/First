@@ -14,6 +14,8 @@ export interface ProposalEdit {
   previousTotalCents: number | null;
   newTotalCents: number | null;
   note: string | null;
+  /** How the client asked for it: text, call, in_person, or office. */
+  requestedVia: string | null;
 }
 
 export interface ProposalWithJob {
@@ -61,6 +63,7 @@ export async function listAllProposals(): Promise<ProposalWithJob[]> {
       previousTotalCents: row.previous_total_cents,
       newTotalCents: row.new_total_cents,
       note: row.note,
+      requestedVia: row.requested_via ?? null,
     });
     editsByProposal.set(row.proposal_id, list);
   }
@@ -105,4 +108,5 @@ type ProposalEditRow = {
   previous_total_cents: number | null;
   new_total_cents: number | null;
   note: string | null;
+  requested_via: string | null;
 };

@@ -10,7 +10,7 @@ import { updateProposalDraft, approveProposal } from "@/lib/actions/proposal-act
 import type { ProposalWithJob } from "@/lib/data/all-proposals";
 import { ViewCount } from "@/components/proposal/view-count";
 import { TrimPanel } from "@/components/proposal/trim-panel";
-import { priceMoveLabel, trimSummary } from "@/lib/proposal-trim";
+import { editHeadline, priceMoveLabel } from "@/lib/proposal-trim";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -120,15 +120,26 @@ function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove
           shorter proposal, not the history of how it got shorter. */}
       {edits.length > 0 && (
         <div className="flex flex-col gap-1 rounded-lg border border-white/60 bg-card/50 p-2.5">
-          <p className="text-xs font-semibold text-muted-foreground">Removed since it went out</p>
+          <p className="text-xs font-semibold text-muted-foreground">Changes since it went out</p>
           {edits.map((edit) => (
             <div key={edit.id} className="text-xs text-muted-foreground">
               <span className="font-medium text-foreground">
-                {trimSummary({ removedZones: edit.removedZones, removedLines: edit.removedLines })}
+                {editHeadline({
+                  removedZones: edit.removedZones,
+                  removedLines: edit.removedLines,
+                  requestedVia: edit.requestedVia,
+                  previousTotalCents: edit.previousTotalCents,
+                  newTotalCents: edit.newTotalCents,
+                })}
               </span>
               {" — "}
               {priceMoveLabel(edit.previousTotalCents ?? 0, edit.newTotalCents ?? 0)}
               {edit.editedByName ? `, by ${edit.editedByName}` : ""} on {formatDate(edit.createdAt)}
+              {/* What they said, which is the part somebody wants in six
+                  months rather than the arithmetic. */}
+              {edit.note && (
+                <p className="mt-0.5 italic">&ldquo;{edit.note}&rdquo;</p>
+              )}
               {edit.removedLines.length > 0 && (
                 <ul className="mt-0.5 list-disc pl-4">
                   {edit.removedLines.map((line) => (

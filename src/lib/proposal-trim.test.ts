@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   centsToInput,
+  editHeadline,
+  hasChange,
+  saveLabel,
+  sourceLabel,
   joinScopeLines,
   priceMoveLabel,
   scopeLines,
@@ -200,5 +204,96 @@ describe("centsToInput", () => {
   it("fills the price box with dollars", () => {
     expect(centsToInput(70000)).toBe("700.00");
     expect(centsToInput(0)).toBe("0.00");
+  });
+});
+
+describe("hasChange", () => {
+  const base = { removedZones: [], removedLines: [], statedTotalCents: 100000, newTotalCents: 100000 };
+
+  it("is nothing when nothing moved", () => {
+    expect(hasChange(base)).toBe(false);
+  });
+
+  it("counts a removal", () => {
+    expect(hasChange({ ...base, removedZones: [{}] })).toBe(true);
+    expect(hasChange({ ...base, removedLines: [{}] })).toBe(true);
+  });
+
+  it("counts a price change with nothing removed", () => {
+    // "Can you add the stone edging" ends with a price that moved and
+    // nothing taken off, and that has to be recordable too.
+    expect(hasChange({ ...base, newTotalCents: 120000 })).toBe(true);
+  });
+
+  it("counts a note on its own", () => {
+    expect(hasChange({ ...base, note: "They are thinking about it until spring." })).toBe(true);
+  });
+
+  it("ignores a note that is only spaces", () => {
+    expect(hasChange({ ...base, note: "   " })).toBe(false);
+  });
+});
+
+describe("saveLabel", () => {
+  const base = { removedZones: [], removedLines: [], statedTotalCents: 100000, newTotalCents: 100000 };
+
+  it("never says remove for a price rise", () => {
+    expect(saveLabel({ ...base, newTotalCents: 120000 })).toBe("Update the price");
+  });
+
+  it("says update when something is coming off", () => {
+    expect(saveLabel({ ...base, removedZones: [{}] })).toBe("Update proposal");
+  });
+
+  it("says what it is doing when it is only a note", () => {
+    expect(saveLabel(base)).toBe("Save the note");
+  });
+});
+
+describe("sourceLabel", () => {
+  it("words how they asked", () => {
+    expect(sourceLabel("text")).toBe("They texted");
+    expect(sourceLabel("call")).toBe("They called");
+    expect(sourceLabel("office")).toBe("Our call");
+  });
+
+  it("says nothing for an older record with no source on it", () => {
+    expect(sourceLabel(null)).toBeNull();
+    expect(sourceLabel("carrier pigeon")).toBeNull();
+  });
+});
+
+describe("editHeadline", () => {
+  it("says what came off and how they asked", () => {
+    expect(
+      editHeadline({
+        removedZones: [{ zoneName: "Back bed", serviceLabel: "Mulch" }],
+        removedLines: [],
+        requestedVia: "text",
+      })
+    ).toBe("Removed Back bed (Mulch) — they texted");
+  });
+
+  it("reads as a price change when nothing came off", () => {
+    expect(
+      editHeadline({
+        removedZones: [],
+        removedLines: [],
+        requestedVia: "call",
+        previousTotalCents: 100000,
+        newTotalCents: 120000,
+      })
+    ).toBe("Price changed — they called");
+  });
+
+  it("reads as a note when neither moved", () => {
+    expect(
+      editHeadline({
+        removedZones: [],
+        removedLines: [],
+        previousTotalCents: 100000,
+        newTotalCents: 100000,
+      })
+    ).toBe("Note added");
   });
 });
