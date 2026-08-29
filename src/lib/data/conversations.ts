@@ -9,6 +9,9 @@ export interface ConversationSummary {
   channel: MessageChannel;
   lastMessage: JobMessage;
   messageCount: number;
+  /** Whose job this is, so a row can say who is carrying it. */
+  assignedToId: string | null;
+  assignedToName: string | null;
 }
 
 /** One row per job+channel that has at least one message, most recently
@@ -23,7 +26,27 @@ export async function listConversations(): Promise<ConversationSummary[]> {
   if (error) throw error;
   if (!messages || messages.length === 0) return [];
 
-  const jobInfoById = new Map(jobs.map((j) => [j.id, { address: j.property.address, customerName: j.property.customer.name }]));
+  // Who is carrying each job, so a row can say so and My Inbox can mean
+  // something. Names are looked up once rather than per message.
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, email");
+  const nameById = new Map(
+    ((profiles ?? []) as { id: string; full_name: string | null; email: string }[]).map((p) => [
+      p.id,
+      p.full_name || p.email,
+    ])
+  );
+
+  const jobInfoById = new Map(
+    jobs.map((j) => [
+      j.id,
+      {
+        address: j.property.address,
+        customerName: j.property.customer.name,
+        assignedToId: j.assigned_to ?? null,
+        assignedToName: j.assigned_to ? nameById.get(j.assigned_to) ?? null : null,
+      },
+    ])
+  );
 
   const grouped = new Map<string, ConversationSummary>();
   for (const raw of messages) {
@@ -42,6 +65,8 @@ export async function listConversations(): Promise<ConversationSummary[]> {
       channel: message.channel,
       lastMessage: message,
       messageCount: 1,
+      assignedToId: info?.assignedToId ?? null,
+      assignedToName: info?.assignedToName ?? null,
     });
   }
 

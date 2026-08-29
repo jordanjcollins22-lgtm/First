@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { MessageSquare, Plus, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createTeamChannel } from "@/lib/actions/team-channel-actions";
 import { cn } from "@/lib/utils";
+import { InboxList } from "@/components/conversations/inbox-list";
 import type { ConversationSummary } from "@/lib/data/conversations";
 import type { TeamChannelWithMembers } from "@/types/domain";
 
@@ -23,41 +24,6 @@ function formatTimestamp(iso: string): string {
 
 const CARD =
   "flex flex-col gap-1 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150 hover:bg-accent/40";
-
-function ClientConversations({ conversations }: { conversations: ConversationSummary[] }) {
-  if (conversations.length === 0) {
-    return (
-      <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-        <MessageSquare className="h-4 w-4" />
-        No client conversations yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2 pt-2">
-      {conversations.map((c) => (
-        <Link key={`${c.jobId}-${c.channel}`} href={`/jobs/${c.jobId}`} className={CARD}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-semibold">{c.customerName || c.propertyAddress}</p>
-            <span className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              Client
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">{c.propertyAddress}</p>
-          <p className="truncate text-sm">
-            <span className="text-muted-foreground">{c.lastMessage.author_name}: </span>
-            {c.lastMessage.body}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {formatTimestamp(c.lastMessage.created_at)} · {c.messageCount} message
-            {c.messageCount === 1 ? "" : "s"}
-          </p>
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 function NewGroupForm() {
   const [name, setName] = useState("");
@@ -212,18 +178,38 @@ export function ConversationsView({
 }) {
   const external = conversations.filter((c) => c.channel === "external");
   const jobNotes = conversations.filter((c) => c.channel === "internal");
+  const mine = external.filter((c) => c.assignedToId === currentProfileId);
 
   return (
-    <Tabs defaultValue="internal">
-      <TabsList>
-        <TabsTrigger value="internal">Internal</TabsTrigger>
-        <TabsTrigger value="external">External</TabsTrigger>
+    <Tabs defaultValue="team">
+      {/* Three inboxes, in the order somebody works them: everything, then
+          what is theirs, then the team talking among themselves. */}
+      <TabsList className="w-full justify-start">
+        <TabsTrigger value="team">Team Inbox</TabsTrigger>
+        <TabsTrigger value="mine">My Inbox</TabsTrigger>
+        <TabsTrigger value="internal">Internal Chat</TabsTrigger>
       </TabsList>
-      <TabsContent value="internal">
-        <InternalConversations channels={channels} jobNotes={jobNotes} currentProfileId={currentProfileId} />
+
+      <TabsContent value="team">
+        <InboxList
+          conversations={external}
+          emptyLabel="No client conversations yet."
+        />
       </TabsContent>
-      <TabsContent value="external">
-        <ClientConversations conversations={external} />
+
+      <TabsContent value="mine">
+        <InboxList
+          conversations={mine}
+          emptyLabel="Nothing assigned to you. Jobs land here once somebody puts your name on them."
+        />
+      </TabsContent>
+
+      <TabsContent value="internal">
+        <InternalConversations
+          channels={channels}
+          jobNotes={jobNotes}
+          currentProfileId={currentProfileId}
+        />
       </TabsContent>
     </Tabs>
   );
