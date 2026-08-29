@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import { logout } from "@/lib/actions/auth-actions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { orphanedTabs, tabLabel } from "@/lib/permissions";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * The whole navigation, at both sizes.
@@ -106,6 +107,10 @@ export function SiteNav({
           Project Data
         </Link>
       )}
+
+      {/* Beside the menu rather than buried in it: it is a one-tap thing
+          somebody does when the light in the room changes, not a setting. */}
+      <ThemeToggle />
 
       <button
         type="button"

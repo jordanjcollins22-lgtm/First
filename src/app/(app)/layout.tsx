@@ -9,6 +9,7 @@ import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/env";
+import { themeScript } from "@/lib/theme";
 import "../globals.css";
 
 export const metadata: Metadata = {
@@ -65,16 +66,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        {/* Runs before anything paints. Without it the page draws light, then
+            React loads and repaints dark, and everybody working in the
+            evening gets a white flash in the face. */}
+        <script dangerouslySetInnerHTML={{ __html: themeScript() }} />
+      </head>
       <body className="min-h-full flex flex-col">
-        <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        {/* The colour wash behind everything. Dimmed hard after dark: these
+            are bright greens mixed to sit on white paper, and at full
+            strength on a dark ground they wash the whole screen and undo the
+            palette underneath them. */}
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 -z-10 overflow-hidden dark:opacity-25"
+        >
           <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-primary/35 blur-3xl" />
           <div className="absolute top-1/4 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-400/30 blur-3xl" />
           <div className="absolute bottom-0 left-1/4 h-80 w-80 rounded-full bg-teal-400/25 blur-3xl" />
           <div className="absolute bottom-[-6rem] right-1/4 h-72 w-72 rounded-full bg-lime-300/25 blur-3xl" />
         </div>
         {impersonatingName && <ImpersonationBanner name={impersonatingName} />}
-        <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150">
+        <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150 dark:border-white/10">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:py-3">
             <Link
               href="/"

@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Dark follows a class rather than the phone alone, so the toggle can
+   override what the phone thinks. The script in the layout sets it before
+   anything paints. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f7f8f6;
   --foreground: #14181a;
@@ -22,6 +27,39 @@
   --input: #dde2dc;
   --ring: #2f6d3c;
   --radius: 0.75rem;
+  color-scheme: light;
+}
+
+/*
+ * The same palette after dark.
+ *
+ * Not the light one inverted. A pure black ground with pure white text is
+ * painful to read for the hour somebody spends on a job page in the evening,
+ * so the ground is a very dark green-grey and the text sits just short of
+ * white. The green lifts, because a brand green mixed for white paper goes
+ * muddy on a dark ground and stops reading as a colour at all.
+ */
+.dark {
+  --background: #10140f;
+  --foreground: #e8ece7;
+  --card: #171c16;
+  --card-foreground: #e8ece7;
+  --popover: #171c16;
+  --popover-foreground: #e8ece7;
+  --primary: #6fbe7d;
+  --primary-foreground: #0b1109;
+  --secondary: #1e241d;
+  --secondary-foreground: #e8ece7;
+  --muted: #1e241d;
+  --muted-foreground: #9aa89b;
+  --accent: #263026;
+  --accent-foreground: #e8ece7;
+  --destructive: #e0685c;
+  --destructive-foreground: #1a0d0b;
+  --border: #2b332a;
+  --input: #2b332a;
+  --ring: #6fbe7d;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -62,8 +100,39 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* The same wash, far dimmer. Left in rather than replaced with a flat colour
+   because the gradient is what stops a full screen of cards looking like a
+   spreadsheet. */
+.dark body {
+  background:
+    radial-gradient(1100px 600px at 8% -10%, rgba(111, 190, 125, 0.1), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(58, 141, 122, 0.08), transparent 55%),
+    radial-gradient(800px 550px at 50% 100%, rgba(111, 190, 125, 0.06), transparent 60%),
+    linear-gradient(180deg, #0d110c 0%, #12170f 45%, #0d110c 100%);
+}
+
 * {
   border-color: var(--border);
+}
+
+/*
+ * The frosted-glass borders, after dark.
+ *
+ * The app draws its cards with a white border at half opacity, in about a
+ * hundred and sixty places. On white paper that reads as a soft edge; on a
+ * dark ground it reads as a bright outline round everything, and the whole
+ * screen turns into a wireframe.
+ *
+ * Retargeted here once rather than edited at every call site. A rule per
+ * component would be a hundred and sixty chances to miss one, and the one
+ * missed is the one somebody notices.
+ */
+.dark [class*="border-white/"] {
+  border-color: rgb(255 255 255 / 0.08);
+}
+
+.dark [class*="bg-white/"] {
+  background-color: rgb(255 255 255 / 0.04);
 }
 
 /* Mapbox GL overrides so controls stay usable with large touch targets */
