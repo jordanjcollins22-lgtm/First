@@ -89,14 +89,18 @@ export async function teamMembersForJob(jobId: string): Promise<string[]> {
   return Array.from(ids);
 }
 
-/** Fire-and-forget fan-out for a job event. */
+/** Fire-and-forget fan-out for a job event.
+ *
+ * `except` drops one person from the list — whoever caused the event. Texting
+ * somebody their own message is the fastest way to get notifications turned
+ * off entirely. */
 export async function notifyJobTeam(
   jobId: string,
   kind: NotificationKind,
   body: string,
-  options?: { dedupeKey?: string }
+  options?: { dedupeKey?: string; except?: string | null }
 ): Promise<void> {
-  const profileIds = await teamMembersForJob(jobId);
+  const profileIds = (await teamMembersForJob(jobId)).filter((id) => id !== options?.except);
   await Promise.all(
     profileIds.map((id) => notifyTeamMember(id, kind, body, options).catch(() => false))
   );
