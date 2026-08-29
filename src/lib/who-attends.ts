@@ -10,6 +10,12 @@
  * So the answer is composed from the services actually on this proposal. It
  * names the partner, because the name on the truck is the thing the client
  * will be looking at.
+ *
+ * And it says the policy out loud even on a job that is entirely ours: work
+ * we do not do in house is given to a licensed partner we hire, rather than
+ * attempted by us. A client comparing quotes is trying to work out who is
+ * going to have a go at something they are not set up for, and "we do all of
+ * it ourselves" is the answer that should worry them.
  */
 
 export type PerformedBy = "own" | "partner";
@@ -41,7 +47,7 @@ export interface Crewing {
 }
 
 /** Any partner line with no name set. A truck with no name on the proposal. */
-const UNNAMED_PARTNER = "A local business we work with";
+const UNNAMED_PARTNER = "A licensed local business we work with";
 
 /**
  * Group the proposal's services by who does them.
@@ -104,21 +110,29 @@ export function joinList(items: string[]): string {
 export function whoAttendsAnswer(crewing: Crewing): string {
   const OURS =
     "Our own crew, in company shirts and a marked truck. You will know the day before who is coming and roughly what time.";
+  // Said on every proposal, including the ones that are entirely ours. It is
+  // how we work, not a caveat about this particular job, and a client is
+  // owed it before they decide rather than after somebody turns up.
+  const POLICY =
+    "Anything in your plan that is not something we do in house, we do not have a go at. We hire a licensed and insured partner who does that work every day, and we stay responsible for it either way.";
   const EITHER_WAY =
     "If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.";
 
   if (crewing.kind === "none" || crewing.kind === "own") {
-    return `${OURS} ${EITHER_WAY}`;
+    return `${OURS} ${POLICY} ${EITHER_WAY}`;
   }
 
   const partners = crewing.partnerServices.map(
     (p) => `${p.partner} will be doing the ${joinList(p.services).toLowerCase()}`
   );
 
+  const HIRED =
+    "licensed and insured, and we hire them for the work we do not do in house rather than attempting it ourselves";
+
   if (crewing.kind === "partner") {
     return (
-      `${joinList(partners)}. They are a local business we partner with and have worked alongside for years, ` +
-      `and we stay responsible for the job either way, so anything you need still comes through us. ` +
+      `${joinList(partners)}. They are a local business we have worked alongside for years, ${HIRED}. ` +
+      `We stay responsible for the job either way, so anything you need still comes through us. ` +
       EITHER_WAY
     );
   }
@@ -126,8 +140,8 @@ export function whoAttendsAnswer(crewing: Crewing): string {
   return (
     `Most of it is our own crew, in company shirts and a marked truck: the ${joinList(
       crewing.ownServices
-    ).toLowerCase()}. ${joinList(partners)}. They are a local business we partner with, and we stay ` +
-    `responsible for the whole job, so anything you need still comes through us. ` +
+    ).toLowerCase()}. ${joinList(partners)}. They are a local business we work with, ${HIRED}. ` +
+    `We stay responsible for the whole job, so anything you need still comes through us. ` +
     EITHER_WAY
   );
 }

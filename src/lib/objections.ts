@@ -105,7 +105,7 @@ export const OBJECTIONS: Objection[] = [
     id: "havent_used_you",
     label: "Are you licensed and insured?",
     answer:
-      "Yes to both, and we will send you the certificate if you would like to see it. We are local to Harford County. Every job gets before and after photos, and you get a walkthrough with us at the end before anybody asks you for the final payment.",
+      "Yes to both, and we will send you the certificate if you would like to see it. We are local to Harford County. If part of your plan is something we do not do in house, we hire a licensed and insured partner for that part rather than attempting it ourselves, and we check their paperwork before they set foot on your property. Every job gets before and after photos, and you get a walkthrough with us at the end before anybody asks you for the final payment.",
     resolutions: ["explain", "talk"],
   },
   {
@@ -123,7 +123,7 @@ export const OBJECTIONS: Objection[] = [
     // fallback for a proposal with nothing priced on it yet.
     label: "Who will be at my property?",
     answer:
-      "Our own crew, in company shirts and a marked truck. You will know the day before who is coming and roughly what time. If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.",
+      "Our own crew, in company shirts and a marked truck. You will know the day before who is coming and roughly what time. Anything in your plan that is not something we do in house, we do not have a go at. We hire a licensed and insured partner who does that work every day, and we stay responsible for it either way. If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.",
     resolutions: ["explain", "talk"],
   },
   {

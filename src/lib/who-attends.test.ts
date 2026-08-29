@@ -81,7 +81,29 @@ describe("whoAttendsAnswer", () => {
   it("says it is our crew when it is", () => {
     const answer = whoAttendsAnswer(summariseCrewing([own("Mulch")]));
     expect(answer).toMatch(/our own crew/i);
-    expect(answer).not.toMatch(/partner/i);
+    // Nobody else is on this job, so nobody else gets named.
+    expect(answer).not.toMatch(/will be doing the/i);
+  });
+
+  it("says what happens to work we do not do in house, even on an all ours job", () => {
+    // A client comparing quotes wants to know who has a go at the thing we
+    // are not set up for. "All of it ourselves" is the worrying answer.
+    for (const lines of [[own("Mulch")], []]) {
+      const answer = whoAttendsAnswer(summariseCrewing(lines));
+      expect(answer).toMatch(/licensed and insured partner/i);
+      expect(answer).toMatch(/in house/i);
+    }
+  });
+
+  it("says a partner is licensed and hired for it, not just somebody we know", () => {
+    for (const lines of [
+      [partner("Tree Removal", "Harford Tree Co")],
+      [own("Mulch"), partner("Tree Removal", "Harford Tree Co")],
+    ]) {
+      const answer = whoAttendsAnswer(summariseCrewing(lines));
+      expect(answer).toMatch(/licensed and insured/i);
+      expect(answer).toMatch(/we hire them/i);
+    }
   });
 
   it("names the partner when the whole job goes out", () => {
