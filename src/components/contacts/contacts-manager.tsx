@@ -15,7 +15,9 @@ import {
 import type { ContactsData, ContactRow } from "@/lib/data/contacts";
 import { CONTACT_TYPES, contactTypeLabel } from "@/lib/contact-types";
 import { emptyLabel, searchContacts } from "@/lib/contact-search";
+import { ContactImportPanel } from "./contact-import-panel";
 import { GeocodePanel } from "./geocode-panel";
+import { MapPinOff } from "lucide-react";
 import { RecentMergesPanel } from "./recent-merges-panel";
 
 function summary(contact: ContactRow): string {
@@ -83,6 +85,41 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
       <RecentMergesPanel merges={data.recentMerges} />
 
       <GeocodePanel pending={data.pendingGeocodes} failed={data.failedGeocodes} />
+
+      {/* Bad addresses, not distant customers. Almost always a geocoder that
+          guessed or a town typed without its state, and it sits in the book
+          looking real until somebody drives to it. Here rather than on Lead
+          Generation: it is contact data to fix, not a lead to chase. */}
+      {data.outOfArea.length > 0 && (
+        <section className="rounded-xl border border-amber-400/70 bg-amber-50/60 p-4">
+          <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-amber-900">
+            <MapPinOff className="h-4 w-4" />
+            {data.outOfArea.length} address{data.outOfArea.length === 1 ? "" : "es"} to check
+          </h2>
+          <p className="mb-3 text-xs text-amber-900">
+            Outside Harford County, so the address is probably wrong. Open each one and fix it, or
+            confirm it really is out of area.
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {data.outOfArea.map((contact) => (
+              <li key={contact.id}>
+                <Link
+                  href={`/clients/${contact.id}`}
+                  className="block rounded-lg border border-amber-300/70 bg-white/70 p-2.5 hover:bg-white"
+                >
+                  <p className="text-sm font-medium">{contact.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{contact.address}</p>
+                  <p className="mt-0.5 text-xs font-medium text-amber-800">{contact.reason}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Back alongside the book. Splitting them meant somebody looking at
+          their contacts had to know that importing lived somewhere else. */}
+      <ContactImportPanel />
 
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

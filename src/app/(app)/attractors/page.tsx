@@ -165,6 +165,7 @@ async function ContactsTab() {
     pendingGeocodes: 0,
     failedGeocodes: 0,
     recentMerges: [],
+    outOfArea: [],
   };
   try {
     data = await getContacts();

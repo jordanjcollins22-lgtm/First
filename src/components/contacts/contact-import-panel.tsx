@@ -31,7 +31,10 @@ export function ContactImportPanel() {
   const [csv, setCsv] = useState("");
   const [contactType, setContactType] = useState<ContactType>("client");
   const [batch, setBatch] = useState("");
-  const [mode, setMode] = useState<MergeMode>("fill");
+  // Updating is the default, because a re-import is nearly always a
+  // corrected export of people already here. Leaving it off meant the usual
+  // case silently did nothing: the field was not blank, it was wrong.
+  const [mode, setMode] = useState<MergeMode>("overwrite");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -154,11 +157,12 @@ export function ContactImportPanel() {
           />
           <span>
             <span className="block text-xs font-semibold">
-              Some of these may already be in here
+              Update the ones we already have
             </span>
             <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              Updates the ones we already have and adds the new ones. A column left blank in the
-              file never clears anything here.
+              On by default. Corrects the contacts already here from this file and adds the new
+              ones. A column left blank in the file never clears anything. Untick to add only
+              people we have never seen.
             </span>
           </span>
         </label>

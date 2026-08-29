@@ -155,8 +155,8 @@ describe("describeChanges", () => {
 
 describe("the wording on the choice", () => {
   it("says which one does what", () => {
-    expect(modeLabel("fill")).toMatch(/fill in what is missing/i);
-    expect(modeLabel("overwrite")).toMatch(/correct what is already here/i);
+    expect(modeLabel("fill")).toMatch(/never seen/i);
+    expect(modeLabel("overwrite")).toMatch(/update the ones we already have/i);
   });
 
   it("promises a blank column will not clear anything", () => {

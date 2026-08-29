@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { checkHarford } from "@/lib/harford";
 import { findDuplicateCustomer, normalizeAddress } from "@/lib/dedupe";
 
 export interface ContactRow {
@@ -39,6 +40,14 @@ export interface MergeRecord {
   undoneAt: string | null;
 }
 
+export interface OutOfAreaContact {
+  id: string;
+  name: string;
+  address: string;
+  /** What gave it away, so it can be judged without opening the record. */
+  reason: string;
+}
+
 export interface ContactsData {
   contacts: ContactRow[];
   duplicates: DuplicatePair[];
@@ -52,6 +61,15 @@ export interface ContactsData {
    * whoever is merging rather than behind a menu — an undo you have to go
    * looking for is one you find after forty more merges. */
   recentMerges: MergeRecord[];
+  /**
+   * Contacts whose address cannot be in Harford County.
+   *
+   * Almost always a bad address rather than a customer three states away:
+   * a geocoder that guessed, or a town name typed without its state. It
+   * lives with the contacts because it is contact data to fix, not a lead
+   * to chase.
+   */
+  outOfArea: OutOfAreaContact[];
 }
 
 /**
@@ -186,11 +204,27 @@ export async function getContacts(): Promise<ContactsData> {
     }
   }
 
+  // Only the ones a check can be sure about. An address it cannot read is
+  // not evidence of anything, and a list of two hundred fine addresses is a
+  // list nobody opens.
+  const outOfArea: OutOfAreaContact[] = [];
+  for (const contact of contacts) {
+    for (const address of contact.addresses) {
+      const check = checkHarford({ address });
+      if (check.verdict !== "outside") continue;
+      outOfArea.push({ id: contact.id, name: contact.name, address, reason: check.reason });
+      // One row per contact: the point is to open them and fix it, and four
+      // rows for one person is four times the work to tick off.
+      break;
+    }
+  }
+
   return {
     contacts,
     duplicates,
     pendingGeocodes: pendingGeocodes ?? 0,
     failedGeocodes: failedGeocodes ?? 0,
     recentMerges,
+    outOfArea,
   };
 }

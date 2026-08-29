@@ -163,8 +163,8 @@ export function describeChanges(existing: ExistingContact, patch: ContactPatch):
 /** What the button should say, so nobody presses it expecting the other one. */
 export function modeLabel(mode: MergeMode): string {
   return mode === "overwrite"
-    ? "Let the file correct what is already here"
-    : "Only fill in what is missing";
+    ? "Update the ones we already have"
+    : "Only add people we have never seen";
 }
 
 export function modeBlurb(mode: MergeMode): string {

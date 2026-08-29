@@ -142,7 +142,9 @@ function matchExisting(draft: ContactDraft, existing: ExistingRow[]): ExistingRo
  */
 export async function previewContactImport(
   csvText: string,
-  mode: MergeMode = "fill"
+  // Updating is the default: a re-import is nearly always a corrected export
+  // of people already here, and filling blanks cannot correct anything.
+  mode: MergeMode = "overwrite"
 ): Promise<PreviewResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
@@ -230,7 +232,7 @@ export async function importContacts(
   csvText: string,
   contactType: string,
   batchName: string,
-  mode: MergeMode = "fill"
+  mode: MergeMode = "overwrite"
 ): Promise<ImportResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
