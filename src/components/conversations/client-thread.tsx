@@ -9,6 +9,7 @@ import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { channelLabel, groupByDay, messageTime, reachLine, type ThreadMessage } from "@/lib/message-thread";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { referenceLine } from "@/lib/needs-reply";
+import { SuggestBar } from "@/components/conversations/suggest-bar";
 
 /**
  * One conversation, as a conversation.
@@ -138,6 +139,10 @@ export function ClientThread({
 
       {/* The composer, with the channel it will use named on it. */}
       <div className="sticky bottom-0 border-t border-border bg-card/90 p-3 backdrop-blur-xl">
+        {/* Drafts, only when asked for. Tapping one fills the box below;
+            nothing is sent until somebody presses send. */}
+        <SuggestBar jobId={jobId} onPick={setBody} />
+
         {pickerOpen && (
           <div className="mb-2 overflow-hidden rounded-xl border border-border">
             {(["external", "internal"] as const).map((option) => (
