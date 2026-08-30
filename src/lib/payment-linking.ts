@@ -112,6 +112,9 @@ export interface ImportTally {
   feesCents: number;
   /** What actually went in, in cents. */
   totalCents: number;
+  /** Payments the card processor had already recorded live, updated in place
+   * rather than added a second time. */
+  mergedWithExisting: number;
 }
 
 /** The sentence at the end of an import. */
@@ -145,6 +148,11 @@ export function tallyLine(tally: ImportTally): string {
       maximumFractionDigits: 0,
     });
     parts.push(`${fees} of card fees recorded as an expense`);
+  }
+  if (tally.mergedWithExisting > 0) {
+    parts.push(
+      `${tally.mergedWithExisting} already recorded by the card processor, updated rather than duplicated`
+    );
   }
   if (tally.skipped > 0) parts.push(`${tally.skipped} skipped`);
   return `${parts.join(". ")}.`;

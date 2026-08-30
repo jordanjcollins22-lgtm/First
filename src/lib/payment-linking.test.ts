@@ -82,6 +82,7 @@ function tally(over: Partial<ImportTally> = {}): ImportTally {
     linked: 0,
     unlinked: 0,
     skipped: 0,
+    mergedWithExisting: 0,
     refunded: 0,
     notSettled: 0,
     clientsCreated: 0,

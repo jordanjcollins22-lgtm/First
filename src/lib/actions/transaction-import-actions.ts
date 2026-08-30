@@ -8,6 +8,11 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { findDuplicateCustomer } from "@/lib/dedupe";
 import { chunk } from "@/lib/chunk";
+import {
+  chargeIdsIn,
+  dropRepeatChargeIds,
+  splitByExistingCharge,
+} from "@/lib/payment-dedupe";
 import { methodDetail, paymentMethod } from "@/lib/payment-method";
 import {
   isSettled,
@@ -172,6 +177,7 @@ export async function importTransactions(
       linked: 0,
       unlinked: 0,
       skipped: report.skipped.length,
+      mergedWithExisting: 0,
       refunded: 0,
       notSettled: 0,
       clientsCreated: 0,
@@ -274,9 +280,23 @@ export async function importTransactions(
       }
     }
 
+    // A charge the card processor already recorded live is not a new payment.
+    // The row in the table has no external_id, so an upsert keyed on that
+    // finds nothing, inserts, and collides on the charge id it already holds
+    // -- failing the whole batch, not the one row. Found first, updated in
+    // place second.
+    const deduped = dropRepeatChargeIds(rows);
+    const alreadyCharged = await paymentsByChargeId(
+      supabase,
+      organizationId,
+      chargeIdsIn(deduped)
+    );
+    const { updates, inserts } = splitByExistingCharge(deduped, alreadyCharged);
+    tally.mergedWithExisting = updates.length;
+
     // Batched and upserted on the exporting system's own id, so running the
     // same file twice updates rather than paying everybody twice.
-    for (const batch of chunk(rows, BATCH)) {
+    for (const batch of chunk(inserts, BATCH)) {
       const withId = batch.filter((r) => r.external_id);
       const withoutId = batch.filter((r) => !r.external_id);
 
@@ -290,6 +310,15 @@ export async function importTransactions(
         const { error } = await supabase.from("payments").insert(withoutId as never);
         if (error) return { ok: false, message: describeImportError(error) };
       }
+    }
+
+    // The ones already in the table, matched on the charge id and updated by
+    // primary key so the export's detail lands on the payment that exists.
+    for (const batch of chunk(updates, BATCH)) {
+      const { error } = await supabase
+        .from("payments")
+        .upsert(batch as never, { onConflict: "id" });
+      if (error) return { ok: false, message: describeImportError(error) };
     }
 
     // Fees, after the payments, and never at the cost of them: a ledger that
@@ -365,6 +394,42 @@ export async function importTransactions(
     console.error("importTransactions failed:", err);
     return { ok: false, message: "Couldn't import that file." };
   }
+}
+
+/**
+ * Which of these charge ids the table already holds, and on which payment.
+ *
+ * Read in pages rather than one enormous `in` list, because a URL has a length
+ * and a file can carry a year of charges.
+ */
+async function paymentsByChargeId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  chargeIds: string[]
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (chargeIds.length === 0) return found;
+
+  for (const batch of chunk(chargeIds, 200)) {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("id, stripe_payment_intent_id")
+      .eq("organization_id", organizationId)
+      .in("stripe_payment_intent_id", batch);
+
+    // Not fatal. Missing the lookup means the collision comes back, and the
+    // error that follows says so plainly -- better than refusing to import at
+    // all because one read failed.
+    if (error) {
+      console.error("Looking up existing charges failed:", error);
+      return found;
+    }
+
+    for (const row of (data ?? []) as { id: string; stripe_payment_intent_id: string | null }[]) {
+      if (row.stripe_payment_intent_id) found.set(row.stripe_payment_intent_id, row.id);
+    }
+  }
+  return found;
 }
 
 /** Postgres and PostgREST codes that genuinely mean a migration has not run:
