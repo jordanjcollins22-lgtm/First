@@ -110,6 +110,7 @@ const CREATES = {
   // Indexes only — nothing to probe for.
   "0136_contact_import_conflict_target.sql": [],
   "0137_job_disputes.sql": [],
+  "0138_archived_proposals.sql": ["archived_proposals"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

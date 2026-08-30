@@ -8,6 +8,8 @@ import { listJobsWithLocation } from "@/lib/data/jobs";
 import { checkTabAccess, requireAnyTab } from "@/lib/data/access";
 import { isSupabaseConfigured } from "@/lib/env";
 import { ClientDetailPanel } from "@/components/attractors/client-detail-panel";
+import { ArchivedProposalsPanel } from "@/components/clients/archived-proposals-panel";
+import { listArchivedProposals } from "@/lib/data/archived-proposals";
 import type { Customer, JobProposal } from "@/types/domain";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 
@@ -48,7 +50,13 @@ export default async function ClientAccountPage({
   const properties = (propertiesRaw ?? []) as unknown as PropertyWithCustomer[];
   const propertyIds = properties.map((p) => p.id);
 
-  const [allJobs, profiles] = await Promise.all([listJobsWithLocation(), listProfiles()]);
+  const [allJobs, profiles, archived] = await Promise.all([
+    listJobsWithLocation(),
+    listProfiles(),
+    // The quotes this client got before this app existed, carried over from
+    // the old CRM. Loaded here so an empty archive costs nothing.
+    listArchivedProposals(customerId),
+  ]);
   const clientJobs = allJobs.filter((j) => propertyIds.includes(j.property_id));
   const jobIds = clientJobs.map((j) => j.id);
 
@@ -79,6 +87,10 @@ export default async function ClientAccountPage({
           profiles={profiles}
           proposalsByJobId={proposalsByJobId}
         />
+      </div>
+
+      <div className="rounded-2xl border border-white/60 bg-card/70 p-6 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
+        <ArchivedProposalsPanel customerId={customerId} proposals={archived} />
       </div>
     </div>
   );

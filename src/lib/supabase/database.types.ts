@@ -375,6 +375,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["evaluation_edits"]["Row"]>;
         Relationships: [];
       };
+      archived_proposals: {
+        Row: {
+          id: string;
+          organization_id: string;
+          customer_id: string;
+          file_path: string;
+          file_name: string;
+          outcome: string;
+          job_date: string | null;
+          title: string | null;
+          amount: number | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["archived_proposals"]["Row"]> & {
+          organization_id: string;
+          customer_id: string;
+          file_path: string;
+          file_name: string;
+          outcome: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["archived_proposals"]["Row"]>;
+        Relationships: [];
+      };
       proposal_edits: {
         Row: {
           id: string;
