@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Move } from "lucide-react";
 
-import { clearPipelineOverride, moveJobOnPipeline } from "@/lib/actions/pipeline-move-actions";
+import {
+  clearPipelineOverride,
+  moveJobOnPipeline,
+  type MoveResponse,
+} from "@/lib/actions/pipeline-move-actions";
 import { movableTo, type PipelineStage } from "@/lib/pipeline";
 
 /**
@@ -18,6 +22,14 @@ import { movableTo, type PipelineStage } from "@/lib/pipeline";
  * until the paperwork catches up — the proposal gets accepted, the crew gets
  * scheduled — and then the board goes back to reading the job, which is what
  * keeps a hand placement from quietly outliving its reason.
+ *
+ * The card itself cannot move until the server says so: the board reads every
+ * position off the job, on the server, and this control knows only its own
+ * job's id. So it does not pretend to. What it can do — and now does — is
+ * answer the tap: the picker closes and the control says where the job is
+ * going, on the frame the finger lifts, and the card arrives in the new
+ * column when the board re-renders behind it. Claiming the move had landed
+ * would be a lie the next render might not back up.
  */
 export function MoveJob({
   jobId,
@@ -29,33 +41,38 @@ export function MoveJob({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
+  const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // What we have asked for, shown until the board comes back saying it. React
+  // drops it when the transition ends, which is the moment the fresh board
+  // arrives — so the echo never outlives the answer it was standing in for.
+  const [asked, setAsked] = useOptimistic<string | null>(null);
 
-  function move(stage: PipelineStage, status: string) {
+  function send(echo: string, work: () => Promise<MoveResponse>) {
     setError(null);
+    // Closed before anything is awaited. A picker that stays open under the
+    // thumb invites a second tap on a second destination.
+    setOpen(false);
     start(async () => {
-      const result = await moveJobOnPipeline(jobId, stage, status);
+      setAsked(echo);
+      const result = await work();
       if (result.ok) {
-        setOpen(false);
         router.refresh();
-      } else {
-        setError(result.message);
+        return;
       }
+      // Nothing moved, so the picker comes back with the reason on it rather
+      // than a card that quietly stayed where it was.
+      setError(result.message);
+      setOpen(true);
     });
   }
 
+  function move(stage: PipelineStage, status: string, label: string) {
+    send(`Moving to ${label}`, () => moveJobOnPipeline(jobId, stage, status));
+  }
+
   function reset() {
-    setError(null);
-    start(async () => {
-      const result = await clearPipelineOverride(jobId);
-      if (result.ok) {
-        setOpen(false);
-        router.refresh();
-      } else {
-        setError(result.message);
-      }
-    });
+    send("Putting it back on automatic", () => clearPipelineOverride(jobId));
   }
 
   if (!open) {
@@ -63,10 +80,10 @@ export function MoveJob({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-1 flex items-center gap-1 px-2 text-[11px] font-semibold text-muted-foreground"
+        className="mt-1 flex items-center gap-1 px-2 py-1 text-left text-[11px] font-semibold text-muted-foreground"
       >
-        <Move className="h-3 w-3" />
-        Move
+        <Move className="h-3 w-3 shrink-0" />
+        {asked ?? "Move"}
       </button>
     );
   }
@@ -78,9 +95,8 @@ export function MoveJob({
         <button
           key={place.label}
           type="button"
-          disabled={pending}
-          onClick={() => move(place.stage, place.status)}
-          className="rounded px-1.5 py-1 text-left text-xs hover:bg-accent/50 disabled:opacity-50"
+          onClick={() => move(place.stage, place.status, place.label)}
+          className="rounded px-1.5 py-2 text-left text-xs hover:bg-accent/50"
         >
           {place.label}
         </button>
@@ -89,9 +105,8 @@ export function MoveJob({
       {overridden && (
         <button
           type="button"
-          disabled={pending}
           onClick={reset}
-          className="mt-1 rounded px-1.5 py-1 text-left text-xs font-semibold text-primary disabled:opacity-50"
+          className="mt-1 rounded px-1.5 py-2 text-left text-xs font-semibold text-primary"
         >
           Put it back on automatic
         </button>
@@ -100,7 +115,7 @@ export function MoveJob({
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="mt-0.5 px-1.5 text-left text-xs text-muted-foreground"
+        className="mt-0.5 px-1.5 py-2 text-left text-xs text-muted-foreground"
       >
         Cancel
       </button>

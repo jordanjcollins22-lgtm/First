@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ClipboardCheck, Loader2, Trash2, X } from "lucide-react";
+import { Check, ClipboardCheck, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,7 @@ import {
   approvePhotos,
   removePhotoMark,
   resolvePhotoMark,
+  type ReviewResult,
 } from "@/lib/actions/photo-review-actions";
 import {
   canApprove,
@@ -22,6 +23,7 @@ import {
   summarise,
   type PhotoMark,
 } from "@/lib/photo-review";
+import { applyMarkEdit, provisionalMark, type MarkEdit } from "@/lib/photo-review-edits";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
 
 interface PhotoReviewPanelProps {
@@ -46,6 +48,13 @@ interface PhotoReviewPanelProps {
  * Approval is blocked while anything is outstanding. Booking a client
  * walkthrough over an unfinished punch list is how a customer gets shown the
  * one bed nobody went back to.
+ *
+ * Every change here lands on the screen before it lands in the database. The
+ * marks are server-rendered, so a crew member clearing a five-item punch list
+ * on site used to wait out a round trip per item and could not tell a slow
+ * one from a tap that missed. The list now answers immediately and the server
+ * catches up behind it; a refusal puts the mark back and says why, because a
+ * punch list that quietly drops an item is worse than one that never moved.
  */
 export function PhotoReviewPanel({
   jobId,
@@ -57,26 +66,70 @@ export function PhotoReviewPanel({
   canReview,
 }: PhotoReviewPanelProps) {
   const router = useRouter();
-  const [placing, setPlacing] = useState<{ photo: JobPhotoWithUrl; x: number; y: number } | null>(
-    null
-  );
-  const [message, setMessage] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [placing, setPlacing] = useState<{
+    photo: JobPhotoWithUrl;
+    x: number;
+    y: number;
+    /** Carried back in when a save was refused, so nobody retypes it. */
+    note: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  // React keeps both of these only while the transition runs, so they give way
+  // to the server's answer the moment the refreshed page arrives, and undo
+  // themselves if the action came back refusing.
+  const [shownMarks, editMarks] = useOptimistic(marks, applyMarkEdit);
+  const [shownApprovedAt, setApproved] = useOptimistic(approvedAt);
 
-  const status = reviewStatus({ crewSignedOff, marks, approvedAt });
-  const outstanding = openMarks(marks);
+  const status = reviewStatus({ crewSignedOff, marks: shownMarks, approvedAt: shownApprovedAt });
+  const outstanding = openMarks(shownMarks);
 
   if (status === "not_ready") return null;
 
-  function run(work: () => Promise<{ ok: boolean; message?: string }>) {
-    setMessage(null);
+  function run(show: () => void, work: () => Promise<ReviewResult>) {
+    setError(null);
     startTransition(async () => {
+      show();
       const result = await work();
-      setFailed(!result.ok);
-      setMessage(result.message ?? null);
-      if (result.ok) router.refresh();
+      if (result.ok) {
+        router.refresh();
+        return;
+      }
+      // The screen is already back to what the server thinks by the time this
+      // reads, so it is the reason and not an apology for a state nobody sees.
+      setError(result.message);
     });
+  }
+
+  function edit(change: MarkEdit, work: () => Promise<ReviewResult>) {
+    run(() => editMarks(change), work);
+  }
+
+  function save(note: string) {
+    if (!placing) return;
+    const { photo, x, y } = placing;
+    const local = provisionalMark({
+      id: `pending-${Date.now()}`,
+      photoId: photo.id,
+      x,
+      y,
+      note,
+      at: new Date().toISOString(),
+    });
+
+    // Shut before the request goes out: the pin is the answer, and a dialog
+    // sitting over the photo it refers to is the thing in the way of seeing it.
+    setPlacing(null);
+    run(
+      () => editMarks({ kind: "added", mark: local }),
+      async () => {
+        const result = await addPhotoMark({ jobId, photoId: photo.id, x, y, note });
+        // Refused: the pin is gone again, so the words that explained it come
+        // back with the dialog rather than dying with it.
+        if (!result.ok) setPlacing({ photo, x, y, note });
+        return result;
+      }
+    );
   }
 
   return (
@@ -95,7 +148,7 @@ export function PhotoReviewPanel({
                 : "border-border bg-secondary/60 text-muted-foreground"
           }`}
         >
-          {summarise(marks)}
+          {summarise(shownMarks)}
         </span>
       </div>
       <p className="mb-3 text-xs text-muted-foreground">
@@ -123,9 +176,9 @@ export function PhotoReviewPanel({
               <ReviewPhoto
                 key={photo.id}
                 photo={photo}
-                marks={marksOnPhoto(marks, photo.id)}
+                marks={marksOnPhoto(shownMarks, photo.id)}
                 canReview={canReview}
-                onPlace={(x, y) => setPlacing({ photo, x, y })}
+                onPlace={(x, y) => setPlacing({ photo, x, y, note: "" })}
               />
             ))}
           </div>
@@ -154,10 +207,13 @@ export function PhotoReviewPanel({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-6 px-1.5 text-xs"
-                  disabled={pending}
+                  className="h-8 px-2 text-xs"
                   title="The crew have been back and done this"
-                  onClick={() => run(() => resolvePhotoMark(jobId, mark.id))}
+                  onClick={() =>
+                    edit({ kind: "resolved", id: mark.id, at: new Date().toISOString() }, () =>
+                      resolvePhotoMark(jobId, mark.id)
+                    )
+                  }
                 >
                   <Check className="h-3.5 w-3.5" />
                 </Button>
@@ -166,10 +222,11 @@ export function PhotoReviewPanel({
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="h-6 px-1.5"
-                    disabled={pending}
+                    className="h-8 px-2"
                     title="Take this mark back"
-                    onClick={() => run(() => removePhotoMark(jobId, mark.id))}
+                    onClick={() =>
+                      edit({ kind: "removed", id: mark.id }, () => removePhotoMark(jobId, mark.id))
+                    }
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -180,50 +237,31 @@ export function PhotoReviewPanel({
         </div>
       )}
 
-      {message && (
-        <p
-          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-            failed ? "bg-amber-500/15 text-amber-800" : "bg-emerald-500/15 text-emerald-700"
-          }`}
-        >
-          {message}
-        </p>
+      {/* Behind the dialog when one is open, so that one says it instead. */}
+      {error && !placing && (
+        <p className="mt-3 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800">{error}</p>
       )}
 
       {canReview && status !== "approved" && (
         <Button
           type="button"
           className="mt-3"
-          disabled={pending || !canApprove(marks)}
-          title={canApprove(marks) ? undefined : "Clear the touch-ups first"}
-          onClick={() => run(() => approvePhotos(jobId))}
+          disabled={!canApprove(shownMarks)}
+          title={canApprove(shownMarks) ? undefined : "Clear the touch-ups first"}
+          onClick={() => run(() => setApproved(new Date().toISOString()), () => approvePhotos(jobId))}
         >
-          {pending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Check className="mr-2 h-4 w-4" />
-          )}
+          <Check className="mr-2 h-4 w-4" />
           Looks right — approve
         </Button>
       )}
 
       {placing && (
         <MarkDialog
+          key={`${placing.photo.id}:${placing.x}:${placing.y}`}
+          initialNote={placing.note}
+          error={error}
           onCancel={() => setPlacing(null)}
-          onSave={(note) =>
-            run(async () => {
-              const result = await addPhotoMark({
-                jobId,
-                photoId: placing.photo.id,
-                x: placing.x,
-                y: placing.y,
-                note,
-              });
-              if (result.ok) setPlacing(null);
-              return result;
-            })
-          }
-          pending={pending}
+          onSave={save}
         />
       )}
     </section>
@@ -290,15 +328,18 @@ function ReviewPhoto({
  * pin nobody can act on, so the mark does not exist until there is one.
  */
 function MarkDialog({
+  initialNote,
+  error,
   onSave,
   onCancel,
-  pending,
 }: {
+  initialNote: string;
+  /** Why the last attempt was refused, if it was. */
+  error: string | null;
   onSave: (note: string) => void;
   onCancel: () => void;
-  pending: boolean;
 }) {
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(initialNote);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -316,14 +357,12 @@ function MarkDialog({
           placeholder="Bed edge collapsed at the corner — re-cut and pack it."
         />
 
+        {error && (
+          <p className="mt-2 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800">{error}</p>
+        )}
+
         <div className="mt-3 flex gap-2">
-          <Button
-            type="button"
-            className="flex-1"
-            disabled={pending || !note.trim()}
-            onClick={() => onSave(note)}
-          >
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          <Button type="button" className="flex-1" disabled={!note.trim()} onClick={() => onSave(note)}>
             Send to the crew
           </Button>
           <Button type="button" variant="ghost" onClick={onCancel}>
