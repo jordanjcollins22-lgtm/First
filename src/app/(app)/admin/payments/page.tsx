@@ -12,6 +12,7 @@ import { listDayEntries, listPayPeople } from "@/lib/data/time-clock";
 import { localDayKey } from "@/lib/data/crew-day";
 import { getReceivedPayments } from "@/lib/data/received-payments";
 import { ReceivedPanel } from "@/components/payments/received-panel";
+import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
 
 /**
  * Money in and out, all of it.
@@ -126,7 +127,15 @@ async function ReceivedTab() {
     );
   }
 
-  return <ReceivedPanel data={data} />;
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Money taken elsewhere, brought in and joined up. Above the list
+          rather than behind a tab: it is the thing somebody came here to do
+          the first few times, and invisible once the backlog is in. */}
+      <TransactionImportPanel />
+      <ReceivedPanel data={data} />
+    </div>
+  );
 }
 
 /** Who was on what today, and what it cost. */
