@@ -42,6 +42,8 @@ interface ClientRow {
   name: string | null;
   email: string | null;
   phone: string | null;
+  /** The CRM id the contact import stored. The strongest match there is. */
+  external_id: string | null;
 }
 
 /**
@@ -242,7 +244,7 @@ async function loadClients(): Promise<ClientRow[]> {
   for (let from = 0; ; from += size) {
     const { data, error } = await supabase
       .from("customers")
-      .select("id, name, email, phone")
+      .select("id, name, email, phone, external_id")
       .range(from, from + size - 1);
     if (error) throw error;
 
@@ -290,8 +292,23 @@ async function loadJobs(): Promise<Map<string, JobCandidate[]>> {
   return byCustomer;
 }
 
-/** The same ladder the contact import climbs: email, then phone, then name. */
+/**
+ * Finding the client this payment belongs to.
+ *
+ * The CRM's own contact id first, because the contact import stored exactly
+ * that against every client and it is the only key here that cannot be two
+ * different people. A payments export carries it on every row, and matching a
+ * name is guesswork by comparison: two Bertrands in the same county is not a
+ * rare thing to have on the books.
+ *
+ * Everything else falls back to the same ladder the contact import climbs.
+ */
 function matchClient(draft: TransactionDraft, clients: ClientRow[]): ClientRow | null {
+  if (draft.customerExternalId) {
+    const exact = clients.find((c) => c.external_id === draft.customerExternalId);
+    if (exact) return exact;
+  }
+
   return (
     (findDuplicateCustomer(clients, {
       name: draft.name,

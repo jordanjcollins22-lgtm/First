@@ -13,6 +13,7 @@ import {
 function draft(over: Partial<TransactionDraft> = {}): TransactionDraft {
   return {
     externalId: "t1",
+    customerExternalId: null,
     name: "Dana Ruiz",
     email: "dana@example.com",
     phone: null,
@@ -187,5 +188,60 @@ describe("the status words that look like their own opposite", () => {
   it("still reads the ordinary success words", () => {
     expect(normaliseStatus("Paid")).toBe("succeeded");
     expect(normaliseStatus("payment succeeded")).toBe("succeeded");
+  });
+});
+
+describe("a real payments export", () => {
+  // Shaped like the file this was built against: due and paid side by side,
+  // one transaction spread over several line-item rows, and the CRM's own
+  // contact id on every row.
+  const csv = [
+    '"Internal transaction id","Customer id","Customer name","Customer email","Payment method","Sub total","Total amount due","Total amount paid","Status","Transaction date","Is refunded","Line item name"',
+    '"tx_1","ghl_a","Roger Johnson","roger@example.com","Debit Card",9100,8190,517.5,"succeeded","Aug 21, 2026","NA","Scope"',
+    '"tx_2","ghl_b","Ann Reed","ann@example.com","Credit Card",416,416,416,"succeeded","Feb 2, 2026","NA","DRIVEWAY SIZE"',
+    '"tx_2","ghl_b","Ann Reed","ann@example.com","",416,"","","succeeded","Feb 2, 2026","NA","Salt Application"',
+    '"tx_3","ghl_c","Kim Ford","kim@example.com","Credit Card",500,500,500,"succeeded","Mar 3, 2026","Full","Scope"',
+  ].join("\n");
+
+  it("takes what was paid, never what was billed", () => {
+    // The row that made this necessary: invoiced $8,190, paid a $517.50
+    // deposit. Reading the wrong column records money that never arrived.
+    const first = parseTransactionCsv(csv).drafts[0];
+    expect(first.amountCents).toBe(51750);
+  });
+
+  it("folds a transaction's line items into one payment", () => {
+    // Three things on one invoice come back as three rows and only the first
+    // carries the money. Counting them separately trebles the takings.
+    const drafts = parseTransactionCsv(csv).drafts;
+    expect(drafts.filter((d) => d.externalId === "tx_2")).toHaveLength(1);
+    expect(drafts.find((d) => d.externalId === "tx_2")?.amountCents).toBe(41600);
+  });
+
+  it("keeps what each line item was for, rather than dropping it", () => {
+    const merged = parseTransactionCsv(csv).drafts.find((d) => d.externalId === "tx_2");
+    expect(merged?.description).toBe("DRIVEWAY SIZE, Salt Application");
+  });
+
+  it("reads the CRM's contact id, which beats matching on a name", () => {
+    expect(parseTransactionCsv(csv).drafts[0].customerExternalId).toBe("ghl_a");
+  });
+
+  it("believes a refund column over a status that says succeeded", () => {
+    const refunded = parseTransactionCsv(csv).drafts.find((d) => d.externalId === "tx_3");
+    expect(refunded?.status).toBe("refunded");
+    expect(isSettled(refunded!)).toBe(false);
+  });
+
+  it("reads the date format the export writes", () => {
+    expect(parseTransactionCsv(csv).drafts[0].paidOn).toBe("2026-08-21");
+  });
+
+  it("adds up only the money that arrived", () => {
+    const preview = previewTransactions(parseTransactionCsv(csv).drafts);
+    expect(preview.total).toBe(3);
+    expect(preview.settled).toBe(2);
+    expect(preview.settledCents).toBe(51750 + 41600);
+    expect(preview.refunded).toBe(1);
   });
 });

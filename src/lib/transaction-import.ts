@@ -18,6 +18,10 @@ export interface TransactionDraft {
   /** The exporting system's own id. The stable key a re-import upserts on, so
    * running the same file twice does not pay everybody twice. */
   externalId: string | null;
+  /** The exporting CRM's own contact id, where the file carries one. The
+   * strongest way to find the client: the contact import stored exactly this
+   * against every one of them, so it beats matching on a name. */
+  customerExternalId: string | null;
   /** Whatever the file called the payer. Matched against contacts later. */
   name: string | null;
   email: string | null;
@@ -44,47 +48,72 @@ export interface TransactionReport {
   unmatchedHeaders: string[];
 }
 
+/**
+ * The names an export gives each thing, best first.
+ *
+ * Order is the whole design here. A real export carries "Total amount due"
+ * and "Total amount paid" side by side, and they are not the same number: a
+ * client invoiced eight thousand who paid a five hundred deposit has both on
+ * one row. Reading the wrong one records money that never arrived, so the
+ * aliases are searched in preference order and the first one present wins,
+ * rather than taking whichever column happens to appear first in the file.
+ */
 const COLUMN_ALIASES = {
   externalId: [
+    "internal transaction id",
     "transaction id",
-    "id",
     "payment id",
     "charge id",
-    "reference",
-    "reference number",
+    "internal order id",
     "receipt number",
-    "invoice id",
-    "order id",
+    "reference number",
+    "reference",
+    "id",
   ],
-  name: ["name", "customer", "customer name", "contact", "contact name", "billing name", "payer"],
-  email: ["email", "customer email", "billing email", "contact email", "email address"],
-  phone: ["phone", "customer phone", "billing phone", "contact phone", "phone number"],
+  /** The exporting CRM's own contact id. The strongest match there is, since
+   * the contact import stored exactly this against every client. */
+  customerExternalId: ["customer id", "contact id", "customer external id"],
+  name: ["customer name", "name", "contact name", "billing name", "payer", "customer", "contact"],
+  email: ["customer email", "email", "billing email", "contact email", "email address"],
+  phone: ["customer phone", "phone", "billing phone", "contact phone", "phone number"],
+  /** What actually arrived, never what was billed. */
   amount: [
-    "amount",
-    "total",
+    "total amount paid",
     "amount paid",
-    "paid",
-    "gross",
+    "amount received",
+    "amount",
     "gross amount",
-    "subtotal",
+    "gross",
+    "paid",
+    "total",
     "price",
     "value",
-    "converted amount",
   ],
   date: [
-    "date",
-    "created",
+    "transaction date",
+    "payment date",
+    "date paid",
+    "paid at",
+    "completed at",
     "created at",
     "created date",
-    "paid at",
-    "payment date",
-    "transaction date",
-    "date paid",
-    "completed at",
+    "created",
+    "date",
   ],
   status: ["status", "payment status", "state", "result"],
-  description: ["description", "product", "item", "line item", "notes", "memo", "product name"],
-  method: ["method", "payment method", "type", "payment type", "source", "card brand"],
+  /** A separate yes/no column some exports carry alongside the status. */
+  refundedFlag: ["is refunded", "refunded"],
+  description: [
+    "line item name",
+    "description",
+    "product name",
+    "product",
+    "item",
+    "line item",
+    "memo",
+    "notes",
+  ],
+  method: ["payment method", "method", "payment type", "card brand", "type"],
 } as const;
 
 function normalizeHeader(header: string): string {
@@ -188,10 +217,15 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
     keyof typeof COLUMN_ALIASES,
     readonly string[],
   ][]) {
-    const found = headers.findIndex((h) => aliases.includes(h));
-    if (found >= 0) {
-      index[field] = found;
-      claimed.add(found);
+    // Walk the aliases rather than the headers, so preference decides which
+    // column is taken when a file carries several that could fit.
+    for (const alias of aliases) {
+      const found = headers.indexOf(alias);
+      if (found >= 0) {
+        index[field] = found;
+        claimed.add(found);
+        break;
+      }
     }
   }
 
@@ -201,6 +235,9 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
 
   const drafts: TransactionDraft[] = [];
   const skipped: { row: number; reason: string }[] = [];
+  /** Where each transaction id landed in drafts, so its extra line-item rows
+   * can be folded into the one payment rather than counted again. */
+  const seen = new Map<string, number>();
 
   const cell = (row: string[], field: keyof typeof COLUMN_ALIASES) => {
     const at = index[field];
@@ -211,6 +248,28 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
     const row = rows[i];
     if (row.every((c) => !c.trim())) continue;
 
+    const externalId = text(cell(row, "externalId"));
+    const lineItem = text(cell(row, "description"));
+
+    // One transaction with three things on it comes back as three rows, and
+    // only the first carries the money — the rest are its line items with an
+    // empty amount. Counting those as payments would treble the row count and
+    // skipping them would lose what the job was for, so they are folded into
+    // the payment they belong to.
+    const already = externalId ? seen.get(externalId) : undefined;
+    if (already !== undefined) {
+      const existing = drafts[already];
+      if (lineItem && !existing.description?.includes(lineItem)) {
+        existing.description = existing.description ? `${existing.description}, ${lineItem}` : lineItem;
+      }
+      // A later row of the same transaction can be the one carrying the money.
+      if (existing.amountCents === 0) {
+        const late = parseMoneyCents(cell(row, "amount"));
+        if (late !== null) existing.amountCents = late;
+      }
+      continue;
+    }
+
     const amountCents = parseMoneyCents(cell(row, "amount"));
     if (amountCents === null) {
       skipped.push({ row: i + 1, reason: "No amount on this row." });
@@ -220,22 +279,31 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
     const name = text(cell(row, "name"));
     const email = text(cell(row, "email"));
     const phone = text(cell(row, "phone"));
-    if (!name && !email && !phone) {
+    const customerExternalId = text(cell(row, "customerExternalId"));
+    if (!name && !email && !phone && !customerExternalId) {
       // Nothing to match a client on. Worth saying rather than importing an
       // orphan payment nobody can attribute.
-      skipped.push({ row: i + 1, reason: "No name, email or phone to match a client on." });
+      skipped.push({ row: i + 1, reason: "Nothing on this row to match a client on." });
       continue;
     }
 
+    // Some exports carry the refund as its own column rather than in the
+    // status, and a row saying "Full" against a status of "succeeded" is a
+    // refund whatever the status says.
+    const refundFlag = (text(cell(row, "refundedFlag")) ?? "").toLowerCase();
+    const refunded = refundFlag === "full" || refundFlag === "partial" || refundFlag === "yes";
+
+    if (externalId) seen.set(externalId, drafts.length);
     drafts.push({
-      externalId: text(cell(row, "externalId")),
+      externalId,
+      customerExternalId,
       name,
       email,
       phone,
       amountCents,
       paidOn: parseDate(cell(row, "date")),
-      status: normaliseStatus(cell(row, "status")),
-      description: text(cell(row, "description")),
+      status: refunded ? "refunded" : normaliseStatus(cell(row, "status")),
+      description: lineItem,
       method: text(cell(row, "method")),
     });
   }
