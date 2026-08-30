@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
-import { isOnPipeline, pipelinePosition, type PipelineStage } from "@/lib/pipeline";
+import { isOnPipeline, pipelinePosition, type PipelineOverride, type PipelineStage } from "@/lib/pipeline";
 import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
 import { activityLabel, isHot, watchingFor, type ViewSummary } from "@/lib/proposal-views";
 
@@ -28,6 +28,8 @@ export interface PipelineCard {
   /** Opened within the hour: somebody who can still be rung while they are
    * on the page. */
   activityHot: boolean;
+  /** Placed here by hand rather than read off the job. */
+  overridden: boolean;
 }
 
 export async function getPipeline(): Promise<PipelineCard[]> {
@@ -68,6 +70,15 @@ export async function getPipeline(): Promise<PipelineCard[]> {
   return jobs
     .map((job) => {
       const proposal = proposalByJob.get(job.id) ?? null;
+      const override: PipelineOverride | null =
+        job.pipeline_override_stage && job.pipeline_override_status && job.pipeline_override_from
+          ? {
+              stage: job.pipeline_override_stage as PipelineStage,
+              status: job.pipeline_override_status,
+              from: job.pipeline_override_from,
+            }
+          : null;
+
       const input = {
         status: job.status,
         evaluationStatus: job.evaluation_status,
@@ -75,6 +86,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         projectStartDate: job.project_start_date,
         projectEndDate: job.project_end_date,
         proposalStatus: proposal?.status ?? null,
+        override,
       };
       if (!isOnPipeline(input)) return null;
 
@@ -98,6 +110,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         assignedTo: job.assigned_to,
         activity: watching ? activityLabel(summary, now) : null,
         activityHot: watching && isHot(summary, proposal?.status ?? ""),
+        overridden: position.overridden === true,
       } satisfies PipelineCard;
     })
     .filter((c): c is PipelineCard => c !== null);

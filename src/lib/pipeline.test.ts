@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { isOnPipeline, pipelinePosition, STAGE_STATUSES, type PipelineInput } from "@/lib/pipeline";
+import {
+  derivedPosition,
+  isOnPipeline,
+  movableTo,
+  overrideIsStale,
+  overrideNote,
+  pipelinePosition,
+  STAGES,
+  STAGE_STATUSES,
+  type PipelineInput,
+} from "@/lib/pipeline";
 
 function job(overrides: Partial<PipelineInput> = {}): PipelineInput {
   return {
@@ -145,5 +155,88 @@ describe("needs sign-off", () => {
 
   it("is a status the board knows how to show", () => {
     expect(STAGE_STATUSES.operations).toContain("Needs sign-off");
+  });
+});
+
+describe("moving a job by hand", () => {
+  const base: PipelineInput = {
+    status: "estimating",
+    evaluationStatus: null,
+    evaluationDate: null,
+    projectStartDate: null,
+    projectEndDate: null,
+    proposalStatus: "sent",
+  };
+  const today = new Date("2026-08-29T12:00:00Z");
+
+  it("puts the job where somebody put it", () => {
+    // They said yes on the phone; the proposal still says sent.
+    const position = pipelinePosition(
+      {
+        ...base,
+        override: { stage: "operations", status: "Won — not scheduled", from: "Sent" },
+      },
+      today
+    );
+    expect(position.stage).toBe("operations");
+    expect(position.status).toBe("Won — not scheduled");
+    expect(position.overridden).toBe(true);
+    expect(overrideNote(position)).toMatch(/by hand/i);
+  });
+
+  it("gives the board back the moment the paperwork catches up", () => {
+    // The same override, but the proposal has since been accepted. The
+    // situation it was made against is gone, so the facts win again.
+    const input: PipelineInput = {
+      ...base,
+      proposalStatus: "accepted",
+      override: { stage: "operations", status: "Won — not scheduled", from: "Sent" },
+    };
+    const position = pipelinePosition(input, today);
+    expect(position.overridden).toBeFalsy();
+    expect(overrideIsStale(input, today)).toBe(true);
+  });
+
+  it("is not stale while nothing underneath has moved", () => {
+    expect(
+      overrideIsStale(
+        { ...base, override: { stage: "operations", status: "Scheduled", from: "Sent" } },
+        today
+      )
+    ).toBe(false);
+  });
+
+  it("ignores a placement naming somewhere that no longer exists", () => {
+    // A status renamed in a later version must not strand a job nowhere.
+    const position = pipelinePosition(
+      { ...base, override: { stage: "operations", status: "Gone Fishing", from: "Sent" } },
+      today
+    );
+    expect(position.status).toBe("Sent");
+  });
+
+  it("treats a moved job as somebody's to act on", () => {
+    // Sent is deliberately not actionable — it is waiting on the client. A
+    // job somebody dragged somewhere is waiting on them.
+    expect(pipelinePosition(base, today).actionable).toBe(false);
+    expect(
+      pipelinePosition(
+        { ...base, override: { stage: "sales", status: "Needs approval", from: "Sent" } },
+        today
+      ).actionable
+    ).toBe(true);
+  });
+
+  it("changes nothing at all when nobody has moved it", () => {
+    expect(pipelinePosition(base, today)).toEqual(derivedPosition(base, today));
+  });
+
+  it("offers every place on the board to move to", () => {
+    const places = movableTo();
+    expect(places).toHaveLength(
+      STAGES.reduce((sum, stage) => sum + STAGE_STATUSES[stage.key].length, 0)
+    );
+    expect(places[0].label).toBe("Evaluation — Scheduled");
+    expect(places.some((p) => p.label === "Operations — Completed")).toBe(true);
   });
 });

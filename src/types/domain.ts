@@ -86,6 +86,17 @@ export interface Job {
   completed_at: string | null;
   completed_by: string | null;
   completion_notes: string | null;
+  /**
+   * Where somebody put this job on the board by hand, and what the board said
+   * at the time. Null everywhere it is read off the job, which is nearly
+   * everywhere — see lib/pipeline for why the "from" half matters.
+   */
+  pipeline_override_stage: string | null;
+  pipeline_override_status: string | null;
+  pipeline_override_from: string | null;
+  pipeline_override_at: string | null;
+  pipeline_override_by: string | null;
+  pipeline_override_note: string | null;
   created_at: string;
   updated_at: string;
 }

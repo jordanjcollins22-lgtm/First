@@ -9,6 +9,7 @@ import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { listAllProposals } from "@/lib/data/all-proposals";
 import { ProposalsView } from "@/components/proposal/proposals-view";
+import { MoveJob } from "@/components/pipeline/move-job";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -150,6 +151,15 @@ async function PipelineTab() {
                                       the cards where that is still an open
                                       question. Sent and read are different
                                       facts, and the board only had the first. */}
+                                  {/* Put here by hand rather than read off
+                                      the job. Said on the card, because a card
+                                      sitting somewhere the data does not imply
+                                      should say so. */}
+                                  {card.overridden && (
+                                    <p className="text-[11px] font-medium text-primary">
+                                      Moved here by hand
+                                    </p>
+                                  )}
                                   {card.activity && (
                                     <p
                                       className={`text-[11px] ${
@@ -163,6 +173,7 @@ async function PipelineTab() {
                                     </p>
                                   )}
                                 </Link>
+                                <MoveJob jobId={card.jobId} overridden={card.overridden} />
                               </li>
                             ))}
                           </ul>

@@ -810,6 +810,12 @@ export interface Database {
           completed_at: string | null;
           photos_approved_at: string | null;
           photos_approved_by: string | null;
+          pipeline_override_stage: string | null;
+          pipeline_override_status: string | null;
+          pipeline_override_from: string | null;
+          pipeline_override_at: string | null;
+          pipeline_override_by: string | null;
+          pipeline_override_note: string | null;
           completed_by: string | null;
           completion_notes: string | null;
           created_at: string;

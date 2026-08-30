@@ -106,6 +106,7 @@ const CREATES = {
   "0132_conversation_reads.sql": ["conversation_reads"],
   "0133_proposal_edit_source.sql": [],
   "0134_evaluation_edits.sql": ["evaluation_edits"],
+  "0135_pipeline_override.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
