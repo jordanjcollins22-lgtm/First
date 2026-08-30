@@ -26,10 +26,34 @@ export function isPublic(pathname: string): boolean {
   );
 }
 
+/**
+ * Whether this request needs us to ask the auth server anything.
+ *
+ * On a public path the answer changes nothing — decideAccess allows it
+ * whoever is asking — so the call was a network round trip to Supabase on
+ * every load of a page we hand to customers. The booking page is prerendered
+ * and served from the CDN, and then waited on an auth check for a form that
+ * has no account behind it.
+ *
+ * The cost of skipping it is that a session is not refreshed on these
+ * requests. That is nothing in practice: a staff member reaches every one of
+ * these pages from inside the app, and any page that needs the session
+ * refreshes it.
+ */
+export function needsAuthCheck(pathname: string): boolean {
+  return !isPublic(pathname);
+}
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   if (!isSupabaseConfigured) {
+    return response;
+  }
+
+  // Nothing to ask, so nobody is asked. Checked before the client is built,
+  // because building it is most of the cost.
+  if (!needsAuthCheck(request.nextUrl.pathname)) {
     return response;
   }
 
@@ -54,8 +78,6 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const isPublicPath = isPublic(request.nextUrl.pathname);
-
   // getUser() calls Supabase's auth server, so it can fail for reasons that
   // have nothing to do with the session — a cold start, a dead spot, a blip at
   // the other end. The error is kept rather than discarded so a failure to ask
@@ -74,7 +96,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   const decision = decideAccess({
-    isPublicPath,
+    // Public paths returned above, so anything reaching here is guarded.
+    isPublicPath: false,
     cookieNames: request.cookies.getAll().map((c) => c.name),
     user,
     error,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPublic, PUBLIC_PREFIXES } from "@/lib/supabase/middleware";
+import { isPublic, PUBLIC_PREFIXES, needsAuthCheck} from "@/lib/supabase/middleware";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -91,5 +91,29 @@ describe("routes a customer opens", () => {
   it("keeps the sign-in page itself reachable", () => {
     expect(PUBLIC_PREFIXES).toContain("/login");
     expect(isPublic("/login")).toBe(true);
+  });
+});
+
+describe("public pages do not wait on the auth server", () => {
+  it("asks nobody about a page we hand to a customer", () => {
+    // decideAccess allows a public path whoever is asking, so the call was a
+    // round trip to Supabase on every load of a prerendered booking page.
+    for (const pathname of ["/book", "/book/options", "/proposal/abc", "/flyer", "/login"]) {
+      expect(needsAuthCheck(pathname)).toBe(false);
+    }
+  });
+
+  it("still asks about everything behind the sign-in", () => {
+    for (const pathname of ["/dashboard", "/jobs/123", "/pipeline", "/admin/settings", "/"]) {
+      expect(needsAuthCheck(pathname)).toBe(true);
+    }
+  });
+
+  it("agrees with the public list it is derived from", () => {
+    // Two ways of saying the same thing is how the flyer page ended up
+    // behind a staff sign-in screen.
+    for (const prefix of PUBLIC_PREFIXES) {
+      expect(needsAuthCheck(prefix)).toBe(!isPublic(prefix));
+    }
   });
 });
