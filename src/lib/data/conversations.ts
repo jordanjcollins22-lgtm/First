@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { messageWindows, newestPerThread, threadKey, type Thread } from "@/lib/conversation-threads";
 import { boundedPageSize, takePage } from "@/lib/pagination";
+import { isMissingColumn } from "@/lib/setup-errors";
 import type { JobMessage, MessageChannel } from "@/types/domain";
 
 /**
@@ -24,7 +25,21 @@ export type ConversationLastMessage = Pick<
   | "created_at"
 >;
 
-const MESSAGE_COLUMNS = "id, job_id, channel, author_type, author_name, reference_label, body, created_at";
+/**
+ * The columns every deployment has.
+ *
+ * Split from the optional one below because naming columns turned a
+ * survivable state into a crash: `select("*")` returns whatever the table
+ * happens to have, so a deployment that had not yet run the migration adding
+ * `reference_label` simply got no reference on its rows. Asking for it by
+ * name makes the whole inbox fail instead.
+ */
+const CORE_MESSAGE_COLUMNS =
+  "id, job_id, channel, author_type, author_name, body, created_at";
+
+/** Added by 0132. Asked for separately so its absence costs the reference
+ * line rather than the page. */
+const MESSAGE_COLUMNS = `${CORE_MESSAGE_COLUMNS}, reference_label`;
 
 /** How many conversations one load of the inbox shows. A phone screen holds
  * about six of these, so fifty is several thumb-flicks past what anybody
@@ -147,11 +162,20 @@ async function readRecentThreads(pageSize: number) {
   let exhausted = false;
 
   for (const size of messageWindows(pageSize)) {
-    const { data, error } = await supabase
-      .from("job_messages")
-      .select(MESSAGE_COLUMNS)
-      .order("created_at", { ascending: false })
-      .limit(size);
+    const read = async (columns: string) =>
+      supabase
+        .from("job_messages")
+        .select(columns)
+        .order("created_at", { ascending: false })
+        .limit(size);
+
+    let { data, error } = await read(MESSAGE_COLUMNS);
+    // A deployment that has not run 0132 yet has no reference_label. That
+    // should cost the "Re: which area they meant" line on a row, not the
+    // whole inbox, so the read is tried again without it.
+    if (isMissingColumn(error)) {
+      ({ data, error } = await read(CORE_MESSAGE_COLUMNS));
+    }
     if (error) throw error;
 
     const rows = (data ?? []) as unknown as ConversationLastMessage[];

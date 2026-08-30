@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { isMissingColumn } from "@/lib/setup-errors";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
 import { boundedPageSize } from "@/lib/pagination";
@@ -34,8 +35,13 @@ export type ProposalListProposal = Pick<
 const PROPOSAL_COLUMNS =
   "id, job_id, token, status, total_cost, scope_snapshot, generated_at, client_response_note";
 
-const EDIT_COLUMNS =
-  "id, proposal_id, created_at, edited_by_name, removed_zones, removed_lines, previous_total_cents, new_total_cents, note, requested_via";
+/** Everything 0131 created. `requested_via` arrived later, in 0133, so it is
+ * asked for separately — a deployment part-way between the two should lose
+ * "they texted" off a history line, not the whole proposals page. */
+const CORE_EDIT_COLUMNS =
+  "id, proposal_id, created_at, edited_by_name, removed_zones, removed_lines, previous_total_cents, new_total_cents, note";
+
+const EDIT_COLUMNS = `${CORE_EDIT_COLUMNS}, requested_via`;
 
 /** How many proposals one load of the list shows. Generous on purpose: the
  * tabs above it split by status, and a page that cannot fill "Needs approval"
@@ -160,12 +166,19 @@ async function listProposalEdits(proposalIds: string[], limit: number): Promise<
   if (proposalIds.length === 0) return [];
   try {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("proposal_edits")
-      .select(EDIT_COLUMNS)
-      .in("proposal_id", proposalIds)
-      .order("created_at", { ascending: false })
-      .limit(limit);
+    const read = async (columns: string) =>
+      supabase
+        .from("proposal_edits")
+        .select(columns)
+        .in("proposal_id", proposalIds)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+    let { data, error } = await read(EDIT_COLUMNS);
+    // Between 0131 and 0133 the table exists without requested_via. Losing
+    // "they texted" off a line is a fair price; losing the whole history of
+    // what came off a quote is not.
+    if (isMissingColumn(error)) ({ data, error } = await read(CORE_EDIT_COLUMNS));
     return (data ?? []) as unknown as ProposalEditRow[];
   } catch {
     return [];

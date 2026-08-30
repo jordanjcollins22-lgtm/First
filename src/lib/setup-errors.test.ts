@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeDbError, isMissingTable } from "@/lib/setup-errors";
+import { describeDbError, isMissingTable, isMissingColumn} from "./setup-errors";
 
 describe("isMissingTable", () => {
   it("recognises the PostgREST schema-cache answer", () => {
@@ -96,5 +96,31 @@ describe("describeDbError", () => {
 
   it("falls back when there is no error at all", () => {
     expect(describeDbError(null, "Couldn't do that.")).toBe("Couldn't do that.");
+  });
+});
+
+describe("an optional column missing must not take a page down", () => {
+  // The inbox and the proposals list name their columns now instead of
+  // selecting everything, which is what makes them cheap — and what turned a
+  // deployment part-way through its migrations from "no reference line" into
+  // a crashing page. Both retry without the optional column, and this is the
+  // check that decides.
+  it("recognises PostgREST and Postgres saying a column is not there", () => {
+    expect(isMissingColumn({ code: "PGRST204" })).toBe(true);
+    expect(isMissingColumn({ code: "42703" })).toBe(true);
+    expect(
+      isMissingColumn({ message: "column job_messages.reference_label does not exist" })
+    ).toBe(true);
+    expect(
+      isMissingColumn({ message: "Could not find the 'requested_via' column of 'proposal_edits'" })
+    ).toBe(true);
+  });
+
+  it("does not mistake a real failure for a missing column", () => {
+    // Retrying a narrower select against a dead database would just fail
+    // twice and hide the reason.
+    expect(isMissingColumn({ code: "PGRST301", message: "JWT expired" })).toBe(false);
+    expect(isMissingColumn({ message: "permission denied for table job_messages" })).toBe(false);
+    expect(isMissingColumn(null)).toBe(false);
   });
 });
