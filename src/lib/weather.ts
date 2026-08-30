@@ -8,6 +8,8 @@
  * render and every export here is a helper, not an action.
  */
 
+import { fetchJson } from "@/lib/resilient-fetch";
+
 export interface WeatherPoint {
   id: string;
   name: string;
@@ -161,7 +163,10 @@ interface OpenMeteoResponse {
  * coordinates and answers with an array in the same order.
  *
  * Cached for half an hour: the forecast doesn't change faster than that, and
- * it keeps a page refresh from hitting the API every time.
+ * it keeps a page refresh from hitting the API every time. The deadline the
+ * call now carries costs the per-render memoisation Next does for a bare
+ * fetch, but not that cache — Next drops the signal when it revalidates in the
+ * background — and this is called once per render anyway.
  */
 export async function fetchForecasts(
   points: WeatherPoint[],
@@ -185,11 +190,27 @@ export async function fetchForecasts(
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", String(Math.min(16, Math.max(1, forecastDays))));
 
-  const res = await fetch(url, { next: { revalidate: 1800 } });
-  if (!res.ok) throw new Error(`Weather service returned ${res.status}`);
+  // Throws on failure, deliberately and still. Both callers already treat a
+  // missing forecast as a missing forecast — the weather page says to reload
+  // in a minute and the job briefing simply leaves the strip off — and turning
+  // an outage into an empty array here would make it look like Open-Meteo
+  // answered "no weather", which renders as a blank forecast nobody can tell
+  // from a real one.
+  //
+  // What has changed is that the throw now arrives. A bare fetch against a
+  // service that has stopped answering never returns, so the fallback that was
+  // written for exactly this case could not fire; the page hung instead.
+  // Three seconds an attempt, twice: a forecast is worth a short wait and
+  // nothing more, and the half-hour cache means a failed load costs one
+  // render rather than one per viewer.
+  const outcome = await fetchJson<OpenMeteoResponse | OpenMeteoResponse[]>(url, {
+    timeoutMs: 3_000,
+    attempts: 2,
+    init: { next: { revalidate: 1800 } },
+  });
+  if (!outcome.ok) throw new Error(`Weather service unavailable: ${outcome.message}`);
 
-  const body = (await res.json()) as OpenMeteoResponse | OpenMeteoResponse[];
-  const entries = Array.isArray(body) ? body : [body];
+  const entries = Array.isArray(outcome.value) ? outcome.value : [outcome.value];
 
   return points.map((point, i) => {
     const entry = entries[i];

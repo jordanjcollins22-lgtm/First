@@ -6,17 +6,40 @@ import { createClient } from "@/lib/supabase/server";
 import { ambiguousOnes, refreshLabel, staleOnes, verdictFor } from "@/lib/address-refresh";
 import { firstAcceptable, pointOutsideRegion, tooThinToPlace } from "@/lib/geocode-guard";
 import { getCurrentProfile } from "@/lib/data/team";
-import { searchAddress } from "@/lib/mapbox-geocoding";
+import { lookupAddress } from "@/lib/mapbox-geocoding";
 import { describeDbError } from "@/lib/setup-errors";
 import { env } from "@/lib/env";
 
-/** How many to place per run.
+/** The most to place per run.
  *
- * Small enough to finish inside a server action's budget and to be watched
- * from a phone, large enough that a book of a few thousand is a handful of
- * taps rather than an afternoon. The button says how many are left, so the
- * work is visible rather than mysterious. */
+ * A ceiling, not a promise: the run also stops when it has been going long
+ * enough, whichever comes first. Small enough to finish inside a server
+ * action's budget and to be watched from a phone, large enough that a book of
+ * a few thousand is a handful of taps rather than an afternoon. The button
+ * says how many are left, so the work is visible rather than mysterious. */
 const BATCH = 40;
+
+/** How many lookups are in the air at once.
+ *
+ * Forty lookups one after another was the real problem here: a request whose
+ * length is forty times whatever Mapbox feels like today, with a person
+ * holding a phone at the end of it. Five at a time turns that into eight
+ * rounds instead of forty, and five is well under any per-second limit a
+ * geocoding plan imposes — the point is to stop waiting serially, not to
+ * flood.
+ *
+ * Each contact's own steps stay in order inside its worker; only different
+ * contacts overlap, and no two of them touch the same rows. */
+const LOOKUP_CONCURRENCY = 5;
+
+/** When to stop starting new ones.
+ *
+ * The batch size alone cannot bound a run, because it says nothing about how
+ * long each lookup takes. This does: once the run has been going this long no
+ * further contact is picked up, the button reports what it managed, and the
+ * rest stay queued for the next tap. A slow afternoon at Mapbox therefore
+ * makes the button do less work rather than making it hang. */
+const RUN_BUDGET_MS = 6_000;
 
 export interface GeocodeProgress {
   ok: true;
@@ -46,6 +69,18 @@ interface Pending {
  * Run in batches on purpose. Thousands of geocoder calls in one request is a
  * timeout, and a run that dies halfway with no record of what it did is worse
  * than one that does forty and says so.
+ *
+ * Three things bound a run, because a batch size on its own does not: at most
+ * `BATCH` contacts, at most `LOOKUP_CONCURRENCY` lookups in flight, and no new
+ * contact picked up after `RUN_BUDGET_MS`. Whatever is left over is still
+ * queued, and the button already exists to say so and be pressed again — that
+ * loop is the background job this work would otherwise need.
+ *
+ * When Mapbox is down or slow: the first lookup that fails to reach it ends
+ * the run there. Contacts that were never asked about keep their null
+ * `geocode_attempted_at`, so they come back untouched on the next press
+ * instead of being written off as unfindable — the difference between a bad
+ * five minutes and a book of addresses quietly marked wrong forever.
  */
 export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
   try {
@@ -72,7 +107,16 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
     let placed = 0;
     let failed = 0;
 
-    for (const contact of pending) {
+    // Set the first time a lookup fails to reach Mapbox at all. Everything
+    // still queued then stops where it is: a contact whose address was never
+    // actually asked about must not be marked as attempted, or an outage
+    // lasting five minutes writes "couldn't be found" across a whole book of
+    // addresses that are perfectly findable, and nothing ever looks at them
+    // again.
+    let outage: string | null = null;
+
+    /** One contact, start to finish. Its own steps stay in order. */
+    async function place(contact: Pending): Promise<void> {
       const attemptedAt = new Date().toISOString();
 
       // Somebody may already have added this property by hand. Creating a
@@ -122,7 +166,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
                 : null,
           })
           .eq("id", contact.id);
-        continue;
+        return;
       }
 
       let match: { lat: number; lng: number; fullAddress: string } | null = null;
@@ -134,20 +178,26 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
       if (tooThinToPlace(contact.import_address)) {
         failure = "Needs a town or ZIP before it can be placed.";
       } else {
-        try {
-          // autocomplete off: this is a finished address, not a keystroke.
-          const results = await searchAddress(contact.import_address, undefined, {
-            autocomplete: false,
-          });
-          // The first answer worth having rather than simply the first: the
-          // best match for a thin address is often the wrong place entirely,
-          // and the one under it is the right street in the right state.
-          const checked = firstAcceptable(contact.import_address, results);
-          match = checked.match;
-          failure = checked.reason;
-        } catch (err) {
-          failure = err instanceof Error ? err.message : "Lookup failed";
+        // autocomplete off: this is a finished address, not a keystroke.
+        const lookup = await lookupAddress(contact.import_address, undefined, {
+          autocomplete: false,
+        });
+
+        if (!lookup.ok) {
+          // Never reached the geocoder, so nothing has been learned about this
+          // address. Recorded against the run rather than against the contact,
+          // and the row is left exactly as it was found — untouched,
+          // unattempted, first in line next time.
+          outage = lookup.reason;
+          return;
         }
+
+        // The first answer worth having rather than simply the first: the
+        // best match for a thin address is often the wrong place entirely,
+        // and the one under it is the right street in the right state.
+        const checked = firstAcceptable(contact.import_address, lookup.suggestions);
+        match = checked.match;
+        failure = checked.reason;
       }
 
       if (!match) {
@@ -180,7 +230,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
             geocode_error: `${failure ?? "Lookup failed"}${removedNote}`,
           })
           .eq("id", contact.id);
-        continue;
+        return;
       }
 
       // Update the one that is there when it is the stale one, rather than
@@ -206,7 +256,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
           .from("customers")
           .update({ geocode_attempted_at: attemptedAt, geocode_error: insertError.message })
           .eq("id", contact.id);
-        continue;
+        return;
       }
 
       placed++;
@@ -215,6 +265,26 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
         .update({ geocode_attempted_at: attemptedAt, geocode_error: null })
         .eq("id", contact.id);
     }
+
+    // A few workers off one queue rather than one pass down the list. Each
+    // takes the next contact only once it has finished the last, so the number
+    // of lookups in flight can never exceed the pool however slow Mapbox is.
+    const queue = [...pending];
+    const startedAt = Date.now();
+
+    async function worker(): Promise<void> {
+      for (;;) {
+        if (outage) return;
+        if (Date.now() - startedAt >= RUN_BUDGET_MS) return;
+        const contact = queue.shift();
+        if (!contact) return;
+        await place(contact);
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(LOOKUP_CONCURRENCY, queue.length) }, () => worker())
+    );
 
     const { count } = await supabase
       .from("customers")
@@ -229,6 +299,16 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
     revalidatePath("/contacts");
     revalidatePath("/attractors");
 
+    // Nothing at all got done and the geocoder is the reason. Said as a
+    // failure rather than as "0 placed", which reads like the addresses are
+    // the problem and sends somebody editing addresses that are fine.
+    if (outage && placed === 0 && failed === 0) {
+      return {
+        ok: false,
+        message: "Address lookup isn't answering right now. Nothing has been changed — try again in a minute.",
+      };
+    }
+
     return {
       ok: true,
       placed,
@@ -237,6 +317,9 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
       message: [
         `${placed} placed`,
         failed > 0 ? `${failed} couldn't be found` : null,
+        // Why the run is short. Without this a run that stopped after nine of
+        // forty looks like a run that decided nine was enough.
+        outage ? "stopped early — address lookup stopped answering" : null,
         remaining > 0 ? `${remaining} to go` : "all done",
       ]
         .filter(Boolean)

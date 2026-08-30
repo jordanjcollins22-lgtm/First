@@ -1,8 +1,55 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
+import { boundedPageSize } from "@/lib/pagination";
 import { activityLabel, isWarm, type ViewSummary } from "@/lib/proposal-views";
 import type { JobProposal } from "@/types/domain";
+
+/**
+ * The part of a proposal this list draws, and nothing else.
+ *
+ * A proposal row is a name, an address, a date, a price, a status and the
+ * buttons that act on it. Everything else on the record — the discount
+ * breakdown, the site image and its transform, the payment path, the Stripe
+ * session, every timestamp the client's own journey wrote — was being read
+ * for every proposal the business had ever sent so that none of it could be
+ * displayed.
+ *
+ * scope_snapshot stays, and it is the big one. The trim panel opens over the
+ * row without another round trip, and the areas it lets somebody remove come
+ * from here.
+ */
+export type ProposalListProposal = Pick<
+  JobProposal,
+  | "id"
+  | "job_id"
+  | "token"
+  | "status"
+  | "total_cost"
+  | "scope_snapshot"
+  | "generated_at"
+  | "client_response_note"
+>;
+
+const PROPOSAL_COLUMNS =
+  "id, job_id, token, status, total_cost, scope_snapshot, generated_at, client_response_note";
+
+const EDIT_COLUMNS =
+  "id, proposal_id, created_at, edited_by_name, removed_zones, removed_lines, previous_total_cents, new_total_cents, note, requested_via";
+
+/** How many proposals one load of the list shows. Generous on purpose: the
+ * tabs above it split by status, and a page that cannot fill "Needs approval"
+ * is a page that hides work from the person whose job it is to do it. */
+export const PROPOSALS_PAGE_SIZE = 100;
+
+/** The most any one caller can ask for, so "give me more" can never quietly
+ * become "give me the table". */
+const MAX_PROPOSALS_PAGE = 500;
+
+/** The most trims one page will read. Twenty per proposal is far past what
+ * any real proposal has been through, and it stops one pathological history
+ * from turning a bounded query back into an unbounded one. */
+const EDITS_PER_PROPOSAL = 20;
 
 /** One trim the office made after the proposal went out. */
 export interface ProposalEdit {
@@ -19,7 +66,7 @@ export interface ProposalEdit {
 }
 
 export interface ProposalWithJob {
-  proposal: JobProposal;
+  proposal: ProposalListProposal;
   job: JobWithLocation;
   /** How often the client opened it, already worded. Internal only. */
   viewLabel: string;
@@ -29,27 +76,47 @@ export interface ProposalWithJob {
   edits: ProposalEdit[];
 }
 
-export async function listAllProposals(): Promise<ProposalWithJob[]> {
+/**
+ * A page of proposals, newest first.
+ *
+ * Bounded. This read every proposal the business had ever generated, and
+ * every trim ever made to any of them, to render a list whose first screen
+ * holds four. The limit is the caller's to raise within reason.
+ */
+export async function listAllProposals(
+  options: { limit?: string | number | null } = {}
+): Promise<ProposalWithJob[]> {
+  const pageSize = boundedPageSize(options.limit, PROPOSALS_PAGE_SIZE, MAX_PROPOSALS_PAGE);
   const supabase = await createClient();
-  // All three together. Views used to run after the proposals came back,
-  // which is a round trip spent waiting for ids this query does not need.
-  const [{ data: proposals, error }, jobs, views, edits] = await Promise.all([
-    supabase.from("job_proposals").select("*").order("generated_at", { ascending: false }),
+  // Views alongside rather than after: it takes no ids, so waiting for the
+  // proposals to come back before asking is a round trip spent doing nothing.
+  const [{ data: proposals, error }, jobs, views] = await Promise.all([
+    supabase
+      .from("job_proposals")
+      .select(PROPOSAL_COLUMNS)
+      .order("generated_at", { ascending: false })
+      .limit(pageSize),
     listJobsWithLocation(),
     viewsForAllProposals().catch(() => ({}) as Record<string, ViewSummary>),
-    // Tolerated rather than required: before migration 0131 this table does
-    // not exist, and a missing history is not a reason for an empty page.
-    listProposalEdits(),
   ]);
   if (error) throw error;
 
   const jobById = new Map(jobs.map((j) => [j.id, j]));
-  const rows: { proposal: JobProposal; job: JobWithLocation }[] = [];
+  const rows: { proposal: ProposalListProposal; job: JobWithLocation }[] = [];
   for (const raw of proposals ?? []) {
-    const proposal = raw as unknown as JobProposal;
+    const proposal = raw as unknown as ProposalListProposal;
     const job = jobById.get(proposal.job_id);
     if (job) rows.push({ proposal, job });
   }
+
+  // Trims are asked for by id, which does mean waiting for the proposals.
+  // Worth the round trip: the alternative is reading the whole history of
+  // every proposal that has ever been trimmed in order to show the handful
+  // belonging to the page somebody is looking at.
+  const edits = await listProposalEdits(
+    rows.map(({ proposal }) => proposal.id),
+    pageSize * EDITS_PER_PROPOSAL
+  );
 
   const editsByProposal = new Map<string, ProposalEdit[]>();
   for (const row of edits) {
@@ -85,15 +152,20 @@ export async function listAllProposals(): Promise<ProposalWithJob[]> {
   });
 }
 
-/** Tolerated rather than required: before migration 0131 this table does not
+/** The trims belonging to the proposals on this page, newest first.
+ *
+ * Tolerated rather than required: before migration 0131 this table does not
  * exist, and a missing history is not a reason for an empty proposals page. */
-async function listProposalEdits(): Promise<ProposalEditRow[]> {
+async function listProposalEdits(proposalIds: string[], limit: number): Promise<ProposalEditRow[]> {
+  if (proposalIds.length === 0) return [];
   try {
     const supabase = await createClient();
     const { data } = await supabase
       .from("proposal_edits")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(EDIT_COLUMNS)
+      .in("proposal_id", proposalIds)
+      .order("created_at", { ascending: false })
+      .limit(limit);
     return (data ?? []) as unknown as ProposalEditRow[];
   } catch {
     return [];
