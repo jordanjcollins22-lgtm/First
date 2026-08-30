@@ -126,6 +126,20 @@ export function TransactionImportPanel() {
           <p className="font-semibold">
             {preview.preview.settled} settled, {money(preview.preview.settledCents)} in total.
           </p>
+
+          {/* What the money does when it meets this database, which is the
+              question a short total on the dashboard is really asking. */}
+          <p>
+            {preview.matchedCount} of them, {money(preview.matchedCents)}, belong to somebody
+            already here.
+            {preview.unmatchedCents > 0 && (
+              <>
+                {" "}
+                The other {money(preview.unmatchedCents)} is from payers this app does not have
+                yet.
+              </>
+            )}
+          </p>
           {/* Said before the import rather than after, so the number on the
               payments screen can be reconciled against the file instead of
               looking like money that went missing. */}

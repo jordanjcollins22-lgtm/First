@@ -60,6 +60,15 @@ const COLUMN_ALIASES = {
   firstName: ["first name", "firstname", "first"],
   lastName: ["last name", "lastname", "last", "surname"],
   fullName: ["name", "full name", "fullname", "contact name", "display name"],
+  /**
+   * A trading name, which some exports carry beside the person's.
+   *
+   * Its own field rather than an alias of the name, and used only where the
+   * export carried no person at all. A row with a first name, a last name and
+   * a company is a person who works somewhere, and replacing them with the
+   * company is how a contact book stops being able to say who it rang.
+   */
+  businessName: ["business name", "company", "company name", "organisation", "organization"],
   email: ["email", "email address", "primary email", "e mail"],
   phone: ["phone", "phone number", "primary phone", "mobile", "mobile phone", "telephone", "cell"],
   address: ["address", "address 1", "address1", "street address", "full address", "street"],
@@ -191,12 +200,15 @@ export function parseContactCsv(text: string): ContactImportReport {
     const first = cell(row, "firstName");
     const last = cell(row, "lastName");
     const full = cell(row, "fullName");
-    const name = full ?? [first, last].filter(Boolean).join(" ").trim();
+    const business = cell(row, "businessName");
+    // The business name is the answer only when there is no person to name.
+    const name = full ?? [first, last].filter(Boolean).join(" ").trim() ?? "";
 
     const email = cell(row, "email");
     const phone = cell(row, "phone");
 
-    if (!name && !email && !phone) {
+    const named = name || business || "";
+    if (!named && !email && !phone) {
       skipped.push({ row: i, reason: "No name, email or phone" });
       continue;
     }
@@ -205,7 +217,7 @@ export function parseContactCsv(text: string): ContactImportReport {
     // strongest identifier present so a repeated row with a typo'd name still
     // collapses.
     const key =
-      cell(row, "externalId") ?? normalizeEmail(email) ?? normalizePhone(phone) ?? name.toLowerCase();
+      cell(row, "externalId") ?? normalizeEmail(email) ?? normalizePhone(phone) ?? named.toLowerCase();
     if (key && seen.has(key)) {
       skipped.push({ row: i, reason: "Same contact appears earlier in this file" });
       continue;
@@ -214,8 +226,9 @@ export function parseContactCsv(text: string): ContactImportReport {
 
     drafts.push({
       // A contact with no name but a phone is a real record; calling it
-      // "Unknown" is better than dropping somebody's number.
-      name: name || email || (phone as string),
+      // "Unknown" is better than dropping somebody's number. A trading name
+      // stands in where the export named no person.
+      name: named || email || (phone as string),
       email,
       phone,
       address: joinAddress([cell(row, "address"), cell(row, "city"), cell(row, "state"), cell(row, "zip")]),

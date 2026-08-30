@@ -30,6 +30,13 @@ export type TransactionPreviewResult =
       /** Rows whose payer is not a contact here. Shown before anybody imports,
        * because the fix is adding the contact, not re-running the file. */
       unmatchedClients: string[];
+      /** What the money does when it meets this database, rather than what
+       * the file says on its own. The whole point of a preview: a total that
+       * comes out short should be explainable before it is imported, not
+       * after somebody notices it on a dashboard. */
+      matchedCents: number;
+      unmatchedCents: number;
+      matchedCount: number;
       sample: { name: string; amount: number; date: string | null; status: string }[];
     }
   | { ok: false; message: string };
@@ -71,8 +78,20 @@ export async function previewTransactionImport(
 
     const clients = await loadClients();
     const unmatchedClients: string[] = [];
+    let matchedCents = 0;
+    let unmatchedCents = 0;
+    let matchedCount = 0;
+
     for (const draft of report.drafts) {
-      if (!matchClient(draft, clients)) {
+      // Only settled rows carry money, so only they are counted here. A
+      // refund in the unmatched pile would make the gap look bigger than the
+      // money actually at stake.
+      const value = isSettled(draft) ? draft.amountCents : 0;
+      if (matchClient(draft, clients)) {
+        matchedCents += value;
+        if (value > 0) matchedCount += 1;
+      } else {
+        unmatchedCents += value;
         const who = draft.name ?? draft.email ?? draft.phone ?? "someone";
         if (!unmatchedClients.includes(who)) unmatchedClients.push(who);
       }
@@ -84,6 +103,9 @@ export async function previewTransactionImport(
       unmatchedHeaders: report.unmatchedHeaders,
       skipped: report.skipped.slice(0, 10),
       unmatchedClients: unmatchedClients.slice(0, 20),
+      matchedCents,
+      unmatchedCents,
+      matchedCount,
       sample: report.drafts.slice(0, 5).map((d) => ({
         name: d.name ?? d.email ?? "",
         amount: d.amountCents / 100,

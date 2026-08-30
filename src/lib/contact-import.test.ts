@@ -157,3 +157,25 @@ describe("re-importing the same export with a column added", () => {
     expect(second.address).toBe("208 Crafton Rd");
   });
 });
+
+describe("an export carrying a business name beside the person's", () => {
+  it("keeps the person, not the company they work at", () => {
+    // A row with a first name, a last name and a company is a person who
+    // works somewhere. Replacing them with the company is how a contact book
+    // stops being able to say who it rang.
+    const report = parseContactCsv(
+      'First Name,Last Name,Email,Business Name\nAshley,Venezia,a@b.com,"Venezia Holdings LLC"'
+    );
+    expect(report.drafts[0].name).toBe("Ashley Venezia");
+  });
+
+  it("uses the trading name where the export named no person", () => {
+    const report = parseContactCsv('First Name,Email,Business Name\n,a@b.com,"Bob\'s Tree Service"');
+    expect(report.drafts[0].name).toBe("Bob's Tree Service");
+  });
+
+  it("claims the column, so it is not reported as one nothing read", () => {
+    const report = parseContactCsv("First Name,Email,Business Name\nAshley,a@b.com,Acme");
+    expect(report.unmatchedHeaders).toEqual([]);
+  });
+});
