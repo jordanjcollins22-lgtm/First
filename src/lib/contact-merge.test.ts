@@ -19,6 +19,8 @@ const EXISTING: ExistingContact = {
   pipeline: "Landscaping",
   pipeline_stage: "Proposal Sent",
   opportunity_value: 5000,
+  do_not_contact: false,
+  tags: ["Client"],
 };
 
 function incoming(over: Partial<IncomingContact> = {}): IncomingContact {
@@ -48,6 +50,8 @@ const BLANK: ExistingContact = {
   pipeline: null,
   pipeline_stage: null,
   opportunity_value: null,
+  do_not_contact: false,
+  tags: null,
 };
 
 describe("the rule everything rests on", () => {
@@ -125,6 +129,31 @@ describe("do not contact", () => {
     // Somebody who asked not to be contacted does not stop having asked.
     const patch = mergeContact(EXISTING, incoming({ doNotContact: false }), "overwrite");
     expect(patch.do_not_contact).toBeUndefined();
+  });
+
+  it("is not written again to somebody who is already opted out", () => {
+    // Re-importing an export where everybody has opted out would otherwise
+    // report every row as changed and rewrite every row to say what it
+    // already said.
+    const optedOut = { ...EXISTING, do_not_contact: true };
+    expect(mergeContact(optedOut, incoming({ doNotContact: true }), "overwrite")).toEqual({});
+  });
+});
+
+describe("tags", () => {
+  it("takes the file's tags when they are new", () => {
+    expect(mergeContact(EXISTING, incoming({ tags: ["Client", "Snow"] }), "overwrite").tags).toEqual([
+      "Client",
+      "Snow",
+    ]);
+  });
+
+  it("says nothing when the file's tags are the ones already filed", () => {
+    expect(mergeContact(EXISTING, incoming({ tags: ["Client"] }), "overwrite")).toEqual({});
+  });
+
+  it("does not clear tags because the export had no tag column", () => {
+    expect(mergeContact(EXISTING, incoming({ tags: [] }), "overwrite").tags).toBeUndefined();
   });
 });
 

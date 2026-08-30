@@ -6,16 +6,16 @@ import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
-import { findDuplicateCustomer } from "@/lib/dedupe";
-import { parseContactCsv, type ContactDraft } from "@/lib/contact-import";
+import { chunk } from "@/lib/chunk";
+import { parseContactCsv } from "@/lib/contact-import";
 import { isContactType, type ContactType } from "@/lib/contact-types";
+import { describeChanges, type MergeMode } from "@/lib/contact-merge";
 import {
-  describeChanges,
-  mergeContact,
-  type ExistingContact,
-  type IncomingContact,
-  type MergeMode,
-} from "@/lib/contact-merge";
+  planContactImport,
+  type ContactUpdateRow,
+  type ExistingContactRow,
+  type ImportPlan,
+} from "@/lib/contact-import-plan";
 
 export interface ImportPreview {
   ok: true;
@@ -51,85 +51,74 @@ export type ImportResult =
   | { ok: true; created: number; updated: number; message: string }
   | { ok: false; message: string };
 
-interface ExistingRow {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  external_id: string | null;
-  import_address: string | null;
-  notes: string | null;
-  source: string | null;
-  pipeline: string | null;
-  pipeline_stage: string | null;
-  opportunity_value: number | null;
+interface DbError {
+  message?: string;
+  code?: string;
 }
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** A rewrite, plus the two columns only a contact whose address moved carries. */
+type ContactWrite = ContactUpdateRow & { geocode_attempted_at?: null; geocode_error?: null };
+
+/**
+ * How many rows go in one statement.
+ *
+ * Big enough that the six hundred odd row export this business imports is two
+ * statements rather than six hundred, small enough that no single request
+ * carries a payload measured in megabytes or holds a transaction open long
+ * enough to be noticed by anybody else writing to the same table.
+ */
+const WRITE_CHUNK = 500;
+
+/**
+ * PostgREST answers with a page rather than everything, and silently: a
+ * thousand-row default means the thousand-and-first contact simply is not in
+ * the reply. Matching against a list that is missing people is how a re-import
+ * creates a second copy of everybody it could not see, so the book is read a
+ * page at a time until a page comes back empty. Asking for one more page than
+ * there are is a round trip nobody notices, and it is the only ending that
+ * does not assume the server hands back as many rows as it was asked for.
+ */
+const READ_PAGE = 1000;
 
 /**
  * Everything a re-import might fill in.
  *
  * Wider than it looks like it needs to be, because "fill the blanks" can only
- * be decided by knowing which are blank. Importing the same export twice —
- * once without a column, once with it — is a normal thing to do and has to
- * work, so every field an import can write is read back here.
+ * be decided by knowing which are blank, and because a rewrite sends the whole
+ * row — a column that was not read cannot be sent back unchanged. Importing
+ * the same export twice — once without a column, once with it — is a normal
+ * thing to do and has to work, so every field an import can write is read
+ * back here.
+ *
+ * The error is returned rather than swallowed. A failed read used to come back
+ * as an empty list, which does not look like a failure to anything downstream:
+ * it looks like an empty contact book, and the import obligingly adds everyone
+ * a second time.
  */
-async function loadExisting(): Promise<ExistingRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("customers")
-    .select(
-      "id, name, email, phone, external_id, import_address, notes, source, pipeline, pipeline_stage, opportunity_value"
-    );
-  return (data ?? []) as unknown as ExistingRow[];
-}
+async function loadExisting(
+  supabase: Supabase
+): Promise<{ rows: ExistingContactRow[]; error: DbError | null }> {
+  const rows: ExistingContactRow[] = [];
 
-/**
- * What a second import would add to somebody already here.
- *
- * Blanks only, always. An import must never overwrite a phone number or a
- * spelling the office corrected by hand — but a field that is empty has
- * nothing to protect, and leaving it empty when the file has the answer is the
- * bug that makes people re-import and wonder why nothing happened.
- *
- * The opt-out is the one exception, and it only ever moves towards silence.
- */
-/** The import's own row shape, as the merge module wants it. */
-function asIncoming(draft: ContactDraft): IncomingContact {
-  return {
-    email: draft.email,
-    phone: draft.phone,
-    externalId: draft.externalId,
-    address: draft.address,
-    notes: draft.notes,
-    source: draft.source,
-    pipeline: draft.pipeline,
-    pipelineStage: draft.pipelineStage,
-    opportunityValue: draft.opportunityValue,
-    doNotContact: draft.doNotContact,
-    tags: draft.tags,
-  };
-}
+  for (let from = 0; ; ) {
+    const { data, error } = await supabase
+      .from("customers")
+      .select(
+        "id, organization_id, name, email, phone, external_id, import_address, notes, source, pipeline, pipeline_stage, opportunity_value, do_not_contact, tags"
+      )
+      // Paging without an order is paging over an order the database is free
+      // to change between requests, which drops and repeats rows.
+      .order("id")
+      .range(from, from + READ_PAGE - 1);
 
-/**
- * Matches an incoming row against what is already here.
- *
- * The CRM's own id first, because it is the only identifier that is actually
- * an identifier. Then the same email/phone/name ladder the booking form uses,
- * so a contact typed in by hand last year and exported from the CRM today
- * lands on one record rather than two.
- */
-function matchExisting(draft: ContactDraft, existing: ExistingRow[]): ExistingRow | null {
-  if (draft.externalId) {
-    const byId = existing.find((c) => c.external_id === draft.externalId);
-    if (byId) return byId;
+    if (error) return { rows, error };
+    const page = (data ?? []) as unknown as ExistingContactRow[];
+    if (page.length === 0) return { rows, error: null };
+    rows.push(...page);
+    from += page.length;
   }
-  return (
-    (findDuplicateCustomer(existing, {
-      name: draft.name,
-      email: draft.email,
-      phone: draft.phone,
-    }) as ExistingRow | null) ?? null
-  );
 }
 
 /**
@@ -139,6 +128,9 @@ function matchExisting(draft: ContactDraft, existing: ExistingRow[]): ExistingRo
  * rows and then spends an afternoon undoing. Showing the counts and the first
  * few parsed rows first costs one extra tap and catches a mis-mapped column
  * before it is three thousand mistakes.
+ *
+ * Worked out by the same planner that does the importing, so the numbers here
+ * are the numbers that will happen rather than a second opinion about them.
  */
 export async function previewContactImport(
   csvText: string,
@@ -158,49 +150,46 @@ export async function previewContactImport(
       };
     }
 
-    const existing = await loadExisting();
-    let creating = 0;
-    let updating = 0;
-    let unchanged = 0;
+    const [supabase, organizationId] = await Promise.all([createClient(), getCurrentOrganizationId()]);
+    const existing = await loadExisting(supabase);
+    if (existing.error) return { ok: false, message: describeDbError(existing.error) };
+
+    const plan = planContactImport(existing.rows, report.drafts, { mode, organizationId });
+
     let gainingAddress = 0;
     let correcting = 0;
     const corrections: ImportPreview["corrections"] = [];
     const sample: ImportPreview["sample"] = [];
 
-    for (const draft of report.drafts) {
-      const match = matchExisting(draft, existing);
-      if (match) {
-        const patch = mergeContact(match as ExistingContact, asIncoming(draft), mode);
-        if (Object.keys(patch).length > 0) updating++;
-        else unchanged++;
-        if (patch.import_address) gainingAddress++;
-
-        const changed = describeChanges(match as ExistingContact, patch);
+    for (const row of plan.rows) {
+      if (row.before) {
+        if (row.patch.import_address) gainingAddress++;
+        const changed = describeChanges(row.before, row.patch);
         if (changed.length > 0) {
           correcting++;
           for (const change of changed) {
-            if (corrections.length < 5) corrections.push({ name: draft.name, ...change });
+            if (corrections.length < 5) corrections.push({ name: row.draft.name, ...change });
           }
         }
-      } else {
-        creating++;
-        if (draft.address) gainingAddress++;
+      } else if (row.draft.address) {
+        gainingAddress++;
       }
+
       if (sample.length < 5) {
         sample.push({
-          name: draft.name,
-          email: draft.email,
-          phone: draft.phone,
-          existing: Boolean(match),
+          name: row.draft.name,
+          email: row.draft.email,
+          phone: row.draft.phone,
+          existing: row.before !== null,
         });
       }
     }
 
     return {
       ok: true,
-      creating,
-      updating,
-      unchanged,
+      creating: plan.created,
+      updating: plan.updated,
+      unchanged: plan.unchanged,
       gainingAddress,
       correcting,
       corrections,
@@ -216,6 +205,106 @@ export async function previewContactImport(
 }
 
 /**
+ * Adds the people this file does not have yet.
+ *
+ * Rows carrying the CRM's own id go in as an upsert onto the unique index over
+ * (organization_id, external_id), so the same export landing twice — two tabs,
+ * a double tap, a second import while the first is still running — cannot
+ * produce two of the same person. The conflict is left to do nothing rather
+ * than to update, and that is deliberate: an update here would write this
+ * file's blanks over whatever the row that beat us to it already holds, and a
+ * blank column is never a statement that a value is gone. The file's own
+ * corrections are not lost by that, they simply land on the next run, when the
+ * contact is visible to the matching pass and goes down the rewrite path.
+ *
+ * Rows with no id from the CRM have nothing to conflict on and go in plainly.
+ */
+async function insertNew(
+  supabase: Supabase,
+  plan: ImportPlan,
+  type: ContactType,
+  batch: string
+): Promise<{ created: number; error: DbError | null }> {
+  const rows = plan.inserts.map((row) => ({ ...row, contact_type: type, import_batch: batch }));
+  const identified = rows.filter((row) => row.external_id);
+  const anonymous = rows.filter((row) => !row.external_id);
+  let created = 0;
+
+  for (const group of chunk(identified, WRITE_CHUNK)) {
+    const { data, error } = await supabase
+      .from("customers")
+      .upsert(group, { onConflict: "organization_id,external_id", ignoreDuplicates: true })
+      .select("id");
+    if (error) return { created, error };
+    // Only rows that were actually inserted come back, so a contact somebody
+    // else added while this ran is not counted as one of ours.
+    created += data?.length ?? 0;
+  }
+
+  for (const group of chunk(anonymous, WRITE_CHUNK)) {
+    const { data, error } = await supabase.from("customers").insert(group).select("id");
+    if (error) return { created, error };
+    created += data?.length ?? 0;
+  }
+
+  return { created, error: null };
+}
+
+/**
+ * Rewrites the people this file has something new for.
+ *
+ * Sent as an upsert onto the primary key, which is the only way to put several
+ * differing rows into one statement. What makes writing a whole row safe is
+ * what the planner put in it: every value is either something the merge
+ * decided or the value the contact already had. The file's blanks are not in
+ * there, so a column the export left out cannot clear anything.
+ *
+ * The two shapes are chunked separately because a batch has to carry the same
+ * keys on every row, and only the contacts whose address actually moved get
+ * their geocoding cleared — clearing it for the rest would send the whole book
+ * back through the geocoder on every import.
+ */
+async function rewriteMatched(
+  supabase: Supabase,
+  plan: ImportPlan
+): Promise<{ updated: number; error: DbError | null }> {
+  const readdressed = plan.updates
+    .filter((update) => update.addressChanged)
+    .map((update) => ({ ...update.row, geocode_attempted_at: null, geocode_error: null }));
+  const rest = plan.updates.filter((update) => !update.addressChanged).map((update) => update.row);
+
+  let updated = 0;
+  const groups: ContactWrite[][] = [...chunk(readdressed, WRITE_CHUNK), ...chunk(rest, WRITE_CHUNK)];
+
+  for (const group of groups) {
+    const { data, error } = await supabase
+      .from("customers")
+      .upsert(group, { onConflict: "id" })
+      .select("id");
+    if (error) return { updated, error };
+    updated += data?.length ?? 0;
+  }
+
+  return { updated, error: null };
+}
+
+/**
+ * Why a write failed, in words somebody can act on.
+ *
+ * Postgres cannot use a partial unique index for an upsert unless the
+ * statement repeats its condition, and PostgREST has no way to say one — so
+ * the index the import needs is the plain one that migration adds. Without it
+ * the error is "no unique or exclusion constraint matching the ON CONFLICT
+ * specification", which is true and tells nobody what to do.
+ */
+function describeImportError(error: DbError): string {
+  if (error.code === "42P10") {
+    return "This import needs its database migration. In Supabase's SQL Editor, run supabase/migrations/0136_contact_import_conflict_target.sql, then reload. Database setup has a copy button.";
+  }
+  return describeDbError(error);
+}
+
+/**
  * Writes the file in.
  *
  * The type is chosen by whoever is importing rather than guessed: a row saying
@@ -227,6 +316,11 @@ export async function previewContactImport(
  * corrected by hand — except the opt-out flag, which only ever moves towards
  * "do not contact", because the cost of dropping one is contacting somebody
  * who asked us not to.
+ *
+ * The whole file is decided first and then written in batches. Six hundred and
+ * seventy one rows is two statements, not six hundred and seventy one, and the
+ * counts below are counted from what the database said it did rather than from
+ * what we hoped it would.
  */
 export async function importContacts(
   csvText: string,
@@ -244,79 +338,31 @@ export async function importContacts(
     }
 
     const [supabase, organizationId] = await Promise.all([createClient(), getCurrentOrganizationId()]);
-    const existing = await loadExisting();
+    const existing = await loadExisting(supabase);
+    if (existing.error) return { ok: false, message: describeDbError(existing.error) };
 
     const batch = batchName.trim() || `Import ${new Date().toLocaleDateString()}`;
     const type = contactType as ContactType;
+    const plan = planContactImport(existing.rows, report.drafts, { mode, organizationId });
 
-    let created = 0;
-    let updated = 0;
-    let unchanged = 0;
+    const added = await insertNew(supabase, plan, type, batch);
+    if (added.error) return { ok: false, message: describeImportError(added.error) };
 
-    for (const draft of report.drafts) {
-      const match = matchExisting(draft, existing);
-
-      if (match) {
-        const patch = mergeContact(match as ExistingContact, asIncoming(draft), mode);
-        if (Object.keys(patch).length > 0) {
-          // A corrected address has to be placed again, or it sits in a
-          // column nothing reads while the property — which is what every
-          // map and every out-of-area check actually looks at — keeps
-          // pointing at the address the import was meant to fix.
-          const write = patch.import_address
-            ? { ...patch, geocode_attempted_at: null, geocode_error: null }
-            : patch;
-          await supabase.from("customers").update(write).eq("id", match.id);
-          updated++;
-        } else {
-          unchanged++;
-        }
-        continue;
-      }
-
-      const { data: inserted, error } = await supabase
-        .from("customers")
-        .insert({
-          organization_id: organizationId,
-          name: draft.name,
-          email: draft.email,
-          phone: draft.phone,
-          notes: draft.notes,
-          contact_type: type,
-          source: draft.source,
-          import_batch: batch,
-          external_id: draft.externalId,
-          do_not_contact: draft.doNotContact,
-          tags: draft.tags.length > 0 ? draft.tags : null,
-          import_address: draft.address,
-          pipeline: draft.pipeline,
-          pipeline_stage: draft.pipelineStage,
-          opportunity_value: draft.opportunityValue,
-        })
-        .select("id, name, email, phone, external_id")
-        .single();
-
-      if (error) return { ok: false, message: describeDbError(error) };
-      if (inserted) {
-        created++;
-        // Added to the in-memory list so two rows for the same person later in
-        // the same file match each other rather than both inserting.
-        existing.push(inserted as unknown as ExistingRow);
-      }
-    }
+    const rewritten = await rewriteMatched(supabase, plan);
+    if (rewritten.error) return { ok: false, message: describeImportError(rewritten.error) };
 
     revalidatePath("/contacts");
     return {
       ok: true,
-      created,
-      updated,
+      created: added.created,
+      updated: rewritten.updated,
       // Filled-in and left-alone counted separately, so a re-import that was
       // supposed to add something and added nothing says so instead of
       // reporting a cheerful number that means "I did nothing".
       message: [
-        created > 0 ? `${created} added` : null,
-        updated > 0 ? `${updated} filled in` : null,
-        unchanged > 0 ? `${unchanged} already complete` : null,
+        added.created > 0 ? `${added.created} added` : null,
+        rewritten.updated > 0 ? `${rewritten.updated} filled in` : null,
+        plan.unchanged > 0 ? `${plan.unchanged} already complete` : null,
         report.skipped.length > 0 ? `${report.skipped.length} skipped` : null,
       ]
         .filter(Boolean)

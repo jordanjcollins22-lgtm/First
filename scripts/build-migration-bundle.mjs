@@ -107,6 +107,8 @@ const CREATES = {
   "0133_proposal_edit_source.sql": [],
   "0134_evaluation_edits.sql": ["evaluation_edits"],
   "0135_pipeline_override.sql": [],
+  // Indexes only — nothing to probe for.
+  "0136_contact_import_conflict_target.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

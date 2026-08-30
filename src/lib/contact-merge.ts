@@ -32,6 +32,11 @@ export interface ExistingContact {
   pipeline: string | null;
   pipeline_stage: string | null;
   opportunity_value: number | null;
+  /** Read as well as written, so a re-import of the same export reports the
+   * people it left exactly as they were rather than counting them as changed
+   * and writing them again. */
+  do_not_contact: boolean;
+  tags: string[] | null;
 }
 
 export interface IncomingContact {
@@ -130,10 +135,24 @@ export function mergeContact(
 
   // Only ever towards silence, in either mode. Somebody who asked not to be
   // contacted does not stop having asked because a later export forgot.
-  if (incoming.doNotContact) patch.do_not_contact = true;
-  if (incoming.tags.length > 0) patch.tags = incoming.tags;
+  if (incoming.doNotContact && !existing.do_not_contact) patch.do_not_contact = true;
+  if (incoming.tags.length > 0 && !sameTags(existing.tags, incoming.tags)) patch.tags = incoming.tags;
 
   return patch;
+}
+
+/**
+ * Whether the file's tags are the ones already filed here.
+ *
+ * Order counts, because a CRM exports its tags in a stable order and the
+ * cheap comparison is right for every case that actually happens. The point
+ * is only to keep an unchanged row out of the write: a patch that sets a
+ * value to what it already is costs a statement and reports itself as an
+ * update, which makes the import's own counts untrustworthy.
+ */
+function sameTags(existing: string[] | null, incoming: string[]): boolean {
+  if (!existing || existing.length !== incoming.length) return false;
+  return existing.every((tag, i) => tag === incoming[i]);
 }
 
 export interface FieldChange {
