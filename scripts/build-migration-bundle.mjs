@@ -109,6 +109,7 @@ const CREATES = {
   "0135_pipeline_override.sql": [],
   // Indexes only — nothing to probe for.
   "0136_contact_import_conflict_target.sql": [],
+  "0137_job_disputes.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

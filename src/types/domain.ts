@@ -97,6 +97,14 @@ export interface Job {
   pipeline_override_at: string | null;
   pipeline_override_by: string | null;
   pipeline_override_note: string | null;
+  /** Set while this job is in dispute — a lawyer, a refusal to pay, a client
+   * who is unhappy in a way that has left the ordinary conversation. Resolved
+   * records a date rather than clearing, so the history survives. */
+  dispute_opened_at: string | null;
+  dispute_resolved_at: string | null;
+  dispute_kind: string | null;
+  dispute_reason: string | null;
+  dispute_opened_by: string | null;
   created_at: string;
   updated_at: string;
 }

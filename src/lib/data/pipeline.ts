@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { isOnPipeline, pipelinePosition, type PipelineOverride, type PipelineStage } from "@/lib/pipeline";
+import { disputeLine } from "@/lib/dispute";
 import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
 import { activityLabel, isHot, watchingFor, type ViewSummary } from "@/lib/proposal-views";
 
@@ -30,6 +31,8 @@ export interface PipelineCard {
   activityHot: boolean;
   /** Placed here by hand rather than read off the job. */
   overridden: boolean;
+  /** What is wrong, when the job is in dispute. Null on all the rest. */
+  disputeLine: string | null;
 }
 
 export async function getPipeline(): Promise<PipelineCard[]> {
@@ -70,6 +73,13 @@ export async function getPipeline(): Promise<PipelineCard[]> {
   return jobs
     .map((job) => {
       const proposal = proposalByJob.get(job.id) ?? null;
+      const dispute = {
+        openedAt: job.dispute_opened_at,
+        resolvedAt: job.dispute_resolved_at,
+        kind: job.dispute_kind,
+        reason: job.dispute_reason,
+      };
+
       const override: PipelineOverride | null =
         job.pipeline_override_stage && job.pipeline_override_status && job.pipeline_override_from
           ? {
@@ -87,6 +97,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         projectEndDate: job.project_end_date,
         proposalStatus: proposal?.status ?? null,
         override,
+        dispute,
       };
       if (!isOnPipeline(input)) return null;
 
@@ -111,6 +122,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         activity: watching ? activityLabel(summary, now) : null,
         activityHot: watching && isHot(summary, proposal?.status ?? ""),
         overridden: position.overridden === true,
+        disputeLine: disputeLine(dispute),
       } satisfies PipelineCard;
     })
     .filter((c): c is PipelineCard => c !== null);

@@ -2,6 +2,7 @@ import Twilio from "twilio";
 
 import { env, isTwilioConfigured } from "@/lib/env";
 import { getJobCustomerContact } from "@/lib/job-customer";
+import { frozenForClient } from "@/lib/data/job-dispute";
 
 /** Assumes a US number when given a bare 10-digit phone — good enough for
  * a single-country landscaping business. Returns null if it can't tell. */
@@ -32,6 +33,12 @@ export async function sendSms(to: string, body: string): Promise<void> {
  * the in-app message, never a reason to fail saving it. */
 export async function notifyCustomerBySms(jobId: string, body: string): Promise<void> {
   if (!isTwilioConfigured) return;
+
+  // Nothing automatic goes to a client in dispute. A booking confirmation or
+  // a proposal update landing in the inbox of somebody talking to a lawyer is
+  // the kind of thing that gets read out later. Anything the office types by
+  // hand still goes — this stops the machine talking, not the business.
+  if (await frozenForClient(jobId)) return;
 
   const contact = await getJobCustomerContact(jobId);
   if (!contact?.phone) return;

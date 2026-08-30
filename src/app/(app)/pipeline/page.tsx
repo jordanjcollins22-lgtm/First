@@ -90,10 +90,20 @@ async function PipelineTab() {
             const inStage = cards.filter((c) => c.stage === stage.key);
             const stageValue = inStage.reduce((sum, c) => sum + (c.value ?? 0), 0);
 
+            // An empty Disputes column is the normal state of the business and
+            // does not need a heading on the board every day. It appears the
+            // moment there is something in it, which is also the moment it
+            // should be the thing the eye lands on.
+            if (stage.key === "disputes" && inStage.length === 0) return null;
+
             return (
               <section
                 key={stage.key}
-                className="rounded-xl border border-white/60 bg-card/60 p-3 backdrop-blur-md"
+                className={`rounded-xl border p-3 backdrop-blur-md ${
+                  stage.key === "disputes"
+                    ? "border-destructive/40 bg-destructive/5"
+                    : "border-white/60 bg-card/60"
+                }`}
               >
                 <div className="mb-0.5 flex items-baseline justify-between gap-2">
                   <h2 className="text-sm font-semibold">{stage.label}</h2>
@@ -125,9 +135,11 @@ async function PipelineTab() {
                                 <Link
                                   href={`/jobs/${card.jobId}`}
                                   className={`block rounded-lg border p-2 text-sm hover:bg-accent/50 ${
-                                    card.actionable
-                                      ? "border-primary/40 bg-primary/5"
-                                      : "border-border bg-background/50"
+                                    card.disputeLine
+                                      ? "border-destructive/50 bg-destructive/5"
+                                      : card.actionable
+                                        ? "border-primary/40 bg-primary/5"
+                                        : "border-border bg-background/50"
                                   }`}
                                 >
                                   <div className="flex items-baseline justify-between gap-2">
@@ -155,6 +167,14 @@ async function PipelineTab() {
                                       the job. Said on the card, because a card
                                       sitting somewhere the data does not imply
                                       should say so. */}
+                                  {/* What is wrong, on the card. The column
+                                      is worth having because the board says
+                                      it without anybody opening a job. */}
+                                  {card.disputeLine && (
+                                    <p className="mt-0.5 text-[11px] font-semibold text-destructive">
+                                      {card.disputeLine}
+                                    </p>
+                                  )}
                                   {card.overridden && (
                                     <p className="text-[11px] font-medium text-primary">
                                       Moved here by hand
@@ -173,7 +193,11 @@ async function PipelineTab() {
                                     </p>
                                   )}
                                 </Link>
-                                <MoveJob jobId={card.jobId} overridden={card.overridden} />
+                                <MoveJob
+                                  jobId={card.jobId}
+                                  overridden={card.overridden}
+                                  disputed={Boolean(card.disputeLine)}
+                                />
                               </li>
                             ))}
                           </ul>

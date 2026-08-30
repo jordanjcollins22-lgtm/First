@@ -13,12 +13,21 @@
  *   Operations — doing the work
  */
 
-export type PipelineStage = "evaluation" | "sales" | "operations";
+import { inDispute, kindLabel, type DisputeState } from "@/lib/dispute";
+
+export type PipelineStage = "evaluation" | "sales" | "operations" | "disputes";
 
 export const STAGES: { key: PipelineStage; label: string; blurb: string }[] = [
   { key: "evaluation", label: "Evaluation", blurb: "Booked to go look at it." },
   { key: "sales", label: "Sales", blurb: "Priced, quoted, waiting on a yes." },
   { key: "operations", label: "Operations", blurb: "Sold — scheduling and doing the work." },
+  // Last on the board on purpose: it should be the column somebody's eye
+  // lands on when it is not empty, and invisible when it is.
+  {
+    key: "disputes",
+    label: "Disputes",
+    blurb: "Stopped until somebody sorts it out. Nothing automatic goes to these clients.",
+  },
 ];
 
 /** The statuses a job can hold within each stage, in order of progress. */
@@ -26,6 +35,10 @@ export const STAGE_STATUSES: Record<PipelineStage, string[]> = {
   evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated"],
   sales: ["Needs pricing", "Needs approval", "Sent", "Declined"],
   operations: ["Won — not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
+  // The kind of trouble rather than a ladder of progress: a dispute does not
+  // advance, it is either open or it is over, and what it is decides who
+  // deals with it.
+  disputes: ["Legal", "Payment", "Quality", "Other"],
 };
 
 /**
@@ -55,6 +68,10 @@ export interface PipelineInput {
   projectEndDate: string | null;
   /** job_proposals.status, or null when no proposal exists yet. */
   proposalStatus: string | null;
+  /** Set while this job is in dispute. Beats every other reading of the job:
+   * a client who is suing us is not a job to get on with, whatever its
+   * paperwork says. */
+  dispute?: DisputeState | null;
   /** Where somebody put it by hand, if they did. */
   override?: PipelineOverride | null;
 }
@@ -96,6 +113,21 @@ function dateKey(d: Date): string {
  * is testable without mocking the clock.
  */
 export function pipelinePosition(input: PipelineInput, today: Date = new Date()): PipelinePosition {
+  // Before anything else, and before a hand placement too. Somebody who moved
+  // this job to "In progress" last week did not know about the solicitor's
+  // letter that arrived on Monday.
+  const dispute = input.dispute ?? null;
+  if (dispute && inDispute(dispute)) {
+    return {
+      stage: "disputes",
+      status: kindLabel(dispute.kind),
+      // Frozen rather than actionable: it is somebody's problem, but it is
+      // not work to pick up off a queue, and it must not pad the counts the
+      // board uses to say what needs doing today.
+      actionable: false,
+    };
+  }
+
   const derived = derivedPosition(input, today);
 
   // A hand placement wins, right up until the facts it was made against

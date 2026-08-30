@@ -816,6 +816,11 @@ export interface Database {
           pipeline_override_at: string | null;
           pipeline_override_by: string | null;
           pipeline_override_note: string | null;
+          dispute_opened_at: string | null;
+          dispute_resolved_at: string | null;
+          dispute_kind: string | null;
+          dispute_reason: string | null;
+          dispute_opened_by: string | null;
           completed_by: string | null;
           completion_notes: string | null;
           created_at: string;

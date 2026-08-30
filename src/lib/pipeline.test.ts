@@ -240,3 +240,68 @@ describe("moving a job by hand", () => {
     expect(places.some((p) => p.label === "Operations — Completed")).toBe(true);
   });
 });
+
+describe("a job in dispute", () => {
+  const today = new Date("2026-08-29T12:00:00Z");
+  const sold: PipelineInput = {
+    status: "approved",
+    evaluationStatus: "completed",
+    evaluationDate: "2026-08-01",
+    projectStartDate: "2026-09-10",
+    projectEndDate: null,
+    proposalStatus: "accepted",
+  };
+  const dispute = {
+    openedAt: "2026-08-20T10:00:00Z",
+    resolvedAt: null,
+    kind: "legal",
+    reason: "Solicitor's letter.",
+  };
+
+  it("comes off the work columns entirely", () => {
+    // It read as "Operations — Scheduled" before, which is a job to get on
+    // with, which is the one thing nobody should do with it.
+    expect(pipelinePosition(sold, today).stage).toBe("operations");
+    expect(pipelinePosition({ ...sold, dispute }, today).stage).toBe("disputes");
+  });
+
+  it("says what kind of trouble it is", () => {
+    expect(pipelinePosition({ ...sold, dispute }, today).status).toBe("Legal");
+  });
+
+  it("is not counted as work waiting to be picked up", () => {
+    expect(pipelinePosition({ ...sold, dispute }, today).actionable).toBe(false);
+  });
+
+  it("beats a hand placement, which was made before the letter arrived", () => {
+    const moved: PipelineInput = {
+      ...sold,
+      dispute,
+      override: { stage: "operations", status: "In progress", from: "Scheduled" },
+    };
+    expect(pipelinePosition(moved, today).stage).toBe("disputes");
+  });
+
+  it("goes back to being read off the job once it is resolved", () => {
+    const resolved = { ...dispute, resolvedAt: "2026-08-28T10:00:00Z" };
+    expect(pipelinePosition({ ...sold, dispute: resolved }, today)).toEqual(
+      pipelinePosition(sold, today)
+    );
+  });
+
+  it("stays on the board — it is a job that needs somebody, not an absence", () => {
+    // Cancelled comes off the board. A dispute must not, or it disappears.
+    expect(isOnPipeline({ ...sold, dispute })).toBe(true);
+  });
+
+  it("offers the four kinds as places to move a job to", () => {
+    const places = movableTo().filter((p) => p.stage === "disputes");
+    expect(places.map((p) => p.status)).toEqual(["Legal", "Payment", "Quality", "Other"]);
+  });
+
+  it("changes nothing for the jobs that are not in one", () => {
+    expect(pipelinePosition({ ...sold, dispute: null }, today)).toEqual(
+      pipelinePosition(sold, today)
+    );
+  });
+});

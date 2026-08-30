@@ -10,6 +10,7 @@ import { proposalPath } from "@/lib/proposal-flow";
 import { hasChange, trimProposal, trimSummary } from "@/lib/proposal-trim";
 import { updateNoticeText, updateThreadNote, worthSending } from "@/lib/proposal-update-notice";
 import { jobThreadContext } from "@/lib/message-context";
+import { frozenForClient } from "@/lib/data/job-dispute";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms, toE164 } from "@/lib/sms";
 import type { ProposalZoneSnapshot } from "@/types/domain";
@@ -175,6 +176,10 @@ async function tellClient(input: {
 }): Promise<boolean> {
   const context = await jobThreadContext(input.jobId);
   if (!context) return false;
+
+  // Same freeze as every other outbound path. The office can still tell them
+  // by hand; the app will not do it on its own while a dispute is open.
+  if (await frozenForClient(input.jobId)) return false;
 
   const notice = updateNoticeText({
     businessName: context.businessName,
