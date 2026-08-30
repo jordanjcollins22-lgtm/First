@@ -8,6 +8,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { findDuplicateCustomer } from "@/lib/dedupe";
 import { chunk } from "@/lib/chunk";
+import { methodDetail, paymentMethod } from "@/lib/payment-method";
 import {
   isSettled,
   netCents,
@@ -225,11 +226,17 @@ export async function importTransactions(
         // What was kept, not what was charged: a partial refund on an
         // otherwise good payment is money we gave back.
         amount_cents: netCents(draft),
-        method: draft.method ?? "import",
+        // The column allows four values and the export uses nine. Folded, with
+        // the export's own wording kept on the note below.
+        method: paymentMethod(draft.method),
         // No date in the file means no date here. Filing it under the day it
         // was imported would look like an answer.
         ...(draft.paidOn ? { received_at: draft.paidOn } : {}),
-        note: [draft.description, draft.status !== "succeeded" ? draft.status : null]
+        note: [
+          draft.description,
+          methodDetail(draft.method),
+          draft.status !== "succeeded" ? draft.status : null,
+        ]
           .filter(Boolean)
           .join(" · ") || null,
         external_id: draft.externalId,
@@ -277,11 +284,11 @@ export async function importTransactions(
         const { error } = await supabase
           .from("payments")
           .upsert(withId as never, { onConflict: "organization_id,external_id" });
-        if (error) return { ok: false, message: describeImportError(error.message) };
+        if (error) return { ok: false, message: describeImportError(error) };
       }
       if (withoutId.length > 0) {
         const { error } = await supabase.from("payments").insert(withoutId as never);
-        if (error) return { ok: false, message: describeImportError(error.message) };
+        if (error) return { ok: false, message: describeImportError(error) };
       }
     }
 
@@ -360,11 +367,31 @@ export async function importTransactions(
   }
 }
 
-function describeImportError(message: string): string {
-  if (/external_id|constraint|42P10/i.test(message)) {
-    return "This needs its database migration. Run supabase/migrations/0139_payment_import.sql, then try again.";
+/** Postgres and PostgREST codes that genuinely mean a migration has not run:
+ * an undefined column, a schema cache that has never seen one, and an
+ * ON CONFLICT with no unique index behind it. */
+const MIGRATION_CODES = new Set(["42703", "42P10", "PGRST204", "PGRST205"]);
+
+/**
+ * What actually went wrong, said plainly.
+ *
+ * This used to answer "run 0139" to anything whose message contained the word
+ * "constraint", which is most of what Postgres refuses: a check violation, a
+ * not-null, a foreign key, a duplicate key. So a real failure — the export's
+ * payment methods not being among the four the column allows — was reported as
+ * a migration that had already been run, and running it again changed nothing.
+ * A wrong diagnosis costs more than no diagnosis, because it sends somebody to
+ * fix a thing that is not broken.
+ */
+function describeImportError(error: { message: string; code?: string; details?: string | null }): string {
+  const code = error.code ?? "";
+  const missingColumn = /does not exist|schema cache/i.test(error.message);
+
+  if (MIGRATION_CODES.has(code) || missingColumn) {
+    return `This needs its database migration. Run supabase/migrations/0139_payment_import.sql through 0141_payment_payer.sql, then try again. (${error.message})`;
   }
-  return message;
+
+  return [error.message, error.details].filter(Boolean).join(" — ");
 }
 
 /** Every contact, to match payers against. Bounded by the size of the book
@@ -521,7 +548,7 @@ export async function reconcileOrphanPayments(
       .from("payments")
       .select("id, payer_name, payer_email, payer_phone")
       .is("customer_id", null);
-    if (error) return { ok: false, message: describeImportError(error.message) };
+    if (error) return { ok: false, message: describeImportError(error) };
 
     const orphans = (data ?? []) as unknown as {
       id: string;
