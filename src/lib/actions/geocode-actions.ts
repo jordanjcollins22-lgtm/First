@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { ambiguousOnes, refreshLabel, staleOnes, verdictFor } from "@/lib/address-refresh";
 import { getCurrentProfile } from "@/lib/data/team";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { describeDbError } from "@/lib/setup-errors";
@@ -75,16 +76,36 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
 
       // Somebody may already have added this property by hand. Creating a
       // second one at the same address would put two pins on one house.
+      //
+      // But an existing property is not always right: a re-imported file is
+      // usually a corrected address, and the property is the thing it was
+      // correcting. So the address is compared rather than the row merely
+      // counted, and one property saying something else is updated in place.
       const { data: already } = await supabase
         .from("properties")
-        .select("id")
-        .eq("customer_id", contact.id)
-        .limit(1);
+        .select("id, address")
+        .eq("customer_id", contact.id);
 
-      if (already && already.length > 0) {
+      const existingProperties = (already ?? []) as { id: string; address: string }[];
+      const verdict = verdictFor({
+        id: contact.id,
+        name: contact.name,
+        importAddress: contact.import_address,
+        propertyAddresses: existingProperties.map((property) => property.address),
+      });
+
+      if (verdict === "matches" || verdict === "ambiguous") {
         await supabase
           .from("customers")
-          .update({ geocode_attempted_at: attemptedAt, geocode_error: null })
+          .update({
+            geocode_attempted_at: attemptedAt,
+            // Says why nothing moved, rather than leaving somebody to wonder
+            // why a corrected address never appeared on the map.
+            geocode_error:
+              verdict === "ambiguous"
+                ? "More than one property on this contact — move the address by hand."
+                : null,
+          })
           .eq("id", contact.id);
         continue;
       }
@@ -109,14 +130,22 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
         continue;
       }
 
-      const { error: insertError } = await supabase.from("properties").insert({
-        customer_id: contact.id,
-        // The geocoder's own wording, not ours: it is the version that matches
-        // what the coordinates actually point at.
-        address: match.fullAddress,
-        lat: match.lat,
-        lng: match.lng,
-      });
+      // Update the one that is there when it is the stale one, rather than
+      // adding a second pin for the same house.
+      const stale = verdict === "stale" ? existingProperties[0] : null;
+      const { error: insertError } = stale
+        ? await supabase
+            .from("properties")
+            .update({ address: match.fullAddress, lat: match.lat, lng: match.lng })
+            .eq("id", stale.id)
+        : await supabase.from("properties").insert({
+            customer_id: contact.id,
+            // The geocoder's own wording, not ours: it is the version that
+            // matches what the coordinates actually point at.
+            address: match.fullAddress,
+            lat: match.lat,
+            lng: match.lng,
+          });
 
       if (insertError) {
         failed++;
@@ -184,5 +213,85 @@ export async function countPendingGeocodes(): Promise<{ pending: number; failed:
     return { pending: pending ?? 0, failed: failed ?? 0 };
   } catch {
     return { pending: 0, failed: 0 };
+  }
+}
+
+export type RefreshResult =
+  | { ok: true; queued: number; ambiguous: number; message: string }
+  | { ok: false; message: string };
+
+/**
+ * Finds corrected addresses that never reached the map, and queues them.
+ *
+ * The placing step only looks at contacts it has never tried, so a contact
+ * placed once from a bad address was never looked at again — the corrected
+ * address sat in a column nothing reads while the property, and therefore
+ * every map and the whole out-of-area list, kept the old one. Imports now
+ * clear that flag themselves; this is for the ones already in that state.
+ *
+ * Queues rather than places: clearing the flag hands them to the same batched
+ * step everything else goes through, so one button does not turn into a
+ * thousand geocoder calls in a single request.
+ */
+export async function refreshStaleAddresses(): Promise<RefreshResult> {
+  try {
+    if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, name, import_address, properties(address)")
+      .not("import_address", "is", null);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    const rows = (data ?? []) as unknown as {
+      id: string;
+      name: string;
+      import_address: string | null;
+      properties: { address: string }[] | null;
+    }[];
+
+    const states = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      importAddress: row.import_address,
+      propertyAddresses: (row.properties ?? []).map((property) => property.address),
+    }));
+
+    const stale = staleOnes(states);
+    const ambiguous = ambiguousOnes(states).length;
+
+    if (stale.length === 0) {
+      return {
+        ok: true,
+        queued: 0,
+        ambiguous,
+        message:
+          ambiguous > 0
+            ? `Every address matches its file, except ${ambiguous} on contacts with more than one property — those need moving by hand.`
+            : "Every imported address already matches what the file says.",
+      };
+    }
+
+    // Handed back to the batched placing step rather than geocoded here.
+    for (const contact of stale) {
+      await supabase
+        .from("customers")
+        .update({ geocode_attempted_at: null, geocode_error: null })
+        .eq("id", contact.id);
+    }
+
+    revalidatePath("/contacts");
+    revalidatePath("/attractors");
+
+    return {
+      ok: true,
+      queued: stale.length,
+      ambiguous,
+      message: `${refreshLabel(stale.length).replace("Re-place", "Queued")} — press Place addresses to put them on the map.`,
+    };
+  } catch (err) {
+    console.error("refreshStaleAddresses failed:", err);
+    return { ok: false, message: "Couldn't check those addresses — try again." };
   }
 }

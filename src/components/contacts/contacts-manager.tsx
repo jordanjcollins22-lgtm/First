@@ -19,6 +19,7 @@ import { ContactImportPanel } from "./contact-import-panel";
 import { GeocodePanel } from "./geocode-panel";
 import { MapPinOff } from "lucide-react";
 import { RecentMergesPanel } from "./recent-merges-panel";
+import { AddressRefreshButton } from "./address-refresh-button";
 
 function summary(contact: ContactRow): string {
   return (
@@ -98,8 +99,11 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
           </h2>
           <p className="mb-3 text-xs text-amber-900">
             Outside Harford County, so the address is probably wrong. Open each one and fix it, or
-            confirm it really is out of area.
+            confirm it really is out of area. If you already corrected these in a re-import, the
+            button below moves the property to match the file.
           </p>
+
+          <AddressRefreshButton />
           <ul className="flex flex-col gap-1.5">
             {data.outOfArea.map((contact) => (
               <li key={contact.id}>

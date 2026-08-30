@@ -259,7 +259,14 @@ export async function importContacts(
       if (match) {
         const patch = mergeContact(match as ExistingContact, asIncoming(draft), mode);
         if (Object.keys(patch).length > 0) {
-          await supabase.from("customers").update(patch).eq("id", match.id);
+          // A corrected address has to be placed again, or it sits in a
+          // column nothing reads while the property — which is what every
+          // map and every out-of-area check actually looks at — keeps
+          // pointing at the address the import was meant to fix.
+          const write = patch.import_address
+            ? { ...patch, geocode_attempted_at: null, geocode_error: null }
+            : patch;
+          await supabase.from("customers").update(write).eq("id", match.id);
           updated++;
         } else {
           unchanged++;
