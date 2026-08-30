@@ -233,6 +233,12 @@ export async function importTransactions(
           .filter(Boolean)
           .join(" · ") || null,
         external_id: draft.externalId,
+        // What the file said about the payer, kept whether or not it matched.
+        // A payment that lands with no contact can then be reconciled later
+        // by somebody who never sees the export.
+        payer_name: draft.name,
+        payer_email: draft.email,
+        payer_phone: draft.phone,
         // The processor's own id, so a row here can be matched against what
         // the processor says without going by name and amount.
         stripe_payment_intent_id: draft.chargeId,
@@ -479,4 +485,106 @@ async function createClientFrom(
 
   if (error || !data) return null;
   return data as unknown as ClientRow;
+}
+
+export type ReconcileResult =
+  | { ok: true; matched: number; created: number; stillOrphan: number; message: string }
+  | { ok: false; message: string };
+
+/**
+ * Gives a home to payments that came in without one.
+ *
+ * Money on the books with no contact against it is money nobody can act on:
+ * it does not appear on a client's record, it does not count towards what
+ * they are worth, and it sits on a dashboard as a number with no name. The
+ * export always knew who paid — a name, usually an email — and that is now
+ * kept on the row, so this can match them up long after the file is gone.
+ *
+ * Matches first, and only then makes somebody. An email that belongs to a
+ * contact already here is that contact, and creating a second one would turn
+ * one client into two half-clients.
+ */
+export async function reconcileOrphanPayments(
+  createMissing = true
+): Promise<ReconcileResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+
+    const [supabase, organizationId, clients] = await Promise.all([
+      createClient(),
+      getCurrentOrganizationId(),
+      loadClients(),
+    ]);
+
+    const { data, error } = await supabase
+      .from("payments")
+      .select("id, payer_name, payer_email, payer_phone")
+      .is("customer_id", null);
+    if (error) return { ok: false, message: describeImportError(error.message) };
+
+    const orphans = (data ?? []) as unknown as {
+      id: string;
+      payer_name: string | null;
+      payer_email: string | null;
+      payer_phone: string | null;
+    }[];
+    if (orphans.length === 0) {
+      return { ok: true, matched: 0, created: 0, stillOrphan: 0, message: "Every payment already has a contact against it." };
+    }
+
+    let matched = 0;
+    let created = 0;
+    let stillOrphan = 0;
+
+    for (const orphan of orphans) {
+      const asDraft = {
+        externalId: null,
+        customerExternalId: null,
+        name: orphan.payer_name,
+        email: orphan.payer_email,
+        phone: orphan.payer_phone,
+      } as TransactionDraft;
+
+      let client = matchClient(asDraft, clients);
+      if (!client && createMissing && (orphan.payer_name || orphan.payer_email)) {
+        const made = await createClientFrom(supabase, organizationId, asDraft);
+        if (made) {
+          clients.push(made);
+          client = made;
+          created += 1;
+        }
+      }
+
+      if (!client) {
+        // Nothing on the row to go on. Left alone and counted, rather than
+        // attached to a guess.
+        stillOrphan += 1;
+        continue;
+      }
+
+      const { error: linkError } = await supabase
+        .from("payments")
+        .update({ customer_id: client.id })
+        .eq("id", orphan.id);
+      if (!linkError) matched += 1;
+      else stillOrphan += 1;
+    }
+
+    revalidatePath("/admin/payments");
+    revalidatePath("/attractors");
+
+    const parts = [`${matched} ${matched === 1 ? "payment" : "payments"} now have a contact`];
+    if (created > 0) {
+      parts.push(`${created} new ${created === 1 ? "contact" : "contacts"} made from what the payment said`);
+    }
+    if (stillOrphan > 0) {
+      parts.push(`${stillOrphan} had no name or email to go on`);
+    }
+
+    return { ok: true, matched, created, stillOrphan, message: `${parts.join(". ")}.` };
+  } catch (err) {
+    console.error("reconcileOrphanPayments failed:", err);
+    return { ok: false, message: "Couldn't match those up." };
+  }
 }

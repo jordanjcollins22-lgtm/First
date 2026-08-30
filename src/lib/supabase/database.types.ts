@@ -459,6 +459,9 @@ export interface Database {
           stripe_invoice_id: string | null;
           external_id: string | null;
           source: string | null;
+          payer_name: string | null;
+          payer_email: string | null;
+          payer_phone: string | null;
           received_at: string;
           note: string | null;
           recorded_by: string | null;

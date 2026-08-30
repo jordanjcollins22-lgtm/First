@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import {
   importTransactions,
   previewTransactionImport,
+  reconcileOrphanPayments,
   type TransactionPreviewResult,
 } from "@/lib/actions/transaction-import-actions";
 
@@ -234,6 +235,37 @@ export function TransactionImportPanel() {
           </ul>
         </div>
       )}
+
+      {/* For money already on the books with nobody against it. The export
+          said who paid, and that is kept on the row, so this can match them
+          up long after the file is gone. */}
+      <div className="flex flex-col gap-1 border-t border-border pt-3">
+        <p className="text-xs text-muted-foreground">
+          Payments showing as &ldquo;no contact&rdquo; still carry the name and email they came in
+          with.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          className="self-start"
+          onClick={() =>
+            start(async () => {
+              setError(null);
+              const result = await reconcileOrphanPayments(true);
+              if (result.ok) {
+                setDone(result.message);
+                router.refresh();
+              } else {
+                setError(result.message);
+              }
+            })
+          }
+        >
+          {pending ? "Matching…" : "Match those up by email"}
+        </Button>
+      </div>
 
       {done && <p className="text-xs font-medium text-primary">{done}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
