@@ -89,9 +89,37 @@ const BOUNDS = { south: 39.3, north: 39.75, west: -76.6, east: -75.95 };
 const STATE_PATTERN =
   /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
 
+/** Only a country name is allowed to follow a ZIP. Anything else means the
+ * five digits were a house number with a street after them. */
+const COUNTRY_TAIL = /^[\s,]*(?:usa|u\.s\.a\.|us|united states)?[\s,.]*$/i;
+
+/**
+ * The postcode in a written address.
+ *
+ * A US address carries two runs of five digits often enough to matter: the
+ * house number at the front and the ZIP at the end. Reading the first one
+ * meant "11824 Harford Rd, Glen Arm, MD 21057" was reported as "ZIP 11824 is
+ * not in Harford County" — the right verdict for the wrong reason, and on a
+ * Harford address with a five-digit house number, the wrong verdict as well.
+ *
+ * So it reads from the end, and a lone five-digit number sitting at the front
+ * of an address with a street after it is a house number, not a postcode.
+ */
 function zipIn(address: string): string | null {
-  const match = address.match(/\b(\d{5})(?:-\d{4})?\b/);
-  return match ? match[1] : null;
+  const matches = [...address.matchAll(/\b(\d{5})(?:-\d{4})?\b/g)];
+  if (matches.length === 0) return null;
+
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const match = matches[i];
+    const start = match.index ?? 0;
+    // The number an address opens with is the house, unless it is all there is.
+    if (start === 0 && matches.length > 1) continue;
+    if (COUNTRY_TAIL.test(address.slice(start + match[0].length))) return match[1];
+  }
+
+  const first = matches[0];
+  if (matches.length === 1 && (first.index ?? 0) === 0) return null;
+  return matches[matches.length - 1][1];
 }
 
 /**

@@ -123,3 +123,43 @@ describe("the ZIP list", () => {
     }
   });
 });
+
+describe("reading the ZIP out of a written address", () => {
+  it("takes the postcode at the end, not the house number at the front", () => {
+    // The bug this exists for: a five-digit house number was read as the ZIP,
+    // so the reason named a number that was never a postcode.
+    const check = checkHarford({ address: "11824 Harford Rd, Glen Arm, Maryland, 21057" });
+    expect(check.verdict).toBe("outside");
+    expect(check.reason).toContain("21057");
+    expect(check.reason).not.toContain("11824");
+  });
+
+  it("does not call a Harford address outside because of its house number", () => {
+    const check = checkHarford({ address: "11824 Pulaski Hwy, Joppa, Maryland, 21085" });
+    expect(check.verdict).toBe("inside");
+    expect(check.reason).toContain("21085");
+  });
+
+  it("reads a bare ZIP on its own", () => {
+    expect(checkHarford({ address: "21014" }).verdict).toBe("inside");
+  });
+
+  it("copes with a country on the end", () => {
+    expect(checkHarford({ address: "8 Brooks Rd, Bel Air, MD 21014, USA" }).verdict).toBe("inside");
+  });
+
+  it("reads ZIP+4", () => {
+    expect(checkHarford({ address: "8 Brooks Rd, Bel Air, MD 21014-1234" }).reason).toContain("21014");
+  });
+
+  it("does not treat a lone house number as a postcode", () => {
+    // Falls through to the town, which is the only real evidence here.
+    const check = checkHarford({ address: "12345 Main St, Bel Air, Maryland" });
+    expect(check.verdict).toBe("inside");
+    expect(check.reason).toMatch(/bel air/i);
+  });
+
+  it("still has nothing to say about a street with no town or ZIP", () => {
+    expect(checkHarford({ address: "12345 Main St" }).verdict).toBe("unknown");
+  });
+});
