@@ -16,6 +16,7 @@ import {
   type TransactionPreview,
 } from "@/lib/transaction-import";
 import { linkToJob, tallyLine, type ImportTally, type JobCandidate } from "@/lib/payment-linking";
+import { jobsToMarkSold, soldLine } from "@/lib/paid-job-stage";
 
 export type TransactionImportResult =
   | { ok: true; message: string; tally: ImportTally; unmatchedClients: string[] }
@@ -251,15 +252,46 @@ export async function importTransactions(
 
     // The half that moves the board. Done after the money is safely in, so a
     // failure here costs the stage change rather than the payments.
+    let sold = 0;
     if (markPaid.size > 0) {
+      const jobIds = [...markPaid];
       const paidAt = new Date().toISOString();
+
+      // When we got the money. Only ever written once: a second payment
+      // against the same job is an instalment, not a new settlement date.
       const { error } = await supabase
         .from("job_proposals")
         .update({ paid_at: paidAt })
-        .in("job_id", [...markPaid])
+        .in("job_id", jobIds)
         .is("paid_at", null);
       if (error) console.error("Marking proposals paid failed:", error);
-      for (const jobId of markPaid) revalidateJobViews(jobId);
+
+      // And the stage. Recording the money is not the same as moving the
+      // work: the board reads a job's own status, which knows nothing about
+      // a payment, so without this a year of receipts leaves every card in
+      // Sales, quoted and apparently still waiting on a yes.
+      const { data: jobRows } = await supabase
+        .from("jobs")
+        .select("id, status")
+        .in("id", jobIds);
+
+      const toMove = jobsToMarkSold(
+        ((jobRows ?? []) as { id: string; status: string }[]).map((j) => ({
+          jobId: j.id,
+          status: j.status,
+        }))
+      );
+
+      if (toMove.length > 0) {
+        const { error: stageError } = await supabase
+          .from("jobs")
+          .update({ status: "approved" })
+          .in("id", toMove);
+        if (stageError) console.error("Moving paid jobs failed:", stageError);
+        else sold = toMove.length;
+      }
+
+      for (const jobId of jobIds) revalidateJobViews(jobId);
     }
 
     revalidatePath("/pipeline");
@@ -267,7 +299,7 @@ export async function importTransactions(
 
     return {
       ok: true,
-      message: tallyLine(tally),
+      message: [tallyLine(tally), soldLine(sold)].filter(Boolean).join(" "),
       tally,
       unmatchedClients: unmatchedClients.slice(0, 20),
     };
