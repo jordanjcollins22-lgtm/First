@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { checkHarford } from "@/lib/harford";
+import { effectiveType } from "@/lib/client-status";
 import { findDuplicateCustomer, normalizeAddress } from "@/lib/dedupe";
 
 export interface ContactRow {
@@ -9,8 +10,20 @@ export interface ContactRow {
   phone: string | null;
   propertyCount: number;
   addresses: string[];
-  /** client, lead, supplier, subcontractor, referral_partner or other. */
+  /**
+   * What this contact is, given the money.
+   *
+   * Derived rather than read off the row: a client is somebody who has paid
+   * us, and a book where a thousand people are called clients is a book where
+   * the word carries no information. A supplier stays a supplier whichever
+   * way money went.
+   */
   contactType: string;
+  /** What the row itself says, kept so a screen can show that the book and
+   * the money disagree rather than silently overruling one with the other. */
+  statedType: string;
+  /** What they have actually paid, in cents. */
+  paidCents: number;
   tags: string[];
   /** Asked not to be contacted. Shown on the row, because the whole reason to
    * carry it across from the CRM is that somebody sees it before they ring. */
@@ -101,6 +114,25 @@ export async function getContacts(): Promise<ContactsData> {
   ]);
   if (error) throw error;
 
+  // What each contact has actually paid, which is what decides whether they
+  // are a client. Tolerated: before the payments table has anything in it
+  // nobody has paid, which is a true answer rather than a broken page.
+  const paidByCustomer = new Map<string, number>();
+  try {
+    const { data: paid } = await supabase
+      .from("payments")
+      .select("customer_id, amount_cents");
+    for (const row of (paid ?? []) as { customer_id: string | null; amount_cents: number }[]) {
+      if (!row.customer_id) continue;
+      paidByCustomer.set(
+        row.customer_id,
+        (paidByCustomer.get(row.customer_id) ?? 0) + (row.amount_cents ?? 0)
+      );
+    }
+  } catch {
+    // Nobody has paid, as far as anybody can tell.
+  }
+
   // Empty until migration 0091 runs, and empty is the right answer then: with
   // no record of a merge there is nothing to offer an undo for.
   const { data: mergeRows } = await supabase
@@ -142,7 +174,12 @@ export async function getContacts(): Promise<ContactsData> {
       properties: { id: string; address: string }[] | null;
     }[]
   ).map((c) => ({
-    contactType: c.contact_type ?? "client",
+    contactType: effectiveType({
+      paidCents: paidByCustomer.get(c.id) ?? 0,
+      contactType: c.contact_type,
+    }),
+    statedType: c.contact_type ?? "",
+    paidCents: paidByCustomer.get(c.id) ?? 0,
     tags: c.tags ?? [],
     doNotContact: c.do_not_contact ?? false,
     pipelineStage: c.pipeline_stage,

@@ -12,6 +12,8 @@ function contact(over: Partial<ContactRow> = {}): ContactRow {
     propertyCount: 1,
     addresses: ["4 Elm Road, Bel Air, MD 21014"],
     contactType: "client",
+    statedType: "client",
+    paidCents: 0,
     tags: [],
     doNotContact: false,
     pipelineStage: null,

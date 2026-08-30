@@ -15,6 +15,7 @@ import type { JobWithLocation } from "@/lib/data/jobs";
 import { AccessDeniedNotice } from "@/components/access-denied-notice";
 import { PageTabs } from "@/components/ui/page-tabs";
 import { getContacts, type ContactsData } from "@/lib/data/contacts";
+import { bookLine, summariseBook } from "@/lib/client-status";
 import { ContactsManager } from "@/components/contacts/contacts-manager";
 import { checkTabAccess as checkTab } from "@/lib/data/access";
 import { getCurrentProfile } from "@/lib/data/team";
@@ -176,9 +177,13 @@ async function ContactsTab() {
   return (
     <div className="max-w-3xl">
       <h1 className="mb-1 text-2xl font-bold">Contacts</h1>
-      <p className="mb-6 text-muted-foreground">
+      <p className="mb-1 text-muted-foreground">
         Everyone in the book. Search by name, email, phone or address.
       </p>
+      {/* Said out loud because the word changed meaning: a client is somebody
+          who has paid, and the label on every row is worked out from the
+          money rather than from whatever an import wrote on it. */}
+      <p className="mb-6 text-sm text-muted-foreground">{bookLine(summariseBook(data.contacts))}</p>
       <ContactsManager data={data} canMerge={canMerge} />
     </div>
   );

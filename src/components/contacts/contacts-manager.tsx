@@ -25,6 +25,14 @@ function summary(contact: ContactRow): string {
   return (
     [
       contactTypeLabel(contact.contactType),
+      // What they have actually paid, which is what makes somebody a client.
+      contact.paidCents > 0
+        ? (contact.paidCents / 100).toLocaleString("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+          })
+        : null,
       contact.email,
       contact.phone,
       `${contact.propertyCount} propert${contact.propertyCount === 1 ? "y" : "ies"}`,

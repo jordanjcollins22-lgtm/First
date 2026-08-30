@@ -91,16 +91,37 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
 
     const supabase = await createClient();
 
+    // Fetch wider than the batch, because most of what is waiting in a real
+    // contact book is a town with no street and is settled without a lookup.
     const { data, error } = await supabase
       .from("customers")
       .select("id, name, import_address")
       .not("import_address", "is", null)
       .is("geocode_attempted_at", null)
-      .limit(BATCH);
+      .limit(BATCH * 5);
     if (error) return { ok: false, message: describeDbError(error) };
 
-    const pending = (data ?? []) as unknown as Pending[];
-    if (pending.length === 0) {
+    const waiting = (data ?? []) as unknown as Pending[];
+
+    // Anything with no street is settled here, in one statement, without a
+    // lookup each. A book of eight hundred where four hundred are towns
+    // should not cost four hundred calls to find that out.
+    const unplaceable = waiting.filter((c) => tooThinToPlace(c.import_address));
+    if (unplaceable.length > 0) {
+      await supabase
+        .from("customers")
+        .update({
+          geocode_attempted_at: new Date().toISOString(),
+          geocode_error: "Needs a street before it can go on the map.",
+        })
+        .in(
+          "id",
+          unplaceable.map((c) => c.id)
+        );
+    }
+
+    const pending = waiting.filter((c) => !tooThinToPlace(c.import_address)).slice(0, BATCH);
+    if (pending.length === 0 && unplaceable.length === 0) {
       return { ok: true, placed: 0, failed: 0, remaining: 0, message: "Every imported address is placed." };
     }
 
@@ -335,10 +356,10 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
 export async function countPendingGeocodes(): Promise<{ pending: number; failed: number }> {
   try {
     const supabase = await createClient();
-    const [{ count: pending }, { count: failed }] = await Promise.all([
+    const [{ data: waiting }, { count: failed }] = await Promise.all([
       supabase
         .from("customers")
-        .select("id", { count: "exact", head: true })
+        .select("import_address")
         .not("import_address", "is", null)
         .is("geocode_attempted_at", null),
       supabase
@@ -346,7 +367,16 @@ export async function countPendingGeocodes(): Promise<{ pending: number; failed:
         .select("id", { count: "exact", head: true })
         .not("geocode_error", "is", null),
     ]);
-    return { pending: pending ?? 0, failed: failed ?? 0 };
+
+    // Only the ones a lookup could actually place. A contact book is full of
+    // city-and-ZIP rows with no street on them, and counting those as work
+    // waiting promises hundreds of pins that are never going to appear —
+    // then spends a Mapbox call each finding that out.
+    const placeable = ((waiting ?? []) as { import_address: string | null }[]).filter(
+      (row) => row.import_address && !tooThinToPlace(row.import_address)
+    ).length;
+
+    return { pending: placeable, failed: failed ?? 0 };
   } catch {
     return { pending: 0, failed: 0 };
   }

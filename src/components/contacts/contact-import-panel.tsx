@@ -29,7 +29,11 @@ import { CONTACT_TYPES, type ContactType } from "@/lib/contact-types";
 export function ContactImportPanel() {
   const [open, setOpen] = useState(false);
   const [csv, setCsv] = useState("");
-  const [contactType, setContactType] = useState<ContactType>("client");
+  // Lead, not client. A client is somebody who has paid us, and that is
+  // worked out from the money rather than chosen on an import form — an
+  // import that calls a thousand strangers clients is how the word stopped
+  // meaning anything.
+  const [contactType, setContactType] = useState<ContactType>("lead");
   const [batch, setBatch] = useState("");
   // Updating is the default, because a re-import is nearly always a
   // corrected export of people already here. Leaving it off meant the usual
