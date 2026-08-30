@@ -202,9 +202,30 @@ export function firstAcceptable(
  * front costs one lookup and saves a pin nobody will notice is wrong until
  * they are looking at a map of North America.
  */
+/**
+ * Whether an address names a building rather than a town.
+ *
+ * A property is a place a crew drives to. "FALLSTON, MD 21160" is a town, and
+ * a geocoder answers it with the middle of Fallston — a real coordinate, a
+ * plausible-looking pin, and nobody's house. A contact book full of those is
+ * worse than one with no pins at all, because they look like work.
+ *
+ * So a street line is required: a number, then a word. That misses the rare
+ * rural address with no number on it, which is the right way round — a
+ * contact with no pin is a contact somebody can fix, and a pin on the middle
+ * of a town is a lie nobody notices.
+ */
+export function hasStreetLine(address: string): boolean {
+  const first = address.split(",")[0]?.trim() ?? "";
+  if (/^p\.?o\.? ?box/i.test(first)) return false;
+  return /^\d+[\w-]*\s+\p{L}/u.test(first);
+}
+
 export function tooThinToPlace(address: string): boolean {
   const clean = address.trim();
   if (clean.length < 6) return true;
-  // Something naming a place: a town after a comma, a state, or a ZIP.
+  // A street to find, and a town or ZIP to find it in. Either alone puts the
+  // pin somewhere that is not the property.
+  if (!hasStreetLine(clean)) return true;
   return !(clean.includes(",") || stateIn(clean) !== null || zipIn(clean) !== null);
 }

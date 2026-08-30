@@ -4,6 +4,7 @@ import {
   REGION,
   firstAcceptable,
   guardMatch,
+  hasStreetLine,
   pointOutsideRegion,
   stateIn,
   tooThinToPlace,
@@ -151,5 +152,45 @@ describe("pointOutsideRegion", () => {
   it("does not treat an unplaced row as misplaced", () => {
     expect(pointOutsideRegion(0, 0)).toBe(false);
     expect(pointOutsideRegion(null, null)).toBe(false);
+  });
+});
+
+describe("hasStreetLine", () => {
+  it("accepts an address that names a building", () => {
+    expect(hasStreetLine("8 Brooks Rd, Bel Air, MD 21014")).toBe(true);
+    expect(hasStreetLine("1315 Amedoro Ct, Abingdon, Maryland, 21009")).toBe(true);
+    expect(hasStreetLine("11824B Pulaski Hwy, Joppa, MD")).toBe(true);
+  });
+
+  it("refuses a town, which is what a contact export is full of", () => {
+    // A geocoder answers "FALLSTON, MD 21160" with the middle of Fallston: a
+    // real coordinate, a plausible pin, and nobody's house.
+    expect(hasStreetLine("FALLSTON, MD 21160")).toBe(false);
+    expect(hasStreetLine("DETROIT, MI 48237")).toBe(false);
+    expect(hasStreetLine("BEL AIR, MD 21015")).toBe(false);
+  });
+
+  it("refuses a PO box, which is not a place a crew can drive to", () => {
+    expect(hasStreetLine("PO Box 417, Bel Air, MD 21014")).toBe(false);
+    expect(hasStreetLine("P.O. BOX 12")).toBe(false);
+  });
+
+  it("refuses a bare ZIP", () => {
+    expect(hasStreetLine("21014")).toBe(false);
+  });
+});
+
+describe("tooThinToPlace with a town-only address", () => {
+  it("leaves a town unplaced rather than pinning its centre", () => {
+    expect(tooThinToPlace("FALLSTON, MD 21160")).toBe(true);
+    expect(tooThinToPlace("BEL AIR, MD 21015")).toBe(true);
+  });
+
+  it("still places a proper address", () => {
+    expect(tooThinToPlace("8 Brooks Rd, Bel Air, MD 21014")).toBe(false);
+  });
+
+  it("still refuses a street with nowhere to put it", () => {
+    expect(tooThinToPlace("1103 Sunset Drive")).toBe(true);
   });
 });
