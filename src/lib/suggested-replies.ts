@@ -106,7 +106,12 @@ export function contextBlock(context: NudgeContext, now: Date): string {
       days === 0 ? "Last message: today" : `Last message: ${days} day${days === 1 ? "" : "s"} ago`
     );
   }
-  lines.push(waitingOnUs(context) ? "They spoke last — this is a reply." : "We spoke last — this is a nudge.");
+  // Written without a dash like everything else here. The facts are the last
+  // thing the model reads before it writes, and a dash in front of it is an
+  // invitation to use one.
+  lines.push(
+    waitingOnUs(context) ? "They spoke last, so this is a reply." : "We spoke last, so this is a nudge."
+  );
 
   lines.push("", "The conversation so far, oldest first:");
   if (context.recentMessages.length === 0) {
@@ -134,6 +139,7 @@ export function systemPrompt(): string {
     "- Do not apologise for chasing, do not say you are following up on a follow-up, and do not mention this being automated.",
     "- Say one thing and ask one question. A message with two questions gets one answer.",
     "- Match the customer's register. If they write in short lines, write in short lines.",
+    "- Never use a dash to join two thoughts. Use a comma, or start a new sentence. A message full of dashes reads as though a machine wrote it, which is the one thing it must not do.",
     "",
     `Give exactly ${MAX_SUGGESTIONS} different drafts, each taking a different angle. Put each on its own line with no numbering, no quotes and no commentary. Nothing else in your reply.`,
   ].join("\n");
@@ -142,6 +148,30 @@ export function systemPrompt(): string {
 // ---------------------------------------------------------------------------
 // Reading the model's answer
 // ---------------------------------------------------------------------------
+
+/**
+ * Takes the dashes out of a draft.
+ *
+ * A model reaches for an em dash to join two thoughts, several times a
+ * paragraph, and it is the single clearest tell that nobody typed this. The
+ * system prompt asks for none, but a prompt is a request rather than a
+ * guarantee, so the drafts are cleaned on the way out too.
+ *
+ * A comma is what somebody writing quickly would have used. The tidy-up after
+ * it matters as much as the replacement: turning "ready — and" into
+ * "ready, and" is right, but leaving ",," or " ," behind swaps one tell for
+ * another.
+ */
+export function plainDashes(text: string): string {
+  return text
+    .replace(/\s*[—–]\s*/g, ", ")
+    // A dash that landed next to punctuation that was already there.
+    .replace(/,\s*([,.!?;:])/g, "$1")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 /** Strips the bullet, number or quote a model reaches for out of habit. */
 function tidy(line: string): string {
@@ -157,7 +187,7 @@ export function parseSuggestions(text: string): string[] {
   const out: string[] = [];
 
   for (const raw of text.split(/\r?\n/)) {
-    const line = tidy(raw);
+    const line = plainDashes(tidy(raw));
     if (!line) continue;
     // A model that explains itself first produces a line that is about the
     // drafts rather than one of them.
@@ -212,7 +242,7 @@ export function fallbackSuggestions(context: NudgeContext, now: Date): string[] 
 
   if (waitingOnUs(context)) {
     return [
-      `Hi ${first} — got your message, thanks. Let me get you a proper answer today.`,
+      `Hi ${first}, got your message, thanks. Let me get you a proper answer today.`,
       `Hi ${first}, thanks for that. Is there a day this week that would suit you for us to come out?`,
     ];
   }
@@ -221,28 +251,28 @@ export function fallbackSuggestions(context: NudgeContext, now: Date): string[] 
     const opened = context.proposalActivity?.toLowerCase().includes("not opened");
     return [
       opened
-        ? `Hi ${first} — just checking the proposal reached you alright. Happy to walk through it on the phone if that is easier.`
-        : `Hi ${first} — saw you had a look at the proposal. Anything on it you want me to go through?`,
+        ? `Hi ${first}, just checking the proposal reached you alright. Happy to walk through it on the phone if that is easier.`
+        : `Hi ${first}, saw you had a look at the proposal. Anything on it you want me to go through?`,
       `Hi ${first}, is there anything holding this up on your end? If the timing is the issue we can look at the diary and work around you.`,
-      `Hi ${first} — happy to start whenever suits. Which day of the week generally works best for you?`,
+      `Hi ${first}, happy to start whenever suits. Which day of the week generally works best for you?`,
     ];
   }
 
   if (context.paid && !context.startDate) {
     return [
-      `Hi ${first} — you are all paid up, thank you. Which days generally suit you and I will get you on the crew's diary.`,
+      `Hi ${first}, you are all paid up, thank you. Which days generally suit you and I will get you on the crew's diary.`,
     ];
   }
 
   if (context.startDate) {
     return [
-      `Hi ${first} — just confirming we are still good for your booked day. Anything you need us to know before we arrive?`,
+      `Hi ${first}, just confirming we are still good for your booked day. Anything you need us to know before we arrive?`,
     ];
   }
 
   return [
     days != null && days > 3
-      ? `Hi ${first} — checking in on this one. Where are you up to, and is there anything you need from us?`
-      : `Hi ${first} — anything you need from us to move this along?`,
+      ? `Hi ${first}, checking in on this one. Where are you up to, and is there anything you need from us?`
+      : `Hi ${first}, anything you need from us to move this along?`,
   ];
 }
