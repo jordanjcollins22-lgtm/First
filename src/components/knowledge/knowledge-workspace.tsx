@@ -35,6 +35,7 @@ import {
   type ScheduledNode,
 } from "@/lib/knowledge-schedule";
 import { fitToCanvas, layeredLayout, layoutGraph, seedPositions } from "@/lib/graph-layout";
+import { mergeLive } from "@/lib/knowledge-live";
 import {
   EMPTY_FILTERS,
   NODE_STATUSES,
@@ -64,7 +65,9 @@ import {
  * with each other.
  */
 export function KnowledgeWorkspace({
-  graph,
+  graph: savedGraph,
+  live,
+  liveSummary,
   tags,
   units,
   materials,
@@ -74,6 +77,12 @@ export function KnowledgeWorkspace({
   today,
 }: {
   graph: Graph;
+  /** The business itself — clients, properties, jobs, services, inventory,
+   * invoices and spending — derived from the real tables rather than typed.
+   * Merged in here so the canvas never has to know the difference. */
+  live: Graph;
+  /** What is on that layer, in a sentence, for the toggle. */
+  liveSummary: string;
   tags: string[];
   /** Every unit this business measures in, built-in and home-made. */
   units: UnitOption[];
@@ -90,6 +99,14 @@ export function KnowledgeWorkspace({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+
+  // On by default: the point of putting the business on the board is seeing
+  // it. Off is for when somebody is working on the ideas alone.
+  const [showLive, setShowLive] = useState(true);
+  const graph = useMemo(
+    () => (showLive ? mergeLive(savedGraph, live) : savedGraph),
+    [showLive, savedGraph, live]
+  );
 
   const [filters, setFilters] = useState<GraphFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
@@ -410,6 +427,18 @@ export function KnowledgeWorkspace({
           onClick={() => setView((v) => (v === "web" ? "breakdown" : "web"))}
         >
           {view === "web" ? "Breakdown" : "Web"}
+        </Button>
+        {/* The business, on or off. A board of ideas and a board of the
+            company are the same board — but somebody decomposing an idea
+            should be able to put the company away for a minute. */}
+        <Button
+          type="button"
+          size="sm"
+          variant={showLive ? "default" : "outline"}
+          onClick={() => setShowLive((v) => !v)}
+          title={liveSummary}
+        >
+          {showLive ? "Hide the business" : "Show the business"}
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => setShowFilters((s) => !s)}>
           {showFilters ? "Hide filters" : "Filters"}

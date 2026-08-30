@@ -8,6 +8,8 @@ import { todayKey } from "@/lib/knowledge-schedule";
 import { listMaterialOptions, type MaterialOption } from "@/lib/data/materials";
 import { listBusinessLocations } from "@/lib/data/locations";
 import { listTools } from "@/lib/data/tools";
+import { getLiveGraph } from "@/lib/data/knowledge-live";
+import { liveCounts, liveSummary } from "@/lib/knowledge-live";
 
 /**
  * Where ideas get broken down until they stop being ideas.
@@ -34,9 +36,13 @@ export default async function KnowledgeGraphPage() {
   // from an idea is the same form, with the same fields, as adding it on the
   // Inventory page — a second, simpler way to add stock is how half an
   // inventory ends up with no storage location and no reorder point.
-  const [locations, tools] = await Promise.all([
+  // The business itself, derived from the real tables. Loaded alongside the
+  // rest so a slow ledger costs nothing extra, and caught on its own so a
+  // table this deployment does not have costs the layer, not the page.
+  const [locations, tools, live] = await Promise.all([
     listBusinessLocations().catch(() => []),
     listTools().catch(() => []),
+    getLiveGraph().catch(() => ({ nodes: [], edges: [] })),
   ]);
   const storageLocations = locations.map((location) => location.name);
   const availableKits = [...new Set(tools.flatMap((t) => t.kits))].sort((a, b) => a - b);
@@ -52,8 +58,10 @@ export default async function KnowledgeGraphPage() {
     <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
       <h1 className="text-2xl font-bold">Knowledge Graph</h1>
       <p className="mb-4 text-muted-foreground">
-        Put the thought down, then break it into what it actually needs. Give it a date and it comes
-        round on its own — and anything two scheduled ideas both need surfaces as one job instead of two.
+        The whole company on one board: clients, their properties, the jobs on them, the services
+        those jobs sell, the inventory those services eat, and the money in and out. Put a thought
+        down beside it and break it into what it actually needs — anything two scheduled ideas both
+        need surfaces as one job instead of two.
       </p>
 
       {!data ? (
@@ -72,6 +80,8 @@ export default async function KnowledgeGraphPage() {
       ) : (
         <KnowledgeWorkspace
           graph={{ nodes: data.nodes, edges: data.edges }}
+          live={live}
+          liveSummary={liveSummary(liveCounts(live.nodes))}
           tags={data.tags}
           units={data.units}
           materials={materials}

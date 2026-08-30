@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { describeDbError } from "@/lib/setup-errors";
 import { createClient } from "@/lib/supabase/server";
+import { isLive } from "@/lib/knowledge-live";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { RECURRENCES, advance, todayKey, type Recurrence } from "@/lib/knowledge-schedule";
@@ -665,14 +666,20 @@ export async function saveNodePositions(
 ): Promise<GraphResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
-    if (positions.length === 0) return { ok: true };
+
+    // Nodes derived from the business have no row to write a position to.
+    // They are laid out fresh on every load, which is right: the picture
+    // should follow the business rather than a position somebody dragged a
+    // job to before it was finished.
+    const saveable = positions.filter((p) => !isLive(p.id));
+    if (saveable.length === 0) return { ok: true };
 
     const supabase = await createClient();
 
     // One statement each rather than an upsert: an upsert needs every
     // not-null column, and this knows only two of them.
     const results = await Promise.all(
-      positions.map((p) =>
+      saveable.map((p) =>
         supabase
           .from("knowledge_nodes")
           .update({ position_x: p.x, position_y: p.y } as never)

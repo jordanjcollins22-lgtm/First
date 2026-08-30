@@ -33,6 +33,7 @@ import {
 import { INVENTORY_GROUPS, type InventoryGroup, type MaterialOption } from "@/lib/inventory-groups";
 import { describePurchaseUrl } from "@/lib/purchase-url";
 import type { UnitOption } from "@/lib/data/knowledge-graph";
+import { isLive, kindOf } from "@/lib/knowledge-live";
 import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import {
   InventoryKindChoice,
@@ -113,6 +114,9 @@ export function NodePanel({
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+
+  /** Derived from the business rather than typed onto the board. */
+  const derived = isLive(node.id);
 
   const [title, setTitle] = useState(node.title);
   const [nodeType, setNodeType] = useState<NodeType>(node.nodeType);
@@ -479,14 +483,27 @@ export function NodePanel({
         </button>
       </div>
 
+      {/* A node derived from the business is a view of a row, not a record
+          on this board. It is edited where it lives — the job page, the
+          inventory list — and the panel says so rather than offering fields
+          that would write to a row that does not exist here. */}
+      {derived && (
+        <p className="mb-3 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs text-muted-foreground">
+          This comes from your {kindOf(node.id)?.replace("_", " ") ?? "records"} and updates itself.
+          {node.appRoute ? " Open it to make a change." : ""}
+        </p>
+      )}
+
       <div className="mb-3 flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onFocus}>
           Local graph
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => setEditing((e) => !e)}>
-          {editing ? "Stop editing" : "Edit"}
-        </Button>
-        {canDelete && (
+        {!derived && (
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditing((e) => !e)}>
+            {editing ? "Stop editing" : "Edit"}
+          </Button>
+        )}
+        {canDelete && !derived && (
           <Button
             type="button"
             size="sm"
