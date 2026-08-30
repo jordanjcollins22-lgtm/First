@@ -36,6 +36,20 @@ export interface TransactionDraft {
   /** What it was for, where the export carries it. */
   description: string | null;
   method: string | null;
+  /**
+   * A test charge rather than a real one.
+   *
+   * Kept and flagged rather than dropped in the parser, so the preview can
+   * say how many there were and what they came to. Silently vanishing rows
+   * is how somebody spends an evening looking for three hundred pounds.
+   */
+  testMode: boolean;
+  /** The processor's own id, for reconciling against the processor. */
+  chargeId: string | null;
+  /** Anything not in dollars, which this cannot convert and must not assume. */
+  currency: string | null;
+  /** Money given back on an otherwise successful charge. */
+  refundedCents: number;
 }
 
 export type TransactionStatus = "succeeded" | "refunded" | "failed" | "pending" | "unknown";
@@ -101,6 +115,17 @@ const COLUMN_ALIASES = {
     "date",
   ],
   status: ["status", "payment status", "state", "result"],
+  /** Whether this was a real charge or a test one. */
+  liveMode: ["live mode", "livemode", "is live", "mode"],
+  /** The processor's own id, so a payment here can be reconciled against
+   * what the processor says. */
+  chargeId: ["charge id", "payment intent id", "stripe charge id", "processor id"],
+  /** What the payment came through: an invoice, a booking form, a calendar.
+   * Often a better description of the work than the line item. */
+  sourceName: ["source name", "source", "invoice name", "form name"],
+  currency: ["currency", "currency code"],
+  /** Money given back on a transaction that otherwise succeeded. */
+  refundedAmount: ["amount refunded", "refunded amount", "refund amount"],
   /** A separate yes/no column some exports carry alongside the status. */
   refundedFlag: ["is refunded", "refunded"],
   description: [
@@ -198,9 +223,27 @@ export function normaliseStatus(value: string | undefined): TransactionStatus {
   return "unknown";
 }
 
-/** Money we actually have, and which may move a job forward. */
+/**
+ * Money we actually have, and which may move a job forward.
+ *
+ * A test charge is not money. Three of them in a real export came to three
+ * hundred and seventy dollars, which is small enough to be invisible on a
+ * dashboard and exactly the kind of thing that makes a total impossible to
+ * reconcile against a bank statement.
+ *
+ * A currency this cannot convert is refused for the same reason: recording
+ * two thousand euros as two thousand dollars is a number that will never be
+ * questioned because it looks perfectly ordinary.
+ */
 export function isSettled(draft: TransactionDraft): boolean {
-  return draft.status === "succeeded" && draft.amountCents > 0;
+  if (draft.testMode) return false;
+  if (draft.currency && draft.currency.toUpperCase() !== "USD") return false;
+  return draft.status === "succeeded" && netCents(draft) > 0;
+}
+
+/** What was actually kept: the payment less anything given back on it. */
+export function netCents(draft: TransactionDraft): number {
+  return draft.amountCents - draft.refundedCents;
 }
 
 export function parseTransactionCsv(csvText: string): TransactionReport {
@@ -293,6 +336,9 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
     const refundFlag = (text(cell(row, "refundedFlag")) ?? "").toLowerCase();
     const refunded = refundFlag === "full" || refundFlag === "partial" || refundFlag === "yes";
 
+    const live = (text(cell(row, "liveMode")) ?? "").toLowerCase();
+    const refundedCents = parseMoneyCents(cell(row, "refundedAmount")) ?? 0;
+
     if (externalId) seen.set(externalId, drafts.length);
     drafts.push({
       externalId,
@@ -303,8 +349,14 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
       amountCents,
       paidOn: parseDate(cell(row, "date")),
       status: refunded ? "refunded" : normaliseStatus(cell(row, "status")),
-      description: lineItem,
+      // What it came through is usually a better description of the work than
+      // the line item: "Snow Removal Booking Form" says more than "Scope".
+      description: text(cell(row, "sourceName")) ?? lineItem,
       method: text(cell(row, "method")),
+      testMode: live === "no" || live === "false" || live === "test",
+      chargeId: text(cell(row, "chargeId")),
+      currency: text(cell(row, "currency")),
+      refundedCents: Math.abs(refundedCents),
     });
   }
 
@@ -319,6 +371,11 @@ export interface TransactionPreview {
   refunded: number;
   failed: number;
   undated: number;
+  /** Test charges. Counted and named rather than dropped in silence. */
+  testMode: number;
+  testModeCents: number;
+  /** Rows in a currency this cannot convert. */
+  otherCurrency: number;
 }
 
 export function previewTransactions(drafts: TransactionDraft[]): TransactionPreview {
@@ -327,16 +384,34 @@ export function previewTransactions(drafts: TransactionDraft[]): TransactionPrev
   let refunded = 0;
   let failed = 0;
   let undated = 0;
+  let testMode = 0;
+  let testModeCents = 0;
+  let otherCurrency = 0;
 
   for (const draft of drafts) {
     if (isSettled(draft)) {
       settled += 1;
-      settledCents += draft.amountCents;
+      settledCents += netCents(draft);
     }
+    if (draft.testMode) {
+      testMode += 1;
+      testModeCents += draft.amountCents;
+    }
+    if (draft.currency && draft.currency.toUpperCase() !== "USD") otherCurrency += 1;
     if (draft.status === "refunded") refunded += 1;
     if (draft.status === "failed") failed += 1;
     if (!draft.paidOn) undated += 1;
   }
 
-  return { total: drafts.length, settled, settledCents, refunded, failed, undated };
+  return {
+    total: drafts.length,
+    settled,
+    settledCents,
+    refunded,
+    failed,
+    undated,
+    testMode,
+    testModeCents,
+    otherCurrency,
+  };
 }

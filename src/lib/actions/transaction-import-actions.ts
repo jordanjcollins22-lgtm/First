@@ -10,6 +10,7 @@ import { findDuplicateCustomer } from "@/lib/dedupe";
 import { chunk } from "@/lib/chunk";
 import {
   isSettled,
+  netCents,
   parseTransactionCsv,
   previewTransactions,
   type TransactionDraft,
@@ -216,7 +217,9 @@ export async function importTransactions(
         organization_id: organizationId,
         customer_id: client.id,
         job_id: link.jobId,
-        amount_cents: draft.amountCents,
+        // What was kept, not what was charged: a partial refund on an
+        // otherwise good payment is money we gave back.
+        amount_cents: netCents(draft),
         method: draft.method ?? "import",
         // No date in the file means no date here. Filing it under the day it
         // was imported would look like an answer.
@@ -225,11 +228,14 @@ export async function importTransactions(
           .filter(Boolean)
           .join(" · ") || null,
         external_id: draft.externalId,
+        // The processor's own id, so a row here can be matched against what
+        // the processor says without going by name and amount.
+        stripe_payment_intent_id: draft.chargeId,
         source: sourceName.trim() || "import",
         recorded_by: profile.id,
       });
       tally.recorded += 1;
-      if (isSettled(draft)) tally.totalCents += draft.amountCents;
+      if (isSettled(draft)) tally.totalCents += netCents(draft);
     }
 
     // Batched and upserted on the exporting system's own id, so running the

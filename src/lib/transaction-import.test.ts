@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isSettled,
+  netCents,
   normaliseStatus,
   parseDate,
   parseMoneyCents,
@@ -22,6 +23,10 @@ function draft(over: Partial<TransactionDraft> = {}): TransactionDraft {
     status: "succeeded",
     description: "Back garden rebuild",
     method: "card",
+    testMode: false,
+    chargeId: null,
+    currency: "USD",
+    refundedCents: 0,
     ...over,
   };
 }
@@ -243,5 +248,62 @@ describe("a real payments export", () => {
     expect(preview.settled).toBe(2);
     expect(preview.settledCents).toBe(51750 + 41600);
     expect(preview.refunded).toBe(1);
+  });
+});
+
+describe("the columns that decide whether a row is money", () => {
+  it("does not count a test charge", () => {
+    // Three of these in a real export came to $370: small enough to be
+    // invisible on a dashboard and impossible to reconcile against a bank.
+    const test = draft({ testMode: true });
+    expect(isSettled(test)).toBe(false);
+    expect(previewTransactions([test, draft()]).settled).toBe(1);
+  });
+
+  it("names what the test charges came to, rather than dropping them quietly", () => {
+    const preview = previewTransactions([draft({ testMode: true, amountCents: 35000 }), draft()]);
+    expect(preview.testMode).toBe(1);
+    expect(preview.testModeCents).toBe(35000);
+  });
+
+  it("reads the live-mode column from the file", () => {
+    const csv = [
+      '"Internal transaction id","Customer name","Total amount paid","Status","Live mode"',
+      '"tx_1","Real Client",100,"succeeded","Yes"',
+      '"tx_2","A Test",10,"succeeded","No"',
+    ].join("\n");
+    const drafts = parseTransactionCsv(csv).drafts;
+    expect(drafts[0].testMode).toBe(false);
+    expect(drafts[1].testMode).toBe(true);
+    expect(previewTransactions(drafts).settledCents).toBe(10000);
+  });
+
+  it("refuses a currency it cannot convert rather than reading euros as dollars", () => {
+    // A number that will never be questioned because it looks ordinary.
+    expect(isSettled(draft({ currency: "EUR" }))).toBe(false);
+    expect(previewTransactions([draft({ currency: "EUR" })]).otherCurrency).toBe(1);
+  });
+
+  it("takes a partial refund off what was kept", () => {
+    const partial = draft({ amountCents: 100000, refundedCents: 25000 });
+    expect(netCents(partial)).toBe(75000);
+    expect(previewTransactions([partial]).settledCents).toBe(75000);
+  });
+
+  it("keeps the processor's own id, so this can be reconciled against it", () => {
+    const csv = [
+      '"Internal transaction id","Customer name","Total amount paid","Status","Charge id"',
+      '"tx_1","Real Client",100,"succeeded","pi_3U71n32MZOhyTasU1Q9jaSEq"',
+    ].join("\n");
+    expect(parseTransactionCsv(csv).drafts[0].chargeId).toBe("pi_3U71n32MZOhyTasU1Q9jaSEq");
+  });
+
+  it("prefers what the payment came through over the line item", () => {
+    // "Snow Removal Booking Form" says more about the work than "Scope".
+    const csv = [
+      '"Internal transaction id","Customer name","Total amount paid","Status","Source name","Line item name"',
+      '"tx_1","Real Client",100,"succeeded","Snow Removal Booking Form","Scope"',
+    ].join("\n");
+    expect(parseTransactionCsv(csv).drafts[0].description).toBe("Snow Removal Booking Form");
   });
 });

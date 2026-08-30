@@ -150,6 +150,21 @@ export function TransactionImportPanel() {
               between this total and the row count.
             </p>
           )}
+          {/* Named rather than dropped in silence: a row that vanishes is how
+              somebody spends an evening hunting a few hundred dollars. */}
+          {preview.preview.testMode > 0 && (
+            <p className="text-amber-600">
+              {preview.preview.testMode} test {preview.preview.testMode === 1 ? "charge" : "charges"}{" "}
+              worth {money(preview.preview.testModeCents)} are not counted. They were never real
+              money.
+            </p>
+          )}
+          {preview.preview.otherCurrency > 0 && (
+            <p className="text-amber-600">
+              {preview.preview.otherCurrency} are not in dollars and cannot be converted here, so
+              they are left out rather than counted at the wrong rate.
+            </p>
+          )}
           {preview.preview.undated > 0 && (
             <p className="text-amber-600">
               {preview.preview.undated} have no date this could read. They go in without one rather
