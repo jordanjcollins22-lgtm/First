@@ -33,6 +33,9 @@ export function TransactionImportPanel() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [csv, setCsv] = useState("");
   const [sourceName, setSourceName] = useState("");
+  // On by default. A payment with nowhere to go is money missing from the
+  // total, and every row carries what a contact needs.
+  const [createMissing, setCreateMissing] = useState(true);
   const [preview, setPreview] = useState<TransactionPreviewResult | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export function TransactionImportPanel() {
   function run() {
     setError(null);
     start(async () => {
-      const result = await importTransactions(csv, sourceName);
+      const result = await importTransactions(csv, sourceName, createMissing);
       if (result.ok) {
         setDone(result.message);
         setPreview(null);
@@ -123,10 +126,14 @@ export function TransactionImportPanel() {
           <p className="font-semibold">
             {preview.preview.settled} settled, {money(preview.preview.settledCents)} in total.
           </p>
+          {/* Said before the import rather than after, so the number on the
+              payments screen can be reconciled against the file instead of
+              looking like money that went missing. */}
           {(preview.preview.refunded > 0 || preview.preview.failed > 0) && (
             <p className="text-muted-foreground">
-              {preview.preview.refunded} refunded and {preview.preview.failed} failed. Both are
-              recorded against the client, and neither marks a job paid.
+              {preview.preview.refunded} refunded and {preview.preview.failed} failed or pending.
+              Neither is money the business took, so neither is brought in. That is the difference
+              between this total and the row count.
             </p>
           )}
           {preview.preview.undated > 0 && (
@@ -144,11 +151,23 @@ export function TransactionImportPanel() {
           )}
 
           {preview.unmatchedClients.length > 0 && (
-            <div>
+            <div className="flex flex-col gap-1">
               <p className="font-medium text-amber-700">
-                Not contacts here yet, so their payments would be skipped:
+                {preview.unmatchedClients.length} payers are not contacts here yet:
               </p>
               <p className="text-muted-foreground">{preview.unmatchedClients.join(", ")}</p>
+              <label className="mt-1 flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={createMissing}
+                  onChange={(e) => setCreateMissing(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="text-muted-foreground">
+                  Make contacts for them, so their payments come in too. Untick and their money is
+                  left out of the total.
+                </span>
+              </label>
             </div>
           )}
 

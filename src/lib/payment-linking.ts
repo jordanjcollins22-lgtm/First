@@ -99,6 +99,14 @@ export interface ImportTally {
   linked: number;
   unlinked: number;
   skipped: number;
+  /** Money given back. Counted so the file reconciles, never written into
+   * payments, which is what the business actually took. */
+  refunded: number;
+  /** Failed or still pending. Not money, and not recorded as any. */
+  notSettled: number;
+  /** Payers nobody had on file, made as contacts so the money had somewhere
+   * to land rather than being dropped. */
+  clientsCreated: number;
   /** What actually went in, in cents. */
   totalCents: number;
 }
@@ -118,6 +126,15 @@ export function tallyLine(tally: ImportTally): string {
   if (tally.unlinked > 0) {
     parts.push(`${tally.unlinked} waiting for somebody to say which job`);
   }
+  if (tally.clientsCreated > 0) {
+    parts.push(
+      `${tally.clientsCreated} new ${tally.clientsCreated === 1 ? "contact" : "contacts"} made for payers nobody had`
+    );
+  }
+  // Said every time, so the number on screen can be reconciled against the
+  // file rather than leaving somebody to wonder where the rest went.
+  if (tally.refunded > 0) parts.push(`${tally.refunded} refunded, not counted as taken`);
+  if (tally.notSettled > 0) parts.push(`${tally.notSettled} failed or pending, not counted`);
   if (tally.skipped > 0) parts.push(`${tally.skipped} skipped`);
   return `${parts.join(". ")}.`;
 }

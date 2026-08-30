@@ -5,6 +5,7 @@ import {
   linkToJob,
   mayMarkPaid,
   tallyLine,
+  type ImportTally,
   type JobCandidate,
 } from "./payment-linking";
 
@@ -75,22 +76,58 @@ describe("linkLabel", () => {
   });
 });
 
+function tally(over: Partial<ImportTally> = {}): ImportTally {
+  return {
+    recorded: 0,
+    linked: 0,
+    unlinked: 0,
+    skipped: 0,
+    refunded: 0,
+    notSettled: 0,
+    clientsCreated: 0,
+    totalCents: 0,
+    ...over,
+  };
+}
+
 describe("tallyLine", () => {
   it("reads as a sentence at the end of an import", () => {
-    expect(tallyLine({ recorded: 12, linked: 9, unlinked: 3, skipped: 1, totalCents: 4_200_00 })).toBe(
+    expect(tallyLine(tally({ recorded: 12, linked: 9, unlinked: 3, skipped: 1, totalCents: 4_200_00 }))).toBe(
       "12 payments in, $4,200. 9 matched to a job. 3 waiting for somebody to say which job. 1 skipped."
     );
   });
 
   it("is singular when it is one", () => {
     expect(
-      tallyLine({ recorded: 1, linked: 1, unlinked: 0, skipped: 0, totalCents: 100_00 })
+      tallyLine(tally({ recorded: 1, linked: 1, totalCents: 100_00 }))
     ).toBe("1 payment in, $100. 1 matched to a job.");
   });
 
   it("says plainly when a re-run brought nothing new", () => {
-    expect(tallyLine({ recorded: 0, linked: 0, unlinked: 0, skipped: 4, totalCents: 0 })).toMatch(
-      /already here/i
+    expect(tallyLine(tally({ skipped: 4 }))).toMatch(/already here/i);
+  });
+});
+
+describe("the tally reconciles against the file", () => {
+  it("says what was refunded and what failed, rather than leaving a gap", () => {
+    // The complaint this exists for: a total on screen that is smaller than
+    // the file, with nothing saying why.
+    const line = tallyLine(
+      tally({ recorded: 124, linked: 100, unlinked: 24, refunded: 6, notSettled: 10, totalCents: 24_154_211 })
+    );
+    expect(line).toContain("124 payments in, $241,542");
+    expect(line).toContain("6 refunded, not counted as taken");
+    expect(line).toContain("10 failed or pending, not counted");
+  });
+
+  it("says when it had to make contacts for payers nobody had", () => {
+    const line = tallyLine(tally({ recorded: 12, clientsCreated: 3, totalCents: 100_00 }));
+    expect(line).toContain("3 new contacts made for payers nobody had");
+  });
+
+  it("is singular for the one contact", () => {
+    expect(tallyLine(tally({ recorded: 1, clientsCreated: 1, totalCents: 100_00 }))).toContain(
+      "1 new contact made"
     );
   });
 });

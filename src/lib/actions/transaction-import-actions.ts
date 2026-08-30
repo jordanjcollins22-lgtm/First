@@ -112,7 +112,11 @@ export async function previewTransactionImport(
  */
 export async function importTransactions(
   csvText: string,
-  sourceName: string
+  sourceName: string,
+  /** Make a contact for a payer nobody has on file, rather than dropping the
+   * money. On by default: a payment with nowhere to go is money missing from
+   * the total, and the row carries everything a contact needs. */
+  createMissing = true
 ): Promise<TransactionImportResult> {
   try {
     const profile = await getCurrentProfile();
@@ -139,11 +143,30 @@ export async function importTransactions(
       linked: 0,
       unlinked: 0,
       skipped: report.skipped.length,
+      refunded: 0,
+      notSettled: 0,
+      clientsCreated: 0,
       totalCents: 0,
     };
 
     for (const draft of report.drafts) {
-      const client = matchClient(draft, clients);
+      let client = matchClient(draft, clients);
+
+      // A payer nobody has on file used to be a skipped row, which meant
+      // money quietly missing from the total. Everything needed to make the
+      // contact is on the row — the CRM's id, a name, an email — so the
+      // contact is made and the payment lands. A client created from a
+      // payment is a client we definitely have, which is more than can be
+      // said for some of the book.
+      if (!client && createMissing) {
+        const made = await createClientFrom(supabase, organizationId, draft);
+        if (made) {
+          clients.push(made);
+          client = made;
+          tally.clientsCreated += 1;
+        }
+      }
+
       if (!client) {
         const who = draft.name ?? draft.email ?? draft.phone ?? "someone";
         if (!unmatchedClients.includes(who)) unmatchedClients.push(who);
@@ -155,9 +178,16 @@ export async function importTransactions(
       if (link.jobId) tally.linked += 1;
       else tally.unlinked += 1;
 
-      // A refund or a failed row is still recorded — it is part of what
-      // happened with this client — but it never marks a job paid.
-      if (link.jobId && isSettled(draft)) markPaid.add(link.jobId);
+      // A failed charge is not money received and a refund is money given
+      // back. The payments table is what the business took, and a total built
+      // from it has to reconcile with the bank. Both are counted and reported
+      // rather than written in.
+      if (!isSettled(draft)) {
+        if (draft.status === "refunded") tally.refunded += 1;
+        else tally.notSettled += 1;
+        continue;
+      }
+      if (link.jobId) markPaid.add(link.jobId);
 
       rows.push({
         organization_id: organizationId,
@@ -316,4 +346,38 @@ function matchClient(draft: TransactionDraft, clients: ClientRow[]): ClientRow |
       phone: draft.phone,
     }) as ClientRow | null) ?? null
   );
+}
+
+
+/**
+ * Makes a contact from a payment row.
+ *
+ * Carries the CRM's own id across, so the next import of anything matches
+ * this person rather than making them again, and marks where they came from
+ * so the office can tell a client created from a receipt apart from one
+ * somebody added on purpose.
+ */
+async function createClientFrom(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  draft: TransactionDraft
+): Promise<ClientRow | null> {
+  const name = draft.name?.trim() || draft.email?.trim() || "Unnamed payer";
+
+  const { data, error } = await supabase
+    .from("customers")
+    .insert({
+      organization_id: organizationId,
+      name,
+      email: draft.email,
+      phone: draft.phone,
+      external_id: draft.customerExternalId,
+      contact_type: "client",
+      source: "Payment import",
+    })
+    .select("id, name, email, phone, external_id")
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as unknown as ClientRow;
 }
