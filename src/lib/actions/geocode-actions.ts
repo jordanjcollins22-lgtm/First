@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { ambiguousOnes, refreshLabel, staleOnes, verdictFor } from "@/lib/address-refresh";
+import { firstAcceptable, pointOutsideRegion, tooThinToPlace } from "@/lib/geocode-guard";
 import { getCurrentProfile } from "@/lib/data/team";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { describeDbError } from "@/lib/setup-errors";
@@ -83,16 +84,30 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
       // counted, and one property saying something else is updated in place.
       const { data: already } = await supabase
         .from("properties")
-        .select("id, address")
+        .select("id, address, lat, lng")
         .eq("customer_id", contact.id);
 
-      const existingProperties = (already ?? []) as { id: string; address: string }[];
-      const verdict = verdictFor({
+      const existingProperties = (already ?? []) as {
+        id: string;
+        address: string;
+        lat: number | null;
+        lng: number | null;
+      }[];
+      const textVerdict = verdictFor({
         id: contact.id,
         name: contact.name,
         importAddress: contact.import_address,
         propertyAddresses: existingProperties.map((property) => property.address),
       });
+
+      // A pin in the wrong country is wrong however well its address text
+      // reads. Those were written before anything checked the answer, and
+      // matching text is exactly why they were never looked at again.
+      const misplaced =
+        existingProperties.length === 1 &&
+        pointOutsideRegion(existingProperties[0].lat, existingProperties[0].lng);
+
+      const verdict = misplaced && textVerdict === "matches" ? "stale" : textVerdict;
 
       if (verdict === "matches" || verdict === "ambiguous") {
         await supabase
@@ -113,19 +128,57 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
       let match: { lat: number; lng: number; fullAddress: string } | null = null;
       let failure: string | null = null;
 
-      try {
-        const results = await searchAddress(contact.import_address);
-        match = results[0] ?? null;
-        if (!match) failure = "No match for that address";
-      } catch (err) {
-        failure = err instanceof Error ? err.message : "Lookup failed";
+      // A street with no town is the input that produced a pin in Ontario.
+      // Refusing it costs one lookup and saves a wrong pin nobody notices
+      // until they are looking at a map of North America.
+      if (tooThinToPlace(contact.import_address)) {
+        failure = "Needs a town or ZIP before it can be placed.";
+      } else {
+        try {
+          // autocomplete off: this is a finished address, not a keystroke.
+          const results = await searchAddress(contact.import_address, undefined, {
+            autocomplete: false,
+          });
+          // The first answer worth having rather than simply the first: the
+          // best match for a thin address is often the wrong place entirely,
+          // and the one under it is the right street in the right state.
+          const checked = firstAcceptable(contact.import_address, results);
+          match = checked.match;
+          failure = checked.reason;
+        } catch (err) {
+          failure = err instanceof Error ? err.message : "Lookup failed";
+        }
       }
 
       if (!match) {
         failed++;
+
+        // Nothing better to put there, and what is there is a pin in the
+        // wrong part of the world. Left alone it keeps lying on every map.
+        // Only removed where no job hangs off it: a misplaced property with
+        // no work on it is import residue, and one with work on it is real
+        // and belongs to a person to sort out. The address text itself is
+        // untouched, so the contact simply goes back to needing placing.
+        let removedNote = "";
+        if (misplaced) {
+          const { count } = await supabase
+            .from("jobs")
+            .select("id", { count: "exact", head: true })
+            .eq("property_id", existingProperties[0].id);
+          if ((count ?? 0) === 0) {
+            await supabase.from("properties").delete().eq("id", existingProperties[0].id);
+            removedNote = " The wrong pin has been taken off the map.";
+          } else {
+            removedNote = " The wrong pin has work on it, so it has been left for you.";
+          }
+        }
+
         await supabase
           .from("customers")
-          .update({ geocode_attempted_at: attemptedAt, geocode_error: failure })
+          .update({
+            geocode_attempted_at: attemptedAt,
+            geocode_error: `${failure ?? "Lookup failed"}${removedNote}`,
+          })
           .eq("id", contact.id);
         continue;
       }
@@ -240,7 +293,7 @@ export async function refreshStaleAddresses(): Promise<RefreshResult> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("customers")
-      .select("id, name, import_address, properties(address)")
+      .select("id, name, import_address, properties(address, lat, lng)")
       .not("import_address", "is", null);
     if (error) return { ok: false, message: describeDbError(error) };
 
@@ -248,7 +301,7 @@ export async function refreshStaleAddresses(): Promise<RefreshResult> {
       id: string;
       name: string;
       import_address: string | null;
-      properties: { address: string }[] | null;
+      properties: { address: string; lat: number | null; lng: number | null }[] | null;
     }[];
 
     const states = rows.map((row) => ({
@@ -258,7 +311,24 @@ export async function refreshStaleAddresses(): Promise<RefreshResult> {
       propertyAddresses: (row.properties ?? []).map((property) => property.address),
     }));
 
-    const stale = staleOnes(states);
+    // Two ways to be wrong. The address text disagreeing with the file is
+    // one; a pin sitting in Ontario is the other, and that one hides behind
+    // address text that reads perfectly well.
+    const misplacedIds = new Set(
+      rows
+        .filter(
+          (row) =>
+            (row.properties ?? []).length === 1 &&
+            pointOutsideRegion(row.properties![0].lat, row.properties![0].lng)
+        )
+        .map((row) => row.id)
+    );
+
+    const byText = staleOnes(states);
+    const stale = [
+      ...byText,
+      ...states.filter((state) => misplacedIds.has(state.id) && !byText.some((s) => s.id === state.id)),
+    ];
     const ambiguous = ambiguousOnes(states).length;
 
     if (stale.length === 0) {
@@ -268,7 +338,7 @@ export async function refreshStaleAddresses(): Promise<RefreshResult> {
         ambiguous,
         message:
           ambiguous > 0
-            ? `Every address matches its file, except ${ambiguous} on contacts with more than one property — those need moving by hand.`
+            ? `Every address matches its file and sits in the right part of the country, except ${ambiguous} on contacts with more than one property — those need moving by hand.`
             : "Every imported address already matches what the file says.",
       };
     }

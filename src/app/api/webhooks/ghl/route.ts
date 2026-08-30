@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { firstAcceptable } from "@/lib/geocode-guard";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 
@@ -82,11 +83,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const matches = await searchAddress(address);
-  if (matches.length === 0) {
-    return NextResponse.json({ error: `Couldn't geocode address: ${address}` }, { status: 400 });
+  // Checked rather than taken. A thin address matches a real street in the
+  // wrong state, and this path writes a property with nobody looking — which
+  // is how pins for a Harford County business ended up across the continent.
+  const matches = await searchAddress(address, undefined, { autocomplete: false });
+  const checked = firstAcceptable(address, matches);
+  if (!checked.match) {
+    return NextResponse.json(
+      { error: `Couldn't place that address: ${address}. ${checked.reason ?? ""}`.trim() },
+      { status: 400 }
+    );
   }
-  const { lat, lng, fullAddress } = matches[0];
+  const { lat, lng, fullAddress } = checked.match;
 
   const evaluationDate = startTimeRaw && !isNaN(Date.parse(startTimeRaw)) ? new Date(startTimeRaw).toISOString() : null;
 
