@@ -107,6 +107,9 @@ export interface ImportTally {
   /** Payers nobody had on file, made as contacts so the money had somewhere
    * to land rather than being dropped. */
   clientsCreated: number;
+  /** What the card processor took, recorded as an expense rather than
+   * quietly deducted from what the client paid. */
+  feesCents: number;
   /** What actually went in, in cents. */
   totalCents: number;
 }
@@ -135,6 +138,14 @@ export function tallyLine(tally: ImportTally): string {
   // file rather than leaving somebody to wonder where the rest went.
   if (tally.refunded > 0) parts.push(`${tally.refunded} refunded, not counted as taken`);
   if (tally.notSettled > 0) parts.push(`${tally.notSettled} failed or pending, not counted`);
+  if (tally.feesCents > 0) {
+    const fees = (tally.feesCents / 100).toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    });
+    parts.push(`${fees} of card fees recorded as an expense`);
+  }
   if (tally.skipped > 0) parts.push(`${tally.skipped} skipped`);
   return `${parts.join(". ")}.`;
 }

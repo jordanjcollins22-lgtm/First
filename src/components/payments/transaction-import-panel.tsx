@@ -165,6 +165,24 @@ export function TransactionImportPanel() {
               they are left out rather than counted at the wrong rate.
             </p>
           )}
+          {/* The difference between money received and money kept. Without it
+              every profit figure in the app is high by this amount, quietly. */}
+          {preview.preview.feesCents > 0 && (
+            <p className="text-muted-foreground">
+              {money(preview.preview.feesCents)} of card fees will go in as an expense, so what was
+              received and what was kept are both visible. Net of fees:{" "}
+              <span className="font-medium text-foreground">
+                {money(preview.preview.settledCents - preview.preview.feesCents)}
+              </span>
+              .
+            </p>
+          )}
+          {preview.preview.discountsCents > 0 && (
+            <p className="text-muted-foreground">
+              {money(preview.preview.discountsCents)} was given away in discounts on these
+              invoices. Not recorded as money, since it never moved.
+            </p>
+          )}
           {preview.preview.undated > 0 && (
             <p className="text-amber-600">
               {preview.preview.undated} have no date this could read. They go in without one rather

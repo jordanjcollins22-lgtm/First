@@ -112,6 +112,7 @@ const CREATES = {
   "0137_job_disputes.sql": [],
   "0138_archived_proposals.sql": ["archived_proposals"],
   "0139_payment_import.sql": [],
+  "0140_processing_fees.sql": [],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

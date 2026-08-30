@@ -50,6 +50,12 @@ export interface TransactionDraft {
   currency: string | null;
   /** Money given back on an otherwise successful charge. */
   refundedCents: number;
+  /** What the processor took. Goes to the ledger as an expense rather than
+   * being netted off the payment: what the client paid is what they paid. */
+  feeCents: number;
+  /** What was taken off the invoice before they paid. Reported, not recorded
+   * as money, since it never moved. */
+  discountCents: number;
 }
 
 export type TransactionStatus = "succeeded" | "refunded" | "failed" | "pending" | "unknown";
@@ -126,6 +132,11 @@ const COLUMN_ALIASES = {
   currency: ["currency", "currency code"],
   /** Money given back on a transaction that otherwise succeeded. */
   refundedAmount: ["amount refunded", "refunded amount", "refund amount"],
+  /** What the processor took to handle the payment. Not a reduction in what
+   * the client paid: an expense the business incurred to take it. */
+  fee: ["processing charge amount", "processing fee", "fee", "fees", "stripe fee"],
+  /** What was knocked off the invoice. Not money, but worth knowing. */
+  discount: ["discount", "discount amount", "total discount"],
   /** A separate yes/no column some exports carry alongside the status. */
   refundedFlag: ["is refunded", "refunded"],
   description: [
@@ -357,6 +368,8 @@ export function parseTransactionCsv(csvText: string): TransactionReport {
       chargeId: text(cell(row, "chargeId")),
       currency: text(cell(row, "currency")),
       refundedCents: Math.abs(refundedCents),
+      feeCents: Math.abs(parseMoneyCents(cell(row, "fee")) ?? 0),
+      discountCents: Math.abs(parseMoneyCents(cell(row, "discount")) ?? 0),
     });
   }
 
@@ -376,6 +389,10 @@ export interface TransactionPreview {
   testModeCents: number;
   /** Rows in a currency this cannot convert. */
   otherCurrency: number;
+  /** What the processor took across the file. An expense, not a deduction. */
+  feesCents: number;
+  /** What was knocked off invoices. Never money, but worth seeing. */
+  discountsCents: number;
 }
 
 export function previewTransactions(drafts: TransactionDraft[]): TransactionPreview {
@@ -387,11 +404,17 @@ export function previewTransactions(drafts: TransactionDraft[]): TransactionPrev
   let testMode = 0;
   let testModeCents = 0;
   let otherCurrency = 0;
+  let feesCents = 0;
+  let discountsCents = 0;
 
   for (const draft of drafts) {
     if (isSettled(draft)) {
       settled += 1;
       settledCents += netCents(draft);
+      // Only on money that actually arrived. A fee on a failed charge is not
+      // a fee anybody paid.
+      feesCents += draft.feeCents;
+      discountsCents += draft.discountCents;
     }
     if (draft.testMode) {
       testMode += 1;
@@ -413,5 +436,7 @@ export function previewTransactions(drafts: TransactionDraft[]): TransactionPrev
     testMode,
     testModeCents,
     otherCurrency,
+    feesCents,
+    discountsCents,
   };
 }

@@ -85,6 +85,7 @@ function tally(over: Partial<ImportTally> = {}): ImportTally {
     refunded: 0,
     notSettled: 0,
     clientsCreated: 0,
+    feesCents: 0,
     totalCents: 0,
     ...over,
   };

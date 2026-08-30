@@ -27,6 +27,10 @@ export const EXPENSE_CATEGORIES: { value: LedgerExpenseCategory; label: string }
   { value: "fuel", label: "Fuel" },
   { value: "equipment", label: "Equipment" },
   { value: "permit", label: "Permit / fees" },
+  // What the card processor takes. Its own category rather than "other"
+  // because it is the one expense that arrives with every single payment,
+  // and a business that cannot see it is a business quoting on gross.
+  { value: "processing_fees", label: "Card processing fees" },
   { value: "other_expense", label: "Other expense" },
 ];
 

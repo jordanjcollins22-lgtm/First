@@ -160,6 +160,10 @@ export async function importTransactions(
     const jobsByCustomer = await loadJobs();
 
     const rows: Record<string, unknown>[] = [];
+    /** Card fees, as expenses. Kept separate from the payment on purpose:
+     * what the client paid is what they paid, and burying the fee inside the
+     * receipt is how it stops being visible. */
+    const feeRows: Record<string, unknown>[] = [];
     const markPaid = new Set<string>();
     const unmatchedClients: string[] = [];
     const tally: ImportTally = {
@@ -170,6 +174,7 @@ export async function importTransactions(
       refunded: 0,
       notSettled: 0,
       clientsCreated: 0,
+      feesCents: 0,
       totalCents: 0,
     };
 
@@ -236,6 +241,24 @@ export async function importTransactions(
       });
       tally.recorded += 1;
       if (isSettled(draft)) tally.totalCents += netCents(draft);
+
+      if (draft.feeCents > 0 && draft.externalId) {
+        feeRows.push({
+          organization_id: organizationId,
+          direction: "out",
+          category: "processing_fees",
+          // The ledger works in whole currency rather than cents.
+          amount: draft.feeCents / 100,
+          occurred_on: draft.paidOn ?? new Date().toISOString().slice(0, 10),
+          method: "card",
+          party: draft.method ?? "Card processor",
+          job_id: link.jobId,
+          note: `Processing fee on ${draft.name ?? "a payment"}`,
+          external_id: `fee:${draft.externalId}`,
+          created_by: profile.id,
+        });
+        tally.feesCents += draft.feeCents;
+      }
     }
 
     // Batched and upserted on the exporting system's own id, so running the
@@ -253,6 +276,22 @@ export async function importTransactions(
       if (withoutId.length > 0) {
         const { error } = await supabase.from("payments").insert(withoutId as never);
         if (error) return { ok: false, message: describeImportError(error.message) };
+      }
+    }
+
+    // Fees, after the payments, and never at the cost of them: a ledger that
+    // did not take is a number to fix, and a payment that did not land is
+    // money missing.
+    if (feeRows.length > 0) {
+      for (const batch of chunk(feeRows, BATCH)) {
+        const { error } = await supabase
+          .from("ledger_entries")
+          .upsert(batch as never, { onConflict: "organization_id,external_id" });
+        if (error) {
+          console.error("Recording processing fees failed:", error);
+          tally.feesCents = 0;
+          break;
+        }
       }
     }
 

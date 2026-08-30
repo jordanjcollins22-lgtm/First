@@ -736,6 +736,7 @@ export type LedgerExpenseCategory =
   | "fuel"
   | "equipment"
   | "permit"
+  | "processing_fees"
   | "other_expense";
 export type LedgerCategory = LedgerIncomeCategory | LedgerExpenseCategory;
 

@@ -27,6 +27,8 @@ function draft(over: Partial<TransactionDraft> = {}): TransactionDraft {
     chargeId: null,
     currency: "USD",
     refundedCents: 0,
+    feeCents: 0,
+    discountCents: 0,
     ...over,
   };
 }
@@ -305,5 +307,41 @@ describe("the columns that decide whether a row is money", () => {
       '"tx_1","Real Client",100,"succeeded","Snow Removal Booking Form","Scope"',
     ].join("\n");
     expect(parseTransactionCsv(csv).drafts[0].description).toBe("Snow Removal Booking Form");
+  });
+});
+
+describe("fees and discounts", () => {
+  it("adds up what the processor took, on money that arrived", () => {
+    const preview = previewTransactions([
+      draft({ feeCents: 1750 }),
+      draft({ externalId: "t2", feeCents: 900 }),
+      // A fee on a failed charge is not a fee anybody paid.
+      draft({ externalId: "t3", status: "failed", feeCents: 5000 }),
+    ]);
+    expect(preview.feesCents).toBe(2650);
+  });
+
+  it("keeps the fee out of what the client paid", () => {
+    // What the client paid is what they paid. The fee is something the
+    // business spent to take it, and netting it off hides both numbers.
+    const one = draft({ amountCents: 100000, feeCents: 3000 });
+    expect(netCents(one)).toBe(100000);
+    expect(previewTransactions([one]).settledCents).toBe(100000);
+  });
+
+  it("reads the fee and discount columns an export writes", () => {
+    const csv = [
+      '"Internal transaction id","Customer name","Total amount paid","Status","Processing charge amount","Discount"',
+      '"tx_1","Real Client",8190,"succeeded",17.5,910',
+    ].join("\n");
+    const d = parseTransactionCsv(csv).drafts[0];
+    expect(d.feeCents).toBe(1750);
+    expect(d.discountCents).toBe(91000);
+  });
+
+  it("counts discounts without treating them as money", () => {
+    const preview = previewTransactions([draft({ amountCents: 100000, discountCents: 20000 })]);
+    expect(preview.discountsCents).toBe(20000);
+    expect(preview.settledCents).toBe(100000);
   });
 });
