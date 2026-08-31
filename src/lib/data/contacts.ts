@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkHarford } from "@/lib/harford";
 import { effectiveType } from "@/lib/client-status";
 import { findDuplicateCustomer, normalizeAddress } from "@/lib/dedupe";
+import { fetchAllRows } from "@/lib/pagination";
 
 export interface ContactRow {
   id: string;
@@ -61,6 +62,20 @@ export interface OutOfAreaContact {
   reason: string;
 }
 
+interface CustomerQueryRow {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  contact_type: string | null;
+  tags: string[] | null;
+  do_not_contact: boolean | null;
+  pipeline: string | null;
+  pipeline_stage: string | null;
+  opportunity_value: number | null;
+  properties: { id: string; address: string }[] | null;
+}
+
 export interface ContactsData {
   contacts: ContactRow[];
   duplicates: DuplicatePair[];
@@ -95,13 +110,20 @@ export interface ContactsData {
 export async function getContacts(): Promise<ContactsData> {
   const supabase = await createClient();
 
-  const [{ data, error }, { count: pendingGeocodes }, { count: failedGeocodes }] = await Promise.all([
-    supabase
-      .from("customers")
-      .select(
-        "id, name, email, phone, contact_type, tags, do_not_contact, pipeline, pipeline_stage, opportunity_value, properties(id, address)"
-      )
-      .order("name"),
+  // Paged, because a select with no range comes back capped at a thousand
+  // rows and says nothing about it. The book is past that, so the unpaged
+  // version quietly stopped at the letter M -- the page rendered, the numbers
+  // looked plausible, and eight hundred people were not in it.
+  const [data, { count: pendingGeocodes }, { count: failedGeocodes }] = await Promise.all([
+    fetchAllRows<CustomerQueryRow>((from, to) =>
+      supabase
+        .from("customers")
+        .select(
+          "id, name, email, phone, contact_type, tags, do_not_contact, pipeline, pipeline_stage, opportunity_value, properties(id, address)"
+        )
+        .order("name")
+        .range(from, to)
+    ),
     supabase
       .from("customers")
       .select("id", { count: "exact", head: true })
@@ -112,17 +134,20 @@ export async function getContacts(): Promise<ContactsData> {
       .select("id", { count: "exact", head: true })
       .not("geocode_error", "is", null),
   ]);
-  if (error) throw error;
 
   // What each contact has actually paid, which is what decides whether they
   // are a client. Tolerated: before the payments table has anything in it
   // nobody has paid, which is a true answer rather than a broken page.
   const paidByCustomer = new Map<string, number>();
   try {
-    const { data: paid } = await supabase
-      .from("payments")
-      .select("customer_id, amount_cents");
-    for (const row of (paid ?? []) as { customer_id: string | null; amount_cents: number }[]) {
+    // Paged for the same reason. Under a thousand payments today, and the
+    // day it goes over is the day every contact past that point silently
+    // stops counting as a client.
+    const paid = await fetchAllRows<{ customer_id: string | null; amount_cents: number }>(
+      (from, to) =>
+        supabase.from("payments").select("customer_id, amount_cents").range(from, to)
+    );
+    for (const row of paid) {
       if (!row.customer_id) continue;
       paidByCustomer.set(
         row.customer_id,
@@ -159,21 +184,7 @@ export async function getContacts(): Promise<ContactsData> {
     undoneAt: m.undone_at,
   }));
 
-  const contacts: ContactRow[] = (
-    (data ?? []) as unknown as {
-      id: string;
-      name: string;
-      email: string | null;
-      phone: string | null;
-      contact_type: string | null;
-      tags: string[] | null;
-      do_not_contact: boolean | null;
-      pipeline: string | null;
-      pipeline_stage: string | null;
-      opportunity_value: number | null;
-      properties: { id: string; address: string }[] | null;
-    }[]
-  ).map((c) => ({
+  const contacts: ContactRow[] = data.map((c) => ({
     contactType: effectiveType({
       paidCents: paidByCustomer.get(c.id) ?? 0,
       contactType: c.contact_type,
@@ -195,13 +206,21 @@ export async function getContacts(): Promise<ContactsData> {
   const duplicates: DuplicatePair[] = [];
   const alreadyPaired = new Set<string>();
 
-  for (let i = 0; i < contacts.length; i++) {
-    const contact = contacts[i];
-    if (alreadyPaired.has(contact.id)) continue;
+  // Grown as we go rather than sliced each time round. `slice` here allocated
+  // a fresh array of every earlier contact on every iteration, which on a book
+  // of eighteen hundred is eighteen hundred copies averaging nine hundred
+  // entries -- work nobody asked for, on every page load.
+  const earlier: ContactRow[] = [];
 
-    // Compare against everyone earlier in the list, so each pair surfaces once.
-    const earlier = contacts.slice(0, i);
+  for (const contact of contacts) {
+    if (alreadyPaired.has(contact.id)) {
+      earlier.push(contact);
+      continue;
+    }
+
+    // Compared against everyone earlier in the list, so each pair surfaces once.
     const match = findDuplicateCustomer(earlier, contact);
+    earlier.push(contact);
     if (!match || alreadyPaired.has(match.id)) continue;
     // The matcher answers with its own narrow shape; we need the full row.
     const hit = contacts.find((c) => c.id === match.id)!;
@@ -223,21 +242,36 @@ export async function getContacts(): Promise<ContactsData> {
 
   // Same address under two contacts is worth a look even when the names differ
   // — though it can legitimately be a duplex, so it's only ever a suggestion.
-  for (let i = 0; i < contacts.length; i++) {
-    for (let j = i + 1; j < contacts.length; j++) {
-      const a = contacts[i];
-      const b = contacts[j];
-      if (alreadyPaired.has(a.id) || alreadyPaired.has(b.id)) continue;
+  //
+  // Indexed by address rather than compared pair by pair. The pairwise version
+  // normalised both addresses inside the innermost loop, so an eighteen
+  // hundred contact book meant more than a million comparisons and several
+  // million string normalisations before the page could render. Two contacts
+  // share an address exactly when they land in the same bucket.
+  const byAddress = new Map<string, ContactRow[]>();
+  for (const contact of contacts) {
+    for (const address of new Set(contact.addresses.map(normalizeAddress))) {
+      if (!address) continue;
+      const bucket = byAddress.get(address);
+      if (bucket) bucket.push(contact);
+      else byAddress.set(address, [contact]);
+    }
+  }
 
-      const shared = a.addresses.some((addrA) =>
-        b.addresses.some((addrB) => normalizeAddress(addrA) === normalizeAddress(addrB))
-      );
-      if (!shared) continue;
+  for (const bucket of byAddress.values()) {
+    if (bucket.length < 2) continue;
 
-      const [keep, merge] = a.propertyCount >= b.propertyCount ? [a, b] : [b, a];
-      duplicates.push({ keep, merge, reason: "Same property address" });
-      alreadyPaired.add(a.id);
-      alreadyPaired.add(b.id);
+    for (let i = 0; i < bucket.length; i++) {
+      for (let j = i + 1; j < bucket.length; j++) {
+        const a = bucket[i];
+        const b = bucket[j];
+        if (alreadyPaired.has(a.id) || alreadyPaired.has(b.id)) continue;
+
+        const [keep, merge] = a.propertyCount >= b.propertyCount ? [a, b] : [b, a];
+        duplicates.push({ keep, merge, reason: "Same property address" });
+        alreadyPaired.add(a.id);
+        alreadyPaired.add(b.id);
+      }
     }
   }
 

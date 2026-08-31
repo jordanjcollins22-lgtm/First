@@ -1,3 +1,4 @@
+import { fetchAllRows } from "@/lib/pagination";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CLIENT_SIDE_TYPES } from "@/lib/contact-types";
 
@@ -38,18 +39,26 @@ export async function reconcileProspects(supabase: Client): Promise<ReconcileRep
     return { checked: 0, matched: 0 };
   }
 
-  const [{ data: properties }, { data: customers }] = await Promise.all([
-    supabase.from("properties").select("address, customer_id"),
-    supabase.from("customers").select("id, name, email, phone").in("contact_type", CLIENT_SIDE_TYPES),
+  const [properties, customers] = await Promise.all([
+    fetchAllRows((from, to) =>
+      supabase.from("properties").select("address, customer_id").range(from, to)
+    ),
+    fetchAllRows((from, to) =>
+      supabase
+        .from("customers")
+        .select("id, name, email, phone")
+        .in("contact_type", CLIENT_SIDE_TYPES)
+        .range(from, to)
+    ),
   ]);
 
   const customerByAddress = new Map<string, string>();
-  for (const property of properties ?? []) {
+  for (const property of properties) {
     const key = normalizeAddress(property.address);
     if (key) customerByAddress.set(key, property.customer_id);
   }
 
-  const customerList = (customers ?? []).map((c) => ({
+  const customerList = customers.map((c) => ({
     id: c.id,
     name: c.name,
     email: c.email,

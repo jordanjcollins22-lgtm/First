@@ -15,7 +15,6 @@ import {
 import type { ContactsData, ContactRow } from "@/lib/data/contacts";
 import { CONTACT_TYPES, contactTypeLabel } from "@/lib/contact-types";
 import { emptyLabel, searchContacts } from "@/lib/contact-search";
-import { ContactImportPanel } from "./contact-import-panel";
 import { GeocodePanel } from "./geocode-panel";
 import { MapPinOff } from "lucide-react";
 import { RecentMergesPanel } from "./recent-merges-panel";
@@ -65,6 +64,22 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
   }
   const byType = typeFilter === "all" ? contacts : contacts.filter((c) => c.contactType === typeFilter);
   const shown = searchContacts(byType, query);
+
+  // Drawn a page at a time. Searching stays over the whole book -- that is
+  // the part worth having client-side, and it is instant -- but rendering
+  // eighteen hundred rows on a phone is a second of blank screen before
+  // anybody can scroll. The window resets whenever the list changes, or
+  // "show more" from a previous search would carry into the next one.
+  const [windowSize, setWindowSize] = useState(PAGE);
+  const windowFor = `${typeFilter}:${query}`;
+  const [windowKey, setWindowKey] = useState(windowFor);
+  if (windowKey !== windowFor) {
+    setWindowKey(windowFor);
+    setWindowSize(PAGE);
+  }
+
+  const visible = shown.slice(0, windowSize);
+  const hidden = shown.length - visible.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,10 +144,6 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
         </section>
       )}
 
-      {/* Back alongside the book. Splitting them meant somebody looking at
-          their contacts had to know that importing lived somewhere else. */}
-      <ContactImportPanel />
-
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">All contacts ({shown.length})</h2>
@@ -181,15 +192,29 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
           </p>
         ) : (
           <ul className="flex flex-col gap-1.5">
-            {shown.map((contact) => (
+            {visible.map((contact) => (
               <ContactRowItem key={contact.id} contact={contact} />
             ))}
           </ul>
+        )}
+
+        {hidden > 0 && (
+          <button
+            type="button"
+            onClick={() => setWindowSize((size) => size + PAGE)}
+            className="mt-2 w-full rounded-md border border-border px-3 py-2 text-xs font-semibold"
+          >
+            Show {Math.min(hidden, PAGE)} more · {hidden} not shown
+          </button>
         )}
       </section>
     </div>
   );
 }
+
+/** How many rows to draw at once. Enough to scroll through without thinking
+ * about it, few enough that the page appears immediately. */
+const PAGE = 100;
 
 function TypeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (

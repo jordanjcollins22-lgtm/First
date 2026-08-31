@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/pagination";
 import { EMPTY_ROWS, buildLiveGraph, type LiveRows } from "@/lib/knowledge-live";
 import type { GraphEdge, GraphNode } from "@/lib/knowledge-graph";
 
@@ -22,6 +23,17 @@ export async function loadLiveRows(): Promise<LiveRows> {
     }
   };
 
+  /** The same tolerance, for the reads that page. Anything the graph draws
+   * from every row has to page, or the graph is missing people nobody can
+   * see are missing. */
+  const getAll = async <T>(run: () => Promise<unknown[]>): Promise<T[]> => {
+    try {
+      return (await run()) as T[];
+    } catch {
+      return [];
+    }
+  };
+
   const [
     customers,
     properties,
@@ -37,14 +49,20 @@ export async function loadLiveRows(): Promise<LiveRows> {
     invoices,
     ledger,
   ] = await Promise.all([
-    get<LiveRows["customers"][number]>(() =>
-      supabase.from("customers").select("id, name, contact_type")
+    getAll<LiveRows["customers"][number]>(() =>
+      fetchAllRows((from, to) =>
+        supabase.from("customers").select("id, name, contact_type").range(from, to)
+      )
     ),
-    get<LiveRows["properties"][number]>(() =>
-      supabase.from("properties").select("id, customer_id, address")
+    getAll<LiveRows["properties"][number]>(() =>
+      fetchAllRows((from, to) =>
+        supabase.from("properties").select("id, customer_id, address").range(from, to)
+      )
     ),
-    get<LiveRows["jobs"][number]>(() =>
-      supabase.from("jobs").select("id, name, status, property_id, job_number")
+    getAll<LiveRows["jobs"][number]>(() =>
+      fetchAllRows((from, to) =>
+        supabase.from("jobs").select("id, name, status, property_id, job_number").range(from, to)
+      )
     ),
     get<LiveRows["jobServices"][number]>(() =>
       supabase.from("job_requested_services").select("job_id, service_type_id")

@@ -42,3 +42,45 @@ export function boundedPageSize(
 export function takePage<T>(rows: T[], pageSize: number): { items: T[]; hasMore: boolean } {
   return { items: rows.slice(0, pageSize), hasMore: rows.length > pageSize };
 }
+
+/**
+ * Every row, in pages, when every row is genuinely what is wanted.
+ *
+ * PostgREST caps a request that asks for no range, and the cap is silent — a
+ * thousand rows come back and nothing anywhere says the other eight hundred
+ * exist. That is the worst shape a limit can have: the page renders, the
+ * numbers look plausible, and the contact whose name starts with a W is
+ * simply not in the book.
+ *
+ * So a read that means "all of them" has to say so in pages. This is not a
+ * licence to read whole tables — a list screen should use `boundedPageSize`
+ * and show one page. It is for the reads that genuinely need the lot:
+ * matching an import against the whole book, or scanning for duplicates,
+ * where working from a truncated list gives a wrong answer rather than a
+ * short one.
+ *
+ * Stops on the first short page, which is how it knows it has reached the
+ * end without a count.
+ */
+export async function fetchAllRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  pageSize = 1000
+): Promise<T[]> {
+  const all: T[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await page(from, from + pageSize - 1);
+    if (error) throw error;
+
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+
+    // A guard against a page that never shortens. Without it a server that
+    // ignores the range would loop until the process died, which is a worse
+    // failure than the truncation this exists to fix.
+    if (all.length > 200_000) break;
+  }
+
+  return all;
+}

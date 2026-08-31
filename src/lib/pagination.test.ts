@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { boundedPageSize, takePage } from "./pagination";
+import { boundedPageSize, fetchAllRows, takePage } from "./pagination";
 
 describe("boundedPageSize", () => {
   it("uses the caller's number when it is a sensible one", () => {
@@ -67,5 +67,70 @@ describe("takePage", () => {
 
   it("handles an empty list", () => {
     expect(takePage([], 4)).toEqual({ items: [], hasMore: false });
+  });
+});
+
+describe("fetchAllRows", () => {
+  /** A fake table, handed out in pages the way PostgREST does. */
+  const table = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({ id: String(i) }));
+
+  const pager = (rows: { id: string }[], calls: number[][] = []) =>
+    async (from: number, to: number) => {
+      calls.push([from, to]);
+      return { data: rows.slice(from, to + 1), error: null };
+    };
+
+  it("gets past the cap that silently truncates", async () => {
+    // The bug this exists for: 1,797 contacts, a thousand come back, and
+    // nothing says the rest are missing.
+    const rows = await fetchAllRows(pager(table(1797)), 1000);
+    expect(rows).toHaveLength(1797);
+  });
+
+  it("asks for exactly the pages it needs and no more", async () => {
+    const calls: number[][] = [];
+    await fetchAllRows(pager(table(1797), calls), 1000);
+    expect(calls).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
+  });
+
+  it("stops on the first short page rather than counting first", async () => {
+    const calls: number[][] = [];
+    await fetchAllRows(pager(table(10), calls), 1000);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("makes one request for an empty table", async () => {
+    const calls: number[][] = [];
+    expect(await fetchAllRows(pager(table(0), calls), 1000)).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("asks a second time when the first page is exactly full", async () => {
+    // Otherwise a table of exactly a thousand and one loses its last row.
+    const calls: number[][] = [];
+    const rows = await fetchAllRows(pager(table(1000), calls), 1000);
+    expect(rows).toHaveLength(1000);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("throws rather than returning half a book", async () => {
+    // A partial answer that looks whole is the failure being fixed here.
+    await expect(
+      fetchAllRows(async () => ({ data: null, error: new Error("boom") }))
+    ).rejects.toThrow("boom");
+  });
+
+  it("gives up rather than looping forever on a server that ignores the range", async () => {
+    let calls = 0;
+    const rows = await fetchAllRows(async () => {
+      calls += 1;
+      return { data: table(1000), error: null };
+    }, 1000);
+    expect(rows.length).toBeGreaterThan(200_000);
+    expect(calls).toBeLessThan(1000);
   });
 });

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/pagination";
 import { buildContactTree, type ContactNode } from "@/lib/contact-tree";
 
 /**
@@ -12,19 +13,34 @@ import { buildContactTree, type ContactNode } from "@/lib/contact-tree";
 export async function getContactTree(): Promise<ContactNode[]> {
   const supabase = await createClient();
 
+  // Paged. A select with no range comes back capped at a thousand rows with
+  // nothing said about it, and a graph of the whole business drawn from a
+  // truncated read is a graph missing people nobody can see are missing.
   const [contacts, properties, jobs, proposals] = await Promise.all([
-    supabase.from("customers").select("id, name, email, phone, contact_type, do_not_contact"),
-    supabase.from("properties").select("id, customer_id, address, acreage"),
-    supabase
-      .from("jobs")
-      .select(
-        "id, property_id, name, status, job_number, evaluation_date, project_start_date, project_end_date, created_at"
-      ),
-    supabase.from("job_proposals").select("job_id, status, total_cost"),
+    fetchAllRows((from, to) =>
+      supabase
+        .from("customers")
+        .select("id, name, email, phone, contact_type, do_not_contact")
+        .range(from, to)
+    ),
+    fetchAllRows((from, to) =>
+      supabase.from("properties").select("id, customer_id, address, acreage").range(from, to)
+    ),
+    fetchAllRows((from, to) =>
+      supabase
+        .from("jobs")
+        .select(
+          "id, property_id, name, status, job_number, evaluation_date, project_start_date, project_end_date, created_at"
+        )
+        .range(from, to)
+    ),
+    fetchAllRows((from, to) =>
+      supabase.from("job_proposals").select("job_id, status, total_cost").range(from, to)
+    ),
   ]);
 
   return buildContactTree({
-    contacts: ((contacts.data ?? []) as {
+    contacts: ((contacts) as unknown as {
       id: string;
       name: string;
       email: string | null;
@@ -39,7 +55,7 @@ export async function getContactTree(): Promise<ContactNode[]> {
       contactType: c.contact_type,
       doNotContact: c.do_not_contact,
     })),
-    properties: ((properties.data ?? []) as {
+    properties: ((properties) as unknown as {
       id: string;
       customer_id: string;
       address: string;
@@ -50,7 +66,7 @@ export async function getContactTree(): Promise<ContactNode[]> {
       address: p.address,
       acreage: p.acreage,
     })),
-    jobs: ((jobs.data ?? []) as {
+    jobs: ((jobs) as unknown as {
       id: string;
       property_id: string;
       name: string;
@@ -71,7 +87,7 @@ export async function getContactTree(): Promise<ContactNode[]> {
       projectEndDate: j.project_end_date,
       createdAt: j.created_at,
     })),
-    proposals: ((proposals.data ?? []) as {
+    proposals: ((proposals) as unknown as {
       job_id: string;
       status: string;
       total_cost: number | null;
