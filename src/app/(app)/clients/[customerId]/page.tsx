@@ -27,8 +27,8 @@ export default async function ClientAccountPage({
   }
 
   const { allowed } = await checkTabAccess("project-data");
-  if (!allowed) redirect("/attractors");
-  await requireAnyTab(["client-detail", "contacts", "project-data", "pipeline"], "/attractors");
+  if (!allowed) redirect("/my-day");
+  await requireAnyTab(["client-detail", "contacts", "project-data", "pipeline"], "/my-day");
 
   const { customerId } = await params;
   const supabase = await createClient();

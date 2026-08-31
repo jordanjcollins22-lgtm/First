@@ -39,7 +39,7 @@ export default async function TeamServicesPage() {
     checkTabAccess("team"),
     checkTabAccess("services"),
   ]);
-  if (!teamAllowed && !servicesAllowed) redirect("/attractors");
+  if (!teamAllowed && !servicesAllowed) redirect("/my-day");
 
   let profiles: Profile[] = [];
   let roles: CustomRole[] = [];

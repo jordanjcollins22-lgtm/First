@@ -40,7 +40,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("dashboard", "/attractors");
+  await requireTab("dashboard", "/my-day");
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
@@ -200,7 +200,7 @@ async function JourneysTab() {
 
   const profile = await getCurrentProfile();
   if (!profile?.roles.includes("admin")) {
-    redirect("/attractors");
+    redirect("/my-day");
   }
 
   const org = await getCurrentOrganization().catch(() => null);

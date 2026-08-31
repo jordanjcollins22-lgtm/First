@@ -45,7 +45,10 @@ export const TABS: readonly TabDefinition[] = [
   { key: "team", label: "Team & Services", href: "/admin/team" },
 
   // Added after the matrix existed.
-  { key: "proposals", label: "Proposals", href: "/proposals", parent: "pipeline" },
+  { key: "proposals", label: "Proposals", href: "/proposals" },
+  // Its own permission because it has its own page now. Invoices used to be a
+  // tab on Money, which meant seeing a bill required seeing payroll.
+  { key: "invoices", label: "Invoices", href: "/proposals", parent: "proposals" },
   { key: "contacts", label: "Contacts", href: "/contacts", parent: "project-data" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
   { key: "leads", label: "Lead Generation", href: "/leads" },
@@ -113,6 +116,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "signed-in person to record a movement, and it shows one item and nothing else.",
   "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
   "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
+  "/more":
+    "The drawer holding every tool that is not one of the eight. It lists only pages the viewer " +
+    "already has permission for and links to nothing else, so a tick of its own would withhold " +
+    "nothing and could leave somebody with no way to reach a page they were granted.",
 };
 
 /**
@@ -158,19 +165,4 @@ export function tabLabel(key: string): string {
 
 export function tabFor(key: string): TabDefinition | undefined {
   return BY_KEY.get(key);
-}
-
-/**
- * Tabs somebody is allowed into but has no door to.
- *
- * A tab that lives on another page is normally reached by opening that page.
- * Grant the tab without the page it sits on and the permission does nothing
- * at all, which is the opposite of what ticking a box looks like it does.
- * These get their own entry in the sidebar so the grant means something.
- */
-export function orphanedTabs(allowed: string[]): TabDefinition[] {
-  const has = new Set(allowed);
-  return TABS.filter(
-    (tab) => tab.parent != null && has.has(tab.key) && !has.has(tab.parent)
-  );
 }

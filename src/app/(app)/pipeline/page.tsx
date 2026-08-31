@@ -1,14 +1,11 @@
 import Link from "next/link";
 
 import { isSupabaseConfigured } from "@/lib/env";
-import { checkTabAccess, requireTab } from "@/lib/data/access";
-import { PageTabs } from "@/components/ui/page-tabs";
+import { requireTab } from "@/lib/data/access";
 import { getPipeline, type PipelineCard } from "@/lib/data/pipeline";
 import { STAGES, STAGE_STATUSES } from "@/lib/pipeline";
 import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { listAllProposals } from "@/lib/data/all-proposals";
-import { ProposalsView } from "@/components/proposal/proposals-view";
 import { MoveJob } from "@/components/pipeline/move-job";
 
 function money(n: number): string {
@@ -33,23 +30,11 @@ function formatDate(value: string): string {
  */
 export default async function PipelinePage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("pipeline", "/attractors");
-
-  const proposalAccess = await checkTabAccess("proposals");
+  await requireTab("pipeline", "/my-day");
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
-      <PageTabs
-        tabs={[
-          { key: "pipeline", label: "Pipeline", content: await PipelineTab() },
-          {
-            key: "proposals",
-            label: "Proposals",
-            content: proposalAccess.allowed ? await ProposalsTab() : null,
-            visible: proposalAccess.allowed,
-          },
-        ]}
-      />
+      {await PipelineTab()}
     </div>
   );
 }
@@ -237,19 +222,4 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
  * Was its own page; the heading stays so the tab still says what it is
  * looking at, because a tab strip is a worse label than a sentence.
  */
-async function ProposalsTab() {
-  const proposals = await listAllProposals();
-
-  return (
-    <div className="max-w-2xl">
-      <h1 className="mb-1 text-2xl font-bold">Proposals</h1>
-      <p className="mb-6 text-muted-foreground">
-        Proposals generate automatically once an evaluation is submitted — edit the price or scope,
-        then approve to send.
-      </p>
-      <ProposalsView proposals={proposals} />
-    </div>
-  );
-}
-
 /** Everyone in the book, and the records that look like one person twice. */

@@ -6,7 +6,7 @@ import { Menu, X } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
-import { orphanedTabs, tabLabel } from "@/lib/permissions";
+import { moreTabs, primaryNav } from "@/lib/nav-groups";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
@@ -38,45 +38,24 @@ export function SiteNav({
 
   // Field-only people get one link. The rest of the app is for the office, and
   // a menu of seventeen things they cannot use is worse than no menu.
+  //
+  // Everybody else gets the eight, in a fixed order, and one door to the rest.
+  // A nav of seventeen equals is a list people scan for the two things they
+  // use; naming the work of the business directly and putting the tools behind
+  // More is the same pages, arranged so the daily ones are the ones you see.
   const links = fieldOnly
     ? [{ href: "/my-day", label: "My Day" }]
     : [
-        ...(can("dashboard") ? [{ href: "/dashboard", label: "Dashboard" }] : []),
-        // Never tab-gated: both of these show the signed-in person their own
-        // work, so there is nothing a tick would be protecting.
+        // Never tab-gated: this shows the signed-in person their own work, so
+        // there is nothing a tick would be protecting.
         { href: "/my-day", label: "My Day" },
-        // ?new=1 because the root redirects admins to the dashboard, and this
-        // is the link that has to get past that.
-        ...(can("new-property") ? [{ href: "/?new=1", label: tabLabel("new-property") }] : []),
-        ...(can("project-data") ? [{ href: "/attractors", label: tabLabel("project-data") }] : []),
-        ...(can("pipeline") ? [{ href: "/pipeline", label: tabLabel("pipeline") }] : []),
-        ...(can("leads") ? [{ href: "/leads", label: tabLabel("leads") }] : []),
-        ...(can("conversations") ? [{ href: "/conversations", label: tabLabel("conversations") }] : []),
-        ...(can("evaluations") ? [{ href: "/evaluations", label: tabLabel("evaluations") }] : []),
-        ...(can("knowledge-graph")
-          ? [{ href: "/knowledge-graph", label: tabLabel("knowledge-graph") }]
-          : []),
-        ...(can("tools") || can("materials") ? [{ href: "/admin/tools", label: "Inventory" }] : []),
-        ...(can("services") || can("team") ? [{ href: "/admin/team", label: "Team & Services" }] : []),
-        // Overhead folded in here as a tab, so one link covers all of it.
-        ...(can("payments") || roles.includes("overhead")
-          ? [{ href: "/admin/payments", label: tabLabel("payments") }]
-          : []),
+        ...primaryNav(allowedTabs).map((entry) => ({ href: entry.href, label: entry.label })),
         // Gated on the admin role itself, never on the table it edits —
         // otherwise one stray uncheck would take away the way back in.
-        ...(roles.includes("admin")
-          ? [
-              { href: "/admin/settings", label: "Settings" },
-            ]
-          : []),
-        // Organizations is a tab on Settings now, shown only to the one
-        // account that can reach it — so it needs no nav entry of its own.
-
-        // Anything they were granted that lives on a page they cannot open.
-        // Ticking a box is meant to grant access; without this a role given
-        // Contacts but not Project Data had no way to reach Contacts at all,
-        // because the only door to it was a page they could not open.
-        ...orphanedTabs(allowedTabs).map((tab) => ({ href: tab.href, label: tab.label })),
+        ...(roles.includes("admin") ? [{ href: "/admin/settings", label: "Settings" }] : []),
+        // The drawer. Only shown when there is something in it, because an
+        // empty More is a promise of more that is not there.
+        ...(moreTabs(allowedTabs).length > 0 ? [{ href: "/more", label: "More" }] : []),
       ];
 
   useEffect(() => {
@@ -101,10 +80,11 @@ export function SiteNav({
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-3 text-sm font-medium">
-      {/* One shortcut in the bar itself, and only where there's room for it. */}
-      {!fieldOnly && can("project-data") && (
-        <Link href="/attractors" className="hidden hover:text-primary sm:inline">
-          Project Data
+      {/* One shortcut in the bar itself, and only where there's room for it.
+          The pipeline rather than a tool: it is the screen the office lives on. */}
+      {!fieldOnly && can("pipeline") && (
+        <Link href="/pipeline" className="hidden hover:text-primary sm:inline">
+          Pipeline
         </Link>
       )}
 

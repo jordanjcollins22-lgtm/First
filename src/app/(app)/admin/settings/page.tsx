@@ -35,7 +35,7 @@ export default async function SettingsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const profile = await getCurrentProfile();
-  if (!profile?.roles.includes("admin")) redirect("/attractors");
+  if (!profile?.roles.includes("admin")) redirect("/my-day");
 
   const isSuperadmin = profile.email.toLowerCase() === SUPERADMIN_EMAIL;
 

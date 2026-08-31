@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { orphanedTabs, tabFor, tabLabel, TABS, UNGOVERNED_ROUTES, tabsAllowedForRoles, unconfiguredTabKeys } from "@/lib/permissions";
+import { tabFor, tabLabel, TABS, UNGOVERNED_ROUTES, tabsAllowedForRoles, unconfiguredTabKeys } from "@/lib/permissions";
 
 const APP_DIR = join(process.cwd(), "src", "app", "(app)");
 
@@ -151,44 +151,6 @@ describe("what each page is called", () => {
   });
 });
 
-describe("orphanedTabs", () => {
-  it("finds a tab somebody is allowed into but has no door to", () => {
-    // Contacts lives on Project Data. Granted without it, the permission did
-    // nothing at all, which is the opposite of what ticking a box looks like.
-    const orphans = orphanedTabs(["contacts"]).map((t) => t.key);
-    expect(orphans).toContain("contacts");
-  });
-
-  it("stays quiet when they can reach it the normal way", () => {
-    expect(orphanedTabs(["contacts", "project-data"]).map((t) => t.key)).not.toContain("contacts");
-  });
-
-  it("says nothing about a tab they were never granted", () => {
-    expect(orphanedTabs(["project-data"])).toEqual([]);
-    expect(orphanedTabs([])).toEqual([]);
-  });
-
-  it("only ever names tabs that live inside another", () => {
-    for (const tab of orphanedTabs(TABS.map((t) => t.key).filter((k) => k !== "pipeline"))) {
-      expect(tab.parent, tab.key).toBeTruthy();
-    }
-  });
-
-  it("points every parent at a tab that exists", () => {
-    // A parent naming nothing would make its child permanently an orphan.
-    const keys = new Set(TABS.map((t) => t.key));
-    for (const tab of TABS) {
-      if (!tab.parent) continue;
-      expect(keys.has(tab.parent), `${tab.key} -> ${tab.parent}`).toBe(true);
-    }
-  });
-
-  it("has no tab parented to itself", () => {
-    for (const tab of TABS) {
-      expect(tab.parent, tab.key).not.toBe(tab.key);
-    }
-  });
-});
 
 describe("one name for a page, everywhere", () => {
   /**

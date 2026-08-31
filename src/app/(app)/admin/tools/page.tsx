@@ -24,7 +24,7 @@ export default async function InventoryPage() {
     checkTabAccess("tools"),
     checkTabAccess("materials"),
   ]);
-  if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
+  if (!toolsAllowed && !materialsAllowed) redirect("/my-day");
 
   const supabase = await createClient();
   const [tools, materials, marketing, services, linksRes, businessLocations] = await Promise.all([

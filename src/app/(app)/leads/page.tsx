@@ -38,7 +38,7 @@ function money(n: number): string {
  */
 export default async function LeadsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("leads", "/attractors");
+  await requireTab("leads", "/my-day");
 
   let data: LeadEngineData | null = null;
   try {

@@ -20,6 +20,21 @@ async function resolveTabAccess(tab: TabKey): Promise<{ allowed: boolean; profil
   return { allowed: tabsAllowedForRoles(profile.roles, permissions).has(tab), profile };
 }
 
+/**
+ * Every tab this person can open.
+ *
+ * The nav already worked this out for itself; a page that wants to list what
+ * somebody has -- the More drawer -- needs the same answer, and two places
+ * computing it separately is how they drift.
+ */
+export async function getAllowedTabs(): Promise<Set<TabKey>> {
+  const profile = await getCurrentProfile();
+  if (!profile) return new Set();
+
+  const permissions = await listRolePermissions().catch(() => []);
+  return tabsAllowedForRoles(profile.roles, permissions);
+}
+
 /** Soft gate for pages that can't safely redirect (would loop with another gated page) — caller renders inline instead. */
 export async function checkTabAccess(tab: TabKey) {
   return resolveTabAccess(tab);

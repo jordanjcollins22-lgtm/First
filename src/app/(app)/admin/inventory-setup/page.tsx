@@ -8,13 +8,13 @@ import { InventorySetupFlow } from "@/components/inventory/inventory-setup-flow"
 
 export default async function InventorySetupPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("inventory-setup", "/attractors");
+  await requireTab("inventory-setup", "/my-day");
 
   const [{ allowed: toolsAllowed }, { allowed: materialsAllowed }] = await Promise.all([
     checkTabAccess("tools"),
     checkTabAccess("materials"),
   ]);
-  if (!toolsAllowed && !materialsAllowed) redirect("/attractors");
+  if (!toolsAllowed && !materialsAllowed) redirect("/my-day");
 
   const businessLocations = await listBusinessLocations().catch(() => []);
   const storageLocations = businessLocations.map((location) => location.name);

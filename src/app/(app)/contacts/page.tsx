@@ -13,7 +13,7 @@ import { ContactImportPanel } from "@/components/contacts/contact-import-panel";
  */
 export default async function ContactsImportPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("contacts", "/attractors");
+  await requireTab("contacts", "/my-day");
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">

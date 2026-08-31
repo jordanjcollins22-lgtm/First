@@ -26,7 +26,7 @@ export default async function EvaluationsPage() {
     );
   }
 
-  await requireTab("evaluations", "/attractors");
+  await requireTab("evaluations", "/my-day");
 
   const schedule = await getMyScheduleData();
   if (!schedule) {

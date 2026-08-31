@@ -13,8 +13,6 @@ import { localDayKey } from "@/lib/data/crew-day";
 import { getReceivedPayments } from "@/lib/data/received-payments";
 import { ReceivedPanel } from "@/components/payments/received-panel";
 import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
-import { listInvoices } from "@/lib/data/client-invoices";
-import { InvoicesPanel } from "@/components/payments/invoices-panel";
 import { listPlans } from "@/lib/data/payment-plans";
 import { SchedulesPanel } from "@/components/payments/schedules-panel";
 import { RecordPaymentPanel } from "@/components/payments/record-payment-panel";
@@ -37,7 +35,7 @@ export default async function PaymentsPage({
   const profile = await getCurrentProfile();
   const isAdmin = Boolean(profile?.roles.includes("admin"));
   const allowed = isAdmin || profile?.roles.includes("overhead");
-  if (!allowed) redirect("/attractors");
+  if (!allowed) redirect("/my-day");
 
   let data: Awaited<ReturnType<typeof getPaymentsData>> | null = null;
   try {
@@ -71,7 +69,8 @@ export default async function PaymentsPage({
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Money</h1>
       <p className="mb-4 text-sm text-muted-foreground sm:mb-6 sm:text-base">
-        Everything in and out — cash jobs, invoices, team pay, materials and overhead.
+        Everything in and out — cash jobs, team pay, materials and overhead. Invoices live on
+        Proposals &amp; Invoices.
       </p>
       <PageTabs
         tabs={[
@@ -102,15 +101,6 @@ export default async function PaymentsPage({
             key: "schedules",
             label: "Schedules",
             content: await SchedulesTab(),
-          },
-          // Bills we sent, as the files they were sent as. Its own tab rather
-          // than part of Received: that one is money that arrived, this is
-          // money we asked for, and an unpaid invoice belongs in neither the
-          // total nor the reconciliation.
-          {
-            key: "invoices",
-            label: "Invoices",
-            content: await InvoicesTab(),
           },
           // Hours are money: this is what the day cost in wages, and the only
           // honest input to what a job cost. Admin only — correcting a logged
@@ -162,31 +152,6 @@ async function ReceivedTab() {
       <ReceivedPanel data={data} />
     </div>
   );
-}
-
-/**
- * Invoices on file, and the form to add one.
- *
- * Loaded on its own and allowed to fail on its own, like the tabs above it:
- * this reads a table that may not exist yet on a database that has not had
- * the migration run, and that should cost this tab rather than the page.
- */
-async function InvoicesTab() {
-  const page = await listInvoices().catch((err) => {
-    console.error("Invoices failed to load:", err);
-    return null;
-  });
-
-  if (!page) {
-    return (
-      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
-        Couldn&apos;t load invoices. If this is a fresh setup, run{" "}
-        <code>supabase/migrations/0142_client_invoices.sql</code>.
-      </p>
-    );
-  }
-
-  return <InvoicesPanel initial={page.invoices} hasMore={page.more} />;
 }
 
 /**
