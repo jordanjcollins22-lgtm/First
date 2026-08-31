@@ -1,0 +1,235 @@
+/**
+ * Invoices as files, against the person they were sent to.
+ *
+ * What the office needs from a bill is three things: what we charged, when it
+ * was due, and whether it came in. A folder of PDFs answers none of them, so
+ * each file carries those alongside it.
+ *
+ * Status is worked out here rather than stored. An invoice is not 'overdue'
+ * the day somebody types it in; it becomes overdue the morning after its due
+ * date, whether or not anybody was looking. A stored status is a second thing
+ * to keep in step, and this is one that would start lying overnight.
+ */
+
+export interface ClientInvoice {
+  id: string;
+  customerId: string;
+  customerName: string | null;
+  filePath: string;
+  fileName: string;
+  invoiceNumber: string | null;
+  amount: number | null;
+  issuedOn: string | null;
+  dueOn: string | null;
+  paidOn: string | null;
+  notes: string | null;
+}
+
+export type InvoiceStatus = "paid" | "overdue" | "due-soon" | "outstanding" | "undated";
+
+export const STATUS_LABEL: Record<InvoiceStatus, string> = {
+  paid: "Paid",
+  overdue: "Overdue",
+  "due-soon": "Due soon",
+  outstanding: "Outstanding",
+  undated: "No due date",
+};
+
+/** Inside this many days of the due date, it is worth chasing. */
+const SOON_DAYS = 7;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A date-only string as a day number, so nothing here depends on the clock's
+ * time of day or on which side of midnight a timezone puts it. */
+function dayNumber(iso: string): number | null {
+  const ms = Date.parse(`${iso}T00:00:00Z`);
+  return Number.isNaN(ms) ? null : Math.floor(ms / DAY_MS);
+}
+
+/**
+ * Where an invoice stands, today.
+ *
+ * Paid wins over everything: an invoice settled late is paid, not overdue,
+ * and a list that keeps shouting about money already in the bank is a list
+ * people stop reading.
+ */
+export function invoiceStatus(invoice: ClientInvoice, today = new Date()): InvoiceStatus {
+  if (invoice.paidOn) return "paid";
+  if (!invoice.dueOn) return "undated";
+
+  const due = dayNumber(invoice.dueOn);
+  const now = dayNumber(today.toISOString().slice(0, 10));
+  if (due == null || now == null) return "undated";
+
+  if (due < now) return "overdue";
+  if (due - now <= SOON_DAYS) return "due-soon";
+  return "outstanding";
+}
+
+/** How many days late, for an invoice that is late. Zero otherwise. */
+export function daysOverdue(invoice: ClientInvoice, today = new Date()): number {
+  if (invoiceStatus(invoice, today) !== "overdue" || !invoice.dueOn) return 0;
+  const due = dayNumber(invoice.dueOn);
+  const now = dayNumber(today.toISOString().slice(0, 10));
+  if (due == null || now == null) return 0;
+  return now - due;
+}
+
+export interface InvoiceSummary {
+  total: number;
+  paid: number;
+  outstanding: number;
+  overdue: number;
+  /** In cents, so nothing here does arithmetic on floats. */
+  billedCents: number;
+  paidCents: number;
+  owedCents: number;
+}
+
+const cents = (amount: number | null): number => (amount == null ? 0 : Math.round(amount * 100));
+
+export function summariseInvoices(rows: ClientInvoice[], today = new Date()): InvoiceSummary {
+  const summary: InvoiceSummary = {
+    total: rows.length,
+    paid: 0,
+    outstanding: 0,
+    overdue: 0,
+    billedCents: 0,
+    paidCents: 0,
+    owedCents: 0,
+  };
+
+  for (const row of rows) {
+    const status = invoiceStatus(row, today);
+    const value = cents(row.amount);
+    summary.billedCents += value;
+
+    if (status === "paid") {
+      summary.paid += 1;
+      summary.paidCents += value;
+      continue;
+    }
+
+    summary.outstanding += 1;
+    summary.owedCents += value;
+    if (status === "overdue") summary.overdue += 1;
+  }
+
+  return summary;
+}
+
+/**
+ * The line above the list.
+ *
+ * Leads with what is owed, because that is the number somebody opened this to
+ * find. An amount is only claimed when there is one to claim: invoices with no
+ * amount typed in are counted but never quietly treated as zero.
+ */
+export function invoiceLine(summary: InvoiceSummary): string {
+  if (summary.total === 0) return "No invoices on file yet.";
+
+  const money = (c: number) =>
+    (c / 100).toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    });
+
+  const parts: string[] = [];
+  if (summary.outstanding > 0) {
+    parts.push(
+      summary.owedCents > 0
+        ? `${money(summary.owedCents)} outstanding across ${summary.outstanding}`
+        : `${summary.outstanding} outstanding`
+    );
+  }
+  if (summary.overdue > 0) parts.push(`${summary.overdue} overdue`);
+  if (summary.paid > 0) parts.push(`${summary.paid} paid`);
+
+  const invoices = summary.total === 1 ? "1 invoice" : `${summary.total} invoices`;
+  return parts.length > 0 ? `${invoices} — ${parts.join(", ")}.` : `${invoices}.`;
+}
+
+/**
+ * Overdue first and oldest of those first, then everything else by date.
+ *
+ * The order is the point: this list is worked from the top, and the money
+ * that has been owed longest is the money most worth a phone call. Paid
+ * invoices sink, since nothing needs doing about them.
+ */
+export function byUrgency(rows: ClientInvoice[], today = new Date()): ClientInvoice[] {
+  const rank: Record<InvoiceStatus, number> = {
+    overdue: 0,
+    "due-soon": 1,
+    outstanding: 2,
+    undated: 3,
+    paid: 4,
+  };
+
+  return [...rows].sort((a, b) => {
+    const byRank = rank[invoiceStatus(a, today)] - rank[invoiceStatus(b, today)];
+    if (byRank !== 0) return byRank;
+
+    // Within a band, the oldest due date first — that is the one that has
+    // been waiting longest. Anything undated goes last in its own band.
+    const aKey = a.dueOn ?? a.issuedOn;
+    const bKey = b.dueOn ?? b.issuedOn;
+    if (!aKey && !bKey) return 0;
+    if (!aKey) return 1;
+    if (!bKey) return -1;
+    return aKey.localeCompare(bKey);
+  });
+}
+
+/** Twenty-five megabytes, matching the proposal archive: a scanned invoice is
+ * the big one, and a ceiling somebody hits while filing a year of them is a
+ * ceiling that stops the filing. */
+export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+export const ACCEPTED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+
+export interface FileCheck {
+  ok: boolean;
+  /** Everything wrong with it at once. Somebody picking files off a phone
+   * should not fix them one round trip at a time. */
+  message: string | null;
+}
+
+export function checkInvoiceFile(file: { type: string; size: number }): FileCheck {
+  const faults: string[] = [];
+  if (!ACCEPTED_TYPES.includes(file.type)) faults.push("It needs to be a PDF, a PNG or a JPG.");
+  if (file.size > MAX_FILE_BYTES) {
+    faults.push(
+      `It is ${(file.size / 1024 / 1024).toFixed(1)}MB, and the limit is ${MAX_FILE_BYTES / 1024 / 1024}MB.`
+    );
+  }
+  if (file.size === 0) faults.push("That file is empty.");
+  return { ok: faults.length === 0, message: faults.length > 0 ? faults.join(" ") : null };
+}
+
+export function extensionFor(type: string): string {
+  if (type === "application/pdf") return "pdf";
+  if (type === "image/png") return "png";
+  return "jpg";
+}
+
+/**
+ * An invoice number read off the file name, when there is one to read.
+ *
+ * Saves typing the thing that is nearly always in the name already. Only a
+ * clear number is offered: guessing wrong and pre-filling the field is worse
+ * than leaving it empty, because a wrong value that looks filled in gets
+ * saved.
+ */
+export function numberFromFileName(fileName: string): string | null {
+  const stem = fileName.replace(/\.[a-z0-9]+$/i, "");
+  // The letter prefix is optional and may be hyphenated off the digits, so
+  // "Invoice #A-155" keeps its A and "INV-2291" does not gain one.
+  const match = stem.match(/inv(?:oice)?[ _-]*#?\s*((?:[a-z]+-)?\d[a-z0-9-]*)/i);
+  if (match?.[1]) return match[1].toUpperCase();
+
+  // A file named nothing but a number is that number.
+  const bare = stem.match(/^#?\s*(\d{3,})$/);
+  return bare?.[1] ?? null;
+}

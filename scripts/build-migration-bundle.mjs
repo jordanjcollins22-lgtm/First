@@ -114,6 +114,7 @@ const CREATES = {
   "0139_payment_import.sql": [],
   "0140_processing_fees.sql": [],
   "0141_payment_payer.sql": [],
+  "0142_client_invoices.sql": ["client_invoices"],
 };
 
 const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();

@@ -400,6 +400,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["archived_proposals"]["Row"]>;
         Relationships: [];
       };
+      client_invoices: {
+        Row: {
+          id: string;
+          organization_id: string;
+          customer_id: string;
+          file_path: string;
+          file_name: string;
+          invoice_number: string | null;
+          amount: number | null;
+          issued_on: string | null;
+          due_on: string | null;
+          paid_on: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["client_invoices"]["Row"]> & {
+          organization_id: string;
+          customer_id: string;
+          file_path: string;
+          file_name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["client_invoices"]["Row"]>;
+        Relationships: [];
+      };
       proposal_edits: {
         Row: {
           id: string;
