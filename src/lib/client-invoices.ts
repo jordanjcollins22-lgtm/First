@@ -11,6 +11,13 @@
  * to keep in step, and this is one that would start lying overnight.
  */
 
+import { planProgress, type PlanLike } from "@/lib/plan-progress";
+
+/** The plan paying an invoice off, as this module needs to see it. */
+export interface InvoicePlan extends PlanLike {
+  kind: string;
+}
+
 export interface ClientInvoice {
   id: string;
   customerId: string;
@@ -23,9 +30,17 @@ export interface ClientInvoice {
   dueOn: string | null;
   paidOn: string | null;
   notes: string | null;
+  /** The schedule settling this bill, when one was agreed. */
+  plan?: InvoicePlan | null;
 }
 
-export type InvoiceStatus = "paid" | "overdue" | "due-soon" | "outstanding" | "undated";
+export type InvoiceStatus =
+  | "paid"
+  | "overdue"
+  | "due-soon"
+  | "outstanding"
+  | "undated"
+  | "on-plan";
 
 export const STATUS_LABEL: Record<InvoiceStatus, string> = {
   paid: "Paid",
@@ -33,6 +48,7 @@ export const STATUS_LABEL: Record<InvoiceStatus, string> = {
   "due-soon": "Due soon",
   outstanding: "Outstanding",
   undated: "No due date",
+  "on-plan": "On a payment plan",
 };
 
 /** Inside this many days of the due date, it is worth chasing. */
@@ -53,9 +69,22 @@ function dayNumber(iso: string): number | null {
  * Paid wins over everything: an invoice settled late is paid, not overdue,
  * and a list that keeps shouting about money already in the bank is a list
  * people stop reading.
+ *
+ * A payment plan comes next, and it supersedes the invoice's own due date.
+ * That date was the terms before anybody renegotiated; once a client has
+ * agreed to pay over three months, calling the bill overdue in month one is
+ * telling the office to chase somebody who is doing exactly what was agreed.
+ * Behind on the plan is a different matter, and still overdue.
  */
 export function invoiceStatus(invoice: ClientInvoice, today = new Date()): InvoiceStatus {
   if (invoice.paidOn) return "paid";
+
+  if (invoice.plan && invoice.plan.status !== "cancelled") {
+    const progress = planProgress(invoice.plan, today);
+    if (progress.settled) return "paid";
+    return progress.overdue.length > 0 ? "overdue" : "on-plan";
+  }
+
   if (!invoice.dueOn) return "undated";
 
   const due = dayNumber(invoice.dueOn);
@@ -67,13 +96,40 @@ export function invoiceStatus(invoice: ClientInvoice, today = new Date()): Invoi
   return "outstanding";
 }
 
-/** How many days late, for an invoice that is late. Zero otherwise. */
+/**
+ * How many days late, for an invoice that is late. Zero otherwise.
+ *
+ * Measured from the plan's oldest missed payment when there is a plan, since
+ * that is the date that was actually missed. Counting from the original due
+ * date would report a bill as months late when the schedule that replaced it
+ * was missed last week.
+ */
 export function daysOverdue(invoice: ClientInvoice, today = new Date()): number {
-  if (invoiceStatus(invoice, today) !== "overdue" || !invoice.dueOn) return 0;
-  const due = dayNumber(invoice.dueOn);
+  if (invoiceStatus(invoice, today) !== "overdue") return 0;
+
   const now = dayNumber(today.toISOString().slice(0, 10));
-  if (due == null || now == null) return 0;
-  return now - due;
+  if (now == null) return 0;
+
+  const from = invoice.plan
+    ? planProgress(invoice.plan, today).overdue[0]?.dueOn
+    : invoice.dueOn;
+  if (!from) return 0;
+
+  const due = dayNumber(from);
+  return due == null ? 0 : now - due;
+}
+
+/**
+ * What is still owed on an invoice, in cents.
+ *
+ * A plan knows what has actually been paid against it; an invoice on its own
+ * only knows whether somebody ticked it off. Where there is a plan, its
+ * arithmetic wins -- otherwise a bill half paid down reads as owed in full.
+ */
+export function owedCents(invoice: ClientInvoice, today = new Date()): number {
+  if (invoiceStatus(invoice, today) === "paid") return 0;
+  if (invoice.plan) return planProgress(invoice.plan, today).outstandingCents;
+  return cents(invoice.amount);
 }
 
 export interface InvoiceSummary {
@@ -81,6 +137,9 @@ export interface InvoiceSummary {
   paid: number;
   outstanding: number;
   overdue: number;
+  /** Outstanding, but being paid down to an agreed schedule and up to date
+   * on it. Not something to chase. */
+  onPlan: number;
   /** In cents, so nothing here does arithmetic on floats. */
   billedCents: number;
   paidCents: number;
@@ -95,6 +154,7 @@ export function summariseInvoices(rows: ClientInvoice[], today = new Date()): In
     paid: 0,
     outstanding: 0,
     overdue: 0,
+    onPlan: 0,
     billedCents: 0,
     paidCents: 0,
     owedCents: 0,
@@ -112,8 +172,13 @@ export function summariseInvoices(rows: ClientInvoice[], today = new Date()): In
     }
 
     summary.outstanding += 1;
-    summary.owedCents += value;
+    // What is left after anything already paid down a plan, rather than the
+    // face value of the bill.
+    const left = owedCents(row, today);
+    summary.owedCents += left;
+    summary.paidCents += value - left;
     if (status === "overdue") summary.overdue += 1;
+    if (status === "on-plan") summary.onPlan += 1;
   }
 
   return summary;
@@ -145,6 +210,7 @@ export function invoiceLine(summary: InvoiceSummary): string {
     );
   }
   if (summary.overdue > 0) parts.push(`${summary.overdue} overdue`);
+  if (summary.onPlan > 0) parts.push(`${summary.onPlan} on a payment plan`);
   if (summary.paid > 0) parts.push(`${summary.paid} paid`);
 
   const invoices = summary.total === 1 ? "1 invoice" : `${summary.total} invoices`;
@@ -163,8 +229,11 @@ export function byUrgency(rows: ClientInvoice[], today = new Date()): ClientInvo
     overdue: 0,
     "due-soon": 1,
     outstanding: 2,
-    undated: 3,
-    paid: 4,
+    // Being paid to an agreed schedule and up to date on it. Below the ones
+    // that need a phone call, above the ones that need nothing.
+    "on-plan": 3,
+    undated: 4,
+    paid: 5,
   };
 
   return [...rows].sort((a, b) => {

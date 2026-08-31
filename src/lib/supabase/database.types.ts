@@ -202,6 +202,7 @@ export interface Database {
           organization_id: string;
           job_id: string | null;
           proposal_id: string | null;
+          invoice_id: string | null;
           customer_id: string;
           kind: string;
           total_cents: number;

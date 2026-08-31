@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { InvoicePlan } from "./client-invoices";
 import {
   byUrgency,
   checkInvoiceFile,
@@ -6,6 +7,7 @@ import {
   invoiceLine,
   invoiceStatus,
   numberFromFileName,
+  owedCents,
   summariseInvoices,
   type ClientInvoice,
 } from "./client-invoices";
@@ -174,5 +176,89 @@ describe("numberFromFileName", () => {
     // A wrong value that looks filled in is worse than an empty field.
     expect(numberFromFileName("scan.pdf")).toBeNull();
     expect(numberFromFileName("final_copy.pdf")).toBeNull();
+  });
+});
+
+describe("an invoice with a payment plan on it", () => {
+  const plan = (over: Partial<InvoicePlan> = {}): InvoicePlan => ({
+    id: "pl1",
+    kind: "instalments",
+    totalCents: 120000,
+    paidCents: 0,
+    status: "accepted",
+    schedule: [
+      { id: "s1", number: 1, amountCents: 40000, dueOn: "2026-06-30", isDeposit: false, status: "due" },
+      { id: "s2", number: 2, amountCents: 40000, dueOn: "2026-07-30", isDeposit: false, status: "due" },
+      { id: "s3", number: 3, amountCents: 40000, dueOn: "2026-08-30", isDeposit: false, status: "due" },
+    ],
+    ...over,
+  });
+
+  it("stops calling a bill overdue once a schedule replaces its due date", () => {
+    // The due date was the terms before anybody renegotiated. Chasing a
+    // client who is doing exactly what was agreed is the bug.
+    const withPlan = inv({ dueOn: "2026-05-31", plan: plan() });
+    expect(invoiceStatus(inv({ dueOn: "2026-05-31" }), TODAY)).toBe("overdue");
+    expect(invoiceStatus(withPlan, TODAY)).toBe("on-plan");
+  });
+
+  it("calls it overdue again the moment they fall behind on the plan", () => {
+    const behind = plan({
+      schedule: [
+        { id: "s1", number: 1, amountCents: 40000, dueOn: "2026-06-01", isDeposit: false, status: "due" },
+      ],
+    });
+    expect(invoiceStatus(inv({ dueOn: "2026-05-31", plan: behind }), TODAY)).toBe("overdue");
+  });
+
+  it("counts the days from the payment they missed, not the original bill", () => {
+    // Months late on the bill, two weeks late on the schedule that replaced
+    // it. Two weeks is the true answer.
+    const behind = plan({
+      schedule: [
+        { id: "s1", number: 1, amountCents: 40000, dueOn: "2026-06-01", isDeposit: false, status: "due" },
+      ],
+    });
+    expect(daysOverdue(inv({ dueOn: "2026-01-01", plan: behind }), TODAY)).toBe(14);
+  });
+
+  it("reads the invoice as paid once the plan is paid off", () => {
+    expect(invoiceStatus(inv({ paidOn: null, plan: plan({ paidCents: 120000 }) }), TODAY)).toBe("paid");
+  });
+
+  it("falls back to the invoice's own dates when the plan was cancelled", () => {
+    const dead = plan({ status: "cancelled" });
+    expect(invoiceStatus(inv({ dueOn: "2026-05-31", plan: dead }), TODAY)).toBe("overdue");
+  });
+
+  it("owes what is left on the plan rather than the face value", () => {
+    const half = inv({ amount: 1200, dueOn: "2026-05-31", plan: plan({ paidCents: 40000 }) });
+    expect(owedCents(half, TODAY)).toBe(80000);
+    // Without a plan it is the whole bill.
+    expect(owedCents(inv({ amount: 1200, dueOn: "2026-05-31" }), TODAY)).toBe(120000);
+  });
+
+  it("keeps the summary reconciling: what is owed plus what is in equals billed", () => {
+    const s = summariseInvoices(
+      [inv({ amount: 1200, dueOn: "2026-05-31", plan: plan({ paidCents: 40000 }) })],
+      TODAY
+    );
+    expect(s.billedCents).toBe(120000);
+    expect(s.owedCents).toBe(80000);
+    expect(s.paidCents).toBe(40000);
+    expect(s.onPlan).toBe(1);
+    expect(s.overdue).toBe(0);
+  });
+
+  it("sorts one being paid to schedule below the ones needing a call", () => {
+    const out = byUrgency(
+      [
+        inv({ id: "on-plan", dueOn: "2026-01-01", plan: plan() }),
+        inv({ id: "late", dueOn: "2026-05-01" }),
+        inv({ id: "paid", paidOn: "2026-06-01" }),
+      ],
+      TODAY
+    );
+    expect(out.map((o) => o.id)).toEqual(["late", "on-plan", "paid"]);
   });
 });

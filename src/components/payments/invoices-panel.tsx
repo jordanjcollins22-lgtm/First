@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { AlertCircle, Check, FileText, Trash2, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, CalendarClock, Check, FileText, Trash2, Upload } from "lucide-react";
 
 import {
   byUrgency,
@@ -18,6 +19,16 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { ChosenContact, ContactPicker } from "@/components/payments/contact-picker";
 import type { SearchableContact } from "@/lib/payer-match";
+import { createPlan } from "@/lib/actions/payment-plan-actions";
+import {
+  buildSchedule,
+  checkPlan,
+  describePlan,
+  INTERVALS,
+  toCents,
+  type Interval,
+} from "@/lib/payment-plan";
+import { planProgress } from "@/lib/plan-progress";
 import {
   createInvoiceUpload,
   deleteInvoice,
@@ -43,6 +54,7 @@ const TONE: Record<InvoiceStatus, string> = {
   overdue: "border-destructive/40 bg-destructive/10 text-destructive",
   "due-soon": "border-amber-300/70 bg-amber-50/70 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200",
   outstanding: "border-border bg-muted text-muted-foreground",
+  "on-plan": "border-sky-300/70 bg-sky-50/70 text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200",
   undated: "border-border bg-muted text-muted-foreground",
   paid: "border-emerald-300/70 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
 };
@@ -378,6 +390,7 @@ function InvoiceCard({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [planning, setPlanning] = useState(false);
 
   const status = invoiceStatus(invoice);
   const late = daysOverdue(invoice);
@@ -446,6 +459,8 @@ function InvoiceCard({
         </span>
       </div>
 
+      {invoice.plan && <PlanProgressStrip invoice={invoice} />}
+
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button
           type="button"
@@ -455,6 +470,17 @@ function InvoiceCard({
         >
           <FileText className="h-3.5 w-3.5" /> Open
         </button>
+
+        {!invoice.paidOn && !invoice.plan && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setPlanning((was) => !was)}
+            className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold disabled:opacity-50"
+          >
+            <CalendarClock className="h-3.5 w-3.5" /> Payment plan
+          </button>
+        )}
 
         {!invoice.paidOn && (
           <button
@@ -497,7 +523,198 @@ function InvoiceCard({
         )}
       </div>
 
+      {planning && <NewInvoicePlan invoice={invoice} onClose={() => setPlanning(false)} />}
+
       {error && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
     </li>
+  );
+}
+
+/** How far through the schedule this bill is, once it has one. */
+function PlanProgressStrip({ invoice }: { invoice: ClientInvoice }) {
+  if (!invoice.plan) return null;
+  const progress = planProgress(invoice.plan);
+  const behind = progress.overdue.length > 0;
+
+  return (
+    <div className="mt-2">
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full rounded-full ${behind ? "bg-destructive" : "bg-emerald-500"}`}
+          style={{ width: `${Math.round(progress.fraction * 100)}%` }}
+        />
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {money(invoice.plan.paidCents / 100)} of {money(invoice.plan.totalCents / 100)} paid
+        {progress.next ? ` · next ${day(progress.next.dueOn)}` : ""}
+        {behind
+          ? ` · ${progress.overdue.length} behind by ${money(progress.overdueCents / 100)}`
+          : ""}
+      </p>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        Manage the schedule on the Schedules tab.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Splitting one bill into payments.
+ *
+ * Pre-filled from the invoice, because the total is not something anybody
+ * should be retyping off the card above it. The schedule is drawn before it
+ * is saved: the plan the client agreed to on the phone and the one the
+ * software worked out are meant to be the same list.
+ */
+function NewInvoicePlan({
+  invoice,
+  onClose,
+}: {
+  invoice: ClientInvoice;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [deposit, setDeposit] = useState("");
+  const [count, setCount] = useState("3");
+  const [interval, setInterval] = useState<Interval>("monthly");
+  const [startOn, setStartOn] = useState(new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const input = {
+    kind: "instalments" as const,
+    totalCents: toCents(invoice.amount ?? 0),
+    depositCents: toCents(Number(deposit.replace(/[^0-9.]/g, "")) || 0),
+    instalments: Number(count) || 1,
+    interval,
+  };
+
+  const verdict = checkPlan(input);
+  const preview = verdict.ok ? buildSchedule(input) : [];
+
+  async function save() {
+    if (!verdict.ok) return;
+    setBusy(true);
+    setError(null);
+
+    const result = await createPlan({
+      ...input,
+      jobId: null,
+      customerId: invoice.customerId,
+      invoiceId: invoice.id,
+      startOn,
+      alreadyAgreed: true,
+    });
+
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  if (invoice.amount == null) {
+    return (
+      <div className="mt-2 rounded-md border border-border bg-background p-2">
+        <p className="text-xs text-muted-foreground">
+          This invoice has no amount on it, so there is nothing to split. Add one first.
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-1 text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Close
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2 rounded-md border border-border bg-background p-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold">
+          Split {money(invoice.amount)} into payments
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Two columns, not three: a date input at a third of a phone's width
+          clips its own year. */}
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Deposit" value={deposit} onChange={setDeposit} placeholder="$0" inputMode="decimal" />
+        <Field label="How many" value={count} onChange={setCount} placeholder="3" inputMode="decimal" />
+        <div className="col-span-2">
+          <Field label="Starts" value={startOn} onChange={setStartOn} type="date" />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {INTERVALS.map((i) => (
+          <button
+            key={i.value}
+            type="button"
+            onClick={() => setInterval(i.value)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              interval === i.value
+                ? "bg-foreground text-background"
+                : "border border-border bg-background"
+            }`}
+          >
+            {i.label}
+          </button>
+        ))}
+      </div>
+
+      {verdict.ok ? (
+        <div className="rounded-md border border-border p-2">
+          <p className="mb-1 text-xs font-semibold">{describePlan(input)}</p>
+          <ul className="space-y-0.5">
+            {preview.slice(0, 6).map((item) => (
+              <li
+                key={item.number}
+                className="flex justify-between gap-2 text-[11px] text-muted-foreground"
+              >
+                <span>
+                  {item.isDeposit ? "Deposit" : `Payment ${item.number}`} ·{" "}
+                  {item.dueInDays === 0 ? "now" : `in ${item.dueInDays} days`}
+                </span>
+                <span className="tabular-nums">{money(item.amountCents / 100)}</span>
+              </li>
+            ))}
+            {preview.length > 6 && (
+              <li className="text-[11px] text-muted-foreground">
+                and {preview.length - 6} more
+              </li>
+            )}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">{verdict.reason}</p>
+      )}
+
+      <button
+        type="button"
+        disabled={busy || !verdict.ok}
+        onClick={save}
+        className="w-full rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold text-background disabled:opacity-50"
+      >
+        {busy ? "Setting up…" : "Put this invoice on a plan"}
+      </button>
+
+      <p className="text-[11px] text-muted-foreground">
+        While a plan is running this bill stops reading as overdue. It goes back to overdue if a
+        payment is missed.
+      </p>
+
+      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+    </div>
   );
 }

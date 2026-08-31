@@ -39,6 +39,8 @@ export async function createPlan(input: {
   jobId: string | null;
   customerId: string;
   proposalId?: string | null;
+  /** The bill this plan pays off, when it was agreed against one. */
+  invoiceId?: string | null;
   kind: PlanKind;
   totalCents: number;
   depositCents?: number;
@@ -73,6 +75,7 @@ export async function createPlan(input: {
         organization_id: organizationId,
         job_id: input.jobId ?? null,
         proposal_id: input.proposalId ?? null,
+        invoice_id: input.invoiceId ?? null,
         customer_id: input.customerId,
         kind: input.kind,
         total_cents: input.totalCents,

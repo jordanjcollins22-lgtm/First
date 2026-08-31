@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
-import type { ClientInvoice } from "@/lib/client-invoices";
+import type { ClientInvoice, InvoicePlan } from "@/lib/client-invoices";
 
 interface InvoiceQueryRow {
   id: string;
@@ -40,6 +40,82 @@ function toInvoice(r: InvoiceQueryRow): ClientInvoice {
   };
 }
 
+/**
+ * The plans settling these invoices, and what has been paid against each.
+ *
+ * Two reads for the whole page rather than two per invoice: the alternative
+ * is a query per card, which is fine at three invoices and a stall at fifty.
+ * A failure here is not fatal — the invoices still list, they just fall back
+ * to their own due dates.
+ */
+async function plansForInvoices(invoiceIds: string[]): Promise<Map<string, InvoicePlan>> {
+  const byInvoice = new Map<string, InvoicePlan>();
+  if (invoiceIds.length === 0) return byInvoice;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("payment_plans")
+    .select(
+      "id, invoice_id, kind, total_cents, status, payment_plan_instalments(id, number, amount_cents, due_on, is_deposit, status)"
+    )
+    .in("invoice_id", invoiceIds);
+
+  if (error) {
+    console.error("Loading invoice payment plans failed:", error);
+    return byInvoice;
+  }
+
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    invoice_id: string | null;
+    kind: string;
+    total_cents: number;
+    status: string;
+    payment_plan_instalments: {
+      id: string;
+      number: number;
+      amount_cents: number;
+      due_on: string;
+      is_deposit: boolean;
+      status: string;
+    }[];
+  }[];
+
+  const { data: paidRows } = await supabase
+    .from("payments")
+    .select("plan_id, amount_cents")
+    .in("plan_id", rows.length > 0 ? rows.map((r) => r.id) : ["none"]);
+
+  const paidByPlan = new Map<string, number>();
+  for (const row of (paidRows ?? []) as { plan_id: string | null; amount_cents: number }[]) {
+    if (!row.plan_id) continue;
+    paidByPlan.set(row.plan_id, (paidByPlan.get(row.plan_id) ?? 0) + Number(row.amount_cents));
+  }
+
+  for (const row of rows) {
+    if (!row.invoice_id) continue;
+    byInvoice.set(row.invoice_id, {
+      id: row.id,
+      kind: row.kind,
+      totalCents: Number(row.total_cents),
+      paidCents: paidByPlan.get(row.id) ?? 0,
+      status: row.status as InvoicePlan["status"],
+      schedule: [...(row.payment_plan_instalments ?? [])]
+        .sort((a, b) => a.number - b.number)
+        .map((item) => ({
+          id: item.id,
+          number: item.number,
+          amountCents: Number(item.amount_cents),
+          dueOn: item.due_on,
+          isDeposit: item.is_deposit,
+          status: item.status as InvoicePlan["schedule"][number]["status"],
+        })),
+    });
+  }
+
+  return byInvoice;
+}
+
 export interface InvoicePage {
   invoices: ClientInvoice[];
   /** Whether asking for the next page would return anything. */
@@ -71,8 +147,11 @@ export async function listInvoices(page = 0): Promise<InvoicePage> {
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as InvoiceQueryRow[];
+  const invoices = rows.slice(0, PAGE_SIZE).map(toInvoice);
+  const plans = await plansForInvoices(invoices.map((i) => i.id));
+
   return {
-    invoices: rows.slice(0, PAGE_SIZE).map(toInvoice),
+    invoices: invoices.map((i) => ({ ...i, plan: plans.get(i.id) ?? null })),
     more: rows.length > PAGE_SIZE,
   };
 }
@@ -91,5 +170,7 @@ export async function listInvoicesForCustomer(customerId: string): Promise<Clien
     .order("issued_on", { ascending: false, nullsFirst: false });
 
   if (error) throw error;
-  return ((data ?? []) as unknown as InvoiceQueryRow[]).map(toInvoice);
+  const invoices = ((data ?? []) as unknown as InvoiceQueryRow[]).map(toInvoice);
+  const plans = await plansForInvoices(invoices.map((i) => i.id));
+  return invoices.map((i) => ({ ...i, plan: plans.get(i.id) ?? null }));
 }
