@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { PREVIEW } from "@/lib/storage-image-url";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
 /** Re-renders the property photo with the drawn work-area outlines on top —
@@ -38,7 +39,16 @@ export function SiteMapImage({
   dimSurroundings?: boolean;
   className?: string;
 }) {
-  const url = canvasImageUrl(imagePath);
+  // The site map is displayed at page width, never at the resolution it was
+  // captured at. PREVIEW is 1280px wide, which is more than any phone shows
+  // and a fraction of the original's weight.
+  //
+  // Falls back to the original if the resize does not come back: asking for a
+  // resized copy routes through Supabase's image renderer, which is not on
+  // for every project, and a sent proposal missing its site map is worse than
+  // a heavy one.
+  const [fullSize, setFullSize] = useState(false);
+  const url = fullSize ? canvasImageUrl(imagePath) : canvasImageUrl(imagePath, PREVIEW);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
@@ -46,6 +56,12 @@ export function SiteMapImage({
     const img = new Image();
     img.onload = () => {
       if (!cancelled) setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    // Without this the skeleton below stays up forever when the resized copy
+    // does not come back, because nothing else ever sets a natural size. A
+    // sent proposal stuck on a shimmer is the worst version of this failing.
+    img.onerror = () => {
+      if (!cancelled) setFullSize((was) => was || true);
     };
     img.src = url;
     return () => {

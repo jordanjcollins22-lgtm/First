@@ -6,7 +6,8 @@ import { CheckCircle2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { THUMBNAIL } from "@/lib/storage-image-url";
+import { ResizedImage } from "./resized-image";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
 import { ObjectionsPanel } from "@/components/proposal/objections-panel";
 import type { ScopeLine } from "@/lib/objections";
@@ -161,10 +162,16 @@ export function ProposalView({
               {zone.photoPaths.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {zone.photoPaths.map((path) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    // A thumbnail, because that is what a square in a grid of
+                    // three is. These were the originals: full camera photos,
+                    // several megabytes each, several per zone, downloaded
+                    // whole to fill a hundred-pixel tile. On a phone on mobile
+                    // data that is most of why a sent proposal took so long to
+                    // appear.
+                    <ResizedImage
                       key={path}
-                      src={canvasImageUrl(path)}
+                      path={path}
+                      transform={THUMBNAIL}
                       alt={`${zone.zoneName} photo`}
                       className="aspect-square rounded-lg object-cover"
                     />

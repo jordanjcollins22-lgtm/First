@@ -1,6 +1,6 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { getProposalByToken } from "@/lib/data/public-proposal";
-import { listPublicExternalMessages } from "@/lib/data/public-job-messages";
+import { listExternalMessagesForJob } from "@/lib/data/public-job-messages";
 import { ProposalView } from "@/components/proposal/proposal-view";
 import { LinkNotValid } from "@/components/proposal/link-not-valid";
 import { isPreview } from "@/lib/proposal-flow";
@@ -27,7 +27,9 @@ export default async function ProposalPage({
 
   if (!data) return <LinkNotValid />;
 
-  const messages = await listPublicExternalMessages(token);
+  // The job id came back with the proposal, so this is one query rather than
+  // two — no second lookup of the token to find what we are already holding.
+  const messages = await listExternalMessagesForJob(data.proposal.job_id);
 
   const previewing = isPreview(preview);
 
