@@ -12,6 +12,7 @@ import { describeDbError } from "@/lib/setup-errors";
 import { isStripeConfigured } from "@/lib/env";
 import { bookableFromKey } from "@/lib/acceptance-path";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
+import { methodDetail, paymentMethod } from "@/lib/payment-method";
 import {
   buildSchedule,
   checkPlan,
@@ -32,7 +33,10 @@ export type PlanResult =
  * from a total that has since changed is a schedule nobody agreed to.
  */
 export async function createPlan(input: {
-  jobId: string;
+  /** Null for a plan agreed before there is a project to hang it on, which
+   * is most of them -- somebody agrees to pay over three months on the phone
+   * and the paperwork follows. */
+  jobId: string | null;
   customerId: string;
   proposalId?: string | null;
   kind: PlanKind;
@@ -40,6 +44,16 @@ export async function createPlan(input: {
   depositCents?: number;
   instalments?: number;
   interval?: Interval;
+  /** The day the schedule counts from. Today when not given. */
+  startOn?: string;
+  /**
+   * True when somebody in the office is writing down an agreement that has
+   * already happened -- a customer said yes on the phone. A plan offered
+   * through a proposal starts as an offer and is accepted separately; one
+   * typed in by hand was never an offer, and leaving it at 'offered' would
+   * show an agreed schedule as still waiting on the customer.
+   */
+  alreadyAgreed?: boolean;
 }): Promise<PlanResult> {
   try {
     const profile = await getCurrentProfile();
@@ -57,7 +71,7 @@ export async function createPlan(input: {
       .from("payment_plans")
       .insert({
         organization_id: organizationId,
-        job_id: input.jobId,
+        job_id: input.jobId ?? null,
         proposal_id: input.proposalId ?? null,
         customer_id: input.customerId,
         kind: input.kind,
@@ -65,6 +79,13 @@ export async function createPlan(input: {
         deposit_cents: input.depositCents ?? 0,
         instalments: input.kind === "instalments" ? input.instalments ?? null : null,
         interval: input.interval ?? null,
+        ...(input.alreadyAgreed
+          ? {
+              status: "accepted" as const,
+              accepted_at: new Date().toISOString(),
+              accepted_by: profile.id,
+            }
+          : {}),
         created_by: profile.id,
       })
       .select("id")
@@ -73,13 +94,15 @@ export async function createPlan(input: {
     if (error || !plan) return { ok: false, message: describeDbError(error) };
 
     const schedule = buildSchedule(input);
-    const today = new Date();
+    // A plan agreed last week starts last week. Dating every instalment from
+    // the day somebody typed it in makes the first one late on arrival.
+    const start = startDate(input.startOn);
     const { error: scheduleError } = await supabase.from("payment_plan_instalments").insert(
       schedule.map((item) => ({
         plan_id: plan.id,
         number: item.number,
         amount_cents: item.amountCents,
-        due_on: addDays(today, item.dueInDays),
+        due_on: addDays(start, item.dueInDays),
         is_deposit: item.isDeposit,
       }))
     );
@@ -226,12 +249,21 @@ export async function acceptPlan(planId: string, jobId: string): Promise<PlanRes
  * outstanding figure is only ever right for the customers who paid by card.
  */
 export async function recordManualPayment(input: {
-  jobId: string;
+  /** Null when the money is not against a project. Most of the back
+   * catalogue is money with no project, and refusing to record it until
+   * somebody makes one is how it stays unrecorded. */
+  jobId: string | null;
   customerId: string;
   planId?: string | null;
   instalmentId?: string | null;
   amountCents: number;
-  method: "cash" | "check" | "other";
+  /** Anything the export or the office says. Folded to what the column
+   * takes, so "Debit Card" does not fail the check constraint. */
+  method: string;
+  /** The day the money arrived, not the day it was typed in. A payment
+   * filed under today because nobody asked is a payment on the wrong side
+   * of a month end. */
+  receivedAt?: string;
   note?: string;
 }): Promise<PlanResult> {
   try {
@@ -244,16 +276,22 @@ export async function recordManualPayment(input: {
       getCurrentOrganizationId(),
     ]);
 
+    const received = receivedOn(input.receivedAt);
+
     const { error } = await supabase.from("payments").insert({
       organization_id: organizationId,
       customer_id: input.customerId,
-      job_id: input.jobId,
+      job_id: input.jobId ?? null,
       plan_id: input.planId ?? null,
       instalment_id: input.instalmentId ?? null,
       amount_cents: input.amountCents,
-      method: input.method,
-      note: input.note?.trim() || null,
+      method: paymentMethod(input.method),
+      // Omitted rather than nulled when no date was given, so the column's
+      // own default of now() applies instead of a null it will not take.
+      ...(received ? { received_at: received } : {}),
+      note: [input.note?.trim(), methodDetail(input.method)].filter(Boolean).join(" · ") || null,
       recorded_by: profile.id,
+      source: "manual",
     });
 
     if (error) return { ok: false, message: describeDbError(error) };
@@ -372,6 +410,22 @@ async function settleIfPaidOff(planId: string): Promise<void> {
     .eq("id", plan.job_id);
 }
 
+/** The day a schedule counts from: what was asked for, or today. */
+function startDate(value: string | undefined): Date {
+  const text = value?.trim();
+  if (text && /^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const parsed = new Date(`${text}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+/** A received date the database will take, or null for "now". */
+function receivedOn(value: string | undefined): string | null {
+  const text = value?.trim();
+  return text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
 function addDays(from: Date, days: number): string {
   const date = new Date(from);
   date.setDate(date.getDate() + days);
@@ -386,8 +440,12 @@ function stripeInterval(days: number): "day" | "week" | "month" | "year" {
   return "year";
 }
 
-function refresh(jobId: string) {
+function refresh(jobId: string | null) {
   // A plan paying off can set the project start date, which moves the card.
-  revalidateJobViews(jobId);
+  // Money can also be recorded against a contact with no project at all --
+  // most of the imported back catalogue is exactly that -- so the project
+  // half is skipped rather than the whole call being unavailable.
+  if (jobId) revalidateJobViews(jobId);
   revalidatePath("/admin/payments");
+  revalidatePath("/pipeline");
 }

@@ -15,6 +15,9 @@ import { ReceivedPanel } from "@/components/payments/received-panel";
 import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
 import { listInvoices } from "@/lib/data/client-invoices";
 import { InvoicesPanel } from "@/components/payments/invoices-panel";
+import { listPlans } from "@/lib/data/payment-plans";
+import { SchedulesPanel } from "@/components/payments/schedules-panel";
+import { RecordPaymentPanel } from "@/components/payments/record-payment-panel";
 
 /**
  * Money in and out, all of it.
@@ -92,6 +95,14 @@ export default async function PaymentsPage({
             label: "Received",
             content: await ReceivedTab(),
           },
+          // Who is paying us over time, and who is behind. Its own tab
+          // because it is a chasing list rather than a total: what it answers
+          // is who to ring today.
+          {
+            key: "schedules",
+            label: "Schedules",
+            content: await SchedulesTab(),
+          },
           // Bills we sent, as the files they were sent as. Its own tab rather
           // than part of Received: that one is money that arrived, this is
           // money we asked for, and an unpaid invoice belongs in neither the
@@ -144,6 +155,10 @@ async function ReceivedTab() {
           rather than behind a tab: it is the thing somebody came here to do
           the first few times, and invisible once the backlog is in. */}
       <TransactionImportPanel />
+      {/* Cash on the driveway and cheques in the post come through neither
+          the card processor nor an export, so without this they exist only
+          in somebody's memory. Folded shut until it is wanted. */}
+      <RecordPaymentPanel />
       <ReceivedPanel data={data} />
     </div>
   );
@@ -172,6 +187,31 @@ async function InvoicesTab() {
   }
 
   return <InvoicesPanel initial={page.invoices} hasMore={page.more} />;
+}
+
+/**
+ * Payment schedules across the whole book.
+ *
+ * Loaded on its own and allowed to fail on its own, like its neighbours: it
+ * reads plans, instalments and payments, and a problem in any of them should
+ * cost this tab rather than the page.
+ */
+async function SchedulesTab() {
+  const plans = await listPlans().catch((err) => {
+    console.error("Payment schedules failed to load:", err);
+    return null;
+  });
+
+  if (!plans) {
+    return (
+      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
+        Couldn&apos;t load payment schedules. If this is a fresh setup, run{" "}
+        <code>supabase/migrations/0116_payment_plans.sql</code>.
+      </p>
+    );
+  }
+
+  return <SchedulesPanel plans={plans} />;
 }
 
 /** Who was on what today, and what it cost. */
