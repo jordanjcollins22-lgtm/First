@@ -27,6 +27,12 @@ export interface PaymentRow {
   receivedAt: string;
   /** Stripe's invoice, when the payment came through one. */
   stripeInvoiceId: string | null;
+  /**
+   * The email the payment itself came in with, for money that has no contact
+   * on it. Two unmatched payments from the same address are the same person,
+   * which is a firmer claim than the time window makes about anybody.
+   */
+  payerEmail?: string | null;
 }
 
 /** Why a group is a group. Shown to the user, so it has to be honest. */
@@ -109,6 +115,15 @@ export function groupPayments(rows: PaymentRow[], options: GroupOptions = {}): P
   // Rules 1 and 2: join everything that shares a project or an invoice.
   joinBy(ordered, union, (r) => (r.jobId ? `job:${r.jobId}` : null));
   joinBy(ordered, union, (r) => (r.stripeInvoiceId ? `inv:${r.stripeInvoiceId}` : null));
+
+  // Money with no contact, joined by the email the payment arrived with. Only
+  // for rows that have no contact: one that does is already grouped by it, and
+  // a payer email is what the card was registered to rather than who the work
+  // was for. Grouped, the office links one card and all of that person's money
+  // moves at once instead of three cards saying the same thing.
+  joinBy(ordered, union, (r) =>
+    !r.customerId && r.payerEmail ? `payer:${r.payerEmail.trim().toLowerCase()}` : null
+  );
 
   // Rule 3, per contact, in time order. The anchor is the first payment of
   // the group being built, not the previous payment: chaining has no ceiling,

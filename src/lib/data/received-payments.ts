@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { suggestForPayer, type RankedContact, type SearchableContact } from "@/lib/payer-match";
 import {
   contactsWithNoProject,
   groupPayments,
@@ -22,6 +23,11 @@ export interface ReceivedPayment {
   receivedAt: string;
   note: string | null;
   stripeInvoiceId: string | null;
+  /** Who the payment said it was from, kept whether or not it matched. This
+   * is what makes money with no contact fixable without the original file. */
+  payerName: string | null;
+  payerEmail: string | null;
+  payerPhone: string | null;
 }
 
 /** A group, resolved for display: names rather than ids. */
@@ -30,6 +36,14 @@ export interface ReceivedGroup extends PaymentGroup {
   jobName: string | null;
   suggestedName: string;
   payments: ReceivedPayment[];
+  /** What the payments in this group said about the payer. Only worth
+   * showing when there is no contact — that is the case somebody has to
+   * resolve by hand. */
+  payerName: string | null;
+  payerEmail: string | null;
+  payerPhone: string | null;
+  /** Contacts worth offering for a group with no contact, best first. */
+  suggestions: RankedContact[];
 }
 
 /** A project this contact already has, offered as somewhere to file money. */
@@ -62,6 +76,9 @@ interface PaymentQueryRow {
   note: string | null;
   stripe_invoice_id: string | null;
   source_invoice_ref: string | null;
+  payer_name: string | null;
+  payer_email: string | null;
+  payer_phone: string | null;
   customers: { name: string } | null;
   jobs: { name: string } | null;
 }
@@ -80,7 +97,7 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
   const { data: paymentRows } = await supabase
     .from("payments")
     .select(
-      "id, customer_id, job_id, amount_cents, method, received_at, note, stripe_invoice_id, source_invoice_ref, customers(name), jobs(name)"
+      "id, customer_id, job_id, amount_cents, method, received_at, note, stripe_invoice_id, source_invoice_ref, payer_name, payer_email, payer_phone, customers(name), jobs(name)"
     )
     .eq("organization_id", organizationId)
     .order("received_at", { ascending: false });
@@ -100,6 +117,9 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
     // Either invoice reference will do as a grouping key: what matters is
     // that two payments settling one invoice carry the same string.
     stripeInvoiceId: r.stripe_invoice_id ?? r.source_invoice_ref,
+    payerName: r.payer_name,
+    payerEmail: r.payer_email,
+    payerPhone: r.payer_phone,
   }));
 
   const forGrouping: PaymentRow[] = payments.map((p) => ({
@@ -109,17 +129,46 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
     amountCents: p.amountCents,
     receivedAt: p.receivedAt,
     stripeInvoiceId: p.stripeInvoiceId,
+    payerEmail: p.payerEmail,
   }));
 
   const byId = new Map(payments.map((p) => [p.id, p]));
-  const groups: ReceivedGroup[] = groupPayments(forGrouping).map((g) => {
-    const members = g.paymentIds.map((id) => byId.get(id)!).filter(Boolean);
+  const bare = groupPayments(forGrouping).map((g) => ({
+    ...g,
+    members: g.paymentIds.map((id) => byId.get(id)!).filter(Boolean),
+  }));
+
+  // Only the groups with no contact need a suggestion, and only their payer
+  // details are worth looking anybody up by. Scoring the whole book against
+  // every group would read three thousand contacts to answer a question about
+  // a handful of payments.
+  const unmatchedPayers = bare
+    .filter((g) => !g.customerId)
+    .map((g) => ({
+      name: g.members.find((m) => m.payerName)?.payerName ?? null,
+      email: g.members.find((m) => m.payerEmail)?.payerEmail ?? null,
+      phone: g.members.find((m) => m.payerPhone)?.payerPhone ?? null,
+    }));
+  const candidates = await contactsMatchingPayers(unmatchedPayers);
+
+  const groups: ReceivedGroup[] = bare.map((g) => {
+    const { members, ...group } = g;
+    const payerName = members.find((m) => m.payerName)?.payerName ?? null;
+    const payerEmail = members.find((m) => m.payerEmail)?.payerEmail ?? null;
+    const payerPhone = members.find((m) => m.payerPhone)?.payerPhone ?? null;
+
     return {
-      ...g,
+      ...group,
       customerName: members.find((m) => m.customerName)?.customerName ?? null,
       jobName: members.find((m) => m.jobName)?.jobName ?? null,
       suggestedName: suggestedProjectName(g),
       payments: members,
+      payerName,
+      payerEmail,
+      payerPhone,
+      suggestions: group.customerId
+        ? []
+        : suggestForPayer(candidates, { name: payerName, email: payerEmail, phone: payerPhone }),
     };
   });
 
@@ -145,6 +194,51 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
   ]);
 
   return { groups, summary: summarise(groups), undocumented, projectsByCustomer, needAddress };
+}
+
+/**
+ * Contacts who might be the payer behind money with no contact on it.
+ *
+ * Looked up by the exact email and phone the payments arrived with, rather
+ * than by reading the book and scoring all of it. The book is thousands of
+ * rows and the question is about a handful of payments; the lookup is the
+ * small half of that. A name gets no query — too many contacts share one for
+ * a fetch to be worth it, and typing the name into the search box is the
+ * better answer when the email is missing.
+ */
+async function contactsMatchingPayers(
+  payers: { name: string | null; email: string | null; phone: string | null }[]
+): Promise<SearchableContact[]> {
+  const emails = [
+    ...new Set(payers.map((p) => p.email?.trim().toLowerCase()).filter(Boolean)),
+  ] as string[];
+  const phones = [...new Set(payers.map((p) => p.phone?.trim()).filter(Boolean))] as string[];
+  if (emails.length === 0 && phones.length === 0) return [];
+
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const found = new Map<string, SearchableContact>();
+
+  const lookup = async (column: "email" | "phone", values: string[]) => {
+    for (let i = 0; i < values.length; i += 200) {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, email, phone")
+        .eq("organization_id", organizationId)
+        .in(column, values.slice(i, i + 200));
+
+      // Not fatal. No suggestions is a screen that still works, with the
+      // search box doing the job instead.
+      if (error) {
+        console.error(`Looking contacts up by ${column} failed:`, error);
+        return;
+      }
+      for (const row of (data ?? []) as SearchableContact[]) found.set(row.id, row);
+    }
+  };
+
+  await Promise.all([lookup("email", emails), lookup("phone", phones)]);
+  return [...found.values()];
 }
 
 /** Every project belonging to these contacts, so money can be filed on one. */

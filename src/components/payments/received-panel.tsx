@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { AlertCircle, Check, FolderPlus, Link2, Unlink } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { AlertCircle, Check, FolderPlus, Link2, Search, Unlink, UserPlus } from "lucide-react";
 
 import type { ReceivedGroup, ReceivedPaymentsData } from "@/lib/data/received-payments";
 import {
   attachPaymentsToProject,
   createProjectForPayments,
   detachPayments,
+  linkPaymentsToCustomer,
+  unlinkPaymentsFromCustomer,
+  searchContacts,
 } from "@/lib/actions/received-payment-actions";
+import { isConfident, type SearchableContact } from "@/lib/payer-match";
 
 function money(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -169,7 +173,7 @@ function GroupCard({ group, data }: { group: ReceivedGroup; data: ReceivedPaymen
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">
-            {group.customerName ?? "Unmatched payment"}
+            {group.customerName ?? group.payerName ?? "Unmatched payment"}
           </p>
           <p className="text-xs text-muted-foreground">
             {group.payments.length} payment{group.payments.length === 1 ? "" : "s"} ·{" "}
@@ -211,10 +215,7 @@ function GroupCard({ group, data }: { group: ReceivedGroup; data: ReceivedPaymen
           </button>
         </div>
       ) : !group.customerId ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          This money is not matched to a contact, so it cannot be filed yet. Add the contact, then
-          re-run the Stripe reconcile.
-        </p>
+        <LinkToContact group={group} onLinked={() => setDone(true)} />
       ) : creating ? (
         <div className="mt-2 space-y-2">
           <input
@@ -285,10 +286,170 @@ function GroupCard({ group, data }: { group: ReceivedGroup; data: ReceivedPaymen
           >
             <FolderPlus className="h-3.5 w-3.5" /> New project
           </button>
+          {/* The way back out. Linking money to a contact is now one tap, so
+              the wrong tap has to be one tap to undo. */}
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => unlinkPaymentsFromCustomer(group.paymentIds))}
+            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            Not this contact
+          </button>
         </div>
       )}
 
       {error && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
     </li>
+  );
+}
+
+/**
+ * Saying whose money this is.
+ *
+ * This used to be a sentence explaining that nothing could be done here. The
+ * payment carries the name and email it arrived with, and the contact book is
+ * searchable, so the two can be put together in one tap rather than in
+ * another system.
+ *
+ * The suggestions come down with the page already scored, so the common case
+ * — the payer's email is somebody we know — costs no round trip at all. The
+ * search box is for the rest.
+ */
+function LinkToContact({ group, onLinked }: { group: ReceivedGroup; onLinked: () => void }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  // The results, and the term they are the answer to. Kept together so
+  // "still searching" is read off the two rather than tracked as a third
+  // piece of state that can disagree with them.
+  const [results, setResults] = useState<{ term: string; contacts: SearchableContact[] }>({
+    term: "",
+    contacts: [],
+  });
+
+  const term = query.trim();
+  const answered = results.term === term;
+  const searching = term.length >= 2 && !answered;
+
+  // Debounced: a request per keystroke is three requests for "joe", and only
+  // the last one is an answer anybody reads.
+  useEffect(() => {
+    if (term.length < 2) return;
+
+    let live = true;
+    const timer = setTimeout(async () => {
+      const found = await searchContacts(term);
+      if (!live) return;
+      if (found.ok) setResults({ term, contacts: found.contacts });
+      else setError(found.message);
+    }, 250);
+
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [term]);
+
+  function link(customerId: string) {
+    setError(null);
+    start(async () => {
+      const result = await linkPaymentsToCustomer(group.paymentIds, customerId);
+      if (result.ok) onLinked();
+      else setError(result.message);
+    });
+  }
+
+  // The name is already the heading when there is one, so it is not repeated.
+  const said = [group.payerEmail, group.payerPhone].filter(Boolean);
+  // Anybody already offered above should not appear again underneath.
+  const suggestedIds = new Set(group.suggestions.map((s) => s.id));
+  const extra = answered ? results.contacts.filter((r) => !suggestedIds.has(r.id)) : [];
+
+  return (
+    <div className="mt-2 space-y-2">
+      {said.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          The payment came in with{" "}
+          <span className="font-medium text-foreground">{said.join(" · ")}</span>
+        </p>
+      ) : group.payerName ? null : (
+        <p className="text-xs text-muted-foreground">
+          This payment arrived with no name or email on it. Search for whoever it belongs to.
+        </p>
+      )}
+
+      {group.suggestions.length > 0 && (
+        <ul className="space-y-1">
+          {group.suggestions.map((s) => (
+            <li key={s.id}>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => link(s.id)}
+                className={`flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs font-semibold disabled:opacity-50 ${
+                  isConfident(s)
+                    ? "border-emerald-300/70 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+                    : "border-border"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{s.name ?? "Unnamed contact"}</span>
+                  <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                    {s.reason}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                  <UserPlus className="h-3.5 w-3.5" /> Link
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={group.suggestions.length > 0 ? "Or search for someone else…" : "Search contacts by name, email or phone"}
+          className="w-full rounded-md border border-border bg-background py-1.5 pl-7 pr-2 text-sm"
+        />
+      </div>
+
+      {searching && <p className="text-xs text-muted-foreground">Searching…</p>}
+
+      {!searching && term.length >= 2 && extra.length === 0 && (
+        <p className="text-xs text-muted-foreground">Nobody matching &ldquo;{term}&rdquo;.</p>
+      )}
+
+      {extra.length > 0 && (
+        <ul className="space-y-1">
+          {extra.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => link(r.id)}
+                className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-left text-xs font-semibold disabled:opacity-50"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{r.name ?? "Unnamed contact"}</span>
+                  <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                    {[r.email, r.phone].filter(Boolean).join(" · ") || "No email or phone on file"}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                  <UserPlus className="h-3.5 w-3.5" /> Link
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+    </div>
   );
 }

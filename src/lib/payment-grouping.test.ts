@@ -240,3 +240,45 @@ describe("suggestedProjectName", () => {
     expect(suggestedProjectName(group)).toBe("Work in March 2026");
   });
 });
+
+describe("money with no contact", () => {
+  const at = (day: number) => `2026-0${day <= 9 ? day : 9}-01T12:00:00.000Z`;
+
+  it("joins two unmatched payments that arrived from the same email", () => {
+    // One person paid twice. Three cards saying the same thing means three
+    // links to make; one card means one.
+    const groups = groupPayments([
+      { id: "a", customerId: null, jobId: null, amountCents: 100, receivedAt: at(1), stripeInvoiceId: null, payerEmail: "jane@example.com" },
+      { id: "b", customerId: null, jobId: null, amountCents: 200, receivedAt: at(2), stripeInvoiceId: null, payerEmail: "Jane@Example.com " },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].totalCents).toBe(300);
+  });
+
+  it("keeps different payers apart", () => {
+    const groups = groupPayments([
+      { id: "a", customerId: null, jobId: null, amountCents: 100, receivedAt: at(1), stripeInvoiceId: null, payerEmail: "jane@example.com" },
+      { id: "b", customerId: null, jobId: null, amountCents: 200, receivedAt: at(1), stripeInvoiceId: null, payerEmail: "dave@example.com" },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("does not join payments that only share a missing email", () => {
+    // Null is not a value two payments can have in common.
+    const groups = groupPayments([
+      { id: "a", customerId: null, jobId: null, amountCents: 100, receivedAt: at(1), stripeInvoiceId: null, payerEmail: null },
+      { id: "b", customerId: null, jobId: null, amountCents: 200, receivedAt: at(1), stripeInvoiceId: null, payerEmail: null },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("leaves a payment that already has a contact grouped by the contact", () => {
+    // A payer email is what the card was registered to, not who the work was
+    // for. Once somebody has said whose money it is, that wins.
+    const groups = groupPayments([
+      { id: "a", customerId: "c1", jobId: null, amountCents: 100, receivedAt: at(1), stripeInvoiceId: null, payerEmail: "shared@example.com" },
+      { id: "b", customerId: "c2", jobId: null, amountCents: 200, receivedAt: at(1), stripeInvoiceId: null, payerEmail: "shared@example.com" },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+});

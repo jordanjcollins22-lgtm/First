@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { searchAddress } from "@/lib/mapbox-geocoding";
+import { payerSearchTerm, type SearchableContact } from "@/lib/payer-match";
 
 /** Results rather than throws — a thrown Server Action loses its message in
  * production and surfaces as an unexplained crash. */
@@ -218,4 +219,135 @@ async function propertyFor(customerId: string, address: string | null): Promise<
 
   if (error || !created) return { ok: false, message: describe(error) };
   return { ok: true, id: created.id };
+}
+
+
+/**
+ * Say whose money this is.
+ *
+ * The screen used to stop here: money with no contact could not be filed, and
+ * the only advice it gave was to add the contact and run the reconcile again.
+ * That is a dead end on a phone, and it left real money sitting unattributed
+ * because the one thing needed was a person to point at.
+ *
+ * Takes a list for the same reason attaching to a project does: a payer's
+ * three payments are one person, and linking them one at a time leaves a
+ * window where a total read in between is wrong.
+ */
+export async function linkPaymentsToCustomer(
+  paymentIds: string[],
+  customerId: string
+): Promise<ReconcileResult> {
+  try {
+    const denied = await assertAdmin();
+    if (denied) return { ok: false, message: denied };
+    if (paymentIds.length === 0) return { ok: false, message: "No payments to link." };
+    if (!customerId) return { ok: false, message: "Pick a contact." };
+
+    const supabase = await createClient();
+    const organizationId = await getCurrentOrganizationId();
+
+    // The contact has to exist and be ours. Without the check, an id in a
+    // form could file money against somebody else's book.
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("id", customerId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (!customer) return { ok: false, message: "That contact no longer exists." };
+
+    const { error } = await supabase
+      .from("payments")
+      .update({ customer_id: customerId })
+      .in("id", paymentIds)
+      .eq("organization_id", organizationId);
+
+    if (error) return { ok: false, message: describe(error) };
+
+    revalidatePath("/admin/payments");
+    revalidatePath(`/contacts/${customerId}`);
+    // A contact who has paid us is a client rather than a lead, and that is
+    // derived from the money rather than stored, so the pipeline only needs
+    // telling to look again.
+    revalidatePath("/pipeline");
+    return { ok: true, jobId: "" };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
+}
+
+/** Take a payment back off a contact, for when the link was wrong. */
+export async function unlinkPaymentsFromCustomer(
+  paymentIds: string[]
+): Promise<ReconcileResult> {
+  try {
+    const denied = await assertAdmin();
+    if (denied) return { ok: false, message: denied };
+    if (paymentIds.length === 0) return { ok: false, message: "No payments to unlink." };
+
+    const supabase = await createClient();
+    const organizationId = await getCurrentOrganizationId();
+
+    // The project goes too. A payment filed on a project belonging to the
+    // contact it is being taken off would otherwise be left pointing at work
+    // that is no longer theirs.
+    const { error } = await supabase
+      .from("payments")
+      .update({ customer_id: null, job_id: null })
+      .in("id", paymentIds)
+      .eq("organization_id", organizationId);
+
+    if (error) return { ok: false, message: describe(error) };
+
+    revalidatePath("/admin/payments");
+    revalidatePath("/pipeline");
+    return { ok: true, jobId: "" };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
+}
+
+export type ContactSearchResult =
+  | { ok: true; contacts: SearchableContact[] }
+  | { ok: false; message: string };
+
+/** How many contacts a search will hand back. Enough to find somebody on a
+ * phone screen, few enough that the answer stays small. */
+const SEARCH_LIMIT = 8;
+
+/**
+ * Contacts matching what somebody typed.
+ *
+ * Four fields and eight rows: this feeds a list you tap, not a page you read,
+ * and shipping whole contact records to draw eight lines of text is how a
+ * search box on a phone becomes slow.
+ */
+export async function searchContacts(query: string): Promise<ContactSearchResult> {
+  try {
+    const term = payerSearchTerm(query);
+    if (!term) return { ok: true, contacts: [] };
+
+    const supabase = await createClient();
+    const organizationId = await getCurrentOrganizationId();
+
+    // Commas and parentheses are how PostgREST separates the arms of an `or`,
+    // so a name with one in it would be read as filter syntax rather than as
+    // something to search for.
+    const safe = term.replace(/[,()*\\]/g, " ").trim();
+    if (!safe) return { ok: true, contacts: [] };
+
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, name, email, phone")
+      .eq("organization_id", organizationId)
+      .or(`name.ilike.%${safe}%,email.ilike.%${safe}%,phone.ilike.%${safe}%`)
+      .order("name")
+      .limit(SEARCH_LIMIT);
+
+    if (error) return { ok: false, message: describe(error) };
+    return { ok: true, contacts: (data ?? []) as SearchableContact[] };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
 }
