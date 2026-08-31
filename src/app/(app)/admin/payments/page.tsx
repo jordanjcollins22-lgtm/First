@@ -13,8 +13,6 @@ import { localDayKey } from "@/lib/data/crew-day";
 import { getReceivedPayments } from "@/lib/data/received-payments";
 import { ReceivedPanel } from "@/components/payments/received-panel";
 import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
-import { listPlans } from "@/lib/data/payment-plans";
-import { SchedulesPanel } from "@/components/payments/schedules-panel";
 import { RecordPaymentPanel } from "@/components/payments/record-payment-panel";
 
 /**
@@ -94,14 +92,6 @@ export default async function PaymentsPage({
             label: "Received",
             content: await ReceivedTab(),
           },
-          // Who is paying us over time, and who is behind. Its own tab
-          // because it is a chasing list rather than a total: what it answers
-          // is who to ring today.
-          {
-            key: "schedules",
-            label: "Schedules",
-            content: await SchedulesTab(),
-          },
           // Hours are money: this is what the day cost in wages, and the only
           // honest input to what a job cost. Admin only — correcting a logged
           // time is not something the person who logged it should do.
@@ -152,31 +142,6 @@ async function ReceivedTab() {
       <ReceivedPanel data={data} />
     </div>
   );
-}
-
-/**
- * Payment schedules across the whole book.
- *
- * Loaded on its own and allowed to fail on its own, like its neighbours: it
- * reads plans, instalments and payments, and a problem in any of them should
- * cost this tab rather than the page.
- */
-async function SchedulesTab() {
-  const plans = await listPlans().catch((err) => {
-    console.error("Payment schedules failed to load:", err);
-    return null;
-  });
-
-  if (!plans) {
-    return (
-      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
-        Couldn&apos;t load payment schedules. If this is a fresh setup, run{" "}
-        <code>supabase/migrations/0116_payment_plans.sql</code>.
-      </p>
-    );
-  }
-
-  return <SchedulesPanel plans={plans} />;
 }
 
 /** Who was on what today, and what it cost. */

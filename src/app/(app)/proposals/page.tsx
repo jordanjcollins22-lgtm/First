@@ -6,6 +6,9 @@ import { listAllProposals } from "@/lib/data/all-proposals";
 import { ProposalsView } from "@/components/proposal/proposals-view";
 import { listInvoices } from "@/lib/data/client-invoices";
 import { InvoicesPanel } from "@/components/payments/invoices-panel";
+import { getReconciliationRows } from "@/lib/data/client-invoices";
+import { reconcile } from "@/lib/accounting-reconcile";
+import { MoneyPanel } from "@/components/payments/money-panel";
 
 /**
  * What we asked for, in both forms it takes.
@@ -35,6 +38,14 @@ export default async function ProposalsPage() {
             key: "invoices",
             label: "Invoices",
             content: invoiceAccess.allowed ? await InvoicesTab() : null,
+            visible: invoiceAccess.allowed,
+          },
+          // Billed against banked. The two halves of the money lived in
+          // different places and the difference between them was nowhere.
+          {
+            key: "money",
+            label: "Money",
+            content: invoiceAccess.allowed ? await MoneyTab() : null,
             visible: invoiceAccess.allowed,
           },
         ]}
@@ -83,4 +94,30 @@ async function InvoicesTab() {
   }
 
   return <InvoicesPanel initial={page.invoices} hasMore={page.more} />;
+}
+
+/**
+ * What was billed against what arrived.
+ *
+ * Per contact, because per invoice is not available: the payments export and
+ * the invoice export share no key, so nothing can say which bill a given
+ * payment settled. Per contact is a claim that is true, and it is the
+ * granularity somebody rings about.
+ */
+async function MoneyTab() {
+  const rows = await getReconciliationRows().catch((err) => {
+    console.error("Reconciliation failed to load:", err);
+    return null;
+  });
+
+  if (!rows) {
+    return (
+      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
+        Couldn&apos;t load the reconciliation. If this is a fresh setup, run{" "}
+        <code>supabase/migrations/0142_client_invoices.sql</code>.
+      </p>
+    );
+  }
+
+  return <MoneyPanel result={reconcile(rows.billed, rows.banked)} />;
 }

@@ -20,7 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import { InvoiceImportPanel } from "@/components/payments/invoice-import-panel";
 import { ChosenContact, ContactPicker } from "@/components/payments/contact-picker";
 import type { SearchableContact } from "@/lib/payer-match";
-import { createPlan } from "@/lib/actions/payment-plan-actions";
+import { createPlan, recordManualPayment } from "@/lib/actions/payment-plan-actions";
 import {
   buildSchedule,
   checkPlan,
@@ -564,11 +564,50 @@ function InvoiceCard({
   );
 }
 
-/** How far through the schedule this bill is, once it has one. */
+/**
+ * The schedule on this bill: where it has got to, and every payment in it.
+ *
+ * All of it here rather than on a screen of its own. A payment schedule is
+ * not a thing anybody manages in the abstract -- it is how one invoice gets
+ * paid, and sending somebody to another tab to tick off an instalment means
+ * holding the invoice in your head while you look for it.
+ */
 function PlanProgressStrip({ invoice }: { invoice: ClientInvoice }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [settledIds, setSettledIds] = useState<string[]>([]);
+
   if (!invoice.plan) return null;
-  const progress = planProgress(invoice.plan);
+  const plan = invoice.plan;
+  const progress = planProgress(plan);
   const behind = progress.overdue.length > 0;
+
+  function markPaid(instalmentId: string, amountCents: number) {
+    setError(null);
+    // Struck through immediately and put back if the write fails: the office
+    // works down a list and should not wait on a round trip per row.
+    setSettledIds((ids) => [...ids, instalmentId]);
+
+    start(async () => {
+      const result = await recordManualPayment({
+        jobId: null,
+        customerId: invoice.customerId,
+        planId: plan.id,
+        instalmentId,
+        amountCents,
+        method: "check",
+        note: `Instalment on ${invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : "an invoice"}`,
+      });
+
+      if (!result.ok) {
+        setSettledIds((ids) => ids.filter((id) => id !== instalmentId));
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   return (
     <div className="mt-2">
@@ -579,15 +618,45 @@ function PlanProgressStrip({ invoice }: { invoice: ClientInvoice }) {
         />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {money(invoice.plan.paidCents / 100)} of {money(invoice.plan.totalCents / 100)} paid
+        {money(plan.paidCents / 100)} of {money(plan.totalCents / 100)} paid
         {progress.next ? ` · next ${day(progress.next.dueOn)}` : ""}
-        {behind
-          ? ` · ${progress.overdue.length} behind by ${money(progress.overdueCents / 100)}`
-          : ""}
       </p>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
-        Manage the schedule on the Schedules tab.
-      </p>
+      {behind && (
+        <p className="mt-0.5 text-xs font-semibold text-destructive">
+          {progress.overdue.length} payment{progress.overdue.length === 1 ? "" : "s"} behind ·{" "}
+          {money(progress.overdueCents / 100)}
+        </p>
+      )}
+
+      <ul className="mt-2 space-y-0.5 border-l-2 border-border pl-2">
+        {plan.schedule.map((item) => {
+          const paid = item.status === "paid" || settledIds.includes(item.id);
+          return (
+            <li key={item.id} className="flex items-center justify-between gap-2 text-xs">
+              <span className={`truncate ${paid ? "text-muted-foreground line-through" : ""}`}>
+                {item.isDeposit ? "Deposit" : `Payment ${item.number}`} · {day(item.dueOn)}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span className="tabular-nums text-muted-foreground">
+                  {money(item.amountCents / 100)}
+                </span>
+                {!paid && item.status !== "cancelled" && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => markPaid(item.id, item.amountCents)}
+                    className="rounded border border-emerald-300/70 bg-emerald-50/70 px-1.5 py-0.5 text-[11px] font-semibold disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+                  >
+                    Paid
+                  </button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {error && <p className="mt-1 text-xs font-medium text-destructive">{error}</p>}
     </div>
   );
 }

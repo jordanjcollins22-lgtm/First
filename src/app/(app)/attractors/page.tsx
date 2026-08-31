@@ -13,12 +13,6 @@ import { AttractorsDashboard } from "@/components/attractors/attractors-dashboar
 import type { AttractorType, AttractorVariant, AttractorWave, BusinessLocation, LocationArea, Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 import { AccessDeniedNotice } from "@/components/access-denied-notice";
-import { PageTabs } from "@/components/ui/page-tabs";
-import { getContacts, type ContactsData } from "@/lib/data/contacts";
-import { bookLine, summariseBook } from "@/lib/client-status";
-import { ContactsManager } from "@/components/contacts/contacts-manager";
-import { checkTabAccess as checkTab } from "@/lib/data/access";
-import { getCurrentProfile } from "@/lib/data/team";
 
 export default async function AttractorsPage({
   searchParams,
@@ -98,10 +92,6 @@ export default async function AttractorsPage({
       listPreviousScanPoints().catch(() => new Map()),
     ]);
 
-  // The one contacts list in the app. It used to be a tab on Pipeline while
-  // /contacts redirected there, so nobody could say where the book lived.
-  const contactAccess = await checkTab("contacts");
-
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
       <AccessDeniedNotice tab={denied} />
@@ -111,80 +101,26 @@ export default async function AttractorsPage({
           <code>supabase/migrations/0023_business_locations.sql</code>, then reload this page.
         </p>
       )}
-      <PageTabs
-        tabs={[
-          {
-            key: "map",
-            label: "Map",
-            content: (
-              <AttractorsDashboard
-                types={types}
-                keywords={keywords}
-                rankScans={rankScans}
-                previousRankPoints={Object.fromEntries(previousRankPoints)}
-                variants={variants}
-                waves={waves}
-                jobs={jobs}
-                locations={locations}
-                areas={areas}
-                properties={properties}
-                prospectAddresses={prospectAddresses}
-                densityPoints={densityPoints}
-                profiles={profiles}
-                currentProfileId={profile?.id ?? null}
-              />
-            ),
-          },
-          {
-            key: "contacts",
-            label: "Contacts",
-            content: contactAccess.allowed ? await ContactsTab() : null,
-            visible: contactAccess.allowed,
-          },
-        ]}
+      {/* One tab left, so no tabs. The book moved to /contacts, which is
+          where somebody clicking "Contacts" was always going to look. */}
+      <AttractorsDashboard
+        types={types}
+        keywords={keywords}
+        rankScans={rankScans}
+        previousRankPoints={Object.fromEntries(previousRankPoints)}
+        variants={variants}
+        waves={waves}
+        jobs={jobs}
+        locations={locations}
+        areas={areas}
+        properties={properties}
+        prospectAddresses={prospectAddresses}
+        densityPoints={densityPoints}
+        profiles={profiles}
+        currentProfileId={profile?.id ?? null}
       />
     </div>
   );
 }
 
-/**
- * The whole contact book, searchable, in one place.
- *
- * Importing is not here: it has its own address at /contacts, so the page
- * somebody opens to look somebody up is not also the page that can overwrite
- * three thousand records.
- */
-async function ContactsTab() {
-  const profile = await getCurrentProfile();
-  // Merging is irreversible, so it stays with admins even where the page
-  // itself is open to more people.
-  const canMerge = Boolean(profile?.roles.includes("admin"));
 
-  let data: ContactsData = {
-    contacts: [],
-    duplicates: [],
-    pendingGeocodes: 0,
-    failedGeocodes: 0,
-    recentMerges: [],
-    outOfArea: [],
-  };
-  try {
-    data = await getContacts();
-  } catch (err) {
-    console.error("Contacts failed to load:", err);
-  }
-
-  return (
-    <div className="max-w-3xl">
-      <h1 className="mb-1 text-2xl font-bold">Contacts</h1>
-      <p className="mb-1 text-muted-foreground">
-        Everyone in the book. Search by name, email, phone or address.
-      </p>
-      {/* Said out loud because the word changed meaning: a client is somebody
-          who has paid, and the label on every row is worked out from the
-          money rather than from whatever an import wrote on it. */}
-      <p className="mb-6 text-sm text-muted-foreground">{bookLine(summariseBook(data.contacts))}</p>
-      <ContactsManager data={data} canMerge={canMerge} />
-    </div>
-  );
-}

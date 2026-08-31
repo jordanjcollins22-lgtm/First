@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { ClientInvoice, InvoicePlan } from "@/lib/client-invoices";
+import type { BankedRow, BilledRow } from "@/lib/accounting-reconcile";
 
 interface InvoiceQueryRow {
   id: string;
@@ -179,4 +180,54 @@ export async function listInvoicesForCustomer(customerId: string): Promise<Clien
   const invoices = ((data ?? []) as unknown as InvoiceQueryRow[]).map(toInvoice);
   const plans = await plansForInvoices(invoices.map((i) => i.id));
   return invoices.map((i) => ({ ...i, plan: plans.get(i.id) ?? null }));
+}
+
+/**
+ * Everything billed and everything banked, for the reconciliation.
+ *
+ * Two narrow reads rather than the full rows: this feeds a set of totals, and
+ * shipping every invoice and every payment to add four numbers up is how a
+ * summary screen becomes the slowest page in the app.
+ */
+export async function getReconciliationRows(): Promise<{
+  billed: BilledRow[];
+  banked: BankedRow[];
+}> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+
+  const [invoices, payments] = await Promise.all([
+    supabase
+      .from("client_invoices")
+      .select("customer_id, amount, paid_on, source_status, customers(name)")
+      .eq("organization_id", organizationId),
+    supabase
+      .from("payments")
+      .select("customer_id, amount_cents")
+      .eq("organization_id", organizationId),
+  ]);
+
+  if (invoices.error) throw invoices.error;
+  if (payments.error) throw payments.error;
+
+  const billed: BilledRow[] = (
+    (invoices.data ?? []) as unknown as {
+      customer_id: string;
+      amount: number | null;
+      paid_on: string | null;
+      source_status: string | null;
+      customers: { name: string } | null;
+    }[]
+  ).map((r) => ({
+    customerId: r.customer_id,
+    customerName: r.customers?.name ?? null,
+    amountCents: r.amount == null ? 0 : Math.round(r.amount * 100),
+    settled: Boolean(r.paid_on) || (r.source_status ?? "").toLowerCase() === "paid",
+  }));
+
+  const banked: BankedRow[] = (
+    (payments.data ?? []) as unknown as { customer_id: string | null; amount_cents: number }[]
+  ).map((r) => ({ customerId: r.customer_id, amountCents: Number(r.amount_cents) }));
+
+  return { billed, banked };
 }
