@@ -5,8 +5,11 @@ import type { ClientInvoice, InvoicePlan } from "@/lib/client-invoices";
 interface InvoiceQueryRow {
   id: string;
   customer_id: string;
-  file_path: string;
-  file_name: string;
+  file_path: string | null;
+  file_name: string | null;
+  title: string | null;
+  scope_html: string | null;
+  source_status: string | null;
   invoice_number: string | null;
   amount: number | null;
   issued_on: string | null;
@@ -22,7 +25,7 @@ interface InvoiceQueryRow {
 export const PAGE_SIZE = 50;
 
 const COLUMNS =
-  "id, customer_id, file_path, file_name, invoice_number, amount, issued_on, due_on, paid_on, notes, customers(name)";
+  "id, customer_id, file_path, file_name, title, invoice_number, amount, issued_on, due_on, paid_on, notes, scope_html, source_status, customers(name)";
 
 function toInvoice(r: InvoiceQueryRow): ClientInvoice {
   return {
@@ -31,6 +34,9 @@ function toInvoice(r: InvoiceQueryRow): ClientInvoice {
     customerName: r.customers?.name ?? null,
     filePath: r.file_path,
     fileName: r.file_name,
+    title: r.title,
+    scopeHtml: r.scope_html,
+    sourceStatus: r.source_status,
     invoiceNumber: r.invoice_number,
     amount: r.amount,
     issuedOn: r.issued_on,

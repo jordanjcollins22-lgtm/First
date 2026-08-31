@@ -17,6 +17,7 @@ import {
   type InvoiceStatus,
 } from "@/lib/client-invoices";
 import { createClient } from "@/lib/supabase/client";
+import { InvoiceImportPanel } from "@/components/payments/invoice-import-panel";
 import { ChosenContact, ContactPicker } from "@/components/payments/contact-picker";
 import type { SearchableContact } from "@/lib/payer-match";
 import { createPlan } from "@/lib/actions/payment-plan-actions";
@@ -56,6 +57,7 @@ const TONE: Record<InvoiceStatus, string> = {
   outstanding: "border-border bg-muted text-muted-foreground",
   "on-plan": "border-sky-300/70 bg-sky-50/70 text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200",
   undated: "border-border bg-muted text-muted-foreground",
+  "partly-paid": "border-amber-300/70 bg-amber-50/70 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200",
   paid: "border-emerald-300/70 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
 };
 
@@ -84,6 +86,9 @@ export function InvoicesPanel({
 
   return (
     <div className="space-y-4">
+      {/* The backlog first: bringing a year of invoices in is the thing
+          somebody does the first few times, and invisible once it is done. */}
+      <InvoiceImportPanel />
       <UploadInvoice onSaved={(inv) => setInvoices((all) => [inv, ...all])} />
 
       <div>
@@ -265,6 +270,10 @@ function UploadInvoice({ onSaved }: { onSaved: (invoice: ClientInvoice) => void 
         dueOn: dueOn || null,
         paidOn: paid ? paidOn || new Date().toISOString().slice(0, 10) : null,
         notes: notes.trim() || null,
+        title: null,
+        scopeHtml: null,
+        sourceStatus: null,
+        plan: null,
       });
       setDone(`Filed against ${contact.name ?? "that contact"}.`);
       reset();
@@ -391,6 +400,7 @@ function InvoiceCard({
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [showScope, setShowScope] = useState(false);
 
   const status = invoiceStatus(invoice);
   const late = daysOverdue(invoice);
@@ -413,9 +423,10 @@ function InvoiceCard({
   }
 
   function open() {
+    if (!invoice.filePath) return;
     setError(null);
     start(async () => {
-      const link = await invoiceFileLink(invoice.filePath);
+      const link = await invoiceFileLink(invoice.filePath!);
       if (link.ok) window.open(link.url, "_blank", "noopener,noreferrer");
       else setError(link.message);
     });
@@ -424,7 +435,7 @@ function InvoiceCard({
   function remove() {
     setError(null);
     start(async () => {
-      const result = await deleteInvoice(invoice.id, invoice.filePath);
+      const result = await deleteInvoice(invoice.id, invoice.filePath ?? "");
       if (result.ok) onRemoved();
       else setError(result.message);
     });
@@ -439,7 +450,7 @@ function InvoiceCard({
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {invoice.invoiceNumber ? `#${invoice.invoiceNumber} · ` : ""}
-            {invoice.fileName}
+            {invoice.fileName ?? invoice.title ?? "No file"}
           </p>
         </div>
         <p className="shrink-0 text-base font-bold">{money(invoice.amount)}</p>
@@ -462,16 +473,27 @@ function InvoiceCard({
       {invoice.plan && <PlanProgressStrip invoice={invoice} />}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={open}
-          className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold disabled:opacity-50"
-        >
-          <FileText className="h-3.5 w-3.5" /> Open
-        </button>
+        {invoice.filePath && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={open}
+            className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold disabled:opacity-50"
+          >
+            <FileText className="h-3.5 w-3.5" /> Open
+          </button>
+        )}
+        {invoice.scopeHtml && (
+          <button
+            type="button"
+            onClick={() => setShowScope((was) => !was)}
+            className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold"
+          >
+            <FileText className="h-3.5 w-3.5" /> {showScope ? "Hide scope" : "Scope"}
+          </button>
+        )}
 
-        {!invoice.paidOn && !invoice.plan && (
+        {status !== "paid" && !invoice.plan && (
           <button
             type="button"
             disabled={pending}
@@ -482,7 +504,7 @@ function InvoiceCard({
           </button>
         )}
 
-        {!invoice.paidOn && (
+        {status !== "paid" && (
           <button
             type="button"
             disabled={pending}
@@ -522,6 +544,18 @@ function InvoiceCard({
           </button>
         )}
       </div>
+
+      {showScope && invoice.scopeHtml && (
+        <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-border bg-background p-2">
+          {/* The scope as the old system stored it. Rendered rather than shown
+              as markup, because it is a document somebody needs to read --
+              and it comes from our own export, not from a client. */}
+          <div
+            className="prose prose-sm max-w-none text-xs dark:prose-invert [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs"
+            dangerouslySetInnerHTML={{ __html: invoice.scopeHtml }}
+          />
+        </div>
+      )}
 
       {planning && <NewInvoicePlan invoice={invoice} onClose={() => setPlanning(false)} />}
 

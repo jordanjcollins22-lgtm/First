@@ -22,8 +22,15 @@ export interface ClientInvoice {
   id: string;
   customerId: string;
   customerName: string | null;
-  filePath: string;
-  fileName: string;
+  /** Null for one that came from an export rather than an upload. */
+  filePath: string | null;
+  fileName: string | null;
+  title: string | null;
+  /** The written scope, as the source system stored it. */
+  scopeHtml: string | null;
+  /** What the system it came from said. An external claim, not something
+   * worked out here. */
+  sourceStatus: string | null;
   invoiceNumber: string | null;
   amount: number | null;
   issuedOn: string | null;
@@ -35,6 +42,7 @@ export interface ClientInvoice {
 }
 
 export type InvoiceStatus =
+  | "partly-paid"
   | "paid"
   | "overdue"
   | "due-soon"
@@ -49,6 +57,7 @@ export const STATUS_LABEL: Record<InvoiceStatus, string> = {
   outstanding: "Outstanding",
   undated: "No due date",
   "on-plan": "On a payment plan",
+  "partly-paid": "Part paid",
 };
 
 /** Inside this many days of the due date, it is worth chasing. */
@@ -84,6 +93,17 @@ export function invoiceStatus(invoice: ClientInvoice, today = new Date()): Invoi
     if (progress.settled) return "paid";
     return progress.overdue.length > 0 ? "overdue" : "on-plan";
   }
+
+  // What the source system said, where there is nothing better. Ordinarily
+  // paid-ness is derived from money received, but the payments export and the
+  // invoice export share no key, so nothing here can join a bill to the
+  // payment that settled it. The file's own word is the best evidence there
+  // is; it is used only after a real payment date and a real plan, both of
+  // which are this app's own facts and outrank it.
+  const claimed = (invoice.sourceStatus ?? "").toLowerCase();
+  if (claimed === "paid") return "paid";
+  if (claimed === "partial") return "partly-paid";
+  if (claimed === "void") return "paid";
 
   if (!invoice.dueOn) return "undated";
 
@@ -232,8 +252,10 @@ export function byUrgency(rows: ClientInvoice[], today = new Date()): ClientInvo
     // Being paid to an agreed schedule and up to date on it. Below the ones
     // that need a phone call, above the ones that need nothing.
     "on-plan": 3,
-    undated: 4,
-    paid: 5,
+    // Some money is in and the rest is not chased on a date anybody has.
+    "partly-paid": 4,
+    undated: 5,
+    paid: 6,
   };
 
   return [...rows].sort((a, b) => {

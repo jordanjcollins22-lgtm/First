@@ -26,6 +26,10 @@ const inv = (over: Partial<ClientInvoice> = {}): ClientInvoice => ({
   dueOn: "2026-05-31",
   paidOn: null,
   notes: null,
+  title: null,
+  scopeHtml: null,
+  sourceStatus: null,
+  plan: null,
   ...over,
 });
 
@@ -260,5 +264,48 @@ describe("an invoice with a payment plan on it", () => {
       TODAY
     );
     expect(out.map((o) => o.id)).toEqual(["late", "on-plan", "paid"]);
+  });
+});
+
+describe("what the exporting system said", () => {
+  it("takes the source's word for paid when there is nothing better", () => {
+    // The payments export and the invoice export share no key, so no payment
+    // can be joined to the bill it settled. The file's word is the evidence.
+    expect(invoiceStatus(inv({ dueOn: "2026-05-01", sourceStatus: "paid" }), TODAY)).toBe("paid");
+  });
+
+  it("shows part paid as its own thing rather than as settled or overdue", () => {
+    expect(invoiceStatus(inv({ dueOn: "2026-05-01", sourceStatus: "partial" }), TODAY)).toBe(
+      "partly-paid"
+    );
+  });
+
+  it("lets this app's own facts outrank the claim", () => {
+    // A plan agreed here is a fact we hold; an export's status is hearsay
+    // from before it. A bill on a live plan is not settled because a file
+    // said so months ago.
+    const onPlan = inv({
+      dueOn: "2026-05-01",
+      sourceStatus: "overdue",
+      plan: {
+        id: "pl", kind: "instalments", totalCents: 120000, paidCents: 0, status: "accepted",
+        schedule: [
+          { id: "s1", number: 1, amountCents: 120000, dueOn: "2026-09-30", isDeposit: false, status: "due" },
+        ],
+      },
+    });
+    expect(invoiceStatus(onPlan, TODAY)).toBe("on-plan");
+    expect(invoiceStatus(inv({ paidOn: "2026-02-01", sourceStatus: "overdue" }), TODAY)).toBe("paid");
+  });
+
+  it("falls back to the dates when the source said nothing useful", () => {
+    expect(invoiceStatus(inv({ dueOn: "2026-05-01", sourceStatus: "unknown" }), TODAY)).toBe("overdue");
+    expect(invoiceStatus(inv({ dueOn: "2026-05-01", sourceStatus: null }), TODAY)).toBe("overdue");
+  });
+
+  it("stops chasing an invoice that was withdrawn", () => {
+    // A voided bill is not owed. Leaving it in the overdue list is asking
+    // somebody to ring a client about money nobody wants.
+    expect(invoiceStatus(inv({ dueOn: "2026-01-01", sourceStatus: "void" }), TODAY)).toBe("paid");
   });
 });

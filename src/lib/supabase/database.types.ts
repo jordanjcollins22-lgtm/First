@@ -406,8 +406,15 @@ export interface Database {
           id: string;
           organization_id: string;
           customer_id: string;
-          file_path: string;
-          file_name: string;
+          file_path: string | null;
+          file_name: string | null;
+          title: string | null;
+          scope_html: string | null;
+          subtotal: number | null;
+          discount: number | null;
+          source_status: string | null;
+          source: string | null;
+          external_id: string | null;
           invoice_number: string | null;
           amount: number | null;
           issued_on: string | null;
@@ -420,8 +427,6 @@ export interface Database {
         Insert: Partial<Database["public"]["Tables"]["client_invoices"]["Row"]> & {
           organization_id: string;
           customer_id: string;
-          file_path: string;
-          file_name: string;
         };
         Update: Partial<Database["public"]["Tables"]["client_invoices"]["Row"]>;
         Relationships: [];
