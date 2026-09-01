@@ -22,7 +22,6 @@ function money(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-const COUNTS = [2, 3, 4, 6];
 
 /**
  * One question, one screen, one tap.
@@ -52,7 +51,6 @@ export function PayView({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [instalments, setInstalments] = useState(3);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // Once this is set the wallets are on screen and the options are behind
@@ -77,7 +75,7 @@ export function PayView({
         const result = await startProposalPayment({
           token,
           pathId: option.id,
-          instalments,
+          instalments: 1,
         });
         setBusyId(null);
         if (result.ok) setPaying({ clientSecret: result.clientSecret, amount: result.amountCents });
@@ -90,7 +88,9 @@ export function PayView({
       const result = await choosePaymentPath({
         token,
         pathId: option.id,
-        instalments,
+        // One. Splitting is arranged by the office against an invoice now,
+        // not chosen by a client on the proposal page.
+        instalments: 1,
       });
       if (!result.ok) {
         setBusyId(null);
@@ -113,9 +113,12 @@ export function PayView({
         <p className="text-sm font-semibold uppercase tracking-wide text-primary">
           {organizationName}
         </p>
-        <h1 className="mt-1 text-2xl font-bold">How would you like to pay?</h1>
+        {/* Not "how would you like to pay" any more. There is one way, and
+            asking a question with one answer reads like something is
+            missing. */}
+        <h1 className="mt-1 text-2xl font-bold">Last step</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This is the last thing we need, and it decides when we can book you in.
+          Settle up and pick the day you would like us.
         </p>
       </div>
 
@@ -138,7 +141,6 @@ export function PayView({
         const amount = option.keepsDiscount
           ? context.totalCents
           : context.totalCents + context.discountCents;
-        const split = option.id !== "full";
         return (
           <div
             key={option.id}
@@ -148,28 +150,6 @@ export function PayView({
               <p className="font-semibold">{option.label}</p>
               <p className="mt-0.5 text-sm text-muted-foreground">{option.detail}</p>
             </div>
-
-            {split && (
-              <div className="flex flex-col gap-1.5">
-                <p className="text-xs text-muted-foreground">How many payments?</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {COUNTS.map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      onClick={() => setInstalments(count)}
-                      className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
-                        instalments === count
-                          ? "border-transparent bg-foreground text-background"
-                          : "border-border text-muted-foreground"
-                      }`}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <Button
               type="button"
@@ -183,26 +163,15 @@ export function PayView({
                 ? canCharge
                   ? "Opening secure checkout…"
                   : "Just a moment…"
-                : split
-                  ? `${canCharge ? "Pay" : "Start with"} ${money(Math.round(amount / instalments))} today`
-                  : `${canCharge ? "Pay" : "Confirm"} ${money(amount)}`}
+                : `${canCharge ? "Pay" : "Confirm"} ${money(amount)}`}
             </Button>
-
-            {/* Roughly, and said so. The exact split lands on the schedule we
-                email, where the remainder goes on the earliest payments
-                rather than being left to rounding. */}
-            {split && (
-              <p className="text-center text-xs text-muted-foreground">
-                Then about {money(Math.round(amount / instalments))} a month until it is cleared.
-              </p>
-            )}
 
             {/* Before the tap, never on the receipt. A surcharge has to be
                 disclosed ahead of the payment, and somebody who would rather
                 write a cheque deserves to know that in time to. */}
-            {canCharge && surchargeCents(split ? Math.round(amount / instalments) : amount) > 0 && (
+            {canCharge && surchargeCents(amount) > 0 && (
               <p className="text-center text-xs text-muted-foreground">
-                {surchargeNotice(split ? Math.round(amount / instalments) : amount)}
+                {surchargeNotice(amount)}
               </p>
             )}
           </div>

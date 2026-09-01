@@ -8,48 +8,53 @@ import {
   hasDiscount,
   optionById,
   optionsAfterAccept,
+  type PaymentOption,
 } from "./acceptance-path";
 
 const WITH_DISCOUNT = { discountCents: 25_000, totalCents: 225_000 };
 const NO_DISCOUNT = { discountCents: 0, totalCents: 250_000 };
 
+/**
+ * The two plan paths, built by hand.
+ *
+ * They are no longer offered to clients, but proposals accepted on those
+ * terms are out in the world and everything that reads one still has to
+ * handle it. Constructed here rather than through optionsAfterAccept for
+ * exactly that reason: the offer went away, the paths did not.
+ */
+const PLAN: PaymentOption = {
+  id: "plan",
+  label: "Split it into payments and keep the discount",
+  detail: "We book your start date one month after your final payment.",
+  keepsDiscount: true,
+  schedulesAfterFinalPayment: true,
+};
+
+const PLAN_NO_DISCOUNT: PaymentOption = {
+  id: "plan_no_discount",
+  label: "Split it into payments and start sooner",
+  detail: "This one gives up the discount.",
+  keepsDiscount: false,
+  schedulesAfterFinalPayment: false,
+};
+
 describe("optionsAfterAccept", () => {
-  it("offers the trade-off only when there is a discount to trade", () => {
-    expect(optionsAfterAccept(WITH_DISCOUNT).map((o) => o.id)).toEqual([
-      "full",
-      "plan",
-      "plan_no_discount",
-    ]);
+  it("offers paying, and nothing else", () => {
+    // Splitting was removed from the proposal page. A client choosing their
+    // own instalment terms commits the business to something nobody agreed,
+    // on a job that has not started. Paying over time is arranged by the
+    // office against an invoice instead.
+    for (const ctx of [WITH_DISCOUNT, NO_DISCOUNT]) {
+      expect(optionsAfterAccept(ctx).map((o) => o.id)).toEqual(["full"]);
+    }
   });
 
-  it("does not offer a choice between two identical outcomes", () => {
-    // With nothing to protect, "start sooner without the discount" is the
-    // same as the plan, and an option that changes nothing gets a form
-    // abandoned.
-    expect(optionsAfterAccept(NO_DISCOUNT).map((o) => o.id)).toEqual(["full", "plan"]);
-  });
-
-  it("always lets somebody just pay", () => {
+  it("keeps the discount, because there is no longer a way to give it up", () => {
     for (const ctx of [WITH_DISCOUNT, NO_DISCOUNT]) {
       const full = optionById(ctx, "full")!;
       expect(full.keepsDiscount).toBe(true);
       expect(full.schedulesAfterFinalPayment).toBe(false);
     }
-  });
-
-  it("waits for the money only where the discount is being protected", () => {
-    expect(optionById(WITH_DISCOUNT, "plan")!.schedulesAfterFinalPayment).toBe(true);
-    expect(optionById(WITH_DISCOUNT, "plan_no_discount")!.schedulesAfterFinalPayment).toBe(false);
-    // No discount, nothing to protect, so nothing to wait for.
-    expect(optionById(NO_DISCOUNT, "plan")!.schedulesAfterFinalPayment).toBe(false);
-  });
-
-  it("keeps the discount on a plan that pays before we start", () => {
-    expect(optionById(WITH_DISCOUNT, "plan")!.keepsDiscount).toBe(true);
-  });
-
-  it("gives the discount up only on the start-sooner option", () => {
-    expect(optionById(WITH_DISCOUNT, "plan_no_discount")!.keepsDiscount).toBe(false);
   });
 
   it("names the ways they can actually pay, on the option they will tap", () => {
@@ -58,15 +63,11 @@ describe("optionsAfterAccept", () => {
     expect(full.detail).toMatch(/Google Pay/);
   });
 
-  it("explains the trade in the option itself", () => {
-    const plan = optionById(WITH_DISCOUNT, "plan")!;
-    expect(plan.detail.toLowerCase()).toContain("one month after your final payment");
-    const sooner = optionById(WITH_DISCOUNT, "plan_no_discount")!;
-    expect(sooner.detail.toLowerCase()).toContain("gives up the discount");
-  });
-
-  it("returns nothing for an id that is not on offer", () => {
-    expect(optionById(NO_DISCOUNT, "plan_no_discount")).toBeUndefined();
+  it("no longer hands back a plan for somebody asking for one", () => {
+    // The path is still understood where it is read off an accepted
+    // proposal; it is simply not on offer.
+    expect(optionById(WITH_DISCOUNT, "plan")).toBeUndefined();
+    expect(optionById(WITH_DISCOUNT, "plan_no_discount")).toBeUndefined();
     expect(optionById(WITH_DISCOUNT, "nonsense")).toBeUndefined();
   });
 });
@@ -82,20 +83,18 @@ describe("hasDiscount", () => {
 describe("amountForPath", () => {
   it("charges the agreed total while the discount holds", () => {
     expect(amountForPath(WITH_DISCOUNT, optionById(WITH_DISCOUNT, "full")!)).toBe(225_000);
-    expect(amountForPath(WITH_DISCOUNT, optionById(WITH_DISCOUNT, "plan")!)).toBe(225_000);
+    expect(amountForPath(WITH_DISCOUNT, PLAN)).toBe(225_000);
   });
 
   it("puts the discount back on the bill when it is given up", () => {
     // Added back rather than recalculated: the stored total is already net of
     // it, and a percentage recomputed against a different number is a
     // different discount from the one that was agreed.
-    expect(amountForPath(WITH_DISCOUNT, optionById(WITH_DISCOUNT, "plan_no_discount")!)).toBe(
-      250_000
-    );
+    expect(amountForPath(WITH_DISCOUNT, PLAN_NO_DISCOUNT)).toBe(250_000);
   });
 
   it("changes nothing when there was no discount", () => {
-    expect(amountForPath(NO_DISCOUNT, optionById(NO_DISCOUNT, "plan")!)).toBe(250_000);
+    expect(amountForPath(NO_DISCOUNT, PLAN)).toBe(250_000);
   });
 });
 
@@ -137,18 +136,18 @@ describe("confirmationFor", () => {
   });
 
   it("says the discount is safe and names the booking rule", () => {
-    const text = confirmationFor(optionById(WITH_DISCOUNT, "plan")!);
+    const text = confirmationFor(PLAN);
     expect(text.toLowerCase()).toContain("discount is safe");
     expect(text.toLowerCase()).toContain("one month from that day");
   });
 
   it("sends the start-sooner option on to picking a day too", () => {
-    const text = confirmationFor(optionById(WITH_DISCOUNT, "plan_no_discount")!);
+    const text = confirmationFor(PLAN_NO_DISCOUNT);
     expect(text.toLowerCase()).toContain("pick the");
   });
 
   it("uses no dashes", () => {
-    for (const option of optionsAfterAccept(WITH_DISCOUNT)) {
+    for (const option of [...optionsAfterAccept(WITH_DISCOUNT), PLAN, PLAN_NO_DISCOUNT]) {
       expect(confirmationFor(option)).not.toMatch(/[—–]/);
       expect(`${option.label} ${option.detail}`).not.toMatch(/[—–]/);
     }

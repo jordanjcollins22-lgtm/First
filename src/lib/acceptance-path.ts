@@ -62,49 +62,38 @@ export function hasDiscount(context: AcceptanceContext): boolean {
  * third option is not offered. Showing somebody a choice between two
  * identical outcomes is how a form gets abandoned.
  */
-export function optionsAfterAccept(context: AcceptanceContext): PaymentOption[] {
-  const options: PaymentOption[] = [
+/**
+ * What a client is offered once they accept.
+ *
+ * One option: pay it. Splitting used to be offered here as two further
+ * choices, and it was the wrong place to offer it — a client picking their
+ * own instalment plan on a proposal page commits the business to terms
+ * nobody agreed to, on a job that has not started, and the discount rules
+ * around it took a paragraph to explain at the exact moment somebody had
+ * already decided to buy.
+ *
+ * Paying over time still exists and is still used. It is set up by the
+ * office, against an invoice, where somebody has agreed the terms with the
+ * client first. See `plan-progress.ts` and the payment plan on an invoice.
+ *
+ * The "plan" and "plan_no_discount" paths are deliberately still understood
+ * everywhere they are read: proposals accepted on those terms are out in the
+ * world, and the ones already agreed have to keep working. They are simply
+ * no longer offered.
+ */
+// The context is no longer consulted, and the parameter stays so every
+// caller keeps working while the shape of this is still one option.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function optionsAfterAccept(_context: AcceptanceContext): PaymentOption[] {
+  return [
     {
       id: "full",
-      label: "Pay in full now",
+      label: "Pay now",
       detail: "Card, Apple Pay or Google Pay on the next screen. We book you in from there.",
       keepsDiscount: true,
       schedulesAfterFinalPayment: false,
     },
   ];
-
-  if (hasDiscount(context)) {
-    options.push(
-      {
-        id: "plan",
-        label: "Split it into payments and keep the discount",
-        detail:
-          "Your discount is for paying before we start, so it stays as long as the balance is " +
-          "cleared first. We book your start date one month after your final payment.",
-        keepsDiscount: true,
-        schedulesAfterFinalPayment: true,
-      },
-      {
-        id: "plan_no_discount",
-        label: "Split it into payments and start sooner",
-        detail:
-          "We get you on the schedule now and you pay as we go. This one gives up the discount, " +
-          "because that was for settling up front.",
-        keepsDiscount: false,
-        schedulesAfterFinalPayment: false,
-      }
-    );
-    return options;
-  }
-
-  options.push({
-    id: "plan",
-    label: "Split it into payments",
-    detail: "Your first payment now, then the rest monthly. We book you in from there.",
-    keepsDiscount: true,
-    schedulesAfterFinalPayment: false,
-  });
-  return options;
 }
 
 export function optionById(context: AcceptanceContext, id: string): PaymentOption | undefined {
