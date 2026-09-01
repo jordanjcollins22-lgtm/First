@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { surchargeCents, surchargeNotice } from "@/lib/card-surcharge";
 import {
   optionsAfterAccept,
   type AcceptanceContext,
@@ -193,6 +194,15 @@ export function PayView({
             {split && (
               <p className="text-center text-xs text-muted-foreground">
                 Then about {money(Math.round(amount / instalments))} a month until it is cleared.
+              </p>
+            )}
+
+            {/* Before the tap, never on the receipt. A surcharge has to be
+                disclosed ahead of the payment, and somebody who would rather
+                write a cheque deserves to know that in time to. */}
+            {canCharge && surchargeCents(split ? Math.round(amount / instalments) : amount) > 0 && (
+              <p className="text-center text-xs text-muted-foreground">
+                {surchargeNotice(split ? Math.round(amount / instalments) : amount)}
               </p>
             )}
           </div>

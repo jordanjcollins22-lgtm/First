@@ -129,6 +129,9 @@ async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
     planId,
     instalmentId,
     amountCents: session.amount_total ?? 0,
+    // Set by the checkout, so the fee inside the total does not have to be
+    // guessed at by reversing a rounded percentage.
+    workCents: Number(session.metadata?.work_cents) || null,
     paymentIntentId:
       typeof session.payment_intent === "string"
         ? session.payment_intent

@@ -490,6 +490,7 @@ export interface Database {
           stripe_invoice_id: string | null;
           external_id: string | null;
           source: string | null;
+          surcharge_cents: number | null;
           payer_name: string | null;
           payer_email: string | null;
           payer_phone: string | null;

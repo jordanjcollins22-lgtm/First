@@ -17,6 +17,7 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import { absolute, payPath, schedulePath } from "@/lib/proposal-flow";
+import { surchargeCents, SURCHARGE_LABEL } from "@/lib/card-surcharge";
 
 export interface CheckoutRequest {
   token: string;
@@ -60,6 +61,7 @@ export async function startProposalCheckout(
   if (!baseUrl) return null;
 
   const stripe = stripeClient();
+  const fee = surchargeCents(input.amountCents);
 
   // Reuse the contact's Stripe customer where we know it. A fresh customer
   // per payment is what stopped payments reconciling to anybody, and it also
@@ -74,6 +76,10 @@ export async function startProposalCheckout(
           customer_email: contact.email || undefined,
           customer_creation: "always" as const,
         }),
+    // Two lines, never one. The card networks require a surcharge to be
+    // disclosed before somebody pays rather than found on the receipt, and
+    // folding it into the price would also make the job look like it cost
+    // more than it was sold for.
     line_items: [
       {
         price_data: {
@@ -83,6 +89,21 @@ export async function startProposalCheckout(
         },
         quantity: 1,
       },
+      ...(fee > 0
+        ? [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: fee,
+                product_data: {
+                  name: SURCHARGE_LABEL,
+                  description: "What the card processor charges to take a card payment.",
+                },
+              },
+              quantity: 1,
+            },
+          ]
+        : []),
     ],
     // Straight to picking a day. They have paid; asking them to find their
     // way back to a link in an email to book is how a paid job sits unbooked.
@@ -92,6 +113,11 @@ export async function startProposalCheckout(
       proposal_id: input.proposalId,
       organization_id: input.organizationId,
       job_id: input.jobId,
+      // What the work was, apart from the fee. The webhook is told only what
+      // arrived, and without this it would credit the client with paying
+      // more for the work than they were billed.
+      work_cents: String(input.amountCents),
+      surcharge_cents: String(fee),
       ...(input.planId ? { plan_id: input.planId } : {}),
       ...(input.instalmentId ? { instalment_id: input.instalmentId } : {}),
     },

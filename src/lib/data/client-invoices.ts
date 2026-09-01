@@ -203,7 +203,7 @@ export async function getReconciliationRows(): Promise<{
       .eq("organization_id", organizationId),
     supabase
       .from("payments")
-      .select("customer_id, amount_cents")
+      .select("customer_id, amount_cents, surcharge_cents")
       .eq("organization_id", organizationId),
   ]);
 
@@ -225,9 +225,19 @@ export async function getReconciliationRows(): Promise<{
     settled: Boolean(r.paid_on) || (r.source_status ?? "").toLowerCase() === "paid",
   }));
 
+  // Net of the card surcharge. A client who paid a $4,520 bill by card sent
+  // $4,678.20, and counting the fee as money against the bill would show them
+  // as having overpaid while quietly inflating what the work earned.
   const banked: BankedRow[] = (
-    (payments.data ?? []) as unknown as { customer_id: string | null; amount_cents: number }[]
-  ).map((r) => ({ customerId: r.customer_id, amountCents: Number(r.amount_cents) }));
+    (payments.data ?? []) as unknown as {
+      customer_id: string | null;
+      amount_cents: number;
+      surcharge_cents: number | null;
+    }[]
+  ).map((r) => ({
+    customerId: r.customer_id,
+    amountCents: Number(r.amount_cents) - Number(r.surcharge_cents ?? 0),
+  }));
 
   return { billed, banked };
 }

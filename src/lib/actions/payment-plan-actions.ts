@@ -13,6 +13,7 @@ import { isStripeConfigured } from "@/lib/env";
 import { bookableFromKey } from "@/lib/acceptance-path";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import { methodDetail, paymentMethod } from "@/lib/payment-method";
+import { splitPaidTotal } from "@/lib/card-surcharge";
 import {
   buildSchedule,
   checkPlan,
@@ -329,11 +330,23 @@ export async function recordStripePayment(input: {
   jobId: string | null;
   planId: string | null;
   instalmentId: string | null;
+  /** What arrived, fee and all. This is the number the bank shows. */
   amountCents: number;
+  /** What the work was, before the card fee, when the checkout recorded it. */
+  workCents?: number | null;
   paymentIntentId: string | null;
   invoiceId: string | null;
 }): Promise<void> {
   const admin = createAdminClient();
+
+  // The total is what reconciles with the bank, so that is what is stored.
+  // The fee inside it is stored beside it, because a $4,520 job paid by card
+  // arrives as $4,678.20 and recording that whole would read as the client
+  // overpaying and quietly inflate what the job earned.
+  const split = splitPaidTotal({
+    totalCents: input.amountCents,
+    workCents: input.workCents ?? null,
+  });
 
   await admin.from("payments").upsert(
     {
@@ -343,6 +356,7 @@ export async function recordStripePayment(input: {
       plan_id: input.planId,
       instalment_id: input.instalmentId,
       amount_cents: input.amountCents,
+      surcharge_cents: split.surchargeCents > 0 ? split.surchargeCents : null,
       method: "card",
       stripe_payment_intent_id: input.paymentIntentId,
       stripe_invoice_id: input.invoiceId,
