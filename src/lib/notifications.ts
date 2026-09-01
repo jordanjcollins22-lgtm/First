@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isTwilioConfigured } from "@/lib/env";
 import { sendSms, toE164 } from "@/lib/sms";
+import { notificationGate, type NotificationKind as GateKind } from "@/lib/notification-gate";
 import type { NotificationKind } from "@/types/domain";
 
 /**
@@ -26,21 +27,34 @@ export async function notifyTeamMember(
     overridesKindPreference?: boolean;
   }
 ): Promise<boolean> {
-  if (!isTwilioConfigured) return false;
-
   const admin = createAdminClient();
 
-  const { data: prefs } = await admin
-    .from("notification_preferences")
-    .select("*")
-    .eq("profile_id", profileId)
-    .maybeSingle();
-  if (!prefs?.sms_enabled) return false;
-  if (!prefs[kind] && !options?.overridesKindPreference) return false;
+  const [{ data: prefs }, { data: profile }] = await Promise.all([
+    admin.from("notification_preferences").select("*").eq("profile_id", profileId).maybeSingle(),
+    admin.from("profiles").select("phone").eq("id", profileId).maybeSingle(),
+  ]);
 
-  const { data: profile } = await admin.from("profiles").select("phone").eq("id", profileId).maybeSingle();
-  const e164 = profile?.phone ? toE164(profile.phone) : null;
-  if (!e164) return false;
+  // One decision, with a reason attached. Every skip used to be a bare
+  // `return false` -- indistinguishable from a send, from the outside and
+  // from the logs, which is why "nobody got notified" had no answer.
+  const verdict = notificationGate({
+    smsConfigured: isTwilioConfigured,
+    prefs,
+    hasStoredPrefs: Boolean(prefs),
+    phone: profile?.phone,
+    toE164,
+    kind: kind as GateKind,
+    overridesKind: options?.overridesKindPreference,
+  });
+
+  if (!verdict.send) {
+    // Said out loud rather than swallowed. It is the only trace of a
+    // notification that was never sent.
+    console.warn(`Notification skipped (${kind}, profile ${profileId}): ${verdict.detail}`);
+    return false;
+  }
+
+  const e164 = toE164((profile?.phone ?? "").trim())!;
 
   // Claim the send before making it, so a retried or overlapping run can't
   // text the same person about the same thing twice.

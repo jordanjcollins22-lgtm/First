@@ -37,22 +37,20 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Who has opted in to receiving reminders at all.
-  const { data: prefs } = await admin
-    .from("notification_preferences")
-    .select("profile_id")
-    .eq("sms_enabled", true)
-    .eq("appointment_reminders", true);
-  if (!prefs || prefs.length === 0) return NextResponse.json({ sent: 0 });
+  // Everybody who could be reminded, rather than everybody who has a
+  // preferences row saying they want to be.
+  //
+  // This used to start from notification_preferences, which meant a person
+  // with no row was never a candidate. Nobody had a row -- the table was
+  // empty -- so this returned "sent: 0" on every run since it was written,
+  // and being correct about sending nothing looks exactly like working.
+  // notifyTeamMember applies the preference per person, and it now treats an
+  // absent row as somebody who has expressed no preference rather than
+  // somebody who declined.
+  const { data: profiles } = await admin.from("profiles").select("id, organization_id");
+  if (!profiles || profiles.length === 0) return NextResponse.json({ sent: 0 });
 
-  // How far ahead to remind is the calendar's call, not the person's.
-  // Evaluations live on each org's built-in Evaluations calendar, so that
-  // calendar's settings govern these reminders.
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("id, organization_id")
-    .in("id", prefs.map((p) => p.profile_id));
-  const orgByProfile = new Map((profiles ?? []).map((p) => [p.id, p.organization_id]));
+  const orgByProfile = new Map(profiles.map((p) => [p.id, p.organization_id]));
 
   const { data: calendars } = await admin
     .from("calendars")
@@ -60,12 +58,15 @@ export async function GET(request: NextRequest) {
     .eq("is_system", true);
   const calendarByOrg = new Map((calendars ?? []).map((c) => [c.organization_id, c]));
 
+  // How far ahead to remind is the calendar's call, not the person's.
+  // Evaluations live on each org's built-in Evaluations calendar, so that
+  // calendar's settings govern these reminders.
   const leadHoursByProfile = new Map<string, number>();
-  for (const pref of prefs) {
-    const calendar = calendarByOrg.get(orgByProfile.get(pref.profile_id) ?? "");
+  for (const profile of profiles) {
+    const calendar = calendarByOrg.get(orgByProfile.get(profile.id) ?? "");
     // No Evaluations calendar yet (migration 0065 not run) falls back to 24h.
     if (calendar && !calendar.reminders_enabled) continue;
-    leadHoursByProfile.set(pref.profile_id, calendar?.reminder_hours_before ?? 24);
+    leadHoursByProfile.set(profile.id, calendar?.reminder_hours_before ?? 24);
   }
   if (leadHoursByProfile.size === 0) return NextResponse.json({ sent: 0 });
 

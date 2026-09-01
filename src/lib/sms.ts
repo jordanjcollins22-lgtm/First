@@ -32,7 +32,15 @@ export async function sendSms(to: string, body: string): Promise<void> {
  * or the customer has no usable phone number — a text is a bonus on top of
  * the in-app message, never a reason to fail saving it. */
 export async function notifyCustomerBySms(jobId: string, body: string): Promise<void> {
-  if (!isTwilioConfigured) return;
+  if (!isTwilioConfigured) {
+    // Said out loud. This returning quietly is why a client never heard
+    // anything and nothing anywhere explained it.
+    console.warn(
+      `No text sent to the client on job ${jobId}: no text provider is set up. ` +
+        "Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER, then redeploy."
+    );
+    return;
+  }
 
   // Nothing automatic goes to a client in dispute. A booking confirmation or
   // a proposal update landing in the inbox of somebody talking to a lawyer is

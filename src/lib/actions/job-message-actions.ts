@@ -9,6 +9,7 @@ import { jobThreadContext } from "@/lib/message-context";
 import { clientMessageText, internalNoteText, messageDedupeKey } from "@/lib/message-notify";
 import { notifyJobTeam } from "@/lib/notifications";
 import { sendSms, toE164 } from "@/lib/sms";
+import { isTwilioConfigured } from "@/lib/env";
 import type { MessageChannel } from "@/types/domain";
 
 export async function postJobMessage(jobId: string, channel: MessageChannel, body: string) {
@@ -65,7 +66,22 @@ async function notifyAboutTeamMessage(input: {
     // Straight to the client's phone, signed with the business name and
     // carrying the link back to the thread so they can answer in one tap.
     const e164 = context?.clientPhone ? toE164(context.clientPhone) : null;
-    if (!e164) return;
+    if (!e164) {
+      console.warn(
+        `No text sent on job ${input.jobId}: ` +
+          (context?.clientPhone
+            ? `"${context.clientPhone}" is not a number this can dial.`
+            : "the client has no phone number on file.")
+      );
+      return;
+    }
+    if (!isTwilioConfigured) {
+      console.warn(
+        `No text sent on job ${input.jobId}: no text provider is set up. ` +
+          "Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER, then redeploy."
+      );
+      return;
+    }
     await sendSms(
       e164,
       clientMessageText({
