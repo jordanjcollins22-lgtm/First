@@ -14,6 +14,7 @@ function contact(over: Partial<ContactRow> = {}): ContactRow {
     contactType: "client",
     statedType: "client",
     paidCents: 0,
+    invoiceCount: 0,
     tags: [],
     doNotContact: false,
     pipelineStage: null,

@@ -25,6 +25,9 @@ export interface ContactRow {
   statedType: string;
   /** What they have actually paid, in cents. */
   paidCents: number;
+  /** How many invoices we have raised against them. A billed contact is a
+   * client whether or not a payment can be joined to the bill. */
+  invoiceCount: number;
   tags: string[];
   /** Asked not to be contacted. Shown on the row, because the whole reason to
    * carry it across from the CRM is that somebody sees it before they ring. */
@@ -158,6 +161,22 @@ export async function getContacts(): Promise<ContactsData> {
     // Nobody has paid, as far as anybody can tell.
   }
 
+  // How many bills each contact has had. Tolerated the same way the payments
+  // read is: before the invoices table exists nobody has been billed, which
+  // is a true answer rather than a broken page.
+  const invoicesByCustomer = new Map<string, number>();
+  try {
+    const billed = await fetchAllRows<{ customer_id: string }>((from, to) =>
+      supabase.from("client_invoices").select("customer_id").range(from, to)
+    );
+    for (const row of billed) {
+      if (!row.customer_id) continue;
+      invoicesByCustomer.set(row.customer_id, (invoicesByCustomer.get(row.customer_id) ?? 0) + 1);
+    }
+  } catch {
+    // Nobody has been billed, as far as anybody can tell.
+  }
+
   // Empty until migration 0091 runs, and empty is the right answer then: with
   // no record of a merge there is nothing to offer an undo for.
   const { data: mergeRows } = await supabase
@@ -187,10 +206,12 @@ export async function getContacts(): Promise<ContactsData> {
   const contacts: ContactRow[] = data.map((c) => ({
     contactType: effectiveType({
       paidCents: paidByCustomer.get(c.id) ?? 0,
+      invoiceCount: invoicesByCustomer.get(c.id) ?? 0,
       contactType: c.contact_type,
     }),
     statedType: c.contact_type ?? "",
     paidCents: paidByCustomer.get(c.id) ?? 0,
+    invoiceCount: invoicesByCustomer.get(c.id) ?? 0,
     tags: c.tags ?? [],
     doNotContact: c.do_not_contact ?? false,
     pipelineStage: c.pipeline_stage,

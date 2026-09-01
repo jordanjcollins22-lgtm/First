@@ -74,17 +74,75 @@ describe("summariseBook", () => {
       contact(),
       contact({ contactType: "supplier" }),
     ]);
-    expect(summary).toEqual({ clients: 1, leads: 2, miscalled: 1 });
+    expect(summary).toEqual({ clients: 1, leads: 2, miscalled: 1, billedUnpaid: 0 });
   });
 
   it("is empty for an empty book", () => {
-    expect(summariseBook([])).toEqual({ clients: 0, leads: 0, miscalled: 0 });
+    expect(summariseBook([])).toEqual({ clients: 0, leads: 0, miscalled: 0, billedUnpaid: 0 });
   });
 });
 
 describe("bookLine", () => {
   it("says what the words mean, because this one changed", () => {
     const line = bookLine(summariseBook([contact({ paidCents: 1 }), contact()]));
-    expect(line).toBe("1 client, 1 lead. A client is somebody who has paid us.");
+    expect(line).toBe("1 client, 1 lead. A client is somebody we have billed or been paid by.");
+  });
+});
+
+
+describe("somebody we have billed", () => {
+  const billed = { paidCents: 0, invoiceCount: 1, contactType: "lead" };
+
+  it("is a client even with no payment recorded against them", () => {
+    // Twenty people here. The payments export and the invoice export share
+    // no key, so a bill and the money that settled it cannot be joined --
+    // and somebody we sent a bill to is not a prospect.
+    expect(effectiveType(billed)).toBe("client");
+  });
+
+  it("is a client while the bill is still unpaid", () => {
+    // Being owed money is a relationship, not a lead.
+    expect(effectiveType({ paidCents: 0, invoiceCount: 3, contactType: "" })).toBe("client");
+  });
+
+  it("stays a lead with no bill and no money", () => {
+    expect(effectiveType({ paidCents: 0, invoiceCount: 0, contactType: "client" })).toBe("lead");
+  });
+
+  it("does not turn a supplier into a client", () => {
+    // A supplier we billed for something is still a supplier. Money and
+    // bills decide nothing about a standing relationship.
+    expect(effectiveType({ paidCents: 500, invoiceCount: 2, contactType: "supplier" })).toBe(
+      "supplier"
+    );
+  });
+
+  it("treats an absent count as nothing known rather than nothing billed", () => {
+    // Callers that ask before invoices are in the picture must not have
+    // their contacts silently demoted.
+    expect(effectiveType({ paidCents: 1000, contactType: "lead" })).toBe("client");
+    expect(effectiveType({ paidCents: 0, contactType: "client" })).toBe("lead");
+  });
+
+  it("is no longer miscalled once a bill exists", () => {
+    expect(miscalledClient({ paidCents: 0, invoiceCount: 1, contactType: "client" })).toBe(false);
+    expect(miscalledClient({ paidCents: 0, invoiceCount: 0, contactType: "client" })).toBe(true);
+  });
+
+  it("counts the billed-but-unpaid separately, because it is a list to work", () => {
+    const summary = summariseBook([
+      { paidCents: 0, invoiceCount: 1, contactType: "lead" },
+      { paidCents: 5000, invoiceCount: 1, contactType: "lead" },
+      { paidCents: 5000, invoiceCount: 0, contactType: "lead" },
+      { paidCents: 0, invoiceCount: 0, contactType: "lead" },
+    ]);
+    expect(summary.clients).toBe(3);
+    expect(summary.leads).toBe(1);
+    expect(summary.billedUnpaid).toBe(1);
+  });
+
+  it("says so on the line above the book", () => {
+    const line = bookLine(summariseBook([{ paidCents: 0, invoiceCount: 1, contactType: "lead" }]));
+    expect(line).toMatch(/1 billed with no payment recorded/);
   });
 });
