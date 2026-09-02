@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { THUMBNAIL } from "@/lib/storage-image-url";
 import { ResizedImage } from "./resized-image";
+import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
 import { ObjectionsPanel } from "@/components/proposal/objections-panel";
 import type { ScopeLine } from "@/lib/objections";
@@ -51,6 +52,11 @@ export function ProposalView({
    * failed to resolve still carry `custom-<uuid>`. Rebuilding fixes them; this
    * makes sure no client reads a database id in the meantime.
    */
+  const scopeGroups = groupByService(
+    proposal.scope_snapshot.map((zone) => ({ ...zone, serviceLabel: labelFor(zone.serviceLabel) }))
+  );
+  const grouped = worthGrouping(scopeGroups);
+
   function labelFor(stored: string): string {
     return displayLabel(stored, serviceNames[stored] ? { name: serviceNames[stored] } : undefined);
   }
@@ -137,12 +143,24 @@ export function ProposalView({
         {proposal.scope_snapshot.length === 0 ? (
           <p className="text-sm text-muted-foreground">No work areas on this proposal.</p>
         ) : (
-          proposal.scope_snapshot.map((zone, i) => (
-            <div key={i} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
+          /* Gathered by service. Six lawn areas listed separately reads as
+             being charged six times for lawn care; under one heading it reads
+             as what it is, which is one service in six places. */
+          scopeGroups.map((group) => (
+            <div key={group.service} className="flex flex-col gap-3">
+              {grouped && (
+                <h3 className="text-base font-semibold">{groupHeading(group)}</h3>
+              )}
+
+              {group.zones.map((zone, i) => (
+            <div key={`${group.service}-${i}`} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold">{zone.zoneName}</p>
-                  <p className="text-sm text-primary">{labelFor(zone.serviceLabel)}</p>
+                  {/* Only where the heading is not already saying it. */}
+                  {!grouped && (
+                    <p className="text-sm text-primary">{labelFor(zone.serviceLabel)}</p>
+                  )}
                 </div>
                 {/* One tap to ask about this area specifically. The
                     alternative is a client typing "the one by the fence" and
@@ -160,24 +178,29 @@ export function ProposalView({
               </div>
               {zone.scopeText && <p className="text-sm text-muted-foreground">{zone.scopeText}</p>}
               {zone.photoPaths.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                /* Whole photos, not squares cut out of the middle of them.
+                   A square crop of a wide garden shot is a close-up of the
+                   lawn with the beds either side of it removed, which is the
+                   part being quoted for. */
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {zone.photoPaths.map((path) => (
-                    // A thumbnail, because that is what a square in a grid of
-                    // three is. These were the originals: full camera photos,
-                    // several megabytes each, several per zone, downloaded
-                    // whole to fill a hundred-pixel tile. On a phone on mobile
-                    // data that is most of why a sent proposal took so long to
-                    // appear.
+                    // A thumbnail, at the size it is displayed. These were the
+                    // originals: full camera photos, several megabytes each,
+                    // several per zone, downloaded whole to fill a tile a few
+                    // hundred pixels across. On a phone on mobile data that is
+                    // most of why a sent proposal took so long to appear.
                     <ResizedImage
                       key={path}
                       path={path}
                       transform={THUMBNAIL}
                       alt={`${zone.zoneName} photo`}
-                      className="aspect-square rounded-lg object-cover"
+                      className="aspect-square rounded-lg bg-muted object-contain"
                     />
                   ))}
                 </div>
               )}
+            </div>
+              ))}
             </div>
           ))
         )}

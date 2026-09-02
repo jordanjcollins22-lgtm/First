@@ -12,6 +12,7 @@ import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { JobStatus } from "@/types/domain";
 import { formatJobNumber } from "@/lib/job-number";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
+import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
 import type { ProposalSiteImageTransform } from "@/types/domain";
 
 /**
@@ -87,6 +88,14 @@ export function WorkOrderView({
    * back there instead. */
   back?: { href: string; label: string };
 }) {
+  // Worked out here rather than stored: zones get edited and a zone's service
+  // can change, and a stored grouping goes wrong the first time somebody
+  // moves an area from mowing to mulching.
+  const zoneGroups = groupByService(
+    order.zones.map((zone) => ({ ...zone, serviceLabel: zone.service }))
+  );
+  const grouped = worthGrouping(zoneGroups);
+
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
       <Link
@@ -176,19 +185,33 @@ export function WorkOrderView({
           No zones have been marked up on this job yet. Check with the office before you start.
         </p>
       ) : (
-        <ol className="flex flex-col gap-3">
-          {order.zones.map((zone, i) => (
+        /* Gathered by service. Six lawn areas as six separate blocks reads as
+           six jobs, and a crew loads the truck for six. Under one heading it
+           reads as one job in six places, which is what it is. */
+        <div className="flex flex-col gap-5">
+          {zoneGroups.map((group) => (
+          <section key={group.service} className="flex flex-col gap-2">
+            {grouped && (
+              <h3 className="text-sm font-bold uppercase tracking-wide text-primary">
+                {groupHeading(group)}
+              </h3>
+            )}
+            <ol className="flex flex-col gap-3">
+              {group.zones.map((zone, i) => (
             <li key={zone.id} className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
               <div className="mb-2 flex items-start gap-2">
                 <span
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
                   style={{ backgroundColor: zone.color }}
                 >
-                  {i + 1}
+                  {/* The number it has on the map, not its place in this
+                      group. A number on a sheet is what somebody points at
+                      across a garden. */}
+                  {group.positions[i]}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold leading-snug">{zone.name}</p>
-                  <p className="text-sm text-primary">{zone.service}</p>
+                  {!grouped && <p className="text-sm text-primary">{zone.service}</p>}
                 </div>
               </div>
 
@@ -227,8 +250,11 @@ export function WorkOrderView({
               <ZonePhotos photos={zone.photos} zoneName={zone.name} />
 
             </li>
+              ))}
+            </ol>
+          </section>
           ))}
-        </ol>
+        </div>
       )}
 
       {/* Where the work gets recorded. This is the screen open on the
