@@ -23,26 +23,44 @@ export function ResizedImage({
   path,
   transform,
   alt,
+  /** Shape of the tile, as a Tailwind aspect class. The photo is fitted
+   * inside it whole. */
+  aspect = "aspect-[4/3]",
   className,
 }: {
   path: string;
   transform: ImageTransform;
   alt: string;
+  aspect?: string;
   className?: string;
 }) {
   const [full, setFull] = useState(false);
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={full ? canvasImageUrl(path) : canvasImageUrl(path, transform)}
-      alt={alt}
-      loading="lazy"
-      decoding="async"
-      // Once, and only from the resized version. Retrying the original after
-      // the original failed would loop on a photo that is genuinely gone.
-      onError={() => setFull((was) => was || true)}
-      className={className}
-    />
+    // The box, not the photo, decides the shape.
+    //
+    // The photo used to be the box: an <img> with an aspect class and no
+    // width of its own takes its width from its intrinsic size, and a lazy
+    // image that has not loaded yet has no intrinsic size at all. It
+    // collapses to the width of its own alt text, which wraps -- so a
+    // proposal full of photos below the fold rendered as a row of tall thin
+    // slivers until each one happened to load.
+    //
+    // A wrapper with a fixed shape cannot do that. It is the right size
+    // before the photo exists, while it loads, and if it never arrives.
+    <div className={`${aspect} overflow-hidden rounded-lg bg-muted ${className ?? ""}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={full ? canvasImageUrl(path) : canvasImageUrl(path, transform)}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        // Once, and only from the resized version. Retrying the original
+        // after the original failed would loop on a photo that is genuinely
+        // gone.
+        onError={() => setFull((was) => was || true)}
+        className="h-full w-full object-contain"
+      />
+    </div>
   );
 }

@@ -194,7 +194,6 @@ export function ProposalView({
                       path={path}
                       transform={THUMBNAIL}
                       alt={`${zone.zoneName} photo`}
-                      className="aspect-square rounded-lg bg-muted object-contain"
                     />
                   ))}
                 </div>
