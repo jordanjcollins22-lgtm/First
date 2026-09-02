@@ -52,6 +52,7 @@ import { createClient } from "@/lib/supabase/client";
 import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
+import { compareImagery, describeImagery } from "@/lib/image-identity";
 import { ZoneServiceDialog } from "./zone-service-dialog";
 import { serviceTypeById } from "./service-catalog";
 import type { Point, WorkZone, ZoneServiceData } from "./types";
@@ -82,6 +83,14 @@ interface CanvasImage {
   rotation: number;
   /** Real-world feet spanned by the image's full native width, once known. */
   realWidthFeet: number | null;
+  /**
+   * True for a photo somebody uploaded rather than one fetched from the map.
+   *
+   * Decides the zoom floor. An upload opens showing all of itself and can be
+   * scaled back down to that; a satellite image keeps the covering floor,
+   * because it is fetched to fit the board and is meant to be turned.
+   */
+  uploaded: boolean;
 }
 
 type Tool = "move" | "zone" | "property-line" | "house" | "note";
@@ -191,6 +200,9 @@ export function ImageCanvasBoard({
   const [keepCentered, setKeepCentered] = useState(true);
   const [autoTurned, setAutoTurned] = useState<number | null>(null);
   const [satelliteError, setSatelliteError] = useState<string | null>(null);
+  /** What the last imagery check found. Kept separate from the error line:
+   * "no change" is a successful answer, not a failure. */
+  const [imageryNote, setImageryNote] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [submittingEval, setSubmittingEval] = useState(false);
   const [evalSubmitted, setEvalSubmitted] = useState(initialEvaluationStatus === "completed");
@@ -399,6 +411,11 @@ export function ImageCanvasBoard({
               setImage({
                 element,
                 blob,
+                // The permissive floor on the way back in. Whatever this was
+                // when it was made, the scale it was saved at is the scale
+                // somebody was looking at, and forcing it up to the covering
+                // floor on reopen moves their work for them.
+                uploaded: true,
                 x: initialDesign.image_x,
                 y: initialDesign.image_y,
                 // Clamped on the way in. A design saved before the photo had
@@ -464,6 +481,8 @@ export function ImageCanvasBoard({
               setImage({
                 element,
                 blob: design.imageBlob,
+                // As above: the saved scale is what somebody was looking at.
+                uploaded: true,
                 x: design.imageX,
                 y: design.imageY,
                 scale: design.imageScale,
@@ -631,20 +650,49 @@ export function ImageCanvasBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, drawingPoints, zones]);
 
-  async function loadImageBlob(blob: Blob, realWidthFeet: number | null = null) {
+  async function loadImageBlob(
+    blob: Blob,
+    realWidthFeet: number | null = null,
+    uploaded = false
+  ) {
     const element = await loadImageElement(blob);
-    // Scaled to cover the board's diagonal rather than to fit inside it, so
-    // there is photo under every corner however far it is turned. Fitting is
-    // what put the white triangles there.
-    const scale = coverScale(element.width, element.height, CANVAS_WIDTH, CANVAS_HEIGHT);
-    setImage({ element, blob, x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale, rotation: 0, realWidthFeet });
+
+    // A satellite image is scaled to cover the board's diagonal, so there is
+    // photo under every corner however far it is turned -- fitting is what
+    // put the white triangles there.
+    //
+    // An upload opens showing all of itself instead. The board's diagonal is
+    // longer than either of its sides, so covering an uploaded photo always
+    // crops it, and because the covering scale was also the zoom floor an
+    // upload arrived cropped with no way to zoom out to what had just been
+    // chosen.
+    const scale = uploaded
+      ? zoomBounds({
+          imageWidth: element.width,
+          imageHeight: element.height,
+          canvasWidth: CANVAS_WIDTH,
+          canvasHeight: CANVAS_HEIGHT,
+          fitWhole: true,
+        }).min
+      : coverScale(element.width, element.height, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    setImage({
+      element,
+      blob,
+      x: CANVAS_WIDTH / 2,
+      y: CANVAS_HEIGHT / 2,
+      scale,
+      rotation: 0,
+      realWidthFeet,
+      uploaded,
+    });
     setLocked(false);
     imageDirtyRef.current = true;
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) loadImageBlob(file);
+    if (file) loadImageBlob(file, null, true);
     e.target.value = "";
   }
 
@@ -652,7 +700,11 @@ export function ImageCanvasBoard({
     lng: number,
     lat: number,
     mapBearing = 0,
-    baseZoom = BASE_SATELLITE_ZOOM
+    baseZoom = BASE_SATELLITE_ZOOM,
+    /** Skip whatever the browser has stored. Checking for newer imagery
+     * against a cached copy would answer "no change" every time, which is
+     * the one answer the check must never invent. */
+    fresh = false
   ): Promise<{ blob: Blob; realWidthFeet: number }> {
     // Mapbox requires its logo/attribution on static images, anchored to the
     // bottom edge. Fetch extra vertical padding, split evenly so the requested
@@ -674,7 +726,7 @@ export function ImageCanvasBoard({
     );
 
     const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},${mapBearing}/${request}x${request}@2x?access_token=${env.mapboxToken}`;
-    const res = await fetch(url);
+    const res = await fetch(url, fresh ? { cache: "reload" } : undefined);
     if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
     const rawBlob = await res.blob();
     const rawImage = await loadImageElement(rawBlob);
@@ -807,6 +859,54 @@ export function ImageCanvasBoard({
     } catch (err) {
       setSatelliteError(
         err instanceof Error ? err.message : "Couldn't load a wider satellite photo."
+      );
+    } finally {
+      setSatelliteLoading(false);
+    }
+  }
+
+  /**
+   * Asks the map whether it has a different photo of this address.
+   *
+   * There is no capture date to be had — the static images API serves pixels
+   * and says nothing about when they were taken — so this cannot report that
+   * imagery is newer. What it can do is fetch the same view again, past the
+   * browser cache, and say whether what came back differs from what is on the
+   * board. That is a narrower claim and the wording matches it.
+   *
+   * A change is applied straight away rather than offered, because somebody
+   * pressing this has asked for the current photo. The aiming and the zoom
+   * are kept, so it is the same view with newer ground under it.
+   */
+  async function checkForNewerImagery() {
+    if (!origin || satelliteLoading || !image) return;
+    setSatelliteError(null);
+    setImageryNote(null);
+    setSatelliteLoading(true);
+
+    try {
+      const aimed = normalizeDegrees(bearing + image.rotation);
+      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
+        origin.lng,
+        origin.lat,
+        aimed,
+        mapZoom,
+        true
+      );
+
+      const verdict = await compareImagery(image.blob, blob);
+      setImageryNote(describeImagery(verdict));
+
+      // Nothing is touched unless there is genuinely something new. Reloading
+      // an identical photo would reset the aiming for no reason.
+      if (verdict === "changed") {
+        await loadImageBlob(blob, realWidthFeet);
+        setBearing(aimed);
+        recenterImage();
+      }
+    } catch (err) {
+      setSatelliteError(
+        err instanceof Error ? err.message : "Couldn't check for newer imagery."
       );
     } finally {
       setSatelliteLoading(false);
@@ -978,6 +1078,7 @@ export function ImageCanvasBoard({
       imageHeight: element.height,
       canvasWidth: CANVAS_WIDTH,
       canvasHeight: CANVAS_HEIGHT,
+      fitWhole: image?.uploaded ?? false,
     });
   }
 
@@ -1070,6 +1171,7 @@ export function ImageCanvasBoard({
         imageHeight: image.element.height,
         canvasWidth: CANVAS_WIDTH,
         canvasHeight: CANVAS_HEIGHT,
+        fitWhole: image.uploaded,
       })
     : { min: 1, max: 1 };
   const dialogZone = zones.find((zone) => zone.id === serviceDialogZoneId) ?? null;
@@ -1704,6 +1806,23 @@ export function ImageCanvasBoard({
             busy={satelliteLoading}
             onStep={(steps) => refetchAtZoom(stepMapZoom(mapZoom, steps))}
           />
+
+          {/* Only where there is a satellite photo to check against. Offering
+              it on an uploaded photo would be a button that cannot do
+              anything. */}
+          {origin != null && image != null && !image.uploaded && (
+            <button
+              type="button"
+              onClick={checkForNewerImagery}
+              disabled={satelliteLoading}
+              className="flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${satelliteLoading ? "animate-spin" : ""}`} />
+              {satelliteLoading ? "Checking\u2026" : "Check for newer imagery"}
+            </button>
+          )}
+
+          {imageryNote && <p className="w-full text-xs text-muted-foreground">{imageryNote}</p>}
         </div>
       )}
 

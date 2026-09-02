@@ -1,18 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { coversAtEveryAngle } from "./canvas-cover";
-import {
-  canStepMapZoom,
-  clampMapZoom,
-  clampScale,
-  distanceBetween,
-  MAP_ZOOM_MAX,
-  MAP_ZOOM_MIN,
-  pinchScale,
-  stepMapZoom,
-  zoomBounds,
-  zoomPercent,
-} from "./canvas-zoom";
+import { MAP_ZOOM_MAX, MAP_ZOOM_MIN, canStepMapZoom, clampMapZoom, clampScale, distanceBetween, pinchScale, stepMapZoom, zoomBounds, zoomPercent } from "./canvas-zoom";
 
 // The real board, and a real satellite photo: 1280 requested at @2x, with the
 // Mapbox attribution strip cropped off the bottom.
@@ -196,5 +185,61 @@ describe("clampMapZoom", () => {
     expect(clampMapZoom(99)).toBe(MAP_ZOOM_MAX);
     expect(clampMapZoom(1)).toBe(MAP_ZOOM_MIN);
     expect(clampMapZoom(Number.NaN)).toBe(MAP_ZOOM_MIN);
+  });
+});
+
+describe("an uploaded photo", () => {
+  // A phone photo and a board that is wider than it is tall.
+  const PHOTO = { imageWidth: 4032, imageHeight: 3024, canvasWidth: 1000, canvasHeight: 800 };
+
+  it("can be zoomed out until all of it is on the board", () => {
+    // The bug: covering always crops, because a board's diagonal is longer
+    // than either of its sides. With the covering scale as the floor, an
+    // upload opened cropped and the slider would not go back.
+    const cover = zoomBounds(PHOTO);
+    const fitted = zoomBounds({ ...PHOTO, fitWhole: true });
+
+    expect(fitted.min).toBeLessThan(cover.min);
+    // At the fitted floor the whole photo is inside the board.
+    expect(PHOTO.imageWidth * fitted.min).toBeLessThanOrEqual(PHOTO.canvasWidth + 1e-9);
+    expect(PHOTO.imageHeight * fitted.min).toBeLessThanOrEqual(PHOTO.canvasHeight + 1e-9);
+  });
+
+  it("does not lose any of its zoom-in range by gaining the zoom-out", () => {
+    // Dropping the floor must not quietly take away how far somebody can go
+    // the other way.
+    expect(zoomBounds({ ...PHOTO, fitWhole: true }).max).toBeGreaterThanOrEqual(
+      zoomBounds(PHOTO).max
+    );
+  });
+
+  it("lets the slider actually reach the fitted floor", () => {
+    const bounds = zoomBounds({ ...PHOTO, fitWhole: true });
+    expect(clampScale(0, bounds)).toBe(bounds.min);
+    expect(clampScale(bounds.min, bounds)).toBe(bounds.min);
+  });
+
+  it("rescues a photo smaller than the board, which was the worst case", () => {
+    // A screenshot smaller than the board had to be blown up past 1:1 just to
+    // cover, so it opened enlarged and cropped with no way back.
+    const small = { imageWidth: 800, imageHeight: 600, canvasWidth: 1000, canvasHeight: 800 };
+    expect(zoomBounds(small).min).toBeGreaterThan(1);
+    expect(zoomBounds({ ...small, fitWhole: true }).min).toBeLessThanOrEqual(1.25);
+  });
+});
+
+describe("a satellite photo", () => {
+  it("keeps the covering floor, so turning it never shows the board", () => {
+    const map = { imageWidth: 1280, imageHeight: 1280, canvasWidth: 1000, canvasHeight: 800 };
+    const bounds = zoomBounds(map);
+    expect(
+      coversAtEveryAngle(
+        map.imageWidth,
+        map.imageHeight,
+        map.canvasWidth,
+        map.canvasHeight,
+        bounds.min
+      )
+    ).toBe(true);
   });
 });

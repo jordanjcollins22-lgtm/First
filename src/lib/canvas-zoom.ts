@@ -1,4 +1,4 @@
-import { coverScale } from "@/lib/canvas-cover";
+import { containScale, coverScale } from "@/lib/canvas-cover";
 
 /**
  * Zooming the photo on the evaluation board.
@@ -37,9 +37,37 @@ export function zoomBounds(input: {
   imageHeight: number;
   canvasWidth: number;
   canvasHeight: number;
+  /**
+   * True for a photo somebody uploaded, where the floor is seeing all of it.
+   *
+   * The covering floor is right for a satellite image, which is fetched to
+   * suit the board and meant to be turned. It is wrong for an upload: the
+   * board's diagonal is longer than either side, so covering always crops,
+   * and the floor being the cover scale meant an uploaded photo opened
+   * cropped and would not zoom out. Rotating one that does not cover shows
+   * the board behind the corners, which is a visible and reversible choice
+   * -- not being able to see your own photo is neither.
+   */
+  fitWhole?: boolean;
 }): ZoomBounds {
-  const min = coverScale(input.imageWidth, input.imageHeight, input.canvasWidth, input.canvasHeight);
-  return { min, max: min * 4 };
+  const cover = coverScale(
+    input.imageWidth,
+    input.imageHeight,
+    input.canvasWidth,
+    input.canvasHeight
+  );
+  const contain = containScale(
+    input.imageWidth,
+    input.imageHeight,
+    input.canvasWidth,
+    input.canvasHeight
+  );
+
+  const min = input.fitWhole ? Math.min(cover, contain) : cover;
+  // The ceiling stays measured from the covering scale either way, so
+  // dropping the floor lets somebody out without quietly taking away how far
+  // they can go in.
+  return { min, max: Math.max(cover, contain) * 4 };
 }
 
 export function clampScale(scale: number, bounds: ZoomBounds): number {

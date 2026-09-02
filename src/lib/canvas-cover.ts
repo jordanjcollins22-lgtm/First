@@ -34,6 +34,26 @@ export function coverScale(
 }
 
 /**
+ * How much to scale a photo so the whole of it is on the board.
+ *
+ * The opposite request to covering, and the right one for a photo somebody
+ * has just uploaded: they picked that image, and the first thing they should
+ * see is all of it. Covering a board with an uploaded photo always crops it
+ * -- the board's diagonal is longer than either of its sides, so the cover
+ * scale is always the larger of the two -- which is how an upload arrived
+ * looking fully zoomed in with no way back out.
+ */
+export function containScale(
+  imageWidth: number,
+  imageHeight: number,
+  canvasWidth: number,
+  canvasHeight: number
+): number {
+  if (imageWidth <= 0 || imageHeight <= 0) return 1;
+  return Math.min(canvasWidth / imageWidth, canvasHeight / imageHeight);
+}
+
+/**
  * Whether a photo drawn at this scale still covers the board once turned.
  *
  * Used by the tests rather than by the app — the app's job is to pick a scale
