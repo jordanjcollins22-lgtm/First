@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { PREVIEW } from "@/lib/storage-image-url";
+import { drawnSize, looksResized } from "@/lib/site-map-geometry";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
 /** Re-renders the property photo with the drawn work-area outlines on top —
@@ -39,16 +39,23 @@ export function SiteMapImage({
   dimSurroundings?: boolean;
   className?: string;
 }) {
-  // The site map is displayed at page width, never at the resolution it was
-  // captured at. PREVIEW is 1280px wide, which is more than any phone shows
-  // and a fraction of the original's weight.
+  // The original, at its own resolution, and deliberately not a resized copy.
   //
-  // Falls back to the original if the resize does not come back: asking for a
-  // resized copy routes through Supabase's image renderer, which is not on
-  // for every project, and a sent proposal missing its site map is worse than
-  // a heavy one.
-  const [fullSize, setFullSize] = useState(false);
-  const url = fullSize ? canvasImageUrl(imagePath) : canvasImageUrl(imagePath, PREVIEW);
+  // Everything below is drawn from `naturalSize` -- the width the browser
+  // reports for whatever image actually loaded -- multiplied by a scale that
+  // was worked out on the evaluation board against the original's pixels.
+  // Ask storage for a smaller copy and that multiplication silently means
+  // something else: the photo is drawn at the wrong size inside a fixed
+  // viewBox, so the map renders at the wrong zoom with the zones no longer
+  // sitting on the ground they were drawn around. It happens on every load,
+  // because none of this is stateful, and locking the board does not help --
+  // the saved numbers were right, the reading of them was not.
+  //
+  // The transform records no natural size, so there is nothing to correct
+  // against. Until it does, this image cannot be resized. The zone photos on
+  // the proposal still are: they are tiles with no geometry riding on them,
+  // and they were the bulk of the weight anyway.
+  const url = canvasImageUrl(imagePath);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
@@ -56,12 +63,6 @@ export function SiteMapImage({
     const img = new Image();
     img.onload = () => {
       if (!cancelled) setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-    };
-    // Without this the skeleton below stays up forever when the resized copy
-    // does not come back, because nothing else ever sets a natural size. A
-    // sent proposal stuck on a shimmer is the worst version of this failing.
-    img.onerror = () => {
-      if (!cancelled) setFullSize((was) => was || true);
     };
     img.src = url;
     return () => {
@@ -80,8 +81,19 @@ export function SiteMapImage({
     );
   }
 
-  const w = naturalSize.w * transform.scale;
-  const h = naturalSize.h * transform.scale;
+  const { width: w, height: h } = drawnSize(naturalSize, transform);
+
+  // Said out loud rather than rendered wrong quietly. A saved design always
+  // covers its board, so a photo that does not is not the photo these numbers
+  // describe -- which in practice means somebody asked storage for a resized
+  // copy again.
+  if (process.env.NODE_ENV !== "production" && looksResized(naturalSize, transform)) {
+    console.warn(
+      `Site map ${imagePath} is smaller than the saved transform expects. ` +
+        "The photo must be loaded at its original resolution: the drawn size is " +
+        "its natural width times a scale worked out against the original's pixels."
+    );
+  }
 
   const view = frame ?? {
     x: 0,
