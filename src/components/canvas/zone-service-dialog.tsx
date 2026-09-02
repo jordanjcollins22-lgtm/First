@@ -30,6 +30,7 @@ import {
   readMeasurement,
   type MeasurementKind,
 } from "@/lib/zone-measurement";
+import { matchesSuggestion, suggestedLocations } from "@/lib/zone-locations";
 
 function PhotoThumb({
   path,
@@ -295,6 +296,8 @@ interface ZoneServiceDialogProps {
     measurementKind: MeasurementKind
   ) => void;
   onCancel: () => void;
+  /** Locations already used on this evaluation, for the chips. */
+  otherLocations?: string[];
 }
 
 export function ZoneServiceDialog({
@@ -303,6 +306,7 @@ export function ZoneServiceDialog({
   jobId,
   catalog,
   initialLocation,
+  otherLocations,
   initialService,
   initialLengthFt,
   initialWidthFt,
@@ -312,6 +316,13 @@ export function ZoneServiceDialog({
   onCancel,
 }: ZoneServiceDialogProps) {
   const [location, setLocation] = useState(initialLocation);
+  // Worked out from what has been named so far rather than from a stored
+  // list: zones get renamed and deleted, and a stored list of places would
+  // keep offering one that no longer exists anywhere on the property.
+  const locationSuggestions = suggestedLocations(
+    (otherLocations ?? []).map((value) => ({ location: value })),
+    { exclude: initialLocation }
+  );
   const [typeId, setTypeId] = useState(initialService?.typeId ?? "");
   const [values, setValues] = useState<Record<string, string>>(initialService?.values ?? {});
   const [notes, setNotes] = useState(initialService?.notes ?? "");
@@ -664,12 +675,51 @@ export function ZoneServiceDialog({
   if (currentStep === "location") {
     body = (
       <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Where is this zone located?" subtitle={zoneName}>
-        <Input
-          placeholder="e.g. Front yard, near the driveway"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          autoFocus
-        />
+        <div className="flex flex-col gap-3">
+          {/* The places already named on this property, tapped rather than
+              retyped. An evaluation walks one garden and the same few places
+              come up over and over; typing "Front yard, near the driveway" a
+              fourth time on a phone is slow, and it is how one place ends up
+              spelled four ways and reads as four places on the crew sheet. */}
+          {locationSuggestions.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs text-muted-foreground">Already on this property</p>
+              <div className="flex flex-wrap gap-1.5">
+                {locationSuggestions.map((suggestion) => {
+                  const chosen = matchesSuggestion(location, suggestion);
+                  return (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setLocation(chosen ? "" : suggestion)}
+                      aria-pressed={chosen}
+                      className={`min-h-9 rounded-full border px-3 text-sm font-medium ${
+                        chosen
+                          ? "border-transparent bg-primary text-primary-foreground"
+                          : "border-border hover:bg-accent/50"
+                      }`}
+                    >
+                      {suggestion}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <Input
+            placeholder={
+              locationSuggestions.length > 0
+                ? "Or somewhere new"
+                : "e.g. Front yard, near the driveway"
+            }
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            // Not focused where there are chips to tap: a keyboard covering
+            // them means the shortcut is offered and then hidden.
+            autoFocus={locationSuggestions.length === 0}
+          />
+        </div>
       </StepShell>
     );
   } else if (currentStep === "measurements") {

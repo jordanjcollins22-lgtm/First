@@ -1968,6 +1968,9 @@ export function ImageCanvasBoard({
         jobId={jobId}
         catalog={catalog}
         initialLocation={dialogZone?.location ?? ""}
+        // Every place named on this evaluation so far, so the next zone in
+        // the front garden is a tap rather than a retype.
+        otherLocations={zones.map((zone) => zone.location)}
         initialService={dialogZone?.service ?? null}
         initialLengthFt={dialogZone?.lengthFt ?? null}
         initialWidthFt={dialogZone?.widthFt ?? null}
