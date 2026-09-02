@@ -37,6 +37,12 @@ export interface ClientInvoice {
   dueOn: string | null;
   paidOn: string | null;
   notes: string | null;
+  /** What has actually been recorded against this invoice, in cents. Money
+   * arriving is what settles a bill; a tick in a box is somebody remembering
+   * to. Both count, and this is the half that needs nobody. */
+  paidCents?: number;
+  /** When the last of that money arrived, for the receipt line. */
+  lastPaidOn?: string | null;
   /** The schedule settling this bill, when one was agreed. */
   plan?: InvoicePlan | null;
 }
@@ -88,6 +94,13 @@ function dayNumber(iso: string): number | null {
 export function invoiceStatus(invoice: ClientInvoice, today = new Date()): InvoiceStatus {
   if (invoice.paidOn) return "paid";
 
+  // Money recorded against this invoice, before anything anybody said about
+  // it. A bill covered by its payments is paid whether or not somebody
+  // remembered to tick it, and one part covered says so rather than reading
+  // as untouched.
+  const covered = coveredByPayments(invoice);
+  if (covered === "full") return "paid";
+
   if (invoice.plan && invoice.plan.status !== "cancelled") {
     const progress = planProgress(invoice.plan, today);
     if (progress.settled) return "paid";
@@ -100,6 +113,8 @@ export function invoiceStatus(invoice: ClientInvoice, today = new Date()): Invoi
   // payment that settled it. The file's own word is the best evidence there
   // is; it is used only after a real payment date and a real plan, both of
   // which are this app's own facts and outrank it.
+  if (covered === "part") return "partly-paid";
+
   const claimed = (invoice.sourceStatus ?? "").toLowerCase();
   if (claimed === "paid") return "paid";
   if (claimed === "partial") return "partly-paid";
@@ -167,6 +182,30 @@ export interface InvoiceSummary {
 }
 
 const cents = (amount: number | null): number => (amount == null ? 0 : Math.round(amount * 100));
+
+/**
+ * How far the payments recorded against this invoice go.
+ *
+ * "none" also covers an invoice with no amount on it: there is no target to
+ * measure against, so no amount of money can be said to cover it. Saying
+ * otherwise would mark a bill paid because a penny arrived.
+ */
+export function coveredByPayments(invoice: ClientInvoice): "full" | "part" | "none" {
+  const paid = invoice.paidCents ?? 0;
+  if (paid <= 0) return "none";
+
+  const owed = cents(invoice.amount);
+  if (owed <= 0) return "none";
+
+  // A penny under is paid. Card rounding and a client typing a round number
+  // should not leave a bill open forever for the sake of small change.
+  return paid >= owed - 1 ? "full" : "part";
+}
+
+/** What is still outstanding after the payments recorded against it. */
+export function remainingCents(invoice: ClientInvoice): number {
+  return Math.max(0, cents(invoice.amount) - (invoice.paidCents ?? 0));
+}
 
 export function summariseInvoices(rows: ClientInvoice[], today = new Date()): InvoiceSummary {
   const summary: InvoiceSummary = {

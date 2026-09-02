@@ -260,6 +260,9 @@ export async function recordManualPayment(input: {
   customerId: string;
   planId?: string | null;
   instalmentId?: string | null;
+  /** The bill this settles, where it is known. What lets the invoice work
+   * out that it has been paid instead of waiting to be told. */
+  invoiceId?: string | null;
   amountCents: number;
   /** Anything the export or the office says. Folded to what the column
    * takes, so "Debit Card" does not fail the check constraint. */
@@ -288,6 +291,7 @@ export async function recordManualPayment(input: {
       job_id: input.jobId ?? null,
       plan_id: input.planId ?? null,
       instalment_id: input.instalmentId ?? null,
+      invoice_id: input.invoiceId ?? null,
       amount_cents: input.amountCents,
       method: paymentMethod(input.method),
       // Omitted rather than nulled when no date was given, so the column's

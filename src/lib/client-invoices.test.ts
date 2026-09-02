@@ -5,9 +5,11 @@ import {
   checkInvoiceFile,
   daysOverdue,
   invoiceLine,
+  coveredByPayments,
   invoiceStatus,
   numberFromFileName,
   owedCents,
+  remainingCents,
   summariseInvoices,
   type ClientInvoice,
 } from "./client-invoices";
@@ -26,6 +28,8 @@ const inv = (over: Partial<ClientInvoice> = {}): ClientInvoice => ({
   dueOn: "2026-05-31",
   paidOn: null,
   notes: null,
+  paidCents: 0,
+  lastPaidOn: null,
   title: null,
   scopeHtml: null,
   sourceStatus: null,
@@ -307,5 +311,58 @@ describe("what the exporting system said", () => {
     // A voided bill is not owed. Leaving it in the overdue list is asking
     // somebody to ring a client about money nobody wants.
     expect(invoiceStatus(inv({ dueOn: "2026-01-01", sourceStatus: "void" }), TODAY)).toBe("paid");
+  });
+});
+
+describe("money recorded against the invoice", () => {
+  it("marks it paid without anybody ticking a box", () => {
+    // The point of the whole thing: the bill settles because the money
+    // arrived, not because somebody remembered.
+    const covered = inv({ amount: 1200, dueOn: "2026-05-01", paidCents: 120000 });
+    expect(invoiceStatus(covered, TODAY)).toBe("paid");
+    expect(remainingCents(covered)).toBe(0);
+  });
+
+  it("says part paid when part of it has arrived", () => {
+    const half = inv({ amount: 1200, dueOn: "2026-05-01", paidCents: 60000 });
+    expect(invoiceStatus(half, TODAY)).toBe("partly-paid");
+    expect(remainingCents(half)).toBe(60000);
+  });
+
+  it("forgives a penny", () => {
+    // Card rounding should not leave a bill open forever over small change.
+    expect(coveredByPayments(inv({ amount: 1200, paidCents: 119999 }))).toBe("full");
+    expect(coveredByPayments(inv({ amount: 1200, paidCents: 119900 }))).toBe("part");
+  });
+
+  it("does not call an invoice with no amount paid because money arrived", () => {
+    // Nothing to measure against, so nothing can cover it.
+    expect(coveredByPayments(inv({ amount: null, paidCents: 500000 }))).toBe("none");
+    expect(invoiceStatus(inv({ amount: null, paidCents: 500000, dueOn: "2026-05-01" }), TODAY)).toBe(
+      "overdue"
+    );
+  });
+
+  it("counts an overpayment as covered rather than as still owing", () => {
+    expect(coveredByPayments(inv({ amount: 1200, paidCents: 200000 }))).toBe("full");
+    expect(remainingCents(inv({ amount: 1200, paidCents: 200000 }))).toBe(0);
+  });
+
+  it("lets a hand-entered paid date still win", () => {
+    expect(invoiceStatus(inv({ amount: 1200, paidCents: 0, paidOn: "2026-06-01" }), TODAY)).toBe(
+      "paid"
+    );
+  });
+
+  it("beats what the old system claimed", () => {
+    // Money in this app outranks a status an export wrote months ago.
+    const claimedOverdue = inv({ amount: 1200, paidCents: 120000, sourceStatus: "overdue" });
+    expect(invoiceStatus(claimedOverdue, TODAY)).toBe("paid");
+  });
+
+  it("leaves an untouched invoice reading off its dates", () => {
+    expect(invoiceStatus(inv({ amount: 1200, dueOn: "2026-05-01", paidCents: 0 }), TODAY)).toBe(
+      "overdue"
+    );
   });
 });

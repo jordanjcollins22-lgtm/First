@@ -123,6 +123,50 @@ async function plansForInvoices(invoiceIds: string[]): Promise<Map<string, Invoi
   return byInvoice;
 }
 
+/**
+ * What has been paid against each of these invoices.
+ *
+ * One read for the whole page rather than one per card. A failure is not
+ * fatal: the invoices still list, they just fall back to what was said about
+ * them rather than what arrived.
+ */
+async function paymentsForInvoices(
+  invoiceIds: string[]
+): Promise<Map<string, { cents: number; lastOn: string | null }>> {
+  const byInvoice = new Map<string, { cents: number; lastOn: string | null }>();
+  if (invoiceIds.length === 0) return byInvoice;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("payments")
+    .select("invoice_id, amount_cents, surcharge_cents, received_at")
+    .in("invoice_id", invoiceIds);
+
+  if (error) {
+    console.error("Loading payments against invoices failed:", error);
+    return byInvoice;
+  }
+
+  for (const row of (data ?? []) as unknown as {
+    invoice_id: string | null;
+    amount_cents: number;
+    surcharge_cents: number | null;
+    received_at: string | null;
+  }[]) {
+    if (!row.invoice_id) continue;
+    const found = byInvoice.get(row.invoice_id) ?? { cents: 0, lastOn: null };
+    // Net of the card fee. A surcharge is money collected to cover a cost,
+    // not money against the bill, and counting it would settle an invoice
+    // three and a half percent early.
+    found.cents += Number(row.amount_cents) - Number(row.surcharge_cents ?? 0);
+    const on = row.received_at?.slice(0, 10) ?? null;
+    if (on && (!found.lastOn || on > found.lastOn)) found.lastOn = on;
+    byInvoice.set(row.invoice_id, found);
+  }
+
+  return byInvoice;
+}
+
 export interface InvoicePage {
   invoices: ClientInvoice[];
   /** Whether asking for the next page would return anything. */
@@ -155,10 +199,16 @@ export async function listInvoices(page = 0): Promise<InvoicePage> {
 
   const rows = (data ?? []) as unknown as InvoiceQueryRow[];
   const invoices = rows.slice(0, PAGE_SIZE).map(toInvoice);
-  const plans = await plansForInvoices(invoices.map((i) => i.id));
+  const ids = invoices.map((i) => i.id);
+  const [plans, paid] = await Promise.all([plansForInvoices(ids), paymentsForInvoices(ids)]);
 
   return {
-    invoices: invoices.map((i) => ({ ...i, plan: plans.get(i.id) ?? null })),
+    invoices: invoices.map((i) => ({
+      ...i,
+      plan: plans.get(i.id) ?? null,
+      paidCents: paid.get(i.id)?.cents ?? 0,
+      lastPaidOn: paid.get(i.id)?.lastOn ?? null,
+    })),
     more: rows.length > PAGE_SIZE,
   };
 }
@@ -178,8 +228,14 @@ export async function listInvoicesForCustomer(customerId: string): Promise<Clien
 
   if (error) throw error;
   const invoices = ((data ?? []) as unknown as InvoiceQueryRow[]).map(toInvoice);
-  const plans = await plansForInvoices(invoices.map((i) => i.id));
-  return invoices.map((i) => ({ ...i, plan: plans.get(i.id) ?? null }));
+  const ids = invoices.map((i) => i.id);
+  const [plans, paid] = await Promise.all([plansForInvoices(ids), paymentsForInvoices(ids)]);
+  return invoices.map((i) => ({
+    ...i,
+    plan: plans.get(i.id) ?? null,
+    paidCents: paid.get(i.id)?.cents ?? 0,
+    lastPaidOn: paid.get(i.id)?.lastOn ?? null,
+  }));
 }
 
 /**

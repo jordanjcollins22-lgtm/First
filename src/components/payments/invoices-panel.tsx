@@ -2,11 +2,12 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CalendarClock, Check, FileText, Trash2, Upload } from "lucide-react";
+import { AlertCircle, CalendarClock, Check, Eye, FileText, Trash2, Upload } from "lucide-react";
 
 import {
   byUrgency,
   checkInvoiceFile,
+  remainingCents,
   daysOverdue,
   invoiceLine,
   invoiceStatus,
@@ -400,7 +401,7 @@ function InvoiceCard({
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [planning, setPlanning] = useState(false);
-  const [showScope, setShowScope] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
 
   const status = invoiceStatus(invoice);
   const late = daysOverdue(invoice);
@@ -464,15 +465,35 @@ function InvoiceCard({
         <span className="text-muted-foreground">
           {invoice.paidOn
             ? `Paid ${day(invoice.paidOn)}`
-            : invoice.dueOn
-              ? `Due ${day(invoice.dueOn)}`
-              : `Issued ${day(invoice.issuedOn)}`}
+            : invoice.lastPaidOn && status === "paid"
+              ? `Paid ${day(invoice.lastPaidOn)}`
+              : invoice.dueOn
+                ? `Due ${day(invoice.dueOn)}`
+                : `Issued ${day(invoice.issuedOn)}`}
         </span>
+        {/* What is left, once money has started arriving against it. Reading
+            "$4,520" on a bill that is half settled is the wrong number to
+            act on. */}
+        {(invoice.paidCents ?? 0) > 0 && remainingCents(invoice) > 0 && (
+          <span className="text-muted-foreground">
+            {money((invoice.paidCents ?? 0) / 100)} in · {money(remainingCents(invoice) / 100)} left
+          </span>
+        )}
       </div>
 
       {invoice.plan && <PlanProgressStrip invoice={invoice} />}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
+        {/* Always here. An imported invoice has no PDF behind it, and before
+            this there was nothing at all to open on one -- the record existed
+            and could not be looked at. */}
+        <button
+          type="button"
+          onClick={() => setShowDetail((was) => !was)}
+          className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold"
+        >
+          <Eye className="h-3.5 w-3.5" /> {showDetail ? "Close" : "View"}
+        </button>
         {invoice.filePath && (
           <button
             type="button"
@@ -480,16 +501,7 @@ function InvoiceCard({
             onClick={open}
             className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
-            <FileText className="h-3.5 w-3.5" /> Open
-          </button>
-        )}
-        {invoice.scopeHtml && (
-          <button
-            type="button"
-            onClick={() => setShowScope((was) => !was)}
-            className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold"
-          >
-            <FileText className="h-3.5 w-3.5" /> {showScope ? "Hide scope" : "Scope"}
+            <FileText className="h-3.5 w-3.5" /> File
           </button>
         )}
 
@@ -545,17 +557,7 @@ function InvoiceCard({
         )}
       </div>
 
-      {showScope && invoice.scopeHtml && (
-        <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-border bg-background p-2">
-          {/* The scope as the old system stored it. Rendered rather than shown
-              as markup, because it is a document somebody needs to read --
-              and it comes from our own export, not from a client. */}
-          <div
-            className="prose prose-sm max-w-none text-xs dark:prose-invert [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs"
-            dangerouslySetInnerHTML={{ __html: invoice.scopeHtml }}
-          />
-        </div>
-      )}
+      {showDetail && <InvoiceDetail invoice={invoice} />}
 
       {planning && <NewInvoicePlan invoice={invoice} onClose={() => setPlanning(false)} />}
 
@@ -595,6 +597,7 @@ function PlanProgressStrip({ invoice }: { invoice: ClientInvoice }) {
         customerId: invoice.customerId,
         planId: plan.id,
         instalmentId,
+        invoiceId: invoice.id,
         amountCents,
         method: "check",
         note: `Instalment on ${invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : "an invoice"}`,
@@ -818,6 +821,93 @@ function NewInvoicePlan({
       </p>
 
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * The invoice itself, readable.
+ *
+ * There was nothing to open on an imported invoice. It had no PDF behind it,
+ * so the "Open" button did not appear, and the record existed while being
+ * impossible to look at — the number, the dates, the scope of work and what
+ * had been paid all sat in the database with no screen showing them.
+ *
+ * Laid out as the bill reads rather than as the table stores it: what it was
+ * for, what it came to, what has arrived against it, and what is left.
+ */
+function InvoiceDetail({ invoice }: { invoice: ClientInvoice }) {
+  const status = invoiceStatus(invoice);
+  const paid = invoice.paidCents ?? 0;
+  const left = remainingCents(invoice);
+
+  return (
+    <div className="mt-2 rounded-md border border-border bg-background">
+      <div className="border-b border-border p-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold">
+            {invoice.invoiceNumber ? `Invoice #${invoice.invoiceNumber}` : "Invoice"}
+          </p>
+          <span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${TONE[status]}`}>
+            {STATUS_LABEL[status]}
+          </span>
+        </div>
+        {invoice.title && <p className="text-xs text-muted-foreground">{invoice.title}</p>}
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {invoice.customerName ?? "Unnamed contact"}
+        </p>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-border p-3 text-xs">
+        <Line label="Issued" value={day(invoice.issuedOn)} />
+        <Line label="Due" value={day(invoice.dueOn)} />
+        <Line label="Amount" value={money(invoice.amount)} />
+        <Line
+          label="Paid"
+          value={paid > 0 ? `${money(paid / 100)}${invoice.lastPaidOn ? ` · ${day(invoice.lastPaidOn)}` : ""}` : "—"}
+        />
+        {left > 0 && paid > 0 && <Line label="Outstanding" value={money(left / 100)} strong />}
+      </dl>
+
+      {invoice.plan && (
+        <div className="border-b border-border p-3">
+          <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            Payment plan
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {money(invoice.plan.paidCents / 100)} of {money(invoice.plan.totalCents / 100)} across{" "}
+            {invoice.plan.schedule.length} payments.
+          </p>
+        </div>
+      )}
+
+      {invoice.scopeHtml ? (
+        <div className="p-3">
+          <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            Scope of work
+          </p>
+          {/* Rendered rather than shown as markup: it is a document somebody
+              needs to read, and it comes from our own export rather than from
+              anything a client typed. */}
+          <div
+            className="prose prose-sm max-h-72 max-w-none overflow-y-auto text-xs dark:prose-invert [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs"
+            dangerouslySetInnerHTML={{ __html: invoice.scopeHtml }}
+          />
+        </div>
+      ) : (
+        <p className="p-3 text-xs text-muted-foreground">
+          No scope of work stored on this one.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className={`mt-0.5 tabular-nums ${strong ? "font-semibold" : ""}`}>{value}</dd>
     </div>
   );
 }
