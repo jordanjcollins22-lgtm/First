@@ -18,6 +18,7 @@ import {
   routeBounds,
   type Route,
 } from "@/lib/directions";
+import { arrivalClock, navigate, spokenDistance, spokenDuration } from "@/lib/navigation";
 
 if (env.mapboxToken) {
   mapboxgl.accessToken = env.mapboxToken;
@@ -53,6 +54,7 @@ export function DirectionsView({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const meRef = useRef<mapboxgl.Marker | null>(null);
   const [route, setRoute] = useState<Route | null>(null);
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +89,61 @@ export function DirectionsView({
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
   }, [destination.lat, destination.lng, hasPin]);
+
+  /**
+   * Follow the driver.
+   *
+   * Started only once there is a route, and stopped the moment the component
+   * goes away — a watch left running is a phone with the GPS on in somebody's
+   * pocket for the rest of the day.
+   *
+   * Every fix recomputes the whole state rather than advancing a counter. A
+   * navigator that accumulates is one missed reading away from confidently
+   * describing a different journey; recomputed, it can be wrong for one
+   * second and right on the next.
+   */
+  useEffect(() => {
+    if (!route || !hasPin) return;
+
+    const watch = navigator.geolocation.watchPosition(
+      (position) => {
+        setOrigin({ lat: position.coords.latitude, lng: position.coords.longitude });
+      },
+      () => {
+        // Silent. The route is already on screen and a driver does not need a
+        // red box because one fix was missed at a junction.
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watch);
+  }, [route, hasPin]);
+
+  const nav =
+    route && origin && destination.lat != null && destination.lng != null
+      ? navigate({
+          position: origin,
+          destination: { lat: destination.lat, lng: destination.lng },
+          route: { ...route, steps: route.steps },
+        })
+      : null;
+
+  /**
+   * Start on arrival.
+   *
+   * Location used to be asked for on a tap, on the reasoning that a
+   * permission prompt appearing before somebody has said what they want is
+   * the prompt everybody denies. That reasoning was about a page somebody
+   * lands on. This one is reached by pressing "Directions" next to an
+   * address, which is somebody saying what they want as plainly as they can,
+   * and then being asked to press a second button to get it.
+   */
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || !hasPin) return;
+    started.current = true;
+    load();
+  }, [hasPin, load]);
 
   // Draw the map once there is a route to draw. Rebuilt rather than diffed:
   // a new route replaces the old one wholesale, and there is nothing to
@@ -127,7 +184,7 @@ export function DirectionsView({
       new mapboxgl.Marker({ color: "#2f6d3c" })
         .setLngLat(route.coordinates[route.coordinates.length - 1])
         .addTo(map);
-      if (origin) new mapboxgl.Marker({ color: "#1d4ed8" }).setLngLat([origin.lng, origin.lat]).addTo(map);
+
 
       const bounds = routeBounds(route.coordinates);
       if (bounds) map.fitBounds(bounds, { padding: 48, duration: 0 });
@@ -136,8 +193,26 @@ export function DirectionsView({
     return () => {
       map.remove();
       mapRef.current = null;
+      meRef.current = null;
     };
-  }, [route, origin]);
+    // Deliberately not depending on `origin`: this rebuilds the map, and
+    // rebuilding it on every position fix would tear the map down twice a
+    // second while somebody is driving. The dot moves in its own effect below.
+  }, [route]);
+
+  /** The driver's dot, moved rather than redrawn. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !origin) return;
+
+    if (!meRef.current) {
+      meRef.current = new mapboxgl.Marker({ color: "#1d4ed8" })
+        .setLngLat([origin.lng, origin.lat])
+        .addTo(map);
+    } else {
+      meRef.current.setLngLat([origin.lng, origin.lat]);
+    }
+  }, [origin]);
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-3 px-4 py-4">
@@ -154,6 +229,52 @@ export function DirectionsView({
         <p className="text-sm text-muted-foreground">{destination.customerName}</p>
       </header>
 
+      {/* The one thing somebody driving actually reads. Big, above the map,
+          and the distance before the words -- at a glance from a cab, "500 ft"
+          is the part that decides whether to start moving over. */}
+      {nav && (
+        <div
+          className={`rounded-2xl border p-4 ${
+            nav.arrived
+              ? "border-emerald-400/60 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+              : nav.offRoute
+                ? "border-amber-400/60 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10"
+                : "border-border bg-card/60"
+          }`}
+        >
+          {nav.arrived ? (
+            <p className="text-xl font-bold">You have arrived.</p>
+          ) : (
+            <>
+              {nav.metresToTurn != null && (
+                <p className="text-3xl font-bold leading-none tabular-nums">
+                  {spokenDistance(nav.metresToTurn)}
+                </p>
+              )}
+              <p className="mt-1 text-lg font-semibold leading-snug">{nav.instruction}</p>
+              {nav.offRoute && (
+                <p className="mt-2 text-sm">
+                  You have come off the route.{" "}
+                  <button type="button" onClick={load} className="font-semibold underline">
+                    Work it out again
+                  </button>
+                </p>
+              )}
+            </>
+          )}
+
+          {!nav.arrived && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                {spokenDuration(nav.remainingSeconds)}
+              </span>
+              <span>{spokenDistance(nav.remainingMetres)}</span>
+              <span>Arrive {arrivalClock(nav.remainingSeconds)}</span>
+            </p>
+          )}
+        </div>
+      )}
+
       {!hasPin && (
         <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-3 text-sm">
           This property has no pin on the map, so the app can&apos;t draw a route to it. The link below
@@ -164,7 +285,7 @@ export function DirectionsView({
       {hasPin && !route && (
         <Button type="button" size="xl" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Navigation className="h-5 w-5" />}
-          {loading ? "Working out the way..." : "Get directions"}
+          {loading ? "Working out the way\u2026" : "Start the route"}
         </Button>
       )}
 

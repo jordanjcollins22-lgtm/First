@@ -21,6 +21,14 @@ export interface RouteStep {
   distance: number;
   /** The road being travelled, when it has a name. */
   name: string;
+  /**
+   * Where the turn happens, as [lng, lat].
+   *
+   * Without it a turn list is a list and nothing more: nothing can say which
+   * instruction somebody is on, how far the next one is, or whether they have
+   * passed it. Every one of those is a distance from this point.
+   */
+  location: [number, number] | null;
 }
 
 export interface Route {
@@ -34,6 +42,16 @@ export interface Route {
 }
 
 const METRES_PER_MILE = 1609.344;
+
+/** A coordinate pair, or null. Mapbox is reliable about this, but a step with
+ * a half-read location would put a turn in the sea. */
+function readPoint(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length < 2) return null;
+  const [lng, lat] = value;
+  if (typeof lng !== "number" || typeof lat !== "number") return null;
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return [lng, lat];
+}
 
 /**
  * Distance the way somebody driving would say it.
@@ -76,7 +94,13 @@ export interface MapboxDirectionsResponse {
     distance?: number;
     duration?: number;
     geometry?: { coordinates?: [number, number][] };
-    legs?: { steps?: { maneuver?: { instruction?: string }; distance?: number; name?: string }[] }[];
+    legs?: {
+      steps?: {
+        maneuver?: { instruction?: string; location?: [number, number] };
+        distance?: number;
+        name?: string;
+      }[];
+    }[];
   }[];
 }
 
@@ -100,6 +124,7 @@ export function parseRoute(body: MapboxDirectionsResponse): Route | null {
         instruction: step.maneuver?.instruction?.trim() ?? "",
         distance: step.distance ?? 0,
         name: step.name?.trim() ?? "",
+        location: readPoint(step.maneuver?.location),
       }))
       // A step with no words is not an instruction, and printing a blank row
       // makes the list look broken rather than short.
