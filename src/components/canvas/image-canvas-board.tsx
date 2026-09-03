@@ -408,19 +408,27 @@ export function ImageCanvasBoard({
             const blob = await res.blob();
             const element = await loadImageElement(blob);
             if (!cancelled) {
-              const isUploaded = initialDesign.image_uploaded ?? false;
               setImage({
                 element,
                 blob,
-                // Use the saved uploaded flag so we apply the same zoom behavior
-                // as when the image was first loaded. Satellite images use covering
-                // zoom bounds; uploaded images use fitting bounds.
-                uploaded: isUploaded,
+                // The permissive floor on the way back in, whatever the photo
+                // started as. The scale it was saved at is the scale somebody
+                // chose and locked, and a floor above it would move their work
+                // for them.
+                //
+                // The floor and the clamp below have to agree, and for a long
+                // time they did not: this said "permissive" while the clamp
+                // asked for the covering floor. A map saved zoomed out past
+                // that floor was therefore snapped back up to it on every
+                // load, which is why a locked site map kept reopening zoomed
+                // in and why re-locking it never helped. The saved numbers
+                // were right; the reading of them was not.
+                uploaded: true,
                 x: initialDesign.image_x,
                 y: initialDesign.image_y,
-                // Clamped on the way in using the same bounds the image was
-                // saved with (determined by whether it was uploaded or satellite),
-                // so the saved scale is preserved correctly.
+                // Clamped only against the same permissive floor, so this can
+                // still catch a scale that is genuine nonsense without moving
+                // one that is merely zoomed out.
                 scale: clampScale(
                   initialDesign.image_scale,
                   zoomBounds({
@@ -428,7 +436,7 @@ export function ImageCanvasBoard({
                     imageHeight: element.height,
                     canvasWidth: CANVAS_WIDTH,
                     canvasHeight: CANVAS_HEIGHT,
-                    fitWhole: isUploaded,
+                    fitWhole: true,
                   })
                 ),
                 rotation: initialDesign.image_rotation,
@@ -478,16 +486,17 @@ export function ImageCanvasBoard({
           if (design.imageBlob) {
             const element = await loadImageElement(design.imageBlob);
             if (!cancelled) {
-              const isUploaded = design.imageUploaded ?? false;
               setImage({
                 element,
                 blob: design.imageBlob,
-                // Use the saved uploaded flag so boundsFor() applies the correct zoom behavior.
-                uploaded: isUploaded,
+                // As above: the permissive floor on the way back in, so the
+                // slider cannot snap a saved zoom-out back up the first time
+                // it is touched.
+                uploaded: true,
                 x: design.imageX,
                 y: design.imageY,
-                // Preserve the exact saved scale without clamping (local storage should
-                // always hold valid scales since they were saved by this same code).
+                // The scale it was saved at, exactly. This one was saved by
+                // this same code a moment ago, so there is nothing to correct.
                 scale: design.imageScale,
                 rotation: design.imageRotation ?? 0,
                 realWidthFeet: design.imageRealWidthFeet ?? null,

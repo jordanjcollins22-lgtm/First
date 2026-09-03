@@ -122,10 +122,6 @@ export async function generateProposal(
       }
     : null;
 
-  // TODO: Generate recommended scope on-demand when approving, not during proposal generation
-  // to avoid blocking proposal creation if the API is slow or unavailable
-  const recommendedScope = null;
-
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
     .from("job_proposals")
@@ -165,7 +161,6 @@ export async function generateProposal(
       scope_snapshot: scopeSnapshot,
       site_image_path: design.image_path,
       site_image_transform: siteImageTransform,
-      recommended_scope: recommendedScope,
       generated_at: new Date().toISOString(),
       // A proposal that stays live stays approved — clearing this would leave
       // a sent proposal claiming nobody ever approved it.

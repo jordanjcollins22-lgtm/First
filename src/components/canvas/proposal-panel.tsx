@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, Eye, Pencil } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, Loader2, Pencil, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { DiscountSelect } from "@/components/canvas/discount-select";
 import { ViewCount } from "@/components/proposal/view-count";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
+import { suggestZoneScope } from "@/lib/actions/scope-suggestion-actions";
 import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
 
 export interface InternalZoneBreakdown {
@@ -73,6 +74,52 @@ export function ProposalPanel({
   const [notice, setNotice] = useState<string | null>(null);
   /** Set when rebuilding would clear a client's acceptance. */
   const [confirm, setConfirm] = useState<string | null>(null);
+  /** Which zone is having a scope line written for it, by index. */
+  const [suggesting, setSuggesting] = useState<number | null>(null);
+  /** Why a suggestion did not arrive, against the zone that asked for it. */
+  const [suggestError, setSuggestError] = useState<{ index: number; message: string } | null>(null);
+
+  /**
+   * Draft a zone's scope line from what the evaluator recorded.
+   *
+   * Writes straight into the box rather than offering it alongside: this is a
+   * draft inside a draft, thrown away by Cancel and only real once somebody
+   * presses Save changes. Asking them to approve the suggestion and then
+   * approve the proposal is one approval too many.
+   */
+  function handleSuggest(index: number) {
+    const zone = draftZones[index];
+    if (!zone) return;
+    // Matched by name rather than by position: the breakdown comes from the
+    // job's live zones and the draft from the proposal's snapshot, and a
+    // proposal taken before a zone was added has the two out of step.
+    const breakdown = zones.find((z) => z.zoneName === zone.zoneName);
+
+    setSuggestError(null);
+    setSuggesting(index);
+    startTransition(async () => {
+      try {
+        const result = await suggestZoneScope({
+          zoneName: zone.zoneName,
+          serviceLabel: zone.serviceLabel,
+          notes: breakdown?.notes ?? "",
+          checklistAnswers: breakdown?.checklistAnswers ?? [],
+          // Names only. The quantities sit right here on the breakdown, and
+          // deliberately do not travel: a scope line must not quote one.
+          materials: [...new Set((breakdown?.materialLineItems ?? []).map((m) => m.material))],
+        });
+        if (result.ok) {
+          setDraftZones((prev) =>
+            prev.map((z, j) => (j === index ? { ...z, scopeText: result.text } : z))
+          );
+        } else {
+          setSuggestError({ index, message: result.message });
+        }
+      } finally {
+        setSuggesting(null);
+      }
+    });
+  }
 
   const link = proposal ? `${baseUrl}/proposal/${proposal.token}` : null;
   /**
@@ -279,6 +326,32 @@ export function ProposalPanel({
                     rows={2}
                     className="text-sm"
                   />
+                  {/* Under the box it fills, not in a toolbar at the top: the
+                      evaluator's notes for this zone are what it writes from,
+                      and this is the only place that is obvious. */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSuggest(i)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
+                    >
+                      {suggesting === i ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          Writing from the notes...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                          Suggest from evaluator notes
+                        </>
+                      )}
+                    </button>
+                    {suggestError?.index === i && (
+                      <span className="text-xs text-muted-foreground">{suggestError.message}</span>
+                    )}
+                  </div>
                 </div>
               ))}
               <div className="flex gap-2">
