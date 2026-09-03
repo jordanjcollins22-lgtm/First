@@ -17,6 +17,8 @@ export interface SaveCanvasDesignInput {
   imageBearing: number;
   /** Whether a person has said the house is the right way round. */
   orientationConfirmed: boolean;
+  /** Whether the image was uploaded by the user (vs. fetched from satellite). */
+  imageUploaded: boolean;
   locked: boolean;
   propertyLine: { x: number; y: number }[];
   houseOutline: { x: number; y: number }[];
@@ -38,6 +40,7 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
       image_real_width_feet: input.imageRealWidthFeet,
       image_bearing: input.imageBearing,
       orientation_confirmed: input.orientationConfirmed,
+      image_uploaded: input.imageUploaded,
       locked: input.locked,
       property_line: input.propertyLine,
       house_outline: input.houseOutline,

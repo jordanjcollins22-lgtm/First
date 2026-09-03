@@ -408,20 +408,19 @@ export function ImageCanvasBoard({
             const blob = await res.blob();
             const element = await loadImageElement(blob);
             if (!cancelled) {
+              const isUploaded = initialDesign.image_uploaded ?? false;
               setImage({
                 element,
                 blob,
-                // The permissive floor on the way back in. Whatever this was
-                // when it was made, the scale it was saved at is the scale
-                // somebody was looking at, and forcing it up to the covering
-                // floor on reopen moves their work for them.
-                uploaded: true,
+                // Use the saved uploaded flag so we apply the same zoom behavior
+                // as when the image was first loaded. Satellite images use covering
+                // zoom bounds; uploaded images use fitting bounds.
+                uploaded: isUploaded,
                 x: initialDesign.image_x,
                 y: initialDesign.image_y,
-                // Clamped on the way in. A design saved before the photo had
-                // to cover the board can hold a scale that shows white in the
-                // corners the moment it is turned, and reopening an old
-                // evaluation is not the place to discover that.
+                // Clamped on the way in using the same bounds the image was
+                // saved with (determined by whether it was uploaded or satellite),
+                // so the saved scale is preserved correctly.
                 scale: clampScale(
                   initialDesign.image_scale,
                   zoomBounds({
@@ -429,6 +428,7 @@ export function ImageCanvasBoard({
                     imageHeight: element.height,
                     canvasWidth: CANVAS_WIDTH,
                     canvasHeight: CANVAS_HEIGHT,
+                    fitWhole: isUploaded,
                   })
                 ),
                 rotation: initialDesign.image_rotation,
@@ -478,14 +478,25 @@ export function ImageCanvasBoard({
           if (design.imageBlob) {
             const element = await loadImageElement(design.imageBlob);
             if (!cancelled) {
+              const isUploaded = design.imageUploaded ?? false;
               setImage({
                 element,
                 blob: design.imageBlob,
-                // As above: the saved scale is what somebody was looking at.
-                uploaded: true,
+                // Use the saved uploaded flag to apply the same zoom behavior.
+                uploaded: isUploaded,
                 x: design.imageX,
                 y: design.imageY,
-                scale: design.imageScale,
+                // Clamp with the same bounds the image was saved with.
+                scale: clampScale(
+                  design.imageScale,
+                  zoomBounds({
+                    imageWidth: element.width,
+                    imageHeight: element.height,
+                    canvasWidth: CANVAS_WIDTH,
+                    canvasHeight: CANVAS_HEIGHT,
+                    fitWhole: isUploaded,
+                  })
+                ),
                 rotation: design.imageRotation ?? 0,
                 realWidthFeet: design.imageRealWidthFeet ?? null,
               });
@@ -525,6 +536,7 @@ export function ImageCanvasBoard({
         imageScale: image?.scale ?? 1,
         imageRotation: image?.rotation ?? 0,
         imageRealWidthFeet: image?.realWidthFeet ?? null,
+        imageUploaded: image?.uploaded ?? false,
         locked,
         address,
         zones,
@@ -570,6 +582,7 @@ export function ImageCanvasBoard({
             imageRealWidthFeet: image?.realWidthFeet ?? null,
             imageBearing: bearing,
             orientationConfirmed: orientConfirmed,
+            imageUploaded: image?.uploaded ?? false,
             locked,
             propertyLine,
             houseOutline,

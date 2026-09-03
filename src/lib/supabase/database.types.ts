@@ -1371,6 +1371,7 @@ export interface Database {
           image_bearing: number;
           orientation_confirmed: boolean;
           image_real_width_feet: number | null;
+          image_uploaded: boolean;
           locked: boolean;
           property_line: Json;
           marks: Json;

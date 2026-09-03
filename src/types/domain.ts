@@ -477,6 +477,8 @@ export interface CanvasDesignRow {
   /** Whether a person has said the house is the right way round. */
   orientation_confirmed?: boolean;
   image_real_width_feet: number | null;
+  /** Whether the image was uploaded by the user (vs. fetched from satellite). */
+  image_uploaded?: boolean;
   /** Notes pinned to points on the picture. */
   marks?: CanvasMark[];
   locked: boolean;

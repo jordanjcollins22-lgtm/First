@@ -63,6 +63,8 @@ export interface StoredDesign {
   imageRotation: number;
   /** Real-world feet spanned by the background image's full native width, if known. */
   imageRealWidthFeet: number | null;
+  /** Whether the image was uploaded by the user (vs. fetched from satellite). */
+  imageUploaded?: boolean;
   locked: boolean;
   address: string;
   zones: WorkZone[];
