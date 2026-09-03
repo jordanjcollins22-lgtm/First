@@ -20,7 +20,7 @@ import {
   PROPOSAL_TERMS_TITLE,
   PROPOSAL_TERMS_TITLE_AGREED,
 } from "@/lib/proposal-terms";
-import { SiteMapImage } from "./site-map-image";
+import { FocusableSiteMap } from "./focusable-site-map";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
 import { displayLabel } from "@/lib/zone-scope";
@@ -130,7 +130,7 @@ export function ProposalView({
       {proposal.site_image_path && proposal.site_image_transform && (
         <div>
           <h2 className="mb-2 text-lg font-semibold">Your property</h2>
-          <SiteMapImage
+          <FocusableSiteMap
             imagePath={proposal.site_image_path}
             transform={proposal.site_image_transform}
             zones={proposal.scope_snapshot}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 
 import type { CanvasMark } from "@/lib/canvas-marks";
-import { SiteMapImage } from "@/components/proposal/site-map-image";
+import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
@@ -140,17 +140,20 @@ export function WorkOrderView({
 
       {/* ------------------------------------------------------- the site map */}
       {order.zones.length > 0 && siteImagePath && imageTransform && (
-        <SiteMapImage
+        <FocusableSiteMap
           imagePath={siteImagePath}
           transform={imageTransform}
           numbered
           dimSurroundings
-          frame={zonesBounds(order.zones, imageTransform.canvasWidth, imageTransform.canvasHeight)}
+          defaultFrame={zonesBounds(order.zones, imageTransform.canvasWidth, imageTransform.canvasHeight)}
           className="w-full rounded-xl border border-white/60 bg-muted"
-          zones={order.zones.map((zone) => ({
+          zones={order.zones.map((zone, i) => ({
             zoneName: zone.name,
             color: zone.color,
             points: zone.points,
+            // Its number on the full map, kept so showing one zone on its own
+            // still calls it what the list beside it calls it.
+            number: i + 1,
           }))}
         />
       )}
