@@ -2,28 +2,36 @@ import { Anthropic } from "@anthropic-ai/sdk";
 import type { WorkZone } from "@/components/canvas/types";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 
+/**
+ * Generate an AI recommendation for what work should be done.
+ *
+ * If the API call fails for any reason, returns null silently so that
+ * proposal generation doesn't block. The proposal can still be created
+ * and sent without a recommendation.
+ */
 export async function generateRecommendedScope(
   zones: WorkZone[],
   organizationName: string
 ): Promise<string | null> {
-  if (zones.length === 0) return null;
+  try {
+    if (zones.length === 0) return null;
 
-  // Build a summary of what will be done
-  const zonesSummary = zones
-    .filter((z) => z.service)
-    .map((z) => {
-      const def = serviceTypeById(z.service?.typeId ?? "");
-      const service = def?.label || z.service?.typeId || "Service";
-      const notes = z.service?.notes ? `Notes: ${z.service.notes}` : "";
-      return `- ${z.name}: ${service}${notes ? ` (${notes})` : ""}`;
-    })
-    .join("\n");
+    // Build a summary of what will be done
+    const zonesSummary = zones
+      .filter((z) => z.service)
+      .map((z) => {
+        const def = serviceTypeById(z.service?.typeId ?? "");
+        const service = def?.label || z.service?.typeId || "Service";
+        const notes = z.service?.notes ? `Notes: ${z.service.notes}` : "";
+        return `- ${z.name}: ${service}${notes ? ` (${notes})` : ""}`;
+      })
+      .join("\n");
 
-  if (!zonesSummary) return null;
+    if (!zonesSummary) return null;
 
-  const client = new Anthropic();
+    const client = new Anthropic();
 
-  const prompt = `Based on these work zones and notes, write a brief professional scope recommendation for a property evaluation proposal from ${organizationName}.
+    const prompt = `Based on these work zones and notes, write a brief professional scope recommendation for a property evaluation proposal from ${organizationName}.
 
 ZONES:
 ${zonesSummary}
@@ -36,7 +44,6 @@ Write 2-3 sentences recommending what work should be done and why. Focus on the 
 
 Keep it warm, friendly, and focused on the outcome for the customer.`;
 
-  try {
     const message = await client.messages.create({
       model: "claude-opus-4-1-20250805",
       max_tokens: 256,
@@ -53,9 +60,12 @@ Keep it warm, friendly, and focused on the outcome for the customer.`;
       // Remove any remaining em dashes
       return content.text.replace(/–|—/g, "-");
     }
-  } catch (error) {
-    console.error("Failed to generate recommended scope:", error);
-  }
 
-  return null;
+    return null;
+  } catch (error) {
+    // Log for debugging but don't throw - proposal generation should succeed
+    // even if the recommendation fails
+    console.error("Failed to generate recommended scope:", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
