@@ -12,7 +12,7 @@ import {
   statusAfterRegen,
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
-import { getCurrentOrganizationId, getCurrentOrganization } from "@/lib/data/organizations";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
@@ -63,14 +63,12 @@ export async function generateProposal(
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
 
-  const [design, catalog, organization] = await Promise.all([
+  const [design, catalog, organizationId] = await Promise.all([
     getCanvasDesignForJob(jobId),
     getCanvasCatalog(),
-    getCurrentOrganization(),
+    getCurrentOrganizationId(),
   ]);
   if (!design) return { ok: false, reason: "no_design" };
-
-  const organizationId = organization.id;
 
   const zones = (design.zones as unknown as WorkZone[]).filter((z) => z.service);
   if (zones.length === 0) return { ok: false, reason: "no_services" };
@@ -125,7 +123,10 @@ export async function generateProposal(
       }
     : null;
 
-  const recommendedScope = await generateRecommendedScope(zones, organization.name);
+  // Use a generic name for the AI scope generation; the actual organization name
+  // will be shown separately on the proposal. This keeps scope generation fast
+  // and doesn't require fetching the full organization record.
+  const recommendedScope = await generateRecommendedScope(zones, "Your Company");
 
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
