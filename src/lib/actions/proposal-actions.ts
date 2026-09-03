@@ -19,7 +19,6 @@ import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { computeProposalTotal } from "@/lib/proposal-pricing";
 import { scopeTextFor, serviceLabelFor } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
-import { generateRecommendedScope } from "@/lib/generate-ai-scope";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import type { Database } from "@/lib/supabase/database.types";
@@ -123,10 +122,9 @@ export async function generateProposal(
       }
     : null;
 
-  // Use a generic name for the AI scope generation; the actual organization name
-  // will be shown separately on the proposal. This keeps scope generation fast
-  // and doesn't require fetching the full organization record.
-  const recommendedScope = await generateRecommendedScope(zones, "Your Company");
+  // TODO: Generate recommended scope on-demand when approving, not during proposal generation
+  // to avoid blocking proposal creation if the API is slow or unavailable
+  const recommendedScope = null;
 
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
