@@ -138,6 +138,13 @@ export function ProposalView({
         </div>
       )}
 
+      {proposal.recommended_scope && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <h2 className="text-base font-semibold">What we recommend</h2>
+          <p className="text-sm leading-relaxed text-muted-foreground">{proposal.recommended_scope}</p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-6">
         <h2 className="text-lg font-semibold">Scope of work</h2>
         {proposal.scope_snapshot.length === 0 ? (

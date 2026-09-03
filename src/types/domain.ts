@@ -663,6 +663,8 @@ export interface JobProposal {
   scope_snapshot: ProposalZoneSnapshot[];
   site_image_path: string | null;
   site_image_transform: ProposalSiteImageTransform | null;
+  /** AI-generated recommendation text based on evaluator notes and selections. */
+  recommended_scope: string | null;
   generated_at: string;
   approved_at: string | null;
   responded_at: string | null;

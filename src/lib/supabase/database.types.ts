@@ -1694,6 +1694,7 @@ export interface Database {
           scope_snapshot: unknown;
           site_image_path: string | null;
           site_image_transform: unknown;
+          recommended_scope: string | null;
           generated_at: string;
           approved_at: string | null;
           responded_at: string | null;

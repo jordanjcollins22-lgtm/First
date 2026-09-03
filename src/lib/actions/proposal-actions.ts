@@ -12,13 +12,14 @@ import {
   statusAfterRegen,
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
-import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { getCurrentOrganizationId, getCurrentOrganization } from "@/lib/data/organizations";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { computeProposalTotal } from "@/lib/proposal-pricing";
 import { scopeTextFor, serviceLabelFor } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
+import { generateRecommendedScope } from "@/lib/generate-ai-scope";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import type { Database } from "@/lib/supabase/database.types";
@@ -62,12 +63,14 @@ export async function generateProposal(
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
 
-  const [design, catalog, organizationId] = await Promise.all([
+  const [design, catalog, organization] = await Promise.all([
     getCanvasDesignForJob(jobId),
     getCanvasCatalog(),
-    getCurrentOrganizationId(),
+    getCurrentOrganization(),
   ]);
   if (!design) return { ok: false, reason: "no_design" };
+
+  const organizationId = organization.id;
 
   const zones = (design.zones as unknown as WorkZone[]).filter((z) => z.service);
   if (zones.length === 0) return { ok: false, reason: "no_services" };
@@ -122,6 +125,8 @@ export async function generateProposal(
       }
     : null;
 
+  const recommendedScope = await generateRecommendedScope(zones, organization.name);
+
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
     .from("job_proposals")
@@ -161,6 +166,7 @@ export async function generateProposal(
       scope_snapshot: scopeSnapshot,
       site_image_path: design.image_path,
       site_image_transform: siteImageTransform,
+      recommended_scope: recommendedScope,
       generated_at: new Date().toISOString(),
       // A proposal that stays live stays approved — clearing this would leave
       // a sent proposal claiming nobody ever approved it.
