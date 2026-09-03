@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Christmas Lights Estimator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+      padding: 20px 0;
+    }
+
+    header h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    header .subtitle {
+      color: #94a3b8;
+      font-size: 16px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #4ade80;
+      color: #0f172a;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    @media (max-width: 768px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+    }
+
+    .photo-section h2 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .upload-area {
+      border: 2px dashed rgba(74, 222, 128, 0.3);
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(74, 222, 128, 0.05);
+    }
+
+    .upload-area:hover {
+      border-color: rgba(74, 222, 128, 0.6);
+      background: rgba(74, 222, 128, 0.1);
+    }
+
+    .upload-area.active {
+      border-color: #4ade80;
+      background: rgba(74, 222, 128, 0.15);
+    }
+
+    .upload-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .upload-text {
+      font-size: 14px;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+
+    .upload-hint {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .btn {
+      background: #4ade80;
+      color: #0f172a;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-block;
+      margin-top: 8px;
+    }
+
+    .btn:hover {
+      background: #22c55e;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #4ade80;
+      border: 1px solid #4ade80;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(74, 222, 128, 0.1);
+    }
+
+    #photoPreview {
+      width: 100%;
+      max-height: 300px;
+      border-radius: 12px;
+      margin: 16px 0;
+      object-fit: cover;
+      display: none;
+    }
+
+    #photoPreview.active {
+      display: block;
+    }
+
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 768px) {
+      .products-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .product-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .product-card:hover {
+      border-color: rgba(74, 222, 128, 0.5);
+      background: rgba(74, 222, 128, 0.1);
+      transform: translateY(-4px);
+    }
+
+    .product-card.selected {
+      border-color: #4ade80;
+      background: rgba(74, 222, 128, 0.2);
+    }
+
+    .product-color {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+    }
+
+    .product-name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .product-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .product-price {
+      font-size: 14px;
+      font-weight: 700;
+      color: #4ade80;
+    }
+
+    .results-section {
+      display: none;
+    }
+
+    .results-section.active {
+      display: block;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .result-card {
+      background: rgba(74, 222, 128, 0.1);
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .result-label {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .result-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #4ade80;
+    }
+
+    .recommendation {
+      background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), rgba(16, 185, 129, 0.1));
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      border-left: 3px solid #4ade80;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .rec-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .rec-desc {
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid rgba(74, 222, 128, 0.2);
+      border-top: 3px solid #4ade80;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .error.active {
+      display: block;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .action-buttons .btn {
+      flex: 1;
+      margin: 0;
+    }
+
+    .size-selector {
+      margin-bottom: 16px;
+    }
+
+    .size-selector label {
+      font-size: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .size-options {
+      display: flex;
+      gap: 8px;
+    }
+
+    .size-btn {
+      flex: 1;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .size-btn:hover {
+      border-color: #4ade80;
+    }
+
+    .size-btn.active {
+      background: #4ade80;
+      color: #0f172a;
+      border-color: #4ade80;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="badge">🎄 LIGHT ESTIMATOR</div>
+    <h1>Christmas Lights Estimator</h1>
+    <p class="subtitle">Upload your house photo and get instant light recommendations</p>
+  </header>
+
+  <div class="error" id="error"></div>
+
+  <div class="main-grid">
+    <!-- Photo Upload Section -->
+    <div class="card photo-section">
+      <h2>📸 Your House Photo</h2>
+      <div class="upload-area" id="uploadArea">
+        <div class="upload-icon">📸</div>
+        <div class="upload-text">Click to upload or drag & drop</div>
+        <div class="upload-hint">PNG, JPG up to 5MB</div>
+        <input type="file" id="photoInput" accept="image/*" style="display: none;">
+        <button class="btn">Choose Photo</button>
+      </div>
+      <img id="photoPreview" alt="House preview">
+      <div class="loading" id="photoLoading">
+        <div class="spinner"></div>
+        <p>Analyzing your house...</p>
+      </div>
+    </div>
+
+    <!-- Products Section -->
+    <div class="card">
+      <h2>💡 Select Light Type</h2>
+      <div class="products-grid" id="productsGrid">
+        <!-- Products will be inserted here -->
+      </div>
+      <div class="size-selector">
+        <label>Strand Size</label>
+        <div class="size-options">
+          <button class="size-btn active" data-size="50">50 Lights</button>
+          <button class="size-btn" data-size="100">100 Lights</button>
+          <button class="size-btn" data-size="200">200 Lights</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Section -->
+  <div class="card results-section" id="resultsSection">
+    <div class="loading" id="estimateLoading">
+      <div class="spinner"></div>
+      <p>Generating your estimate...</p>
+    </div>
+
+    <div id="estimateContent" style="display: none;">
+      <h2 style="margin-bottom: 24px;">✓ Your Estimate</h2>
+
+      <div class="recommendation" id="recommendation"></div>
+
+      <div class="results-grid">
+        <div class="result-card">
+          <div class="result-label">Estimated Coverage</div>
+          <div class="result-value" id="coverage">-</div>
+        </div>
+        <div class="result-card">
+          <div class="result-label">Strings Needed</div>
+          <div class="result-value" id="strands">-</div>
+        </div>
+        <div class="result-card">
+          <div class="result-label">Power Usage</div>
+          <div class="result-value" id="power">-</div>
+        </div>
+        <div class="result-card">
+          <div class="result-label">Total Estimate</div>
+          <div class="result-value" id="totalPrice">-</div>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn" id="addToCart">Add to Cart</button>
+        <button class="btn btn-secondary" id="newPhoto">Upload New Photo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const products = [
+    {
+      id: 'warm',
+      name: 'Warm White',
+      desc: 'Classic cozy glow',
+      emoji: '💡',
+      color: 'linear-gradient(135deg, #ffd700 0%, #ffed4e 100%)',
+      prices: { 50: 19.99, 100: 29.99, 200: 49.99 }
+    },
+    {
+      id: 'cool',
+      name: 'Cool White',
+      desc: 'Modern crisp look',
+      emoji: '❄️',
+      color: 'linear-gradient(135deg, #60a5fa 0%, #93c5fd 100%)',
+      prices: { 50: 19.99, 100: 29.99, 200: 49.99 }
+    },
+    {
+      id: 'multi',
+      name: 'Multicolor RGB',
+      desc: 'Fun & colorful',
+      emoji: '🎨',
+      color: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)',
+      prices: { 50: 34.99, 100: 59.99, 200: 89.99 }
+    },
+    {
+      id: 'smart',
+      name: 'Smart RGB Pro',
+      desc: 'WiFi + app control',
+      emoji: '✨',
+      color: 'linear-gradient(135deg, #a78bfa 0%, #c084fc 100%)',
+      prices: { 50: 49.99, 100: 79.99, 200: 129.99 }
+    }
+  ];
+
+  let selectedProduct = null;
+  let selectedSize = 100;
+  let estimateData = null;
+
+  // Initialize products
+  function initProducts() {
+    const grid = document.getElementById('productsGrid');
+    products.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'product-card';
+      card.onclick = () => selectProduct(p.id);
+      card.innerHTML = `
+        <div class="product-color" style="background: ${p.color}">${p.emoji}</div>
+        <div class="product-name">${p.name}</div>
+        <div class="product-desc">${p.desc}</div>
+        <div class="product-price">$${p.prices[100].toFixed(2)}</div>
+      `;
+      grid.appendChild(card);
+    });
+    selectProduct('warm');
+  }
+
+  function selectProduct(id) {
+    selectedProduct = products.find(p => p.id === id);
+    document.querySelectorAll('.product-card').forEach((card, i) => {
+      card.classList.toggle('selected', products[i].id === id);
+    });
+  }
+
+  // File upload
+  document.getElementById('photoInput').addEventListener('change', handlePhotoUpload);
+  document.getElementById('uploadArea').addEventListener('click', () => {
+    document.getElementById('photoInput').click();
+  });
+  document.getElementById('uploadArea').addEventListener('dragover', (e) => {
+    e.preventDefault();
+    document.getElementById('uploadArea').classList.add('active');
+  });
+  document.getElementById('uploadArea').addEventListener('dragleave', () => {
+    document.getElementById('uploadArea').classList.remove('active');
+  });
+  document.getElementById('uploadArea').addEventListener('drop', (e) => {
+    e.preventDefault();
+    document.getElementById('uploadArea').classList.remove('active');
+    if (e.dataTransfer.files.length) {
+      document.getElementById('photoInput').files = e.dataTransfer.files;
+      handlePhotoUpload();
+    }
+  });
+
+  function handlePhotoUpload() {
+    const file = document.getElementById('photoInput').files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const preview = document.getElementById('photoPreview');
+      preview.src = e.target.result;
+      preview.classList.add('active');
+      analyzePhoto(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function analyzePhoto(dataUrl) {
+    document.getElementById('photoLoading').classList.add('active');
+    document.getElementById('resultsSection').classList.add('active');
+    document.getElementById('estimateContent').style.display = 'none';
+    document.getElementById('estimateLoading').classList.add('active');
+
+    // Simulate analysis with random but realistic house data
+    setTimeout(() => {
+      const sqFootage = Math.floor(Math.random() * 2000) + 1500;
+      estimateData = {
+        sqFootage: sqFootage,
+        perimeter: Math.floor(sqFootage * 0.15) + 50,
+        height: 'Two-story colonial',
+        features: Math.random() > 0.5 ? 'with accent lighting' : 'traditional layout'
+      };
+
+      document.getElementById('photoLoading').classList.remove('active');
+      generateEstimate();
+    }, 2000);
+  }
+
+  // Size selector
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      selectedSize = parseInt(e.target.dataset.size);
+      if (estimateData) generateEstimate();
+    });
+  });
+
+  function generateEstimate() {
+    const sqft = estimateData.sqFootage;
+    const strands = Math.max(3, Math.ceil(estimateData.perimeter / 50));
+    const totalLights = strands * selectedSize;
+    const power = (totalLights * 0.5).toFixed(0);
+    const price = selectedProduct.prices[selectedSize];
+    const totalPrice = (price * strands).toFixed(2);
+
+    document.getElementById('coverage').textContent = sqft.toLocaleString() + ' sq ft';
+    document.getElementById('strands').textContent = strands + '-' + (strands + 1) + ' Strands';
+    document.getElementById('power').textContent = '~' + power + 'W';
+    document.getElementById('totalPrice').textContent = '$' + totalPrice;
+
+    const rec = document.getElementById('recommendation');
+    rec.innerHTML = `
+      <div style="display: flex; gap: 16px;">
+        <div style="font-size: 40px; flex-shrink: 0;">${selectedProduct.emoji}</div>
+        <div style="flex: 1;">
+          <div class="rec-title">${selectedProduct.name} (${selectedSize} Lights)</div>
+          <div class="rec-desc">
+            Perfect for your ${estimateData.height} ${estimateData.features}.
+            This configuration provides optimal coverage of approximately ${sqft} sq ft
+            with ${totalLights} total lights across ${strands}-${strands + 1} strands.
+          </div>
+          <div style="font-size: 18px; font-weight: 700; color: #4ade80;">$${totalPrice}</div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('estimateLoading').classList.remove('active');
+    document.getElementById('estimateContent').style.display = 'block';
+  }
+
+  document.getElementById('newPhoto').addEventListener('click', () => {
+    document.getElementById('photoInput').value = '';
+    document.getElementById('photoPreview').classList.remove('active');
+    document.getElementById('resultsSection').classList.remove('active');
+    document.getElementById('uploadArea').focus();
+  });
+
+  document.getElementById('addToCart').addEventListener('click', () => {
+    const price = selectedProduct.prices[selectedSize];
+    const strands = Math.max(3, Math.ceil(estimateData.perimeter / 50));
+    alert(`✓ Added ${strands} x ${selectedProduct.name} (${selectedSize} lights each) to cart!\n\nTotal: $${(price * strands).toFixed(2)}\n\nThis is a mockup - ready to integrate with a real payment system.`);
+  });
+
+  // Initialize
+  initProducts();
+</script>
+</body>
+</html>
