@@ -482,21 +482,13 @@ export function ImageCanvasBoard({
               setImage({
                 element,
                 blob: design.imageBlob,
-                // Use the saved uploaded flag to apply the same zoom behavior.
+                // Use the saved uploaded flag so boundsFor() applies the correct zoom behavior.
                 uploaded: isUploaded,
                 x: design.imageX,
                 y: design.imageY,
-                // Clamp with the same bounds the image was saved with.
-                scale: clampScale(
-                  design.imageScale,
-                  zoomBounds({
-                    imageWidth: element.width,
-                    imageHeight: element.height,
-                    canvasWidth: CANVAS_WIDTH,
-                    canvasHeight: CANVAS_HEIGHT,
-                    fitWhole: isUploaded,
-                  })
-                ),
+                // Preserve the exact saved scale without clamping (local storage should
+                // always hold valid scales since they were saved by this same code).
+                scale: design.imageScale,
                 rotation: design.imageRotation ?? 0,
                 realWidthFeet: design.imageRealWidthFeet ?? null,
               });
