@@ -52,7 +52,7 @@ import { WorkOrderView } from "@/components/job/work-order-view";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { formatJobNumber } from "@/lib/job-number";
 import { isFieldOnly } from "@/lib/affiliate-roles";
-import { computeJobTotals, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
+import { costJob, costZone, zoneCrewHours, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import { resolveBaseUrl } from "@/lib/app-url";
 import type { WorkZone } from "@/components/canvas/types";
@@ -271,9 +271,13 @@ export default async function JobPage({
   const hasClientRequest = requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
 
   const zones = design ? ((design.zones as unknown as WorkZone[]).filter((z) => z.service)) : [];
-  const { totalCost: serviceCost } = computeJobTotals(zones, catalog);
+  // What the job costs us and what it prices at, from the same function the
+  // proposal is built with, so the internal breakdown and the client's number
+  // can never be two different opinions.
+  const jobCost = costJob(zones, catalog);
+  const labourCost = jobCost.labourCents / 100;
   const materialItems = allMaterialLineItems(zones, catalog);
-  const materialsCost = materialItems.reduce((sum, item) => sum + (item.totalCost ?? 0), 0);
+  const materialsCost = jobCost.materialsCents / 100;
   // Documentation follows the priced zones — the work that was actually sold.
   // A drawn shape with no service on it is a draft, and requiring photos of a
   // draft would block sign-off on scratch work.
@@ -315,11 +319,19 @@ export default async function JobPage({
     const checklistAnswers = (def?.fields ?? [])
       .filter((field) => zone.service?.values[field.key])
       .map((field) => ({ label: field.label, value: zone.service!.values[field.key] }));
+    const cost = costZone(zone, catalog);
     return {
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricingRow ? { name: pricingRow.name } : undefined),
       notes: zone.service?.notes ?? "",
       checklistAnswers,
+      crewHours: zoneCrewHours(zone, catalog).hours,
+      materialsCents: cost.materialsCents,
+      labourCents: cost.labourCents,
+      directCostCents: cost.directCostCents,
+      priceCents: cost.priceCents,
+      hasMissingTiming: cost.hasMissingTiming,
+      hasUnknownMaterialCost: cost.hasUnknownMaterialCost,
       materialLineItems: materialItems
         .filter((item) => item.zoneName === zone.name)
         .map((item) => ({ material: item.material, quantityLabel: formatMaterialQuantity(item), cost: item.totalCost })),
@@ -468,7 +480,8 @@ export default async function JobPage({
                 jobId={jobId}
                 proposal={proposal}
                 baseUrl={baseUrl}
-                serviceCost={serviceCost}
+                labourCost={labourCost}
+                markup={catalog.markup}
                 materialsCost={materialsCost}
                 zones={zoneBreakdowns}
                 discounts={discounts}

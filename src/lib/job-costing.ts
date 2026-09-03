@@ -24,19 +24,21 @@ export interface Markup {
   /**
    * What direct cost is multiplied by. 2 doubles it.
    *
-   * This is the whole margin, not a margin percentage: it covers overhead,
-   * the vehicles, the office and the profit.
+   * A multiplier on cost rather than a margin percentage, because that is how
+   * the business quotes: "materials and labour, times two".
    */
   multiplier: number;
   /**
-   * A further percentage on top, applied after the multiplier.
+   * Overhead, as a percentage added at the end.
    *
-   * Separate from the multiplier because the business states it separately --
-   * "times two, plus ten percent" -- and folding it in would leave a single
-   * 2.2 that nobody could recognise as their own pricing, or correct without
-   * doing arithmetic first.
+   * Added after the multiplier, not to the raw cost: it is charged on the
+   * marked-up figure, which makes "times two plus ten percent" 2.2x cost and
+   * not 2.1x. Kept as its own number rather than folded into a single 2.2,
+   * because the business thinks of it as overhead rather than margin, and a
+   * lone 2.2 is neither recognisable as their own pricing nor correctable
+   * without doing arithmetic first.
    */
-  upliftPercent: number;
+  overheadPercent: number;
 }
 
 export interface ZoneCostInput {
@@ -57,8 +59,8 @@ export interface ZoneCost {
   directCostCents: number;
   /** What the multiplier added. */
   marginCents: number;
-  /** What the uplift added, on top of the multiplied figure. */
-  upliftCents: number;
+  /** What the overhead added, on top of the multiplied figure. */
+  overheadCents: number;
   /** What the client is quoted. */
   priceCents: number;
 }
@@ -67,7 +69,7 @@ export interface ZoneCost {
  * Direct cost and price for one work area.
  *
  * The order matters and is the business's own: cost, then multiply, then add
- * the uplift to the multiplied figure. "Times two plus ten percent" is 2.2
+ * the overhead to the multiplied figure. "Times two plus ten percent" is 2.2
  * times cost, not 2.1 -- the ten percent is charged on the marked-up number,
  * not on the raw cost. Two ways to read one sentence and a tenth of the
  * margin between them, which is why it is written down here.
@@ -78,11 +80,11 @@ export function priceZone(input: ZoneCostInput, markup: Markup): ZoneCost {
   const directCostCents = materialsCents + labourCents;
 
   const multiplied = directCostCents * markup.multiplier;
-  const uplifted = multiplied * (1 + markup.upliftPercent / 100);
+  const withOverhead = multiplied * (1 + markup.overheadPercent / 100);
 
   // Rounded once, at the end. Rounding each step compounds the error into
   // something that shows up as a dollar or two on a large job.
-  const priceCents = Math.round(uplifted);
+  const priceCents = Math.round(withOverhead);
   const marginCents = Math.round(multiplied) - directCostCents;
 
   return {
@@ -90,7 +92,7 @@ export function priceZone(input: ZoneCostInput, markup: Markup): ZoneCost {
     labourCents,
     directCostCents,
     marginCents,
-    upliftCents: priceCents - directCostCents - marginCents,
+    overheadCents: priceCents - directCostCents - marginCents,
     priceCents,
   };
 }
@@ -111,7 +113,7 @@ export function priceJob(zones: ZoneCost[]): ZoneCost {
       labourCents: total.labourCents + zone.labourCents,
       directCostCents: total.directCostCents + zone.directCostCents,
       marginCents: total.marginCents + zone.marginCents,
-      upliftCents: total.upliftCents + zone.upliftCents,
+      overheadCents: total.overheadCents + zone.overheadCents,
       priceCents: total.priceCents + zone.priceCents,
     }),
     {
@@ -119,7 +121,7 @@ export function priceJob(zones: ZoneCost[]): ZoneCost {
       labourCents: 0,
       directCostCents: 0,
       marginCents: 0,
-      upliftCents: 0,
+      overheadCents: 0,
       priceCents: 0,
     }
   );
@@ -132,5 +134,37 @@ export function priceJob(zones: ZoneCost[]): ZoneCost {
  * asked when somebody looks at a price and wonders whether it is right.
  */
 export function effectiveMultiplier(markup: Markup): number {
-  return markup.multiplier * (1 + markup.upliftPercent / 100);
+  return markup.multiplier * (1 + markup.overheadPercent / 100);
+}
+
+/**
+ * What an hour of crew time costs, in whole cents.
+ *
+ * Blended from the hourly team's actual pay rates. Commission pay is a share
+ * of the sale rather than a cost per hour, so those people are not in the
+ * average -- including them would drag the rate towards zero and quietly
+ * underprice every job.
+ *
+ * The organization's own figure is a fallback for a business that has not
+ * entered anybody's pay yet, not an override. Once there are real rates they
+ * are the truth, and a stale manual number that disagreed with the payroll
+ * would be the more convincing of the two on screen.
+ *
+ * Shared rather than written twice: the Team page shows this number and the
+ * quote is built from it, and two copies of an average are two numbers that
+ * eventually disagree in front of a client.
+ */
+export function blendedCrewRateCents(
+  team: { payType: string; ratePerHour: number | null }[],
+  fallbackPerHour: number | null
+): number {
+  const hourly = team
+    .filter((member) => member.payType !== "commission")
+    .map((member) => member.ratePerHour)
+    .filter((rate): rate is number => rate != null);
+
+  if (hourly.length > 0) {
+    return Math.round((hourly.reduce((sum, rate) => sum + rate, 0) / hourly.length) * 100);
+  }
+  return Math.round((fallbackPerHour ?? 0) * 100);
 }

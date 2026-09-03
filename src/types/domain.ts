@@ -12,6 +12,10 @@ export interface Organization {
   name: string;
   slug: string | null;
   crew_cost_per_hour: number | null;
+  /** What direct cost is multiplied by to reach the quoted price. */
+  price_multiplier: number;
+  /** Overhead, charged on the multiplied figure rather than the raw cost. */
+  overhead_percent: number;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
   created_at: string;

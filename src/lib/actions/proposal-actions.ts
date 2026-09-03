@@ -102,9 +102,9 @@ export async function generateProposal(
       points: zone.points,
       color: zone.color,
       priceCents: Math.round(own.total * 100),
-      // An hourly rate with no measurement, or a material we have no cost for,
-      // means this number is not something the rate card fully produced.
-      priceDerived: !own.hasNonFlatRate && !own.hasUnknownMaterialCost,
+      // A service with no timing on it, or a material we have no cost for,
+      // means this number is not something the costing fully produced.
+      priceDerived: !own.hasMissingTiming && !own.hasUnknownMaterialCost,
       // Who a client will actually meet, frozen with the rest of the quote.
       performedBy: pricingRow?.performed_by === "partner" ? "partner" : "own",
       partnerName: pricingRow?.partner_name ?? null,

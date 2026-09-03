@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { effectiveMultiplier, priceJob, priceZone, type Markup } from "@/lib/job-costing";
+import {
+  blendedCrewRateCents,
+  effectiveMultiplier,
+  priceJob,
+  priceZone,
+  type Markup,
+} from "@/lib/job-costing";
 
 /** The business's own: times two, then ten percent on top. */
-const HOUSE: Markup = { multiplier: 2, upliftPercent: 10 };
+const HOUSE: Markup = { multiplier: 2, overheadPercent: 10 };
 
 describe("priceZone", () => {
   it("adds labour to materials to get what it costs us", () => {
@@ -16,7 +22,7 @@ describe("priceZone", () => {
     expect(cost.directCostCents).toBe(25_000);
   });
 
-  it("charges the uplift on the marked-up figure, not the raw cost", () => {
+  it("charges the overhead on the marked-up figure, not the raw cost", () => {
     // $250 of cost. Times two is $500, plus ten percent of $500 is $550.
     // Charging the ten percent on the cost instead would quote $525.
     const cost = priceZone(
@@ -31,7 +37,7 @@ describe("priceZone", () => {
       { materialsCents: 7_333, crewHours: 2.5, crewCostPerHourCents: 4_250 },
       HOUSE
     );
-    expect(cost.directCostCents + cost.marginCents + cost.upliftCents).toBe(cost.priceCents);
+    expect(cost.directCostCents + cost.marginCents + cost.overheadCents).toBe(cost.priceCents);
   });
 
   it("prices a zone with no materials on its labour alone", () => {
@@ -78,17 +84,17 @@ describe("priceZone", () => {
   it("quotes cost when there is no markup set", () => {
     const cost = priceZone(
       { materialsCents: 10_000, crewHours: 0, crewCostPerHourCents: 0 },
-      { multiplier: 1, upliftPercent: 0 }
+      { multiplier: 1, overheadPercent: 0 }
     );
     expect(cost.priceCents).toBe(10_000);
     expect(cost.marginCents).toBe(0);
-    expect(cost.upliftCents).toBe(0);
+    expect(cost.overheadCents).toBe(0);
   });
 
-  it("takes the multiplier and the uplift as given, whatever they are", () => {
+  it("takes the multiplier and the overhead as given, whatever they are", () => {
     const flat = priceZone(
       { materialsCents: 10_000, crewHours: 0, crewCostPerHourCents: 0 },
-      { multiplier: 2.1, upliftPercent: 0 }
+      { multiplier: 2.1, overheadPercent: 0 }
     );
     expect(flat.priceCents).toBe(21_000);
   });
@@ -115,7 +121,7 @@ describe("priceJob", () => {
       priceZone({ materialsCents, crewHours: 1.37, crewCostPerHourCents: 4_167 }, HOUSE)
     );
     const job = priceJob(zones);
-    expect(job.directCostCents + job.marginCents + job.upliftCents).toBe(job.priceCents);
+    expect(job.directCostCents + job.marginCents + job.overheadCents).toBe(job.priceCents);
   });
 });
 
@@ -125,6 +131,49 @@ describe("effectiveMultiplier", () => {
   });
 
   it("is 1 when nothing is marked up", () => {
-    expect(effectiveMultiplier({ multiplier: 1, upliftPercent: 0 })).toBe(1);
+    expect(effectiveMultiplier({ multiplier: 1, overheadPercent: 0 })).toBe(1);
+  });
+});
+
+describe("blendedCrewRateCents", () => {
+  const hourly = (ratePerHour: number | null) => ({ payType: "hourly", ratePerHour });
+
+  it("averages the hourly team's pay", () => {
+    expect(blendedCrewRateCents([hourly(20), hourly(30)], null)).toBe(2_500);
+  });
+
+  it("leaves commission-only people out, so the rate is not dragged down", () => {
+    const team = [hourly(20), hourly(30), { payType: "commission", ratePerHour: null }];
+    expect(blendedCrewRateCents(team, null)).toBe(2_500);
+  });
+
+  it("counts somebody paid both ways, because they are still paid by the hour", () => {
+    expect(blendedCrewRateCents([{ payType: "both", ratePerHour: 40 }], null)).toBe(4_000);
+  });
+
+  it("ignores an hourly person whose pay has not been entered", () => {
+    expect(blendedCrewRateCents([hourly(20), hourly(null)], null)).toBe(2_000);
+  });
+
+  it("falls back to the organization's figure when no pay is entered", () => {
+    expect(blendedCrewRateCents([hourly(null)], 25)).toBe(2_500);
+  });
+
+  it("falls back for an empty team", () => {
+    expect(blendedCrewRateCents([], 25)).toBe(2_500);
+  });
+
+  it("is zero when nobody has set anything, rather than a guess", () => {
+    expect(blendedCrewRateCents([], null)).toBe(0);
+  });
+
+  it("prefers real pay over a stale manual figure", () => {
+    expect(blendedCrewRateCents([hourly(30)], 12)).toBe(3_000);
+  });
+
+  it("returns whole cents from an average that does not divide", () => {
+    const rate = blendedCrewRateCents([hourly(20), hourly(21), hourly(23)], null);
+    expect(Number.isInteger(rate)).toBe(true);
+    expect(rate).toBe(2_133);
   });
 });

@@ -22,6 +22,8 @@ export interface Database {
           name: string;
           slug: string | null;
           crew_cost_per_hour: number | null;
+          price_multiplier: number;
+          overhead_percent: number;
           measurement_unit: string;
           measurement_basis: string;
           created_at: string;

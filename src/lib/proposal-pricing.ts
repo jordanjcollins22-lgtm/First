@@ -1,6 +1,7 @@
 import type { WorkZone } from "@/components/canvas/types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { kindOfSaved } from "@/lib/zone-measurement";
+import { priceJob, priceZone, type ZoneCost } from "@/lib/job-costing";
 
 const CUBIC_FEET_PER_YARD = 27;
 // Typical loaded wheelbarrow capacity used for hauling estimates.
@@ -151,26 +152,151 @@ export function allMaterialLineItems(zones: WorkZone[], catalog: CanvasCatalog):
   return items;
 }
 
+// ---------------------------------------------------------------------------
+// Pricing from cost
+//
+// The business quotes materials plus labour, times two, plus ten percent
+// overhead. Materials come off the service's material rules and the
+// inventory's unit costs; labour comes off the service's timing and the
+// measurement the evaluator took. Everything below gathers those two numbers
+// for one zone and hands them to job-costing, which owns the arithmetic.
+//
+// This replaced a per-unit rate card, where a service carried the price of a
+// square foot and the price was that times the area. The rate card is still
+// in the table and is no longer read: a price worked out two ways is a price
+// nobody can explain, and the business does not quote that way.
+// ---------------------------------------------------------------------------
+
+/** A zone's price, with what it is missing to be trusted. */
+export interface ZonePricing extends ZoneCost {
+  /**
+   * A material on this zone has no unit cost recorded, so it contributed
+   * nothing. The price is a floor, not the price.
+   */
+  hasUnknownMaterialCost: boolean;
+  /**
+   * The service has no timing, so no labour was charged. The zone is quoted
+   * on its materials alone, which for most work is nearly nothing.
+   */
+  hasMissingTiming: boolean;
+}
+
 /**
- * The one number a client sees: service cost + material cost across the
- * whole job. Materials with an unknown cost are excluded from the number
- * but flagged via `hasUnknownMaterialCost` so an admin knows it's a floor,
- * not the real total.
+ * How long this zone takes a crew, from the service's timing and the
+ * measurement taken.
+ *
+ * Crew-hours rather than clock-hours: three people for an hour is three, and
+ * three is what gets paid for.
+ *
+ * A service priced flat has no measurement to multiply, so its timing has to
+ * be the whole-job estimate rather than a rate. Saying so is the point of the
+ * second return value -- charging nothing for labour and staying quiet is how
+ * a job gets quoted at the cost of its mulch.
+ */
+export function zoneCrewHours(
+  zone: WorkZone,
+  catalog: CanvasCatalog
+): { hours: number; missingTiming: boolean } {
+  const service = zone.service;
+  if (!service) return { hours: 0, missingTiming: false };
+
+  const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
+  if (!pricing || pricing.status !== "active") return { hours: 0, missingTiming: false };
+
+  const measurements = zoneMeasurements(zone);
+  const units =
+    pricing.pricing_basis === "area"
+      ? measurements?.areaSqFt ?? 0
+      : pricing.pricing_basis === "perimeter"
+        ? measurements?.perimeterFt ?? 0
+        : pricing.pricing_basis === "count"
+          ? zoneServiceCount(zone)
+          : null;
+
+  if (units != null && pricing.minutes_per_sqft != null) {
+    return {
+      hours: (pricing.minutes_per_sqft / 60) * units * (pricing.crew_size ?? 1),
+      missingTiming: false,
+    };
+  }
+  // Already a whole-job figure, so the crew size is baked into it.
+  if (pricing.estimated_hours != null) {
+    return { hours: pricing.estimated_hours, missingTiming: false };
+  }
+  return { hours: 0, missingTiming: true };
+}
+
+/** What this zone's materials cost us, in whole cents. */
+export function zoneMaterialsCents(
+  zone: WorkZone,
+  catalog: CanvasCatalog
+): { cents: number; hasUnknownCost: boolean } {
+  const measurements = zoneMeasurements(zone);
+  const items = zoneMaterialLineItems(zone, measurements?.areaSqFt ?? 0, catalog);
+
+  let cents = 0;
+  let hasUnknownCost = false;
+  for (const item of items) {
+    if (item.totalCost == null) {
+      hasUnknownCost = true;
+      continue;
+    }
+    cents += item.totalCost * 100;
+  }
+  return { cents: Math.round(cents), hasUnknownCost };
+}
+
+/** Cost and price for one work area. */
+export function costZone(zone: WorkZone, catalog: CanvasCatalog): ZonePricing {
+  const materials = zoneMaterialsCents(zone, catalog);
+  const time = zoneCrewHours(zone, catalog);
+
+  return {
+    ...priceZone(
+      {
+        materialsCents: materials.cents,
+        crewHours: time.hours,
+        crewCostPerHourCents: catalog.crewCostPerHourCents,
+      },
+      catalog.markup
+    ),
+    hasUnknownMaterialCost: materials.hasUnknownCost,
+    hasMissingTiming: time.missingTiming,
+  };
+}
+
+/**
+ * Cost and price for the whole job, summed from its zones.
+ *
+ * Zones with no service are skipped rather than priced at nothing: an
+ * undecided shape is a drafting artefact, not free work.
+ */
+export function costJob(zones: WorkZone[], catalog: CanvasCatalog): ZonePricing {
+  const priced = zones.filter((zone) => zone.service).map((zone) => costZone(zone, catalog));
+  return {
+    ...priceJob(priced),
+    hasUnknownMaterialCost: priced.some((zone) => zone.hasUnknownMaterialCost),
+    hasMissingTiming: priced.some((zone) => zone.hasMissingTiming),
+  };
+}
+
+/**
+ * The one number a client sees, in dollars.
+ *
+ * Kept as a wrapper over costJob so the callers that only want the total do
+ * not have to know how it was reached. `hasMissingTiming` and
+ * `hasUnknownMaterialCost` are what makes a price a floor rather than a
+ * price, and a caller showing the number to somebody who can change it should
+ * say so.
  */
 export function computeProposalTotal(
   zones: WorkZone[],
   catalog: CanvasCatalog
-): { total: number; hasNonFlatRate: boolean; hasUnknownMaterialCost: boolean } {
-  const { totalCost, hasNonFlatRate } = computeJobTotals(zones, catalog);
-  const materialItems = allMaterialLineItems(zones, catalog);
-  let materialsCost = 0;
-  let hasUnknownMaterialCost = false;
-  for (const item of materialItems) {
-    if (item.totalCost == null) {
-      hasUnknownMaterialCost = true;
-      continue;
-    }
-    materialsCost += item.totalCost;
-  }
-  return { total: totalCost + materialsCost, hasNonFlatRate, hasUnknownMaterialCost };
+): { total: number; hasMissingTiming: boolean; hasUnknownMaterialCost: boolean } {
+  const job = costJob(zones, catalog);
+  return {
+    total: job.priceCents / 100,
+    hasMissingTiming: job.hasMissingTiming,
+    hasUnknownMaterialCost: job.hasUnknownMaterialCost,
+  };
 }

@@ -18,6 +18,7 @@ import { TeamServicesToggle } from "@/components/team/team-services-toggle";
 import { ServicePricingRow } from "@/components/service-pricing/service-pricing-row";
 import { CreateServiceTypeForm } from "@/components/service-pricing/create-service-type-form";
 import { PendingServiceRow } from "@/components/service-pricing/pending-service-row";
+import { blendedCrewRateCents } from "@/lib/job-costing";
 import { PayRateInput } from "@/components/team/pay-rate-input";
 import { PhoneInput } from "@/components/team/phone-input";
 import { EditTeamMember } from "@/components/team/edit-team-member";
@@ -107,17 +108,14 @@ export default async function TeamServicesPage() {
         ? orgRes.measurement_basis
         : "area";
 
-    // Blended crew cost = average of the HOURLY team's set pay rates —
-    // commission pay is a % of the sale, not a per-hour labor cost. The
-    // org-level manual rate only fills in until pay has been entered.
-    const payRates = profiles
-      .filter((p) => p.pay_type !== "commission")
-      .map((p) => p.pay_rate_per_hour)
-      .filter((r): r is number => r != null);
+    // The same blend the quote is built from, from the same function. Two
+    // copies of an average are two numbers that eventually disagree, and this
+    // one is on screen next to prices derived from the other.
     crewCostPerHour =
-      payRates.length > 0
-        ? Math.round((payRates.reduce((sum, r) => sum + r, 0) / payRates.length) * 100) / 100
-        : orgRes.crew_cost_per_hour;
+      blendedCrewRateCents(
+        profiles.map((p) => ({ payType: p.pay_type, ratePerHour: p.pay_rate_per_hour })),
+        orgRes.crew_cost_per_hour
+      ) / 100;
   }
   const activeServices = services.filter((s) => s.status === "active");
   const pendingServices = services.filter((s) => s.status === "pending");

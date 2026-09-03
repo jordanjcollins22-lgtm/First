@@ -11,6 +11,7 @@ import { ViewCount } from "@/components/proposal/view-count";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import { suggestZoneScope } from "@/lib/actions/scope-suggestion-actions";
+import { effectiveMultiplier, type Markup } from "@/lib/job-costing";
 import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
 
 export interface InternalZoneBreakdown {
@@ -19,6 +20,21 @@ export interface InternalZoneBreakdown {
   notes: string;
   checklistAnswers: { label: string; value: string }[];
   materialLineItems: { material: string; quantityLabel: string; cost: number | null }[];
+  /** Crew-hours: a three-person crew for an hour is three. */
+  crewHours: number;
+  materialsCents: number;
+  labourCents: number;
+  /** Materials and labour, before markup. */
+  directCostCents: number;
+  priceCents: number;
+  /** No timing on the service, so nothing was charged for the work itself. */
+  hasMissingTiming: boolean;
+  /** A material here has no unit cost, so the figure is a floor. */
+  hasUnknownMaterialCost: boolean;
+}
+
+function money(cents: number): string {
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -42,8 +58,9 @@ export function ProposalPanel({
   jobId,
   proposal,
   baseUrl,
-  serviceCost,
+  labourCost,
   materialsCost,
+  markup,
   zones,
   discounts,
   viewLabel = null,
@@ -52,8 +69,10 @@ export function ProposalPanel({
   jobId: string;
   proposal: JobProposal | null;
   baseUrl: string;
-  serviceCost: number;
+  labourCost: number;
   materialsCost: number;
+  /** How direct cost becomes the quoted price, for the line that says so. */
+  markup: Markup;
   zones: InternalZoneBreakdown[];
   discounts: Discount[];
   /** How often the client has opened it. Null when there is nothing to say
@@ -416,18 +435,64 @@ export function ProposalPanel({
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Internal only — the client never sees this
               </p>
+              {/* What it costs us, then what turns that into the price. The
+                  account manager is approving the last line, and the only way
+                  to judge it is to see the three above it. */}
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Service cost</span>
-                <span>${Math.round(serviceCost).toLocaleString()}</span>
+                <span className="text-muted-foreground">Labour</span>
+                <span>${Math.round(labourCost).toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Material cost</span>
+                <span className="text-muted-foreground">Materials</span>
                 <span>${Math.round(materialsCost).toLocaleString()}</span>
               </div>
+              <div className="flex justify-between border-t border-border/60 pt-2 text-xs font-medium">
+                <span>Cost to us</span>
+                <span>${Math.round(labourCost + materialsCost).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">
+                  &times;{markup.multiplier}
+                  {markup.overheadPercent > 0 && ` plus ${markup.overheadPercent}% overhead`}
+                </span>
+                <span className="text-muted-foreground">
+                  &times;{effectiveMultiplier(markup).toFixed(2)} overall
+                </span>
+              </div>
+
+              {zones.some((zone) => zone.hasMissingTiming) && (
+                /* Silence here would quote a job at the cost of its mulch.
+                   Named rather than counted, because the fix is to go and put
+                   a time on that service. */
+                <p className="rounded-md bg-amber-400/10 px-2 py-1.5 text-[11px] text-amber-700">
+                  No timing set for{" "}
+                  {[...new Set(zones.filter((z) => z.hasMissingTiming).map((z) => z.serviceLabel))].join(", ")}
+                  , so no labour is being charged for it.
+                </p>
+              )}
+              {zones.some((zone) => zone.hasUnknownMaterialCost) && (
+                <p className="rounded-md bg-amber-400/10 px-2 py-1.5 text-[11px] text-amber-700">
+                  A material here has no unit cost, so this is a floor rather than the price.
+                </p>
+              )}
               {zones.map((zone, i) => (
                 <div key={i} className="rounded-md border border-border/60 p-2.5 text-xs">
-                  <p className="font-medium">
-                    {zone.zoneName} <span className="text-muted-foreground">· {zone.serviceLabel}</span>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="font-medium">
+                      {zone.zoneName} <span className="text-muted-foreground">· {zone.serviceLabel}</span>
+                    </p>
+                    <span className="shrink-0 font-semibold">{money(zone.priceCents)}</span>
+                  </div>
+                  {/* The same three lines as the job, for the one area. A
+                      client who asks to drop a zone is asking about this. */}
+                  <p className="text-muted-foreground">
+                    {zone.crewHours > 0
+                      ? `${zone.crewHours.toFixed(1)} crew hr · ${money(zone.labourCents)} labour`
+                      : "No labour"}
+                    {" · "}
+                    {money(zone.materialsCents)} materials
+                    {" · "}
+                    {money(zone.directCostCents)} cost
                   </p>
                   {zone.checklistAnswers.length > 0 && (
                     <ul className="mt-1 list-disc pl-4 text-muted-foreground">
