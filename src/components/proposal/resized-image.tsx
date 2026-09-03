@@ -23,9 +23,17 @@ export function ResizedImage({
   path,
   transform,
   alt,
-  /** Shape of the tile, as a Tailwind aspect class. The photo is fitted
-   * inside it whole. */
-  aspect = "aspect-[4/3]",
+  /**
+   * Shape of the tile, as a Tailwind aspect class. The photo is fitted inside
+   * it whole.
+   *
+   * Square, because these are photos taken on a phone standing in somebody's
+   * garden and nearly all of them are portrait. Fitting a portrait photo
+   * inside a landscape tile leaves it small between two wide grey margins;
+   * the same photo in a square tile is close to twice the size, and a
+   * landscape one still fits with room to spare.
+   */
+  aspect = "aspect-square",
   className,
 }: {
   path: string;

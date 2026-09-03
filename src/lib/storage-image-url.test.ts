@@ -82,15 +82,27 @@ describe("publicStorageUrl", () => {
 });
 
 describe("the standard sizes", () => {
-  it("asks for a thumbnail wide enough for a dense phone screen", () => {
-    expect(THUMBNAIL.width).toBeGreaterThanOrEqual(96 * 3);
+  it("asks for a thumbnail big enough for a dense phone screen", () => {
+    expect(THUMBNAIL.width).toBeGreaterThanOrEqual(200 * 3);
+  });
+
+  it("gives both dimensions on every size, never one alone", () => {
+    // One dimension alone does not scale the other to match: the renderer
+    // pins what it is given and leaves the rest at the original's size, so a
+    // 4032x3024 photo asked for at width 320 comes back 320x4032. See the
+    // note above these constants.
+    for (const size of [THUMBNAIL, PREVIEW]) {
+      expect(size.width).toBeDefined();
+      expect(size.height).toBeDefined();
+    }
   });
 
   it("crops neither size, so markers stored as fractions still land correctly", () => {
     // A marker is a fraction of the image. Crop the image and the fraction
-    // points somewhere else entirely, so neither standard size sets a height.
-    expect(THUMBNAIL.height).toBeUndefined();
-    expect(PREVIEW.height).toBeUndefined();
+    // points somewhere else entirely, so the pair of dimensions has to be a
+    // bounding box to fit inside rather than a shape to fill.
+    expect(THUMBNAIL.resize).toBe("contain");
+    expect(PREVIEW.resize).toBe("contain");
   });
 
   it("asks for less than the original in both cases", () => {

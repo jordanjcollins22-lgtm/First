@@ -42,18 +42,48 @@ const MIN_QUALITY = 20;
 const MAX_QUALITY = 100;
 
 /**
- * A grid tile or an avatar-sized square. Width only, so nothing is cropped
- * and a photo with markers on it still has its markers in the right place.
- * 320 covers a 96px square on a three-times-density phone screen.
+ * Both dimensions, always, and never one on its own.
+ *
+ * The obvious way to ask for a thumbnail is a width and no height, and let the
+ * height follow the original's shape. That is what the documentation describes
+ * and it is not what this renderer does: given a width alone it pins the width
+ * and leaves the height at the original's. A 4032x3024 camera photo asked for
+ * at width 320 came back 320x4032 -- the same picture squeezed to a twelfth of
+ * its width. Height alone is the same mistake mirrored (3000x240).
+ *
+ * Nothing downstream can recover from that. `object-contain` faithfully drew
+ * the sliver it was given, so a proposal's photos rendered as vertical
+ * threads, and it looked like a layout bug in the page rather than a wrong
+ * picture arriving from storage.
+ *
+ * So both dimensions go on every transform, with `contain` to fit inside them.
+ * `contain` and not `cover`: cover fills the box by cropping, and a square
+ * crop of a wide garden shot is a close-up of the lawn with the beds either
+ * side of it removed, which is the part being quoted for. The pair is a
+ * bounding box, not a shape -- a portrait photo comes back portrait, fitted.
  */
-export const THUMBNAIL: ImageTransform = { width: 320, quality: 60 };
 
 /**
- * A photo filling the width of a phone, or a proposal's site map. Big enough
- * that it doesn't look soft on a retina screen, small enough that it isn't
- * the original four megabytes.
+ * A grid tile. 640 covers a tile a little over 200px across on a
+ * three-times-density phone screen, in either orientation.
  */
-export const PREVIEW: ImageTransform = { width: 1280, quality: 75 };
+export const THUMBNAIL: ImageTransform = {
+  width: 640,
+  height: 640,
+  resize: "contain",
+  quality: 60,
+};
+
+/**
+ * A photo filling the width of a phone. Big enough that it doesn't look soft
+ * on a retina screen, small enough that it isn't the original four megabytes.
+ */
+export const PREVIEW: ImageTransform = {
+  width: 1280,
+  height: 1280,
+  resize: "contain",
+  quality: 75,
+};
 
 function clampQuality(quality: number): number {
   return Math.min(MAX_QUALITY, Math.max(MIN_QUALITY, Math.round(quality)));
