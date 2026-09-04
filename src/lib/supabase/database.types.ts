@@ -758,6 +758,15 @@ export interface Database {
           geometry_type: string;
           geometry: Json;
           position: number;
+          /** The outline not to leave. */
+          boundary: Json | null;
+          /** The streets, in the order to walk them. */
+          walk_path: Json | null;
+          start_point: Json | null;
+          /** Where the van goes. Rarely the first door. */
+          park_point: Json | null;
+          end_point: Json | null;
+          start_address: string | null;
           created_at: string;
           updated_at: string;
         };
