@@ -39,45 +39,6 @@ export function formatMeasurements(
   return `${Math.round(m.areaSqFt).toLocaleString()} sq ft · ${Math.round(m.perimeterFt).toLocaleString()} ft perimeter`;
 }
 
-/** Paginates the whole-job task list so large jobs don't silently overflow one page. */
-export function computeJobTotals(
-  zones: WorkZone[],
-  catalog: CanvasCatalog
-): { totalCost: number; totalHours: number; hasNonFlatRate: boolean } {
-  let totalCost = 0;
-  let totalHours = 0;
-  let hasNonFlatRate = false;
-  for (const zone of zones) {
-    const service = zone.service;
-    if (!service) continue;
-    const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
-    if (!pricing || pricing.status !== "active") continue;
-    // What the price multiplies by. "count" reads the Quantity the evaluator
-    // entered on the zone (how many bushes); "flat" charges once.
-    const measurements = zoneMeasurements(zone);
-    const quantity =
-      pricing.pricing_basis === "area"
-        ? measurements?.areaSqFt ?? 0
-        : pricing.pricing_basis === "perimeter"
-          ? measurements?.perimeterFt ?? 0
-          : pricing.pricing_basis === "count"
-            ? zoneServiceCount(zone)
-            : null;
-
-    if (pricing.cost != null) {
-      totalCost += quantity != null ? pricing.cost * quantity : pricing.cost;
-      if (quantity == null && pricing.pricing_basis !== "flat") hasNonFlatRate = true;
-    }
-    if (quantity != null && pricing.minutes_per_sqft != null) {
-      // Crew-hours, not clock-hours — a 3-person crew burns 3x the paid time.
-      totalHours += (pricing.minutes_per_sqft / 60) * quantity * (pricing.crew_size ?? 1);
-    } else if (pricing.estimated_hours != null) {
-      totalHours += pricing.estimated_hours;
-    }
-  }
-  return { totalCost, totalHours, hasNonFlatRate };
-}
-
 export interface MaterialLineItem {
   zoneName: string;
   materialId: string;

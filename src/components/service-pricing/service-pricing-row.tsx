@@ -149,6 +149,17 @@ export function ServicePricingRow({
     savePricing(next, nextUnit);
   }
 
+  /**
+   * Persist the timing on its own.
+   *
+   * It used to be saved only as a side effect of pressing "Use calculated",
+   * which was fine while it was one input to a suggestion. It sets the price
+   * now, so typing a time and walking away has to keep it.
+   */
+  function saveLabor() {
+    startTransition(() => updateServiceLabor(serviceTypeId, minutesValue || null, crewSizeValue));
+  }
+
   function handleUseCalculated() {
     const rounded = Math.round(calculatedCogsPerSqFt * 100) / 100;
     setCogs(rounded.toString());
@@ -208,7 +219,11 @@ export function ServicePricingRow({
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label className="text-xs text-muted-foreground">Price {cogs.trim() && "(auto)"}</Label>
+          {/* Kept, and no longer what a client is quoted. Quotes are built from
+              cost: materials and labour, marked up. Saying so on the field is
+              cheaper than someone typing a rate here and waiting for prices to
+              move. */}
+          <Label className="text-xs text-muted-foreground">Old per-unit price</Label>
           <Input
             type="number"
             step="0.01"
@@ -219,6 +234,46 @@ export function ServicePricingRow({
             onChange={(e) => setCost(e.target.value)}
             onBlur={() => savePricing()}
             className="h-9 w-24 text-sm"
+          />
+          <p className="text-[10px] text-muted-foreground">Not used for quoting</p>
+        </div>
+        {/* What the quote is actually built from. This lived behind the
+            "Tools, materials & how-to" toggle while it was one input among
+            many; it is now the price, so it is in the row. */}
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Minutes per {measurementUnit}</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min={0}
+            placeholder="0"
+            value={minutesPerSqft}
+            disabled={isPending}
+            onChange={(e) => setMinutesPerSqft(e.target.value)}
+            onBlur={() => saveLabor()}
+            className="h-9 w-24 text-sm"
+          />
+          {/* The same number the other way up, which is the way people know
+              it: nobody has an opinion about 0.12 minutes, everybody has one
+              about 500 sq ft an hour. */}
+          <p className="text-[10px] text-muted-foreground">
+            {minutesValue > 0
+              ? `≈ ${Math.round(60 / minutesValue).toLocaleString()} ${measurementUnit}/crew-hr`
+              : "No time set — no labour charged"}
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Crew size</Label>
+          <Input
+            type="number"
+            step="1"
+            min={1}
+            placeholder="1"
+            value={crewSize}
+            disabled={isPending}
+            onChange={(e) => setCrewSize(e.target.value)}
+            onBlur={() => saveLabor()}
+            className="h-9 w-20 text-sm"
           />
         </div>
         {saveError && (
@@ -444,39 +499,6 @@ export function ServicePricingRow({
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs text-muted-foreground">Minutes to do 1 {measurementUnit}</Label>
-              <Input
-                type="number"
-                step="0.1"
-                min={0}
-                placeholder="0"
-                value={minutesPerSqft}
-                onChange={(e) => setMinutesPerSqft(e.target.value)}
-                className="h-9 w-24 text-sm"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs text-muted-foreground">Crew size</Label>
-              <Input
-                type="number"
-                step="1"
-                min={1}
-                placeholder="1"
-                value={crewSize}
-                onChange={(e) => setCrewSize(e.target.value)}
-                className="h-9 w-20 text-sm"
-              />
-            </div>
-            {crewCostPerHour == null && (
-              <p className="text-xs text-destructive">
-                Set hourly pay for your crew on the Team side first — labor cost can&apos;t be calculated
-                without it.
-              </p>
-            )}
           </div>
 
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
