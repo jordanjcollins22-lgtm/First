@@ -147,7 +147,6 @@ export async function testGisConnection(serviceUrl: string): Promise<ActionResul
 }
 
 export interface StartImportInput {
-  serviceUrl: string;
   scope: "zip" | "county";
   zip?: string;
 }
@@ -155,10 +154,12 @@ export interface StartImportInput {
 /**
  * Stages two and five: a bounded ZIP run, or the whole county.
  *
- * Discovery runs again here rather than trusting an earlier test, because the
- * layer may have changed in between and the mapping must be the one this run
- * actually uses. The first page is then handed to the background route; the
- * browser gets the job id and nothing else.
+ * The layer comes from the last connection test that found one -- never from
+ * the URL box, which after a reload holds the default catalog again while the
+ * import button is still lit by the earlier test. That mismatch was the
+ * production failure "The connection test has to find an address layer".
+ * Discovery still runs once more on that layer, so the mapping the run uses
+ * is read from the layer as it is now, not as it was when the test ran.
  */
 export async function startGisImport(input: StartImportInput): Promise<ActionResult<{ jobId: string; where: string }>> {
   return guard("startGisImport", async () => {
@@ -166,7 +167,6 @@ export async function startGisImport(input: StartImportInput): Promise<ActionRes
     if (!env.cronSecret) {
       throw new Error("CRON_SECRET must be set on the server for the import to run in the background.");
     }
-    const endpoint = endpointFrom(input.serviceUrl);
     const zip = input.scope === "zip" ? (input.zip ?? "").replace(/\D/g, "").slice(0, 5) : null;
     if (input.scope === "zip" && (!zip || zip.length !== 5)) throw new Error("A five-digit ZIP is needed.");
 
@@ -181,12 +181,28 @@ export async function startGisImport(input: StartImportInput): Promise<ActionRes
       .limit(1);
     if (active && active.length > 0) throw new Error("An import is already running. Pause it or let it finish first.");
 
+    const { data: lastTest, error: testError } = await admin
+      .from("gis_import_jobs")
+      .select("layer_url, service_url")
+      .eq("organization_id", profile.organization_id)
+      .eq("kind", "connection_test")
+      .eq("status", "done")
+      .not("layer_url", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (testError) throw testError;
+    if (!lastTest?.layer_url) {
+      throw new Error("Run a connection test that finds the address layer first. The import uses the layer that test recorded.");
+    }
+    const endpoint = endpointFrom(lastTest.layer_url);
+
     const discovery = await discoverLayer(endpoint, "server-action");
     if (!discovery.layerUrl || !discovery.mapping?.address) {
       throw new Error(
         discovery.probe.ok
-          ? "The connection test has to find an address layer before an import can start."
-          : `The county did not answer: ${discovery.probe.message ?? discovery.probe.kind}`
+          ? `${endpoint} no longer describes a layer with an address field. Run the connection test again.`
+          : `The county did not answer at ${endpoint}: ${discovery.probe.message ?? discovery.probe.kind}`
       );
     }
 
@@ -199,7 +215,7 @@ export async function startGisImport(input: StartImportInput): Promise<ActionRes
         kind: input.scope,
         status: "running",
         scope: (zip ? { zip } : {}) as unknown as Json,
-        service_url: endpoint,
+        service_url: lastTest.service_url,
         layer_url: discovery.layerUrl,
         layer_name: discovery.layerName,
         max_record_count: discovery.description.maxRecordCount,

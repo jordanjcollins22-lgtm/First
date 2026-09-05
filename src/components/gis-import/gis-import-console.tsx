@@ -46,7 +46,10 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
   const router = useRouter();
   const backgroundReady = environment.cronSecretPresent;
   const [isPending, startTransition] = useTransition();
-  const [url, setUrl] = useState(defaultUrl);
+  // The last tested URL, not the default: a reload must not quietly put the
+  // catalog root back in the box under a green "Layer found".
+  const lastTested = jobs.find((j) => j.kind === "connection_test")?.service_url;
+  const [url, setUrl] = useState(lastTested ?? defaultUrl);
   const [zip, setZip] = useState("21014");
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<Record<string, unknown> | null>(null);
@@ -120,7 +123,17 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
           event on a house are never touched.
         </p>
         <EnvironmentCard environment={environment} />
-        {!canImport && (
+        {canImport ? (
+          <p className="mb-3 text-sm">
+            Will query{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{latestTest?.layer_url}</code>
+            {" "}
+            <span className="text-muted-foreground">
+              — the layer found by the test at {latestTest ? new Date(latestTest.created_at).toLocaleTimeString() : ""}. The
+              URL box above is not used here.
+            </span>
+          </p>
+        ) : (
           <p className="mb-3 text-sm text-muted-foreground">
             The connection test has to find an address layer before an import can start.
           </p>
@@ -135,7 +148,7 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
           <Button
             type="button"
             disabled={isPending || !canImport || !backgroundReady || Boolean(running)}
-            onClick={() => run(() => startGisImport({ serviceUrl: url, scope: "zip", zip }))}
+            onClick={() => run(() => startGisImport({ scope: "zip", zip }))}
           >
             Import ZIP {zip || "…"}
           </Button>
@@ -145,7 +158,7 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
             disabled={isPending || !canImport || !backgroundReady || Boolean(running)}
             onClick={() => {
               if (!window.confirm("Import every address in Harford County? This runs for a while in the background.")) return;
-              run(() => startGisImport({ serviceUrl: url, scope: "county" }));
+              run(() => startGisImport({ scope: "county" }));
             }}
           >
             Import whole county
