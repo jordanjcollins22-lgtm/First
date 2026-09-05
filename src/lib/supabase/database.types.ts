@@ -988,8 +988,10 @@ export interface Database {
           total_count: number | null;
           /** Everything USPS sent about the route. */
           attributes: Json;
-          /** Rings of [lng, lat] pairs. */
+          /** Rings of [lng, lat] pairs: the boundary worked out from the streets. */
           rings: Json;
+          /** The streets the carrier walks, as USPS sent them: paths of [lng, lat]. */
+          paths: Json | null;
           source_url: string | null;
           fetched_at: string;
         };

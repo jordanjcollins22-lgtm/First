@@ -10,8 +10,10 @@ import {
   eddmRoutesUrl,
   parseEddmRoutes,
   routesToFeatures,
+  routesToStreetFeatures,
   type EddmRoute,
   type EddmRouteFeature,
+  type EddmStreetFeature,
 } from "@/lib/eddm";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -26,7 +28,16 @@ import type { Json } from "@/lib/supabase/database.types";
  */
 
 export type EddmResult =
-  | { ok: true; zip: string; routes: EddmRouteFeature[]; source: "stored" | "usps"; fetchedAt: string | null; note: string | null }
+  | {
+      ok: true;
+      zip: string;
+      routes: EddmRouteFeature[];
+      /** The streets each route walks, as USPS drew them. */
+      streets: EddmStreetFeature[];
+      source: "stored" | "usps";
+      fetchedAt: string | null;
+      note: string | null;
+    }
   | { ok: false; error: string };
 
 const STALE_AFTER_DAYS = 45;
@@ -42,7 +53,7 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
 
     const { data: stored, error: storedError } = await supabase
       .from("eddm_routes")
-      .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, fetched_at")
+      .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, paths, fetched_at")
       .eq("organization_id", profile.organization_id)
       .eq("zip", zip)
       .order("route_id");
@@ -53,7 +64,15 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
     const stale = !newest || Date.now() - new Date(newest).getTime() > STALE_AFTER_DAYS * 86_400_000;
 
     if (storedRoutes.length > 0 && !refresh && !stale) {
-      return { ok: true, zip, routes: routesToFeatures(storedRoutes), source: "stored", fetchedAt: newest, note: null };
+      return {
+        ok: true,
+        zip,
+        routes: routesToFeatures(storedRoutes),
+        streets: routesToStreetFeatures(storedRoutes),
+        source: "stored",
+        fetchedAt: newest,
+        note: null,
+      };
     }
 
     // Ask USPS, and keep the receipt.
@@ -79,7 +98,7 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
       : serverError
         ? `USPS answered with an error: ${serverError}`
         : routes.length === 0
-          ? "USPS answered, but no routes with boundaries could be read from the answer. The receipt is on the County Import screen."
+          ? "USPS answered, but no routes with streets or boundaries could be read from the answer. The receipt is on the County Import screen."
           : null;
 
     if (job) {
@@ -104,6 +123,7 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
           ok: true,
           zip,
           routes: routesToFeatures(storedRoutes),
+          streets: routesToStreetFeatures(storedRoutes),
           source: "stored",
           fetchedAt: newest,
           note: `Showing routes saved ${newest ? new Date(newest).toLocaleDateString() : "earlier"}; USPS could not be refreshed: ${failure}`,
@@ -123,6 +143,7 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
         total_count: r.total,
         attributes: r.attributes as Json,
         rings: r.rings as unknown as Json,
+        paths: r.paths as unknown as Json,
         source_url: url.split("?")[0],
         fetched_at: now,
       })),
@@ -130,7 +151,15 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
     );
     if (upsertError) throw upsertError;
 
-    return { ok: true, zip, routes: routesToFeatures(routes), source: "usps", fetchedAt: now, note: null };
+    return {
+      ok: true,
+      zip,
+      routes: routesToFeatures(routes),
+      streets: routesToStreetFeatures(routes),
+      source: "usps",
+      fetchedAt: now,
+      note: null,
+    };
   } catch (err) {
     console.error("[eddm] loadEddmRoutes failed:", err);
     return { ok: false, error: err instanceof Error ? err.message : "Could not load routes." };
@@ -146,6 +175,7 @@ function toRoute(row: {
   total_count: number | null;
   attributes: Json;
   rings: Json;
+  paths: Json | null;
 }): EddmRoute & { id: string } {
   return {
     id: row.id,
@@ -156,5 +186,6 @@ function toRoute(row: {
     total: row.total_count,
     attributes: (row.attributes ?? {}) as Record<string, unknown>,
     rings: (row.rings ?? []) as [number, number][][],
+    paths: (row.paths ?? []) as [number, number][][],
   };
 }

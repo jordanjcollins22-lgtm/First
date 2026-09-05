@@ -4,15 +4,27 @@
  * Every Door Direct Mail is sold by carrier route, and USPS draws the routes
  * on its own map from an ArcGIS server at gis.usps.com. There is no documented
  * API; what there is, is the request that map makes -- a geoprocessing task
- * that takes a ZIP and answers with the routes in it as a feature set. So
- * nothing here assumes a field name: the attributes are searched for the
+ * that takes a ZIP and answers with the routes in it as a feature set.
+ *
+ * What it answers with is not what one would guess. A route is not a
+ * boundary: it is the streets the carrier walks, a bundle of short line
+ * segments each carrying the route's counts. The first live answer for ZIP
+ * 21014 was thirty routes of polylines and not one polygon. So the streets are
+ * kept as they came, and the boundary the map draws -- and hands to the wave
+ * form -- is worked out from them: a hull around the street network, pushed
+ * out far enough to take in the houses that stand back from the kerb.
+ *
+ * Nothing here assumes a field name; the attributes are searched for the
  * route id and the counts under the several names USPS has used, and the
  * geometry is accepted in either of the two projections it has come back in.
- *
- * Kept pure. What USPS answers is written to the database with the request
+ * Kept pure: what USPS answers is written to the database with the request
  * that produced it, so when the service changes shape the change is visible
  * there rather than as a map with no routes on it.
  */
+
+import * as turf from "@turf/turf";
+
+export type LngLatPair = [number, number];
 
 export interface EddmRoute {
   zip: string;
@@ -20,8 +32,10 @@ export interface EddmRoute {
   residential: number | null;
   business: number | null;
   total: number | null;
-  /** Rings of [lng, lat], WGS84. The first is normally the outer boundary. */
-  rings: [number, number][][];
+  /** Rings of [lng, lat], WGS84: the boundary, worked out or given. */
+  rings: LngLatPair[][];
+  /** The streets the carrier walks, as USPS sent them. */
+  paths: LngLatPair[][];
   attributes: Record<string, unknown>;
 }
 
@@ -68,7 +82,7 @@ function asCount(v: unknown): number | null {
 }
 
 /** Web Mercator metres to degrees, for a server that ignored the projection asked for. */
-export function mercatorToLngLat(x: number, y: number): [number, number] {
+export function mercatorToLngLat(x: number, y: number): LngLatPair {
   const R = 6378137;
   const lng = (x / R) * (180 / Math.PI);
   const lat = (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * (180 / Math.PI);
@@ -80,22 +94,68 @@ function looksProjected(x: number, y: number): boolean {
   return Math.abs(x) > 180 || Math.abs(y) > 90;
 }
 
-function ringsOf(geometry: unknown): [number, number][][] {
-  if (!isDict(geometry) || !Array.isArray(geometry.rings)) return [];
-  const rings: [number, number][][] = [];
-  for (const ring of geometry.rings) {
-    if (!Array.isArray(ring)) continue;
-    const points: [number, number][] = [];
-    for (const vertex of ring) {
+function linesOf(raw: unknown, minPoints: number): LngLatPair[][] {
+  if (!Array.isArray(raw)) return [];
+  const out: LngLatPair[][] = [];
+  for (const line of raw) {
+    if (!Array.isArray(line)) continue;
+    const points: LngLatPair[] = [];
+    for (const vertex of line) {
       if (!Array.isArray(vertex)) continue;
       const x = Number(vertex[0]);
       const y = Number(vertex[1]);
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       points.push(looksProjected(x, y) ? mercatorToLngLat(x, y) : [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6]);
     }
-    if (points.length >= 4) rings.push(points);
+    if (points.length >= minPoints) out.push(points);
   }
-  return rings;
+  return out;
+}
+
+/** How far past the kerb the boundary reaches, so houses set back from the street are inside it. */
+const SETBACK_KM = 0.06;
+/** The longest edge a concave hull may take; longer gaps between streets are not one neighbourhood. */
+const HULL_EDGE_KM = 0.4;
+
+/**
+ * A boundary for a route USPS only drew as streets.
+ *
+ * A concave hull around every vertex of every segment, then pushed out sixty
+ * metres so the houses along the streets fall inside it. Where a hull cannot
+ * be formed -- too few points, or streets that do not close -- the streets
+ * themselves are buffered instead, which is looser but never empty.
+ */
+export function routeBoundary(paths: LngLatPair[][]): LngLatPair[][] {
+  const vertices = paths.flat();
+  if (vertices.length < 3) return [];
+
+  let shape: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null;
+  try {
+    const points = turf.featureCollection(vertices.map((v) => turf.point(v)));
+    const hull = turf.concave(points, { maxEdge: HULL_EDGE_KM, units: "kilometers" }) ?? turf.convex(points);
+    if (hull) shape = turf.buffer(hull, SETBACK_KM, { units: "kilometers" }) ?? null;
+  } catch {
+    shape = null;
+  }
+  if (!shape) {
+    try {
+      const streets = turf.multiLineString(paths.filter((p) => p.length >= 2));
+      shape = turf.buffer(streets, SETBACK_KM, { units: "kilometers" }) ?? null;
+    } catch {
+      shape = null;
+    }
+  }
+  if (!shape) return [];
+
+  const simplified = turf.simplify(shape, { tolerance: 0.00003, highQuality: false });
+  const polygons =
+    simplified.geometry.type === "Polygon" ? [simplified.geometry.coordinates] : simplified.geometry.coordinates;
+  // Outer rings only, largest first. Holes in a walking area are streets the
+  // carrier does not serve, which is a distinction for USPS and not for us.
+  return polygons
+    .map((rings) => rings[0].map(([lng, lat]) => [Math.round(lng * 1e6) / 1e6, Math.round(lat * 1e6) / 1e6] as LngLatPair))
+    .filter((ring) => ring.length >= 4)
+    .sort((a, b) => b.length - a.length);
 }
 
 /**
@@ -131,13 +191,22 @@ export function eddmError(body: unknown): string | null {
   return null;
 }
 
-/** Every route in a response, with what we could read of it. */
+/**
+ * Every route in a response, with what we could read of it.
+ *
+ * A route may arrive as rings (a boundary) or as paths (its streets). Given
+ * streets and no boundary, the boundary is worked out. Given neither, there
+ * is nothing to draw and the route is left out.
+ */
 export function parseEddmRoutes(body: unknown, fallbackZip: string): EddmRoute[] {
   const routes: EddmRoute[] = [];
   for (const feature of featuresIn(body)) {
     const attributes = isDict(feature.attributes) ? feature.attributes : {};
     const routeId = asText(pick(attributes, ROUTE_ID_FIELDS));
-    const rings = ringsOf(feature.geometry);
+    const geometry = isDict(feature.geometry) ? feature.geometry : {};
+    const givenRings = linesOf(geometry.rings, 4);
+    const paths = linesOf(geometry.paths, 2);
+    const rings = givenRings.length > 0 ? givenRings : routeBoundary(paths);
     if (!routeId || rings.length === 0) continue;
     routes.push({
       zip: asText(pick(attributes, ZIP_FIELDS)) ?? fallbackZip,
@@ -146,6 +215,7 @@ export function parseEddmRoutes(body: unknown, fallbackZip: string): EddmRoute[]
       business: asCount(pick(attributes, BUS_FIELDS)),
       total: asCount(pick(attributes, TOT_FIELDS)),
       rings,
+      paths,
       attributes,
     });
   }
@@ -153,44 +223,88 @@ export function parseEddmRoutes(body: unknown, fallbackZip: string): EddmRoute[]
 }
 
 /** The biggest ring by vertex count, which is the outer boundary in practice. */
-export function outerRing(route: Pick<EddmRoute, "rings">): [number, number][] | null {
+export function outerRing(route: Pick<EddmRoute, "rings">): LngLatPair[] | null {
   if (route.rings.length === 0) return null;
   return [...route.rings].sort((a, b) => b.length - a.length)[0];
 }
 
+/** A palette wide enough that neighbouring routes read as different. */
+const ROUTE_COLORS = ["#f59e0b", "#3b82f6", "#ec4899", "#10b981", "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#84cc16", "#06b6d4"];
+
+export function routeColor(index: number): string {
+  return ROUTE_COLORS[((index % ROUTE_COLORS.length) + ROUTE_COLORS.length) % ROUTE_COLORS.length];
+}
+
+export interface EddmRouteProperties {
+  id: string;
+  zip: string;
+  routeId: string;
+  residential: number | null;
+  business: number | null;
+  total: number | null;
+  color: string;
+  /** From USPS's demographics, when present. */
+  medianIncome: number | null;
+  medianAge: number | null;
+  householdSize: number | null;
+  /** USPS's own flag: fewer than 200 deliveries, below the EDDM minimum. */
+  under200: boolean;
+}
+
 export interface EddmRouteFeature {
   type: "Feature";
-  geometry: { type: "Polygon"; coordinates: [number, number][][] };
-  properties: {
-    id: string;
-    zip: string;
-    routeId: string;
-    residential: number | null;
-    business: number | null;
-    total: number | null;
+  geometry: { type: "Polygon"; coordinates: LngLatPair[][] };
+  properties: EddmRouteProperties;
+}
+
+export interface EddmStreetFeature {
+  type: "Feature";
+  geometry: { type: "MultiLineString"; coordinates: LngLatPair[][] };
+  properties: Pick<EddmRouteProperties, "id" | "routeId" | "color">;
+}
+
+function propertiesOf(r: EddmRoute & { id?: string }, index: number): EddmRouteProperties {
+  const a = r.attributes;
+  return {
+    id: r.id ?? `${r.zip}-${r.routeId}`,
+    zip: r.zip,
+    routeId: r.routeId,
+    residential: r.residential,
+    business: r.business,
+    total: r.total,
+    color: routeColor(index),
+    medianIncome: asCount(pick(a, ["MED_INCOME", "AVG_INCOME", "MEDIAN_INCOME"])),
+    medianAge: asCount(pick(a, ["MED_AGE", "AVG_AGE", "MEDIAN_AGE"])),
+    householdSize: (() => {
+      const v = pick(a, ["AVG_HH_SIZ", "AVG_HH_SIZE", "HH_SIZE"]);
+      const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+      return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+    })(),
+    under200: String(pick(a, ["LT_200_IND"]) ?? "").toUpperCase() === "Y",
   };
 }
 
-/** Routes as the map draws them: one polygon each, outer ring first. */
-export function routesToFeatures(
-  routes: (EddmRoute & { id?: string })[]
-): EddmRouteFeature[] {
+/** Routes as the map draws them: one boundary polygon each, outer ring first. */
+export function routesToFeatures(routes: (EddmRoute & { id?: string })[]): EddmRouteFeature[] {
   return routes
     .filter((r) => r.rings.length > 0)
-    .map((r) => {
+    .map((r, index) => {
       const outer = outerRing(r)!;
-      const holes = r.rings.filter((ring) => ring !== outer);
       return {
         type: "Feature",
-        geometry: { type: "Polygon", coordinates: [outer, ...holes] },
-        properties: {
-          id: r.id ?? `${r.zip}-${r.routeId}`,
-          zip: r.zip,
-          routeId: r.routeId,
-          residential: r.residential,
-          business: r.business,
-          total: r.total,
-        },
+        geometry: { type: "Polygon", coordinates: [outer] },
+        properties: propertiesOf(r, index),
       };
     });
+}
+
+/** The streets of each route, coloured to match its boundary. */
+export function routesToStreetFeatures(routes: (EddmRoute & { id?: string })[]): EddmStreetFeature[] {
+  return routes
+    .filter((r) => r.paths.length > 0)
+    .map((r, index) => ({
+      type: "Feature",
+      geometry: { type: "MultiLineString", coordinates: r.paths },
+      properties: { id: r.id ?? `${r.zip}-${r.routeId}`, routeId: r.routeId, color: routeColor(index) },
+    }));
 }

@@ -48,7 +48,7 @@ import type {
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { MapHouse } from "@/lib/house-geojson";
-import type { EddmRouteFeature } from "@/lib/eddm";
+import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import { loadEddmRoutes } from "@/lib/actions/eddm-actions";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
@@ -137,6 +137,7 @@ export function AttractorsDashboard({
   const [showEddm, setShowEddm] = useState(false);
   const [eddmZip, setEddmZip] = useState("21014");
   const [eddmRoutes, setEddmRoutes] = useState<EddmRouteFeature[]>([]);
+  const [eddmStreets, setEddmStreets] = useState<EddmStreetFeature[]>([]);
   const [eddmBusy, setEddmBusy] = useState(false);
   const [eddmStatus, setEddmStatus] = useState<string | null>(null);
   // A route handed in as a wave shape opens the form as a polygon; the key
@@ -154,6 +155,7 @@ export function AttractorsDashboard({
       return;
     }
     setEddmRoutes(result.routes);
+    setEddmStreets(result.streets);
     setShowEddm(true);
     const total = result.routes.reduce((sum, r) => sum + (r.properties.total ?? 0), 0);
     setEddmStatus(
@@ -479,6 +481,7 @@ export function AttractorsDashboard({
                 houses={showHouses ? houses : []}
                 showAllAddresses={showAllAddresses}
                 eddmRoutes={showEddm ? eddmRoutes : []}
+                eddmStreets={showEddm ? eddmStreets : []}
                 onUseRouteAsWave={useRouteAsWave}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
