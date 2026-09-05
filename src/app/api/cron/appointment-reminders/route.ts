@@ -1,0 +1,134 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyTeamMember } from "@/lib/notifications";
+import { reconcileProspects } from "@/lib/data/prospect-reconcile";
+import { growProspects } from "@/lib/data/prospect-growth";
+import { NIGHTLY_BUDGET } from "@/lib/prospecting";
+import { env, isSupabaseAdminConfigured } from "@/lib/env";
+
+/**
+ * Texts each person an "evaluation coming up" reminder, however many hours
+ * ahead they asked for. Meant to be hit on a schedule (Vercel Cron, or any
+ * scheduler that can send a header).
+ *
+ * vercel.json runs this once a day, because Vercel's Hobby plan rejects any
+ * deployment whose cron runs more often than that. A lead time is therefore
+ * only as precise as the run interval: on a daily schedule, anything under
+ * ~24 hours won't reliably fire. On a paid plan, change the schedule to
+ * "0 * * * *" for hourly and short lead times start working.
+ *
+ * Sends are recorded in notification_log keyed by job, so running more often
+ * than needed — or twice at once — still only texts a person once per
+ * appointment.
+ */
+export async function GET(request: NextRequest) {
+  if (!isSupabaseAdminConfigured) {
+    return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
+  }
+  // Vercel Cron sends this automatically; anything else must supply it.
+  const secret = env.cronSecret;
+  if (secret) {
+    const auth = request.headers.get("authorization");
+    if (auth !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
+  const admin = createAdminClient();
+
+  // Everybody who could be reminded, rather than everybody who has a
+  // preferences row saying they want to be.
+  //
+  // This used to start from notification_preferences, which meant a person
+  // with no row was never a candidate. Nobody had a row -- the table was
+  // empty -- so this returned "sent: 0" on every run since it was written,
+  // and being correct about sending nothing looks exactly like working.
+  // notifyTeamMember applies the preference per person, and it now treats an
+  // absent row as somebody who has expressed no preference rather than
+  // somebody who declined.
+  const { data: profiles } = await admin.from("profiles").select("id, organization_id");
+  if (!profiles || profiles.length === 0) return NextResponse.json({ sent: 0 });
+
+  const orgByProfile = new Map(profiles.map((p) => [p.id, p.organization_id]));
+
+  const { data: calendars } = await admin
+    .from("calendars")
+    .select("organization_id, reminders_enabled, reminder_hours_before")
+    .eq("is_system", true);
+  const calendarByOrg = new Map((calendars ?? []).map((c) => [c.organization_id, c]));
+
+  // How far ahead to remind is the calendar's call, not the person's.
+  // Evaluations live on each org's built-in Evaluations calendar, so that
+  // calendar's settings govern these reminders.
+  const leadHoursByProfile = new Map<string, number>();
+  for (const profile of profiles) {
+    const calendar = calendarByOrg.get(orgByProfile.get(profile.id) ?? "");
+    // No Evaluations calendar yet (migration 0065 not run) falls back to 24h.
+    if (calendar && !calendar.reminders_enabled) continue;
+    leadHoursByProfile.set(profile.id, calendar?.reminder_hours_before ?? 24);
+  }
+  if (leadHoursByProfile.size === 0) return NextResponse.json({ sent: 0 });
+
+  const now = Date.now();
+  // One window wide enough to cover every calendar's lead time, then filtered
+  // per person below — cheaper than a query each.
+  const maxHours = Math.max(...leadHoursByProfile.values());
+  const { data: jobs } = await admin
+    .from("jobs")
+    .select("id, name, assigned_to, evaluation_date, evaluation_status, property_id")
+    .not("evaluation_date", "is", null)
+    .neq("evaluation_status", "completed")
+    .gte("evaluation_date", new Date(now).toISOString())
+    .lte("evaluation_date", new Date(now + maxHours * 3600_000).toISOString());
+  if (!jobs || jobs.length === 0) return NextResponse.json({ sent: 0 });
+
+  const addressByProperty = new Map<string, string>();
+  const propertyIds = Array.from(new Set(jobs.map((j) => j.property_id)));
+  const { data: properties } = await admin.from("properties").select("id, address").in("id", propertyIds);
+  for (const property of properties ?? []) addressByProperty.set(property.id, property.address);
+
+  let sent = 0;
+  for (const job of jobs) {
+    if (!job.assigned_to || !job.evaluation_date) continue;
+    const leadHours = leadHoursByProfile.get(job.assigned_to);
+    if (leadHours == null) continue;
+
+    const hoursAway = (new Date(job.evaluation_date).getTime() - now) / 3600_000;
+    if (hoursAway > leadHours) continue;
+
+    const when = new Date(job.evaluation_date).toLocaleString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const address = addressByProperty.get(job.property_id) ?? job.name;
+    const didSend = await notifyTeamMember(
+      job.assigned_to,
+      "appointment_reminders",
+      `Reminder: evaluation at ${address} on ${when}.`,
+      { dedupeKey: job.id }
+    ).catch(() => false);
+    if (didSend) sent += 1;
+  }
+
+  // Nightly sweep of the cold-prospect list against the client book. It rides
+  // this cron rather than its own because Vercel's Hobby plan rejects a
+  // deployment with more than one daily schedule — and the reconciliation is
+  // cheap next to the reminders it shares a run with.
+  const reconciled = await reconcileProspects(admin).catch(() => ({ checked: 0, matched: 0 }));
+
+  // Grow the prospect list around finished work. Capped per run because each
+  // seed is a billed property-API call — a few good streets a night beats
+  // swallowing the county in one evening.
+  const { data: orgs } = await admin.from("organizations").select("id");
+  const grown: Record<string, number> = {};
+  for (const org of orgs ?? []) {
+    const report = await growProspects(admin, org.id, NIGHTLY_BUDGET).catch(() => null);
+    if (report) grown[org.id] = report.added;
+  }
+
+  return NextResponse.json({ sent, reconciled, grown });
+}

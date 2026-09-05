@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Dark follows a class rather than the phone alone, so the toggle can
+   override what the phone thinks. The script in the layout sets it before
+   anything paints. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f7f8f6;
   --foreground: #14181a;
@@ -22,6 +27,39 @@
   --input: #dde2dc;
   --ring: #2f6d3c;
   --radius: 0.75rem;
+  color-scheme: light;
+}
+
+/*
+ * The same palette after dark.
+ *
+ * Not the light one inverted. A pure black ground with pure white text is
+ * painful to read for the hour somebody spends on a job page in the evening,
+ * so the ground is a very dark green-grey and the text sits just short of
+ * white. The green lifts, because a brand green mixed for white paper goes
+ * muddy on a dark ground and stops reading as a colour at all.
+ */
+.dark {
+  --background: #10140f;
+  --foreground: #e8ece7;
+  --card: #171c16;
+  --card-foreground: #e8ece7;
+  --popover: #171c16;
+  --popover-foreground: #e8ece7;
+  --primary: #6fbe7d;
+  --primary-foreground: #0b1109;
+  --secondary: #1e241d;
+  --secondary-foreground: #e8ece7;
+  --muted: #1e241d;
+  --muted-foreground: #9aa89b;
+  --accent: #263026;
+  --accent-foreground: #e8ece7;
+  --destructive: #e0685c;
+  --destructive-foreground: #1a0d0b;
+  --border: #2b332a;
+  --input: #2b332a;
+  --ring: #6fbe7d;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -51,13 +89,50 @@
 }
 
 body {
-  background: var(--background);
+  min-height: 100dvh;
+  background:
+    radial-gradient(1100px 600px at 8% -10%, rgba(47, 109, 60, 0.14), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(58, 141, 122, 0.12), transparent 55%),
+    radial-gradient(800px 550px at 50% 100%, rgba(47, 109, 60, 0.08), transparent 60%),
+    linear-gradient(180deg, #eef2ec 0%, #f6f8f5 45%, #eef1ec 100%);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* The same wash, far dimmer. Left in rather than replaced with a flat colour
+   because the gradient is what stops a full screen of cards looking like a
+   spreadsheet. */
+.dark body {
+  background:
+    radial-gradient(1100px 600px at 8% -10%, rgba(111, 190, 125, 0.1), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(58, 141, 122, 0.08), transparent 55%),
+    radial-gradient(800px 550px at 50% 100%, rgba(111, 190, 125, 0.06), transparent 60%),
+    linear-gradient(180deg, #0d110c 0%, #12170f 45%, #0d110c 100%);
+}
+
 * {
   border-color: var(--border);
+}
+
+/*
+ * The frosted-glass borders, after dark.
+ *
+ * The app draws its cards with a white border at half opacity, in about a
+ * hundred and sixty places. On white paper that reads as a soft edge; on a
+ * dark ground it reads as a bright outline round everything, and the whole
+ * screen turns into a wireframe.
+ *
+ * Retargeted here once rather than edited at every call site. A rule per
+ * component would be a hundred and sixty chances to miss one, and the one
+ * missed is the one somebody notices.
+ */
+.dark [class*="border-white/"] {
+  border-color: rgb(255 255 255 / 0.08);
+}
+
+.dark [class*="bg-white/"] {
+  background-color: rgb(255 255 255 / 0.04);
 }
 
 /* Mapbox GL overrides so controls stay usable with large touch targets */
@@ -69,4 +144,130 @@ body {
 .mapboxgl-popup-content {
   border-radius: var(--radius-md);
   padding: 12px;
+}
+
+/* Always-visible, subtle scrollbars on wide tables — the glass borders are
+   soft enough that a hidden/auto-appearing scrollbar makes cut-off content
+   easy to miss instead of read as "scroll for more". */
+.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.overflow-x-auto::-webkit-scrollbar {
+  height: 8px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+
+/* ------------------------------------------------------------------
+   The EDDM flyer.
+
+   On screen the sheet is proportional so it fits a phone; on paper it is
+   given its real measurements, because 4" x 4.75" is what an advertiser paid
+   for and what the print shop cuts to. Two sets of rules for one element, and
+   only the printed one has to be exact.
+
+   The measurements have to add up to the paper or the browser scales the
+   whole thing down to make it fit, which is what "it prints wrong" looks
+   like. Across: 0.2 + 4 + 0.1 + 4 + 0.2 = 8.5. Down: 0.2 + 4.75 + 0.1 +
+   4.75 + 0.1 + 0.9 + 0.2 = 11.
+   ------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    width: 8.5in;
+  }
+
+  /* Backgrounds are not decoration here: without this the green band, the
+     blue strip and the dashed borders are dropped by the browser's default
+     and the flyer prints as white paper with photographs on it. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Only the sheets reach the paper. Hiding by ancestor is not enough — the
+     app's header, nav and page padding all sit between the sheet and the
+     page box, so the sheets are lifted out of the flow instead. */
+  body {
+    visibility: hidden;
+  }
+
+  .print-root,
+  .print-root * {
+    visibility: visible;
+  }
+
+  .print-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 8.5in;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .print-sheet {
+    width: 8.5in !important;
+    height: 11in !important;
+    aspect-ratio: auto !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-sheet:last-of-type {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .flyer-inner {
+    padding: 0.2in !important;
+  }
+
+  .flyer-grid {
+    grid-template-columns: 4in 4in !important;
+    grid-template-rows: 4.75in 4.75in !important;
+    gap: 0.1in !important;
+  }
+
+  .flyer-tile {
+    width: 4in !important;
+    height: 4.75in !important;
+  }
+
+  .flyer-banner {
+    height: 0.9in !important;
+  }
+
+  /* Door hangers are full bleed: two 4.25" halves are the whole sheet, and
+     the cut goes straight down the middle with nothing to spare. */
+  .hanger-half {
+    width: 4.25in !important;
+    height: 11in !important;
+  }
 }
