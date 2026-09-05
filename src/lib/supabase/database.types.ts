@@ -935,6 +935,11 @@ export interface Database {
           /** 0 to 1: how close the two addresses were. */
           score: number;
           status: string;
+          /** The address that came in, for a reviewer to judge against. */
+          incoming_address: string | null;
+          incoming_normalized: string | null;
+          parcel_id: string | null;
+          source: string | null;
           reviewed_by: string | null;
           reviewed_at: string | null;
           created_at: string;
