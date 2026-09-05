@@ -256,3 +256,64 @@ describe("parcelFromFeature", () => {
     expect(mapped.parcel?.address).toBe("12 TOLLGATE CT, MD");
   });
 });
+
+describe("Harford's Address Master, as the live layer actually describes itself", () => {
+  // Every name below was read back from the county's server by the first
+  // connection test run from the deployed app. Not one of them was in the
+  // hand-built sample schema, which is why discovery happens at run time.
+  const ADDRESS_MASTER = [
+    "OBJECTID", "FEATURE", "P_ST_DIREC", "P_ST_TYPE", "P_CITY", "P_Z_1", "Address", "UnitNumber", "UnitType",
+    "CAD_Value", "GlobalID", "P_ST_NO", "Parcel_Address", "FIREBOX", "FDID", "LATITUDE", "LONGITUDE", "RMS_LAT",
+    "RMS_LONG", "P_ST_NAME", "Parcel_feat", "ADDNUM_SUF", "MSAGCOMM", "P_ST_SUF",
+  ];
+  const mapping = discoverFields(ADDRESS_MASTER);
+
+  it("finds the address, the ZIP, the town, the unit and a stable key", () => {
+    expect(mapping).toMatchObject({
+      address: "Address",
+      zip: "P_Z_1",
+      city: "P_CITY",
+      unit: "UnitNumber",
+      unitType: "UnitType",
+      parcelId: "GlobalID",
+      ownerName: null,
+      landUse: null,
+    });
+    expect(mappingIsUsable(mapping)).toBe(true);
+  });
+
+  it("assembles a full address the normalizer can key on", () => {
+    const mapped = parcelFromFeature(
+      {
+        attributes: { Address: "1550 SWEARINGEN DR", P_CITY: "BEL AIR", P_Z_1: "21014", GlobalID: "{9F2C-1}" },
+        lat: 39.5359,
+        lng: -76.3483,
+      },
+      mapping,
+      "7"
+    );
+    expect(mapped.parcel?.address).toBe("1550 SWEARINGEN DR, BEL AIR, MD 21014");
+    expect(mapped.parcel?.parcelId).toBe("{9F2C-1}");
+    expect(normalizeAddress(mapped.parcel!.address)).toBe("1550 SWEARINGEN DR BEL AIR MD 21014");
+  });
+
+  it("keeps two apartments at one street address as two addresses", () => {
+    const at = (unit: string) =>
+      parcelFromFeature(
+        { attributes: { Address: "100 MAIN ST", UnitType: "APT", UnitNumber: unit, P_CITY: "BEL AIR", P_Z_1: "21014" }, lat: null, lng: null },
+        mapping,
+        unit
+      ).parcel!.address;
+    expect(at("1")).toBe("100 MAIN ST APT 1, BEL AIR, MD 21014");
+    expect(normalizeAddress(at("1"))).not.toBe(normalizeAddress(at("2")));
+  });
+
+  it("does not add a unit the street line already has", () => {
+    const mapped = parcelFromFeature(
+      { attributes: { Address: "100 MAIN ST APT 1", UnitNumber: "1", P_CITY: "BEL AIR", P_Z_1: "21014" }, lat: null, lng: null },
+      mapping,
+      "x"
+    );
+    expect(mapped.parcel?.address).toBe("100 MAIN ST APT 1, BEL AIR, MD 21014");
+  });
+});

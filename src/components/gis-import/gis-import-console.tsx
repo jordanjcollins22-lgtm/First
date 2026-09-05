@@ -19,6 +19,7 @@ import {
   type KnownHouseCheck,
 } from "@/lib/actions/gis-import-actions";
 import type { GisImportJob } from "@/lib/data/gis-import";
+import type { ServerEnvDiagnostic } from "@/lib/gis-probe";
 
 /**
  * The controls for the county import, and the record of every run.
@@ -34,12 +35,13 @@ const KNOWN_HOUSE = "1550 Swearingen Drive, Bel Air, MD 21014";
 interface Props {
   jobs: GisImportJob[];
   defaultUrl: string;
-  /** Whether CRON_SECRET is set, without which no background step can run. */
-  backgroundReady: boolean;
+  /** What the server saw of its own configuration while rendering this page. */
+  environment: ServerEnvDiagnostic;
 }
 
-export function GisImportConsole({ jobs, defaultUrl, backgroundReady }: Props) {
+export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
   const router = useRouter();
+  const backgroundReady = environment.cronSecretPresent;
   const [isPending, startTransition] = useTransition();
   const [url, setUrl] = useState(defaultUrl);
   const [zip, setZip] = useState("21014");
@@ -107,11 +109,7 @@ export function GisImportConsole({ jobs, defaultUrl, backgroundReady }: Props) {
           changes nothing: houses we hold are enriched, never duplicated; the raw address and every
           event on a house are never touched.
         </p>
-        {!backgroundReady && (
-          <p className="mb-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-800">
-            CRON_SECRET is not set on the server, so background steps cannot run yet.
-          </p>
-        )}
+        <EnvironmentCard environment={environment} />
         {!canImport && (
           <p className="mb-3 text-sm text-muted-foreground">
             The connection test has to find an address layer before an import can start.
@@ -559,5 +557,86 @@ function KnownHouse({ check }: { check: KnownHouseCheck }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/**
+ * Whether the server can run background steps, said from evidence.
+ *
+ * Two readings of the same fact, from two runtimes: the one that rendered this
+ * page, and -- on request -- the step route itself, fetched live from the
+ * browser. If the two disagree, that disagreement is the finding. Neither
+ * ever shows the secret; only that it is there, and how long it is.
+ */
+function EnvironmentCard({ environment }: { environment: ServerEnvDiagnostic }) {
+  const [routeCheck, setRouteCheck] = useState<ServerEnvDiagnostic | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function checkRoute() {
+    setChecking(true);
+    setRouteError(null);
+    try {
+      const res = await fetch("/api/gis-import/step", { cache: "no-store" });
+      if (!res.ok) throw new Error(`The step route answered ${res.status}.`);
+      setRouteCheck((await res.json()) as ServerEnvDiagnostic);
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : "Could not reach the step route.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const ok = environment.cronSecretPresent;
+
+  return (
+    <div className={`mb-3 rounded-lg p-3 text-sm ${ok ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium">
+          {ok
+            ? "The server can run background steps."
+            : "The server that rendered this page cannot see CRON_SECRET, so background steps cannot run yet."}
+        </p>
+        <Button type="button" size="sm" variant="outline" disabled={checking} onClick={checkRoute}>
+          {checking ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1 h-3.5 w-3.5" />}
+          Check the step route
+        </Button>
+      </div>
+      <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+        <EnvRow label="This page (rendered on the server)" report={environment} />
+        {routeCheck && <EnvRow label="/api/gis-import/step (fetched just now)" report={routeCheck} />}
+      </dl>
+      {routeError && <p className="mt-2 text-xs text-destructive">{routeError}</p>}
+    </div>
+  );
+}
+
+function EnvRow({ label, report }: { label: string; report: ServerEnvDiagnostic }) {
+  const o = report.origin;
+  return (
+    <div className="rounded-md bg-white/60 p-2">
+      <p className="font-semibold">{label}</p>
+      <p>
+        CRON_SECRET present: <strong>{report.cronSecretPresent ? "true" : "false"}</strong>
+        {" · "}length {report.cronSecretLength}
+      </p>
+      <p>
+        {o.platform}
+        {o.environment ? ` · ${o.environment}` : ""}
+        {o.region ? ` · ${o.region}` : ""}
+        {" · "}
+        {o.runtime}
+      </p>
+      <p>
+        {report.gitBranch ? `branch ${report.gitBranch}` : "no git branch reported"}
+        {report.gitSha ? ` · ${report.gitSha}` : ""}
+        {report.deploymentId ? ` · ${report.deploymentId}` : ""}
+      </p>
+      <p>
+        Service role key: {report.supabaseAdminPresent ? "present" : "missing"}
+        {report.cronLikeNames.length > 0 && ` · variables named like cron: ${report.cronLikeNames.join(", ")}`}
+      </p>
+      <p className="text-muted-foreground">checked {new Date(report.checkedAt).toLocaleTimeString()}</p>
+    </div>
   );
 }

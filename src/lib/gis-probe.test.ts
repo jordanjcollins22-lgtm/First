@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { describeOrigin } from "@/lib/gis-probe";
+import { describeOrigin, serverEnvDiagnostic } from "@/lib/gis-probe";
 
 /**
  * Where a request ran from is the first question when the county does not
@@ -35,5 +35,34 @@ describe("describeOrigin", () => {
     vi.stubEnv("VERCEL_ENV", "");
     vi.stubEnv("HTTPS_PROXY", "");
     expect(describeOrigin("route-handler").platform).toBe("local");
+  });
+});
+
+describe("serverEnvDiagnostic", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("says the secret is there, and how long, and never what it is", () => {
+    vi.stubEnv("CRON_SECRET", "s3cr3t-value");
+    const report = serverEnvDiagnostic("route-handler");
+    expect(report.cronSecretPresent).toBe(true);
+    expect(report.cronSecretLength).toBe(12);
+    expect(report.origin.cronSecretPresent).toBe(true);
+    expect(JSON.stringify(report)).not.toContain("s3cr3t");
+  });
+
+  it("treats a blank value as absent but shows its length", () => {
+    // Pasted as three spaces: "set" in the dashboard, useless in the process.
+    vi.stubEnv("CRON_SECRET", "   ");
+    const report = serverEnvDiagnostic("page-render");
+    expect(report.cronSecretPresent).toBe(false);
+    expect(report.cronSecretLength).toBe(3);
+  });
+
+  it("lists near-miss names so a typo is visible", () => {
+    vi.stubEnv("CRON_SECRET", "");
+    vi.stubEnv("CRON_SECRET_KEY", "x");
+    const report = serverEnvDiagnostic("page-render");
+    expect(report.cronSecretPresent).toBe(false);
+    expect(report.cronLikeNames).toContain("CRON_SECRET_KEY");
   });
 });

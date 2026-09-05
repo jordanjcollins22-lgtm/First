@@ -138,10 +138,16 @@ export const FIELD_CANDIDATES = {
   ],
   ownerName: ["OWNNAME", "OWNNAME1", "OWNER", "OWNER_NAME", "OWNERNAME", "DEEDHOLDER"],
   lotSizeSqft: ["SQFT", "LOTSIZE", "LOT_SIZE", "LAND_AREA", "ACRES", "AREA"],
-  zip: ["ZIPCODE", "ZIP", "ZIP_CODE", "POSTAL", "POSTALCODE", "POSTAL_CODE", "SITUS_ZIP", "PREMZIP"],
-  city: ["CITY", "MUNICIPALITY", "POSTAL_CITY", "SITUS_CITY", "PLACE", "TOWN", "PREMCITY"],
-  state: ["STATE", "ST", "SITUS_STATE", "STATEABBR"],
+  // P_Z_1 and P_CITY are what Harford's Address Master actually calls them,
+  // learned from the layer itself on the first live connection test.
+  zip: ["ZIPCODE", "ZIP", "ZIP_CODE", "P_Z_1", "POSTAL", "POSTALCODE", "POSTAL_CODE", "SITUS_ZIP", "PREMZIP", "ZIP1"],
+  city: ["CITY", "P_CITY", "MUNICIPALITY", "POSTAL_CITY", "SITUS_CITY", "PLACE", "TOWN", "PREMCITY", "MSAGCOMM"],
+  state: ["STATE", "ST", "SITUS_STATE", "STATEABBR", "P_STATE"],
   landUse: ["DESCLU", "LU", "LANDUSE", "LAND_USE", "USECODE", "USE_CODE", "PROPTYPE", "ZONING"],
+  // A door inside a building. Two apartments at one street address are two
+  // houses to knock on, and without the unit they would collapse into one.
+  unit: ["UNITNUMBER", "UNIT_NUMBER", "UNITNUM", "UNIT_NUM", "UNIT", "APT", "SUBADDRESS"],
+  unitType: ["UNITTYPE", "UNIT_TYPE", "SUBADDRESS_TYPE"],
 } as const;
 
 export type FieldRole = keyof typeof FIELD_CANDIDATES;
@@ -232,8 +238,16 @@ export function assembleAddress(
   attributes: Record<string, unknown>,
   mapping: FieldMapping
 ): string | null {
-  const street = text(attributes, mapping.address);
+  let street = text(attributes, mapping.address);
   if (!street) return null;
+
+  // The unit, when the layer keeps it in its own column and the street line
+  // does not already carry one.
+  const unit = text(attributes, mapping.unit);
+  if (unit && !/\b(APT|UNIT|STE|SUITE|BLDG|LOT|#)\s*\S+/i.test(street)) {
+    const unitType = text(attributes, mapping.unitType) ?? "UNIT";
+    street = `${street} ${unitType} ${unit}`;
+  }
 
   const city = text(attributes, mapping.city);
   const state = text(attributes, mapping.state) ?? "MD";

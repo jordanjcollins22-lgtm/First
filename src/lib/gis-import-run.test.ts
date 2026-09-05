@@ -27,7 +27,8 @@ describe("whereFor", () => {
 });
 
 describe("selfBaseUrl", () => {
-  it("uses the request's own origin when nothing is configured", () => {
+  it("uses the request's own origin, so a step stays inside its own deployment", () => {
     expect(selfBaseUrl("https://app.example.com")).toBe("https://app.example.com");
+    expect(selfBaseUrl("https://app.example.com/")).toBe("https://app.example.com");
   });
 });

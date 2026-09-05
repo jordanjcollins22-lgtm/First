@@ -160,11 +160,20 @@ function mappingOf(job: JobRow): FieldMapping | null {
   return mappingIsUsable(mapping) ? mapping : null;
 }
 
-/** The URL a step calls itself back on. The deployment's own domain, so it is never a preview URL. */
+/**
+ * The URL a step calls itself back on.
+ *
+ * The request's own origin first, so a step always posts to the deployment
+ * it is running in: a preview chaining into production would run the old
+ * code with the new job. The configured domains are only for when there is
+ * no request to read a host from.
+ */
 export function selfBaseUrl(requestOrigin: string): string {
+  const own = requestOrigin.trim().replace(/\/+$/, "");
+  if (own) return own;
   if (env.appUrl) return env.appUrl.replace(/\/+$/, "");
   if (env.productionDomain) return `https://${env.productionDomain}`;
-  return requestOrigin;
+  return "";
 }
 
 /**

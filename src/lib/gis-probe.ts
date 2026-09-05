@@ -18,9 +18,11 @@ export interface RequestOrigin {
   /** production | preview | development, when Vercel says. */
   environment: string | null;
   region: string | null;
-  /** server-action | route-handler | background-job */
+  /** server-action | route-handler | background-job | page-render */
   runtime: string;
   node: string;
+  /** Whether the process this ran in could authenticate a background step. Never the value. */
+  cronSecretPresent: boolean;
 }
 
 export function describeOrigin(runtime: RequestOrigin["runtime"]): RequestOrigin {
@@ -35,6 +37,49 @@ export function describeOrigin(runtime: RequestOrigin["runtime"]): RequestOrigin
     region: process.env.VERCEL_REGION ?? null,
     runtime,
     node: process.version,
+    cronSecretPresent: (process.env.CRON_SECRET ?? "").trim().length > 0,
+  };
+}
+
+/**
+ * What the server process can see of its own configuration. Safe to show.
+ *
+ * Answers one question without leaking anything: is CRON_SECRET actually in
+ * this process's environment? The value is never read out -- only whether it
+ * is there and how long it is -- and the names of any variables that look
+ * like an attempt at it, so a stray space or a near-miss in the name is
+ * visible instead of a mystery. Read straight from process.env at call time,
+ * not from a module-level snapshot, so it cannot describe a different moment
+ * than the one it is answering for.
+ */
+export interface ServerEnvDiagnostic {
+  checkedAt: string;
+  origin: RequestOrigin;
+  cronSecretPresent: boolean;
+  /** Raw length, spaces included, so a value that is only whitespace shows as present-but-blank. */
+  cronSecretLength: number;
+  /** Environment variable names containing "cron", any case. Names only. */
+  cronLikeNames: string[];
+  supabaseAdminPresent: boolean;
+  gitBranch: string | null;
+  gitSha: string | null;
+  deploymentId: string | null;
+}
+
+export function serverEnvDiagnostic(runtime: RequestOrigin["runtime"]): ServerEnvDiagnostic {
+  const secret = process.env.CRON_SECRET ?? "";
+  return {
+    checkedAt: new Date().toISOString(),
+    origin: describeOrigin(runtime),
+    cronSecretPresent: secret.trim().length > 0,
+    cronSecretLength: secret.length,
+    cronLikeNames: Object.keys(process.env)
+      .filter((name) => /cron/i.test(name))
+      .sort(),
+    supabaseAdminPresent: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    gitBranch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+    gitSha: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
   };
 }
 

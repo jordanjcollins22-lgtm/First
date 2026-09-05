@@ -3,6 +3,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { acquireLease, kickStep, runStep, selfBaseUrl } from "@/lib/gis-import-run";
+import { serverEnvDiagnostic } from "@/lib/gis-probe";
 
 /**
  * One step of a county import, run after the response has gone.
@@ -24,6 +25,21 @@ export const dynamic = "force-dynamic";
 
 /** A stop against a chain that never ends. The whole county is a few hundred steps. */
 const MAX_STEPS = 2_000;
+
+/**
+ * What this route's own process can see of its configuration.
+ *
+ * The same function, the same environment, as the steps themselves -- so if
+ * this says CRON_SECRET is present, the steps can authenticate, and if it
+ * says absent, the deployment is not receiving it. Reveals presence, length
+ * and variable names only; never a value. Needs no secret to call, because
+ * it holds none.
+ */
+export async function GET() {
+  return NextResponse.json(serverEnvDiagnostic("route-handler"), {
+    headers: { "cache-control": "no-store" },
+  });
+}
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseAdminConfigured) {

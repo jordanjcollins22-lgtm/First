@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { env, isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import { DEFAULT_GIS_URL, listGisImportJobs } from "@/lib/data/gis-import";
+import { serverEnvDiagnostic } from "@/lib/gis-probe";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { GisImportConsole } from "@/components/gis-import/gis-import-console";
 
@@ -16,6 +17,11 @@ import { GisImportConsole } from "@/components/gis-import/gis-import-console";
  * questions asked afterwards. Nothing here waits on the county in the
  * browser; imports run in the background and this page watches them.
  */
+// Rendered on every request. What this page says about the server's
+// environment must be about the process answering now, never a copy of an
+// earlier render.
+export const dynamic = "force-dynamic";
+
 export default async function GisImportPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
@@ -36,7 +42,7 @@ export default async function GisImportPage() {
       <GisImportConsole
         jobs={jobs}
         defaultUrl={env.harfordGisUrl || DEFAULT_GIS_URL}
-        backgroundReady={Boolean(env.cronSecret)}
+        environment={serverEnvDiagnostic("page-render")}
       />
     </div>
   );
