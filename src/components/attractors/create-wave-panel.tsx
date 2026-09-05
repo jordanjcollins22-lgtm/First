@@ -20,7 +20,6 @@ import type {
 } from "@/types/domain";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { AreaCoveragePanel } from "./area-coverage-panel";
-import type { AreaAddress } from "@/lib/area-coverage";
 
 const GEOMETRY_OPTIONS: { value: AttractorGeometryType; label: string; hint: string }[] = [
   { value: "point_radius", label: "Address + radius", hint: "Yard sign, billboard, single location" },
@@ -34,7 +33,6 @@ export function CreateWavePanel({
   variants,
   drawnPoints,
   onRequestDraw,
-  areaAddresses,
   onCancel,
   onCreated,
 }: {
@@ -42,8 +40,6 @@ export function CreateWavePanel({
   variants: AttractorVariant[];
   drawnPoints: LatLng[] | null;
   onRequestDraw: (geometryType: "polygon" | "route") => void;
-  /** Every address on file, for counting doors inside the shape being drawn. */
-  areaAddresses: AreaAddress[];
   onCancel: () => void;
   onCreated: () => void;
 }) {
@@ -323,7 +319,7 @@ export function CreateWavePanel({
       {/* Live, as the shape is drawn. The moment the door count changes a
           decision is the moment somebody is deciding how big to make the
           circle — showing it only after saving is showing it too late. */}
-      <AreaCoveragePanel type={geometryType} geometry={previewGeometry} addresses={areaAddresses} />
+      <AreaCoveragePanel type={geometryType} geometry={previewGeometry} />
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 

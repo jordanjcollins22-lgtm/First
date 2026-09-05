@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { deleteAttractorWave, updateAttractorWave } from "@/lib/actions/attractor-actions";
 import { colorForAttractorType } from "./attractor-colors";
 import { AreaCoveragePanel } from "./area-coverage-panel";
-import type { AreaAddress } from "@/lib/area-coverage";
 import type { AttractorType, AttractorVariant, AttractorWave, AttractorWaveStatus } from "@/types/domain";
 
 const GEOMETRY_LABEL: Record<string, string> = {
@@ -25,15 +24,12 @@ export function WaveDetailPanel({
   wave,
   types,
   variants,
-  areaAddresses,
   onClose,
   onDeleted,
 }: {
   wave: AttractorWave;
   types: AttractorType[];
   variants: AttractorVariant[];
-  /** Every address on file, for counting the doors inside this wave's area. */
-  areaAddresses: AreaAddress[];
   onClose: () => void;
   onDeleted: () => void;
 }) {
@@ -137,8 +133,8 @@ export function WaveDetailPanel({
       <AreaCoveragePanel
         type={wave.geometry_type}
         geometry={wave.geometry}
-        addresses={areaAddresses}
         quantityDeployed={wave.quantity_deployed}
+        waveId={wave.id}
       />
 
       <div className="flex flex-col gap-1.5">

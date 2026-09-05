@@ -2485,6 +2485,16 @@ export interface Database {
         Args: Record<string, never>;
         Returns: number;
       };
+      /** The doors inside a drawn shape: count, stage breakdown, print run by design. */
+      houses_coverage: {
+        Args: { org: string; ring: Json | null; zips: Json | null; designs?: number };
+        Returns: Json;
+      };
+      /** The doors inside a drawn shape, one row each, for the walker's sheet. */
+      houses_door_list: {
+        Args: { org: string; ring: Json | null; zips: Json | null; designs?: number; max_rows?: number };
+        Returns: Json;
+      };
       /** Every mappable house as [lng, lat, stageRank], in one JSON value. */
       houses_map_points: {
         Args: { org: string };

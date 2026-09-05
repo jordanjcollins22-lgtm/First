@@ -2,7 +2,6 @@ import { listAttractorTypes, listAttractorVariants, listAttractorWaves } from "@
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { listBusinessLocations, listLocationAreas } from "@/lib/data/locations";
 import { listProperties } from "@/lib/data/properties";
-import { listProspectAddresses } from "@/lib/data/prospects";
 import { listHousesWithHistory } from "@/lib/data/houses";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
@@ -78,13 +77,10 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles, prospectAddresses, houses, densityPoints, keywords, rankScans, previousRankPoints] =
+  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints] =
     await Promise.all([
       listProperties(),
       listProfiles().catch(() => [] as Profile[]),
-      // Coordinates only, for counting doors inside a drawn area. Empty until
-      // somebody imports parcels, which the count itself then says.
-      listProspectAddresses().catch(() => []),
       // The canonical houses with anyone or anything on them, for the map.
       listHousesWithHistory().catch(() => []),
       getDensityPoints().catch(() => []),
@@ -117,7 +113,6 @@ export default async function AttractorsPage({
         locations={locations}
         areas={areas}
         properties={properties}
-        prospectAddresses={prospectAddresses}
         houses={houses}
         densityPoints={densityPoints}
         profiles={profiles}
