@@ -10,7 +10,7 @@ import {
   acceptHouse,
   correctHouseAddress,
   holdHouse,
-  searchCountyAddresses,
+  searchAddresses,
   type ActionResult,
   type AddressHit,
 } from "@/lib/actions/house-review-actions";
@@ -95,6 +95,7 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
           {editing === house.id ? (
             <AddressEditor
               initial={draft}
+              houseId={house.id}
               busy={isPending}
               onSave={(address) => run(() => correctHouseAddress(house.id, address))}
               onCancel={() => setEditing(null)}
@@ -165,11 +166,13 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
  */
 function AddressEditor({
   initial,
+  houseId,
   busy,
   onSave,
   onCancel,
 }: {
   initial: string;
+  houseId: string;
   busy: boolean;
   onSave: (address: string) => void;
   onCancel: () => void;
@@ -177,7 +180,7 @@ function AddressEditor({
   const [value, setValue] = useState(initial);
   const [hits, setHits] = useState<AddressHit[]>([]);
   const [searching, setSearching] = useState(false);
-  const [picked, setPicked] = useState(false);
+  const [picked, setPicked] = useState<AddressHit | null>(null);
   const latest = useRef(0);
 
   useEffect(() => {
@@ -185,7 +188,7 @@ function AddressEditor({
     const ticket = ++latest.current;
     const timer = setTimeout(async () => {
       setSearching(true);
-      const result = await searchCountyAddresses(value);
+      const result = await searchAddresses(value, houseId);
       // A slower earlier search must not overwrite a newer one's answer.
       if (ticket !== latest.current) return;
       setHits(result.ok ? result.value : []);
@@ -196,7 +199,7 @@ function AddressEditor({
 
   function choose(hit: AddressHit) {
     setValue(hit.address);
-    setPicked(true);
+    setPicked(hit);
     setHits([]);
   }
 
@@ -209,7 +212,7 @@ function AddressEditor({
           onChange={(e) => {
             const next = e.target.value;
             setValue(next);
-            setPicked(false);
+            setPicked(null);
             if (next.trim().length < 3) setHits([]);
           }}
           onKeyDown={(e) => {
@@ -232,11 +235,12 @@ function AddressEditor({
               <li key={hit.id}>
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => choose(hit)}
                 >
-                  {hit.address}
+                  <span>{hit.address}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{hit.ours ? "already ours" : "county"}</span>
                 </button>
               </li>
             ))}
@@ -244,9 +248,11 @@ function AddressEditor({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        {picked
-          ? "The county's address. Saving links this house to the county's record and pin."
-          : "Pick a county address from the list, or save what you typed."}
+        {picked?.ours
+          ? "Already one of our houses. Saving merges this held record into it: its people and history move across, and the duplicate goes."
+          : picked
+            ? "The county's address. Saving links this house to the county's record and pin."
+            : "Pick an address from the list, or save what you typed."}
       </p>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={busy || !value.trim()} onClick={() => onSave(value)}>
