@@ -199,3 +199,38 @@ export async function correctHouseAddress(houseId: string, address: string): Pro
     };
   });
 }
+
+export interface AddressHit {
+  id: string;
+  /** The county's address, as the county writes it. */
+  address: string;
+}
+
+/**
+ * The county's addresses that contain what was typed.
+ *
+ * Matched on the normalized key, so "barton ct abingdon" finds "102 BARTON
+ * CT, ABINGDON, MD 21009" however either was spelled, and only among county
+ * rows -- the point of the search is to hand a held house the county's
+ * record of it, pin and all. A handful of results, ordered so a house number
+ * typed first floats its street to the top.
+ */
+export async function searchCountyAddresses(query: string): Promise<ActionResult<AddressHit[]>> {
+  return guard("searchCountyAddresses", async () => {
+    await requireReviewer();
+    const needle = normalizeAddress(query);
+    if (needle.length < 3) return [];
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("houses")
+      .select("id, address, normalized_address")
+      .eq("source", "harford_gis")
+      .not("parcel_id", "is", null)
+      .ilike("normalized_address", `%${needle.replace(/[%_]/g, "")}%`)
+      .order("normalized_address")
+      .limit(8);
+    if (error) throw error;
+    return (data ?? []).map((row) => ({ id: row.id, address: row.address }));
+  });
+}

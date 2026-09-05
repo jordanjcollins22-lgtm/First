@@ -1,12 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, Landmark, MapPinOff, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { STAGE_COLOR, STAGE_LABEL } from "@/lib/house-relationship";
-import { acceptHouse, correctHouseAddress, holdHouse, type ActionResult } from "@/lib/actions/house-review-actions";
+import {
+  acceptHouse,
+  correctHouseAddress,
+  holdHouse,
+  searchCountyAddresses,
+  type ActionResult,
+  type AddressHit,
+} from "@/lib/actions/house-review-actions";
 import type { HouseForReview } from "@/lib/data/houses";
 
 /**
@@ -86,27 +93,12 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
           )}
 
           {editing === house.id ? (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="The correct address"
-                className="text-sm"
-              />
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => run(() => correctHouseAddress(house.id, draft))}
-                >
-                  Save
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
+            <AddressEditor
+              initial={draft}
+              busy={isPending}
+              onSave={(address) => run(() => correctHouseAddress(house.id, address))}
+              onCancel={() => setEditing(null)}
+            />
           ) : (
             <div className="flex flex-wrap gap-2">
               {house.countySuggestion && (
@@ -158,6 +150,112 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The correct address, found rather than typed.
+ *
+ * Searches the county's addresses as the person types and offers the
+ * matches; picking one fills the box with the county's exact spelling, which
+ * is what lets the save absorb the county's row, pin included. Typing
+ * something the county does not have still saves -- a house outside Harford
+ * is a real house -- it just stays held if its pin is still wrong.
+ */
+function AddressEditor({
+  initial,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  initial: string;
+  busy: boolean;
+  onSave: (address: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const [hits, setHits] = useState<AddressHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [picked, setPicked] = useState(false);
+  const latest = useRef(0);
+
+  useEffect(() => {
+    if (picked || value.trim().length < 3) return;
+    const ticket = ++latest.current;
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      const result = await searchCountyAddresses(value);
+      // A slower earlier search must not overwrite a newer one's answer.
+      if (ticket !== latest.current) return;
+      setHits(result.ok ? result.value : []);
+      setSearching(false);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [value, picked]);
+
+  function choose(hit: AddressHit) {
+    setValue(hit.address);
+    setPicked(true);
+    setHits([]);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="relative">
+        <Input
+          value={value}
+          autoFocus
+          onChange={(e) => {
+            const next = e.target.value;
+            setValue(next);
+            setPicked(false);
+            if (next.trim().length < 3) setHits([]);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (hits.length > 0 && !picked) choose(hits[0]);
+              else onSave(value);
+            }
+            if (e.key === "Escape") onCancel();
+          }}
+          placeholder="Start typing the address: 102 barton"
+          className="text-sm"
+        />
+        {(hits.length > 0 || searching) && (
+          <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-border bg-background shadow-md">
+            {searching && hits.length === 0 && (
+              <li className="px-3 py-2 text-xs text-muted-foreground">Searching the county…</li>
+            )}
+            {hits.map((hit) => (
+              <li key={hit.id}>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => choose(hit)}
+                >
+                  {hit.address}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {picked
+          ? "The county's address. Saving links this house to the county's record and pin."
+          : "Pick a county address from the list, or save what you typed."}
+      </p>
+      <div className="flex gap-2">
+        <Button type="button" size="sm" disabled={busy || !value.trim()} onClick={() => onSave(value)}>
+          Save
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
