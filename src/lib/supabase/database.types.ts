@@ -805,6 +805,15 @@ export interface Database {
           source_updated_at: string | null;
           /** The only join available between a parcel and a customer we had. */
           normalized_address: string | null;
+          /** Which normalizer produced normalized_address, so keys can be regenerated. */
+          address_normalizer_version: number;
+          /** house | street | unusable. A street is not one address. */
+          kind: string;
+          needs_review: boolean;
+          review_reason: string | null;
+          /** The county's own address text. `address` keeps the raw original. */
+          gis_address: string | null;
+          gis_matched_at: string | null;
           created_at: string;
           updated_at: string;
         };
