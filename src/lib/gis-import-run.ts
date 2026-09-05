@@ -177,9 +177,27 @@ export function selfBaseUrl(requestOrigin: string): string {
 }
 
 /**
- * Asks the next step to run. Fire and forget: the answer is a 202 and nothing
- * is learned from it. Failures to reach ourselves are written on the job so a
- * stalled chain is visible rather than mysterious.
+ * A token good for one thing: running another step of one job.
+ *
+ * Generated when an import starts and stored on its row, where the database
+ * scheduler reads it back to post the next step. Compared in constant time,
+ * because a token check that leaks timing is a token check in name only.
+ */
+export function newTickToken(): string {
+  return `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
+}
+
+export function tokenMatches(expected: string | null | undefined, given: unknown): boolean {
+  if (!expected || typeof given !== "string" || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Asks for the first step right away, so the screen shows movement before
+ * the scheduler's next tick. One hop from a server action to the route: not
+ * a chain, which is what the platform refuses with a 508.
  */
 export async function kickStep(baseUrl: string, jobId: string): Promise<void> {
   if (!env.cronSecret) throw new Error("CRON_SECRET must be set for the import to run in the background.");
@@ -225,10 +243,39 @@ async function releaseLease(admin: Admin, jobId: string, patch: Partial<JobRow>)
 export interface StepOutcome {
   /** running | paused | done | failed */
   status: string;
-  /** Whether the caller should ask for another step. */
+  /** Whether there is another page after this one. */
   more: boolean;
   fetched: number;
   message: string | null;
+}
+
+/** How long one invocation keeps taking pages before leaving the rest to the next tick. */
+const STEP_BUDGET_MS = 25_000;
+
+/**
+ * As many pages as fit in one invocation.
+ *
+ * Each page re-takes the lease, so a pause pressed between pages is seen and
+ * honoured, and a second runner arriving mid-loop gets nothing. A page is
+ * only begun while there is time for it to finish inside the function's
+ * limit; whatever is left waits for the scheduler, which asks again within
+ * half a minute.
+ */
+export async function runSteps(admin: Admin, first: JobRow, runtime: RequestOrigin["runtime"]): Promise<StepOutcome> {
+  const started = Date.now();
+  let job: JobRow | null = first;
+  let outcome: StepOutcome = { status: first.status, more: false, fetched: 0, message: null };
+  let pages = 0;
+
+  while (job) {
+    outcome = await runStep(admin, job, runtime);
+    pages++;
+    if (!outcome.more || outcome.status !== "running") break;
+    if (Date.now() - started > STEP_BUDGET_MS) break;
+    job = await acquireLease(admin, first.id);
+  }
+
+  return { ...outcome, fetched: first.fetched + pages };
 }
 
 /**

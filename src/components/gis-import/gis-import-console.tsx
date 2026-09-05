@@ -118,9 +118,10 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
       <section className="rounded-xl border border-border p-4">
         <h2 className="mb-1 font-semibold">2. Import</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Runs on the server in the background and can be paused, resumed and re-run. A second run
-          changes nothing: houses we hold are enriched, never duplicated; the raw address and every
-          event on a house are never touched.
+          Runs on the server in the background, driven by the database&apos;s scheduler every thirty
+          seconds until it is done, so this page can be closed. It can be paused, resumed and re-run. A
+          second run changes nothing: houses we hold are enriched, never duplicated; the raw address and
+          every event on a house are never touched.
         </p>
         <EnvironmentCard environment={environment} />
         {canImport ? (

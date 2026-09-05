@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { selfBaseUrl, whereFor, type JobRow } from "@/lib/gis-import-run";
+import { newTickToken, selfBaseUrl, tokenMatches, whereFor, type JobRow } from "@/lib/gis-import-run";
 import { discoverFields } from "@/lib/gis-import";
 
 function job(over: Partial<JobRow>): JobRow {
@@ -37,5 +37,25 @@ describe("selfBaseUrl", () => {
   it("uses the request's own origin, so a step stays inside its own deployment", () => {
     expect(selfBaseUrl("https://app.example.com")).toBe("https://app.example.com");
     expect(selfBaseUrl("https://app.example.com/")).toBe("https://app.example.com");
+  });
+});
+
+describe("tick tokens", () => {
+  it("are long, random and match only themselves", () => {
+    const a = newTickToken();
+    const b = newTickToken();
+    expect(a).toHaveLength(64);
+    expect(a).not.toBe(b);
+    expect(tokenMatches(a, a)).toBe(true);
+    expect(tokenMatches(a, b)).toBe(false);
+  });
+
+  it("refuse anything that is not exactly the token", () => {
+    const token = newTickToken();
+    expect(tokenMatches(token, token.slice(0, -1))).toBe(false);
+    expect(tokenMatches(token, `${token}x`)).toBe(false);
+    expect(tokenMatches(token, undefined)).toBe(false);
+    expect(tokenMatches(null, "anything")).toBe(false);
+    expect(tokenMatches(token, 42)).toBe(false);
   });
 });

@@ -960,6 +960,8 @@ export interface Database {
           /** The exact requests and answers, newest last. */
           diagnostics: Json;
           last_error: string | null;
+          /** Authorises one more step of this job, and nothing else. */
+          tick_token: string | null;
           started_by: string | null;
           started_at: string;
           finished_at: string | null;
@@ -972,6 +974,20 @@ export interface Database {
           service_url: string;
         };
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
+        Relationships: [];
+      };
+      gis_import_settings: {
+        Row: {
+          organization_id: string;
+          /** Where the deployed app answers, for the scheduler to post to. */
+          base_url: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["gis_import_settings"]["Row"]> & {
+          organization_id: string;
+          base_url: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gis_import_settings"]["Row"]>;
         Relationships: [];
       };
       house_match_reviews: {
@@ -2457,6 +2473,11 @@ export interface Database {
       gis_integrity_report: {
         Args: { org: string };
         Returns: Json;
+      };
+      /** One scheduler tick: asks for a step on every runnable import. */
+      gis_import_tick: {
+        Args: Record<string, never>;
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

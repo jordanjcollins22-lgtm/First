@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
-import { discoverLayer, kickStep, selfBaseUrl, totals, whereFor } from "@/lib/gis-import-run";
+import { discoverLayer, kickStep, newTickToken, selfBaseUrl, totals, whereFor } from "@/lib/gis-import-run";
 import { cleanEndpoint } from "@/lib/arcgis";
 import { normalizeAddress } from "@/lib/address-normalize";
 import type { Json } from "@/lib/supabase/database.types";
@@ -223,6 +223,7 @@ export async function startGisImport(input: StartImportInput): Promise<ActionRes
         field_mapping: discovery.mapping as unknown as Json,
         diagnostics: discovery.probes.map((p) => ({ ...p })) as unknown as Json,
         before_totals: before,
+        tick_token: newTickToken(),
         started_by: profile.id,
       })
       .select("*")
@@ -231,27 +232,40 @@ export async function startGisImport(input: StartImportInput): Promise<ActionRes
 
     const where = whereFor(job, discovery.mapping);
 
-    await kick(job.id);
+    await kick(job.id, profile.organization_id);
     revalidatePath(PAGE);
     return { jobId: job.id, where };
   });
 }
 
-async function kick(jobId: string) {
+/**
+ * Records where this deployment answers, so the database scheduler can post
+ * steps to it, then asks for the first step right away.
+ */
+async function kick(jobId: string, organizationId: string) {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
   const proto = requestHeaders.get("x-forwarded-proto") ?? "https";
   const base = selfBaseUrl(host ? `${proto}://${host}` : "");
+  if (!base) throw new Error("Could not work out this deployment's own URL.");
+
+  const admin = createAdminClient();
+  const { error: settingsError } = await admin
+    .from("gis_import_settings")
+    .upsert({ organization_id: organizationId, base_url: base, updated_at: new Date().toISOString() });
+  if (settingsError) throw settingsError;
+
   try {
     await kickStep(base, jobId);
   } catch (err) {
+    // Not fatal: the scheduler will ask within half a minute. Say so on the
+    // row rather than failing a job that is about to run anyway.
     const message = messageOf(err);
-    const admin = createAdminClient();
+    console.error("[gis-import] first step could not be kicked directly:", message);
     await admin
       .from("gis_import_jobs")
-      .update({ status: "failed", last_error: `Could not start the background step at ${base}: ${message}` })
+      .update({ last_error: `First step could not be started directly (${message}); waiting for the scheduler.` })
       .eq("id", jobId);
-    throw new Error(`Could not start the background step: ${message}`);
   }
 }
 
@@ -283,15 +297,17 @@ export async function resumeGisImport(jobId: string): Promise<ActionResult<null>
         lease_until: null,
         last_error: null,
         finished_at: null,
+        // A job started before the scheduler existed has no token yet.
+        tick_token: newTickToken(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId)
       .in("status", ["paused", "failed"])
-      .select("id")
+      .select("id, organization_id")
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new Error("That import is not paused or failed.");
-    await kick(jobId);
+    await kick(jobId, data.organization_id);
     revalidatePath(PAGE);
     return null;
   });
