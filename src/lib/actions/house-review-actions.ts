@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { normalizeAddress } from "@/lib/address-normalize";
 import { assessAddress, NORMALIZER_VERSION } from "@/lib/address-quality";
+import { looserTerms, rankHits, searchTerms } from "@/lib/address-search";
 
 /**
  * Settling a held address.
@@ -207,30 +208,41 @@ export interface AddressHit {
 }
 
 /**
- * The county's addresses that contain what was typed.
+ * The county's addresses containing every word that was typed.
  *
- * Matched on the normalized key, so "barton ct abingdon" finds "102 BARTON
- * CT, ABINGDON, MD 21009" however either was spelled, and only among county
- * rows -- the point of the search is to hand a held house the county's
- * record of it, pin and all. A handful of results, ordered so a house number
- * typed first floats its street to the top.
+ * Word by word rather than as one phrase, so "128 Post Rd Aberdeen" finds
+ * "128 N POST RD, ABERDEEN, MD 21001" despite the N it lacks, and the words
+ * may come in any order. Only among county rows -- the point of the search is
+ * to hand a held house the county's record of it, pin and all. When every
+ * word together finds nothing, the number and the street name alone are
+ * tried, so a mistyped town still gets a list to pick from.
  */
 export async function searchCountyAddresses(query: string): Promise<ActionResult<AddressHit[]>> {
   return guard("searchCountyAddresses", async () => {
     await requireReviewer();
-    const needle = normalizeAddress(query);
-    if (needle.length < 3) return [];
+    const terms = searchTerms(query);
+    if (terms.join("").length < 3) return [];
 
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("houses")
-      .select("id, address, normalized_address")
-      .eq("source", "harford_gis")
-      .not("parcel_id", "is", null)
-      .ilike("normalized_address", `%${needle.replace(/[%_]/g, "")}%`)
-      .order("normalized_address")
-      .limit(8);
-    if (error) throw error;
-    return (data ?? []).map((row) => ({ id: row.id, address: row.address }));
+    const find = async (words: string[]) => {
+      let q = supabase
+        .from("houses")
+        .select("id, address, normalized_address")
+        .eq("source", "harford_gis")
+        .not("parcel_id", "is", null);
+      for (const word of words) q = q.ilike("normalized_address", `%${word.replace(/[%_]/g, "")}%`);
+      const { data, error } = await q.order("normalized_address").limit(20);
+      if (error) throw error;
+      return (data ?? []).map((row) => ({ id: row.id, address: row.address, normalized: row.normalized_address ?? "" }));
+    };
+
+    let hits = await find(terms);
+    if (hits.length === 0) {
+      const loose = looserTerms(terms);
+      if (loose.length > 0) hits = await find(loose);
+    }
+    return rankHits(hits, terms)
+      .slice(0, 8)
+      .map(({ id, address }) => ({ id, address }));
   });
 }
