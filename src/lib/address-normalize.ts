@@ -241,3 +241,39 @@ export function houseNumber(raw: string | null | undefined): string | null {
   const first = normalized.split(" ")[0] ?? "";
   return /^\d+[A-Z]?$/.test(first) ? first : null;
 }
+
+/**
+ * How alike two strings are, letter by letter: 1 minus the edit distance over
+ * the longer length.
+ *
+ * The word-based score above cannot see a one-letter slip. "711 LEILA CT" and
+ * "711 LELIA CT" share six words of eight and score 0.75, below the line at
+ * which a question is asked -- so a customer's house and the county's record
+ * of it were created as two houses. Letter by letter they are 0.93 alike. The
+ * reverse also holds: "705 BENJAMIN RD" and "705 BEL AIR RD" share every word
+ * but one and scored 0.86 by words, yet are only 0.77 alike by letter, which
+ * is the truth -- they are different streets.
+ */
+export function characterSimilarity(a: string | null | undefined, b: string | null | undefined): number {
+  const x = (a ?? "").trim();
+  const y = (b ?? "").trim();
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const longest = Math.max(x.length, y.length);
+  return 1 - editDistance(x, y) / longest;
+}
+
+/** Levenshtein distance, two rows at a time. */
+function editDistance(a: string, b: string): number {
+  if (a.length < b.length) [a, b] = [b, a];
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}

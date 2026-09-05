@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import { houseCounts, listHousesNeedingReview } from "@/lib/data/houses";
+import { listPendingMatchReviews } from "@/lib/data/match-reviews";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { HouseReviewList } from "@/components/houses/house-review-list";
+import { MatchReviewList } from "@/components/houses/match-review-list";
 
 /**
  * The addresses the map is not drawing, and why.
@@ -20,9 +22,10 @@ export default async function HouseReviewPage() {
   const { allowed } = await checkTabAccess("house-review");
   if (!allowed) redirect("/attractors");
 
-  const [counts, waiting] = await Promise.all([
+  const [counts, waiting, matches] = await Promise.all([
     houseCounts().catch(() => ({ total: 0, mappable: 0, held: 0, settled: 0 })),
     listHousesNeedingReview().catch(() => []),
+    listPendingMatchReviews().catch(() => []),
   ]);
 
   return (
@@ -45,7 +48,20 @@ export default async function HouseReviewPage() {
         ))}
       </div>
 
-      <HouseReviewList houses={waiting} />
+      <section className="mb-8">
+        <h2 className="mb-1 text-lg font-semibold">County matches to settle</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Addresses the county holds that are close to one of ours but not identical. The import
+          did not guess; you decide. {matches.length > 0 && `${matches.length} waiting.`}
+        </p>
+        <MatchReviewList reviews={matches} />
+      </section>
+
+      <section>
+        <h2 className="mb-1 text-lg font-semibold">Held addresses</h2>
+        <p className="mb-3 text-sm text-muted-foreground">Ours, held back rather than drawn.</p>
+        <HouseReviewList houses={waiting} />
+      </section>
     </div>
   );
 }

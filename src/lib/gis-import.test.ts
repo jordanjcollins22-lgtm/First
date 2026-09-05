@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyReviewHistory,
   assembleAddress,
   discoverFields,
+  nearMatchScore,
   landUseLooksResidential,
   mappingIsUsable,
   parcelFromFeature,
@@ -108,10 +110,44 @@ describe("resolveParcel", () => {
     expect(decision).toMatchObject({ action: "create" });
   });
 
-  it("still asks when the near match is one of our own houses", () => {
+  it("treats a unit inside one of our buildings as its own door", () => {
+    // Our record is the building; the county's is a door in it. Creating the
+    // door is not a duplicate of the building, and asking would be asking
+    // once per apartment.
     const withOurs = [...EXISTING, house("h-bond-ours", "140 N Bond St, Bel Air, MD 21014")];
     const decision = resolveParcel(parcel({ address: "140 N BOND ST UNIT A, BEL AIR, MD 21014" }), withOurs);
-    expect(decision).toMatchObject({ action: "review", candidateHouseId: "h-bond-ours" });
+    expect(decision).toMatchObject({ action: "create" });
+  });
+
+  it("asks about a one-letter slip in the street name", () => {
+    // 711 Leila Court in our records; 711 LELIA CT in the county's. The same
+    // house. By words they share too little; by letters they are 0.93 alike.
+    const withLeila = [...EXISTING, house("h-leila", "711 Leila Court, Bel Air, Maryland 21014, United States")];
+    const decision = resolveParcel(parcel({ address: "711 LELIA CT, BEL AIR, MD 21014" }), withLeila);
+    expect(decision).toMatchObject({ action: "review", candidateHouseId: "h-leila" });
+  });
+
+  it("asks when only the street type or the ZIP differs", () => {
+    const ours = [
+      ...EXISTING,
+      house("h-regent", "1510 Regent Court, Bel Air, Maryland 21014"),
+      house("h-dowers", "703 Dowers Road, Abingdon, Maryland 21009"),
+    ];
+    expect(resolveParcel(parcel({ address: "1510 REGENT DR, BEL AIR, MD 21014" }), ours)).toMatchObject({
+      action: "review",
+      candidateHouseId: "h-regent",
+    });
+    expect(resolveParcel(parcel({ address: "703 DOWERS RD, ABINGDON, MD 21015" }), ours)).toMatchObject({
+      action: "review",
+      candidateHouseId: "h-dowers",
+    });
+  });
+
+  it("does not mistake a different street in the same town for a near match", () => {
+    // Same number, same town, same ZIP, different street. By words that scored
+    // 0.86 and raised a pointless question; by letters it is a different place.
+    const ours = [...EXISTING, house("h-benjamin", "705 Benjamin Road, Bel Air, Maryland 21014")];
+    expect(resolveParcel(parcel({ address: "705 BEL AIR RD, BEL AIR, MD 21014" }), ours)).toMatchObject({ action: "create" });
   });
 
   it("does not ask about two houses on one street", () => {
@@ -351,5 +387,74 @@ describe("Harford's Address Master, as the live layer actually describes itself"
       "x"
     );
     expect(mapped.parcel?.address).toBe("100 MAIN ST APT 1, BEL AIR, MD 21014");
+  });
+});
+
+describe("applyReviewHistory", () => {
+  const review = {
+    action: "review" as const,
+    normalized: "991 BERN DR UNIT 2B HAVRE DE GRACE MD 21078",
+    candidateHouseId: "h-bern",
+    score: 0.8,
+    reason: "Close",
+  };
+
+  it("creates a parcel a person has already called a different house", () => {
+    expect(applyReviewHistory(review, "rejected")).toEqual({
+      action: "create",
+      normalized: review.normalized,
+      kind: "house",
+    });
+  });
+
+  it("leaves an unanswered or unasked question as it is", () => {
+    expect(applyReviewHistory(review, "pending")).toBe(review);
+    expect(applyReviewHistory(review, null)).toBe(review);
+  });
+
+  it("changes nothing that was not a question", () => {
+    const create = { action: "create" as const, normalized: "X", kind: "house" as const };
+    expect(applyReviewHistory(create, "rejected")).toBe(create);
+  });
+});
+
+describe("assembleAddress and a street line that already names the state", () => {
+  const mapping = discoverFields(["Address", "P_CITY", "P_Z_1"]);
+  it("does not say MD twice", () => {
+    expect(assembleAddress({ Address: "2244 SCHUSTER RD, JARRETTSVILLE, MD", P_CITY: "JARRETTSVILLE" }, mapping)).toBe(
+      "2244 SCHUSTER RD, JARRETTSVILLE, MD"
+    );
+    expect(
+      assembleAddress({ Address: "2244 SCHUSTER RD, JARRETTSVILLE, MD", P_CITY: "JARRETTSVILLE", P_Z_1: "21084" }, mapping)
+    ).toBe("2244 SCHUSTER RD, JARRETTSVILLE, MD, 21084");
+  });
+});
+
+describe("nearMatchScore", () => {
+  const score = (ours: string, county: string) => nearMatchScore(normalizeAddress(ours), normalizeAddress(county));
+
+  it("sees a one-letter slip in a street name as the same house", () => {
+    expect(score("711 Leila Court, Bel Air, MD 21014", "711 LELIA CT, BEL AIR, MD 21014")).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("sees a different street type or a different ZIP as a question", () => {
+    expect(score("1510 Regent Court, Bel Air, MD 21014", "1510 REGENT DR, BEL AIR, MD 21014")).toBeGreaterThanOrEqual(0.8);
+    expect(score("703 Dowers Road, Abingdon, MD 21009", "703 DOWERS RD, ABINGDON, MD 21015")).toBeGreaterThanOrEqual(0.8);
+    expect(score("1550 Swearingen Dr, Bel Air, MD", "1550 SWEARINGEN DR, BEL AIR, MD 21014")).toBeGreaterThanOrEqual(0.8);
+    expect(score("4019 Federal Hill Road, Jarrettsville, MD 21084", "4019 OLD FEDERAL HILL RD, JARRETTSVILLE, MD 21084")).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("is not flattered by a shared town and ZIP", () => {
+    // Different streets, same number, same town. By words 0.86; here, judged
+    // on the streets alone, they are nothing alike.
+    expect(score("705 Benjamin Road, Bel Air, MD 21014", "705 BEL AIR RD, BEL AIR, MD 21014")).toBeLessThan(0.8);
+    expect(score("201 North Stokes Street, Havre de Grace, MD 21078", "201 N ADAMS ST, HAVRE DE GRACE, MD 21078")).toBeLessThan(0.8);
+    expect(score("2201 Watervale Road, Fallston, MD 21047", "2201 FALLSTON RD, FALLSTON, MD 21047")).toBeLessThan(0.8);
+  });
+
+  it("treats a unit inside our building as its own door, not a question", () => {
+    // Thirteen apartments at 991 Bern Drive are thirteen doors to knock on;
+    // asking thirteen times whether each is "the same house" helps nobody.
+    expect(score("991 Bern Drive, Havre de Grace, MD 21078", "991 BERN DR UNIT 2B, HAVRE DE GRACE, MD 21078")).toBeLessThan(0.8);
   });
 });

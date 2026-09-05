@@ -12,6 +12,7 @@ import {
   type EndpointDescription,
 } from "@/lib/arcgis";
 import {
+  applyReviewHistory,
   discoverFields,
   mappingIsUsable,
   parcelFromFeature,
@@ -19,6 +20,7 @@ import {
   type ExistingHouse,
   type FieldMapping,
   type ParcelRecord,
+  type PriorReview,
 } from "@/lib/gis-import";
 import { houseNumber } from "@/lib/address-normalize";
 import { NORMALIZER_VERSION, withinHarford } from "@/lib/address-quality";
@@ -476,12 +478,17 @@ async function applyPage(
   // address, or same house number. Nothing else can match, so nothing else is
   // fetched -- against ninety thousand houses, that is what keeps a page fast.
   const candidates = await candidateHouses(admin, org, undecided);
+  const priorReviews = await priorReviewsFor(admin, candidates);
 
   const toCreate: Database["public"]["Tables"]["houses"]["Insert"][] = [];
   const reviews: Database["public"]["Tables"]["house_match_reviews"]["Insert"][] = [];
 
   for (const parcel of undecided) {
-    const decision = resolveParcel(parcel, candidates);
+    const fresh = resolveParcel(parcel, candidates);
+    const decision =
+      fresh.action === "review"
+        ? applyReviewHistory(fresh, priorReviews.get(`${fresh.candidateHouseId}|${fresh.normalized}`) ?? null)
+        : fresh;
 
     if (decision.action === "skip") {
       out.skipped++;
@@ -507,6 +514,9 @@ async function applyPage(
         incoming_normalized: decision.normalized,
         parcel_id: parcel.parcelId,
         source: SOURCE,
+        // So "different house" can be created from the review, pin and all.
+        incoming_lat: parcel.lat,
+        incoming_lng: parcel.lng,
       });
       continue;
     }
@@ -593,6 +603,24 @@ async function applyPage(
   return out;
 }
 
+/** What has already been asked, or answered, about parcels against these houses. */
+async function priorReviewsFor(admin: Admin, candidates: ExistingHouse[]): Promise<Map<string, PriorReview>> {
+  const prior = new Map<string, PriorReview>();
+  const ids = candidates.filter((c) => !c.fromCounty).map((c) => c.id);
+  if (ids.length === 0) return prior;
+
+  const { data, error } = await admin
+    .from("house_match_reviews")
+    .select("house_id, incoming_normalized, status")
+    .in("house_id", ids)
+    .in("status", ["pending", "rejected"]);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    prior.set(`${row.house_id}|${row.incoming_normalized ?? ""}`, row.status === "rejected" ? "rejected" : "pending");
+  }
+  return prior;
+}
+
 /** The houses on this page's addresses or house numbers. Only these can match anything. */
 async function candidateHouses(admin: Admin, org: string, parcels: ParcelRecord[]): Promise<ExistingHouse[]> {
   const numbers = [...new Set(parcels.map((p) => houseNumber(p.address)).filter((n): n is string => Boolean(n)))];
@@ -624,7 +652,7 @@ async function candidateHouses(admin: Admin, org: string, parcels: ParcelRecord[
  * half -- a pin outside the county, or none at all -- and the county's are
  * inside it; a house whose pin was fine keeps it.
  */
-async function enrichHouse(
+export async function enrichHouse(
   admin: Admin,
   houseId: string,
   parcel: ParcelRecord

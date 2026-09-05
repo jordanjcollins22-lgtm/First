@@ -1005,6 +1005,12 @@ export interface Database {
           incoming_normalized: string | null;
           parcel_id: string | null;
           source: string | null;
+          /** The parcel's pin, so "different house" can be created on the spot. */
+          incoming_lat: number | null;
+          incoming_lng: number | null;
+          /** same_house | different, once settled. */
+          resolution: string | null;
+          created_house_id: string | null;
           reviewed_by: string | null;
           reviewed_at: string | null;
           created_at: string;

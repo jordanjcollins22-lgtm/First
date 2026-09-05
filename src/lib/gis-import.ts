@@ -15,7 +15,7 @@
  * Coordinates take no part in any of it. They are the half that was wrong.
  */
 
-import { addressSimilarity, houseNumber, normalizeAddress } from "@/lib/address-normalize";
+import { characterSimilarity, houseNumber, normalizeAddress } from "@/lib/address-normalize";
 import { assessAddress, canLinkAutomatically, type AddressKind } from "@/lib/address-quality";
 
 /** One parcel, after the county's own field names have been mapped away. */
@@ -94,7 +94,7 @@ export function resolveParcel(parcel: ParcelRecord, existing: ExistingHouse[]): 
     // reads. 1628 and 1638 Eva Mar Blvd share every other word.
     if (houseNumber(house.normalizedAddress) !== number) continue;
 
-    const score = addressSimilarity(house.normalizedAddress, normalized);
+    const score = nearMatchScore(house.normalizedAddress, normalized);
     if (score >= AMBIGUOUS_AT && (!best || score > best.score)) best = { house, score };
   }
 
@@ -109,6 +109,40 @@ export function resolveParcel(parcel: ParcelRecord, existing: ExistingHouse[]): 
   }
 
   return { action: "create", normalized, kind: verdict.kind };
+}
+
+/**
+ * How alike two addresses with the same house number are, 0 to 1.
+ *
+ * Letter by letter rather than word by word, because a one-letter slip in a
+ * street name ("LEILA" for "LELIA") is the commonest way one house gets two
+ * spellings, and word counting cannot see it. And measured on the part that
+ * differs: the town, state and ZIP the two share are stripped from the end
+ * first, so that "705 BENJAMIN RD" and "705 BEL AIR RD" are judged on their
+ * streets -- which are nothing alike -- and not flattered by the "BEL AIR MD
+ * 21014" they have in common. When the tails differ (one has a ZIP, one
+ * does not) the whole strings are compared, which is what catches a missing
+ * ZIP as the near miss it is.
+ */
+export function nearMatchScore(existingNormalized: string | null | undefined, incomingNormalized: string): number {
+  const a = (existingNormalized ?? "").split(" ").filter(Boolean);
+  const b = incomingNormalized.split(" ").filter(Boolean);
+  if (a.length === 0 || b.length === 0) return 0;
+
+  // Keep the number, the street name and its type on each side, so that what
+  // is compared is at least "711 LEILA CT" and never just "711 LEILA".
+  let shared = 0;
+  while (
+    shared < a.length - 3 &&
+    shared < b.length - 3 &&
+    a[a.length - 1 - shared] === b[b.length - 1 - shared]
+  ) {
+    shared++;
+  }
+
+  const left = a.slice(0, a.length - shared).join(" ");
+  const right = b.slice(0, b.length - shared).join(" ");
+  return Math.round(characterSimilarity(left, right) * 100) / 100;
 }
 
 /**
@@ -201,6 +235,10 @@ export function mappingIsUsable(mapping: FieldMapping): boolean {
   return Boolean(mapping.address);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Reads one attribute as text, or nothing. Numbers are text too: a ZIP can arrive as 21014. */
 function text(attributes: Record<string, unknown>, field: string | null): string | null {
   if (!field) return null;
@@ -271,10 +309,17 @@ export function assembleAddress(
   // runs through three ZIP codes, and without its town and ZIP appended two
   // different houses on it share one key. Only a trailing town counts.
   const upper = street.toUpperCase().replace(/[.,]+$/, "").trim();
-  const endsWithCity = Boolean(city) && upper.endsWith(city!.toUpperCase());
-  const stateZip = [state, zip].filter(Boolean).join(" ");
+  // The town is already there when the line ends with it, or carries it as
+  // its own comma-separated part ("2244 SCHUSTER RD, JARRETTSVILLE, MD").
+  const cityUpper = city?.toUpperCase() ?? "";
+  const cityPresent =
+    Boolean(city) &&
+    (upper.endsWith(cityUpper) || new RegExp(`,\\s*${escapeRegExp(cityUpper)}\\s*(,|$)`).test(upper));
+  // And the state, when the line already says which.
+  const endsWithState = new RegExp(`\\b${escapeRegExp(state.toUpperCase())}$`).test(upper);
+  const stateZip = [endsWithState ? null : state, zip].filter(Boolean).join(" ");
 
-  if (endsWithCity) return stateZip ? `${street}, ${stateZip}` : street;
+  if (cityPresent) return stateZip ? `${street}, ${stateZip}` : street;
   const tail = [city, stateZip].filter(Boolean).join(", ");
   return tail ? `${street}, ${tail}` : street;
 }
@@ -323,4 +368,19 @@ export function parcelFromFeature(
     skipReason: null,
     landUse,
   };
+}
+
+/** What a person already said about this parcel against this house, if anything. */
+export type PriorReview = "pending" | "rejected" | null;
+
+/**
+ * A decision, in the light of what has already been asked.
+ *
+ * A parcel a reviewer has already called a different house must not be asked
+ * about again: it is new ground now, and gets created. One still waiting for
+ * an answer is not asked twice either; it is counted and left alone.
+ */
+export function applyReviewHistory(decision: ImportDecision, prior: PriorReview): ImportDecision {
+  if (decision.action !== "review" || prior !== "rejected") return decision;
+  return { action: "create", normalized: decision.normalized, kind: "house" };
 }
