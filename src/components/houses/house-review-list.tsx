@@ -181,6 +181,8 @@ function AddressEditor({
   const [hits, setHits] = useState<AddressHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<AddressHit | null>(null);
+  /** A finished search that found nothing: the county has no such address. */
+  const [noneFound, setNoneFound] = useState(false);
   const latest = useRef(0);
 
   useEffect(() => {
@@ -191,7 +193,9 @@ function AddressEditor({
       const result = await searchAddresses(value, houseId);
       // A slower earlier search must not overwrite a newer one's answer.
       if (ticket !== latest.current) return;
-      setHits(result.ok ? result.value : []);
+      const found = result.ok ? result.value : [];
+      setHits(found);
+      setNoneFound(result.ok && found.length === 0);
       setSearching(false);
     }, 250);
     return () => clearTimeout(timer);
@@ -213,6 +217,7 @@ function AddressEditor({
             const next = e.target.value;
             setValue(next);
             setPicked(null);
+            setNoneFound(false);
             if (next.trim().length < 3) setHits([]);
           }}
           onKeyDown={(e) => {
@@ -252,7 +257,9 @@ function AddressEditor({
           ? "Already one of our houses. Saving merges this held record into it: its people and history move across, and the duplicate goes."
           : picked
             ? "The county's address. Saving links this house to the county's record and pin."
-            : "Pick an address from the list, or save what you typed."}
+            : noneFound && value.trim().length >= 3
+              ? "No county address matches. Saving keeps what you typed and looks up its location; military housing and a few new streets are not in the county's data."
+              : "Pick an address from the list, or save what you typed."}
       </p>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={busy || !value.trim()} onClick={() => onSave(value)}>
