@@ -811,6 +811,9 @@ export interface Database {
           kind: string;
           needs_review: boolean;
           review_reason: string | null;
+          /** When a person settled a held address, and who. */
+          reviewed_at: string | null;
+          reviewed_by: string | null;
           /** The county's own address text. `address` keeps the raw original. */
           gis_address: string | null;
           gis_matched_at: string | null;

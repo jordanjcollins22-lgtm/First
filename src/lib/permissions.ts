@@ -50,6 +50,7 @@ export const TABS: readonly TabDefinition[] = [
   // tab on Money, which meant seeing a bill required seeing payroll.
   { key: "invoices", label: "Invoices", href: "/proposals", parent: "proposals" },
   { key: "contacts", label: "Contacts", href: "/contacts", parent: "project-data" },
+  { key: "house-review", label: "Address Review", href: "/admin/houses", parent: "project-data" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
   { key: "leads", label: "Lead Generation", href: "/leads" },
   { key: "conversations", label: "Conversations", href: "/conversations" },
