@@ -303,9 +303,19 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
     return { status: "failed", more: false, fetched: 0, message: "No usable address field." };
   }
 
-  const checkpoint = (job.checkpoint ?? {}) as { offset?: number; attempts?: number };
+  const checkpoint = (job.checkpoint ?? {}) as {
+    offset?: number;
+    attempts?: number;
+    lastObjectId?: number | null;
+    objectIdField?: string | null;
+  };
   const offset = Math.max(0, Number(checkpoint.offset ?? 0));
   const attempts = Math.max(0, Number(checkpoint.attempts ?? 0));
+  // Where the last page ended, by key. A job from before keyset paging has
+  // an offset and no key; it carries on by offset until its first page here
+  // records one.
+  const afterObjectId = checkpoint.lastObjectId ?? null;
+  const objectIdField = checkpoint.objectIdField ?? null;
   const where = whereFor(job, mapping);
 
   // A page that was cut off -- the function killed at its time limit, which
@@ -328,7 +338,10 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
   // report itself. Cleared to zero when the page is written successfully.
   await admin
     .from("gis_import_jobs")
-    .update({ checkpoint: { offset, attempts: attempts + 1 } as unknown as Json, updated_at: new Date().toISOString() })
+    .update({
+      checkpoint: { ...checkpoint, offset, attempts: attempts + 1 } as unknown as Json,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", job.id);
 
   // The count is asked once, on the first page, so the screen can show
@@ -340,7 +353,7 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
     totalExpected = countProbe.ok ? parseCount(countProbe.body) : null;
   }
 
-  const pageUrl = queryUrl(job.layer_url, { where, offset, pageSize });
+  const pageUrl = queryUrl(job.layer_url, { where, offset, pageSize, afterObjectId, objectIdField });
   // Short enough that a slow county answer fails and is recorded, rather than
   // the function being killed before it can write anything down.
   const probe = await probeEndpoint(pageUrl, runtime, PAGE_FETCH_TIMEOUT_MS);
@@ -379,7 +392,14 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
     duplicates_prevented: job.duplicates_prevented + result.duplicatesPrevented,
     errors: job.errors + result.errors,
     total_expected: totalExpected,
-    checkpoint: { offset: nextOffset, attempts: 0 } as unknown as Json,
+    checkpoint: {
+      offset: nextOffset,
+      attempts: 0,
+      // Falls back to the previous bound on an empty page, so a final empty
+      // fetch cannot lose the position.
+      lastObjectId: page.lastObjectId ?? afterObjectId,
+      objectIdField: page.objectIdField ?? objectIdField,
+    } as unknown as Json,
     steps: job.steps + 1,
     last_error: result.lastError,
     finished_at: finished ? new Date().toISOString() : null,

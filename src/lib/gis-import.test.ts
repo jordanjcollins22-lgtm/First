@@ -326,6 +326,24 @@ describe("Harford's Address Master, as the live layer actually describes itself"
     expect(normalizeAddress(at("1"))).not.toBe(normalizeAddress(at("2")));
   });
 
+  it("appends the town and ZIP to a street that is merely named after the town", () => {
+    // Bel Air Road runs through Bel Air, Fallston and Kingsville. "716 BEL
+    // AIR RD" alone is not one house; the first ZIP run keyed 224 rows that
+    // way before this was caught.
+    expect(assembleAddress({ Address: "716 BEL AIR RD", P_CITY: "BEL AIR", P_Z_1: "21014" }, mapping)).toBe(
+      "716 BEL AIR RD, BEL AIR, MD 21014"
+    );
+    expect(assembleAddress({ Address: "716 BEL AIR RD", P_CITY: "KINGSVILLE", P_Z_1: "21087" }, mapping)).toBe(
+      "716 BEL AIR RD, KINGSVILLE, MD 21087"
+    );
+  });
+
+  it("does not repeat a town the street line already ends with", () => {
+    expect(assembleAddress({ Address: "100 MAIN ST, BEL AIR", P_CITY: "BEL AIR", P_Z_1: "21014" }, mapping)).toBe(
+      "100 MAIN ST, BEL AIR, MD 21014"
+    );
+  });
+
   it("does not add a unit the street line already has", () => {
     const mapped = parcelFromFeature(
       { attributes: { Address: "100 MAIN ST APT 1", UnitNumber: "1", P_CITY: "BEL AIR", P_Z_1: "21014" }, lat: null, lng: null },

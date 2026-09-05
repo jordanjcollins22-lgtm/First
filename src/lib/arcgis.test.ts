@@ -4,6 +4,7 @@ import {
   centroidOf,
   cleanEndpoint,
   describeEndpoint,
+  keysetWhere,
   layerUrl,
   metadataUrl,
   parseCount,
@@ -98,6 +99,28 @@ describe("urls", () => {
     expect(url.searchParams.get("returnGeometry")).toBe("true");
   });
 
+  it("pages by object id when told where the last page ended", () => {
+    // The whole county is well over a hundred thousand rows. Skipping by
+    // offset makes the server count them all every page; a key bound does not.
+    const url = new URL(
+      queryUrl("https://gis.example.gov/x/MapServer/3", {
+        where: "P_Z_1 LIKE '21014%'",
+        offset: 99_999,
+        pageSize: 400,
+        afterObjectId: 48_213,
+      })
+    );
+    expect(url.searchParams.get("where")).toBe("(P_Z_1 LIKE '21014%') AND OBJECTID > 48213");
+    expect(url.searchParams.get("resultOffset")).toBe("0");
+    expect(url.searchParams.get("orderByFields")).toBe("OBJECTID");
+  });
+
+  it("folds the key bound into a county-wide query and honours the layer's own id field", () => {
+    expect(keysetWhere("1=1", "OBJECTID", 10)).toBe("OBJECTID > 10");
+    expect(keysetWhere("1=1", "FID", null)).toBe("1=1");
+    expect(keysetWhere("A = 1", "FID", 7)).toBe("(A = 1) AND FID > 7");
+  });
+
   it("asks only for a count when that is all that is wanted", () => {
     const url = new URL(
       queryUrl("https://gis.example.gov/x/MapServer/3", { where: "1=1", offset: 0, pageSize: 1, countOnly: true })
@@ -173,12 +196,23 @@ describe("features", () => {
     });
     expect(page.exceededTransferLimit).toBe(true);
     expect(page.fields).toEqual(["FULLADDR", "ZIPCODE"]);
+    expect(page.objectIdField).toBe("OBJECTID");
+    expect(page.lastObjectId).toBeNull();
     expect(page.features[0]).toEqual({
       attributes: { FULLADDR: "1550 SWEARINGEN DR", ZIPCODE: "21014" },
       lat: 39.5,
       lng: -76.3,
     });
     expect(page.features[1].lat).toBeNull();
+  });
+
+  it("finds where the page ended, by the field the server names", () => {
+    const page = parseFeaturePage({
+      objectIdFieldName: "FID",
+      features: [{ attributes: { FID: 12 } }, { attributes: { FID: 40 } }, { attributes: { FID: 33 } }],
+    });
+    expect(page.objectIdField).toBe("FID");
+    expect(page.lastObjectId).toBe(40);
   });
 
   it("carries the server's error out rather than an empty page", () => {

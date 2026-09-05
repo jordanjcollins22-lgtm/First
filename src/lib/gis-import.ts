@@ -263,12 +263,19 @@ export function assembleAddress(
   const state = text(attributes, mapping.state) ?? "MD";
   const zip = text(attributes, mapping.zip);
 
-  // Already a full address: the street field carries a town or a ZIP.
-  if (/\b\d{5}(-\d{4})?\b/.test(street) || (city && street.toUpperCase().includes(city.toUpperCase()))) {
-    return street;
-  }
+  // Already a full address: the street field carries a ZIP.
+  if (/\b\d{5}(-\d{4})?\b/.test(street)) return street;
 
-  const tail = [city, [state, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  // The street field may end with the town already ("100 MAIN ST, BEL AIR").
+  // It may also simply be a street named after the town: "716 BEL AIR RD"
+  // runs through three ZIP codes, and without its town and ZIP appended two
+  // different houses on it share one key. Only a trailing town counts.
+  const upper = street.toUpperCase().replace(/[.,]+$/, "").trim();
+  const endsWithCity = Boolean(city) && upper.endsWith(city!.toUpperCase());
+  const stateZip = [state, zip].filter(Boolean).join(" ");
+
+  if (endsWithCity) return stateZip ? `${street}, ${stateZip}` : street;
+  const tail = [city, stateZip].filter(Boolean).join(", ");
   return tail ? `${street}, ${tail}` : street;
 }
 

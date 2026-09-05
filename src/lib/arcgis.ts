@@ -194,6 +194,23 @@ export interface QueryOptions {
   returnGeometry?: boolean;
   /** Ask only how many rows match; no features come back. */
   countOnly?: boolean;
+  /**
+   * Page by key rather than by offset: only rows whose object id is above
+   * this, from the start. An offset of a hundred thousand makes the server
+   * count a hundred thousand rows to skip them, and drifts if a row is added
+   * mid-run; "id greater than the last one seen" does neither.
+   */
+  afterObjectId?: number | null;
+  /** The layer's own object id field. OBJECTID unless the layer says otherwise. */
+  objectIdField?: string | null;
+}
+
+/** The where clause with the keyset bound folded in, when there is one. */
+export function keysetWhere(where: string, objectIdField: string, afterObjectId: number | null | undefined): string {
+  const base = where && where !== "1=1" ? where : null;
+  if (afterObjectId == null) return base ?? "1=1";
+  const bound = `${objectIdField} > ${Math.floor(afterObjectId)}`;
+  return base ? `(${base}) AND ${bound}` : bound;
 }
 
 /**
@@ -205,9 +222,10 @@ export interface QueryOptions {
  * overlap or leave a gap between them: an unordered offset is undefined.
  */
 export function queryUrl(layer: string, options: QueryOptions): string {
+  const oid = options.objectIdField || "OBJECTID";
   const url = new URL(`${cleanEndpoint(layer)}/query`);
   url.searchParams.set("f", "json");
-  url.searchParams.set("where", options.where || "1=1");
+  url.searchParams.set("where", keysetWhere(options.where, oid, options.afterObjectId));
   if (options.countOnly) {
     url.searchParams.set("returnCountOnly", "true");
     return url.toString();
@@ -215,8 +233,9 @@ export function queryUrl(layer: string, options: QueryOptions): string {
   url.searchParams.set("outFields", options.outFields?.join(",") || "*");
   url.searchParams.set("returnGeometry", options.returnGeometry === false ? "false" : "true");
   url.searchParams.set("outSR", "4326");
-  url.searchParams.set("orderByFields", "OBJECTID");
-  url.searchParams.set("resultOffset", String(Math.max(0, Math.floor(options.offset))));
+  url.searchParams.set("orderByFields", oid);
+  // With a keyset bound the page always starts at the front of what is left.
+  url.searchParams.set("resultOffset", String(options.afterObjectId != null ? 0 : Math.max(0, Math.floor(options.offset))));
   url.searchParams.set("resultRecordCount", String(Math.max(1, Math.floor(options.pageSize))));
   return url.toString();
 }
@@ -234,6 +253,10 @@ export interface FeaturePage {
   exceededTransferLimit: boolean;
   /** Field names as the server listed them on this page. */
   fields: string[];
+  /** What the server calls its object id field on this layer. */
+  objectIdField: string | null;
+  /** The highest object id on the page: where the next page starts from. */
+  lastObjectId: number | null;
   error: string | null;
 }
 
@@ -279,7 +302,14 @@ function plausible(lat: number, lng: number): { lat: number; lng: number } | nul
 
 /** Reads a query response into features we can use, or the error it carried. */
 export function parseFeaturePage(body: unknown): FeaturePage {
-  const empty: FeaturePage = { features: [], exceededTransferLimit: false, fields: [], error: null };
+  const empty: FeaturePage = {
+    features: [],
+    exceededTransferLimit: false,
+    fields: [],
+    objectIdField: null,
+    lastObjectId: null,
+    error: null,
+  };
   if (!isDict(body)) return { ...empty, error: "The server answered with something that was not a feature set." };
 
   if (isDict(body.error)) {
@@ -297,10 +327,19 @@ export function parseFeaturePage(body: unknown): FeaturePage {
     .map((f) => str(f.name))
     .filter((name): name is string => Boolean(name));
 
+  const objectIdField = str(body.objectIdFieldName) ?? "OBJECTID";
+  let lastObjectId: number | null = null;
+  for (const feature of features) {
+    const id = num(feature.attributes[objectIdField]);
+    if (id != null && (lastObjectId == null || id > lastObjectId)) lastObjectId = id;
+  }
+
   return {
     features,
     exceededTransferLimit: body.exceededTransferLimit === true,
     fields,
+    objectIdField,
+    lastObjectId,
     error: null,
   };
 }
