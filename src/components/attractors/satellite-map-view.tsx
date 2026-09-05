@@ -11,8 +11,8 @@ import { geometryPoints, geometryToPolygon, waveToPolygon } from "@/lib/attracto
 import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
 import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
-import { ALL_ADDRESSES_MIN_ZOOM, housesToFeatures, type MapHouse } from "@/lib/house-geojson";
-import { STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
+import { housesToFeatures, pointsToFeatures, stageColorExpression, type MapHouse, type MapPoint } from "@/lib/house-geojson";
+import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
 
 if (env.mapboxToken) {
   mapboxgl.accessToken = env.mapboxToken;
@@ -37,9 +37,9 @@ interface SatelliteMapViewProps {
    */
   houses: MapHouse[];
   /**
-   * Whether to also draw every other address in view: the county's houses
-   * nobody has spoken to. Fetched by viewport, only when zoomed in enough for
-   * a dot to be a door.
+   * Whether to draw every address in the county, coloured by stage: clusters
+   * from a distance, one dot per door up close. Fetched once as bare points
+   * and kept for the life of the page.
    */
   showAllAddresses: boolean;
   /**
@@ -90,6 +90,10 @@ const HOUSES_SOURCE = "houses-with-history";
 const HOUSES_LAYER = "houses-with-history-circle";
 const ALL_ADDRESSES_SOURCE = "all-addresses";
 const ALL_ADDRESSES_LAYER = "all-addresses-circle";
+const ALL_ADDRESSES_CLUSTER_LAYER = "all-addresses-cluster";
+const ALL_ADDRESSES_COUNT_LAYER = "all-addresses-cluster-count";
+/** Below this, the county is clusters; from here, every door is its own dot. */
+const CLUSTER_MAX_ZOOM = 12;
 const DENSITY_SOURCE = "attractor-density";
 const DENSITY_LAYER = "attractor-density-circle";
 const RANK_SOURCE = "rank-grid";
@@ -286,18 +290,50 @@ export function SatelliteMapView({
         },
       });
 
-      // Every other address in view, when asked for. Under everything that
-      // has a story, and quiet: these are the doors nobody has knocked on.
-      map.addSource(ALL_ADDRESSES_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // Every address in the county, when asked for. Clustered from a
+      // distance so the county reads as counts, and one coloured dot per door
+      // once zoomed in far enough for a dot to be a door.
+      map.addSource(ALL_ADDRESSES_SOURCE, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        cluster: true,
+        clusterMaxZoom: CLUSTER_MAX_ZOOM,
+        clusterRadius: 48,
+      });
+      map.addLayer({
+        id: ALL_ADDRESSES_CLUSTER_LAYER,
+        type: "circle",
+        source: ALL_ADDRESSES_SOURCE,
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": "rgba(71, 85, 105, 0.75)",
+          "circle-radius": ["interpolate", ["linear"], ["get", "point_count"], 10, 12, 500, 22, 5000, 34],
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      map.addLayer({
+        id: ALL_ADDRESSES_COUNT_LAYER,
+        type: "symbol",
+        source: ALL_ADDRESSES_SOURCE,
+        filter: ["has", "point_count"],
+        layout: {
+          "text-field": ["get", "point_count_abbreviated"],
+          "text-size": 11,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+        },
+        paint: { "text-color": "#ffffff" },
+      });
       map.addLayer({
         id: ALL_ADDRESSES_LAYER,
         type: "circle",
         source: ALL_ADDRESSES_SOURCE,
+        filter: ["!", ["has", "point_count"]],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2, 16, 4, 19, 7],
-          "circle-color": "#94a3b8",
-          "circle-opacity": 0.75,
-          "circle-stroke-width": 0.5,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.5, 15, 4.5, 19, 8],
+          "circle-color": stageColorExpression() as mapboxgl.ExpressionSpecification,
+          "circle-opacity": 0.9,
+          "circle-stroke-width": 0.75,
           "circle-stroke-color": "#ffffff",
         },
       });
@@ -441,19 +477,54 @@ export function SatelliteMapView({
       map.on("mouseenter", HOUSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", HOUSES_LAYER, () => (map.getCanvas().style.cursor = ""));
 
-      map.on("click", ALL_ADDRESSES_LAYER, (e) => {
+      map.on("click", ALL_ADDRESSES_CLUSTER_LAYER, (e) => {
+        const feature = e.features?.[0];
+        const point = feature?.geometry as GeoJSON.Point | undefined;
+        const clusterId = feature?.properties?.cluster_id;
+        const source = map.getSource(ALL_ADDRESSES_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+        if (!feature || !point || clusterId == null || !source) return;
+        source.getClusterExpansionZoom(clusterId, (err, zoom) => {
+          if (err || zoom == null) return;
+          map.easeTo({ center: point.coordinates as [number, number], zoom: Math.min(zoom, 18) });
+        });
+      });
+      map.on("mouseenter", ALL_ADDRESSES_CLUSTER_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", ALL_ADDRESSES_CLUSTER_LAYER, () => (map.getCanvas().style.cursor = ""));
+
+      map.on("click", ALL_ADDRESSES_LAYER, async (e) => {
         const feature = e.features?.[0];
         const point = feature?.geometry as GeoJSON.Point | undefined;
         if (!feature || !point) return;
-        const { address } = feature.properties as { address: string };
-        new mapboxgl.Popup({ offset: 8 })
-          .setLngLat(point.coordinates as [number, number])
-          .setHTML(
-            `<div style="font:500 13px system-ui"><div>${escapeHtml(address)}</div>` +
-              `<div style="color:#666;font-weight:400">${escapeHtml(STAGE_LABEL.untouched)}</div></div>`
-          )
+        const [lng, lat] = point.coordinates as [number, number];
+        const rank = Number((feature.properties as { s?: number }).s ?? 0);
+        const stage = RELATIONSHIP_STAGES[rank] ?? "untouched";
+        const popup = new mapboxgl.Popup({ offset: 8 })
+          .setLngLat([lng, lat])
+          .setHTML(`<div style="font:500 13px system-ui"><div style="color:#666">${escapeHtml(STAGE_LABEL[stage])}</div><div>Looking up the address…</div></div>`)
           .addTo(map);
+        // The points carry no address, to keep a hundred thousand of them
+        // small; the one that was clicked is looked up on demand.
+        const d = 0.00012;
+        const params = new URLSearchParams({
+          minLat: String(lat - d),
+          minLng: String(lng - d),
+          maxLat: String(lat + d),
+          maxLng: String(lng + d),
+        });
+        try {
+          const res = await fetch(`/api/houses/geojson?${params}`, { cache: "no-store" });
+          const body = (await res.json()) as { features?: { properties: { address: string } }[] };
+          const address = body.features?.[0]?.properties.address ?? "Address not found";
+          popup.setHTML(
+            `<div style="font:500 13px system-ui"><div>${escapeHtml(address)}</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(STAGE_LABEL[stage])}</div></div>`
+          );
+        } catch {
+          popup.setHTML(`<div style="font:500 13px system-ui">${escapeHtml(STAGE_LABEL[stage])}</div>`);
+        }
       });
+      map.on("mouseenter", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", JOBS_LAYER, (e) => {
         const id = e.features?.[0]?.properties?.id;
@@ -580,7 +651,8 @@ export function SatelliteMapView({
     source.setData({ type: "FeatureCollection", features: housesToFeatures(houses) });
   }, [houses, mapLoaded]);
 
-  // Every other address in view, fetched as the map moves, while asked for.
+  // Every address in the county, fetched once and kept, while asked for.
+  const allPointsRef = useRef<MapPoint[] | null>(null);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loadedRef.current) return;
@@ -592,59 +664,30 @@ export function SatelliteMapView({
       return;
     }
 
-    // Houses with a story are drawn by their own layer; the same house must
-    // not also appear as a grey dot underneath its coloured one.
-    const storied = new Set(houses.map((h) => h.id));
-    let latest = 0;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
+    let cancelled = false;
     async function load() {
-      if (!map) return;
-      if (map.getZoom() < ALL_ADDRESSES_MIN_ZOOM) {
-        source?.setData({ type: "FeatureCollection", features: [] });
-        setAllAddressesNote("Zoom in to see every address");
-        return;
+      if (!allPointsRef.current) {
+        setAllAddressesNote("Loading every address in the county…");
+        try {
+          const res = await fetch("/api/houses/all");
+          if (!res.ok) throw new Error(`${res.status}`);
+          const body = (await res.json()) as { points: MapPoint[] };
+          allPointsRef.current = body.points;
+        } catch {
+          if (!cancelled) setAllAddressesNote("Could not load the county's addresses");
+          return;
+        }
       }
-      const bounds = map.getBounds();
-      if (!bounds) return;
-      const ticket = ++latest;
-      const params = new URLSearchParams({
-        minLat: String(bounds.getSouth()),
-        minLng: String(bounds.getWest()),
-        maxLat: String(bounds.getNorth()),
-        maxLng: String(bounds.getEast()),
-      });
-      try {
-        const res = await fetch(`/api/houses/geojson?${params}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`${res.status}`);
-        const body = (await res.json()) as {
-          features: { type: "Feature"; geometry: GeoJSON.Point; properties: { id: string; address: string; untouched: boolean } }[];
-          capped?: boolean;
-        };
-        if (ticket !== latest) return;
-        const features = body.features.filter((f) => !storied.has(f.properties.id));
-        source?.setData({ type: "FeatureCollection", features });
-        setAllAddressesNote(
-          body.capped ? "Showing the first 8,000 addresses in view; zoom in for all of them" : `${features.length.toLocaleString()} addresses in view`
-        );
-      } catch {
-        if (ticket === latest) setAllAddressesNote("Could not load addresses for this view");
-      }
+      if (cancelled) return;
+      const features = pointsToFeatures(allPointsRef.current);
+      source?.setData({ type: "FeatureCollection", features });
+      setAllAddressesNote(`${features.length.toLocaleString()} addresses. Zoom in for one dot per door.`);
     }
-
-    function scheduled() {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(load, 300);
-    }
-
     void load();
-    map.on("moveend", scheduled);
     return () => {
-      map.off("moveend", scheduled);
-      if (timer) clearTimeout(timer);
-      latest++;
+      cancelled = true;
     };
-  }, [showAllAddresses, houses, mapLoaded]);
+  }, [showAllAddresses, mapLoaded]);
 
   // Keep the job markers in sync.
   useEffect(() => {
@@ -745,6 +788,16 @@ export function SatelliteMapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {(showAllAddresses || houses.length > 0) && (
+        <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col gap-0.5 rounded-md bg-black/60 px-2 py-1.5 text-[11px] text-white">
+          {RELATIONSHIP_STAGES.map((stage) => (
+            <span key={stage} className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[stage] }} />
+              {STAGE_LABEL[stage]}
+            </span>
+          ))}
+        </div>
+      )}
       {showAllAddresses && allAddressesNote && (
         <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-black/60 px-2 py-1 text-xs text-white">
           {allAddressesNote}

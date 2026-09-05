@@ -2485,6 +2485,11 @@ export interface Database {
         Args: Record<string, never>;
         Returns: number;
       };
+      /** Every mappable house as [lng, lat, stageRank], in one JSON value. */
+      houses_map_points: {
+        Args: { org: string };
+        Returns: Json;
+      };
       /** The houses inside a map viewport, and whether anything has happened to each. */
       houses_in_bbox: {
         Args: { org: string; min_lat: number; min_lng: number; max_lat: number; max_lng: number; max_rows?: number };

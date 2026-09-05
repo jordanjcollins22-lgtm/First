@@ -162,7 +162,7 @@ export function FilterBar({
         </Label>
         <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <input type="checkbox" checked={showAllAddresses} onChange={onToggleShowAllAddresses} className="h-3.5 w-3.5" />
-          All addresses, no contact yet
+          Every address in the county, by stage
         </Label>
         {showProjects && (
           <Select

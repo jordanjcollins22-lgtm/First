@@ -1,4 +1,10 @@
-import { STAGE_COLOR, type RelationshipStage } from "@/lib/house-relationship";
+import {
+  displayStage,
+  RELATIONSHIP_STAGES,
+  STAGE_COLOR,
+  type HouseEvent,
+  type RelationshipStage,
+} from "@/lib/house-relationship";
 
 /**
  * A house as the map draws it.
@@ -76,3 +82,45 @@ export function parseBbox(params: URLSearchParams): { minLat: number; minLng: nu
  * says. Zoomed in past it, the dots are doors.
  */
 export const ALL_ADDRESSES_MIN_ZOOM = 13;
+
+/** `[lng, lat, stageRank]`, as the all-houses route sends it. */
+export type MapPoint = [number, number, number];
+
+export interface PointFeature {
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: { s: number };
+}
+
+/** Every point as a feature, carrying only its stage rank; the layer colours by that. */
+export function pointsToFeatures(points: MapPoint[]): PointFeature[] {
+  const out: PointFeature[] = [];
+  for (const point of points) {
+    if (!Array.isArray(point) || point.length < 3) continue;
+    const [lng, lat, s] = point;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    out.push({ type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] }, properties: { s: Number(s) || 0 } });
+  }
+  return out;
+}
+
+/** The Mapbox `match` expression that turns a stage rank into its colour. */
+export function stageColorExpression(): unknown[] {
+  const cases: unknown[] = [];
+  RELATIONSHIP_STAGES.forEach((stage, rank) => {
+    cases.push(rank, STAGE_COLOR[stage]);
+  });
+  return ["match", ["get", "s"], ...cases, STAGE_COLOR.untouched];
+}
+
+/**
+ * The stage a house shows on the map.
+ *
+ * The event log's high-water mark, except that a house with somebody
+ * attached and nothing yet recorded counts as spoken to: we know who lives
+ * there, and "have we talked to them" is the map's question.
+ */
+export function stageForMap(events: HouseEvent[], hasContacts: boolean): RelationshipStage {
+  const stage = displayStage(events);
+  return stage === "untouched" && hasContacts ? "spoken_to" : stage;
+}

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { displayStage, type HouseEvent, type RelationshipStage } from "@/lib/house-relationship";
 import { streetPrefix } from "@/lib/address-quality";
-import type { MapHouse } from "@/lib/house-geojson";
+import { stageForMap, type MapHouse } from "@/lib/house-geojson";
 
 /**
  * Houses, and the ones a person still has to settle.
@@ -231,7 +231,7 @@ export async function listHousesWithHistory(): Promise<MapHouse[]> {
         address: row.address,
         lat: Number(row.lat),
         lng: Number(row.lng),
-        stage: displayStage(events),
+        stage: stageForMap(events, (row.house_contacts?.length ?? 0) > 0),
         contacts: (row.house_contacts ?? [])
           .map((c) => c.customers?.name)
           .filter((name): name is string => Boolean(name)),

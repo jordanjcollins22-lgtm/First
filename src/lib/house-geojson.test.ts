@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { housesToFeatures, parseBbox, type MapHouse } from "@/lib/house-geojson";
+import {
+  housesToFeatures,
+  parseBbox,
+  pointsToFeatures,
+  stageColorExpression,
+  stageForMap,
+  type MapHouse,
+  type MapPoint,
+} from "@/lib/house-geojson";
 
 const house = (over: Partial<MapHouse> = {}): MapHouse => ({
   id: "h1",
@@ -38,5 +46,39 @@ describe("parseBbox", () => {
     expect(parseBbox(new URLSearchParams({ minLat: "1" }))).toBeNull();
     expect(parseBbox(new URLSearchParams({ minLat: "2", minLng: "0", maxLat: "1", maxLng: "1" }))).toBeNull();
     expect(parseBbox(new URLSearchParams({ minLat: "0", minLng: "0", maxLat: "95", maxLng: "1" }))).toBeNull();
+  });
+});
+
+describe("pointsToFeatures", () => {
+  it("turns bare points into features carrying only their stage", () => {
+    const points: MapPoint[] = [[-76.3483, 39.5359, 4], [-76.3, 39.5, 0]];
+    const features = pointsToFeatures(points);
+    expect(features).toHaveLength(2);
+    expect(features[0].geometry.coordinates).toEqual([-76.3483, 39.5359]);
+    expect(features[0].properties).toEqual({ s: 4 });
+  });
+
+  it("drops a point that is not one", () => {
+    expect(pointsToFeatures([[NaN, 1, 0] as MapPoint, [1] as unknown as MapPoint])).toHaveLength(0);
+  });
+});
+
+describe("stageColorExpression", () => {
+  it("maps every rank to its stage colour, with untouched as the fallback", () => {
+    const expression = stageColorExpression();
+    expect(expression[0]).toBe("match");
+    expect(expression).toContain("#22c55e");
+    expect(expression[expression.length - 1]).toBe("#94a3b8");
+  });
+});
+
+describe("stageForMap", () => {
+  it("counts a known contact with nothing recorded as spoken to", () => {
+    expect(stageForMap([], true)).toBe("spoken_to");
+    expect(stageForMap([], false)).toBe("untouched");
+  });
+
+  it("never lowers a stage the events earned", () => {
+    expect(stageForMap([{ kind: "client", at: "2026-01-01" }], true)).toBe("client");
   });
 });
