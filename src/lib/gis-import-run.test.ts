@@ -18,6 +18,13 @@ describe("whereFor", () => {
     expect(whereFor(job({}), mapping)).toBe("FULLADDR LIKE '%21014%'");
   });
 
+  it("bounds ZIP 21014 by P_Z_1, the field Harford's Address Master actually has", () => {
+    // The clause the bounded run will send. Not the address text: the layer
+    // keeps the ZIP in its own column, and the address field has no ZIP in it.
+    const mapping = discoverFields(["OBJECTID", "P_CITY", "P_Z_1", "Address", "UnitNumber", "UnitType", "GlobalID"]);
+    expect(whereFor(job({}), mapping)).toBe("P_Z_1 LIKE '21014%'");
+  });
+
   it("asks for everything on a county run", () => {
     // "Do not import the entire county yet" is enforced by which button was
     // pressed, and this is the only place the two runs differ.

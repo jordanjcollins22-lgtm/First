@@ -16,10 +16,13 @@ import {
   startGisImport,
   testGisConnection,
   verifyKnownHouse,
+  type ActionResult,
   type KnownHouseCheck,
 } from "@/lib/actions/gis-import-actions";
 import type { GisImportJob } from "@/lib/data/gis-import";
 import type { ServerEnvDiagnostic } from "@/lib/gis-probe";
+import { discoverFields, type FieldMapping } from "@/lib/gis-import";
+import { zipWhere } from "@/lib/arcgis";
 
 /**
  * The controls for the county import, and the record of every run.
@@ -63,11 +66,18 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
     return () => clearInterval(timer);
   }, [running, router]);
 
-  function run(work: () => Promise<unknown>) {
+  // Actions return their outcome rather than throwing it. A thrown server
+  // error reaches a production browser as React error #441 with the message
+  // stripped; a returned one reaches it as the words the server chose.
+  function run(work: () => Promise<ActionResult<unknown>>) {
     setError(null);
     startTransition(async () => {
       try {
-        await work();
+        const result = await work();
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "That didn't work.");
@@ -98,7 +108,7 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
           </Button>
         </div>
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-        {latestTest && <ConnectionResult job={latestTest} onPick={setUrl} />}
+        {latestTest && <ConnectionResult job={latestTest} zip={zip} onPick={setUrl} />}
       </section>
 
       {/* Stages two and five: imports. */}
@@ -167,7 +177,13 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
                 type="button"
                 variant="outline"
                 disabled={isPending}
-                onClick={() => run(async () => setKnown(await verifyKnownHouse(knownAddress)))}
+                onClick={() =>
+                  run(async () => {
+                    const result = await verifyKnownHouse(knownAddress);
+                    if (result.ok) setKnown(result.value);
+                    return result;
+                  })
+                }
               >
                 <Search className="mr-1 h-4 w-4" />
                 Verify
@@ -186,7 +202,13 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
               type="button"
               variant="outline"
               disabled={isPending}
-              onClick={() => run(async () => setReport((await runIntegrityChecks()) as Record<string, unknown>))}
+              onClick={() =>
+                run(async () => {
+                  const result = await runIntegrityChecks();
+                  if (result.ok) setReport(result.value as Record<string, unknown>);
+                  return result;
+                })
+              }
             >
               <ShieldCheck className="mr-1 h-4 w-4" />
               Run integrity checks
@@ -256,10 +278,19 @@ interface Probe {
 }
 
 /** What the connection test found, or exactly why it did not. */
-function ConnectionResult({ job, onPick }: { job: GisImportJob; onPick: (url: string) => void }) {
+function ConnectionResult({ job, zip, onPick }: { job: GisImportJob; zip: string; onPick: (url: string) => void }) {
   const probes = (Array.isArray(job.diagnostics) ? job.diagnostics : []) as Probe[];
   const fields = (Array.isArray(job.discovered_fields) ? job.discovered_fields : []) as { name: string; type: string; alias?: string | null }[];
-  const mapping = (job.field_mapping ?? null) as Record<string, string | null> | null;
+  const stored = (job.field_mapping ?? null) as Partial<FieldMapping> | null;
+  // Resolved again, now, from the fields the layer reported, by the same
+  // function the import runs. The stored mapping is what an earlier build
+  // decided; this is what the current one will read. When they differ, the
+  // test predates the code and says so.
+  const mapping: FieldMapping | null = fields.length > 0 ? discoverFields(fields.map((f) => f.name)) : null;
+  const stale =
+    mapping && stored ? (Object.keys(mapping) as (keyof FieldMapping)[]).some((role) => (stored[role] ?? null) !== mapping[role]) : false;
+  const cleanZip = zip.replace(/\D/g, "").slice(0, 5);
+  const where = mapping?.address && cleanZip.length === 5 ? zipWhere(cleanZip, mapping.zip, mapping.address) : null;
   const found = (job.layers_found ?? {}) as {
     kind?: string;
     services?: string[];
@@ -370,16 +401,40 @@ function ConnectionResult({ job, onPick }: { job: GisImportJob; onPick: (url: st
       {mapping && (
         <div>
           <p className="mb-1 font-medium">What the import will read</p>
+          {stale && (
+            <p className="mb-1 text-xs text-amber-700">
+              This test ran on an earlier build. The fields below are resolved by the current code from the
+              {" "}{fields.length} fields the layer reported; run the test again to record them.
+            </p>
+          )}
           <table className="text-xs">
             <tbody>
-              {Object.entries(mapping).map(([role, field]) => (
+              {(Object.keys(mapping) as (keyof FieldMapping)[]).map((role) => (
                 <tr key={role}>
-                  <td className="pr-3 py-0.5 text-muted-foreground">{role}</td>
-                  <td className="py-0.5 font-mono">{field ?? <span className="text-muted-foreground">— not present</span>}</td>
+                  <td className="py-0.5 pr-3 text-muted-foreground">{role}</td>
+                  <td className="py-0.5 font-mono">
+                    {mapping[role] ? (
+                      <>
+                        <span className="text-muted-foreground">→ </span>
+                        {mapping[role]}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">— no such field on this layer</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {where && (
+            <p className="mt-2 text-xs">
+              ZIP {cleanZip} will query{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">{where}</code>
+              {!mapping.zip && (
+                <span className="ml-1 text-amber-700">(no ZIP field, so the address text is searched instead)</span>
+              )}
+            </p>
+          )}
         </div>
       )}
 
