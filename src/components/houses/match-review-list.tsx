@@ -5,7 +5,13 @@ import { Link2, SplitSquareHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { STAGE_COLOR, STAGE_LABEL } from "@/lib/house-relationship";
-import { settleAsDifferent, settleAsSameHouse, type ActionResult } from "@/lib/actions/match-review-actions";
+import {
+  relinkToCounty,
+  settleAsDifferent,
+  settleAsSameHouse,
+  type ActionResult,
+  type SameHouseOutcome,
+} from "@/lib/actions/match-review-actions";
 import type { MatchReviewForScreen } from "@/lib/data/match-reviews";
 
 /**
@@ -19,6 +25,8 @@ export function MatchReviewList({ reviews }: { reviews: MatchReviewForScreen[] }
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /** The question whose "same house" hit a different existing link, and needs the relink answer. */
+  const [conflictFor, setConflictFor] = useState<{ reviewId: string; message: string } | null>(null);
 
   function run(work: () => Promise<ActionResult<{ message: string }>>) {
     setError(null);
@@ -27,6 +35,21 @@ export function MatchReviewList({ reviews }: { reviews: MatchReviewForScreen[] }
       const result = await work();
       if (result.ok) setNote(result.value.message);
       else setError(result.error);
+    });
+  }
+
+  function sameHouse(reviewId: string) {
+    setError(null);
+    setNote(null);
+    setConflictFor(null);
+    startTransition(async () => {
+      const result: ActionResult<SameHouseOutcome> = await settleAsSameHouse(reviewId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      if (result.value.conflict) setConflictFor({ reviewId, message: result.value.message });
+      else setNote(result.value.message);
     });
   }
 
@@ -73,8 +96,24 @@ export function MatchReviewList({ reviews }: { reviews: MatchReviewForScreen[] }
             </div>
           </div>
 
+          {conflictFor?.reviewId === review.id && (
+            <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              <p>{conflictFor.message}</p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2"
+                disabled={isPending}
+                onClick={() => run(() => relinkToCounty(review.id))}
+              >
+                <Link2 className="mr-1 h-3.5 w-3.5" />
+                Same house; our address was wrong. Use the county&apos;s.
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" disabled={isPending} onClick={() => run(() => settleAsSameHouse(review.id))}>
+            <Button type="button" size="sm" disabled={isPending} onClick={() => sameHouse(review.id)}>
               <Link2 className="mr-1 h-3.5 w-3.5" />
               Same house, link it
             </Button>

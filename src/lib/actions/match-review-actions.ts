@@ -57,13 +57,38 @@ async function loadPending(reviewId: string) {
   return { admin, review: data };
 }
 
+export interface SameHouseOutcome {
+  linked: boolean;
+  message: string;
+  /**
+   * Set when our house already carries a different county parcel. That
+   * happens when our address, as written, matched a different county record
+   * exactly -- "4019 Federal Hill Rd" when the house is on Old Federal Hill
+   * Rd. The person then has to say which address is right; see relinkToCounty.
+   */
+  conflict?: { currentGisAddress: string | null };
+}
+
 /** It is the same house. Link the county's parcel to it. */
-export async function settleAsSameHouse(reviewId: string): Promise<ActionResult<{ message: string }>> {
+export async function settleAsSameHouse(reviewId: string): Promise<ActionResult<SameHouseOutcome>> {
   return guard("settleAsSameHouse", async () => {
     const profile = await requireReviewer();
     const { admin, review } = await loadPending(reviewId);
     if (!review.parcel_id || !review.incoming_address) {
       throw new Error("This question has no parcel on it to link.");
+    }
+
+    const { data: ours } = await admin
+      .from("houses")
+      .select("parcel_id, gis_address")
+      .eq("id", review.house_id)
+      .maybeSingle();
+    if (ours?.parcel_id && ours.parcel_id !== review.parcel_id) {
+      return {
+        linked: false,
+        message: `This house is already linked to the county's "${ours.gis_address ?? ours.parcel_id}", because our address matched it exactly. If the house is really at the county's other address, our address was wrong: take the county's below.`,
+        conflict: { currentGisAddress: ours.gis_address ?? null },
+      };
     }
 
     // The county's row may already exist as a house of its own, made before
@@ -101,23 +126,133 @@ export async function settleAsSameHouse(reviewId: string): Promise<ActionResult<
       lotSizeSqft: null,
     });
     if (outcome === "duplicate-link") {
-      throw new Error("That house is already linked to a different county parcel, so this one cannot be the same house.");
+      throw new Error("That county parcel is already on another house.");
     }
     if (outcome === "error") throw new Error("The house could not be updated.");
 
-    const { error } = await admin
-      .from("house_match_reviews")
-      .update({
-        status: "accepted",
-        resolution: "same_house",
+    await markSettled(admin, reviewId, "same_house", profile.id);
+    revalidatePath(PAGE);
+    return { linked: true, message: "Linked." };
+  });
+}
+
+async function markSettled(
+  admin: ReturnType<typeof createAdminClient>,
+  reviewId: string,
+  resolution: "same_house" | "different",
+  reviewerId: string,
+  createdHouseId: string | null = null
+) {
+  const { error } = await admin
+    .from("house_match_reviews")
+    .update({
+      status: resolution === "same_house" ? "accepted" : "rejected",
+      resolution,
+      created_house_id: createdHouseId,
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", reviewId);
+  if (error) throw error;
+}
+
+/**
+ * Same house, and our address was the wrong one.
+ *
+ * The house takes the county's address as its own -- the one place the raw
+ * address is rewritten, because a person has said the original was a mistake
+ * -- and the county's parcel. The parcel it wrongly held is released, and a
+ * note is left so the next import creates that county record as its own
+ * house instead of asking about it. If the review kept the parcel's pin the
+ * house moves to it now; otherwise the house is held until the next import
+ * brings the pin, which the importer does for any held house it finds linked.
+ */
+export async function relinkToCounty(reviewId: string): Promise<ActionResult<{ message: string }>> {
+  return guard("relinkToCounty", async () => {
+    const profile = await requireReviewer();
+    const { admin, review } = await loadPending(reviewId);
+    if (!review.parcel_id || !review.incoming_address) {
+      throw new Error("This question has no parcel on it to link.");
+    }
+
+    const { data: ours, error: oursError } = await admin
+      .from("houses")
+      .select("id, parcel_id, gis_address, normalized_address")
+      .eq("id", review.house_id)
+      .maybeSingle();
+    if (oursError) throw oursError;
+    if (!ours) throw new Error("That house no longer exists.");
+
+    // Someone else may already hold the county's key as a bare row.
+    const normalized = review.incoming_normalized ?? normalizeAddress(review.incoming_address);
+    const { data: holder } = await admin
+      .from("houses")
+      .select("id, source, property_id, property_events(id), house_contacts(customer_id), zone_houses(zone_id)")
+      .eq("organization_id", review.organization_id)
+      .eq("normalized_address", normalized)
+      .neq("id", ours.id)
+      .maybeSingle();
+    if (holder) {
+      const bare =
+        holder.source === "harford_gis" &&
+        !holder.property_id &&
+        (holder.property_events?.length ?? 0) === 0 &&
+        (holder.house_contacts?.length ?? 0) === 0 &&
+        (holder.zone_houses?.length ?? 0) === 0;
+      if (!bare) throw new Error("The county's address is already a house with history of its own. Merge those by hand first.");
+      const { error } = await admin.from("houses").delete().eq("id", holder.id);
+      if (error) throw error;
+    }
+
+    // Release the parcel we held by mistake, and make sure it comes back as
+    // its own house rather than as a question.
+    if (ours.parcel_id && ours.parcel_id !== review.parcel_id && ours.gis_address) {
+      await admin.from("house_match_reviews").insert({
+        organization_id: review.organization_id,
+        house_id: ours.id,
+        score: 0.8,
+        status: "rejected",
+        resolution: "different",
+        incoming_address: ours.gis_address,
+        incoming_normalized: normalizeAddress(ours.gis_address),
+        parcel_id: ours.parcel_id,
+        source: "harford_gis",
         reviewed_by: profile.id,
         reviewed_at: new Date().toISOString(),
+      });
+    }
+
+    const hasPin = review.incoming_lat != null && review.incoming_lng != null;
+    const now = new Date().toISOString();
+    const { error } = await admin
+      .from("houses")
+      .update({
+        address: review.incoming_address,
+        normalized_address: normalized,
+        address_normalizer_version: NORMALIZER_VERSION,
+        parcel_id: review.parcel_id,
+        county: "Harford",
+        gis_address: review.incoming_address,
+        gis_matched_at: now,
+        source_updated_at: now,
+        kind: "house",
+        ...(hasPin
+          ? { lat: review.incoming_lat!, lng: review.incoming_lng!, needs_review: false, review_reason: null }
+          : { lat: 0, lng: 0, needs_review: true, review_reason: "Waiting for the county's pin for the corrected address" }),
+        reviewed_at: now,
+        reviewed_by: profile.id,
+        updated_at: now,
       })
-      .eq("id", reviewId);
+      .eq("id", ours.id);
     if (error) throw error;
 
+    await markSettled(admin, reviewId, "same_house", profile.id);
     revalidatePath(PAGE);
-    return { message: "Linked." };
+    return {
+      message: hasPin
+        ? "Relinked: the house now carries the county's address, parcel and pin."
+        : "Relinked to the county's address and parcel. Its pin arrives with the next county import.",
+    };
   });
 }
 
@@ -169,18 +304,7 @@ export async function settleAsDifferent(reviewId: string): Promise<ActionResult<
       message = createdHouseId ? "Added as its own house." : "Recorded. A house with that address already exists.";
     }
 
-    const { error } = await admin
-      .from("house_match_reviews")
-      .update({
-        status: "rejected",
-        resolution: "different",
-        created_house_id: createdHouseId,
-        reviewed_by: profile.id,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("id", reviewId);
-    if (error) throw error;
-
+    await markSettled(admin, reviewId, "different", profile.id, createdHouseId);
     revalidatePath(PAGE);
     return { message };
   });

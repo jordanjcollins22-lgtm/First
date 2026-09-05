@@ -458,20 +458,29 @@ async function applyPage(
   const parcelIds = [...new Set(parcels.map((p) => p.parcelId))];
   const { data: linkedRows, error: linkedError } = await admin
     .from("houses")
-    .select("id, parcel_id")
+    .select("id, parcel_id, needs_review")
     .eq("organization_id", org)
     .eq("county", COUNTY)
     .in("parcel_id", parcelIds);
   if (linkedError) throw linkedError;
-  const linked = new Set((linkedRows ?? []).map((r) => r.parcel_id));
+  const linked = new Map((linkedRows ?? []).map((r) => [r.parcel_id, r]));
 
-  const undecided = parcels.filter((p) => {
-    if (linked.has(p.parcelId)) {
-      out.matched++;
-      return false;
+  const undecided: ParcelRecord[] = [];
+  for (const p of parcels) {
+    const row = linked.get(p.parcelId);
+    if (!row) {
+      undecided.push(p);
+      continue;
     }
-    return true;
-  });
+    out.matched++;
+    // A linked house that is held is one whose pin could not be trusted -- a
+    // person relinked it to this parcel without the county's coordinates.
+    // The county has them now; the enrich step replaces a bad pin.
+    if (row.needs_review) {
+      const refreshed = await enrichHouse(admin, row.id, p);
+      if (refreshed === "error") out.errors++;
+    }
+  }
   if (undecided.length === 0) return out;
 
   // 2 and 3. The houses that could possibly be these parcels: same normalized
