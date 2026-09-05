@@ -147,8 +147,18 @@ export async function correctHouseAddress(houseId: string, address: string): Pro
         (holder.property_events?.length ?? 0) === 0 &&
         (holder.house_contacts?.length ?? 0) === 0 &&
         (holder.zone_houses?.length ?? 0) === 0;
+
       if (!bare) {
-        throw new Error(`"${holder.address}" is already a house with history of its own. Merge those by hand first.`);
+        // The corrected address is a house we already have, with its own
+        // people or history. Then this held record is a duplicate of it --
+        // a geocoder's second copy -- and the answer is to fold this one into
+        // that one: every event, person, zone and hang moves across, nothing
+        // is lost, and the duplicate goes.
+        await mergeHouseInto(supabase, houseId, holder.id);
+        revalidatePath(PAGE);
+        return {
+          message: `Merged into "${holder.address}", which already carried this house. Its people and history moved with it.`,
+        };
       }
       if (existing.parcel_id && holder.parcel_id && existing.parcel_id !== holder.parcel_id) {
         throw new Error("This house is already linked to a different county parcel.");
@@ -203,37 +213,42 @@ export async function correctHouseAddress(houseId: string, address: string): Pro
 
 export interface AddressHit {
   id: string;
-  /** The county's address, as the county writes it. */
+  /** The address as its record writes it. */
   address: string;
+  /** One of our own houses rather than a county row. Saving onto it merges. */
+  ours: boolean;
 }
 
 /**
- * The county's addresses containing every word that was typed.
+ * The addresses containing every word that was typed.
  *
  * Word by word rather than as one phrase, so "128 Post Rd Aberdeen" finds
  * "128 N POST RD, ABERDEEN, MD 21001" despite the N it lacks, and the words
- * may come in any order. Only among county rows -- the point of the search is
- * to hand a held house the county's record of it, pin and all. When every
- * word together finds nothing, the number and the street name alone are
- * tried, so a mistyped town still gets a list to pick from.
+ * may come in any order. County rows and our own houses both appear, marked
+ * apart: picking a county row hands the held house the county's record and
+ * pin; picking one of ours merges the held record into it, because a held
+ * address that turns out to be a house we already have is a duplicate. When
+ * every word together finds nothing, the number and the street name alone
+ * are tried, so a mistyped town still gets a list to pick from.
  */
-export async function searchCountyAddresses(query: string): Promise<ActionResult<AddressHit[]>> {
-  return guard("searchCountyAddresses", async () => {
+export async function searchAddresses(query: string, excludeHouseId: string): Promise<ActionResult<AddressHit[]>> {
+  return guard("searchAddresses", async () => {
     await requireReviewer();
     const terms = searchTerms(query);
     if (terms.join("").length < 3) return [];
 
     const supabase = await createClient();
     const find = async (words: string[]) => {
-      let q = supabase
-        .from("houses")
-        .select("id, address, normalized_address")
-        .eq("source", "harford_gis")
-        .not("parcel_id", "is", null);
+      let q = supabase.from("houses").select("id, address, normalized_address, source").neq("id", excludeHouseId);
       for (const word of words) q = q.ilike("normalized_address", `%${word.replace(/[%_]/g, "")}%`);
       const { data, error } = await q.order("normalized_address").limit(20);
       if (error) throw error;
-      return (data ?? []).map((row) => ({ id: row.id, address: row.address, normalized: row.normalized_address ?? "" }));
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        address: row.address,
+        normalized: row.normalized_address ?? "",
+        ours: row.source !== "harford_gis",
+      }));
     };
 
     let hits = await find(terms);
@@ -243,6 +258,58 @@ export async function searchCountyAddresses(query: string): Promise<ActionResult
     }
     return rankHits(hits, terms)
       .slice(0, 8)
-      .map(({ id, address }) => ({ id, address }));
+      .map(({ id, address, ours }) => ({ id, address, ours }));
   });
+}
+
+/**
+ * Folds one house into another and removes the first.
+ *
+ * Events and door hangs are re-pointed, since each is one row about one
+ * house. People and zone memberships are pairs, so the ones the target
+ * already has are skipped rather than doubled. The target keeps its own
+ * property link unless it had none. The row being folded away is deleted
+ * last, after everything on it has somewhere to live.
+ */
+async function mergeHouseInto(supabase: Awaited<ReturnType<typeof createClient>>, fromId: string, intoId: string) {
+  const fail = (error: { message: string } | null) => {
+    if (error) throw error;
+  };
+
+  fail((await supabase.from("property_events").update({ house_id: intoId }).eq("house_id", fromId)).error);
+  fail((await supabase.from("door_hanger_events").update({ house_id: intoId }).eq("house_id", fromId)).error);
+
+  const { data: contacts, error: contactsError } = await supabase
+    .from("house_contacts")
+    .select("customer_id, role")
+    .eq("house_id", fromId);
+  fail(contactsError);
+  const { data: existingContacts } = await supabase.from("house_contacts").select("customer_id").eq("house_id", intoId);
+  const has = new Set((existingContacts ?? []).map((c) => c.customer_id));
+  const moving = (contacts ?? []).filter((c) => !has.has(c.customer_id));
+  if (moving.length > 0) {
+    fail(
+      (await supabase.from("house_contacts").insert(moving.map((c) => ({ house_id: intoId, customer_id: c.customer_id, role: c.role }))))
+        .error
+    );
+  }
+  fail((await supabase.from("house_contacts").delete().eq("house_id", fromId)).error);
+
+  const { data: zones } = await supabase.from("zone_houses").select("zone_id").eq("house_id", fromId);
+  const { data: existingZones } = await supabase.from("zone_houses").select("zone_id").eq("house_id", intoId);
+  const inZones = new Set((existingZones ?? []).map((z) => z.zone_id));
+  const movingZones = (zones ?? []).filter((z) => !inZones.has(z.zone_id));
+  if (movingZones.length > 0) {
+    fail((await supabase.from("zone_houses").insert(movingZones.map((z) => ({ zone_id: z.zone_id, house_id: intoId })))).error);
+  }
+  fail((await supabase.from("zone_houses").delete().eq("house_id", fromId)).error);
+
+  const { data: pair } = await supabase.from("houses").select("id, property_id").in("id", [fromId, intoId]);
+  const from = pair?.find((h) => h.id === fromId);
+  const into = pair?.find((h) => h.id === intoId);
+  if (into && !into.property_id && from?.property_id) {
+    fail((await supabase.from("houses").update({ property_id: from.property_id }).eq("id", intoId)).error);
+  }
+
+  fail((await supabase.from("houses").delete().eq("id", fromId)).error);
 }
