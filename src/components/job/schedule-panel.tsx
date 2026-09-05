@@ -5,6 +5,7 @@ import { CalendarClock, CalendarX, Loader2, RotateCcw, XCircle } from "lucide-re
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HolidayNotice, HolidayRangeNotice } from "@/components/job/holiday-notice";
 import {
   cancelEstimate,
   cancelJob,
@@ -178,6 +179,7 @@ export function SchedulePanel({
                 disabled={!estimateMove.ok || isPending}
                 onChange={(e) => setEstimateStart(e.target.value)}
               />
+              <HolidayNotice value={estimateStart} />
             </label>
             <label className="flex flex-col gap-1 text-xs font-medium">
               Ends
@@ -278,6 +280,7 @@ export function SchedulePanel({
                     disabled={isPending}
                     onChange={(e) => setStart(e.target.value)}
                   />
+                  <HolidayNotice value={start} />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium">
                   End
@@ -287,8 +290,13 @@ export function SchedulePanel({
                     disabled={isPending}
                     onChange={(e) => setEnd(e.target.value)}
                   />
+                  <HolidayNotice value={end} />
                 </label>
               </div>
+              {/* The days that ruin a week-long job are the ones in the
+                  middle: somebody picks a Monday and a Friday and never
+                  looks at the Thursday. */}
+              <HolidayRangeNotice start={start} end={end} />
 
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button

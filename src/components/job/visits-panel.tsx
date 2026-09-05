@@ -5,6 +5,7 @@ import { AlertTriangle, CalendarPlus, Loader2, Pause, Play, Plus, Ticket, Trash2
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HolidayNotice, HolidayRangeNotice } from "@/components/job/holiday-notice";
 import { VisitLabour } from "@/components/job/visit-labour";
 import type { Person, TimeEntry } from "@/lib/time-clock";
 import {
@@ -193,12 +194,15 @@ function SessionList({
             <label className="flex flex-col gap-1 text-xs font-medium">
               Starts
               <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+              <HolidayNotice value={startsOn} />
             </label>
             <label className="flex flex-col gap-1 text-xs font-medium">
               Ends
               <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} />
+              <HolidayNotice value={endsOn} />
             </label>
           </div>
+          <HolidayRangeNotice start={startsOn} end={endsOn} />
 
           <label className="mt-2 flex flex-col gap-1 text-xs font-medium">
             What this trip is for
