@@ -7,6 +7,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { normalizeAddress } from "@/lib/address-normalize";
 import { assessAddress, NORMALIZER_VERSION } from "@/lib/address-quality";
 import { looserTerms, rankHits, searchTerms } from "@/lib/address-search";
+import { lookupAddress } from "@/lib/mapbox-geocoding";
+import { firstAcceptable } from "@/lib/geocode-guard";
 
 /**
  * Settling a held address.
@@ -168,7 +170,29 @@ export async function correctHouseAddress(houseId: string, address: string): Pro
       absorbed = holder;
     }
 
-    const coords = absorbed ? { lat: absorbed.lat, lng: absorbed.lng } : existing;
+    // Where the pin comes from, in order of trust: the county's row when
+    // there is one; otherwise, if the pin we hold is the bad half, a fresh
+    // lookup of the corrected address, checked against the region so that a
+    // Peace Court in Queensland cannot come back a second time. Aberdeen
+    // Proving Ground is the case: a federal installation the county does not
+    // publish, so the county has no row to give and the geocoder has to.
+    let coords: { lat: number | null; lng: number | null } = absorbed
+      ? { lat: absorbed.lat, lng: absorbed.lng }
+      : { lat: existing.lat, lng: existing.lng };
+    let placedBy: string | null = absorbed ? "the county" : null;
+    if (!absorbed) {
+      const before = assessAddress(trimmed, coords);
+      if (before.kind === "house" && before.needsReview) {
+        const lookup = await lookupAddress(trimmed, undefined, { autocomplete: false });
+        if (lookup.ok) {
+          const { match } = firstAcceptable(trimmed, lookup.suggestions);
+          if (match) {
+            coords = { lat: match.lat, lng: match.lng };
+            placedBy = match.fullAddress;
+          }
+        }
+      }
+    }
     const verdict = assessAddress(trimmed, coords);
     const now = new Date().toISOString();
 
@@ -183,6 +207,7 @@ export async function correctHouseAddress(houseId: string, address: string): Pro
         review_reason: verdict.reasons.join(". ") || null,
         reviewed_at: now,
         reviewed_by: profile.id,
+        ...(!absorbed && placedBy && coords.lat != null && coords.lng != null ? { lat: coords.lat, lng: coords.lng } : {}),
         ...(absorbed
           ? {
               lat: absorbed.lat,
@@ -205,8 +230,10 @@ export async function correctHouseAddress(houseId: string, address: string): Pro
       message: absorbed
         ? "Corrected, and linked to the county's record of it, pin included."
         : verdict.needsReview
-          ? `Corrected. Still held: ${verdict.reasons.join(". ")}`
-          : "Corrected.",
+          ? `Corrected. Still held: ${verdict.reasons.join(". ")}${placedBy ? "" : " The county has no record of it and the map lookup found nothing to place it by."}`
+          : placedBy
+            ? `Corrected and placed at ${placedBy}. The county has no record of this address, so the pin is from a map lookup.`
+            : "Corrected.",
     };
   });
 }
