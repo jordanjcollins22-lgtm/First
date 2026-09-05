@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, MapPinOff, Pencil } from "lucide-react";
+import { Check, Landmark, MapPinOff, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { STAGE_COLOR, STAGE_LABEL } from "@/lib/house-relationship";
-import { acceptHouse, correctHouseAddress, holdHouse } from "@/lib/actions/house-review-actions";
+import { acceptHouse, correctHouseAddress, holdHouse, type ActionResult } from "@/lib/actions/house-review-actions";
 import type { HouseForReview } from "@/lib/data/houses";
 
 /**
@@ -25,16 +25,22 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
-  function run(work: () => Promise<void>) {
+  // Actions return their outcome. A thrown one would reach this page, in
+  // production, as React error #441 with the message stripped out.
+  function run(work: () => Promise<ActionResult<unknown>>) {
     setError(null);
+    setNote(null);
     startTransition(async () => {
-      try {
-        await work();
-        setEditing(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "That didn't save.");
+      const result = await work();
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      const value = result.value as { message?: string } | null;
+      if (value?.message) setNote(value.message);
+      setEditing(null);
     });
   }
 
@@ -49,6 +55,7 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
   return (
     <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {note && <p className="text-sm text-emerald-700">{note}</p>}
 
       {houses.map((house) => (
         <div key={house.id} className="flex flex-col gap-2 rounded-xl border border-border p-4">
@@ -102,9 +109,22 @@ export function HouseReviewList({ houses }: { houses: HouseForReview[] }) {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
+              {house.countySuggestion && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => run(() => correctHouseAddress(house.id, house.countySuggestion!))}
+                  title="Take the county's address and pin for this house"
+                >
+                  <Landmark className="mr-1 h-3.5 w-3.5" />
+                  Use the county&apos;s: {house.countySuggestion}
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
+                variant={house.countySuggestion ? "outline" : "default"}
                 disabled={isPending}
                 onClick={() => run(() => acceptHouse(house.id))}
               >

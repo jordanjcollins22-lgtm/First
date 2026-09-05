@@ -48,7 +48,9 @@ export async function listPendingMatchReviews(limit = 200): Promise<MatchReviewF
   const { data, error } = await supabase
     .from("house_match_reviews")
     .select(
-      "id, house_id, incoming_address, parcel_id, score, incoming_lat, incoming_lng, created_at, houses(address, source, property_events(kind, occurred_at), house_contacts(customers(name)))"
+      // house_match_reviews points at houses twice (the house asked about, and
+      // the one made on "different"), so the join has to say which.
+      "id, house_id, incoming_address, parcel_id, score, incoming_lat, incoming_lng, created_at, houses!house_id(address, source, property_events(kind, occurred_at), house_contacts(customers(name)))"
     )
     .eq("status", "pending")
     .order("score", { ascending: false })
