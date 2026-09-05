@@ -195,7 +195,7 @@ function AddressEditor({
       setSearching(false);
     }, 250);
     return () => clearTimeout(timer);
-  }, [value, picked]);
+  }, [value, picked, houseId]);
 
   function choose(hit: AddressHit) {
     setValue(hit.address);
