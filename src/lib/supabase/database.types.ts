@@ -785,7 +785,7 @@ export interface Database {
           },
         ];
       };
-      hanger_houses: {
+      houses: {
         Row: {
           id: string;
           organization_id: string;
@@ -793,45 +793,57 @@ export interface Database {
           lat: number;
           lng: number;
           property_id: string | null;
+          /** The county's own key, stabler than an address. */
+          parcel_id: string | null;
+          county: string | null;
+          /** Public record, and supplemental property data rather than a contact. */
+          owner_name: string | null;
+          lot_size_sqft: number | null;
+          /** The parcel outline, for drawing property lines under the marker. */
+          boundary: Json | null;
+          source: string | null;
+          source_updated_at: string | null;
+          /** The only join available between a parcel and a customer we had. */
+          normalized_address: string | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["hanger_houses"]["Row"]> & {
+        Insert: Partial<Database["public"]["Tables"]["houses"]["Row"]> & {
           organization_id: string;
           address: string;
           lat: number;
           lng: number;
         };
-        Update: Partial<Database["public"]["Tables"]["hanger_houses"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["houses"]["Row"]>;
         Relationships: [];
       };
-      hanger_zone_houses: {
+      zone_houses: {
         Row: {
           zone_id: string;
           house_id: string;
           created_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["hanger_zone_houses"]["Row"]> & {
+        Insert: Partial<Database["public"]["Tables"]["zone_houses"]["Row"]> & {
           zone_id: string;
           house_id: string;
         };
-        Update: Partial<Database["public"]["Tables"]["hanger_zone_houses"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["zone_houses"]["Row"]>;
         Relationships: [
           {
-            foreignKeyName: "hanger_zone_houses_zone_id_fkey";
+            foreignKeyName: "zone_houses_zone_id_fkey";
             columns: ["zone_id"];
             referencedRelation: "hanger_zones";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "hanger_zone_houses_house_id_fkey";
+            foreignKeyName: "zone_houses_house_id_fkey";
             columns: ["house_id"];
-            referencedRelation: "hanger_houses";
+            referencedRelation: "houses";
             referencedColumns: ["id"];
           },
         ];
       };
-      hanger_hangs: {
+      door_hanger_events: {
         Row: {
           id: string;
           organization_id: string;
@@ -842,20 +854,86 @@ export interface Database {
           hung_by: string | null;
           created_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["hanger_hangs"]["Row"]> & {
+        Insert: Partial<Database["public"]["Tables"]["door_hanger_events"]["Row"]> & {
           organization_id: string;
           house_id: string;
           design_number: number;
         };
-        Update: Partial<Database["public"]["Tables"]["hanger_hangs"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["door_hanger_events"]["Row"]>;
         Relationships: [
           {
-            foreignKeyName: "hanger_hangs_house_id_fkey";
+            foreignKeyName: "door_hanger_events_house_id_fkey";
             columns: ["house_id"];
-            referencedRelation: "hanger_houses";
+            referencedRelation: "houses";
             referencedColumns: ["id"];
           },
         ];
+      };
+      house_contacts: {
+        Row: {
+          house_id: string;
+          customer_id: string;
+          role: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["house_contacts"]["Row"]> & {
+          house_id: string;
+          customer_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["house_contacts"]["Row"]>;
+        Relationships: [];
+      };
+      property_events: {
+        Row: {
+          id: string;
+          organization_id: string;
+          house_id: string;
+          /** Ranked in src/lib/house-relationship.ts, which owns the order. */
+          kind: string;
+          occurred_at: string;
+          job_id: string | null;
+          customer_id: string | null;
+          amount_cents: number | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["property_events"]["Row"]> & {
+          organization_id: string;
+          house_id: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["property_events"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "property_events_house_id_fkey";
+            columns: ["house_id"];
+            referencedRelation: "houses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      house_match_reviews: {
+        Row: {
+          id: string;
+          organization_id: string;
+          house_id: string;
+          property_id: string | null;
+          customer_id: string | null;
+          /** 0 to 1: how close the two addresses were. */
+          score: number;
+          status: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["house_match_reviews"]["Row"]> & {
+          organization_id: string;
+          house_id: string;
+          score: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["house_match_reviews"]["Row"]>;
+        Relationships: [];
       };
       inventory_codes: {
         Row: {
