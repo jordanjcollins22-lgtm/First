@@ -452,6 +452,15 @@ describe("nearMatchScore", () => {
     expect(score("2201 Watervale Road, Fallston, MD 21047", "2201 FALLSTON RD, FALLSTON, MD 21047")).toBeLessThan(0.8);
   });
 
+  it("does not let a long shared tail rescue two different streets whose ZIPs differ", () => {
+    // With the ZIPs unequal nothing was stripped, and "BEL AIR MD" carried
+    // two unrelated courts over the line. The ZIPs are set aside instead.
+    expect(score("711 Leila Court, Bel Air, MD 21014", "711 SELKIRK CT, BEL AIR, MD 21015")).toBeLessThan(0.8);
+    expect(score("502 Ann Place, Bel Air, MD 21015", "502 HANNA RD, BEL AIR, MD 21014")).toBeLessThan(0.8);
+    // While the same street with only the ZIP wrong is as near as it gets.
+    expect(score("502 Ann Place, Bel Air, MD 21015", "502 ANN PL, BEL AIR, MD 21014")).toBeGreaterThanOrEqual(0.95);
+  });
+
   it("treats a unit inside our building as its own door, not a question", () => {
     // Thirteen apartments at 991 Bern Drive are thirteen doors to knock on;
     // asking thirteen times whether each is "the same house" helps nobody.

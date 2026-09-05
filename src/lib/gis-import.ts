@@ -129,19 +129,29 @@ export function nearMatchScore(existingNormalized: string | null | undefined, in
   const b = incomingNormalized.split(" ").filter(Boolean);
   if (a.length === 0 || b.length === 0) return 0;
 
-  // Keep the number, the street name and its type on each side, so that what
-  // is compared is at least "711 LEILA CT" and never just "711 LEILA".
-  let shared = 0;
-  while (
-    shared < a.length - 3 &&
-    shared < b.length - 3 &&
-    a[a.length - 1 - shared] === b[b.length - 1 - shared]
-  ) {
-    shared++;
+  let ia = a.length - 1;
+  let ib = b.length - 1;
+
+  // Two ZIPs that differ are set aside rather than compared: a customer's
+  // 21015 against the county's 21014 is a slip in the ZIP, and the streets
+  // behind it should be judged on their own. (One ZIP against none is kept in
+  // the comparison -- a missing ZIP is itself the near miss.)
+  const isZip = (word: string) => /^\d{5}$/.test(word);
+  if (isZip(a[ia]) && isZip(b[ib]) && a[ia] !== b[ib]) {
+    ia--;
+    ib--;
   }
 
-  const left = a.slice(0, a.length - shared).join(" ");
-  const right = b.slice(0, b.length - shared).join(" ");
+  // Strip the town and state the two share, keeping the number, the street
+  // name and its type on each side, so that what is compared is at least
+  // "711 LEILA CT" and never just "711 LEILA".
+  while (ia >= 3 && ib >= 3 && a[ia] === b[ib]) {
+    ia--;
+    ib--;
+  }
+
+  const left = a.slice(0, ia + 1).join(" ");
+  const right = b.slice(0, ib + 1).join(" ");
   return Math.round(characterSimilarity(left, right) * 100) / 100;
 }
 
