@@ -51,6 +51,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "invoices", label: "Invoices", href: "/proposals", parent: "proposals" },
   { key: "contacts", label: "Contacts", href: "/contacts", parent: "project-data" },
   { key: "house-review", label: "Address Review", href: "/admin/houses", parent: "project-data" },
+  { key: "gis-import", label: "County Import", href: "/admin/gis-import", parent: "project-data" },
   { key: "pipeline", label: "Pipeline", href: "/pipeline" },
   { key: "leads", label: "Lead Generation", href: "/leads" },
   { key: "conversations", label: "Conversations", href: "/conversations" },

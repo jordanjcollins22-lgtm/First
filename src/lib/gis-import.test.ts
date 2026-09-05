@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assembleAddress,
   discoverFields,
+  landUseLooksResidential,
   mappingIsUsable,
+  parcelFromFeature,
   pickField,
   resolveParcel,
   type ExistingHouse,
@@ -163,11 +166,13 @@ describe("pickField", () => {
 describe("discoverFields / mappingIsUsable", () => {
   it("maps a realistic Maryland parcel layer", () => {
     const mapping = discoverFields(["OBJECTID", "ACCTID", "SITUS_ADDRESS", "OWNNAME", "SQFT", "SHAPE"]);
-    expect(mapping).toEqual({
+    expect(mapping).toMatchObject({
       parcelId: "ACCTID",
       address: "SITUS_ADDRESS",
       ownerName: "OWNNAME",
       lotSizeSqft: "SQFT",
+      zip: null,
+      landUse: null,
     });
     expect(mappingIsUsable(mapping)).toBe(true);
   });
@@ -186,5 +191,68 @@ describe("discoverFields / mappingIsUsable", () => {
     // The reason discovery happens at run time: this should cost a re-run,
     // not a deploy.
     expect(mappingIsUsable(discoverFields(["PARCEL_ID", "PROPADDR", "OWNER_NAME"]))).toBe(true);
+  });
+});
+
+describe("parcelFromFeature", () => {
+  const mapping = discoverFields(["OBJECTID", "ADDRESSID", "FULLADDR", "CITY", "ZIPCODE", "OWNNAME1", "DESCLU", "ACRES"]);
+
+  it("reads the county's columns into one parcel", () => {
+    const mapped = parcelFromFeature(
+      {
+        attributes: {
+          OBJECTID: 7,
+          ADDRESSID: "A-100",
+          FULLADDR: "1550 SWEARINGEN DR",
+          CITY: "BEL AIR",
+          ZIPCODE: 21014,
+          OWNNAME1: "SMITH JOHN",
+          DESCLU: "Residential",
+          ACRES: 0.25,
+        },
+        lat: 39.5,
+        lng: -76.3,
+      },
+      mapping,
+      "7"
+    );
+    expect(mapped.parcel).toEqual({
+      parcelId: "A-100",
+      address: "1550 SWEARINGEN DR, BEL AIR, MD 21014",
+      lat: 39.5,
+      lng: -76.3,
+      ownerName: "SMITH JOHN",
+      lotSizeSqft: 10_890,
+    });
+  });
+
+  it("does not repeat a town or ZIP the street field already carries", () => {
+    expect(
+      assembleAddress({ FULLADDR: "1550 SWEARINGEN DR BEL AIR MD 21014", CITY: "BEL AIR", ZIPCODE: "21014" }, mapping)
+    ).toBe("1550 SWEARINGEN DR BEL AIR MD 21014");
+  });
+
+  it("turns away ground nobody lives on, and only that", () => {
+    expect(landUseLooksResidential("Commercial")).toBe(false);
+    expect(landUseLooksResidential("Residential")).toBe(true);
+    expect(landUseLooksResidential("Town House")).toBe(true);
+    // Unknown is not a reason to refuse: the address check still runs.
+    expect(landUseLooksResidential(null)).toBe(true);
+    expect(landUseLooksResidential("Something new")).toBe(true);
+
+    const mapped = parcelFromFeature(
+      { attributes: { FULLADDR: "1 MAIN ST", DESCLU: "Industrial" }, lat: null, lng: null },
+      mapping,
+      "1"
+    );
+    expect(mapped.parcel).toBeNull();
+    expect(mapped.skipReason).toMatch(/Industrial/);
+  });
+
+  it("falls back to the object id when the layer has no key of its own", () => {
+    const bare = discoverFields(["OBJECTID", "FULLADDR"]);
+    const mapped = parcelFromFeature({ attributes: { OBJECTID: 42, FULLADDR: "12 TOLLGATE CT" }, lat: null, lng: null }, bare, "42");
+    expect(mapped.parcel?.parcelId).toBe("42");
+    expect(mapped.parcel?.address).toBe("12 TOLLGATE CT, MD");
   });
 });

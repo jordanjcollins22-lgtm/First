@@ -29,6 +29,10 @@ export const env = {
   stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
+  // Harford County's ArcGIS REST endpoint: the address layer, or the service
+  // or catalog above it, in which case the app finds the layer itself. Unset
+  // means the county's public catalog, and discovery does the rest.
+  harfordGisUrl: process.env.HARFORD_GIS_URL ?? "",
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
   livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
   livekitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "",

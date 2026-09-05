@@ -11,7 +11,7 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Json = any;
+export type Json = any;
 
 export interface Database {
   public: {
@@ -924,6 +924,55 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      gis_import_jobs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          /** connection_test | zip | county */
+          kind: string;
+          /** queued | running | paused | done | failed */
+          status: string;
+          scope: Json;
+          service_url: string;
+          layer_url: string | null;
+          layer_name: string | null;
+          max_record_count: number | null;
+          /** Every field the layer reported, as reported. */
+          discovered_fields: Json | null;
+          field_mapping: Json | null;
+          layers_found: Json | null;
+          total_expected: number | null;
+          fetched: number;
+          processed: number;
+          matched: number;
+          created: number;
+          skipped: number;
+          review: number;
+          duplicates_prevented: number;
+          errors: number;
+          /** { offset }. Resuming starts here. */
+          checkpoint: Json;
+          steps: number;
+          lease_until: string | null;
+          before_totals: Json | null;
+          after_totals: Json | null;
+          /** The exact requests and answers, newest last. */
+          diagnostics: Json;
+          last_error: string | null;
+          started_by: string | null;
+          started_at: string;
+          finished_at: string | null;
+          updated_at: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]> & {
+          organization_id: string;
+          kind: string;
+          service_url: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
+        Relationships: [];
       };
       house_match_reviews: {
         Row: {
@@ -2403,7 +2452,13 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      /** The post-import integrity questions, answered in one trip. */
+      gis_integrity_report: {
+        Args: { org: string };
+        Returns: Json;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

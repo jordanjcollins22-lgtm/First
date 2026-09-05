@@ -109,10 +109,39 @@ export function resolveParcel(parcel: ParcelRecord, existing: ExistingHouse[]): 
  * and the first one the layer actually has wins.
  */
 export const FIELD_CANDIDATES = {
-  parcelId: ["ACCTID", "ACCOUNT", "ACCTNUM", "PARCELID", "PARCEL_ID", "PIN", "OBJECTID"],
-  address: ["SITUS_ADDRESS", "SITUSADDR", "ADDRESS", "PROPADDR", "FULLADDR", "SITEADDRESS", "ADDR"],
-  ownerName: ["OWNNAME", "OWNER", "OWNER_NAME", "OWNERNAME", "DEEDHOLDER"],
-  lotSizeSqft: ["SQFT", "LOTSIZE", "LOT_SIZE", "AREA", "ACRES"],
+  parcelId: [
+    "ACCTID",
+    "ACCOUNT",
+    "ACCTNUM",
+    "PARCELID",
+    "PARCEL_ID",
+    "PIN",
+    "ADDRESSID",
+    "ADDRESS_ID",
+    "ADDR_ID",
+    "GLOBALID",
+    "OBJECTID",
+  ],
+  address: [
+    "SITUS_ADDRESS",
+    "SITUSADDR",
+    "FULLADDR",
+    "FULL_ADDRESS",
+    "FULLADDRESS",
+    "SITEADDRESS",
+    "SITE_ADDRESS",
+    "PROPADDR",
+    "ADDRESS",
+    "ADDR",
+    "STREET_ADDRESS",
+    "PREMADDR",
+  ],
+  ownerName: ["OWNNAME", "OWNNAME1", "OWNER", "OWNER_NAME", "OWNERNAME", "DEEDHOLDER"],
+  lotSizeSqft: ["SQFT", "LOTSIZE", "LOT_SIZE", "LAND_AREA", "ACRES", "AREA"],
+  zip: ["ZIPCODE", "ZIP", "ZIP_CODE", "POSTAL", "POSTALCODE", "POSTAL_CODE", "SITUS_ZIP", "PREMZIP"],
+  city: ["CITY", "MUNICIPALITY", "POSTAL_CITY", "SITUS_CITY", "PLACE", "TOWN", "PREMCITY"],
+  state: ["STATE", "ST", "SITUS_STATE", "STATEABBR"],
+  landUse: ["DESCLU", "LU", "LANDUSE", "LAND_USE", "USECODE", "USE_CODE", "PROPTYPE", "ZONING"],
 } as const;
 
 export type FieldRole = keyof typeof FIELD_CANDIDATES;
@@ -134,21 +163,15 @@ export function pickField(available: string[], role: FieldRole): string | null {
   return null;
 }
 
-export interface FieldMapping {
-  parcelId: string | null;
-  address: string | null;
-  ownerName: string | null;
-  lotSizeSqft: string | null;
-}
+export type FieldMapping = Record<FieldRole, string | null>;
 
 /** The whole mapping, and whether it is usable. */
 export function discoverFields(available: string[]): FieldMapping {
-  return {
-    parcelId: pickField(available, "parcelId"),
-    address: pickField(available, "address"),
-    ownerName: pickField(available, "ownerName"),
-    lotSizeSqft: pickField(available, "lotSizeSqft"),
-  };
+  const mapping = {} as FieldMapping;
+  for (const role of Object.keys(FIELD_CANDIDATES) as FieldRole[]) {
+    mapping[role] = pickField(available, role);
+  }
+  return mapping;
 }
 
 /**
@@ -160,4 +183,113 @@ export function discoverFields(available: string[]): FieldMapping {
  */
 export function mappingIsUsable(mapping: FieldMapping): boolean {
   return Boolean(mapping.address);
+}
+
+/** Reads one attribute as text, or nothing. Numbers are text too: a ZIP can arrive as 21014. */
+function text(attributes: Record<string, unknown>, field: string | null): string | null {
+  if (!field) return null;
+  const value = attributes[field];
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function numeric(attributes: Record<string, unknown>, field: string | null): number | null {
+  if (!field) return null;
+  const value = attributes[field];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+/**
+ * Words in a land-use description that mean nobody lives there.
+ *
+ * Kept short and negative on purpose. A land-use field is an extra: when the
+ * layer has none, or says something we do not recognise, the parcel goes on to
+ * the address check like any other. Only a description that plainly says
+ * commercial, industrial, or empty ground is turned away here.
+ */
+const NOT_RESIDENTIAL = /commerc|industr|agricult|exempt|utilit|vacant|open space|right.of.way|parking|church|school|government|cemeter|railroad|common area|conservation/i;
+const RESIDENTIAL = /resid|dwelling|town ?house|condo|apartment|single|multi.?fam|duplex|mobile home|manufactured/i;
+
+/** Whether a land-use description rules a parcel out as somewhere to knock. */
+export function landUseLooksResidential(landUse: string | null): boolean {
+  if (!landUse) return true;
+  if (RESIDENTIAL.test(landUse)) return true;
+  return !NOT_RESIDENTIAL.test(landUse);
+}
+
+/**
+ * The county's address as one line, however many columns it came in.
+ *
+ * Some layers carry "1550 SWEARINGEN DR" in one field and the town and ZIP in
+ * two others; the normalizer wants all of it, because a key without a ZIP
+ * cannot tell two Bel Airs apart. State defaults to Maryland when the layer
+ * has no column for it, since this is Harford County's own data.
+ */
+export function assembleAddress(
+  attributes: Record<string, unknown>,
+  mapping: FieldMapping
+): string | null {
+  const street = text(attributes, mapping.address);
+  if (!street) return null;
+
+  const city = text(attributes, mapping.city);
+  const state = text(attributes, mapping.state) ?? "MD";
+  const zip = text(attributes, mapping.zip);
+
+  // Already a full address: the street field carries a town or a ZIP.
+  if (/\b\d{5}(-\d{4})?\b/.test(street) || (city && street.toUpperCase().includes(city.toUpperCase()))) {
+    return street;
+  }
+
+  const tail = [city, [state, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return tail ? `${street}, ${tail}` : street;
+}
+
+export interface MappedParcel {
+  parcel: ParcelRecord | null;
+  /** Why there is no parcel, when there is none. */
+  skipReason: string | null;
+  /** The county's land-use text, for the record. */
+  landUse: string | null;
+}
+
+/**
+ * One feature, read through the discovered mapping.
+ *
+ * Nothing here decides identity. It produces the parcel record the resolver
+ * judges, and says no when the feature is not a place anyone lives.
+ */
+export function parcelFromFeature(
+  feature: { attributes: Record<string, unknown>; lat: number | null; lng: number | null },
+  mapping: FieldMapping,
+  fallbackId: string
+): MappedParcel {
+  const landUse = text(feature.attributes, mapping.landUse);
+  if (!landUseLooksResidential(landUse)) {
+    return { parcel: null, skipReason: `Land use: ${landUse}`, landUse };
+  }
+
+  const address = assembleAddress(feature.attributes, mapping);
+  if (!address) return { parcel: null, skipReason: "No address on the feature", landUse };
+
+  const lot = numeric(feature.attributes, mapping.lotSizeSqft);
+  // An acreage field is small numbers; a square-footage field is large ones.
+  const lotSizeSqft =
+    lot == null ? null : /ACRE/i.test(mapping.lotSizeSqft ?? "") ? Math.round(lot * 43_560) : Math.round(lot);
+
+  return {
+    parcel: {
+      parcelId: text(feature.attributes, mapping.parcelId) ?? fallbackId,
+      address,
+      lat: feature.lat,
+      lng: feature.lng,
+      ownerName: text(feature.attributes, mapping.ownerName),
+      lotSizeSqft,
+    },
+    skipReason: null,
+    landUse,
+  };
 }
