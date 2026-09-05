@@ -2485,6 +2485,11 @@ export interface Database {
         Args: Record<string, never>;
         Returns: number;
       };
+      /** The houses inside a map viewport, and whether anything has happened to each. */
+      houses_in_bbox: {
+        Args: { org: string; min_lat: number; min_lng: number; max_lat: number; max_lng: number; max_rows?: number };
+        Returns: { id: string; address: string; lat: number; lng: number; untouched: boolean }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

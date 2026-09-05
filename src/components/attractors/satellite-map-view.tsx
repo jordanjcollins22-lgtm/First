@@ -11,6 +11,8 @@ import { geometryPoints, geometryToPolygon, waveToPolygon } from "@/lib/attracto
 import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
 import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
+import { ALL_ADDRESSES_MIN_ZOOM, housesToFeatures, type MapHouse } from "@/lib/house-geojson";
+import { STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
 
 if (env.mapboxToken) {
   mapboxgl.accessToken = env.mapboxToken;
@@ -28,6 +30,18 @@ interface SatelliteMapViewProps {
    * worked from somewhere we merely know about.
    */
   leadProperties: { id: string; customerId: string; name: string; address: string; lat: number; lng: number }[];
+  /**
+   * Every house with a story -- anyone we know there, anything that happened
+   * -- coloured by how far it has got with us. The canonical records, so a
+   * held address that was just corrected appears here the moment it saves.
+   */
+  houses: MapHouse[];
+  /**
+   * Whether to also draw every other address in view: the county's houses
+   * nobody has spoken to. Fetched by viewport, only when zoomed in enough for
+   * a dot to be a door.
+   */
+  showAllAddresses: boolean;
   /**
    * Ranked areas, strongest first, with an intensity from 0 to 1.
    *
@@ -72,6 +86,10 @@ const JOBS_SOURCE = "attractor-jobs";
 const JOBS_LAYER = "attractor-jobs-circle";
 const LEADS_SOURCE = "attractor-leads";
 const LEADS_LAYER = "attractor-leads-circle";
+const HOUSES_SOURCE = "houses-with-history";
+const HOUSES_LAYER = "houses-with-history-circle";
+const ALL_ADDRESSES_SOURCE = "all-addresses";
+const ALL_ADDRESSES_LAYER = "all-addresses-circle";
 const DENSITY_SOURCE = "attractor-density";
 const DENSITY_LAYER = "attractor-density-circle";
 const RANK_SOURCE = "rank-grid";
@@ -97,6 +115,8 @@ export function SatelliteMapView({
   waves,
   jobs,
   leadProperties,
+  houses,
+  showAllAddresses,
   densityCells,
   rankPoints,
   visibleWaveIds,
@@ -116,6 +136,8 @@ export function SatelliteMapView({
   const drawRef = useRef<MapboxDraw | null>(null);
   const loadedRef = useRef(false);
   const [mapLoaded, setMapLoaded] = useState(false);
+  /** What the "all addresses" layer wants the person to know, if anything. */
+  const [allAddressesNote, setAllAddressesNote] = useState<string | null>(null);
   const onGeometryDrawnRef = useRef(onGeometryDrawn);
   const onSelectWaveRef = useRef(onSelectWave);
   const onSelectJobRef = useRef(onSelectJob);
@@ -264,6 +286,22 @@ export function SatelliteMapView({
         },
       });
 
+      // Every other address in view, when asked for. Under everything that
+      // has a story, and quiet: these are the doors nobody has knocked on.
+      map.addSource(ALL_ADDRESSES_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: ALL_ADDRESSES_LAYER,
+        type: "circle",
+        source: ALL_ADDRESSES_SOURCE,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2, 16, 4, 19, 7],
+          "circle-color": "#94a3b8",
+          "circle-opacity": 0.75,
+          "circle-stroke-width": 0.5,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+
       map.addSource(LEADS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: LEADS_LAYER,
@@ -278,6 +316,22 @@ export function SatelliteMapView({
           "circle-stroke-width": 2,
           "circle-stroke-color": "#7c3aed",
           "circle-opacity": 0.9,
+        },
+      });
+
+      // Houses with a story, coloured by stage. Above the lead markers so a
+      // corrected address shows in its true colour rather than as a hollow dot.
+      map.addSource(HOUSES_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: HOUSES_LAYER,
+        type: "circle",
+        source: HOUSES_SOURCE,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 4, 14, 6, 18, 9],
+          "circle-color": ["get", "color"],
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": 0.95,
         },
       });
 
@@ -360,6 +414,45 @@ export function SatelliteMapView({
       });
       map.on("mouseleave", LEADS_LAYER, () => {
         map.getCanvas().style.cursor = "";
+      });
+
+      map.on("click", HOUSES_LAYER, (e) => {
+        const feature = e.features?.[0];
+        const point = feature?.geometry as GeoJSON.Point | undefined;
+        if (!feature || !point) return;
+        const { address, stage, contacts, customerId } = feature.properties as {
+          address: string;
+          stage: RelationshipStage;
+          contacts: string;
+          customerId: string | null;
+        };
+        const link = customerId
+          ? `<a href="/clients/${escapeHtml(customerId)}" style="color:#2f6d3c;text-decoration:underline">Open contact</a>`
+          : "";
+        new mapboxgl.Popup({ offset: 10 })
+          .setLngLat(point.coordinates as [number, number])
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>${escapeHtml(address)}</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(STAGE_LABEL[stage] ?? stage)}` +
+              `${contacts ? ` · ${escapeHtml(contacts)}` : ""}</div>${link}</div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", HOUSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", HOUSES_LAYER, () => (map.getCanvas().style.cursor = ""));
+
+      map.on("click", ALL_ADDRESSES_LAYER, (e) => {
+        const feature = e.features?.[0];
+        const point = feature?.geometry as GeoJSON.Point | undefined;
+        if (!feature || !point) return;
+        const { address } = feature.properties as { address: string };
+        new mapboxgl.Popup({ offset: 8 })
+          .setLngLat(point.coordinates as [number, number])
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>${escapeHtml(address)}</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(STAGE_LABEL.untouched)}</div></div>`
+          )
+          .addTo(map);
       });
 
       map.on("click", JOBS_LAYER, (e) => {
@@ -478,6 +571,81 @@ export function SatelliteMapView({
     });
   }, [leadProperties, mapLoaded]);
 
+  // Keep the houses with a story in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(HOUSES_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+    source.setData({ type: "FeatureCollection", features: housesToFeatures(houses) });
+  }, [houses, mapLoaded]);
+
+  // Every other address in view, fetched as the map moves, while asked for.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(ALL_ADDRESSES_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    if (!showAllAddresses) {
+      source.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+
+    // Houses with a story are drawn by their own layer; the same house must
+    // not also appear as a grey dot underneath its coloured one.
+    const storied = new Set(houses.map((h) => h.id));
+    let latest = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function load() {
+      if (!map) return;
+      if (map.getZoom() < ALL_ADDRESSES_MIN_ZOOM) {
+        source?.setData({ type: "FeatureCollection", features: [] });
+        setAllAddressesNote("Zoom in to see every address");
+        return;
+      }
+      const bounds = map.getBounds();
+      if (!bounds) return;
+      const ticket = ++latest;
+      const params = new URLSearchParams({
+        minLat: String(bounds.getSouth()),
+        minLng: String(bounds.getWest()),
+        maxLat: String(bounds.getNorth()),
+        maxLng: String(bounds.getEast()),
+      });
+      try {
+        const res = await fetch(`/api/houses/geojson?${params}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const body = (await res.json()) as {
+          features: { type: "Feature"; geometry: GeoJSON.Point; properties: { id: string; address: string; untouched: boolean } }[];
+          capped?: boolean;
+        };
+        if (ticket !== latest) return;
+        const features = body.features.filter((f) => !storied.has(f.properties.id));
+        source?.setData({ type: "FeatureCollection", features });
+        setAllAddressesNote(
+          body.capped ? "Showing the first 8,000 addresses in view; zoom in for all of them" : `${features.length.toLocaleString()} addresses in view`
+        );
+      } catch {
+        if (ticket === latest) setAllAddressesNote("Could not load addresses for this view");
+      }
+    }
+
+    function scheduled() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(load, 300);
+    }
+
+    void load();
+    map.on("moveend", scheduled);
+    return () => {
+      map.off("moveend", scheduled);
+      if (timer) clearTimeout(timer);
+      latest++;
+    };
+  }, [showAllAddresses, houses, mapLoaded]);
+
   // Keep the job markers in sync.
   useEffect(() => {
     const map = mapRef.current;
@@ -574,5 +742,14 @@ export function SatelliteMapView({
     };
   }, [drawMode]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {showAllAddresses && allAddressesNote && (
+        <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-black/60 px-2 py-1 text-xs text-white">
+          {allAddressesNote}
+        </div>
+      )}
+    </div>
+  );
 }

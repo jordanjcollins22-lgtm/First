@@ -52,6 +52,11 @@ export function FilterBar({
   showLeads,
   leadCount,
   onToggleShowLeads,
+  showHouses,
+  houseCount,
+  onToggleShowHouses,
+  showAllAddresses,
+  onToggleShowAllAddresses,
   showProjects,
   onToggleShowProjects,
   jobStatusFilter,
@@ -74,6 +79,14 @@ export function FilterBar({
   showLeads: boolean;
   leadCount: number;
   onToggleShowLeads: () => void;
+  /** Houses with a story, coloured by stage. On by default: these are the map. */
+  showHouses: boolean;
+  houseCount: number;
+  onToggleShowHouses: () => void;
+  /** Every other address in view -- the county's houses nobody has spoken to.
+   * Off by default and fetched by viewport; the whole county is too many dots. */
+  showAllAddresses: boolean;
+  onToggleShowAllAddresses: () => void;
   showProjects: boolean;
   onToggleShowProjects: () => void;
   jobStatusFilter: Set<JobStatus>;
@@ -142,6 +155,14 @@ export function FilterBar({
         <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <input type="checkbox" checked={showLeads} onChange={onToggleShowLeads} className="h-3.5 w-3.5" />
           Leads with an address ({leadCount.toLocaleString()})
+        </Label>
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <input type="checkbox" checked={showHouses} onChange={onToggleShowHouses} className="h-3.5 w-3.5" />
+          Houses by stage ({houseCount.toLocaleString()})
+        </Label>
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <input type="checkbox" checked={showAllAddresses} onChange={onToggleShowAllAddresses} className="h-3.5 w-3.5" />
+          All addresses, no contact yet
         </Label>
         {showProjects && (
           <Select

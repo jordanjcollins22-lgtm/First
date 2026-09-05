@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { displayStage, type HouseEvent, type RelationshipStage } from "@/lib/house-relationship";
 import { streetPrefix } from "@/lib/address-quality";
+import type { MapHouse } from "@/lib/house-geojson";
 
 /**
  * Houses, and the ones a person still has to settle.
@@ -178,4 +179,66 @@ export async function houseCounts(): Promise<HouseCounts> {
     count((q) => q.not("reviewed_at", "is", null)),
   ]);
   return { total, mappable, held, settled };
+}
+
+/**
+ * The houses with a story: anyone we know there, or anything that happened.
+ *
+ * These ride along with the Project Data page and are always drawn, coloured
+ * by stage. They are a few hundred out of a hundred and seventeen thousand;
+ * the rest are fetched by viewport when somebody asks for them.
+ */
+export async function listHousesWithHistory(): Promise<MapHouse[]> {
+  const supabase = await createClient();
+
+  const [{ data: contactRows, error: contactsError }, { data: eventRows, error: eventsError }] = await Promise.all([
+    supabase.from("house_contacts").select("house_id"),
+    supabase.from("property_events").select("house_id"),
+  ]);
+  if (contactsError) throw contactsError;
+  if (eventsError) throw eventsError;
+
+  const ids = [...new Set([...(contactRows ?? []), ...(eventRows ?? [])].map((r) => r.house_id))];
+  if (ids.length === 0) return [];
+
+  const houses: MapHouse[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase
+      .from("houses")
+      .select(
+        "id, address, lat, lng, kind, needs_review, parcel_id, property_events(kind, occurred_at), house_contacts(customer_id, customers(name))"
+      )
+      .in("id", ids.slice(i, i + 200))
+      .eq("kind", "house")
+      .eq("needs_review", false);
+    if (error) throw error;
+
+    for (const row of (data ?? []) as unknown as {
+      id: string;
+      address: string;
+      lat: number;
+      lng: number;
+      parcel_id: string | null;
+      property_events: { kind: string; occurred_at: string }[] | null;
+      house_contacts: { customer_id: string; customers: { name: string } | null }[] | null;
+    }[]) {
+      const events: HouseEvent[] = (row.property_events ?? []).map((e) => ({
+        kind: e.kind as HouseEvent["kind"],
+        at: e.occurred_at,
+      }));
+      houses.push({
+        id: row.id,
+        address: row.address,
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+        stage: displayStage(events),
+        contacts: (row.house_contacts ?? [])
+          .map((c) => c.customers?.name)
+          .filter((name): name is string => Boolean(name)),
+        customerId: row.house_contacts?.[0]?.customer_id ?? null,
+        countyPin: row.parcel_id != null,
+      });
+    }
+  }
+  return houses;
 }

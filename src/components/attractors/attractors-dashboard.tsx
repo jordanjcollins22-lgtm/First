@@ -47,6 +47,7 @@ import type {
 } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
+import type { MapHouse } from "@/lib/house-geojson";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "waves" | "clients";
@@ -61,6 +62,7 @@ export function AttractorsDashboard({
   areas,
   properties,
   prospectAddresses,
+  houses,
   densityPoints,
   keywords,
   rankScans,
@@ -77,6 +79,8 @@ export function AttractorsDashboard({
   properties: PropertyWithCustomer[];
   /** Imported parcels, coordinates only — the door count for a drawn area. */
   prospectAddresses: { lat: number | null; lng: number | null; zip: string | null; doNotContact: boolean }[];
+  /** Every house with a story, coloured by stage on the map. */
+  houses: MapHouse[];
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -138,6 +142,12 @@ export function AttractorsDashboard({
   // Off by default: a book of a few thousand imported addresses would bury the
   // handful of real jobs under dots the first time somebody opened the page.
   const [showLeads, setShowLeads] = useState(false);
+  // On by default: these are the houses that are ours to act on, and a
+  // corrected address should appear the moment it is saved.
+  const [showHouses, setShowHouses] = useState(true);
+  // Off by default and fetched by viewport: the county is a hundred and
+  // seventeen thousand dots, and the point of them is only visible up close.
+  const [showAllAddresses, setShowAllAddresses] = useState(false);
   // The grid for whichever phrase is selected, ready for the map. Nothing
   // selected means nothing drawn — every phrase at once would be a mess of
   // overlapping dots saying nothing.
@@ -372,6 +382,11 @@ export function AttractorsDashboard({
         showLeads={showLeads}
         leadCount={leadProperties.length}
         onToggleShowLeads={() => setShowLeads((v) => !v)}
+        showHouses={showHouses}
+        houseCount={houses.length}
+        onToggleShowHouses={() => setShowHouses((v) => !v)}
+        showAllAddresses={showAllAddresses}
+        onToggleShowAllAddresses={() => setShowAllAddresses((v) => !v)}
         types={types}
         typeFilter={typeFilter}
         onToggleType={(id) => toggleInSet(setTypeFilter, id)}
@@ -426,6 +441,8 @@ export function AttractorsDashboard({
                 waves={waves}
                 jobs={filteredJobs}
                 leadProperties={showLeads ? leadProperties : []}
+                houses={showHouses ? houses : []}
+                showAllAddresses={showAllAddresses}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
