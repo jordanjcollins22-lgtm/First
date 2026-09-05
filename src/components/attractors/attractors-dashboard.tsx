@@ -36,6 +36,7 @@ import type { Keyword, Scan } from "@/lib/data/rank-grid";
 import type {
   AttractorType,
   AttractorVariant,
+  AttractorGeometryType,
   AttractorWave,
   AttractorWaveStatus,
   BusinessLocation,
@@ -47,6 +48,8 @@ import type {
 import type { JobWithLocation } from "@/lib/data/jobs";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { MapHouse } from "@/lib/house-geojson";
+import type { EddmRouteFeature } from "@/lib/eddm";
+import { loadEddmRoutes } from "@/lib/actions/eddm-actions";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "waves" | "clients";
@@ -129,6 +132,48 @@ export function AttractorsDashboard({
   // Off by default and fetched by viewport: the county is a hundred and
   // seventeen thousand dots, and the point of them is only visible up close.
   const [showAllAddresses, setShowAllAddresses] = useState(false);
+  // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
+  // the page; the toggle only hides them.
+  const [showEddm, setShowEddm] = useState(false);
+  const [eddmZip, setEddmZip] = useState("21014");
+  const [eddmRoutes, setEddmRoutes] = useState<EddmRouteFeature[]>([]);
+  const [eddmBusy, setEddmBusy] = useState(false);
+  const [eddmStatus, setEddmStatus] = useState<string | null>(null);
+  // A route handed in as a wave shape opens the form as a polygon; the key
+  // remounts the form so the preset takes.
+  const [createPreset, setCreatePreset] = useState<AttractorGeometryType | undefined>(undefined);
+  const [createKey, setCreateKey] = useState(0);
+
+  async function loadRoutes(refresh: boolean) {
+    setEddmBusy(true);
+    setEddmStatus(null);
+    const result = await loadEddmRoutes(eddmZip, refresh);
+    setEddmBusy(false);
+    if (!result.ok) {
+      setEddmStatus(result.error);
+      return;
+    }
+    setEddmRoutes(result.routes);
+    setShowEddm(true);
+    const total = result.routes.reduce((sum, r) => sum + (r.properties.total ?? 0), 0);
+    setEddmStatus(
+      result.note ??
+        `${result.routes.length} routes in ${result.zip}, ${total.toLocaleString()} USPS deliveries` +
+          (result.source === "stored" && result.fetchedAt ? ` (saved ${new Date(result.fetchedAt).toLocaleDateString()})` : " (from USPS just now)")
+    );
+  }
+
+  function useRouteAsWave(points: LatLng[]) {
+    setCreating(true);
+    setSelectedWaveId(null);
+    setSelectedJobId(null);
+    setSelectedClientId(null);
+    setDrawnPoints(points);
+    setDrawTarget("wave");
+    setDrawMode(null);
+    setCreatePreset("polygon");
+    setCreateKey((k) => k + 1);
+  }
   // The grid for whichever phrase is selected, ready for the map. Nothing
   // selected means nothing drawn — every phrase at once would be a mess of
   // overlapping dots saying nothing.
@@ -250,6 +295,8 @@ export function AttractorsDashboard({
   }
 
   function startCreating() {
+    setCreatePreset(undefined);
+    setCreateKey((k) => k + 1);
     setCreating(true);
     setSelectedWaveId(null);
     setSelectedJobId(null);
@@ -368,6 +415,13 @@ export function AttractorsDashboard({
         onToggleShowHouses={() => setShowHouses((v) => !v)}
         showAllAddresses={showAllAddresses}
         onToggleShowAllAddresses={() => setShowAllAddresses((v) => !v)}
+        showEddm={showEddm}
+        onToggleShowEddm={() => setShowEddm((v) => !v)}
+        eddmZip={eddmZip}
+        onEddmZipChange={setEddmZip}
+        onLoadEddm={(refresh) => void loadRoutes(refresh)}
+        eddmBusy={eddmBusy}
+        eddmStatus={eddmStatus}
         types={types}
         typeFilter={typeFilter}
         onToggleType={(id) => toggleInSet(setTypeFilter, id)}
@@ -424,6 +478,8 @@ export function AttractorsDashboard({
                 leadProperties={showLeads ? leadProperties : []}
                 houses={showHouses ? houses : []}
                 showAllAddresses={showAllAddresses}
+                eddmRoutes={showEddm ? eddmRoutes : []}
+                onUseRouteAsWave={useRouteAsWave}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
@@ -480,8 +536,10 @@ export function AttractorsDashboard({
             <CardContent className="pt-6">
               {creating && (
                 <CreateWavePanel
+                  key={createKey}
                   types={types}
                   variants={variants}
+                  initialGeometryType={createPreset}
                   drawnPoints={drawTarget === "wave" ? drawnPoints : null}
                   onRequestDraw={requestDraw}
                   onCancel={() => {

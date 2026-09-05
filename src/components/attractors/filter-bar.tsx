@@ -57,6 +57,13 @@ export function FilterBar({
   onToggleShowHouses,
   showAllAddresses,
   onToggleShowAllAddresses,
+  showEddm,
+  onToggleShowEddm,
+  eddmZip,
+  onEddmZipChange,
+  onLoadEddm,
+  eddmBusy,
+  eddmStatus,
   showProjects,
   onToggleShowProjects,
   jobStatusFilter,
@@ -87,6 +94,14 @@ export function FilterBar({
    * Off by default and fetched by viewport; the whole county is too many dots. */
   showAllAddresses: boolean;
   onToggleShowAllAddresses: () => void;
+  /** USPS carrier routes for one ZIP, drawn as outlines with USPS's counts. */
+  showEddm: boolean;
+  onToggleShowEddm: () => void;
+  eddmZip: string;
+  onEddmZipChange: (zip: string) => void;
+  onLoadEddm: (refresh: boolean) => void;
+  eddmBusy: boolean;
+  eddmStatus: string | null;
   showProjects: boolean;
   onToggleShowProjects: () => void;
   jobStatusFilter: Set<JobStatus>;
@@ -187,6 +202,42 @@ export function FilterBar({
           <input type="checkbox" checked={showLocations} onChange={onToggleShowLocations} className="h-3.5 w-3.5" />
           Locations
         </Label>
+      </div>
+
+      {/* USPS carrier routes: the unit EDDM is sold by and a natural walk. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <input type="checkbox" checked={showEddm} onChange={onToggleShowEddm} className="h-3.5 w-3.5" />
+          USPS EDDM routes
+        </Label>
+        <input
+          value={eddmZip}
+          onChange={(e) => onEddmZipChange(e.target.value.replace(/\D/g, "").slice(0, 5))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onLoadEddm(false);
+          }}
+          inputMode="numeric"
+          placeholder="ZIP"
+          className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs"
+        />
+        <button
+          type="button"
+          disabled={eddmBusy || eddmZip.length !== 5}
+          onClick={() => onLoadEddm(false)}
+          className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {eddmBusy ? "Loading…" : "Load routes"}
+        </button>
+        <button
+          type="button"
+          disabled={eddmBusy || eddmZip.length !== 5}
+          onClick={() => onLoadEddm(true)}
+          className="h-8 rounded-md border border-border px-3 text-xs font-medium disabled:opacity-50"
+          title="Ask USPS again, replacing what is saved for this ZIP"
+        >
+          Refresh from USPS
+        </button>
+        {eddmStatus && <span className="text-xs text-muted-foreground">{eddmStatus}</span>}
       </div>
     </div>
   );

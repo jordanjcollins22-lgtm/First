@@ -56,6 +56,13 @@ describe("describeEndpoint", () => {
     expect(described.folders).toEqual(["Planning", "PublicSafety"]);
   });
 
+  it("recognises a geoprocessing server by its tasks", () => {
+    // USPS's EDDM service: nothing to query, tasks to run.
+    const described = describeEndpoint({ serviceDescription: "EDDM", tasks: ["routes", "zip"] });
+    expect(described.kind).toBe("geoprocessing");
+    expect(described.tasks).toEqual(["routes", "zip"]);
+  });
+
   it("surfaces the error a server hides inside a 200", () => {
     // ArcGIS answers a missing layer with HTTP 200 and an error object.
     // Reading that as "a layer with no fields" would be a silent failure.

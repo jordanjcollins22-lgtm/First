@@ -33,6 +33,10 @@ export const env = {
   // or catalog above it, in which case the app finds the layer itself. Unset
   // means the county's public catalog, and discovery does the rest.
   harfordGisUrl: process.env.HARFORD_GIS_URL ?? "",
+  // The request USPS's own EDDM map makes for the carrier routes in a ZIP,
+  // with {zip} where the ZIP goes. Unset means the request as observed; set
+  // it when USPS moves the service.
+  uspsEddmRoutesUrl: process.env.USPS_EDDM_ROUTES_URL ?? "",
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
   livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
   livekitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "",

@@ -13,6 +13,8 @@ import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/ty
 import type { JobWithLocation } from "@/lib/data/jobs";
 import { housesToFeatures, pointsToFeatures, stageColorExpression, type MapHouse, type MapPoint } from "@/lib/house-geojson";
 import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
+import type { EddmRouteFeature } from "@/lib/eddm";
+import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
 if (env.mapboxToken) {
   mapboxgl.accessToken = env.mapboxToken;
@@ -42,6 +44,10 @@ interface SatelliteMapViewProps {
    * and kept for the life of the page.
    */
   showAllAddresses: boolean;
+  /** USPS carrier routes for a ZIP, drawn as outlines with USPS's counts. */
+  eddmRoutes: EddmRouteFeature[];
+  /** A route's outline handed to the wave form as a drawn shape. */
+  onUseRouteAsWave: (points: LatLng[]) => void;
   /**
    * Ranked areas, strongest first, with an intensity from 0 to 1.
    *
@@ -91,6 +97,10 @@ const HOUSES_LAYER = "houses-with-history-circle";
 const ALL_ADDRESSES_SOURCE = "all-addresses";
 const ALL_ADDRESSES_LAYER = "all-addresses-circle";
 const ALL_ADDRESSES_CLUSTER_LAYER = "all-addresses-cluster";
+const EDDM_SOURCE = "eddm-routes";
+const EDDM_FILL_LAYER = "eddm-routes-fill";
+const EDDM_LINE_LAYER = "eddm-routes-line";
+const EDDM_LABEL_LAYER = "eddm-routes-label";
 const ALL_ADDRESSES_COUNT_LAYER = "all-addresses-cluster-count";
 /** Below this, the county is clusters; from here, every door is its own dot. */
 const CLUSTER_MAX_ZOOM = 12;
@@ -121,6 +131,8 @@ export function SatelliteMapView({
   leadProperties,
   houses,
   showAllAddresses,
+  eddmRoutes,
+  onUseRouteAsWave,
   densityCells,
   rankPoints,
   visibleWaveIds,
@@ -144,7 +156,11 @@ export function SatelliteMapView({
   const [allAddressesNote, setAllAddressesNote] = useState<string | null>(null);
   const onGeometryDrawnRef = useRef(onGeometryDrawn);
   const onSelectWaveRef = useRef(onSelectWave);
+  const onUseRouteAsWaveRef = useRef(onUseRouteAsWave);
   const onSelectJobRef = useRef(onSelectJob);
+  useEffect(() => {
+    onUseRouteAsWaveRef.current = onUseRouteAsWave;
+  }, [onUseRouteAsWave]);
 
   useEffect(() => {
     onGeometryDrawnRef.current = onGeometryDrawn;
@@ -288,6 +304,34 @@ export function SatelliteMapView({
           "text-halo-color": "rgba(0,0,0,0.55)",
           "text-halo-width": 1.2,
         },
+      });
+
+      // USPS carrier routes: outlines with the route id, under the houses so
+      // the dots read on top of the shapes.
+      map.addSource(EDDM_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: EDDM_FILL_LAYER,
+        type: "fill",
+        source: EDDM_SOURCE,
+        paint: { "fill-color": "#f59e0b", "fill-opacity": 0.12 },
+      });
+      map.addLayer({
+        id: EDDM_LINE_LAYER,
+        type: "line",
+        source: EDDM_SOURCE,
+        paint: { "line-color": "#f59e0b", "line-width": 2, "line-opacity": 0.9 },
+      });
+      map.addLayer({
+        id: EDDM_LABEL_LAYER,
+        type: "symbol",
+        source: EDDM_SOURCE,
+        minzoom: 11,
+        layout: {
+          "text-field": ["concat", ["get", "routeId"], "\n", ["to-string", ["coalesce", ["get", "total"], ""]]],
+          "text-size": 11,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+        },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#7c2d12", "text-halo-width": 1.2 },
       });
 
       // Every address in the county, when asked for. Clustered from a
@@ -526,6 +570,49 @@ export function SatelliteMapView({
       map.on("mouseenter", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = ""));
 
+      map.on("click", EDDM_FILL_LAYER, async (e) => {
+        // A dot on top of a route is about the dot.
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER] }).length > 0) return;
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const props = feature.properties as { zip: string; routeId: string; residential: number | null; business: number | null; total: number | null };
+        const polygon = feature.geometry as GeoJSON.Polygon;
+        const outer = polygon.coordinates[0] ?? [];
+        const points: LatLng[] = outer.map(([lng, lat]) => ({ lat, lng }));
+        const usps = [
+          props.residential != null ? `${Number(props.residential).toLocaleString()} residential` : null,
+          props.business != null ? `${Number(props.business).toLocaleString()} business` : null,
+          props.total != null ? `${Number(props.total).toLocaleString()} total deliveries` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>USPS route ${escapeHtml(props.zip)} ${escapeHtml(props.routeId)}</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(usps || "No USPS counts")}</div>` +
+              `<div id="eddm-ours" style="color:#666;font-weight:400">Counting our houses…</div>` +
+              `<button type="button" style="margin-top:6px;padding:4px 8px;border-radius:6px;background:#2f6d3c;color:#fff;font:500 12px system-ui">Use as a wave area</button></div>`
+          )
+          .addTo(map);
+        popup.getElement()?.querySelector("button")?.addEventListener("click", () => {
+          onUseRouteAsWaveRef.current(points);
+          popup.remove();
+        });
+        // Our own count inside the same outline, beside USPS's.
+        const result = await houseCoverage("polygon", { points });
+        const ours = popup.getElement()?.querySelector("#eddm-ours");
+        if (!ours) return;
+        if (result.ok && result.value) {
+          const clients = result.value.byStage.client + result.value.byStage.job_completed;
+          ours.textContent = `Ours: ${result.value.total.toLocaleString()} houses, ${clients} clients, ${result.value.toHang.toLocaleString()} to hang`;
+        } else {
+          ours.textContent = "Our count is unavailable";
+        }
+      });
+      map.on("mouseenter", EDDM_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", EDDM_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
+
       map.on("click", JOBS_LAYER, (e) => {
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectJobRef.current(id);
@@ -650,6 +737,15 @@ export function SatelliteMapView({
     if (!source) return;
     source.setData({ type: "FeatureCollection", features: housesToFeatures(houses) });
   }, [houses, mapLoaded]);
+
+  // Keep the USPS routes in sync.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(EDDM_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+    source.setData({ type: "FeatureCollection", features: eddmRoutes });
+  }, [eddmRoutes, mapLoaded]);
 
   // Every address in the county, fetched once and kept, while asked for.
   const allPointsRef = useRef<MapPoint[] | null>(null);

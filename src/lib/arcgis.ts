@@ -10,7 +10,7 @@
  */
 
 /** The three kinds of thing `?f=json` can describe. */
-export type EndpointKind = "catalog" | "service" | "layer" | "unknown";
+export type EndpointKind = "catalog" | "service" | "layer" | "geoprocessing" | "unknown";
 
 export interface ArcgisField {
   name: string;
@@ -33,6 +33,8 @@ export interface EndpointDescription {
   layers: ArcgisLayerSummary[];
   fields: ArcgisField[];
   layerName: string | null;
+  /** A geoprocessing server's tasks, which are run rather than queried. */
+  tasks: string[];
   /** How many features one query may return. The page size cannot exceed it. */
   maxRecordCount: number | null;
   /** Whether the layer will honour resultOffset. Without it there is no paging. */
@@ -70,6 +72,7 @@ export function describeEndpoint(body: unknown): EndpointDescription {
     layers: [],
     fields: [],
     layerName: null,
+    tasks: [],
     maxRecordCount: null,
     supportsPagination: false,
     geometryType: null,
@@ -100,6 +103,13 @@ export function describeEndpoint(body: unknown): EndpointDescription {
       supportsPagination: advanced.supportsPagination === true,
       geometryType: str(body.geometryType),
     };
+  }
+
+  // USPS's EDDM service is one of these: no layers to query, only tasks to
+  // run, each of which takes parameters and answers with features.
+  if (Array.isArray(body.tasks)) {
+    const tasks = body.tasks.filter((t): t is string => typeof t === "string");
+    return { ...empty, kind: "geoprocessing", tasks, layerName: str(body.serviceDescription) };
   }
 
   if (Array.isArray(body.layers)) {

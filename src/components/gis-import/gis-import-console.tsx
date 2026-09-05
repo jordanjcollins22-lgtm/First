@@ -264,6 +264,7 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
 function describeKind(job: GisImportJob): string {
   if (job.kind === "connection_test") return "Connection test";
   const scope = (job.scope ?? {}) as { zip?: string };
+  if (job.kind === "eddm") return `USPS EDDM routes, ZIP ${scope.zip ?? ""}`;
   return job.kind === "zip" ? `ZIP ${scope.zip ?? ""}` : "Whole county";
 }
 

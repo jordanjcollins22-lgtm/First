@@ -108,6 +108,8 @@ export async function testGisConnection(serviceUrl: string): Promise<ActionResul
       }`;
     } else if (discovery.description.error) {
       lastError = `The server answered 200 with an error: ${discovery.description.error}`;
+    } else if (discovery.description.kind === "geoprocessing") {
+      lastError = `This is a geoprocessing service with tasks: ${discovery.description.tasks.join(", ") || "none listed"}. It is run, not imported; USPS EDDM routes are fetched from it by the Project Data map.`;
     } else if (discovery.description.kind === "catalog") {
       lastError = "This is the catalog. Pick one of the services listed below and test it.";
     } else if (discovery.description.kind === "service" && !discovery.layerUrl) {

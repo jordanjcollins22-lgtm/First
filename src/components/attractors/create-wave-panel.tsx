@@ -32,6 +32,7 @@ export function CreateWavePanel({
   types,
   variants,
   drawnPoints,
+  initialGeometryType,
   onRequestDraw,
   onCancel,
   onCreated,
@@ -39,6 +40,8 @@ export function CreateWavePanel({
   types: AttractorType[];
   variants: AttractorVariant[];
   drawnPoints: LatLng[] | null;
+  /** A USPS route handed in as a shape opens the form already set to polygon. */
+  initialGeometryType?: AttractorGeometryType;
   onRequestDraw: (geometryType: "polygon" | "route") => void;
   onCancel: () => void;
   onCreated: () => void;
@@ -46,7 +49,7 @@ export function CreateWavePanel({
   const [typeId, setTypeId] = useState(types[0]?.id ?? "");
   const [variantId, setVariantId] = useState<string>("");
   const [name, setName] = useState("");
-  const [geometryType, setGeometryType] = useState<AttractorGeometryType>("point_radius");
+  const [geometryType, setGeometryType] = useState<AttractorGeometryType>(initialGeometryType ?? "point_radius");
   const [address, setAddress] = useState<GeocodeSuggestion | null>(null);
   const [radiusMiles, setRadiusMiles] = useState("0.25");
   const [bufferMiles, setBufferMiles] = useState("0.25");

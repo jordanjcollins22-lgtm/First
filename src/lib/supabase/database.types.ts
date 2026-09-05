@@ -976,6 +976,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
         Relationships: [];
       };
+      eddm_routes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          zip: string;
+          /** USPS's route id within the ZIP, e.g. C012. */
+          route_id: string;
+          residential_count: number | null;
+          business_count: number | null;
+          total_count: number | null;
+          /** Everything USPS sent about the route. */
+          attributes: Json;
+          /** Rings of [lng, lat] pairs. */
+          rings: Json;
+          source_url: string | null;
+          fetched_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["eddm_routes"]["Row"]> & {
+          organization_id: string;
+          zip: string;
+          route_id: string;
+          rings: Json;
+        };
+        Update: Partial<Database["public"]["Tables"]["eddm_routes"]["Row"]>;
+        Relationships: [];
+      };
       gis_import_settings: {
         Row: {
           organization_id: string;
