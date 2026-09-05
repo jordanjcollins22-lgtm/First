@@ -46,6 +46,12 @@ const COUNTY = "Harford";
 const SOURCE = "harford_gis";
 /** How many parcels one step asks for. Sized to finish inside one function. */
 const PAGE_SIZE = 400;
+/** The smallest page a retry will shrink to. */
+const MIN_PAGE_SIZE = 25;
+/** How many times one offset may be cut off before the job stops and says so. */
+const MAX_PAGE_ATTEMPTS = 6;
+/** Deadline for one page from the county. The function has sixty seconds in all. */
+const PAGE_FETCH_TIMEOUT_MS = 20_000;
 /** How long a step may hold a job before another runner may take it. */
 const LEASE_MS = 120_000;
 
@@ -250,7 +256,7 @@ export interface StepOutcome {
 }
 
 /** How long one invocation keeps taking pages before leaving the rest to the next tick. */
-const STEP_BUDGET_MS = 25_000;
+const STEP_BUDGET_MS = 20_000;
 
 /**
  * As many pages as fit in one invocation.
@@ -297,10 +303,33 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
     return { status: "failed", more: false, fetched: 0, message: "No usable address field." };
   }
 
-  const checkpoint = (job.checkpoint ?? {}) as { offset?: number };
+  const checkpoint = (job.checkpoint ?? {}) as { offset?: number; attempts?: number };
   const offset = Math.max(0, Number(checkpoint.offset ?? 0));
-  const pageSize = Math.min(PAGE_SIZE, job.max_record_count ?? PAGE_SIZE);
+  const attempts = Math.max(0, Number(checkpoint.attempts ?? 0));
   const where = whereFor(job, mapping);
+
+  // A page that was cut off -- the function killed at its time limit, which
+  // leaves no error behind -- shows up as the same offset being attempted
+  // again. Each retry asks for half as many rows, so a heavy stretch of the
+  // county gets through in smaller bites, and after enough of them the job
+  // stops with a reason instead of retrying every half minute for ever.
+  if (attempts >= MAX_PAGE_ATTEMPTS) {
+    await releaseLease(admin, job.id, {
+      status: "failed",
+      last_error: `The page at offset ${offset} was cut off ${attempts} times in a row, even at ${
+        PAGE_SIZE >> (attempts - 1)
+      } rows. Resume to try again.`,
+    });
+    return { status: "failed", more: false, fetched: 0, message: "Page kept timing out." };
+  }
+  const pageSize = Math.max(MIN_PAGE_SIZE, Math.min(PAGE_SIZE >> attempts, job.max_record_count ?? PAGE_SIZE));
+
+  // Written before any work, so a kill is counted even though it cannot
+  // report itself. Cleared to zero when the page is written successfully.
+  await admin
+    .from("gis_import_jobs")
+    .update({ checkpoint: { offset, attempts: attempts + 1 } as unknown as Json, updated_at: new Date().toISOString() })
+    .eq("id", job.id);
 
   // The count is asked once, on the first page, so the screen can show
   // progress against something.
@@ -312,7 +341,9 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
   }
 
   const pageUrl = queryUrl(job.layer_url, { where, offset, pageSize });
-  const probe = await probeEndpoint(pageUrl, runtime, 40_000);
+  // Short enough that a slow county answer fails and is recorded, rather than
+  // the function being killed before it can write anything down.
+  const probe = await probeEndpoint(pageUrl, runtime, PAGE_FETCH_TIMEOUT_MS);
   const page = parseFeaturePage(probe.body);
 
   if (!probe.ok || page.error) {
@@ -348,7 +379,7 @@ export async function runStep(admin: Admin, job: JobRow, runtime: RequestOrigin[
     duplicates_prevented: job.duplicates_prevented + result.duplicatesPrevented,
     errors: job.errors + result.errors,
     total_expected: totalExpected,
-    checkpoint: { offset: nextOffset } as unknown as Json,
+    checkpoint: { offset: nextOffset, attempts: 0 } as unknown as Json,
     steps: job.steps + 1,
     last_error: result.lastError,
     finished_at: finished ? new Date().toISOString() : null,
@@ -488,9 +519,11 @@ async function applyPage(
 
   if (reviews.length > 0) {
     // One open question per house per incoming address; a rerun adds nothing.
-    // Reviews are rare enough to write one at a time, and the index that
-    // guarantees this is partial, which PostgREST cannot name in a batch.
-    const inserted = await insertReviewsIndividually(admin, reviews);
+    // The index that guarantees this is partial, which PostgREST cannot name
+    // in a batch, so the open ones are read first and only the rest written.
+    // Two round trips for the page, not two per review: a page with a hundred
+    // and fifty of them is what timed the function out.
+    const inserted = await insertMissingReviews(admin, reviews);
     out.review = out.review - reviews.length + inserted;
   }
 
@@ -551,11 +584,13 @@ async function candidateHouses(admin: Admin, org: string, parcels: ParcelRecord[
     const chunk = numbers.slice(i, i + 40);
     const { data, error } = await admin
       .from("houses")
-      .select("id, normalized_address")
+      .select("id, normalized_address, source")
       .eq("organization_id", org)
       .or(chunk.map((n) => `normalized_address.like.${n} %`).join(","));
     if (error) throw error;
-    for (const row of data ?? []) found.set(row.id, { id: row.id, normalizedAddress: row.normalized_address });
+    for (const row of data ?? []) {
+      found.set(row.id, { id: row.id, normalizedAddress: row.normalized_address, fromCounty: row.source === SOURCE });
+    }
   }
 
   return [...found.values()];
@@ -620,23 +655,37 @@ async function enrichHouse(
   return "ok";
 }
 
-/** The slow path for reviews when the batch cannot use the partial index. */
-async function insertReviewsIndividually(
+/** Writes the reviews not already open, in a batch. Returns how many were new. */
+async function insertMissingReviews(
   admin: Admin,
   reviews: Database["public"]["Tables"]["house_match_reviews"]["Insert"][]
 ): Promise<number> {
-  let inserted = 0;
+  const houseIds = [...new Set(reviews.map((r) => r.house_id))];
+  const { data: open, error } = await admin
+    .from("house_match_reviews")
+    .select("house_id, incoming_normalized")
+    .in("house_id", houseIds)
+    .eq("status", "pending");
+  if (error) throw error;
+
+  const already = new Set((open ?? []).map((r) => `${r.house_id}|${r.incoming_normalized ?? ""}`));
+  const fresh = new Map<string, (typeof reviews)[number]>();
   for (const review of reviews) {
-    const { data: open } = await admin
-      .from("house_match_reviews")
-      .select("id")
-      .eq("house_id", review.house_id)
-      .eq("incoming_normalized", review.incoming_normalized ?? "")
-      .eq("status", "pending")
-      .maybeSingle();
-    if (open) continue;
-    const { error } = await admin.from("house_match_reviews").insert(review);
-    if (!error) inserted++;
+    const key = `${review.house_id}|${review.incoming_normalized ?? ""}`;
+    if (!already.has(key) && !fresh.has(key)) fresh.set(key, review);
   }
-  return inserted;
+  if (fresh.size === 0) return 0;
+
+  const { error: insertError } = await admin.from("house_match_reviews").insert([...fresh.values()]);
+  if (insertError) {
+    // A race with another runner on the same house: fall back to one at a
+    // time so the rest of the page is not lost to one collision.
+    let inserted = 0;
+    for (const review of fresh.values()) {
+      const { error: oneError } = await admin.from("house_match_reviews").insert(review);
+      if (!oneError) inserted++;
+    }
+    return inserted;
+  }
+  return fresh.size;
 }

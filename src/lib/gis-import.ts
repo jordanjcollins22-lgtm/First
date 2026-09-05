@@ -34,6 +34,13 @@ export interface ParcelRecord {
 export interface ExistingHouse {
   id: string;
   normalizedAddress: string | null;
+  /**
+   * Whether this house itself came from the county. Two county rows with
+   * different addresses are two addresses -- a building and a unit in it --
+   * not a question about one; only a house from our own records can be the
+   * near match a person needs to settle.
+   */
+  fromCounty?: boolean;
 }
 
 export type ImportDecision =
@@ -80,6 +87,9 @@ export function resolveParcel(parcel: ParcelRecord, existing: ExistingHouse[]): 
   let best: { house: ExistingHouse; score: number } | null = null;
 
   for (const house of existing) {
+    // The county disagreeing with itself is not a question for us. "140 N
+    // Bond St" and "140 N Bond St Unit A" are both county address points.
+    if (house.fromCounty) continue;
     // A different house number is a different house, however alike the rest
     // reads. 1628 and 1638 Eva Mar Blvd share every other word.
     if (houseNumber(house.normalizedAddress) !== number) continue;

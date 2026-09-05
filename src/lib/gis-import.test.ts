@@ -96,6 +96,24 @@ describe("resolveParcel", () => {
     expect(decision).toMatchObject({ action: "review", candidateHouseId: "h-swearingen" });
   });
 
+  it("does not ask about a unit when the building came from the county too", () => {
+    // Both are county address points: the building, and a door inside it. A
+    // review here would be the county disagreeing with itself, and the first
+    // ZIP run raised hundreds of them.
+    const withBuilding = [
+      ...EXISTING,
+      { ...house("h-bond", "140 N Bond St, Bel Air, MD 21014"), fromCounty: true },
+    ];
+    const decision = resolveParcel(parcel({ address: "140 N BOND ST UNIT A, BEL AIR, MD 21014" }), withBuilding);
+    expect(decision).toMatchObject({ action: "create" });
+  });
+
+  it("still asks when the near match is one of our own houses", () => {
+    const withOurs = [...EXISTING, house("h-bond-ours", "140 N Bond St, Bel Air, MD 21014")];
+    const decision = resolveParcel(parcel({ address: "140 N BOND ST UNIT A, BEL AIR, MD 21014" }), withOurs);
+    expect(decision).toMatchObject({ action: "review", candidateHouseId: "h-bond-ours" });
+  });
+
   it("does not ask about two houses on one street", () => {
     // 1628 and 1638 Eva Mar share every word but the number, and are two
     // different families. A different number is a different house.
