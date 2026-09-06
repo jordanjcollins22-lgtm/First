@@ -54,6 +54,10 @@ import { EddmMailingPanel } from "./eddm-mailing-panel";
 import type { EddmMailing } from "@/lib/data/eddm";
 import type { MailingRates } from "@/lib/eddm-mailing";
 import { unionBoundary } from "@/lib/eddm-mailing";
+import { EddmBuildPanel } from "./eddm-build-panel";
+import type { EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
+import type { EddmRouteSummary } from "@/lib/data/eddm-build";
+import type { UnservedCluster } from "@/lib/eddm-clusters";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "waves" | "clients";
@@ -70,6 +74,9 @@ export function AttractorsDashboard({
   houses,
   eddmRates,
   eddmMailings,
+  eddmBuild,
+  eddmSummary,
+  unservedClusters,
   densityPoints,
   keywords,
   rankScans,
@@ -89,6 +96,10 @@ export function AttractorsDashboard({
   /** What an EDDM piece costs to post and to print, for pricing a mailing. */
   eddmRates: MailingRates;
   eddmMailings: EddmMailing[];
+  /** The last USPS-routes build, the routes it left, and the houses none reach. */
+  eddmBuild: EddmBuildStatus | null;
+  eddmSummary: EddmRouteSummary;
+  unservedClusters: UnservedCluster[];
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -141,6 +152,10 @@ export function AttractorsDashboard({
   // Off by default and fetched by viewport: the county is a hundred and
   // seventeen thousand dots, and the point of them is only visible up close.
   const [showAllAddresses, setShowAllAddresses] = useState(false);
+  // The houses no USPS route reaches; on once a build has run, because they
+  // are the point of it.
+  const [showUnserved, setShowUnserved] = useState(false);
+  const [flyTo, setFlyTo] = useState<LatLng | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
   const [showEddm, setShowEddm] = useState(false);
@@ -453,6 +468,9 @@ export function AttractorsDashboard({
         onToggleShowHouses={() => setShowHouses((v) => !v)}
         showAllAddresses={showAllAddresses}
         onToggleShowAllAddresses={() => setShowAllAddresses((v) => !v)}
+        showUnserved={showUnserved}
+        unservedCount={unservedClusters.reduce((sum, c) => sum + c.houses, 0)}
+        onToggleShowUnserved={() => setShowUnserved((v) => !v)}
         showEddm={showEddm}
         onToggleShowEddm={() => setShowEddm((v) => !v)}
         eddmZip={eddmZip}
@@ -521,6 +539,8 @@ export function AttractorsDashboard({
                 selectedEddmIds={[...mailingSelection.keys()]}
                 onToggleMailingRoute={toggleMailingRoute}
                 onUseRouteAsWave={openWaveFromRoute}
+                showUnserved={showUnserved}
+                unservedClusters={unservedClusters}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
@@ -531,7 +551,7 @@ export function AttractorsDashboard({
                 locations={locations}
                 areas={areas}
                 showLocations={showLocations}
-                flyToTarget={selectedClientProperty ? { lat: selectedClientProperty.lat, lng: selectedClientProperty.lng } : null}
+                flyToTarget={flyTo ?? (selectedClientProperty ? { lat: selectedClientProperty.lat, lng: selectedClientProperty.lng } : null)}
                 drawMode={drawMode}
                 onGeometryDrawn={(points) => {
                   setDrawnPoints(points);
@@ -571,6 +591,24 @@ export function AttractorsDashboard({
             </div>
           )}
         </Card>
+
+        {!creating && !selectedWave && !selectedJob && (
+          <Card>
+            <CardContent className="pt-6">
+              <EddmBuildPanel
+                build={eddmBuild}
+                summary={eddmSummary}
+                clusters={unservedClusters}
+                showUnserved={showUnserved}
+                onToggleShowUnserved={() => setShowUnserved((v) => !v)}
+                onFlyTo={(target) => {
+                  setShowUnserved(true);
+                  setFlyTo({ ...target });
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {(mailingSelection.size > 0 || (showEddm && eddmRoutes.length > 0)) && !creating && !selectedWave && !selectedJob && (
           <Card className="max-h-[70vh] overflow-y-auto">

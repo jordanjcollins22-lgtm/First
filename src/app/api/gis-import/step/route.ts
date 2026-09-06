@@ -3,6 +3,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { acquireLease, runSteps, tokenMatches } from "@/lib/gis-import-run";
+import { EDDM_BUILD_KIND, runEddmBuildSteps } from "@/lib/eddm-build";
 import { serverEnvDiagnostic } from "@/lib/gis-probe";
 
 /**
@@ -72,7 +73,8 @@ export async function POST(request: NextRequest) {
 
   after(async () => {
     try {
-      await runSteps(admin, job, "background-job");
+      if (job.kind === EDDM_BUILD_KIND) await runEddmBuildSteps(admin, job);
+      else await runSteps(admin, job, "background-job");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("gis import step failed:", message);

@@ -53,7 +53,7 @@ export async function loadEddmRoutes(rawZip: string, refresh = false): Promise<E
 
     const { data: stored, error: storedError } = await supabase
       .from("eddm_routes")
-      .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, paths, fetched_at")
+      .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, paths, fetched_at, walkability, walkability_reason, route_type, house_count, wave_id")
       .eq("organization_id", profile.organization_id)
       .eq("zip", zip)
       .order("route_id");
@@ -176,6 +176,11 @@ function toRoute(row: {
   attributes: Json;
   rings: Json;
   paths: Json | null;
+  walkability?: string;
+  walkability_reason?: string | null;
+  route_type?: string | null;
+  house_count?: number;
+  wave_id?: string | null;
 }): EddmRoute & { id: string } {
   return {
     id: row.id,
@@ -187,5 +192,10 @@ function toRoute(row: {
     attributes: (row.attributes ?? {}) as Record<string, unknown>,
     rings: (row.rings ?? []) as [number, number][][],
     paths: (row.paths ?? []) as [number, number][][],
+    walkability: row.walkability === "walkable" || row.walkability === "hard" ? row.walkability : "unknown",
+    walkabilityReason: row.walkability_reason ?? null,
+    routeType: row.route_type ?? null,
+    houseCount: row.house_count ?? 0,
+    waveId: row.wave_id ?? null,
   };
 }

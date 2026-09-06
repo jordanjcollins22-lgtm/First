@@ -57,6 +57,9 @@ export function FilterBar({
   onToggleShowHouses,
   showAllAddresses,
   onToggleShowAllAddresses,
+  showUnserved,
+  unservedCount,
+  onToggleShowUnserved,
   showEddm,
   onToggleShowEddm,
   eddmZip,
@@ -94,6 +97,10 @@ export function FilterBar({
    * Off by default and fetched by viewport; the whole county is too many dots. */
   showAllAddresses: boolean;
   onToggleShowAllAddresses: () => void;
+  /** The houses no USPS route's streets reach, in their own colour. */
+  showUnserved: boolean;
+  unservedCount: number;
+  onToggleShowUnserved: () => void;
   /** USPS carrier routes for one ZIP, drawn as outlines with USPS's counts. */
   showEddm: boolean;
   onToggleShowEddm: () => void;
@@ -238,6 +245,12 @@ export function FilterBar({
           Refresh from USPS
         </button>
         {eddmStatus && <span className="text-xs text-muted-foreground">{eddmStatus}</span>}
+        {unservedCount > 0 && (
+          <Label className="ml-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <input type="checkbox" checked={showUnserved} onChange={onToggleShowUnserved} className="h-3.5 w-3.5" />
+            Off any route ({unservedCount.toLocaleString()})
+          </Label>
+        )}
       </div>
     </div>
   );

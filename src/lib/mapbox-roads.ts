@@ -32,7 +32,7 @@ export async function nearbyRoads(
   const json = (await response.json()) as {
     features?: {
       geometry?: { type: string; coordinates: [number, number] };
-      properties?: { class?: string; tilequery?: { distance?: number } };
+      properties?: { class?: string; name?: string; tilequery?: { distance?: number } };
     }[];
   };
 
@@ -50,6 +50,7 @@ export async function nearbyRoads(
         lng,
         distanceMetres,
         roadClass: feature.properties?.class ?? null,
+        name: feature.properties?.name ?? null,
       };
     });
 }

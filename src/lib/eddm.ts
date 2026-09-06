@@ -37,6 +37,14 @@ export interface EddmRoute {
   /** The streets the carrier walks, as USPS sent them. */
   paths: LngLatPair[][];
   attributes: Record<string, unknown>;
+  /** Filled in by the build: whether a door-hanger team can walk it, and why not. */
+  walkability?: "walkable" | "hard" | "unknown";
+  walkabilityReason?: string | null;
+  routeType?: string | null;
+  /** How many of our houses sit on the route's streets. */
+  houseCount?: number;
+  /** The Door Hangers wave made from the route, when there is one. */
+  waveId?: string | null;
 }
 
 /** The request the EDDM map makes for one ZIP, with the answer asked for in WGS84. */
@@ -231,6 +239,9 @@ export function outerRing(route: Pick<EddmRoute, "rings">): LngLatPair[] | null 
 /** A palette wide enough that neighbouring routes read as different. */
 const ROUTE_COLORS = ["#f59e0b", "#3b82f6", "#ec4899", "#10b981", "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#84cc16", "#06b6d4"];
 
+/** A route a team should not walk: drawn in one colour, whatever its number. */
+export const HARD_ROUTE_COLOR = "#dc2626";
+
 export function routeColor(index: number): string {
   return ROUTE_COLORS[((index % ROUTE_COLORS.length) + ROUTE_COLORS.length) % ROUTE_COLORS.length];
 }
@@ -251,6 +262,10 @@ export interface EddmRouteProperties {
   under200: boolean;
   /** The post office the bundles for this route are taken to. */
   facility: string | null;
+  walkability: "walkable" | "hard" | "unknown";
+  walkabilityReason: string | null;
+  houseCount: number | null;
+  waveId: string | null;
 }
 
 export interface EddmRouteFeature {
@@ -274,7 +289,7 @@ function propertiesOf(r: EddmRoute & { id?: string }, index: number): EddmRouteP
     residential: r.residential,
     business: r.business,
     total: r.total,
-    color: routeColor(index),
+    color: r.walkability === "hard" ? HARD_ROUTE_COLOR : routeColor(index),
     medianIncome: asCount(pick(a, ["MED_INCOME", "AVG_INCOME", "MEDIAN_INCOME"])),
     medianAge: asCount(pick(a, ["MED_AGE", "AVG_AGE", "MEDIAN_AGE"])),
     householdSize: (() => {
@@ -284,6 +299,10 @@ function propertiesOf(r: EddmRoute & { id?: string }, index: number): EddmRouteP
     })(),
     under200: String(pick(a, ["LT_200_IND"]) ?? "").toUpperCase() === "Y",
     facility: asText(pick(a, ["FAC_NAME", "FACILITY_NAME", "FACILITY"])),
+    walkability: r.walkability ?? "unknown",
+    walkabilityReason: r.walkabilityReason ?? null,
+    houseCount: r.houseCount ?? null,
+    waveId: r.waveId ?? null,
   };
 }
 
@@ -308,6 +327,6 @@ export function routesToStreetFeatures(routes: (EddmRoute & { id?: string })[]):
     .map((r, index) => ({
       type: "Feature",
       geometry: { type: "MultiLineString", coordinates: r.paths },
-      properties: { id: r.id ?? `${r.zip}-${r.routeId}`, routeId: r.routeId, color: routeColor(index) },
+      properties: { id: r.id ?? `${r.zip}-${r.routeId}`, routeId: r.routeId, color: r.walkability === "hard" ? HARD_ROUTE_COLOR : routeColor(index) },
     }));
 }

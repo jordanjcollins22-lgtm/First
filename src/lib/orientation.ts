@@ -77,6 +77,8 @@ export function describeHeading(degrees: number): string {
  * before it is believed.
  */
 export interface RoadCandidate extends LatLng {
+  /** The road's name on the map, when it has one. */
+  name?: string | null;
   distanceMetres: number;
   roadClass: string | null;
 }

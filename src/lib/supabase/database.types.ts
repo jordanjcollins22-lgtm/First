@@ -821,6 +821,11 @@ export interface Database {
           /** The county's own address text. `address` keeps the raw original. */
           gis_address: string | null;
           gis_matched_at: string | null;
+          /** The USPS route whose street runs past this house, when one does. */
+          eddm_route_id: string | null;
+          eddm_route_distance_m: number | null;
+          /** No route's streets come within reach: a missed door, or a new development. */
+          eddm_unserved: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -1027,6 +1032,15 @@ export interface Database {
           paths: Json | null;
           source_url: string | null;
           fetched_at: string;
+          /** USPS's route type: C city, R rural, H highway contract, B boxes. */
+          route_type: string | null;
+          /** walkable | hard | unknown */
+          walkability: string;
+          walkability_reason: string | null;
+          main_roads: Json | null;
+          wave_id: string | null;
+          zone_id: string | null;
+          house_count: number;
         };
         Insert: Partial<Database["public"]["Tables"]["eddm_routes"]["Row"]> & {
           organization_id: string;
@@ -2546,6 +2560,12 @@ export interface Database {
         Args: Record<string, never>;
         Returns: number;
       };
+      eddm_rebuild_segments: { Args: { org: string; the_zip: string }; Returns: number };
+      eddm_assign_houses: { Args: { org: string; the_zip: string; max_m?: number }; Returns: Json };
+      eddm_materialize_zones: { Args: { org: string; the_zip: string }; Returns: Json };
+      eddm_unserved_cells: { Args: { org: string }; Returns: Json };
+      houses_unserved_points: { Args: { org: string }; Returns: Json };
+      houses_zip_counts: { Args: { org: string }; Returns: Json };
       /** The doors inside a drawn shape: count, stage breakdown, print run by design. */
       houses_coverage: {
         Args: { org: string; ring: Json | null; zips: Json | null; designs?: number };

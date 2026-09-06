@@ -14,6 +14,7 @@ import type { JobWithLocation } from "@/lib/data/jobs";
 import { housesToFeatures, pointsToFeatures, stageColorExpression, type MapHouse, type MapPoint } from "@/lib/house-geojson";
 import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
 import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
+import type { UnservedCluster } from "@/lib/eddm-clusters";
 import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
 if (env.mapboxToken) {
@@ -50,6 +51,13 @@ interface SatelliteMapViewProps {
   eddmStreets: EddmStreetFeature[];
   /** A route's outline handed to the wave form as a drawn shape. */
   onUseRouteAsWave: (points: LatLng[]) => void;
+  /**
+   * Whether to mark the houses no USPS route's streets reach: each as its
+   * own dot, and grouped, so a few missed doors beside a route and a whole
+   * development read differently.
+   */
+  showUnserved: boolean;
+  unservedClusters: UnservedCluster[];
   /** Routes ticked for a mailing, drawn solid. */
   selectedEddmIds: string[];
   onToggleMailingRoute: (id: string) => void;
@@ -109,6 +117,13 @@ const EDDM_LABEL_LAYER = "eddm-routes-label";
 const EDDM_STREETS_SOURCE = "eddm-streets";
 const EDDM_STREETS_LAYER = "eddm-streets-line";
 const ALL_ADDRESSES_COUNT_LAYER = "all-addresses-cluster-count";
+const UNSERVED_SOURCE = "unserved-houses";
+const UNSERVED_LAYER = "unserved-houses-circle";
+const UNSERVED_GROUPS_SOURCE = "unserved-groups";
+const UNSERVED_GROUPS_LAYER = "unserved-groups-circle";
+const UNSERVED_GROUPS_LABEL_LAYER = "unserved-groups-label";
+/** The colour of a house no USPS route reaches. */
+const UNSERVED_COLOR = "#d946ef";
 /** Below this, the county is clusters; from here, every door is its own dot. */
 const CLUSTER_MAX_ZOOM = 12;
 const DENSITY_SOURCE = "attractor-density";
@@ -141,6 +156,8 @@ export function SatelliteMapView({
   eddmRoutes,
   eddmStreets,
   onUseRouteAsWave,
+  showUnserved,
+  unservedClusters,
   selectedEddmIds,
   onToggleMailingRoute,
   densityCells,
@@ -408,6 +425,49 @@ export function SatelliteMapView({
         },
       });
 
+      // Houses no USPS route reaches: their own colour, on top of the county's
+      // dots, and a ring per group with its count so a development is seen
+      // from a distance.
+      map.addSource(UNSERVED_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: UNSERVED_LAYER,
+        type: "circle",
+        source: UNSERVED_SOURCE,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 2, 13, 3.5, 16, 6, 19, 9],
+          "circle-color": UNSERVED_COLOR,
+          "circle-opacity": 0.95,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#4a044e",
+        },
+      });
+      map.addSource(UNSERVED_GROUPS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: UNSERVED_GROUPS_LAYER,
+        type: "circle",
+        source: UNSERVED_GROUPS_SOURCE,
+        maxzoom: 15,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["get", "houses"], 1, 8, 5, 12, 50, 20, 300, 30],
+          "circle-color": ["case", ["==", ["get", "kind"], "development"], "rgba(217, 70, 239, 0.35)", "rgba(217, 70, 239, 0.15)"],
+          "circle-stroke-width": ["case", ["==", ["get", "kind"], "development"], 2.5, 1.5],
+          "circle-stroke-color": UNSERVED_COLOR,
+        },
+      });
+      map.addLayer({
+        id: UNSERVED_GROUPS_LABEL_LAYER,
+        type: "symbol",
+        source: UNSERVED_GROUPS_SOURCE,
+        maxzoom: 15,
+        layout: {
+          "text-field": ["to-string", ["get", "houses"]],
+          "text-size": 11,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+          "text-allow-overlap": true,
+        },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#4a044e", "text-halo-width": 1.2 },
+      });
+
       map.addSource(LEADS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: LEADS_LAYER,
@@ -596,6 +656,40 @@ export function SatelliteMapView({
       map.on("mouseenter", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = ""));
 
+      map.on("click", UNSERVED_GROUPS_LAYER, (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const props = feature.properties as { houses: number; kind: string; sample: string; zip: string | null };
+        const what =
+          props.kind === "development"
+            ? "Likely a new development: no USPS route reaches these yet"
+            : "A few doors no route's streets pass: take them in on the nearest walk";
+        new mapboxgl.Popup({ offset: 6, maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>${Number(props.houses).toLocaleString()} houses off any USPS route</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(what)}</div>` +
+              `<div style="color:#666;font-weight:400">Near ${escapeHtml(props.sample ?? "")}${props.zip ? `, ${escapeHtml(props.zip)}` : ""}</div></div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", UNSERVED_GROUPS_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", UNSERVED_GROUPS_LAYER, () => (map.getCanvas().style.cursor = ""));
+      map.on("click", UNSERVED_LAYER, (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const props = feature.properties as { address: string };
+        new mapboxgl.Popup({ offset: 6, maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>${escapeHtml(props.address ?? "")}</div>` +
+              `<div style="color:#666;font-weight:400">No USPS route's streets come within 60 m</div></div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", UNSERVED_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", UNSERVED_LAYER, () => (map.getCanvas().style.cursor = ""));
+
       map.on("click", EDDM_FILL_LAYER, async (e) => {
         // A dot on top of a route is about the dot.
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER] }).length > 0) return;
@@ -612,8 +706,18 @@ export function SatelliteMapView({
           medianAge: number | null;
           householdSize: number | null;
           under200: boolean;
+          walkability: string;
+          walkabilityReason: string | null;
+          houseCount: number | null;
+          waveId: string | null;
         };
         const inMailing = selectedEddmRef.current.has(props.id);
+        const walk =
+          props.walkability === "hard"
+            ? `<div style="color:#dc2626;font-weight:500">Hard to walk${props.walkabilityReason ? `: ${escapeHtml(props.walkabilityReason)}` : ""}</div>`
+            : props.walkability === "walkable"
+              ? `<div style="color:#15803d;font-weight:500">Walkable${props.waveId ? " · door-hanger wave made" : ""}${props.houseCount != null ? ` · ${Number(props.houseCount).toLocaleString()} of our houses on it` : ""}</div>`
+              : "";
         const polygon = feature.geometry as GeoJSON.Polygon;
         const outer = polygon.coordinates[0] ?? [];
         const points: LatLng[] = outer.map(([lng, lat]) => ({ lat, lng }));
@@ -639,6 +743,7 @@ export function SatelliteMapView({
               `<div style="color:#666;font-weight:400">${escapeHtml(usps || "No USPS counts")}</div>` +
               (people ? `<div style="color:#666;font-weight:400">${escapeHtml(people)}</div>` : "") +
               under200 +
+              walk +
               `<div id="eddm-ours" style="color:#666;font-weight:400">Counting our houses…</div>` +
               `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
               `<button type="button" data-act="mail" style="padding:4px 8px;border-radius:6px;background:${inMailing ? "#b45309" : "#1d4ed8"};color:#fff;font:500 12px system-ui">${inMailing ? "Remove from mailing" : "Add to mailing"}</button>` +
@@ -860,6 +965,56 @@ export function SatelliteMapView({
     };
   }, [showAllAddresses, mapLoaded]);
 
+  // The houses no route reaches, fetched once when asked for; the groups
+  // come with the page.
+  const unservedRef = useRef<[number, number, string, string][] | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const points = map.getSource(UNSERVED_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    const groups = map.getSource(UNSERVED_GROUPS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!points || !groups) return;
+    if (!showUnserved) {
+      points.setData({ type: "FeatureCollection", features: [] });
+      groups.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    groups.setData({
+      type: "FeatureCollection",
+      features: unservedClusters.map((c) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [c.lng, c.lat] },
+        properties: { houses: c.houses, kind: c.kind, sample: c.sample, zip: c.zip },
+      })),
+    });
+    let cancelled = false;
+    async function load() {
+      if (!unservedRef.current) {
+        try {
+          const res = await fetch("/api/houses/unserved");
+          if (!res.ok) throw new Error(`${res.status}`);
+          const body = (await res.json()) as { points: [number, number, string, string][] };
+          unservedRef.current = body.points;
+        } catch {
+          return;
+        }
+      }
+      if (cancelled) return;
+      points?.setData({
+        type: "FeatureCollection",
+        features: unservedRef.current.map(([lng, lat, id, address]) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [lng, lat] },
+          properties: { id, address },
+        })),
+      });
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [showUnserved, unservedClusters, mapLoaded]);
+
   // Keep the job markers in sync.
   useEffect(() => {
     const map = mapRef.current;
@@ -959,7 +1114,7 @@ export function SatelliteMapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
-      {(showAllAddresses || houses.length > 0) && (
+      {(showAllAddresses || showUnserved || houses.length > 0) && (
         <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col gap-0.5 rounded-md bg-black/60 px-2 py-1.5 text-[11px] text-white">
           {RELATIONSHIP_STAGES.map((stage) => (
             <span key={stage} className="flex items-center gap-1.5">
@@ -967,6 +1122,12 @@ export function SatelliteMapView({
               {STAGE_LABEL[stage]}
             </span>
           ))}
+          {showUnserved && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: UNSERVED_COLOR }} />
+              Off any USPS route
+            </span>
+          )}
         </div>
       )}
       {showAllAddresses && allAddressesNote && (
