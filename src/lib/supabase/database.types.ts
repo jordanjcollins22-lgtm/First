@@ -2626,6 +2626,8 @@ export interface Database {
       zone_dedupe: { Args: { org: string }; Returns: Json };
       zones_geojson: { Args: { org: string }; Returns: Json };
       zone_settle: { Args: { the_zone: string }; Returns: Json };
+      zone_absorb_enclaves: { Args: { org: string; the_zip: string | null }; Returns: Json };
+      zone_enclave_count: { Args: { org: string }; Returns: Json };
       zones_list: { Args: { org: string }; Returns: Json };
       classify_houses: { Args: { org: string; the_zip: string | null }; Returns: Json };
       kind_summary: { Args: { org: string }; Returns: Json };

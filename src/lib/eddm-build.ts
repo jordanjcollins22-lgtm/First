@@ -96,6 +96,10 @@ export interface EddmBuildCheckpoint {
   phase: "routes" | "houses" | "zones";
   /** In the zones phase: how many of the ZIP's zones are built so far. */
   zoneIndex?: number;
+  /** Zones still to rebuild after enclaves were handed over; empty when settled. */
+  fixQueue?: string[];
+  /** How many enclave passes this ZIP has had; three is enough. */
+  passes?: number;
   zips: Record<string, ZipResult>;
 }
 
@@ -115,6 +119,8 @@ export function checkpointOf(job: Pick<JobRow, "checkpoint">): EddmBuildCheckpoi
     replaced: raw.replaced === true,
     phase: raw.phase === "houses" ? "houses" : raw.phase === "zones" ? "zones" : "routes",
     zoneIndex: typeof raw.zoneIndex === "number" ? raw.zoneIndex : 0,
+    fixQueue: Array.isArray(raw.fixQueue) ? raw.fixQueue.filter((z): z is string => typeof z === "string") : [],
+    passes: typeof raw.passes === "number" ? raw.passes : 0,
     zips: raw.zips && typeof raw.zips === "object" ? raw.zips : {},
   };
 }
@@ -415,6 +421,8 @@ async function assignAndMaterialize(
 
 /** How long the zones phase keeps building zones in one invocation. */
 const ZONES_BUDGET_MS = 25_000;
+/** Enclave passes per ZIP: the third finds almost nothing. */
+const MAX_ENCLAVE_PASSES = 3;
 
 /**
  * The third part of a ZIP: each zone's outline, walk, parking and mode,
@@ -441,17 +449,43 @@ async function buildZones(
   if (error) throw error;
   const all = zones ?? [];
   let index = checkpoint.zoneIndex ?? 0;
-  while (index < all.length && Date.now() - started < ZONES_BUDGET_MS) {
-    const { error: buildError } = await admin.rpc("zone_build", { the_zone: all[index].id });
+  let fixQueue = [...(checkpoint.fixQueue ?? [])];
+  let passes = checkpoint.passes ?? 0;
+  const build = async (id: string) => {
+    const { error: buildError } = await admin.rpc("zone_build", { the_zone: id });
     if (buildError) throw buildError;
-    const { error: settleError } = await admin.rpc("zone_settle", { the_zone: all[index].id });
+    const { error: settleError } = await admin.rpc("zone_settle", { the_zone: id });
     if (settleError) throw settleError;
+  };
+  while (index < all.length && Date.now() - started < ZONES_BUDGET_MS) {
+    await build(all[index].id);
     index++;
   }
-  const finishedZip = index >= all.length;
+  // Every zone outlined: no zone inside another. A few doors whose street
+  // belonged to a neighbouring route sit as an island in the zone around
+  // them; they are handed over, and both zones are rebuilt. Repeated until
+  // nothing moves, up to three times.
+  let finishedZip = false;
+  if (index >= all.length) {
+    while (fixQueue.length > 0 && Date.now() - started < ZONES_BUDGET_MS) {
+      await build(fixQueue.shift()!);
+    }
+    if (fixQueue.length === 0 && Date.now() - started < ZONES_BUDGET_MS) {
+      if (passes >= MAX_ENCLAVE_PASSES) {
+        finishedZip = true;
+      } else {
+        const { data: absorbed, error: absorbError } = await admin.rpc("zone_absorb_enclaves", { org, the_zip: zip });
+        if (absorbError) throw absorbError;
+        const result = (absorbed ?? {}) as { moved?: number; affected?: string[] };
+        passes++;
+        if (!result.moved || !result.affected || result.affected.length === 0) finishedZip = true;
+        else fixQueue = result.affected;
+      }
+    }
+  }
   const next: EddmBuildCheckpoint = finishedZip
-    ? { offset: checkpoint.offset + 1, attempts: 0, replaced: checkpoint.replaced, phase: "routes", zoneIndex: 0, zips: checkpoint.zips }
-    : { ...checkpoint, attempts: 0, phase: "zones", zoneIndex: index };
+    ? { offset: checkpoint.offset + 1, attempts: 0, replaced: checkpoint.replaced, phase: "routes", zoneIndex: 0, fixQueue: [], passes: 0, zips: checkpoint.zips }
+    : { ...checkpoint, attempts: 0, phase: "zones", zoneIndex: index, fixQueue, passes };
   const finished = finishedZip && next.offset >= scope.zips.length;
   await admin
     .from("gis_import_jobs")
@@ -470,7 +504,7 @@ async function buildZones(
     status: finished ? "done" : "running",
     more: !finished,
     fetched: 0,
-    message: `${zip}: ${index} of ${all.length} zones built${finishedZip ? "." : ", more next tick."}`,
+    message: `${zip}: ${index} of ${all.length} zones built${fixQueue.length ? `, ${fixQueue.length} to rebuild after enclaves` : ""}${finishedZip ? "." : ", more next tick."}`,
   };
 }
 
