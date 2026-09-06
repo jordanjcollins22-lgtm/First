@@ -1,15 +1,13 @@
--- House-to-route assignment in parts, inside the API's statement timeout.
+-- Reach of a route's street: a hundred and fifty metres.
 --
--- The first version looked up the nearest street twice per house and did a
--- whole ZIP in one statement; Bel Air's eighteen thousand houses took twenty
--- seconds and the API cut it off at eight. Now one lateral lookup per house,
--- and the ZIP's houses split by a hash of their id into `parts`, each call
--- doing one part. The last part writes the counts. (The reach and the
--- search box were widened in 0170.)
-DROP FUNCTION IF EXISTS eddm_assign_houses(UUID, TEXT, DOUBLE PRECISION);
-
+-- At ninety, the first build left two thousand houses in Bel Air alone
+-- "unreached", and most of them were ninety to a hundred and fifty metres
+-- from the street: a deep lot, a long driveway, a flag lot behind another.
+-- Those doors are on the walk. The houses no route serves at all are the
+-- ones with no street within a couple of hundred metres, which the wider
+-- search box now measures instead of giving up on.
 CREATE OR REPLACE FUNCTION eddm_assign_houses(
-  org UUID, the_zip TEXT, max_m DOUBLE PRECISION DEFAULT 90, part INTEGER DEFAULT 0, parts INTEGER DEFAULT 1
+  org UUID, the_zip TEXT, max_m DOUBLE PRECISION DEFAULT 150, part INTEGER DEFAULT 0, parts INTEGER DEFAULT 1
 )
 RETURNS JSONB LANGUAGE plpgsql AS $$
 DECLARE assigned INTEGER; unserved INTEGER;
@@ -23,8 +21,8 @@ BEGIN
     FROM (
       SELECT h2.id,
              eddm_to_metres(h2.lng::double precision, h2.lat::double precision) AS p,
-             box(eddm_to_metres(h2.lng::double precision - 0.0015, h2.lat::double precision - 0.0012),
-                 eddm_to_metres(h2.lng::double precision + 0.0015, h2.lat::double precision + 0.0012)) AS b
+             box(eddm_to_metres(h2.lng::double precision - 0.0025, h2.lat::double precision - 0.002),
+                 eddm_to_metres(h2.lng::double precision + 0.0025, h2.lat::double precision + 0.002)) AS b
       FROM houses h2
       WHERE h2.organization_id = org AND h2.kind = 'house' AND NOT h2.needs_review
         AND NOT (h2.lat = 0 AND h2.lng = 0)
@@ -55,7 +53,3 @@ BEGIN
 
   RETURN jsonb_build_object('assigned', assigned, 'unserved', unserved, 'part', part, 'parts', parts);
 END $$;
-
--- Each part scans the ZIP's houses; by ZIP is an index walk, not a pass
--- over the county.
-CREATE INDEX IF NOT EXISTS houses_zip_idx ON houses (organization_id, right(normalized_address, 5));

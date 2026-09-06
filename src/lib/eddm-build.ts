@@ -41,8 +41,12 @@ import type { Json } from "@/lib/supabase/database.types";
 export const EDDM_BUILD_KIND = "eddm_build";
 /** A ZIP with fewer houses than this is a stray address, not a place to build routes for. */
 export const MIN_HOUSES_PER_ZIP = 20;
-/** How far from a route's street a house may be and still be on the route. */
-export const ROUTE_REACH_M = 90;
+/**
+ * How far from a route's street a house may be and still be on the route.
+ * A deep lot or a long driveway puts the house a hundred metres and more
+ * from the street; the door is still on the walk.
+ */
+export const ROUTE_REACH_M = 150;
 /** How far around a sampled street point to look for a main road. */
 const ROAD_LOOK_M = 50;
 /** A ZIP's houses are assigned in this many parts, each inside the API's eight-second statement limit. */
