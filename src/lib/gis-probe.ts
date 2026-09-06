@@ -143,7 +143,13 @@ export async function probeEndpoint(
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { accept: "application/json", "user-agent": "jslandscaping-app/1.0 (+gis import)" },
+      // The State's servers sit behind bot protection that answers an
+      // unfamiliar client with an empty 503; a browser's name gets the data.
+      headers: {
+        accept: "application/json, text/plain, */*",
+        "accept-language": "en-US,en;q=0.9",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+      },
       cache: "no-store",
     });
     const raw = await res.text();
