@@ -204,10 +204,55 @@ function openHouseCard(map: mapboxgl.Map, lngLat: [number, number], lookup: { id
     .then((body) => {
       if (!popup.isOpen()) return;
       popup.setHTML(body.facts ? renderHouseCard(body.facts) : `<div style="font:400 12.5px system-ui">${escapeHtml(lookup.label)}<div style="color:#666">No house on record at this point</div></div>`);
+      if (body.facts) fillOwner(popup, body.facts);
     })
     .catch(() => {
       if (popup.isOpen()) popup.setHTML(`<div style="font:400 12.5px system-ui">${escapeHtml(lookup.label)}<div style="color:#666">Could not gather the house's facts</div></div>`);
     });
+}
+
+/**
+ * The owner's name, read from the State's record the first time and kept
+ * after that. The card says "looking up" until it arrives.
+ */
+function fillOwner(popup: mapboxgl.Popup, facts: HouseFacts) {
+  const slot = popup.getElement()?.querySelector<HTMLElement>(`[data-owner-for="${CSS.escape(facts.id)}"]`);
+  if (!slot) return;
+  fetch(`/api/houses/${facts.id}/owner`, { cache: "no-store" })
+    .then((res) => res.json() as Promise<{ ownerName: string | null; mailing: string | null; ownerOccupied?: boolean | null; reason?: string }>)
+    .then((body) => {
+      if (!popup.isOpen()) return;
+      if (body.ownerName) {
+        slot.style.color = "";
+        slot.innerHTML = `${escapeHtml(body.ownerName)}${body.mailing ? `<div style="color:#666">Tax bill to ${escapeHtml(body.mailing)}</div>` : ""}`;
+      } else {
+        slot.textContent = body.reason ?? "The State's record has no owner on it.";
+      }
+    })
+    .catch(() => {
+      if (popup.isOpen()) slot.textContent = "Could not read the State's record.";
+    });
+}
+
+/**
+ * The house under a click that landed on no dot: the county's roofs are
+ * houses whether or not their dots are drawn. Asks the database for the
+ * house nearest the point; opens its card when there is one within a few
+ * metres, otherwise does whatever the click would have done.
+ */
+function openHouseCardAt(map: mapboxgl.Map, lngLat: [number, number], otherwise?: () => void) {
+  const params = new URLSearchParams({ lat: String(lngLat[1]), lng: String(lngLat[0]) });
+  fetch(`/api/houses/facts?${params}`, { cache: "no-store" })
+    .then((res) => res.json() as Promise<{ facts: HouseFacts | null }>)
+    .then((body) => {
+      if (!body.facts) {
+        otherwise?.();
+        return;
+      }
+      const popup = new mapboxgl.Popup({ offset: 8, maxWidth: "320px" }).setLngLat(lngLat).setHTML(renderHouseCard(body.facts)).addTo(map);
+      fillOwner(popup, body.facts);
+    })
+    .catch(() => otherwise?.());
 }
 
 interface WalkAnswer {
@@ -862,11 +907,21 @@ export function SatelliteMapView({
           minutes: raw.minutes == null ? null : Number(raw.minutes),
           pathKm: raw.pathKm == null ? null : Number(raw.pathKm),
         };
-        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "320px" }).setLngLat(e.lngLat).setHTML(zoneCard(props)).addTo(map);
-        popup.getElement()?.querySelector("button[data-act=walk]")?.addEventListener("click", () => {
-          void showWalk(map, props.id);
-          popup.remove();
+        // A roof inside the zone is a house first; the zone's card is for the
+        // ground between them.
+        openHouseCardAt(map, [e.lngLat.lng, e.lngLat.lat], () => {
+          const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "320px" }).setLngLat(e.lngLat).setHTML(zoneCard(props)).addTo(map);
+          popup.getElement()?.querySelector("button[data-act=walk]")?.addEventListener("click", () => {
+            void showWalk(map, props.id);
+            popup.remove();
+          });
         });
+      });
+      // Anywhere else on the map: the house under the click, if there is one.
+      map.on("click", (e) => {
+        const layers = [HOUSES_LAYER, ALL_ADDRESSES_LAYER, ALL_ADDRESSES_CLUSTER_LAYER, JOBS_LAYER, LEADS_LAYER, UNSERVED_LAYER, UNSERVED_GROUPS_LAYER, ZONES_FILL_LAYER, EDDM_FILL_LAYER, WAVES_FILL_LAYER, LOCATIONS_LAYER, AREAS_FILL_LAYER].filter((l) => map.getLayer(l));
+        if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
+        openHouseCardAt(map, [e.lngLat.lng, e.lngLat.lat]);
       });
       map.on("mouseenter", ZONES_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", ZONES_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));

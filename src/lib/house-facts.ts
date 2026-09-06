@@ -142,7 +142,11 @@ export function renderHouseCard(facts: HouseFacts): string {
       "Who owns it",
       `<b style="color:${occ.tone === "good" ? "#15803d" : occ.tone === "warn" ? "#c2410c" : "#666"}">${escapeHtml(occ.text)}</b>` +
         (soldRecently ? ` <span style="color:#e11d48;font-weight:600">· new owners</span>` : "") +
-        (o?.ownerName ? `<div>${escapeHtml(o.ownerName)}</div>` : "") +
+        (o?.ownerName
+          ? `<div>${escapeHtml(o.ownerName)}</div>`
+          : o?.accountId
+            ? `<div data-owner-for="${escapeHtml(facts.id)}" style="color:#666">Looking up the owner's name…</div>`
+            : "") +
         (ownerBits.length ? `<div style="color:#666">${ownerBits.join(" · ")}</div>` : "") +
         (link ? `<a href="${link}" target="_blank" rel="noopener" style="color:#2f6d3c;text-decoration:underline">State record</a>` : "")
     )
