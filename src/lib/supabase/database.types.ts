@@ -2561,7 +2561,7 @@ export interface Database {
         Returns: number;
       };
       eddm_rebuild_segments: { Args: { org: string; the_zip: string }; Returns: number };
-      eddm_assign_houses: { Args: { org: string; the_zip: string; max_m?: number }; Returns: Json };
+      eddm_assign_houses: { Args: { org: string; the_zip: string; max_m?: number; part?: number; parts?: number }; Returns: Json };
       eddm_materialize_zones: { Args: { org: string; the_zip: string }; Returns: Json };
       eddm_unserved_cells: { Args: { org: string }; Returns: Json };
       houses_unserved_points: { Args: { org: string }; Returns: Json };

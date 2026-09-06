@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       if (job.kind === EDDM_BUILD_KIND) await runEddmBuildSteps(admin, job);
       else await runSteps(admin, job, "background-job");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageOf(err);
       console.error("gis import step failed:", message);
       await admin
         .from("gis_import_jobs")
@@ -93,4 +93,15 @@ export async function POST(request: NextRequest) {
 
   const checkpoint = (job.checkpoint ?? {}) as { offset?: number };
   return NextResponse.json({ accepted: true, jobId, offset: checkpoint.offset ?? 0, step: job.steps + 1 }, { status: 202 });
+}
+
+/** Supabase errors are plain objects, and "[object Object]" on a job row says nothing. */
+function messageOf(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object") {
+    const e = err as { message?: string; details?: string; hint?: string; code?: string };
+    const text = [e.message, e.details, e.hint, e.code ? `(${e.code})` : null].filter(Boolean).join(" ");
+    return text || JSON.stringify(err).slice(0, 500);
+  }
+  return String(err);
 }

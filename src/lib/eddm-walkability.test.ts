@@ -14,15 +14,27 @@ describe("routeTypeVerdict", () => {
 });
 
 describe("mainRoadVerdict", () => {
-  it("lets a route of streets through and stops one with a highway in it", () => {
-    expect(mainRoadVerdict([{ class: "street", name: "Oak Ln" }, { class: "tertiary", name: "Moores Mill Rd" }]).walkability).toBe("walkable");
-    const verdict = mainRoadVerdict([{ class: "street", name: "Oak Ln" }, { class: "primary", name: "Bel Air Rd" }]);
+  const quiet = [{ class: "street", name: "Oak Ln" }];
+  const main = [{ class: "street", name: "Oak Ln" }, { class: "primary", name: "Bel Air Rd" }];
+
+  it("lets a route of streets through and stops one that runs along a highway", () => {
+    expect(mainRoadVerdict([quiet, [{ class: "tertiary", name: "Moores Mill Rd" }], quiet]).walkability).toBe("walkable");
+    const verdict = mainRoadVerdict([main, main, quiet, quiet]);
     expect(verdict.walkability).toBe("hard");
     expect(verdict.reason).toContain("Bel Air Rd");
+    expect(verdict.reason).toContain("2 of 4 checks");
+  });
+
+  it("forgives a route that only starts from a main road", () => {
+    expect(mainRoadVerdict([main, quiet, quiet, quiet, quiet, quiet]).walkability).toBe("walkable");
+  });
+
+  it("does not judge a route no check answered for", () => {
+    expect(mainRoadVerdict([]).walkability).toBe("unknown");
   });
 
   it("names the class when the road has no name", () => {
-    expect(mainRoadVerdict([{ class: "trunk_link", name: null }]).reason).toMatch(/trunk road/);
+    expect(mainRoadVerdict([[{ class: "trunk_link", name: null }]]).reason).toMatch(/trunk road/);
   });
 });
 
@@ -51,7 +63,7 @@ describe("walkVerdict", () => {
   });
 
   it("decides a city route by its roads", () => {
-    expect(walkVerdict("C", []).walkability).toBe("walkable");
-    expect(walkVerdict("C", [{ class: "secondary", name: "Churchville Rd" }]).walkability).toBe("hard");
+    expect(walkVerdict("C", [[]]).walkability).toBe("walkable");
+    expect(walkVerdict("C", [[{ class: "secondary", name: "Churchville Rd" }]]).walkability).toBe("hard");
   });
 });

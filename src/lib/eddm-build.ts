@@ -42,9 +42,11 @@ export const EDDM_BUILD_KIND = "eddm_build";
 /** A ZIP with fewer houses than this is a stray address, not a place to build routes for. */
 export const MIN_HOUSES_PER_ZIP = 20;
 /** How far from a route's street a house may be and still be on the route. */
-export const ROUTE_REACH_M = 60;
+export const ROUTE_REACH_M = 90;
 /** How far around a sampled street point to look for a main road. */
-const ROAD_LOOK_M = 80;
+const ROAD_LOOK_M = 50;
+/** A ZIP's houses are assigned in this many parts, each inside the API's eight-second statement limit. */
+const ASSIGN_PARTS = 8;
 /** How many ZIPs may be begun in one invocation, by time: a ZIP is not begun after this. */
 const STEP_BUDGET_MS = 15_000;
 /** Deadline for USPS to answer for one ZIP. */
@@ -77,6 +79,13 @@ export interface EddmBuildCheckpoint {
   offset: number;
   attempts: number;
   replaced: boolean;
+  /**
+   * Where in the current ZIP the build is: `routes` still has USPS to ask
+   * and the roads to check; `houses` has the routes written and has the
+   * houses, waves and zones left. Two phases, because each can take twenty
+   * seconds and the function has sixty.
+   */
+  phase: "routes" | "houses";
   zips: Record<string, ZipResult>;
 }
 
@@ -94,6 +103,7 @@ export function checkpointOf(job: Pick<JobRow, "checkpoint">): EddmBuildCheckpoi
     offset: typeof raw.offset === "number" ? raw.offset : 0,
     attempts: typeof raw.attempts === "number" ? raw.attempts : 0,
     replaced: raw.replaced === true,
+    phase: raw.phase === "houses" ? "houses" : "routes",
     zips: raw.zips && typeof raw.zips === "object" ? raw.zips : {},
   };
 }
@@ -178,6 +188,8 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
   }
 
   const zip = scope.zips[checkpoint.offset];
+  if (checkpoint.phase === "houses") return assignAndMaterialize(admin, job, scope, checkpoint, zip);
+
   const url = eddmRoutesUrl(zip, env.uspsEddmRoutesUrl || DEFAULT_EDDM_ROUTES_URL);
   const probe = await probeEndpoint(url, "background-job", USPS_TIMEOUT_MS);
   const serverError = probe.ok ? eddmError(probe.body) : null;
@@ -210,7 +222,7 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
     }
     // Given up on this ZIP; the rest of the county still gets built.
     const zips = { ...checkpoint.zips, [zip]: emptyResult(failure) };
-    const next: EddmBuildCheckpoint = { offset: checkpoint.offset + 1, attempts: 0, replaced: checkpoint.replaced, zips };
+    const next: EddmBuildCheckpoint = { offset: checkpoint.offset + 1, attempts: 0, replaced: checkpoint.replaced, phase: "routes", zips };
     const finished = next.offset >= scope.zips.length;
     await admin
       .from("gis_import_jobs")
@@ -254,12 +266,69 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
   );
   if (upsertError) throw upsertError;
 
+  // The routes are down. The houses are the next invocation's work, so a
+  // slow USPS answer and a big ZIP never share one function's time.
+  const judgedResult: ZipResult = {
+    routes: judged.length,
+    walkable: judged.filter((j) => j.walkability === "walkable").length,
+    hard: judged.filter((j) => j.walkability === "hard").length,
+    unknown: judged.filter((j) => j.walkability === "unknown").length,
+    waves: 0,
+    assigned: 0,
+    unserved: 0,
+    error: null,
+  };
+  await admin
+    .from("gis_import_jobs")
+    .update({
+      checkpoint: { ...checkpoint, attempts: 0, phase: "houses", zips: { ...checkpoint.zips, [zip]: judgedResult } } as unknown as Json,
+      diagnostics,
+      fetched: job.fetched + judgedResult.routes,
+      skipped: job.skipped + judgedResult.hard,
+      steps: job.steps + 1,
+      last_error: null,
+      lease_until: null,
+      updated_at: now(),
+    })
+    .eq("id", job.id);
+  return {
+    status: "running",
+    more: true,
+    fetched: judgedResult.routes,
+    message: `${zip}: ${judgedResult.routes} routes, ${judgedResult.walkable} walkable, ${judgedResult.hard} hard. Houses next.`,
+  };
+}
+
+/** The second half of a ZIP: houses onto routes, waves and zones for the walkable ones. */
+async function assignAndMaterialize(
+  admin: Admin,
+  job: JobRow,
+  scope: EddmBuildScope,
+  checkpoint: EddmBuildCheckpoint,
+  zip: string
+): Promise<StepOutcome> {
+  const org = job.organization_id;
+  const now = () => new Date().toISOString();
+  const judgedResult = checkpoint.zips[zip] ?? emptyResult("");
+
   // 3. Houses onto routes.
   const { error: segError } = await admin.rpc("eddm_rebuild_segments", { org, the_zip: zip });
   if (segError) throw segError;
-  const { data: assignment, error: assignError } = await admin.rpc("eddm_assign_houses", { org, the_zip: zip, max_m: ROUTE_REACH_M });
-  if (assignError) throw assignError;
-  const { assigned = 0, unserved = 0 } = (assignment ?? {}) as { assigned?: number; unserved?: number };
+  let assigned = 0;
+  let unserved = 0;
+  for (let part = 0; part < ASSIGN_PARTS; part++) {
+    const { data: assignment, error: assignError } = await admin.rpc("eddm_assign_houses", {
+      org,
+      the_zip: zip,
+      max_m: ROUTE_REACH_M,
+      part,
+      parts: ASSIGN_PARTS,
+    });
+    if (assignError) throw assignError;
+    const counts = (assignment ?? {}) as { assigned?: number; unserved?: number };
+    if (typeof counts.assigned === "number") assigned = counts.assigned;
+    if (typeof counts.unserved === "number") unserved = counts.unserved;
+  }
 
   // 4. Waves for the walkable routes that have none, then zones.
   const { data: stored, error: storedError } = await admin
@@ -305,20 +374,12 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
     replaced = true;
   }
 
-  const result: ZipResult = {
-    routes: judged.length,
-    walkable: judged.filter((j) => j.walkability === "walkable").length,
-    hard: judged.filter((j) => j.walkability === "hard").length,
-    unknown: judged.filter((j) => j.walkability === "unknown").length,
-    waves: wavesMade,
-    assigned,
-    unserved,
-    error: null,
-  };
+  const result: ZipResult = { ...judgedResult, waves: wavesMade, assigned, unserved, error: null };
   const next: EddmBuildCheckpoint = {
     offset: checkpoint.offset + 1,
     attempts: 0,
     replaced,
+    phase: "routes",
     zips: { ...checkpoint.zips, [zip]: result },
   };
   const finished = next.offset >= scope.zips.length;
@@ -327,13 +388,10 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
     .from("gis_import_jobs")
     .update({
       checkpoint: next as unknown as Json,
-      diagnostics,
-      fetched: job.fetched + result.routes,
       processed: job.processed + result.routes,
       created: job.created + wavesMade,
       matched: job.matched + assigned,
       review: job.review + unserved,
-      skipped: job.skipped + result.hard,
       steps: job.steps + 1,
       status: finished ? "done" : "running",
       finished_at: finished ? now() : null,
@@ -380,38 +438,39 @@ async function judgeRoutes(routes: EddmRoute[]): Promise<JudgedRoute[]> {
         out[index] = { route, routeType, walkability: byType.walkability, reason: byType.reason, mainRoads: [] };
         continue;
       }
-      const roads = await roadsAlong(route.paths);
-      const verdict = walkVerdict(routeType, roads);
-      out[index] = {
-        route,
-        routeType,
-        walkability: verdict.walkability,
-        reason: verdict.reason,
-        mainRoads: roads === null ? [] : roads.filter((r) => MAIN_ROAD_CLASSES.has(r.class)),
-      };
+      const checks = await roadsAlong(route.paths);
+      const verdict = walkVerdict(routeType, checks);
+      const seen = new Set<string>();
+      const mainRoads = (checks ?? [])
+        .flat()
+        .filter((r) => MAIN_ROAD_CLASSES.has(r.class))
+        .filter((r) => {
+          const key = `${r.class}|${r.name ?? ""}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      out[index] = { route, routeType, walkability: verdict.walkability, reason: verdict.reason, mainRoads };
     }
   };
   await Promise.all(Array.from({ length: Math.min(ROAD_CONCURRENCY, routes.length) }, worker));
   return out;
 }
 
-/** The roads at a handful of points along the route's streets; null when the map could not be asked. */
-async function roadsAlong(paths: LngLatPair[][]): Promise<RoadHit[] | null> {
+/**
+ * The roads at each of a handful of points along the route's streets, one
+ * list per point that answered; null when the map could not be asked at all.
+ */
+async function roadsAlong(paths: LngLatPair[][]): Promise<RoadHit[][] | null> {
   if (!env.mapboxToken) return null;
-  const seen = new Map<string, RoadHit>();
-  let answered = false;
+  const checks: RoadHit[][] = [];
   for (const [lng, lat] of samplePoints(paths)) {
     try {
       const hits = await nearbyRoads({ lat, lng }, ROAD_LOOK_M, AbortSignal.timeout(6_000));
-      answered = true;
-      for (const hit of hits) {
-        if (!hit.roadClass) continue;
-        const key = `${hit.roadClass}|${hit.name ?? ""}`;
-        if (!seen.has(key)) seen.set(key, { class: hit.roadClass, name: hit.name ?? null });
-      }
+      checks.push(hits.filter((h) => h.roadClass).map((h) => ({ class: h.roadClass!, name: h.name ?? null })));
     } catch {
       // One point unanswered is not a verdict; the others still count.
     }
   }
-  return answered ? [...seen.values()] : null;
+  return checks.length > 0 ? checks : null;
 }

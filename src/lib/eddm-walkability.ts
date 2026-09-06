@@ -50,13 +50,25 @@ export interface RoadHit {
   name: string | null;
 }
 
-/** From the roads found along a city route. A main road makes it hard. */
-export function mainRoadVerdict(roads: RoadHit[]): WalkVerdict {
-  const main = roads.filter((r) => MAIN_ROAD_CLASSES.has(r.class));
-  if (main.length === 0) return { walkability: "walkable", reason: null };
+/** A route is hard once this share of the checks along its streets meet a main road. */
+export const HARD_AT = 1 / 3;
+
+/**
+ * From the roads found at each check point along a city route.
+ *
+ * One check meeting a main road is a route that starts from one, which
+ * nearly every neighbourhood does; the walk simply does not go down it.
+ * A third of the checks meeting one is a route that runs along it.
+ */
+export function mainRoadVerdict(checks: RoadHit[][]): WalkVerdict {
+  const answered = checks.length;
+  if (answered === 0) return { walkability: "unknown", reason: "Roads not checked yet" };
+  const hits = checks.filter((roads) => roads.some((r) => MAIN_ROAD_CLASSES.has(r.class)));
+  if (hits.length === 0 || hits.length / answered < HARD_AT) return { walkability: "walkable", reason: null };
+  const main = hits.flat().filter((r) => MAIN_ROAD_CLASSES.has(r.class));
   const names = [...new Set(main.map((r) => r.name).filter((n): n is string => Boolean(n)))];
   const what = names.length > 0 ? names.slice(0, 3).join(", ") : `${main[0].class.replace("_link", "")} road`;
-  return { walkability: "hard", reason: `Main road through the route: ${what}` };
+  return { walkability: "hard", reason: `Main road through the route: ${what} (${hits.length} of ${answered} checks)` };
 }
 
 /**
@@ -64,7 +76,7 @@ export function mainRoadVerdict(roads: RoadHit[]): WalkVerdict {
  * streets, so a road is found wherever on the route it runs and the cost
  * stays a handful of lookups per route.
  */
-export function samplePoints(paths: LngLatPair[][], count = 6): LngLatPair[] {
+export function samplePoints(paths: LngLatPair[][], count = 10): LngLatPair[] {
   const vertices = paths.flat();
   if (vertices.length === 0) return [];
   if (vertices.length <= count) return vertices;
@@ -77,9 +89,9 @@ export function samplePoints(paths: LngLatPair[][], count = 6): LngLatPair[] {
 }
 
 /** Both checks together. USPS's type rules first; the roads decide the rest. */
-export function walkVerdict(routeType: string | null | undefined, roads: RoadHit[] | null): WalkVerdict {
+export function walkVerdict(routeType: string | null | undefined, checks: RoadHit[][] | null): WalkVerdict {
   const byType = routeTypeVerdict(routeType);
   if (byType.walkability === "hard") return byType;
-  if (roads === null) return byType.walkability === "walkable" ? { walkability: "unknown", reason: "Roads not checked yet" } : byType;
-  return mainRoadVerdict(roads);
+  if (checks === null) return byType.walkability === "walkable" ? { walkability: "unknown", reason: "Roads not checked yet" } : byType;
+  return mainRoadVerdict(checks);
 }

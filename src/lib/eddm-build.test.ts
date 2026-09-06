@@ -56,7 +56,7 @@ describe("describeBuild", () => {
       ...base,
       status: "running",
       scope: { zips: ["21014", "21009", "21015"], replaceWaves: [] },
-      checkpoint: { offset: 1, attempts: 0, replaced: false, zips: {} },
+      checkpoint: { offset: 1, attempts: 0, replaced: false, phase: "routes", zips: {} },
     });
     expect(text).toContain("1 of 3 ZIPs");
     expect(text).toContain("on 21009");
@@ -67,7 +67,7 @@ describe("describeBuild", () => {
       ...base,
       status: "done",
       scope: { zips: ["21014"], replaceWaves: [] },
-      checkpoint: { offset: 1, attempts: 0, replaced: true, zips: {} },
+      checkpoint: { offset: 1, attempts: 0, replaced: true, phase: "routes", zips: {} },
     });
     expect(text.startsWith("Built 1 of 1 ZIPs")).toBe(true);
   });
@@ -77,6 +77,6 @@ describe("scope and checkpoint parsing", () => {
   it("tolerates missing or odd values", () => {
     expect(scopeOf({ scope: null })).toEqual({ zips: [], replaceWaves: [] });
     expect(scopeOf({ scope: { zips: ["21014", 3], replaceWaves: "x" } })).toEqual({ zips: ["21014"], replaceWaves: [] });
-    expect(checkpointOf({ checkpoint: {} })).toEqual({ offset: 0, attempts: 0, replaced: false, zips: {} });
+    expect(checkpointOf({ checkpoint: {} })).toEqual({ offset: 0, attempts: 0, replaced: false, phase: "routes", zips: {} });
   });
 });
