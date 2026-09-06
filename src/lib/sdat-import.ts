@@ -61,6 +61,9 @@ export function describeSdatImport(job: Pick<JobRow, "status" | "fetched" | "mat
   return `Read ${progress}. ${totals}.`;
 }
 
+/** The answers that mean "not now" rather than "no": a challenge page, a throttle, a busy server. */
+const TRANSIENT_STATUSES = new Set([403, 429, 502, 503, 504]);
+
 export async function runSdatSteps(admin: Admin, first: JobRow): Promise<StepOutcome> {
   const started = Date.now();
   let job: JobRow | null = first;
@@ -68,6 +71,11 @@ export async function runSdatSteps(admin: Admin, first: JobRow): Promise<StepOut
   while (job) {
     outcome = await runSdatStep(admin, job);
     if (!outcome.more || outcome.status !== "running") break;
+    // The portal sits behind bot protection that challenges a client asking
+    // too fast: fifty pages in six minutes got a "just a moment" page. One
+    // page a tick, four thousand rows, reads the county in a quarter hour
+    // without tripping it.
+    if (isSocrataUrl(job.layer_url ?? "")) break;
     if (Date.now() - started > STEP_BUDGET_MS) break;
     job = await acquireLease(admin, first.id);
   }
@@ -219,6 +227,16 @@ export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutc
         return { features: parsed.rows.map((attributes) => ({ attributes })), error: parsed.error, exceededTransferLimit: false, lastObjectId: null, objectIdField: null };
       })()
     : parseFeaturePage(probe.body);
+  if (!probe.ok && probe.status != null && TRANSIENT_STATUSES.has(Number(probe.status)) && attempts + 1 < MAX_PAGE_ATTEMPTS) {
+    // Asked to slow down. The checkpoint stays; the scheduler asks again in
+    // half a minute, and the page is the same page.
+    await recordDiagnostic(admin, job, probe);
+    await release(admin, job.id, {
+      total_expected: totalExpected,
+      last_error: `The portal answered ${probe.status} at ${offset}; waiting a moment and asking again (${attempts + 1} of ${MAX_PAGE_ATTEMPTS}).`,
+    });
+    return { status: "running", more: false, fetched: 0, message: `Portal answered ${probe.status}; will retry.` };
+  }
   if (!probe.ok || page.error) {
     await recordDiagnostic(admin, job, probe);
     const message = page.error ?? probe.message ?? "The State's server did not answer.";
