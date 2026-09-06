@@ -22,6 +22,8 @@ export type SdatKey =
   | "address"
   | "streetNumber"
   | "streetName"
+  | "streetType"
+  | "streetDirection"
   | "unit"
   | "city"
   | "zip"
@@ -48,24 +50,26 @@ const CANDIDATES: Record<SdatKey, string[]> = {
   account: ["ACCTID", "ACCOUNT_ID", "ACCT_ID", "ACCOUNTID", "ACCOUNT"],
   address: ["ADDRESS", "PREMISE_ADDRESS", "PREM_ADDR", "SITE_ADDR", "MDP_STREET_ADDRESS", "PREMADDR", "SITEADDR"],
   streetNumber: ["STRTNUM", "PREMISE_ADDRESS_NUMBER", "STREET_NUMBER", "HOUSE_NUMBER"],
-  streetName: ["STRTNAM", "PREMISE_ADDRESS_STREET", "STREET_NAME"],
+  streetName: ["STRTNAM", "PREMISE_ADDRESS_STREET", "PREMISE_ADDRESS_STREET_NAME", "STREET_NAME"],
+  streetType: ["STRTSUF", "PREMISE_ADDRESS_TYPE", "PREMISE_ADDRESS_STREET_TYPE", "STREET_TYPE", "STRTTYP"],
+  streetDirection: ["STRTDIR", "PREMISE_ADDRESS_DIRECTION", "STREET_DIRECTION"],
   unit: ["STRTUNT", "PREMISE_ADDRESS_UNIT", "UNIT"],
   city: ["CITY", "PREMISE_ADDRESS_CITY", "MDP_CITY", "PREMCITY", "SITE_CITY"],
-  zip: ["ZIPCODE", "PREMISE_ADDRESS_ZIP", "ZIP", "PREMZIP", "SITE_ZIP", "MDP_ZIP"],
+  zip: ["ZIPCODE", "PREMISE_ADDRESS_ZIP", "PREMISE_ADDRESS_ZIP_CODE", "ZIP", "PREMZIP", "SITE_ZIP", "MDP_ZIP"],
   ownerName: ["OWNNAME1", "OWNER_NAME", "OWNNAME", "OWNER_NAME_1", "OWNER1"],
   ownerName2: ["OWNNAME2", "OWNER_NAME_2", "OWNER2"],
-  mailLine1: ["OWNADD1", "OWNER_MAILING_ADDRESS_LINE_1", "MAIL_ADDR1", "MAILADDR1", "OWNER_ADDRESS_1"],
-  mailLine2: ["OWNADD2", "OWNER_MAILING_ADDRESS_LINE_2", "MAIL_ADDR2", "MAILADDR2", "OWNER_ADDRESS_2"],
-  mailCity: ["OWNCITY", "OWNER_CITY", "MAIL_CITY", "MAILCITY"],
-  mailState: ["OWNSTA", "OWNER_STATE", "MAIL_STATE", "MAILSTATE"],
-  mailZip: ["OWNZIP", "OWNER_ZIP", "MAIL_ZIP", "MAILZIP"],
-  principalResidence: ["RESIDENT", "PRINCIPAL_RESIDENCE", "PRINRES", "PRIN_RES", "HOMESTEAD", "OWNOCC"],
+  mailLine1: ["OWNADD1", "OWNER_MAILING_ADDRESS_LINE_1", "MAILING_ADDRESS_LINE_1", "MAIL_ADDR1", "MAILADDR1", "OWNER_ADDRESS_1"],
+  mailLine2: ["OWNADD2", "OWNER_MAILING_ADDRESS_LINE_2", "MAILING_ADDRESS_LINE_2", "MAIL_ADDR2", "MAILADDR2", "OWNER_ADDRESS_2"],
+  mailCity: ["OWNCITY", "OWNER_CITY", "MAILING_ADDRESS_CITY", "MAIL_CITY", "MAILCITY"],
+  mailState: ["OWNSTA", "OWNER_STATE", "MAILING_ADDRESS_STATE", "MAIL_STATE", "MAILSTATE"],
+  mailZip: ["OWNZIP", "OWNER_ZIP", "MAILING_ADDRESS_ZIP_CODE", "MAILING_ADDRESS_ZIP", "MAIL_ZIP", "MAILZIP"],
+  principalResidence: ["RESIDENT", "PRINCIPAL_RESIDENCE", "PRINCIPAL_RESIDENCE_INDICATOR", "PRINRES", "PRIN_RES", "HOMESTEAD", "OWNOCC"],
   transferDate: ["TRADATE", "SALES_SEGMENT_1_TRANSFER_DATE", "TRANSFER_DATE", "LAST_SALE_DATE", "SALEDATE", "TRANSFER_DATE_1"],
   consideration: ["CONSIDR1", "SALES_SEGMENT_1_CONSIDERATION", "CONSIDERATION", "SALE_PRICE", "SALEPRICE", "CONSIDERATION_1"],
   yearBuilt: ["YEARBLT", "YEAR_BUILT", "YRBLT"],
   landUse: ["LU", "LAND_USE", "LAND_USE_CODE", "LUCODE"],
   landUseDescription: ["DESCLU", "LAND_USE_DESCRIPTION", "LU_DESC"],
-  assessedValue: ["NFMTTLVL", "TOTAL_ASSESSMENT", "ASSESSMENT", "CURRENT_ASSESSMENT", "NFMTTL"],
+  assessedValue: ["NFMTTLVL", "TOTAL_ASSESSMENT", "CURRENT_ASSESSMENT_YEAR_TOTAL_PHASE_IN_VALUE", "ASSESSMENT", "CURRENT_ASSESSMENT", "NFMTTL"],
   jurisdiction: ["JURSCODE", "JURISDICTION_CODE", "JURIS", "JURSCD"],
   county: ["COUNTY", "COUNTY_NAME", "CNTYNAME", "JURISDICTION"],
 };
@@ -192,7 +196,7 @@ export function premiseOf(attrs: Record<string, unknown>, mapping: SdatMapping):
     const number = text(attrs, mapping.streetNumber);
     const street = text(attrs, mapping.streetName);
     if (!number || !street) return null;
-    line = `${number} ${street}`;
+    line = [number, text(attrs, mapping.streetDirection), street, text(attrs, mapping.streetType)].filter(Boolean).join(" ");
   }
   const unit = text(attrs, mapping.unit);
   if (unit && !/\b(APT|UNIT|STE|SUITE|BLDG|LOT|#)\s*\S+/i.test(line)) line = `${line} UNIT ${unit}`;

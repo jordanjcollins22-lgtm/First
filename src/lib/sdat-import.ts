@@ -3,6 +3,16 @@ import { acquireLease, recordDiagnostic, type JobRow, type StepOutcome } from "@
 import { probeEndpoint } from "@/lib/gis-probe";
 import { discoverSdatFields, ownershipFromRecord, sdatMappingIsUsable, sdatWhere, type SdatMapping } from "@/lib/sdat";
 import { discoverLayer } from "@/lib/gis-import-run";
+import {
+  isSocrataUrl,
+  parseSocrataCount,
+  parseSocrataPage,
+  socrataCountUrl,
+  socrataFieldNames,
+  socrataFieldsUrl,
+  socrataPageUrl,
+  socrataWhere,
+} from "@/lib/socrata";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -76,6 +86,7 @@ async function release(admin: Admin, jobId: string, patch: Partial<JobRow>) {
  * on the row as the start action would have.
  */
 async function bootstrap(admin: Admin, job: JobRow): Promise<JobRow | null> {
+  if (isSocrataUrl(job.layer_url || job.service_url)) return bootstrapSocrata(admin, job);
   const discovery = await discoverLayer(job.layer_url || job.service_url, "background-job");
   const fields = discovery.description.fields;
   const mapping = discoverSdatFields(fields.map((f) => f.name));
@@ -117,6 +128,45 @@ async function bootstrap(admin: Admin, job: JobRow): Promise<JobRow | null> {
   return data;
 }
 
+/** The portal's version of the same: one row tells the fields. */
+async function bootstrapSocrata(admin: Admin, job: JobRow): Promise<JobRow | null> {
+  const url = job.layer_url || job.service_url;
+  const probe = await probeEndpoint(socrataFieldsUrl(url), "background-job", PAGE_FETCH_TIMEOUT_MS);
+  const names = probe.ok ? socrataFieldNames(probe.body) : [];
+  const mapping = discoverSdatFields(names);
+  const diagnostics = [...(Array.isArray(job.diagnostics) ? (job.diagnostics as Json[]) : []), { ...probe } as unknown as Json].slice(-25);
+  if (!probe.ok || !sdatMappingIsUsable(mapping)) {
+    await release(admin, job.id, {
+      status: "failed",
+      diagnostics,
+      discovered_fields: names.map((name) => ({ name })) as unknown as Json,
+      last_error: !probe.ok
+        ? `The portal did not answer: ${probe.message ?? probe.kind}`
+        : `The resource has no premise address field. Its fields: ${names.slice(0, 40).join(", ")}`,
+      finished_at: new Date().toISOString(),
+    });
+    return null;
+  }
+  const scope = (job.scope ?? {}) as Partial<SdatScope>;
+  const { data, error } = await admin
+    .from("gis_import_jobs")
+    .update({
+      layer_url: url,
+      layer_name: "Maryland open data: real property assessments",
+      max_record_count: PAGE_SIZE,
+      discovered_fields: names.map((name) => ({ name })) as unknown as Json,
+      field_mapping: mapping as unknown as Json,
+      scope: { ...scope, zipIsNumber: false, where: socrataWhere(mapping, scope.zips ?? []) } as unknown as Json,
+      diagnostics,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", job.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /** One page. Expects the caller to hold the lease. */
 export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutcome> {
   let job = first;
@@ -136,7 +186,8 @@ export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutc
   const attempts = Math.max(0, Number(checkpoint.attempts ?? 0));
   const afterObjectId = checkpoint.lastObjectId ?? null;
   const objectIdField = checkpoint.objectIdField ?? null;
-  const where = sdatWhere(mapping, scope.zips ?? [], scope.zipIsNumber === true);
+  const socrata = isSocrataUrl(job.layer_url);
+  const where = socrata ? socrataWhere(mapping, scope.zips ?? []) : sdatWhere(mapping, scope.zips ?? [], scope.zipIsNumber === true);
 
   if (attempts >= MAX_PAGE_ATTEMPTS) {
     await release(admin, job.id, { status: "failed", last_error: `The page at ${offset} was cut off ${attempts} times in a row. Resume to try again.` });
@@ -151,14 +202,22 @@ export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutc
 
   let totalExpected = job.total_expected;
   if (totalExpected == null && offset === 0) {
-    const countProbe = await probeEndpoint(queryUrl(job.layer_url, { where, offset: 0, pageSize: 1, countOnly: true }), "background-job");
+    const countUrl = socrata ? socrataCountUrl(job.layer_url, where) : queryUrl(job.layer_url, { where, offset: 0, pageSize: 1, countOnly: true });
+    const countProbe = await probeEndpoint(countUrl, "background-job");
     await recordDiagnostic(admin, job, countProbe);
-    totalExpected = countProbe.ok ? parseCount(countProbe.body) : null;
+    totalExpected = countProbe.ok ? (socrata ? parseSocrataCount(countProbe.body) : parseCount(countProbe.body)) : null;
   }
 
-  const pageUrl = queryUrl(job.layer_url, { where, offset, pageSize, afterObjectId, objectIdField, returnGeometry: false });
+  const pageUrl = socrata
+    ? socrataPageUrl(job.layer_url, where, offset, pageSize)
+    : queryUrl(job.layer_url, { where, offset, pageSize, afterObjectId, objectIdField, returnGeometry: false });
   const probe = await probeEndpoint(pageUrl, "background-job", PAGE_FETCH_TIMEOUT_MS);
-  const page = parseFeaturePage(probe.body);
+  const page = socrata
+    ? (() => {
+        const parsed = parseSocrataPage(probe.body);
+        return { features: parsed.rows.map((attributes) => ({ attributes })), error: parsed.error, exceededTransferLimit: false, lastObjectId: null, objectIdField: null };
+      })()
+    : parseFeaturePage(probe.body);
   if (!probe.ok || page.error) {
     await recordDiagnostic(admin, job, probe);
     const message = page.error ?? probe.message ?? "The State's server did not answer.";
