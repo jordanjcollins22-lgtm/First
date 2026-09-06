@@ -7,6 +7,7 @@ import { getEddmRates, listEddmMailings } from "@/lib/data/eddm";
 import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/data/eddm-build";
 import { EMPTY_OWNERSHIP, kindSummary, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
 import { listZones } from "@/lib/data/zones";
+import { listMarketingPlays } from "@/lib/data/marketing";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
 import { listProfiles } from "@/lib/data/team";
@@ -21,9 +22,9 @@ import { AccessDeniedNotice } from "@/components/access-denied-notice";
 export default async function AttractorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ denied?: string }>;
+  searchParams: Promise<{ denied?: string; zone?: string }>;
 }) {
-  const { denied } = await searchParams;
+  const { denied, zone } = await searchParams;
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const { allowed, profile } = await checkTabAccess("project-data");
@@ -104,6 +105,9 @@ export default async function AttractorsPage({
       listZones().catch(() => []),
       kindSummary().catch(() => ({})),
     ]);
+  // The marketing to do, synced on the way in so a client who paid a
+  // minute ago is already on it.
+  const plays = await listMarketingPlays({ sync: true }).catch(() => []);
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
@@ -137,6 +141,8 @@ export default async function AttractorsPage({
         ownership={ownership}
         ownershipMatrix={ownershipMatrix}
         zones={zones}
+        plays={plays}
+        initialZoneId={zone ?? null}
         houseKinds={houseKinds}
         densityPoints={densityPoints}
         profiles={profiles}

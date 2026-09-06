@@ -55,6 +55,8 @@ import type { EddmMailing } from "@/lib/data/eddm";
 import type { MailingRates } from "@/lib/eddm-mailing";
 import { unionBoundary } from "@/lib/eddm-mailing";
 import { EddmBuildPanel } from "./eddm-build-panel";
+import { MarketingTodo } from "@/components/marketing/marketing-todo";
+import type { MarketingPlay } from "@/lib/marketing-plays";
 import { OwnershipPanel } from "./ownership-panel";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
@@ -89,6 +91,8 @@ export function AttractorsDashboard({
   ownershipMatrix,
   houseKinds,
   zones,
+  plays,
+  initialZoneId,
   densityPoints,
   keywords,
   rankScans,
@@ -119,6 +123,10 @@ export function AttractorsDashboard({
   houseKinds: Partial<Record<HouseKind, number>>;
   /** The door-hanger zones, built from the USPS routes as a partition of the county. */
   zones: ZoneRow[];
+  /** The marketing to do, made from evaluations and clients. */
+  plays: MarketingPlay[];
+  /** A zone to open on arrival, from a link on another page. */
+  initialZoneId: string | null;
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -175,7 +183,10 @@ export function AttractorsDashboard({
   // are the point of it.
   const [showUnserved, setShowUnserved] = useState(false);
   const [showZones, setShowZones] = useState(zones.length > 0);
-  const [focusZone, setFocusZone] = useState<{ id: string; at: number } | null>(null);
+  const [focusZone, setFocusZone] = useState<{ id: string; at: number } | null>(initialZoneId ? { id: initialZoneId, at: 0 } : null);
+  // The zones with an evaluation, a client or marketing to do in them are
+  // the ones the office works; the rest of the county is behind a switch.
+  const [zoneScope, setZoneScope] = useState<"active" | "all">("active");
   const [pointColorMode, setPointColorMode] = useState<PointColorMode>("stage");
   // A question over the county's dots, from the cross-check table; the map
   // shows only the houses that answer yes.
@@ -573,6 +584,7 @@ export function AttractorsDashboard({
                 showUnserved={showUnserved && !focused}
                 unservedClusters={unservedClusters}
                 showZones={showZones && !focused}
+                zoneScope={zoneScope}
                 focusZone={focused ? null : focusZone}
                 pointColorMode={pointColorMode}
                 pointHighlight={pointHighlight?.value ?? null}
@@ -628,6 +640,21 @@ export function AttractorsDashboard({
         </Card>
 
         {!creating && !selectedWave && !selectedJob && (
+          <Card className="max-h-[70vh] overflow-y-auto">
+            <CardContent className="pt-6">
+              <MarketingTodo
+                plays={plays}
+                onFocusZone={(id) => {
+                  setShowZones(true);
+                  setFocusZone({ id, at: Date.now() });
+                }}
+                onFlyTo={(target) => setFlyTo({ ...target })}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {!creating && !selectedWave && !selectedJob && (
           <Card>
             <CardContent className="pt-6">
               <OwnershipPanel
@@ -658,6 +685,8 @@ export function AttractorsDashboard({
                 summary={eddmSummary}
                 clusters={unservedClusters}
                 zones={zones}
+                zoneScope={zoneScope}
+                onZoneScope={setZoneScope}
                 onFocusZone={(id) => {
                   setShowZones(true);
                   setFocusZone({ id, at: Date.now() });

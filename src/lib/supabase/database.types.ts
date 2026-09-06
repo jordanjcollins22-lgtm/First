@@ -32,6 +32,7 @@ export interface Database {
           eddm_postage_per_piece: number | null;
           /** What a piece costs to print in-house, in dollars. */
           eddm_print_cost_per_piece: number;
+          marketing_since: string;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> & {
           name: string;
@@ -996,6 +997,39 @@ export interface Database {
           service_url: string;
         };
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
+        Relationships: [];
+      };
+      marketing_plays: {
+        Row: {
+          id: string;
+          organization_id: string;
+          house_id: string;
+          job_id: string | null;
+          customer_id: string | null;
+          /** evaluation | client: what set the play off. */
+          reason: string;
+          /** yard_sign | knocks | door_hangers | flyers */
+          kind: string;
+          quantity: number;
+          zone_id: string | null;
+          /** House ids for doors; route objects for flyers. */
+          targets: Json;
+          /** open | done | skipped */
+          status: string;
+          done_at: string | null;
+          done_by: string | null;
+          mailing_id: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["marketing_plays"]["Row"]> & {
+          organization_id: string;
+          house_id: string;
+          reason: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["marketing_plays"]["Row"]>;
         Relationships: [];
       };
       house_kinds: {
@@ -2633,6 +2667,13 @@ export interface Database {
       zone_merge_small: { Args: { org: string; the_zip: string | null; max_houses?: number }; Returns: Json };
       zone_enclave_count: { Args: { org: string }; Returns: Json };
       zones_list: { Args: { org: string }; Returns: Json };
+      marketing_sync: { Args: { org: string }; Returns: Json };
+      marketing_play_set: { Args: { the_play: string; new_status: string; by: string | null; designs?: number }; Returns: Json };
+      marketing_plays_list: { Args: { org: string; include_done?: boolean }; Returns: Json };
+      marketing_knock_targets: { Args: { the_house: string }; Returns: Json };
+      marketing_hanger_targets: { Args: { the_house: string; wanted?: number }; Returns: Json };
+      marketing_flyer_routes: { Args: { the_house: string; wanted?: number }; Returns: Json };
+      zone_is_active: { Args: { the_zone: string }; Returns: boolean };
       classify_houses: { Args: { org: string; the_zip: string | null }; Returns: Json };
       kind_summary: { Args: { org: string }; Returns: Json };
       /** The doors inside a drawn shape: count, stage breakdown, print run by design. */

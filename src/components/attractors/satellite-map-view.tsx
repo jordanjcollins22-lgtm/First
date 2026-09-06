@@ -83,6 +83,8 @@ interface SatelliteMapViewProps {
    * coloured by whether each is walked, scootered or driven.
    */
   showZones: boolean;
+  /** Only the zones with an evaluation, a client or marketing to do in them, or every zone. */
+  zoneScope: "active" | "all";
   /** A zone to fly to and show the walk of, when the panel picks one. */
   focusZone: { id: string; at: number } | null;
   /** Routes ticked for a mailing, drawn solid. */
@@ -304,6 +306,7 @@ export function SatelliteMapView({
   showUnserved,
   unservedClusters,
   showZones,
+  zoneScope,
   focusZone,
   selectedEddmIds,
   onToggleMailingRoute,
@@ -1220,6 +1223,17 @@ export function SatelliteMapView({
       cancelled = true;
     };
   }, [showZones, mapLoaded]);
+
+  // The county's zones are there when asked; by default the map shows only
+  // the ones with something of ours in them.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const filter = zoneScope === "all" ? null : ["==", ["get", "active"], true];
+    for (const layer of [ZONES_FILL_LAYER, ZONES_LINE_LAYER, ZONES_LABEL_LAYER]) {
+      if (map.getLayer(layer)) map.setFilter(layer, filter as mapboxgl.FilterSpecification | null);
+    }
+  }, [zoneScope, mapLoaded]);
 
   // A zone picked from the list: fly to it and draw its walk.
   useEffect(() => {

@@ -49,6 +49,10 @@ export interface ZoneProperties {
   reason: string | null;
   waveId: string | null;
   clients: number;
+  /** An evaluation, a client, or marketing still to do in it: the zones the office needs to see. */
+  active?: boolean;
+  /** Marketing plays still to do in it. */
+  open?: number;
 }
 
 /** "3 h 40 min", "45 min". */

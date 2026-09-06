@@ -24,6 +24,8 @@ import { PageTabs } from "@/components/ui/page-tabs";
 import { isTwilioConfigured } from "@/lib/env";
 import { getMyNotificationSettings } from "@/lib/data/notification-preferences";
 import { NotificationSettings } from "@/components/notifications/notification-settings";
+import { listMarketingPlays } from "@/lib/data/marketing";
+import { MarketingTodo } from "@/components/marketing/marketing-todo";
 
 /**
  * One person's own work — whoever they are.
@@ -125,6 +127,13 @@ async function OfficeDay() {
     return [];
   });
 
+  // The marketing every evaluation and client set off, to tick off. Synced
+  // on the way in; allowed to fail on its own.
+  const plays = await listMarketingPlays({ sync: true }).catch((err) => {
+    console.error("Marketing plays failed to load:", err);
+    return [];
+  });
+
   const { summary } = data;
   const nothing =
     data.evaluations.every((s) => s.rows.length === 0) && data.jobs.every((s) => s.rows.length === 0);
@@ -188,6 +197,12 @@ async function OfficeDay() {
             sections={data.jobs}
           />
         </>
+      )}
+
+      {plays.length > 0 && (
+        <div className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
+          <MarketingTodo plays={plays} />
+        </div>
       )}
 
       {work && (

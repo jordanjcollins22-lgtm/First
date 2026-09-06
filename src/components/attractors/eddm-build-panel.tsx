@@ -29,6 +29,8 @@ export function EddmBuildPanel({
   onToggleShowUnserved,
   onFlyTo,
   zones,
+  zoneScope,
+  onZoneScope,
   onFocusZone,
 }: {
   build: EddmBuildStatus | null;
@@ -39,10 +41,15 @@ export function EddmBuildPanel({
   onFlyTo: (target: { lat: number; lng: number }) => void;
   /** The zones, every house in exactly one, with how each is covered. */
   zones: ZoneRow[];
+  /** Only the zones with an evaluation, a client or marketing to do in them, or every zone. */
+  zoneScope: "active" | "all";
+  onZoneScope: (scope: "active" | "all") => void;
   onFocusZone: (id: string) => void;
 }) {
   const [showAllZones, setShowAllZones] = useState(false);
-  const ranked = rankZones(zones);
+  const activeZones = zones.filter((z) => z.active);
+  const shown = zoneScope === "all" ? zones : activeZones;
+  const ranked = rankZones(shown);
   const byMode = (m: string) => zones.filter((z) => z.mode === m);
   const hours = (list: ZoneRow[]) => Math.round(list.reduce((s, z) => s + (z.minutes ?? 0), 0) / 60);
   const router = useRouter();
@@ -127,6 +134,13 @@ export function EddmBuildPanel({
       {zones.length > 0 && (
         <div className="space-y-2 border-t border-border pt-3">
           <p className="text-xs font-medium">Zones: every house in exactly one, none overlapping</p>
+          <label className="flex items-center gap-1.5 text-xs">
+            <input type="checkbox" checked={zoneScope === "all"} onChange={(e) => onZoneScope(e.target.checked ? "all" : "active")} className="h-3.5 w-3.5" />
+            Show every zone
+            <span className="text-muted-foreground">
+              ({activeZones.length} with evaluations, clients or marketing to do; {zones.length - activeZones.length} more)
+            </span>
+          </label>
           <p className="text-xs text-muted-foreground">
             {(["foot", "scooter", "vehicle"] as const)
               .map((m) => `${byMode(m).length} ${MODE_LABEL[m].toLowerCase()} (${byMode(m).reduce((s, z) => s + z.houses, 0).toLocaleString()} doors, ${hours(byMode(m))} h)`)
@@ -154,9 +168,9 @@ export function EddmBuildPanel({
               );
             })}
           </ul>
-          {zones.length > 10 && (
+          {shown.length > 10 && (
             <button type="button" className="text-xs text-primary hover:underline" onClick={() => setShowAllZones((v) => !v)}>
-              {showAllZones ? "Show fewer" : `Show all ${zones.length} zones`}
+              {showAllZones ? "Show fewer" : `Show all ${shown.length} zones`}
             </button>
           )}
         </div>
