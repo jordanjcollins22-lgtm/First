@@ -2590,6 +2590,9 @@ export interface Database {
       houses_unserved_points: { Args: { org: string }; Returns: Json };
       houses_zip_counts: { Args: { org: string }; Returns: Json };
       ownership_summary: { Args: { org: string }; Returns: Json };
+      house_facts: { Args: { org: string; the_house: string }; Returns: Json };
+      house_nearest: { Args: { org: string; at_lat: number; at_lng: number }; Returns: string | null };
+      relationship_ownership_matrix: { Args: { org: string }; Returns: Json };
       /** The doors inside a drawn shape: count, stage breakdown, print run by design. */
       houses_coverage: {
         Args: { org: string; ring: Json | null; zips: Json | null; designs?: number };

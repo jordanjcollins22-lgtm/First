@@ -84,16 +84,17 @@ export function parseBbox(params: URLSearchParams): { minLat: number; minLng: nu
 export const ALL_ADDRESSES_MIN_ZOOM = 13;
 
 /**
- * `[lng, lat, stageRank, ownership?, soldRecently?]`, as the all-houses
- * route sends it. Ownership is 0 unknown, 1 owner-occupied, 2 absentee;
- * soldRecently is 1 when the house changed hands in the last year.
+ * `[lng, lat, stageRank, ownership?, soldRecently?, walkableRoute?]`, as the
+ * all-houses route sends it. Ownership is 0 unknown, 1 owner-occupied,
+ * 2 absentee; soldRecently is 1 when the house changed hands in the last
+ * year; walkableRoute is 1 when a USPS route that became a wave passes it.
  */
-export type MapPoint = [number, number, number] | [number, number, number, number, number];
+export type MapPoint = [number, number, number] | [number, number, number, number, number] | [number, number, number, number, number, number];
 
 export interface PointFeature {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
-  properties: { s: number; o: number; r: number };
+  properties: { s: number; o: number; r: number; w: number };
 }
 
 /** Every point as a feature, carrying its stage rank, ownership and recent sale; the layer colours by one of them. */
@@ -101,12 +102,12 @@ export function pointsToFeatures(points: MapPoint[]): PointFeature[] {
   const out: PointFeature[] = [];
   for (const point of points) {
     if (!Array.isArray(point) || point.length < 3) continue;
-    const [lng, lat, s, o, r] = point;
+    const [lng, lat, s, o, r, w] = point;
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     out.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [lng, lat] },
-      properties: { s: Number(s) || 0, o: Number(o) || 0, r: Number(r) || 0 },
+      properties: { s: Number(s) || 0, o: Number(o) || 0, r: Number(r) || 0, w: Number(w) || 0 },
     });
   }
   return out;

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { SDAT_KIND, describeSdatImport } from "@/lib/sdat-import";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
+import type { MatrixRow } from "@/lib/house-highlight";
 
 /** What the State's roll has told us about the county's houses, in counts. */
 export interface OwnershipSummary {
@@ -49,4 +50,14 @@ export async function latestSdatImport(): Promise<SdatStatus | null> {
   if (error) throw error;
   if (!job) return null;
   return { jobId: job.id, status: job.status, summary: describeSdatImport(job), fetched: job.fetched, totalExpected: job.total_expected, updatedAt: job.updated_at };
+}
+
+/** Where we stand against who owns it, counted, for the cross-check table. */
+export async function relationshipOwnershipMatrix(): Promise<MatrixRow[]> {
+  const supabase = await createClient();
+  const org = await getCurrentOrganizationId();
+  if (!org) return [];
+  const { data, error } = await supabase.rpc("relationship_ownership_matrix", { org });
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []) as MatrixRow[];
 }

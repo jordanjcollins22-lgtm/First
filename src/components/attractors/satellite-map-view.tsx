@@ -22,9 +22,11 @@ import {
   type MapPoint,
   type PointColorMode,
 } from "@/lib/house-geojson";
-import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
+import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL } from "@/lib/house-relationship";
 import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
+import { renderHouseCard, renderHouseCardLoading, type HouseFacts } from "@/lib/house-facts";
+import { matchesHighlight, type PointHighlight } from "@/lib/house-highlight";
 import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
 if (env.mapboxToken) {
@@ -57,6 +59,8 @@ interface SatelliteMapViewProps {
   showAllAddresses: boolean;
   /** What the county's dots are coloured by: stage, ownership, or a recent sale. */
   pointColorMode: PointColorMode;
+  /** A question over the county's dots; only the ones that answer yes are drawn. */
+  pointHighlight: PointHighlight | null;
   /** USPS carrier routes for a ZIP, drawn as outlines with USPS's counts. */
   eddmRoutes: EddmRouteFeature[];
   /** The streets each route walks, coloured to match. */
@@ -159,6 +163,29 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Everything we know about the house at a dot, in one popup.
+ *
+ * Opens at once with what the dot itself knows, then fills in from the
+ * server: the people, the owner, the route, the hangers. One request.
+ */
+function openHouseCard(map: mapboxgl.Map, lngLat: [number, number], lookup: { id?: string; label: string }) {
+  const popup = new mapboxgl.Popup({ offset: 8, maxWidth: "320px" })
+    .setLngLat(lngLat)
+    .setHTML(renderHouseCardLoading(lookup.label))
+    .addTo(map);
+  const params = lookup.id ? new URLSearchParams({ id: lookup.id }) : new URLSearchParams({ lat: String(lngLat[1]), lng: String(lngLat[0]) });
+  fetch(`/api/houses/facts?${params}`, { cache: "no-store" })
+    .then((res) => res.json() as Promise<{ facts: HouseFacts | null; error?: string }>)
+    .then((body) => {
+      if (!popup.isOpen()) return;
+      popup.setHTML(body.facts ? renderHouseCard(body.facts) : `<div style="font:400 12.5px system-ui">${escapeHtml(lookup.label)}<div style="color:#666">No house on record at this point</div></div>`);
+    })
+    .catch(() => {
+      if (popup.isOpen()) popup.setHTML(`<div style="font:400 12.5px system-ui">${escapeHtml(lookup.label)}<div style="color:#666">Could not gather the house's facts</div></div>`);
+    });
+}
+
 export function SatelliteMapView({
   waves,
   jobs,
@@ -166,6 +193,7 @@ export function SatelliteMapView({
   houses,
   showAllAddresses,
   pointColorMode,
+  pointHighlight,
   eddmRoutes,
   eddmStreets,
   onUseRouteAsWave,
@@ -599,23 +627,8 @@ export function SatelliteMapView({
         const feature = e.features?.[0];
         const point = feature?.geometry as GeoJSON.Point | undefined;
         if (!feature || !point) return;
-        const { address, stage, contacts, customerId } = feature.properties as {
-          address: string;
-          stage: RelationshipStage;
-          contacts: string;
-          customerId: string | null;
-        };
-        const link = customerId
-          ? `<a href="/clients/${escapeHtml(customerId)}" style="color:#2f6d3c;text-decoration:underline">Open contact</a>`
-          : "";
-        new mapboxgl.Popup({ offset: 10 })
-          .setLngLat(point.coordinates as [number, number])
-          .setHTML(
-            `<div style="font:500 13px system-ui"><div>${escapeHtml(address)}</div>` +
-              `<div style="color:#666;font-weight:400">${escapeHtml(STAGE_LABEL[stage] ?? stage)}` +
-              `${contacts ? ` · ${escapeHtml(contacts)}` : ""}</div>${link}</div>`
-          )
-          .addTo(map);
+        const { id, address } = feature.properties as { id: string; address: string };
+        openHouseCard(map, point.coordinates as [number, number], { id, label: address });
       });
       map.on("mouseenter", HOUSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", HOUSES_LAYER, () => (map.getCanvas().style.cursor = ""));
@@ -634,37 +647,17 @@ export function SatelliteMapView({
       map.on("mouseenter", ALL_ADDRESSES_CLUSTER_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", ALL_ADDRESSES_CLUSTER_LAYER, () => (map.getCanvas().style.cursor = ""));
 
-      map.on("click", ALL_ADDRESSES_LAYER, async (e) => {
+      map.on("click", ALL_ADDRESSES_LAYER, (e) => {
+        // A dot with a story on top of it is handled by that layer.
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER] }).length > 0) return;
         const feature = e.features?.[0];
         const point = feature?.geometry as GeoJSON.Point | undefined;
         if (!feature || !point) return;
-        const [lng, lat] = point.coordinates as [number, number];
         const rank = Number((feature.properties as { s?: number }).s ?? 0);
         const stage = RELATIONSHIP_STAGES[rank] ?? "untouched";
-        const popup = new mapboxgl.Popup({ offset: 8 })
-          .setLngLat([lng, lat])
-          .setHTML(`<div style="font:500 13px system-ui"><div style="color:#666">${escapeHtml(STAGE_LABEL[stage])}</div><div>Looking up the address…</div></div>`)
-          .addTo(map);
         // The points carry no address, to keep a hundred thousand of them
-        // small; the one that was clicked is looked up on demand.
-        const d = 0.00012;
-        const params = new URLSearchParams({
-          minLat: String(lat - d),
-          minLng: String(lng - d),
-          maxLat: String(lat + d),
-          maxLng: String(lng + d),
-        });
-        try {
-          const res = await fetch(`/api/houses/geojson?${params}`, { cache: "no-store" });
-          const body = (await res.json()) as { features?: { properties: { address: string } }[] };
-          const address = body.features?.[0]?.properties.address ?? "Address not found";
-          popup.setHTML(
-            `<div style="font:500 13px system-ui"><div>${escapeHtml(address)}</div>` +
-              `<div style="color:#666;font-weight:400">${escapeHtml(STAGE_LABEL[stage])}</div></div>`
-          );
-        } catch {
-          popup.setHTML(`<div style="font:500 13px system-ui">${escapeHtml(STAGE_LABEL[stage])}</div>`);
-        }
+        // small; the one that was clicked is looked up by where it is.
+        openHouseCard(map, point.coordinates as [number, number], { label: STAGE_LABEL[stage] });
       });
       map.on("mouseenter", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = ""));
@@ -975,15 +968,20 @@ export function SatelliteMapView({
         }
       }
       if (cancelled) return;
-      const features = pointsToFeatures(allPointsRef.current);
+      const kept = pointHighlight ? allPointsRef.current.filter((p) => matchesHighlight(p, pointHighlight)) : allPointsRef.current;
+      const features = pointsToFeatures(kept);
       source?.setData({ type: "FeatureCollection", features });
-      setAllAddressesNote(`${features.length.toLocaleString()} addresses. Zoom in for one dot per door.`);
+      setAllAddressesNote(
+        pointHighlight
+          ? `${features.length.toLocaleString()} of ${allPointsRef.current.length.toLocaleString()} addresses answer the question.`
+          : `${features.length.toLocaleString()} addresses. Zoom in for one dot per door.`
+      );
     }
     void load();
     return () => {
       cancelled = true;
     };
-  }, [showAllAddresses, mapLoaded]);
+  }, [showAllAddresses, pointHighlight, mapLoaded]);
 
   // The houses no route reaches, fetched once when asked for; the groups
   // come with the page.

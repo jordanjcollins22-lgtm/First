@@ -59,6 +59,7 @@ import { OwnershipPanel } from "./ownership-panel";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
+import type { MatrixRow, PointHighlight } from "@/lib/house-highlight";
 import type { EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
@@ -83,6 +84,7 @@ export function AttractorsDashboard({
   unservedClusters,
   sdatJob,
   ownership,
+  ownershipMatrix,
   densityPoints,
   keywords,
   rankScans,
@@ -109,6 +111,7 @@ export function AttractorsDashboard({
   /** The State's roll: the last read of it, and what it says in counts. */
   sdatJob: SdatStatus | null;
   ownership: OwnershipSummary;
+  ownershipMatrix: MatrixRow[];
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -165,6 +168,9 @@ export function AttractorsDashboard({
   // are the point of it.
   const [showUnserved, setShowUnserved] = useState(false);
   const [pointColorMode, setPointColorMode] = useState<PointColorMode>("stage");
+  // A question over the county's dots, from the cross-check table; the map
+  // shows only the houses that answer yes.
+  const [pointHighlight, setPointHighlight] = useState<{ key: string; value: PointHighlight } | null>(null);
   const [flyTo, setFlyTo] = useState<LatLng | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
@@ -552,6 +558,7 @@ export function AttractorsDashboard({
                 showUnserved={showUnserved}
                 unservedClusters={unservedClusters}
                 pointColorMode={pointColorMode}
+                pointHighlight={pointHighlight?.value ?? null}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
@@ -613,6 +620,12 @@ export function AttractorsDashboard({
                 onColorMode={(mode) => {
                   setPointColorMode(mode);
                   if (mode !== "stage") setShowAllAddresses(true);
+                }}
+                matrix={ownershipMatrix}
+                highlight={pointHighlight}
+                onHighlight={(next) => {
+                  setPointHighlight(next);
+                  if (next) setShowAllAddresses(true);
                 }}
               />
             </CardContent>

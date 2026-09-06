@@ -9,6 +9,7 @@ import { pauseSdatImport, resumeSdatImport, sdatStatus, startSdatImport, type Sd
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import { DEFAULT_SDAT_URL } from "@/lib/sdat";
 import type { PointColorMode } from "@/lib/house-geojson";
+import { countHighlight, HIGHLIGHT_PRESETS, stageOwnershipTable, type MatrixRow, type PointHighlight } from "@/lib/house-highlight";
 
 /**
  * Who owns the houses, from the State's assessment roll.
@@ -23,11 +24,19 @@ export function OwnershipPanel({
   summary,
   colorMode,
   onColorMode,
+  matrix,
+  highlight,
+  onHighlight,
 }: {
   job: SdatStatus | null;
   summary: OwnershipSummary;
   colorMode: PointColorMode;
   onColorMode: (mode: PointColorMode) => void;
+  /** Where we stand against who owns it, counted. */
+  matrix: MatrixRow[];
+  /** The question the map is currently showing the answer to. */
+  highlight: { key: string; value: PointHighlight } | null;
+  onHighlight: (next: { key: string; value: PointHighlight } | null) => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -116,6 +125,74 @@ export function OwnershipPanel({
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {known && matrix.length > 0 && (
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-xs font-medium">Where we stand, against who owns it</p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="py-0.5 text-left font-normal"></th>
+                <th className="py-0.5 text-right font-normal">Owner</th>
+                <th className="py-0.5 text-right font-normal">Rented</th>
+                <th className="py-0.5 text-right font-normal">Unknown</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stageOwnershipTable(matrix).map((row) => (
+                <tr key={row.rank} className="border-t border-border/60">
+                  <td className="py-0.5">{row.label}</td>
+                  {([1, 2, 0] as const).map((own) => {
+                    const n = own === 1 ? row.owner : own === 2 ? row.absentee : row.unknown;
+                    const key = `cell-${row.rank}-${own}`;
+                    const active = highlight?.key === key;
+                    return (
+                      <td key={own} className="py-0.5 text-right">
+                        <button
+                          type="button"
+                          disabled={n === 0}
+                          onClick={() => onHighlight(active ? null : { key, value: { stages: [row.rank], ownership: [own] } })}
+                          className={active ? "rounded bg-primary px-1.5 text-primary-foreground" : n === 0 ? "text-muted-foreground/50" : "rounded px-1.5 hover:bg-muted"}
+                          title="Show these on the map"
+                        >
+                          {n.toLocaleString()}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex flex-wrap gap-1.5">
+            {HIGHLIGHT_PRESETS.map((preset) => {
+              const active = highlight?.key === preset.key;
+              const n = countHighlight(matrix, preset.highlight);
+              return (
+                <button
+                  key={preset.key}
+                  type="button"
+                  title={preset.why}
+                  onClick={() => onHighlight(active ? null : { key: preset.key, value: preset.highlight })}
+                  className={
+                    active
+                      ? "rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
+                      : "rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                  }
+                >
+                  {preset.label}
+                  {!preset.highlight.soldRecently && <span className="ml-1 opacity-70">{n.toLocaleString()}</span>}
+                </button>
+              );
+            })}
+            {highlight && (
+              <button type="button" onClick={() => onHighlight(null)} className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:underline">
+                Show everything
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {known && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs">
