@@ -89,6 +89,8 @@ interface SatelliteMapViewProps {
   visibleZoneIds: string[];
   /** A zone to fly to and show the walk of, when the panel picks one. */
   focusZone: { id: string; at: number } | null;
+  /** A marketing play whose doors to light up, while it is being looked at. */
+  focusPlay?: { id: string; at: number } | null;
   /** Routes ticked for a mailing, drawn solid. */
   selectedEddmIds: string[];
   onToggleMailingRoute: (id: string) => void;
@@ -157,6 +159,9 @@ const WALK_LINE_LAYER = "zone-walk-line";
 const WALK_STOPS_LAYER = "zone-walk-stops";
 const WALK_ORDER_LAYER = "zone-walk-order";
 const WALK_MARKS_SOURCE = "zone-walk-marks";
+const PLAY_DOORS_SOURCE = "play-doors";
+const PLAY_DOORS_LAYER = "play-doors-circle";
+const PLAY_DOORS_LABEL_LAYER = "play-doors-label";
 const WALK_MARKS_LAYER = "zone-walk-marks";
 const WALK_MARKS_LABEL_LAYER = "zone-walk-marks-label";
 const UNSERVED_SOURCE = "unserved-houses";
@@ -361,6 +366,7 @@ export function SatelliteMapView({
   zoneScope,
   visibleZoneIds,
   focusZone,
+  focusPlay = null,
   selectedEddmIds,
   onToggleMailingRoute,
   densityCells,
@@ -641,6 +647,22 @@ export function SatelliteMapView({
         paint: { "text-color": "#ffffff" },
       });
       map.addSource(WALK_MARKS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // The doors of the marketing play being looked at, numbered in walking order.
+      map.addSource(PLAY_DOORS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: PLAY_DOORS_LAYER,
+        type: "circle",
+        source: PLAY_DOORS_SOURCE,
+        paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 4, 17, 9], "circle-color": "#f59e0b", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 },
+      });
+      map.addLayer({
+        id: PLAY_DOORS_LABEL_LAYER,
+        type: "symbol",
+        source: PLAY_DOORS_SOURCE,
+        minzoom: 16,
+        layout: { "text-field": ["to-string", ["get", "i"]], "text-size": 10, "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"], "text-offset": [0, -1.1] },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#78350f", "text-halo-width": 1 },
+      });
       map.addLayer({
         id: WALK_MARKS_LAYER,
         type: "circle",
@@ -1298,6 +1320,39 @@ export function SatelliteMapView({
       if (map.getLayer(layer)) map.setFilter(layer, filter as mapboxgl.FilterSpecification);
     }
   }, [zoneScope, visibleZoneIds, mapLoaded]);
+
+  // A play picked from the list: its doors, numbered, and the map on them.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(PLAY_DOORS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+    if (!focusPlay) {
+      source.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/marketing/${focusPlay.id}/doors`, { cache: "no-store" });
+        if (!res.ok) return;
+        const body = (await res.json()) as { doors?: { id: string; lat: number; lng: number; address: string }[] };
+        const doors = body.doors ?? [];
+        if (cancelled || doors.length === 0) return;
+        source.setData({
+          type: "FeatureCollection",
+          features: doors.map((d, i) => ({ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: [d.lng, d.lat] }, properties: { i: i + 1, address: d.address } })),
+        });
+        const bounds = doors.reduce((b, d) => b.extend([d.lng, d.lat]), new mapboxgl.LngLatBounds([doors[0].lng, doors[0].lat], [doors[0].lng, doors[0].lat]));
+        map.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 17 });
+      } catch {
+        // Nothing to light up.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [focusPlay, mapLoaded]);
 
   // A zone picked from the list: fly to it and draw its walk.
   useEffect(() => {

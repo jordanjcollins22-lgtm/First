@@ -7,6 +7,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { designsAvailable } from "@/lib/actions/house-coverage-actions";
 import { createEddmMailing } from "@/lib/actions/eddm-mailing-actions";
 import { flyerRoutesOf, shortAddress, type MarketingPlay, type PlayStatus } from "@/lib/marketing-plays";
+import { learnedDefaults, type PlayReview } from "@/lib/marketing-approval";
 
 /**
  * Ticking marketing off.
@@ -85,5 +86,70 @@ export async function makeFlyerMailing(playId: string): Promise<ActionResult<{ m
     if (linkError) throw linkError;
     for (const page of PAGES) revalidatePath(page);
     return { mailingId: made.value.id };
+  });
+}
+
+/**
+ * What the business has taught the app, written where the sync reads it:
+ * the count it settles on for each kind, and how far a hanger is worth
+ * carrying. Recomputed from every decision so far after each new one.
+ */
+async function relearn(org: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("marketing_approval_state", { org });
+  if (error) throw error;
+  const reviews = ((data ?? {}) as { reviews?: PlayReview[] }).reviews ?? [];
+  for (const d of learnedDefaults(reviews)) {
+    const { error: setError } = await supabase.rpc("marketing_defaults_set", { org, the_kind: d.kind, the_quantity: d.quantity, the_reach: d.maxDistanceM });
+    if (setError) throw setError;
+  }
+}
+
+/** A person's yes to a play as it stands. */
+export async function approveMarketingPlay(playId: string): Promise<ActionResult<null>> {
+  return guard("approveMarketingPlay", async () => {
+    const profile = await requireUser();
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("marketing_play_review", { org: profile.organization_id, the_play: playId, decision: "approve", by: profile.id });
+    if (error) throw error;
+    const result = (data ?? {}) as { ok?: boolean; error?: string };
+    if (!result.ok) throw new Error(result.error ?? "The play could not be approved.");
+    await relearn(profile.organization_id);
+    for (const page of PAGES) revalidatePath(page);
+    return null;
+  });
+}
+
+/**
+ * A person's changes to a play: doors (or routes) taken out, how many it
+ * should be, and a word on why. Approved in the same breath when asked,
+ * so one look is one click.
+ */
+export async function editMarketingPlay(input: { playId: string; remove?: string[]; quantity?: number | null; note?: string; approve?: boolean }): Promise<ActionResult<{ quantity: number }>> {
+  return guard("editMarketingPlay", async () => {
+    const profile = await requireUser();
+    const supabase = await createClient();
+    const org = profile.organization_id;
+    const { data, error } = await supabase.rpc("marketing_play_review", {
+      org,
+      the_play: input.playId,
+      decision: "edit",
+      remove: input.remove && input.remove.length > 0 ? input.remove : null,
+      set_quantity: input.quantity ?? null,
+      note: input.note?.trim() || null,
+      by: profile.id,
+    });
+    if (error) throw error;
+    const result = (data ?? {}) as { ok?: boolean; error?: string; quantity?: number };
+    if (!result.ok) throw new Error(result.error ?? "The play could not be changed.");
+    if (input.approve) {
+      const { data: approved, error: approveError } = await supabase.rpc("marketing_play_review", { org, the_play: input.playId, decision: "approve", by: profile.id });
+      if (approveError) throw approveError;
+      const ok = (approved ?? {}) as { ok?: boolean; error?: string };
+      if (!ok.ok) throw new Error(ok.error ?? "The play could not be approved.");
+    }
+    await relearn(org);
+    for (const page of PAGES) revalidatePath(page);
+    return { quantity: result.quantity ?? 0 };
   });
 }

@@ -42,6 +42,11 @@ export interface MarketingPlay {
   zoneMode: string | null;
   /** Whether the zone has been approved for the map; null when the play has no zone. */
   zoneApproved?: boolean | null;
+  /** pending until a person (or, with trust earned, the app) approves it. */
+  approval?: "pending" | "approved" | "auto";
+  approvedAt?: string | null;
+  /** Doors or routes a person took out. */
+  removedCount?: number;
   /** House ids for doors; FlyerRoute objects for flyers. */
   targets: unknown;
   status: PlayStatus;

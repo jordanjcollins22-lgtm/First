@@ -56,7 +56,7 @@ import type { MailingRates } from "@/lib/eddm-mailing";
 import { unionBoundary } from "@/lib/eddm-mailing";
 import { EddmBuildPanel } from "./eddm-build-panel";
 import { MarketingTodo } from "@/components/marketing/marketing-todo";
-import type { MarketingPlay } from "@/lib/marketing-plays";
+import type { MarketingState } from "@/lib/data/marketing";
 import type { ZoneApprovalState } from "@/lib/data/zone-approval";
 import { ZoneApprovalPanel } from "./zone-approval-panel";
 import { OwnershipPanel } from "./ownership-panel";
@@ -93,7 +93,7 @@ export function AttractorsDashboard({
   ownershipMatrix,
   houseKinds,
   zones,
-  plays,
+  marketing,
   approvals,
   initialZoneId,
   densityPoints,
@@ -126,8 +126,8 @@ export function AttractorsDashboard({
   houseKinds: Partial<Record<HouseKind, number>>;
   /** The door-hanger zones, built from the USPS routes as a partition of the county. */
   zones: ZoneRow[];
-  /** The marketing to do, made from evaluations and clients. */
-  plays: MarketingPlay[];
+  /** The marketing to do, made from evaluations and clients, with what has been decided so far. */
+  marketing: MarketingState;
   /** Which zones are approved for the map, and how much the app still asks. */
   approvals: ZoneApprovalState;
   /** A zone to open on arrival, from a link on another page. */
@@ -192,6 +192,8 @@ export function AttractorsDashboard({
   // The zones with an evaluation, a client or marketing to do in them are
   // the ones the office works; the rest of the county is behind a switch.
   const [zoneScope, setZoneScope] = useState<"active" | "all">("active");
+  // A play whose doors are lit up on the map while it is looked at.
+  const [focusPlay, setFocusPlay] = useState<{ id: string; at: number } | null>(null);
   // Only approved zones are on the map; the one being looked at joins them.
   const approvedZoneIds = useMemo(() => new Set(approvals.zones.filter((z) => !z.needsApproval).map((z) => z.id)), [approvals]);
   const approvedZones = useMemo(() => zones.filter((z) => approvedZoneIds.has(z.id)), [zones, approvedZoneIds]);
@@ -595,6 +597,7 @@ export function AttractorsDashboard({
                 showZones={showZones && !focused}
                 zoneScope={zoneScope}
                 visibleZoneIds={visibleZoneIds}
+                focusPlay={focused ? null : focusPlay}
                 focusZone={focused ? null : focusZone}
                 pointColorMode={pointColorMode}
                 pointHighlight={pointHighlight?.value ?? null}
@@ -653,7 +656,10 @@ export function AttractorsDashboard({
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               <MarketingTodo
-                plays={plays}
+                plays={marketing.plays}
+                reviews={marketing.reviews}
+                autoApproved={marketing.autoApproved}
+                onShowDoors={(id) => setFocusPlay(id ? { id, at: Date.now() } : null)}
                 onFocusZone={(id) => {
                   setShowZones(true);
                   setFocusZone({ id, at: Date.now() });

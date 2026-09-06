@@ -7,7 +7,7 @@ import { getEddmRates, listEddmMailings } from "@/lib/data/eddm";
 import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/data/eddm-build";
 import { EMPTY_OWNERSHIP, kindSummary, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
 import { listZones } from "@/lib/data/zones";
-import { listMarketingPlays } from "@/lib/data/marketing";
+import { marketingState } from "@/lib/data/marketing";
 import { zoneApprovalState } from "@/lib/data/zone-approval";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
@@ -108,7 +108,7 @@ export default async function AttractorsPage({
     ]);
   // The marketing to do, synced on the way in so a client who paid a
   // minute ago is already on it.
-  const plays = await listMarketingPlays({ sync: true }).catch(() => []);
+  const marketing = await marketingState({ sync: true }).catch(() => ({ plays: [], reviews: [], defaults: [], autoApproved: 0 }));
   // Which zones a person has approved for the map, and the app's own pass
   // over the rest once it has earned the trust.
   const approvals = await zoneApprovalState().catch(() => ({ zones: [], reviews: [], streak: 0, level: "ask_all" as const, autoApproved: 0 }));
@@ -145,7 +145,7 @@ export default async function AttractorsPage({
         ownership={ownership}
         ownershipMatrix={ownershipMatrix}
         zones={zones}
-        plays={plays}
+        marketing={marketing}
         approvals={approvals}
         initialZoneId={zone ?? null}
         houseKinds={houseKinds}

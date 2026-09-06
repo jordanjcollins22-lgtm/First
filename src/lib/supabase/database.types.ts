@@ -1031,6 +1031,46 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["zone_reviews"]["Row"]>;
         Relationships: [];
       };
+      marketing_play_reviews: {
+        Row: {
+          id: string;
+          organization_id: string;
+          play_id: string | null;
+          kind: string;
+          reason: string | null;
+          decision: string;
+          quantity_before: number | null;
+          quantity_after: number | null;
+          removed_count: number;
+          kept_max_m: number | null;
+          removed_min_m: number | null;
+          note: string | null;
+          reviewer: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["marketing_play_reviews"]["Row"]> & {
+          organization_id: string;
+          kind: string;
+          decision: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["marketing_play_reviews"]["Row"]>;
+        Relationships: [];
+      };
+      marketing_defaults: {
+        Row: {
+          organization_id: string;
+          kind: string;
+          quantity: number | null;
+          max_distance_m: number | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["marketing_defaults"]["Row"]> & {
+          organization_id: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["marketing_defaults"]["Row"]>;
+        Relationships: [];
+      };
       summary_cache: {
         Row: {
           organization_id: string;
@@ -1067,6 +1107,11 @@ export interface Database {
           done_by: string | null;
           mailing_id: string | null;
           note: string | null;
+          /** pending | approved | auto */
+          approval: string;
+          approved_at: string | null;
+          approved_by: string | null;
+          removed: Json;
           created_at: string;
           updated_at: string;
         };
@@ -2724,7 +2769,11 @@ export interface Database {
       marketing_play_set: { Args: { the_play: string; new_status: string; by: string | null; designs?: number }; Returns: Json };
       marketing_plays_list: { Args: { org: string; include_done?: boolean }; Returns: Json };
       marketing_knock_targets: { Args: { the_house: string }; Returns: Json };
-      marketing_hanger_targets: { Args: { the_house: string; wanted?: number }; Returns: Json };
+      marketing_hanger_targets: { Args: { the_house: string; wanted?: number; max_m?: number | null; skip?: string[] }; Returns: Json };
+      marketing_play_doors: { Args: { the_play: string }; Returns: Json };
+      marketing_play_review: { Args: { org: string; the_play: string; decision: string; remove?: string[] | null; set_quantity?: number | null; note?: string | null; by?: string | null }; Returns: Json };
+      marketing_approval_state: { Args: { org: string }; Returns: Json };
+      marketing_defaults_set: { Args: { org: string; the_kind: string; the_quantity: number | null; the_reach: number | null }; Returns: undefined };
       marketing_flyer_routes: { Args: { the_house: string; wanted?: number }; Returns: Json };
       zone_is_active: { Args: { the_zone: string }; Returns: boolean };
       classify_houses: { Args: { org: string; the_zip: string | null }; Returns: Json };
