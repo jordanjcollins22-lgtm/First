@@ -8,7 +8,8 @@ import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import { cleanEndpoint } from "@/lib/arcgis";
 import { discoverLayer, kickStep, newTickToken, selfBaseUrl } from "@/lib/gis-import-run";
-import { DEFAULT_SDAT_URL, discoverSdatFields, sdatMappingIsUsable, sdatWhere } from "@/lib/sdat";
+import { discoverSdatFields, sdatMappingIsUsable, sdatWhere } from "@/lib/sdat";
+import { DEFAULT_SOCRATA_SDAT_URL, isSocrataUrl } from "@/lib/socrata";
 import { SDAT_KIND, describeSdatImport } from "@/lib/sdat-import";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -81,11 +82,41 @@ export async function startSdatImport(rawUrl?: string): Promise<ActionResult<Sda
     const { data: active } = await admin.from("gis_import_jobs").select("id").eq("organization_id", org).eq("kind", SDAT_KIND).eq("status", "running").limit(1);
     if (active && active.length > 0) throw new Error("The roll is already being read. Let it finish first.");
 
+    const { data: counts, error: countsError } = await admin.rpc("houses_zip_counts", { org });
+    if (countsError) throw countsError;
+    const zips = ((counts ?? []) as { zip: string; n: number }[]).filter((c) => c.n >= 20).map((c) => c.zip);
+
+    // The open-data portal is the source that answers the app. MD iMAP
+    // refuses it with an empty 503, whatever name the request gives. A
+    // portal URL needs no discovery here: the first step reads its fields.
+    const given = (rawUrl ?? "").trim() || DEFAULT_SOCRATA_SDAT_URL;
+    if (isSocrataUrl(given)) {
+      const { data: job, error } = await admin
+        .from("gis_import_jobs")
+        .insert({
+          organization_id: org,
+          kind: SDAT_KIND,
+          status: "running",
+          scope: { zips } as unknown as Json,
+          service_url: given,
+          layer_url: given,
+          checkpoint: { offset: 0, attempts: 0 } as unknown as Json,
+          tick_token: newTickToken(),
+          started_by: profile.id,
+        })
+        .select("*")
+        .single();
+      if (error) throw error;
+      await kick(job.id, org);
+      revalidatePath(PAGE);
+      return statusOf(job);
+    }
+
     let endpoint: string;
     try {
-      endpoint = cleanEndpoint((rawUrl ?? "").trim() || DEFAULT_SDAT_URL);
+      endpoint = cleanEndpoint(given);
     } catch {
-      throw new Error("That is not a URL an ArcGIS server would answer.");
+      throw new Error("That is not a URL an ArcGIS server or the open-data portal would answer.");
     }
     const discovery = await discoverLayer(endpoint, "server-action");
     if (!discovery.probe.ok) {
@@ -106,10 +137,6 @@ export async function startSdatImport(rawUrl?: string): Promise<ActionResult<Sda
     }
     const zipField = fields.find((f) => f.name === mapping.zip);
     const zipIsNumber = /Integer|Double|Single/i.test(zipField?.type ?? "");
-
-    const { data: counts, error: countsError } = await admin.rpc("houses_zip_counts", { org });
-    if (countsError) throw countsError;
-    const zips = ((counts ?? []) as { zip: string; n: number }[]).filter((c) => c.n >= 20).map((c) => c.zip);
 
     const { data: job, error } = await admin
       .from("gis_import_jobs")

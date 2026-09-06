@@ -7,7 +7,7 @@ import { Home, Loader2, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { pauseSdatImport, resumeSdatImport, sdatStatus, startSdatImport, type SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
-import { DEFAULT_SDAT_URL } from "@/lib/sdat";
+import { DEFAULT_SOCRATA_SDAT_URL } from "@/lib/socrata";
 import type { PointColorMode } from "@/lib/house-geojson";
 import { countHighlight, HIGHLIGHT_PRESETS, matrixCanCount, stageOwnershipTable, type MatrixRow, type PointHighlight } from "@/lib/house-highlight";
 import { KIND_LABEL, type HouseKind } from "@/lib/house-geojson";
@@ -54,7 +54,7 @@ export function OwnershipPanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<SdatStatus | null>(job);
-  const [url, setUrl] = useState(DEFAULT_SDAT_URL);
+  const [url, setUrl] = useState(DEFAULT_SOCRATA_SDAT_URL);
   const [showUrl, setShowUrl] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -137,7 +137,7 @@ export function OwnershipPanel({
           onChange={(e) => setUrl(e.target.value)}
           className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px]"
           spellCheck={false}
-          title="The State's parcel layer on MD iMAP. Change only if the State moves it."
+          title="The State's assessment roll on Maryland's open-data portal. Change only if the State moves it."
         />
       )}
 
