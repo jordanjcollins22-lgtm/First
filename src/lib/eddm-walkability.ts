@@ -48,11 +48,13 @@ export function routeTypeVerdict(routeType: string | null | undefined): WalkVerd
 
 /**
  * Below this many USPS deliveries per kilometre of the route's streets, the
- * houses are too far apart to walk. Suburban lots on both sides of a street
- * give sixty to a hundred and forty; a road of acreage lots gives under
- * twenty.
+ * houses are too far apart to walk. Quarter-acre lots on both sides of a
+ * street give seventy and more, half-acre about forty-five, acre lots about
+ * thirty; a road of five-acre lots gives under fifteen. Applied to the
+ * routes USPS drives (R and H): a city route (C) is one USPS's own carrier
+ * walks, and is walkable by definition, main roads aside.
  */
-export const WALK_DENSITY_MIN = 35;
+export const WALK_DENSITY_MIN = 25;
 
 /** Length of the route's streets in kilometres, from their [lng, lat] vertices. */
 export function streetKm(paths: LngLatPair[][]): number {
@@ -71,8 +73,9 @@ function metresBetween([lng1, lat1]: LngLatPair, [lng2, lat2]: LngLatPair): numb
   return 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** From how many doors there are per kilometre of street. */
-export function densityVerdict(deliveries: number | null | undefined, km: number): WalkVerdict {
+/** From how many doors there are per kilometre of street, for the routes USPS drives. */
+export function densityVerdict(deliveries: number | null | undefined, km: number, routeType?: string | null): WalkVerdict {
+  if ((routeType ?? "").trim().toUpperCase() === "C") return { walkability: "unknown", reason: null };
   if (deliveries == null || !(km > 0)) return { walkability: "unknown", reason: null };
   const perKm = deliveries / km;
   if (perKm < WALK_DENSITY_MIN) {
@@ -139,7 +142,7 @@ export interface RouteFacts {
 export function walkVerdict(facts: RouteFacts, checks: RoadHit[][] | null): WalkVerdict {
   const byType = routeTypeVerdict(facts.routeType);
   if (byType.walkability === "hard") return byType;
-  const byDensity = densityVerdict(facts.deliveries, facts.streetKm);
+  const byDensity = densityVerdict(facts.deliveries, facts.streetKm, facts.routeType);
   if (byDensity.walkability === "hard") return byDensity;
   if (checks === null) return { walkability: "unknown", reason: "Roads not checked yet" };
   return mainRoadVerdict(checks);
@@ -147,5 +150,8 @@ export function walkVerdict(facts: RouteFacts, checks: RoadHit[][] | null): Walk
 
 /** Whether the roads still need looking at, given what is already known. */
 export function needsRoadCheck(facts: RouteFacts): boolean {
-  return routeTypeVerdict(facts.routeType).walkability !== "hard" && densityVerdict(facts.deliveries, facts.streetKm).walkability !== "hard";
+  return (
+    routeTypeVerdict(facts.routeType).walkability !== "hard" &&
+    densityVerdict(facts.deliveries, facts.streetKm, facts.routeType).walkability !== "hard"
+  );
 }

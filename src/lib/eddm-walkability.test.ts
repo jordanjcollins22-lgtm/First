@@ -27,10 +27,15 @@ describe("streetKm and densityVerdict", () => {
   });
   it("walks a subdivision and drives a road of acreage lots", () => {
     // Abingdon R017: 846 deliveries on 6 km. R011: 532 on 33 km.
-    expect(densityVerdict(846, 6).walkability).toBe("walkable");
-    const rural = densityVerdict(532, 33.2);
+    expect(densityVerdict(846, 6, "R").walkability).toBe("walkable");
+    const rural = densityVerdict(532, 33.2, "R");
     expect(rural.walkability).toBe("hard");
     expect(rural.reason).toMatch(/16 deliveries per km/);
+  });
+  it("never drives a city route: USPS's own carrier walks it", () => {
+    // Bel Air C016: 444 deliveries on 19 km of half-acre streets.
+    expect(densityVerdict(444, 19, "C").walkability).toBe("unknown");
+    expect(needsRoadCheck({ routeType: "C", deliveries: 444, streetKm: 19 })).toBe(true);
   });
   it("does not judge without a count or a street", () => {
     expect(densityVerdict(null, 6).walkability).toBe("unknown");

@@ -337,7 +337,7 @@ async function assignAndMaterialize(
   // 4. Waves for the walkable routes that have none, then zones.
   const { data: stored, error: storedError } = await admin
     .from("eddm_routes")
-    .select("id, route_id, rings, walkability, walkability_reason, wave_id, house_count, total_count")
+    .select("id, route_id, rings, walkability, walkability_reason, wave_id, zone_id, house_count, total_count")
     .eq("organization_id", org)
     .eq("zip", zip)
     .order("route_id");
@@ -345,6 +345,10 @@ async function assignAndMaterialize(
 
   let wavesMade = 0;
   for (const row of stored ?? []) {
+    if (row.walkability !== "walkable" && (row.wave_id || row.zone_id)) {
+      await retireRoute(admin, row);
+      continue;
+    }
     if (row.walkability !== "walkable" || row.wave_id) continue;
     const points = wavePointsOf({ rings: (row.rings ?? []) as LngLatPair[][] });
     if (!points) continue;
@@ -411,6 +415,28 @@ async function assignAndMaterialize(
     fetched: result.routes,
     message: `${zip}: ${result.routes} routes, ${result.walkable} walkable, ${result.hard} hard, ${wavesMade} waves made, ${assigned} houses on a route, ${unserved} unreached.`,
   };
+}
+
+/**
+ * A route judged walkable once and hard now loses its wave and zone, unless
+ * somebody has already walked the zone: a record of hangers hung is kept
+ * whatever the route is judged today.
+ */
+async function retireRoute(admin: Admin, row: { id: string; wave_id: string | null; zone_id: string | null }) {
+  if (row.zone_id) {
+    const { count } = await admin.from("door_hanger_events").select("id", { count: "exact", head: true }).eq("zone_id", row.zone_id);
+    if ((count ?? 0) > 0) return;
+    const { error: housesError } = await admin.from("zone_houses").delete().eq("zone_id", row.zone_id);
+    if (housesError) throw housesError;
+    const { error: zoneError } = await admin.from("hanger_zones").delete().eq("id", row.zone_id);
+    if (zoneError) throw zoneError;
+  }
+  if (row.wave_id) {
+    const { error: waveError } = await admin.from("attractor_waves").delete().eq("id", row.wave_id).eq("type_id", "door_hangers");
+    if (waveError) throw waveError;
+  }
+  const { error } = await admin.from("eddm_routes").update({ wave_id: null, zone_id: null }).eq("id", row.id);
+  if (error) throw error;
 }
 
 function emptyResult(error: string): ZipResult {
