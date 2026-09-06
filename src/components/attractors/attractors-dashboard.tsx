@@ -180,6 +180,9 @@ export function AttractorsDashboard({
   // A question over the county's dots, from the cross-check table; the map
   // shows only the houses that answer yes.
   const [pointHighlight, setPointHighlight] = useState<{ key: string; value: PointHighlight } | null>(null);
+  // A cross-check is a question, and the map answers only it: while one is
+  // active every other layer is off, so the dots left are the whole answer.
+  const focused = pointHighlight !== null;
   const [flyTo, setFlyTo] = useState<LatLng | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
@@ -557,32 +560,32 @@ export function AttractorsDashboard({
           {viewMode === "satellite" ? (
             isMapboxConfigured ? (
               <SatelliteMapView
-                waves={waves}
-                jobs={filteredJobs}
-                leadProperties={showLeads ? leadProperties : []}
-                houses={showHouses ? houses : []}
-                showAllAddresses={showAllAddresses}
-                eddmRoutes={showEddm ? eddmRoutes : []}
-                eddmStreets={showEddm ? eddmStreets : []}
+                waves={focused ? [] : waves}
+                jobs={focused ? [] : filteredJobs}
+                leadProperties={showLeads && !focused ? leadProperties : []}
+                houses={showHouses && !focused ? houses : []}
+                showAllAddresses={showAllAddresses || focused}
+                eddmRoutes={showEddm && !focused ? eddmRoutes : []}
+                eddmStreets={showEddm && !focused ? eddmStreets : []}
                 selectedEddmIds={[...mailingSelection.keys()]}
                 onToggleMailingRoute={toggleMailingRoute}
                 onUseRouteAsWave={openWaveFromRoute}
-                showUnserved={showUnserved}
+                showUnserved={showUnserved && !focused}
                 unservedClusters={unservedClusters}
-                showZones={showZones}
-                focusZone={focusZone}
+                showZones={showZones && !focused}
+                focusZone={focused ? null : focusZone}
                 pointColorMode={pointColorMode}
                 pointHighlight={pointHighlight?.value ?? null}
-                densityCells={mapCells}
-                rankPoints={rankOverlay}
-                visibleWaveIds={visibleWaveIds}
+                densityCells={focused ? [] : mapCells}
+                rankPoints={focused ? [] : rankOverlay}
+                visibleWaveIds={focused ? new Set<string>() : visibleWaveIds}
                 selectedWaveId={selectedWaveId}
                 onSelectWave={selectWave}
                 selectedJobId={selectedJobId}
                 onSelectJob={selectJob}
-                locations={locations}
-                areas={areas}
-                showLocations={showLocations}
+                locations={focused ? [] : locations}
+                areas={focused ? [] : areas}
+                showLocations={showLocations && !focused}
                 flyToTarget={flyTo ?? (selectedClientProperty ? { lat: selectedClientProperty.lat, lng: selectedClientProperty.lng } : null)}
                 drawMode={drawMode}
                 onGeometryDrawn={(points) => {

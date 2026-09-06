@@ -20,6 +20,15 @@ import { KIND_LABEL, type HouseKind } from "@/lib/house-geojson";
  * elsewhere, and when it last sold for what. The map can then colour by
  * that instead of by stage, and a door list says whose door it is.
  */
+/** "Clients, owner-occupied", from a table cell's key. */
+function describeCell(key: string): string {
+  const m = /^cell-(\d+)-(\d)$/.exec(key);
+  if (!m) return "this selection";
+  const stage = stageOwnershipTable([[Number(m[1]), Number(m[2]), 0, 1]])[0]?.label ?? "these houses";
+  const own = m[2] === "1" ? "owner lives there" : m[2] === "2" ? "rented" : "ownership unknown";
+  return `${stage}, ${own}`;
+}
+
 export function OwnershipPanel({
   job,
   summary,
@@ -205,6 +214,11 @@ export function OwnershipPanel({
               </button>
             )}
           </div>
+          {highlight && (
+            <p className="rounded-md bg-primary/10 px-2 py-1.5 text-xs">
+              The map is showing only <b>{HIGHLIGHT_PRESETS.find((p) => p.key === highlight.key)?.label ?? describeCell(highlight.key)}</b>. Everything else is hidden until you choose Show everything.
+            </p>
+          )}
         </div>
       )}
 
