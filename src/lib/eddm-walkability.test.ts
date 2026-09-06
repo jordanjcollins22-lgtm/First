@@ -1,15 +1,45 @@
 import { describe, expect, it } from "vitest";
 
-import { mainRoadVerdict, routeTypeVerdict, samplePoints, walkVerdict } from "@/lib/eddm-walkability";
+import { densityVerdict, mainRoadVerdict, needsRoadCheck, routeTypeVerdict, samplePoints, streetKm, walkVerdict } from "@/lib/eddm-walkability";
 
 describe("routeTypeVerdict", () => {
-  it("walks city routes and not the driven kinds", () => {
-    expect(routeTypeVerdict("C").walkability).toBe("walkable");
-    expect(routeTypeVerdict("R")).toMatchObject({ walkability: "hard" });
-    expect(routeTypeVerdict("R").reason).toMatch(/Rural/);
-    expect(routeTypeVerdict("H").walkability).toBe("hard");
+  it("settles only the types with no doors", () => {
     expect(routeTypeVerdict("B").reason).toMatch(/no doors/);
+    expect(routeTypeVerdict("G").walkability).toBe("hard");
+    // USPS calls Abingdon's subdivisions rural; the doors decide, not the letter.
+    expect(routeTypeVerdict("R").walkability).toBe("unknown");
+    expect(routeTypeVerdict("C").walkability).toBe("unknown");
     expect(routeTypeVerdict(null).walkability).toBe("unknown");
+  });
+});
+
+describe("streetKm and densityVerdict", () => {
+  // Two straight kilometres of street, roughly, along a parallel of latitude.
+  const twoKm: [number, number][][] = [
+    [
+      [-76.3, 39.5],
+      [-76.3 + 2 / (111.32 * Math.cos((39.5 * Math.PI) / 180)), 39.5],
+    ],
+  ];
+  it("measures the streets", () => {
+    expect(streetKm(twoKm)).toBeCloseTo(2, 1);
+    expect(streetKm([])).toBe(0);
+  });
+  it("walks a subdivision and drives a road of acreage lots", () => {
+    // Abingdon R017: 846 deliveries on 6 km. R011: 532 on 33 km.
+    expect(densityVerdict(846, 6).walkability).toBe("walkable");
+    const rural = densityVerdict(532, 33.2);
+    expect(rural.walkability).toBe("hard");
+    expect(rural.reason).toMatch(/16 deliveries per km/);
+  });
+  it("does not judge without a count or a street", () => {
+    expect(densityVerdict(null, 6).walkability).toBe("unknown");
+    expect(densityVerdict(600, 0).walkability).toBe("unknown");
+  });
+  it("only sends the routes still in question to the road check", () => {
+    expect(needsRoadCheck({ routeType: "R", deliveries: 846, streetKm: 6 })).toBe(true);
+    expect(needsRoadCheck({ routeType: "R", deliveries: 532, streetKm: 33.2 })).toBe(false);
+    expect(needsRoadCheck({ routeType: "B", deliveries: 900, streetKm: 1 })).toBe(false);
   });
 });
 
@@ -54,16 +84,16 @@ describe("samplePoints", () => {
 });
 
 describe("walkVerdict", () => {
-  it("does not bother checking roads on a route USPS drives", () => {
-    expect(walkVerdict("R", null).walkability).toBe("hard");
+  const dense = { routeType: "R", deliveries: 800, streetKm: 7 };
+  it("is hard for the driven kinds before any roads are looked at", () => {
+    expect(walkVerdict({ routeType: "R", deliveries: 532, streetKm: 33.2 }, null).walkability).toBe("hard");
+    expect(walkVerdict({ routeType: "B", deliveries: 900, streetKm: 1 }, null).walkability).toBe("hard");
   });
-
-  it("is unknown for a city route whose roads have not been checked", () => {
-    expect(walkVerdict("C", null)).toMatchObject({ walkability: "unknown" });
+  it("waits for the roads on a dense route", () => {
+    expect(walkVerdict(dense, null)).toMatchObject({ walkability: "unknown" });
   });
-
-  it("decides a city route by its roads", () => {
-    expect(walkVerdict("C", [[]]).walkability).toBe("walkable");
-    expect(walkVerdict("C", [[{ class: "secondary", name: "Churchville Rd" }]]).walkability).toBe("hard");
+  it("decides a dense route by its roads", () => {
+    expect(walkVerdict(dense, [[]]).walkability).toBe("walkable");
+    expect(walkVerdict(dense, [[{ class: "secondary", name: "Churchville Rd" }]]).walkability).toBe("hard");
   });
 });

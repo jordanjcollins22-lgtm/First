@@ -32,17 +32,53 @@ const ROUTE_TYPE_LABEL: Record<string, string> = {
   G: "General delivery",
 };
 
-/** From USPS's route type alone. Rural and highway routes are driven. */
+/**
+ * From USPS's route type alone. Only the types with no doors are settled
+ * here: USPS calls most of Harford's subdivisions "rural" because of how the
+ * carrier is paid, not how close the houses are, so R and H are judged by
+ * density like everything else.
+ */
 export function routeTypeVerdict(routeType: string | null | undefined): WalkVerdict {
   const type = (routeType ?? "").trim().toUpperCase();
-  if (type === "C") return { walkability: "walkable", reason: null };
-  if (type === "R" || type === "H") {
-    return { walkability: "hard", reason: `${ROUTE_TYPE_LABEL[type]}: driven by USPS, houses too far apart to walk` };
-  }
   if (type === "B" || type === "G") {
     return { walkability: "hard", reason: `${ROUTE_TYPE_LABEL[type]}: no doors on this route` };
   }
   return { walkability: "unknown", reason: null };
+}
+
+/**
+ * Below this many USPS deliveries per kilometre of the route's streets, the
+ * houses are too far apart to walk. Suburban lots on both sides of a street
+ * give sixty to a hundred and forty; a road of acreage lots gives under
+ * twenty.
+ */
+export const WALK_DENSITY_MIN = 35;
+
+/** Length of the route's streets in kilometres, from their [lng, lat] vertices. */
+export function streetKm(paths: LngLatPair[][]): number {
+  let metres = 0;
+  for (const path of paths) {
+    for (let i = 1; i < path.length; i++) metres += metresBetween(path[i - 1], path[i]);
+  }
+  return metres / 1000;
+}
+
+function metresBetween([lng1, lat1]: LngLatPair, [lng2, lat2]: LngLatPair): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** From how many doors there are per kilometre of street. */
+export function densityVerdict(deliveries: number | null | undefined, km: number): WalkVerdict {
+  if (deliveries == null || !(km > 0)) return { walkability: "unknown", reason: null };
+  const perKm = deliveries / km;
+  if (perKm < WALK_DENSITY_MIN) {
+    return { walkability: "hard", reason: `Houses too far apart: ${Math.round(perKm)} deliveries per km of street` };
+  }
+  return { walkability: "walkable", reason: null };
 }
 
 export interface RoadHit {
@@ -88,10 +124,28 @@ export function samplePoints(paths: LngLatPair[][], count = 10): LngLatPair[] {
   return out;
 }
 
-/** Both checks together. USPS's type rules first; the roads decide the rest. */
-export function walkVerdict(routeType: string | null | undefined, checks: RoadHit[][] | null): WalkVerdict {
-  const byType = routeTypeVerdict(routeType);
+export interface RouteFacts {
+  routeType: string | null | undefined;
+  /** USPS's delivery count for the route. */
+  deliveries: number | null | undefined;
+  streetKm: number;
+}
+
+/**
+ * All the checks together: no doors, then too few doors per street, then a
+ * main road along the streets. Anything not settled by the first two waits
+ * on the roads; with no road answer it is unknown, not walkable.
+ */
+export function walkVerdict(facts: RouteFacts, checks: RoadHit[][] | null): WalkVerdict {
+  const byType = routeTypeVerdict(facts.routeType);
   if (byType.walkability === "hard") return byType;
-  if (checks === null) return byType.walkability === "walkable" ? { walkability: "unknown", reason: "Roads not checked yet" } : byType;
+  const byDensity = densityVerdict(facts.deliveries, facts.streetKm);
+  if (byDensity.walkability === "hard") return byDensity;
+  if (checks === null) return { walkability: "unknown", reason: "Roads not checked yet" };
   return mainRoadVerdict(checks);
+}
+
+/** Whether the roads still need looking at, given what is already known. */
+export function needsRoadCheck(facts: RouteFacts): boolean {
+  return routeTypeVerdict(facts.routeType).walkability !== "hard" && densityVerdict(facts.deliveries, facts.streetKm).walkability !== "hard";
 }

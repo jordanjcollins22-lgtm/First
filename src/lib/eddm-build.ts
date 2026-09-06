@@ -8,7 +8,7 @@ import {
   type EddmRoute,
   type LngLatPair,
 } from "@/lib/eddm";
-import { MAIN_ROAD_CLASSES, samplePoints, walkVerdict, type RoadHit, type Walkability } from "@/lib/eddm-walkability";
+import { MAIN_ROAD_CLASSES, needsRoadCheck, samplePoints, streetKm, walkVerdict, type RoadHit, type RouteFacts, type Walkability } from "@/lib/eddm-walkability";
 import { acquireLease, type JobRow, type StepOutcome } from "@/lib/gis-import-run";
 import { nearbyRoads } from "@/lib/mapbox-roads";
 import { probeEndpoint } from "@/lib/gis-probe";
@@ -25,9 +25,9 @@ import type { Json } from "@/lib/supabase/database.types";
  *
  *  1. asks USPS for the ZIP's routes and writes them down with USPS's own
  *     route type (city, rural, highway contract, boxes);
- *  2. decides whether each route can be walked -- rural and highway routes
- *     are driven, and a city route with a main road through it is hard --
- *     by checking the map's road classes at a few points along its streets;
+ *  2. decides whether each route can be walked -- too few doors per
+ *     kilometre of street is a drive, and a main road along the streets,
+ *     from the map's road classes at points along them, is hard;
  *  3. cuts the streets into segments and assigns every house in the ZIP to
  *     the route whose street passes it, flagging the ones no route reaches;
  *  4. makes one Door Hangers wave per walkable route, and one zone with the
@@ -433,13 +433,14 @@ async function judgeRoutes(routes: EddmRoute[]): Promise<JudgedRoute[]> {
       const index = cursor++;
       const route = routes[index];
       const routeType = routeTypeOf(route);
-      const byType = walkVerdict(routeType, null);
-      if (byType.walkability === "hard" || route.paths.length === 0) {
-        out[index] = { route, routeType, walkability: byType.walkability, reason: byType.reason, mainRoads: [] };
+      const facts: RouteFacts = { routeType, deliveries: route.total, streetKm: streetKm(route.paths) };
+      if (!needsRoadCheck(facts) || route.paths.length === 0) {
+        const settled = walkVerdict(facts, null);
+        out[index] = { route, routeType, walkability: settled.walkability, reason: settled.reason, mainRoads: [] };
         continue;
       }
       const checks = await roadsAlong(route.paths);
-      const verdict = walkVerdict(routeType, checks);
+      const verdict = walkVerdict(facts, checks);
       const seen = new Set<string>();
       const mainRoads = (checks ?? [])
         .flat()
