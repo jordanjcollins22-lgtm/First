@@ -265,6 +265,7 @@ function describeKind(job: GisImportJob): string {
   if (job.kind === "connection_test") return "Connection test";
   const scope = (job.scope ?? {}) as { zip?: string };
   if (job.kind === "eddm") return `USPS EDDM routes, ZIP ${scope.zip ?? ""}`;
+  if (job.kind === "sdat") return "State assessment roll (SDAT): who owns each house";
   if (job.kind === "eddm_build") {
     const zips = (job.scope as { zips?: string[] } | null)?.zips?.length ?? 0;
     return `USPS routes to door-hanger waves, ${zips} ZIPs`;

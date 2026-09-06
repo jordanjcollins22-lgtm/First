@@ -985,6 +985,29 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
         Relationships: [];
       };
+      house_ownership: {
+        Row: {
+          house_id: string;
+          organization_id: string;
+          account_id: string | null;
+          owner_name: string | null;
+          owner_mailing: string | null;
+          /** true owner-occupied, false absentee, null unknown. */
+          owner_occupied: boolean | null;
+          occupancy_reason: string | null;
+          principal_residence: boolean | null;
+          last_sale_date: string | null;
+          last_sale_price: number | null;
+          year_built: number | null;
+          land_use: string | null;
+          assessed_value: number | null;
+          source_layer: string | null;
+          fetched_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["house_ownership"]["Row"]> & { house_id: string; organization_id: string };
+        Update: Partial<Database["public"]["Tables"]["house_ownership"]["Row"]>;
+        Relationships: [];
+      };
       eddm_mailings: {
         Row: {
           id: string;
@@ -2566,6 +2589,7 @@ export interface Database {
       eddm_unserved_cells: { Args: { org: string }; Returns: Json };
       houses_unserved_points: { Args: { org: string }; Returns: Json };
       houses_zip_counts: { Args: { org: string }; Returns: Json };
+      ownership_summary: { Args: { org: string }; Returns: Json };
       /** The doors inside a drawn shape: count, stage breakdown, print run by design. */
       houses_coverage: {
         Args: { org: string; ring: Json | null; zips: Json | null; designs?: number };

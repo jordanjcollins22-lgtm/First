@@ -11,7 +11,17 @@ import { geometryPoints, geometryToPolygon, waveToPolygon } from "@/lib/attracto
 import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
 import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
-import { housesToFeatures, pointsToFeatures, stageColorExpression, type MapHouse, type MapPoint } from "@/lib/house-geojson";
+import {
+  housesToFeatures,
+  OWNERSHIP_COLOR,
+  pointColorExpression,
+  pointsToFeatures,
+  SOLD_COLOR,
+  stageColorExpression,
+  type MapHouse,
+  type MapPoint,
+  type PointColorMode,
+} from "@/lib/house-geojson";
 import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
 import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
@@ -45,6 +55,8 @@ interface SatelliteMapViewProps {
    * and kept for the life of the page.
    */
   showAllAddresses: boolean;
+  /** What the county's dots are coloured by: stage, ownership, or a recent sale. */
+  pointColorMode: PointColorMode;
   /** USPS carrier routes for a ZIP, drawn as outlines with USPS's counts. */
   eddmRoutes: EddmRouteFeature[];
   /** The streets each route walks, coloured to match. */
@@ -153,6 +165,7 @@ export function SatelliteMapView({
   leadProperties,
   houses,
   showAllAddresses,
+  pointColorMode,
   eddmRoutes,
   eddmStreets,
   onUseRouteAsWave,
@@ -927,6 +940,13 @@ export function SatelliteMapView({
     streets?.setData({ type: "FeatureCollection", features: eddmStreets });
   }, [eddmRoutes, eddmStreets, mapLoaded]);
 
+  // The county's dots take their colour from whichever the person asked for.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current || !map.getLayer(ALL_ADDRESSES_LAYER)) return;
+    map.setPaintProperty(ALL_ADDRESSES_LAYER, "circle-color", pointColorExpression(pointColorMode) as mapboxgl.ExpressionSpecification);
+  }, [pointColorMode, mapLoaded]);
+
   // Every address in the county, fetched once and kept, while asked for.
   const allPointsRef = useRef<MapPoint[] | null>(null);
   useEffect(() => {
@@ -1116,12 +1136,26 @@ export function SatelliteMapView({
       <div ref={containerRef} className="h-full w-full" />
       {(showAllAddresses || showUnserved || houses.length > 0) && (
         <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col gap-0.5 rounded-md bg-black/60 px-2 py-1.5 text-[11px] text-white">
-          {RELATIONSHIP_STAGES.map((stage) => (
-            <span key={stage} className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[stage] }} />
-              {STAGE_LABEL[stage]}
-            </span>
-          ))}
+          {(pointColorMode === "stage" || !showAllAddresses) &&
+            RELATIONSHIP_STAGES.map((stage) => (
+              <span key={stage} className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[stage] }} />
+                {STAGE_LABEL[stage]}
+              </span>
+            ))}
+          {showAllAddresses && pointColorMode === "ownership" && (
+            <>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: OWNERSHIP_COLOR.ownerOccupied }} />Owner lives there</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: OWNERSHIP_COLOR.absentee }} />Absentee or rented</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: OWNERSHIP_COLOR.unknown }} />Not on the roll</span>
+            </>
+          )}
+          {showAllAddresses && pointColorMode === "sold" && (
+            <>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SOLD_COLOR.recent }} />Sold in the last year</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SOLD_COLOR.other }} />Everything else</span>
+            </>
+          )}
           {showUnserved && (
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: UNSERVED_COLOR }} />

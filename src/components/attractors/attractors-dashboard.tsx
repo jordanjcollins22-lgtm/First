@@ -55,6 +55,10 @@ import type { EddmMailing } from "@/lib/data/eddm";
 import type { MailingRates } from "@/lib/eddm-mailing";
 import { unionBoundary } from "@/lib/eddm-mailing";
 import { EddmBuildPanel } from "./eddm-build-panel";
+import { OwnershipPanel } from "./ownership-panel";
+import type { SdatStatus } from "@/lib/actions/sdat-actions";
+import type { OwnershipSummary } from "@/lib/data/ownership";
+import type { PointColorMode } from "@/lib/house-geojson";
 import type { EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
@@ -77,6 +81,8 @@ export function AttractorsDashboard({
   eddmBuild,
   eddmSummary,
   unservedClusters,
+  sdatJob,
+  ownership,
   densityPoints,
   keywords,
   rankScans,
@@ -100,6 +106,9 @@ export function AttractorsDashboard({
   eddmBuild: EddmBuildStatus | null;
   eddmSummary: EddmRouteSummary;
   unservedClusters: UnservedCluster[];
+  /** The State's roll: the last read of it, and what it says in counts. */
+  sdatJob: SdatStatus | null;
+  ownership: OwnershipSummary;
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -155,6 +164,7 @@ export function AttractorsDashboard({
   // The houses no USPS route reaches; on once a build has run, because they
   // are the point of it.
   const [showUnserved, setShowUnserved] = useState(false);
+  const [pointColorMode, setPointColorMode] = useState<PointColorMode>("stage");
   const [flyTo, setFlyTo] = useState<LatLng | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
@@ -541,6 +551,7 @@ export function AttractorsDashboard({
                 onUseRouteAsWave={openWaveFromRoute}
                 showUnserved={showUnserved}
                 unservedClusters={unservedClusters}
+                pointColorMode={pointColorMode}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
@@ -591,6 +602,22 @@ export function AttractorsDashboard({
             </div>
           )}
         </Card>
+
+        {!creating && !selectedWave && !selectedJob && (
+          <Card>
+            <CardContent className="pt-6">
+              <OwnershipPanel
+                job={sdatJob}
+                summary={ownership}
+                colorMode={pointColorMode}
+                onColorMode={(mode) => {
+                  setPointColorMode(mode);
+                  if (mode !== "stage") setShowAllAddresses(true);
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {!creating && !selectedWave && !selectedJob && (
           <Card>

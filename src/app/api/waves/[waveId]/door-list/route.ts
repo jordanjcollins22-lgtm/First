@@ -49,16 +49,19 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ wa
   });
   if (listError) return NextResponse.json({ error: listError.message }, { status: 500 });
 
-  const rows = (data ?? []) as [string, string, number, number, boolean, number, number, number][];
+  const rows = (data ?? []) as [string, string, number, number, boolean, number, number, number, string?, string?][];
+  const ownerWord = (o: string | undefined) => (o === "owner" ? "Owner lives there" : o === "absentee" ? "Absentee / rented" : "");
   const lines = [
-    ["Address", "Where we stand", "Hangers so far", "Design to hang", "Skip", "Latitude", "Longitude"].join(","),
-    ...rows.map(([, address, rank, hangs, dnc, design, lat, lng]) =>
+    ["Address", "Where we stand", "Hangers so far", "Design to hang", "Skip", "Owner", "Last sold", "Latitude", "Longitude"].join(","),
+    ...rows.map(([, address, rank, hangs, dnc, design, lat, lng, owner, lastSold]) =>
       [
         csvCell(address),
         csvCell(STAGE_LABEL[RELATIONSHIP_STAGES[rank] ?? "untouched"]),
         hangs,
         dnc ? "" : design,
         dnc ? "SKIP (asked not to be contacted)" : "",
+        csvCell(ownerWord(owner)),
+        csvCell(lastSold ?? ""),
         lat,
         lng,
       ].join(",")

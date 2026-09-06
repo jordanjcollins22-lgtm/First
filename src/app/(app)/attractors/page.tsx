@@ -5,6 +5,7 @@ import { listProperties } from "@/lib/data/properties";
 import { listHousesWithHistory } from "@/lib/data/houses";
 import { getEddmRates, listEddmMailings } from "@/lib/data/eddm";
 import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/data/eddm-build";
+import { EMPTY_OWNERSHIP, latestSdatImport, ownershipSummary } from "@/lib/data/ownership";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
 import { listProfiles } from "@/lib/data/team";
@@ -79,7 +80,7 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings, eddmBuild, eddmSummary, unservedClusters] =
+  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings, eddmBuild, eddmSummary, unservedClusters, sdatJob, ownership] =
     await Promise.all([
       listProperties(),
       listProfiles().catch(() => [] as Profile[]),
@@ -96,6 +97,8 @@ export default async function AttractorsPage({
       latestEddmBuild().catch(() => null),
       eddmRouteSummary().catch(() => ({ routes: 0, walkable: 0, hard: 0, unknown: 0, waves: 0, housesOnRoutes: 0, zips: 0 })),
       listUnservedClusters().catch(() => []),
+      latestSdatImport().catch(() => null),
+      ownershipSummary().catch(() => EMPTY_OWNERSHIP),
     ]);
 
   return (
@@ -126,6 +129,8 @@ export default async function AttractorsPage({
         eddmBuild={eddmBuild}
         eddmSummary={eddmSummary}
         unservedClusters={unservedClusters}
+        sdatJob={sdatJob}
+        ownership={ownership}
         densityPoints={densityPoints}
         profiles={profiles}
         currentProfileId={profile?.id ?? null}

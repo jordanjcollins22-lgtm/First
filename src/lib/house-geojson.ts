@@ -83,25 +83,60 @@ export function parseBbox(params: URLSearchParams): { minLat: number; minLng: nu
  */
 export const ALL_ADDRESSES_MIN_ZOOM = 13;
 
-/** `[lng, lat, stageRank]`, as the all-houses route sends it. */
-export type MapPoint = [number, number, number];
+/**
+ * `[lng, lat, stageRank, ownership?, soldRecently?]`, as the all-houses
+ * route sends it. Ownership is 0 unknown, 1 owner-occupied, 2 absentee;
+ * soldRecently is 1 when the house changed hands in the last year.
+ */
+export type MapPoint = [number, number, number] | [number, number, number, number, number];
 
 export interface PointFeature {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
-  properties: { s: number };
+  properties: { s: number; o: number; r: number };
 }
 
-/** Every point as a feature, carrying only its stage rank; the layer colours by that. */
+/** Every point as a feature, carrying its stage rank, ownership and recent sale; the layer colours by one of them. */
 export function pointsToFeatures(points: MapPoint[]): PointFeature[] {
   const out: PointFeature[] = [];
   for (const point of points) {
     if (!Array.isArray(point) || point.length < 3) continue;
-    const [lng, lat, s] = point;
+    const [lng, lat, s, o, r] = point;
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-    out.push({ type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] }, properties: { s: Number(s) || 0 } });
+    out.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lng, lat] },
+      properties: { s: Number(s) || 0, o: Number(o) || 0, r: Number(r) || 0 },
+    });
   }
   return out;
+}
+
+/** What the county's dots are coloured by. */
+export type PointColorMode = "stage" | "ownership" | "sold";
+
+export const OWNERSHIP_COLOR = {
+  unknown: "#94a3b8",
+  ownerOccupied: "#22c55e",
+  absentee: "#f97316",
+} as const;
+
+export const SOLD_COLOR = { recent: "#e11d48", other: "#cbd5e1" } as const;
+
+/** Owner-occupied green, absentee orange, unknown grey. */
+export function ownershipColorExpression(): unknown[] {
+  return ["match", ["get", "o"], 1, OWNERSHIP_COLOR.ownerOccupied, 2, OWNERSHIP_COLOR.absentee, OWNERSHIP_COLOR.unknown];
+}
+
+/** Sold in the last year stands out; everything else fades. */
+export function soldColorExpression(): unknown[] {
+  return ["match", ["get", "r"], 1, SOLD_COLOR.recent, SOLD_COLOR.other];
+}
+
+export function pointColorExpression(mode: PointColorMode): unknown[] {
+  if (mode === "ownership") return ownershipColorExpression();
+  if (mode === "sold") return soldColorExpression();
+  return stageColorExpression();
 }
 
 /** The Mapbox `match` expression that turns a stage rank into its colour. */
