@@ -6,11 +6,12 @@
 -- zone. A zone is one walk, so an island belongs to whoever surrounds it.
 -- For every zone, every piece but the one with the most doors is handed
 -- to the neighbouring zone that shares the longest border with it when it
--- is small -- ten doors, or a twentieth of the zone, whichever is more --
--- or when that neighbour wraps most of its edge, which is a piece inside
--- another zone whatever its size. A big second piece with its own edges
--- is a route in two parts and stays; a piece that touches no zone at all
--- is a real outpost in empty land and stays. The affected zones are then
+-- is a scrap -- twenty doors, or a twentieth of the zone, whichever is more
+-- -- or when that neighbour wraps half its edge or more, which is a piece
+-- inside another zone whatever its size. A bigger piece that only brushes
+-- a neighbour stays: given away, it would be the neighbour's detached
+-- piece brushing this zone, and go back and forth for ever. A piece that
+-- touches no zone at all is a real outpost in empty land and stays. The affected zones are then
 -- rebuilt and settled by the caller.
 CREATE OR REPLACE FUNCTION public.zone_absorb_enclaves(org UUID, the_zip TEXT)
 RETURNS JSONB LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
@@ -29,7 +30,9 @@ BEGIN
     n_pieces := ST_NumGeometries(z.g);
     IF n_pieces IS NULL OR n_pieces < 2 THEN CONTINUE; END IF;
     SELECT count(*) INTO zone_total FROM zone_houses WHERE zone_id = z.id;
-    limit_houses := greatest(10, zone_total / 20);
+    -- A scrap of up to twenty doors (or one in twenty of the zone's) is part
+    -- of the walk next to it; anything bigger moves only when wrapped.
+    limit_houses := greatest(20, zone_total / 20);
     -- The piece with the most doors is the zone; it is never given away.
     SELECT i INTO main_idx FROM generate_series(1, n_pieces) i
     ORDER BY (SELECT count(*) FROM zone_houses zh JOIN houses h ON h.id = zh.house_id

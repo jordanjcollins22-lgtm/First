@@ -766,6 +766,8 @@ export interface Database {
           boundary: Json | null;
           /** The streets, in the order to walk them. */
           walk_path: Json | null;
+          /** A split part's own wave; the route's wave otherwise. */
+          wave_id?: string | null;
           start_point: Json | null;
           /** Where the van goes. Rarely the first door. */
           park_point: Json | null;
@@ -2627,6 +2629,8 @@ export interface Database {
       zones_geojson: { Args: { org: string }; Returns: Json };
       zone_settle: { Args: { the_zone: string }; Returns: Json };
       zone_absorb_enclaves: { Args: { org: string; the_zip: string | null }; Returns: Json };
+      zone_split_pieces: { Args: { org: string; the_zip: string | null }; Returns: Json };
+      zone_merge_small: { Args: { org: string; the_zip: string | null; max_houses?: number }; Returns: Json };
       zone_enclave_count: { Args: { org: string }; Returns: Json };
       zones_list: { Args: { org: string }; Returns: Json };
       classify_houses: { Args: { org: string; the_zip: string | null }; Returns: Json };

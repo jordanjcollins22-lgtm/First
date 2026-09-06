@@ -474,12 +474,22 @@ async function buildZones(
       if (passes >= MAX_ENCLAVE_PASSES) {
         finishedZip = true;
       } else {
+        // Hand enclaves to the zone around them; then any big piece still
+        // on its own becomes a zone of its own. Both leave zones to rebuild.
         const { data: absorbed, error: absorbError } = await admin.rpc("zone_absorb_enclaves", { org, the_zip: zip });
         if (absorbError) throw absorbError;
-        const result = (absorbed ?? {}) as { moved?: number; affected?: string[] };
+        const moved = (absorbed ?? {}) as { moved?: number; affected?: string[] };
+        const { data: split, error: splitError } = await admin.rpc("zone_split_pieces", { org, the_zip: zip });
+        if (splitError) throw splitError;
+        const made = (split ?? {}) as { made?: number; affected?: string[] };
+        // And a zone too small to be a walk joins the neighbour beside it.
+        const { data: merged, error: mergeError } = await admin.rpc("zone_merge_small", { org, the_zip: zip });
+        if (mergeError) throw mergeError;
+        const joined = (merged ?? {}) as { merged?: number; affected?: string[] };
         passes++;
-        if (!result.moved || !result.affected || result.affected.length === 0) finishedZip = true;
-        else fixQueue = result.affected;
+        const touched = [...new Set([...(moved.affected ?? []), ...(made.affected ?? []), ...(joined.affected ?? [])])];
+        if (touched.length === 0) finishedZip = true;
+        else fixQueue = touched;
       }
     }
   }
