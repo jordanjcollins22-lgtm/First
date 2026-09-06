@@ -767,6 +767,7 @@ export interface Database {
           boundary: Json | null;
           /** The streets, in the order to walk them. */
           walk_path: Json | null;
+          walk_line?: Json | null;
           /** A split part's own wave; the route's wave otherwise. */
           wave_id?: string | null;
           approval?: string;

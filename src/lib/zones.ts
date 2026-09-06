@@ -22,9 +22,9 @@ export const MODE_COLOR: Record<ZoneMode, string> = {
 };
 
 export const MODE_WHY: Record<ZoneMode, string> = {
-  foot: "under 35 m of path per door",
-  scooter: "35 to 75 m of path per door",
-  vehicle: "over 75 m of path per door",
+  foot: "under 55 m of street per door",
+  scooter: "55 to 110 m of street per door",
+  vehicle: "over 110 m of street per door",
 };
 
 export function modeOf(value: string | null | undefined): ZoneMode | null {

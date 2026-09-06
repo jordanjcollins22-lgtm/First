@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 
 /**
- * One zone's walk: where to park, and the doors in the order to take them.
+ * One zone's walk: where to park, the doors in the order to take them, and
+ * the line along the streets that joins them.
  *
  * Kept off the zones layer because a walk is hundreds of points and only
  * one zone is looked at at a time.
@@ -18,7 +19,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ zo
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("hanger_zones")
-    .select("id, name, mode, house_count, path_km, est_minutes, median_gap_m, walk_path, park_point, start_point, end_point, start_address")
+    .select("id, name, mode, house_count, path_km, est_minutes, median_gap_m, walk_path, walk_line, park_point, start_point, end_point, start_address")
     .eq("id", zoneId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();

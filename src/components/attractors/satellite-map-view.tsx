@@ -266,6 +266,8 @@ interface WalkAnswer {
     path_km: number | null;
     est_minutes: number | null;
     walk_path: { lat: number; lng: number }[] | null;
+    /** [lng, lat] along the streets walked; null when no street reaches the zone. */
+    walk_line: [number, number][] | null;
     park_point: { lat: number; lng: number } | null;
     start_address: string | null;
   };
@@ -281,7 +283,10 @@ async function showWalk(map: mapboxgl.Map, zoneId: string) {
   const { zone } = (await res.json()) as WalkAnswer;
   const path = zone.walk_path ?? [];
   const park = zone.park_point;
-  const coords: [number, number][] = [
+  // The line is the streets walked; only a zone no street reaches falls
+  // back to door-to-door straight lines.
+  const streets = Array.isArray(zone.walk_line) && zone.walk_line.length > 1 ? zone.walk_line : null;
+  const coords: [number, number][] = streets ?? [
     ...(park ? [[park.lng, park.lat] as [number, number]] : []),
     ...path.map((p) => [p.lng, p.lat] as [number, number]),
     ...(park ? [[park.lng, park.lat] as [number, number]] : []),
