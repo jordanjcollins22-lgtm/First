@@ -1,7 +1,8 @@
 import { parseCount, parseFeaturePage, queryUrl } from "@/lib/arcgis";
 import { acquireLease, recordDiagnostic, type JobRow, type StepOutcome } from "@/lib/gis-import-run";
 import { probeEndpoint } from "@/lib/gis-probe";
-import { ownershipFromRecord, sdatWhere, type SdatMapping } from "@/lib/sdat";
+import { discoverSdatFields, ownershipFromRecord, sdatMappingIsUsable, sdatWhere, type SdatMapping } from "@/lib/sdat";
+import { discoverLayer } from "@/lib/gis-import-run";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -69,8 +70,61 @@ async function release(admin: Admin, jobId: string, patch: Partial<JobRow>) {
     .eq("id", jobId);
 }
 
+/**
+ * A job started without its layer read -- from the database, say -- reads it
+ * on its first step: the fields, the mapping, the page size, all recorded
+ * on the row as the start action would have.
+ */
+async function bootstrap(admin: Admin, job: JobRow): Promise<JobRow | null> {
+  const discovery = await discoverLayer(job.layer_url || job.service_url, "background-job");
+  const fields = discovery.description.fields;
+  const mapping = discoverSdatFields(fields.map((f) => f.name));
+  const usable = Boolean(discovery.layerUrl) && sdatMappingIsUsable(mapping);
+  const diagnostics = [...(Array.isArray(job.diagnostics) ? (job.diagnostics as Json[]) : []), ...discovery.probes.map((p) => ({ ...p }) as unknown as Json)].slice(-25);
+  if (!usable) {
+    await release(admin, job.id, {
+      status: "failed",
+      diagnostics,
+      discovered_fields: fields as unknown as Json,
+      last_error: !discovery.probe.ok
+        ? `The State's server did not answer: ${discovery.probe.message ?? discovery.probe.kind}`
+        : !discovery.layerUrl
+          ? `${job.service_url} is a ${discovery.description.kind}, not a layer.`
+          : `The layer has no premise address field. Its fields: ${fields.map((f) => f.name).slice(0, 40).join(", ")}`,
+      finished_at: new Date().toISOString(),
+    });
+    return null;
+  }
+  const zipField = fields.find((f) => f.name === mapping.zip);
+  const scope = (job.scope ?? {}) as Partial<SdatScope>;
+  const zipIsNumber = /Integer|Double|Single/i.test(zipField?.type ?? "");
+  const { data, error } = await admin
+    .from("gis_import_jobs")
+    .update({
+      layer_url: discovery.layerUrl,
+      layer_name: discovery.layerName,
+      max_record_count: discovery.description.maxRecordCount,
+      discovered_fields: fields as unknown as Json,
+      field_mapping: mapping as unknown as Json,
+      scope: { ...scope, zipIsNumber, where: sdatWhere(mapping, scope.zips ?? [], zipIsNumber) } as unknown as Json,
+      diagnostics,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", job.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /** One page. Expects the caller to hold the lease. */
-export async function runSdatStep(admin: Admin, job: JobRow): Promise<StepOutcome> {
+export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutcome> {
+  let job = first;
+  if (!sdatMappingOf(job)) {
+    const ready = await bootstrap(admin, job);
+    if (!ready) return { status: "failed", more: false, fetched: 0, message: "The layer could not be read." };
+    job = ready;
+  }
   const mapping = sdatMappingOf(job);
   if (!job.layer_url || !mapping) {
     await release(admin, job.id, { status: "failed", last_error: "The layer has no address field to match on.", finished_at: new Date().toISOString() });
