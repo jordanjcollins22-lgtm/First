@@ -57,6 +57,8 @@ import { unionBoundary } from "@/lib/eddm-mailing";
 import { EddmBuildPanel } from "./eddm-build-panel";
 import { MarketingTodo } from "@/components/marketing/marketing-todo";
 import type { MarketingPlay } from "@/lib/marketing-plays";
+import type { ZoneApprovalState } from "@/lib/data/zone-approval";
+import { ZoneApprovalPanel } from "./zone-approval-panel";
 import { OwnershipPanel } from "./ownership-panel";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
@@ -92,6 +94,7 @@ export function AttractorsDashboard({
   houseKinds,
   zones,
   plays,
+  approvals,
   initialZoneId,
   densityPoints,
   keywords,
@@ -125,6 +128,8 @@ export function AttractorsDashboard({
   zones: ZoneRow[];
   /** The marketing to do, made from evaluations and clients. */
   plays: MarketingPlay[];
+  /** Which zones are approved for the map, and how much the app still asks. */
+  approvals: ZoneApprovalState;
   /** A zone to open on arrival, from a link on another page. */
   initialZoneId: string | null;
   /** Every address with what it has actually paid, for ranking areas. */
@@ -187,6 +192,10 @@ export function AttractorsDashboard({
   // The zones with an evaluation, a client or marketing to do in them are
   // the ones the office works; the rest of the county is behind a switch.
   const [zoneScope, setZoneScope] = useState<"active" | "all">("active");
+  // Only approved zones are on the map; the one being looked at joins them.
+  const approvedZoneIds = useMemo(() => new Set(approvals.zones.filter((z) => !z.needsApproval).map((z) => z.id)), [approvals]);
+  const approvedZones = useMemo(() => zones.filter((z) => approvedZoneIds.has(z.id)), [zones, approvedZoneIds]);
+  const visibleZoneIds = useMemo(() => [...approvedZoneIds, ...(focusZone ? [focusZone.id] : [])], [approvedZoneIds, focusZone]);
   const [pointColorMode, setPointColorMode] = useState<PointColorMode>("stage");
   // A question over the county's dots, from the cross-check table; the map
   // shows only the houses that answer yes.
@@ -585,6 +594,7 @@ export function AttractorsDashboard({
                 unservedClusters={unservedClusters}
                 showZones={showZones && !focused}
                 zoneScope={zoneScope}
+                visibleZoneIds={visibleZoneIds}
                 focusZone={focused ? null : focusZone}
                 pointColorMode={pointColorMode}
                 pointHighlight={pointHighlight?.value ?? null}
@@ -677,6 +687,20 @@ export function AttractorsDashboard({
           </Card>
         )}
 
+        {!creating && !selectedWave && !selectedJob && approvals.zones.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <ZoneApprovalPanel
+                state={approvals}
+                onFocusZone={(id) => {
+                  setShowZones(true);
+                  setFocusZone({ id, at: Date.now() });
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {!creating && !selectedWave && !selectedJob && (
           <Card>
             <CardContent className="pt-6">
@@ -684,7 +708,7 @@ export function AttractorsDashboard({
                 build={eddmBuild}
                 summary={eddmSummary}
                 clusters={unservedClusters}
-                zones={zones}
+                zones={approvedZones}
                 zoneScope={zoneScope}
                 onZoneScope={setZoneScope}
                 onFocusZone={(id) => {

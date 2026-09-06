@@ -40,6 +40,8 @@ export interface MarketingPlay {
   zoneId: string | null;
   zoneName: string | null;
   zoneMode: string | null;
+  /** Whether the zone has been approved for the map; null when the play has no zone. */
+  zoneApproved?: boolean | null;
   /** House ids for doors; FlyerRoute objects for flyers. */
   targets: unknown;
   status: PlayStatus;
@@ -153,7 +155,7 @@ export function playDetail(play: MarketingPlay): string {
         : "No neighbours close enough to knock on.";
     case "door_hangers":
       return play.zoneName
-        ? `The ${play.quantity} doors nearest the house in zone ${play.zoneName}. Ticking this off records a hanger on each.`
+        ? `The ${play.quantity} doors nearest the house in zone ${play.zoneName}${play.zoneApproved === false ? " (zone waiting for approval)" : ""}. Ticking this off records a hanger on each.`
         : `The ${play.quantity} doors nearest the house. Ticking this off records a hanger on each.`;
     case "flyers": {
       const routes = flyerRoutesOf(play);

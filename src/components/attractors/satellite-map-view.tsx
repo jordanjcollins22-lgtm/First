@@ -85,6 +85,8 @@ interface SatelliteMapViewProps {
   showZones: boolean;
   /** Only the zones with an evaluation, a client or marketing to do in them, or every zone. */
   zoneScope: "active" | "all";
+  /** The zones allowed on the map: the approved ones, and the one being looked at. */
+  visibleZoneIds: string[];
   /** A zone to fly to and show the walk of, when the panel picks one. */
   focusZone: { id: string; at: number } | null;
   /** Routes ticked for a mailing, drawn solid. */
@@ -352,6 +354,7 @@ export function SatelliteMapView({
   unservedClusters,
   showZones,
   zoneScope,
+  visibleZoneIds,
   focusZone,
   selectedEddmIds,
   onToggleMailingRoute,
@@ -1284,11 +1287,12 @@ export function SatelliteMapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loadedRef.current) return;
-    const filter = zoneScope === "all" ? null : ["==", ["get", "active"], true];
+    const allowed = ["in", ["get", "id"], ["literal", visibleZoneIds]];
+    const filter = zoneScope === "all" ? allowed : ["all", ["==", ["get", "active"], true], allowed];
     for (const layer of [ZONES_FILL_LAYER, ZONES_LINE_LAYER, ZONES_LABEL_LAYER]) {
-      if (map.getLayer(layer)) map.setFilter(layer, filter as mapboxgl.FilterSpecification | null);
+      if (map.getLayer(layer)) map.setFilter(layer, filter as mapboxgl.FilterSpecification);
     }
-  }, [zoneScope, mapLoaded]);
+  }, [zoneScope, visibleZoneIds, mapLoaded]);
 
   // A zone picked from the list: fly to it and draw its walk.
   useEffect(() => {

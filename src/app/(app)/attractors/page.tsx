@@ -8,6 +8,7 @@ import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/d
 import { EMPTY_OWNERSHIP, kindSummary, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
 import { listZones } from "@/lib/data/zones";
 import { listMarketingPlays } from "@/lib/data/marketing";
+import { zoneApprovalState } from "@/lib/data/zone-approval";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
 import { listProfiles } from "@/lib/data/team";
@@ -108,6 +109,9 @@ export default async function AttractorsPage({
   // The marketing to do, synced on the way in so a client who paid a
   // minute ago is already on it.
   const plays = await listMarketingPlays({ sync: true }).catch(() => []);
+  // Which zones a person has approved for the map, and the app's own pass
+  // over the rest once it has earned the trust.
+  const approvals = await zoneApprovalState().catch(() => ({ zones: [], reviews: [], streak: 0, level: "ask_all" as const, autoApproved: 0 }));
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:py-8">
@@ -142,6 +146,7 @@ export default async function AttractorsPage({
         ownershipMatrix={ownershipMatrix}
         zones={zones}
         plays={plays}
+        approvals={approvals}
         initialZoneId={zone ?? null}
         houseKinds={houseKinds}
         densityPoints={densityPoints}

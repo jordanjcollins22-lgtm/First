@@ -769,6 +769,12 @@ export interface Database {
           walk_path: Json | null;
           /** A split part's own wave; the route's wave otherwise. */
           wave_id?: string | null;
+          approval?: string;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          approved_mode?: string | null;
+          approved_houses?: number | null;
+          approval_note?: string | null;
           start_point: Json | null;
           /** Where the van goes. Rarely the first door. */
           park_point: Json | null;
@@ -997,6 +1003,31 @@ export interface Database {
           service_url: string;
         };
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
+        Relationships: [];
+      };
+      zone_reviews: {
+        Row: {
+          id: string;
+          organization_id: string;
+          zone_id: string | null;
+          zone_name: string | null;
+          decision: string;
+          reason: string | null;
+          note: string | null;
+          mode: string | null;
+          new_mode: string | null;
+          houses: number | null;
+          gap_m: number | null;
+          path_km: number | null;
+          est_minutes: number | null;
+          reviewer: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["zone_reviews"]["Row"]> & {
+          organization_id: string;
+          decision: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["zone_reviews"]["Row"]>;
         Relationships: [];
       };
       summary_cache: {
@@ -2684,6 +2715,8 @@ export interface Database {
       zones_list: { Args: { org: string }; Returns: Json };
       marketing_sync: { Args: { org: string }; Returns: Json };
       marketing_sync_and_refresh: { Args: { org: string }; Returns: Json };
+      zone_review: { Args: { org: string; the_zone: string; decision: string; reason?: string | null; note?: string | null; new_mode?: string | null; by?: string | null }; Returns: Json };
+      zone_approvals: { Args: { org: string }; Returns: Json };
       summary_get: { Args: { org: string; the_key: string; max_age?: string }; Returns: Json };
       summary_refresh: { Args: { org: string; the_key: string }; Returns: Json };
       summaries_refresh: { Args: { org: string; keys?: string[] | null }; Returns: Json };
