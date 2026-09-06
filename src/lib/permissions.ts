@@ -105,6 +105,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "Whoever is signed in, looking at their own work — stops for a crew member, clients and jobs " +
     "for anybody else. It shows one person their own day and nobody else's, so there is nothing to " +
     "withhold, and a tick could leave somebody with no screen to open.",
+  "/eddm/mailings/[mailingId]/order":
+    "The printed order package for one EDDM mailing, at its own URL so it can be opened in a tab and " +
+    "printed. Guarded by requireAnyTab on Project Data, which is the only place a mailing can be made.",
   "/jobs/[jobId]/directions":
     "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page — " +
     "it shows a property address, which anybody who can open the job can already see.",

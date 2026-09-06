@@ -18,6 +18,10 @@ export interface Organization {
   overhead_percent: number;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
+  /** USPS EDDM Retail postage per piece, dollars. Null until somebody enters it. */
+  eddm_postage_per_piece?: number | null;
+  /** In-house printing cost per piece, dollars. */
+  eddm_print_cost_per_piece?: number | null;
   created_at: string;
   updated_at: string;
 }

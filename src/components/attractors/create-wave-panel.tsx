@@ -33,6 +33,8 @@ export function CreateWavePanel({
   variants,
   drawnPoints,
   initialGeometryType,
+  initialName,
+  initialQuantity,
   onRequestDraw,
   onCancel,
   onCreated,
@@ -42,13 +44,16 @@ export function CreateWavePanel({
   drawnPoints: LatLng[] | null;
   /** A USPS route handed in as a shape opens the form already set to polygon. */
   initialGeometryType?: AttractorGeometryType;
+  /** From an EDDM mailing: its name and its piece count, already typed in. */
+  initialName?: string;
+  initialQuantity?: number;
   onRequestDraw: (geometryType: "polygon" | "route") => void;
   onCancel: () => void;
   onCreated: () => void;
 }) {
   const [typeId, setTypeId] = useState(types[0]?.id ?? "");
   const [variantId, setVariantId] = useState<string>("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [geometryType, setGeometryType] = useState<AttractorGeometryType>(initialGeometryType ?? "point_radius");
   const [address, setAddress] = useState<GeocodeSuggestion | null>(null);
   const [radiusMiles, setRadiusMiles] = useState("0.25");
@@ -56,7 +61,7 @@ export function CreateWavePanel({
   const [zipText, setZipText] = useState("");
   const [datePlanned, setDatePlanned] = useState("");
   const [status, setStatus] = useState<AttractorWaveStatus>("planned");
-  const [quantity, setQuantity] = useState("");
+  const [quantity, setQuantity] = useState(initialQuantity != null ? String(initialQuantity) : "");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();

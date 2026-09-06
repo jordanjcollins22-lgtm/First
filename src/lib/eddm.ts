@@ -249,6 +249,8 @@ export interface EddmRouteProperties {
   householdSize: number | null;
   /** USPS's own flag: fewer than 200 deliveries, below the EDDM minimum. */
   under200: boolean;
+  /** The post office the bundles for this route are taken to. */
+  facility: string | null;
 }
 
 export interface EddmRouteFeature {
@@ -281,6 +283,7 @@ function propertiesOf(r: EddmRoute & { id?: string }, index: number): EddmRouteP
       return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
     })(),
     under200: String(pick(a, ["LT_200_IND"]) ?? "").toUpperCase() === "Y",
+    facility: asText(pick(a, ["FAC_NAME", "FACILITY_NAME", "FACILITY"])),
   };
 }
 

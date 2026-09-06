@@ -28,6 +28,10 @@ export interface Database {
           measurement_basis: string;
           created_at: string;
           updated_at: string;
+          /** USPS EDDM Retail postage per piece, in dollars. A setting because USPS revises it. */
+          eddm_postage_per_piece: number | null;
+          /** What a piece costs to print in-house, in dollars. */
+          eddm_print_cost_per_piece: number;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> & {
           name: string;
@@ -974,6 +978,35 @@ export interface Database {
           service_url: string;
         };
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
+        Relationships: [];
+      };
+      eddm_mailings: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          /** residential | all */
+          audience: string;
+          routes: Json;
+          pieces: number;
+          postage_per_piece: number | null;
+          print_cost_per_piece: number;
+          postage_cents: number;
+          print_cost_cents: number;
+          drop_facilities: Json;
+          /** planned | printed | mailed */
+          status: string;
+          mailed_on: string | null;
+          wave_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["eddm_mailings"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["eddm_mailings"]["Row"]>;
         Relationships: [];
       };
       eddm_routes: {

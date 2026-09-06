@@ -50,6 +50,9 @@ interface SatelliteMapViewProps {
   eddmStreets: EddmStreetFeature[];
   /** A route's outline handed to the wave form as a drawn shape. */
   onUseRouteAsWave: (points: LatLng[]) => void;
+  /** Routes ticked for a mailing, drawn solid. */
+  selectedEddmIds: string[];
+  onToggleMailingRoute: (id: string) => void;
   /**
    * Ranked areas, strongest first, with an intensity from 0 to 1.
    *
@@ -138,6 +141,8 @@ export function SatelliteMapView({
   eddmRoutes,
   eddmStreets,
   onUseRouteAsWave,
+  selectedEddmIds,
+  onToggleMailingRoute,
   densityCells,
   rankPoints,
   visibleWaveIds,
@@ -162,10 +167,13 @@ export function SatelliteMapView({
   const onGeometryDrawnRef = useRef(onGeometryDrawn);
   const onSelectWaveRef = useRef(onSelectWave);
   const onUseRouteAsWaveRef = useRef(onUseRouteAsWave);
+  const onToggleMailingRouteRef = useRef(onToggleMailingRoute);
+  const selectedEddmRef = useRef<Set<string>>(new Set());
   const onSelectJobRef = useRef(onSelectJob);
   useEffect(() => {
     onUseRouteAsWaveRef.current = onUseRouteAsWave;
-  }, [onUseRouteAsWave]);
+    onToggleMailingRouteRef.current = onToggleMailingRoute;
+  }, [onUseRouteAsWave, onToggleMailingRoute]);
 
   useEffect(() => {
     onGeometryDrawnRef.current = onGeometryDrawn;
@@ -594,6 +602,7 @@ export function SatelliteMapView({
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as {
+          id: string;
           zip: string;
           routeId: string;
           residential: number | null;
@@ -604,6 +613,7 @@ export function SatelliteMapView({
           householdSize: number | null;
           under200: boolean;
         };
+        const inMailing = selectedEddmRef.current.has(props.id);
         const polygon = feature.geometry as GeoJSON.Polygon;
         const outer = polygon.coordinates[0] ?? [];
         const points: LatLng[] = outer.map(([lng, lat]) => ({ lat, lng }));
@@ -630,11 +640,18 @@ export function SatelliteMapView({
               (people ? `<div style="color:#666;font-weight:400">${escapeHtml(people)}</div>` : "") +
               under200 +
               `<div id="eddm-ours" style="color:#666;font-weight:400">Counting our houses…</div>` +
-              `<button type="button" style="margin-top:6px;padding:4px 8px;border-radius:6px;background:#2f6d3c;color:#fff;font:500 12px system-ui">Use as a wave area</button></div>`
+              `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
+              `<button type="button" data-act="mail" style="padding:4px 8px;border-radius:6px;background:${inMailing ? "#b45309" : "#1d4ed8"};color:#fff;font:500 12px system-ui">${inMailing ? "Remove from mailing" : "Add to mailing"}</button>` +
+              `<button type="button" data-act="wave" style="padding:4px 8px;border-radius:6px;background:#2f6d3c;color:#fff;font:500 12px system-ui">Use as a wave area</button>` +
+              `</div></div>`
           )
           .addTo(map);
-        popup.getElement()?.querySelector("button")?.addEventListener("click", () => {
+        popup.getElement()?.querySelector("button[data-act=wave]")?.addEventListener("click", () => {
           onUseRouteAsWaveRef.current(points);
+          popup.remove();
+        });
+        popup.getElement()?.querySelector("button[data-act=mail]")?.addEventListener("click", () => {
+          onToggleMailingRouteRef.current(props.id);
           popup.remove();
         });
         // Our own count inside the same outline, beside USPS's.
@@ -775,6 +792,25 @@ export function SatelliteMapView({
     if (!source) return;
     source.setData({ type: "FeatureCollection", features: housesToFeatures(houses) });
   }, [houses, mapLoaded]);
+
+  // Routes in the mailing are drawn solid; the rest stay faint.
+  useEffect(() => {
+    selectedEddmRef.current = new Set(selectedEddmIds);
+    const map = mapRef.current;
+    if (!map || !loadedRef.current || !map.getLayer(EDDM_FILL_LAYER)) return;
+    map.setPaintProperty(EDDM_FILL_LAYER, "fill-opacity", [
+      "case",
+      ["in", ["get", "id"], ["literal", selectedEddmIds]],
+      0.4,
+      0.1,
+    ]);
+    map.setPaintProperty(EDDM_LINE_LAYER, "line-width", [
+      "case",
+      ["in", ["get", "id"], ["literal", selectedEddmIds]],
+      3,
+      1.5,
+    ]);
+  }, [selectedEddmIds, mapLoaded]);
 
   // Keep the USPS routes and their streets in sync.
   useEffect(() => {

@@ -3,6 +3,7 @@ import { listJobsWithLocation } from "@/lib/data/jobs";
 import { listBusinessLocations, listLocationAreas } from "@/lib/data/locations";
 import { listProperties } from "@/lib/data/properties";
 import { listHousesWithHistory } from "@/lib/data/houses";
+import { getEddmRates, listEddmMailings } from "@/lib/data/eddm";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
 import { listProfiles } from "@/lib/data/team";
@@ -77,7 +78,7 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints] =
+  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings] =
     await Promise.all([
       listProperties(),
       listProfiles().catch(() => [] as Profile[]),
@@ -89,6 +90,8 @@ export default async function AttractorsPage({
       listKeywords().catch(() => []),
       listLatestScans().catch(() => []),
       listPreviousScanPoints().catch(() => new Map()),
+      getEddmRates().catch(() => ({ postagePerPiece: null, printCostPerPiece: 0 })),
+      listEddmMailings().catch(() => []),
     ]);
 
   return (
@@ -114,6 +117,8 @@ export default async function AttractorsPage({
         areas={areas}
         properties={properties}
         houses={houses}
+        eddmRates={eddmRates}
+        eddmMailings={eddmMailings}
         densityPoints={densityPoints}
         profiles={profiles}
         currentProfileId={profile?.id ?? null}

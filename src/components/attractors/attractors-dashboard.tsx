@@ -50,6 +50,10 @@ import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { MapHouse } from "@/lib/house-geojson";
 import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import { loadEddmRoutes } from "@/lib/actions/eddm-actions";
+import { EddmMailingPanel } from "./eddm-mailing-panel";
+import type { EddmMailing } from "@/lib/data/eddm";
+import type { MailingRates } from "@/lib/eddm-mailing";
+import { unionBoundary } from "@/lib/eddm-mailing";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "waves" | "clients";
@@ -64,6 +68,8 @@ export function AttractorsDashboard({
   areas,
   properties,
   houses,
+  eddmRates,
+  eddmMailings,
   densityPoints,
   keywords,
   rankScans,
@@ -80,6 +86,9 @@ export function AttractorsDashboard({
   properties: PropertyWithCustomer[];
   /** Every house with a story, coloured by stage on the map. */
   houses: MapHouse[];
+  /** What an EDDM piece costs to post and to print, for pricing a mailing. */
+  eddmRates: MailingRates;
+  eddmMailings: EddmMailing[];
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -138,6 +147,31 @@ export function AttractorsDashboard({
   const [eddmZip, setEddmZip] = useState("21014");
   const [eddmRoutes, setEddmRoutes] = useState<EddmRouteFeature[]>([]);
   const [eddmStreets, setEddmStreets] = useState<EddmStreetFeature[]>([]);
+  // Routes ticked for a mailing, kept as features so a selection survives
+  // loading another ZIP's routes.
+  const [mailingSelection, setMailingSelection] = useState<Map<string, EddmRouteFeature>>(new Map());
+  const [createName, setCreateName] = useState<string | undefined>(undefined);
+  const [createQuantity, setCreateQuantity] = useState<number | undefined>(undefined);
+
+  function toggleMailingRoute(id: string) {
+    setMailingSelection((current) => {
+      const next = new Map(current);
+      if (next.has(id)) next.delete(id);
+      else {
+        const feature = eddmRoutes.find((f) => f.properties.id === id);
+        if (feature) next.set(id, feature);
+      }
+      return next;
+    });
+  }
+
+  function makeWaveFromMailing(routes: EddmRouteFeature[], name: string, quantity: number) {
+    const ring = unionBoundary(routes.map((f) => f.geometry.coordinates[0]));
+    if (!ring) return;
+    setCreateName(name);
+    setCreateQuantity(quantity);
+    openWaveFromRoute(ring.map(([lng, lat]) => ({ lat, lng })));
+  }
   const [eddmBusy, setEddmBusy] = useState(false);
   const [eddmStatus, setEddmStatus] = useState<string | null>(null);
   // A route handed in as a wave shape opens the form as a polygon; the key
@@ -165,7 +199,7 @@ export function AttractorsDashboard({
     );
   }
 
-  function useRouteAsWave(points: LatLng[]) {
+  function openWaveFromRoute(points: LatLng[]) {
     setCreating(true);
     setSelectedWaveId(null);
     setSelectedJobId(null);
@@ -297,6 +331,8 @@ export function AttractorsDashboard({
   }
 
   function startCreating() {
+    setCreateName(undefined);
+    setCreateQuantity(undefined);
     setCreatePreset(undefined);
     setCreateKey((k) => k + 1);
     setCreating(true);
@@ -482,7 +518,9 @@ export function AttractorsDashboard({
                 showAllAddresses={showAllAddresses}
                 eddmRoutes={showEddm ? eddmRoutes : []}
                 eddmStreets={showEddm ? eddmStreets : []}
-                onUseRouteAsWave={useRouteAsWave}
+                selectedEddmIds={[...mailingSelection.keys()]}
+                onToggleMailingRoute={toggleMailingRoute}
+                onUseRouteAsWave={openWaveFromRoute}
                 densityCells={mapCells}
                 rankPoints={rankOverlay}
                 visibleWaveIds={visibleWaveIds}
@@ -534,6 +572,21 @@ export function AttractorsDashboard({
           )}
         </Card>
 
+        {(mailingSelection.size > 0 || (showEddm && eddmRoutes.length > 0)) && !creating && !selectedWave && !selectedJob && (
+          <Card className="max-h-[70vh] overflow-y-auto">
+            <CardContent className="pt-6">
+              <EddmMailingPanel
+                selected={[...mailingSelection.values()]}
+                rates={eddmRates}
+                mailings={eddmMailings}
+                onRemove={toggleMailingRoute}
+                onClear={() => setMailingSelection(new Map())}
+                onMakeWave={makeWaveFromMailing}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {(creating || selectedWave || selectedJob) && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
@@ -543,6 +596,8 @@ export function AttractorsDashboard({
                   types={types}
                   variants={variants}
                   initialGeometryType={createPreset}
+                  initialName={createName}
+                  initialQuantity={createQuantity}
                   drawnPoints={drawTarget === "wave" ? drawnPoints : null}
                   onRequestDraw={requestDraw}
                   onCancel={() => {
