@@ -57,6 +57,9 @@ export function FilterBar({
   onToggleShowHouses,
   showAllAddresses,
   onToggleShowAllAddresses,
+  showZones,
+  zoneCount,
+  onToggleShowZones,
   showUnserved,
   unservedCount,
   onToggleShowUnserved,
@@ -97,6 +100,10 @@ export function FilterBar({
    * Off by default and fetched by viewport; the whole county is too many dots. */
   showAllAddresses: boolean;
   onToggleShowAllAddresses: () => void;
+  /** The door-hanger zones, a tiling of the county coloured by how each is covered. */
+  showZones: boolean;
+  zoneCount: number;
+  onToggleShowZones: () => void;
   /** The houses no USPS route's streets reach, in their own colour. */
   showUnserved: boolean;
   unservedCount: number;
@@ -245,6 +252,12 @@ export function FilterBar({
           Refresh from USPS
         </button>
         {eddmStatus && <span className="text-xs text-muted-foreground">{eddmStatus}</span>}
+        {zoneCount > 0 && (
+          <Label className="ml-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <input type="checkbox" checked={showZones} onChange={onToggleShowZones} className="h-3.5 w-3.5" />
+            Door-hanger zones ({zoneCount})
+          </Label>
+        )}
         {unservedCount > 0 && (
           <Label className="ml-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <input type="checkbox" checked={showUnserved} onChange={onToggleShowUnserved} className="h-3.5 w-3.5" />

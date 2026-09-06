@@ -30,8 +30,12 @@ import type { Json } from "@/lib/supabase/database.types";
  *     from the map's road classes at points along them, is hard;
  *  3. cuts the streets into segments and assigns every house in the ZIP to
  *     the route whose street passes it, flagging the ones no route reaches;
- *  4. makes one Door Hangers wave per walkable route, and one zone with the
- *     route's houses attached, where none exists yet.
+ *  4. puts every house into a zone -- its route's, or the nearest housed
+ *     route's when none reached it -- with a wave for every route that has
+ *     houses, hard ones included;
+ *  5. builds each zone: an outline that overlaps no neighbour, the doors in
+ *     walking order, where to park, and whether it is a walk, a scooter or
+ *     a vehicle by how far apart the doors are.
  *
  * Every write is idempotent on (organization, ZIP, route), so a step cut
  * off halfway is rerun from the same offset and the database ends up the
@@ -89,7 +93,9 @@ export interface EddmBuildCheckpoint {
    * houses, waves and zones left. Two phases, because each can take twenty
    * seconds and the function has sixty.
    */
-  phase: "routes" | "houses";
+  phase: "routes" | "houses" | "zones";
+  /** In the zones phase: how many of the ZIP's zones are built so far. */
+  zoneIndex?: number;
   zips: Record<string, ZipResult>;
 }
 
@@ -107,7 +113,8 @@ export function checkpointOf(job: Pick<JobRow, "checkpoint">): EddmBuildCheckpoi
     offset: typeof raw.offset === "number" ? raw.offset : 0,
     attempts: typeof raw.attempts === "number" ? raw.attempts : 0,
     replaced: raw.replaced === true,
-    phase: raw.phase === "houses" ? "houses" : "routes",
+    phase: raw.phase === "houses" ? "houses" : raw.phase === "zones" ? "zones" : "routes",
+    zoneIndex: typeof raw.zoneIndex === "number" ? raw.zoneIndex : 0,
     zips: raw.zips && typeof raw.zips === "object" ? raw.zips : {},
   };
 }
@@ -193,6 +200,7 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
 
   const zip = scope.zips[checkpoint.offset];
   if (checkpoint.phase === "houses") return assignAndMaterialize(admin, job, scope, checkpoint, zip);
+  if (checkpoint.phase === "zones") return buildZones(admin, job, scope, checkpoint, zip);
 
   const url = eddmRoutesUrl(zip, env.uspsEddmRoutesUrl || DEFAULT_EDDM_ROUTES_URL);
   const probe = await probeEndpoint(url, "background-job", USPS_TIMEOUT_MS);
@@ -334,7 +342,15 @@ async function assignAndMaterialize(
     if (typeof counts.unserved === "number") unserved = counts.unserved;
   }
 
-  // 4. Waves for the walkable routes that have none, then zones.
+  // 4. Every house in the ZIP into a zone: the ones no route reached join
+  //    the nearest housed route; then a zone per route, hard or walkable.
+  const { error: adoptError } = await admin.rpc("zone_adopt_leftovers", { org, the_zip: zip });
+  if (adoptError) throw adoptError;
+  const { error: ensureError } = await admin.rpc("zone_ensure", { org, the_zip: zip });
+  if (ensureError) throw ensureError;
+
+  // A wave for every route with houses. Hard routes are waves too: they
+  // are covered by scooter or vehicle, not left out.
   const { data: stored, error: storedError } = await admin
     .from("eddm_routes")
     .select("id, route_id, rings, walkability, walkability_reason, wave_id, zone_id, house_count, total_count")
@@ -345,13 +361,8 @@ async function assignAndMaterialize(
 
   let wavesMade = 0;
   for (const row of stored ?? []) {
-    if (row.walkability !== "walkable" && (row.wave_id || row.zone_id)) {
-      await retireRoute(admin, row);
-      continue;
-    }
-    if (row.walkability !== "walkable" || row.wave_id) continue;
-    const points = wavePointsOf({ rings: (row.rings ?? []) as LngLatPair[][] });
-    if (!points) continue;
+    if (row.wave_id || row.house_count === 0) continue;
+    const points = wavePointsOf({ rings: (row.rings ?? []) as LngLatPair[][] }) ?? [];
     const { data: wave, error: waveError } = await admin
       .from("attractor_waves")
       .insert({
@@ -361,7 +372,7 @@ async function assignAndMaterialize(
         geometry_type: "polygon",
         geometry: { points } as unknown as Json,
         status: "planned",
-        notes: `Built from USPS carrier route ${zip} ${row.route_id}: ${row.house_count.toLocaleString()} of our houses on it, ${(row.total_count ?? 0).toLocaleString()} USPS deliveries.`,
+        notes: `Zone ${zip} ${row.route_id}: ${row.house_count.toLocaleString()} of our houses, ${(row.total_count ?? 0).toLocaleString()} USPS deliveries.${row.walkability === "hard" && row.walkability_reason ? ` ${row.walkability_reason}.` : ""}`,
       })
       .select("id")
       .single();
@@ -370,9 +381,6 @@ async function assignAndMaterialize(
     if (linkError) throw linkError;
     wavesMade++;
   }
-
-  const { error: zoneError } = await admin.rpc("eddm_materialize_zones", { org, the_zip: zip });
-  if (zoneError) throw zoneError;
 
   // The hand-drawn waves go once there is something in their place.
   let replaced = checkpoint.replaced;
@@ -383,23 +391,73 @@ async function assignAndMaterialize(
   }
 
   const result: ZipResult = { ...judgedResult, waves: wavesMade, assigned, unserved, error: null };
-  const next: EddmBuildCheckpoint = {
-    offset: checkpoint.offset + 1,
-    attempts: 0,
-    replaced,
-    phase: "routes",
-    zips: { ...checkpoint.zips, [zip]: result },
-  };
-  const finished = next.offset >= scope.zips.length;
+  await admin
+    .from("gis_import_jobs")
+    .update({
+      checkpoint: { ...checkpoint, attempts: 0, replaced, phase: "zones", zoneIndex: 0, zips: { ...checkpoint.zips, [zip]: result } } as unknown as Json,
+      created: job.created + wavesMade,
+      matched: job.matched + assigned,
+      review: job.review + unserved,
+      steps: job.steps + 1,
+      last_error: null,
+      lease_until: null,
+      updated_at: now(),
+    })
+    .eq("id", job.id);
 
+  return {
+    status: "running",
+    more: true,
+    fetched: 0,
+    message: `${zip}: ${assigned} houses on a route, ${unserved} adopted by the nearest, ${wavesMade} waves made. Zones next.`,
+  };
+}
+
+/** How long the zones phase keeps building zones in one invocation. */
+const ZONES_BUDGET_MS = 25_000;
+
+/**
+ * The third part of a ZIP: each zone's outline, walk, parking and mode,
+ * settled against its neighbours so the county stays a partition. A zone
+ * takes a second or two, so a ZIP of thirty takes a few invocations.
+ */
+async function buildZones(
+  admin: Admin,
+  job: JobRow,
+  scope: EddmBuildScope,
+  checkpoint: EddmBuildCheckpoint,
+  zip: string
+): Promise<StepOutcome> {
+  const org = job.organization_id;
+  const now = () => new Date().toISOString();
+  const started = Date.now();
+  const { data: zones, error } = await admin
+    .from("hanger_zones")
+    .select("id")
+    .eq("organization_id", org)
+    .eq("zip", zip)
+    .not("eddm_route_id", "is", null)
+    .order("id");
+  if (error) throw error;
+  const all = zones ?? [];
+  let index = checkpoint.zoneIndex ?? 0;
+  while (index < all.length && Date.now() - started < ZONES_BUDGET_MS) {
+    const { error: buildError } = await admin.rpc("zone_build", { the_zone: all[index].id });
+    if (buildError) throw buildError;
+    const { error: settleError } = await admin.rpc("zone_settle", { the_zone: all[index].id });
+    if (settleError) throw settleError;
+    index++;
+  }
+  const finishedZip = index >= all.length;
+  const next: EddmBuildCheckpoint = finishedZip
+    ? { offset: checkpoint.offset + 1, attempts: 0, replaced: checkpoint.replaced, phase: "routes", zoneIndex: 0, zips: checkpoint.zips }
+    : { ...checkpoint, attempts: 0, phase: "zones", zoneIndex: index };
+  const finished = finishedZip && next.offset >= scope.zips.length;
   await admin
     .from("gis_import_jobs")
     .update({
       checkpoint: next as unknown as Json,
-      processed: job.processed + result.routes,
-      created: job.created + wavesMade,
-      matched: job.matched + assigned,
-      review: job.review + unserved,
+      processed: job.processed + (finishedZip ? (checkpoint.zips[zip]?.routes ?? 0) : 0),
       steps: job.steps + 1,
       status: finished ? "done" : "running",
       finished_at: finished ? now() : null,
@@ -408,35 +466,12 @@ async function assignAndMaterialize(
       updated_at: now(),
     })
     .eq("id", job.id);
-
   return {
     status: finished ? "done" : "running",
     more: !finished,
-    fetched: result.routes,
-    message: `${zip}: ${result.routes} routes, ${result.walkable} walkable, ${result.hard} hard, ${wavesMade} waves made, ${assigned} houses on a route, ${unserved} unreached.`,
+    fetched: 0,
+    message: `${zip}: ${index} of ${all.length} zones built${finishedZip ? "." : ", more next tick."}`,
   };
-}
-
-/**
- * A route judged walkable once and hard now loses its wave and zone, unless
- * somebody has already walked the zone: a record of hangers hung is kept
- * whatever the route is judged today.
- */
-async function retireRoute(admin: Admin, row: { id: string; wave_id: string | null; zone_id: string | null }) {
-  if (row.zone_id) {
-    const { count } = await admin.from("door_hanger_events").select("id", { count: "exact", head: true }).eq("zone_id", row.zone_id);
-    if ((count ?? 0) > 0) return;
-    const { error: housesError } = await admin.from("zone_houses").delete().eq("zone_id", row.zone_id);
-    if (housesError) throw housesError;
-    const { error: zoneError } = await admin.from("hanger_zones").delete().eq("id", row.zone_id);
-    if (zoneError) throw zoneError;
-  }
-  if (row.wave_id) {
-    const { error: waveError } = await admin.from("attractor_waves").delete().eq("id", row.wave_id).eq("type_id", "door_hangers");
-    if (waveError) throw waveError;
-  }
-  const { error } = await admin.from("eddm_routes").update({ wave_id: null, zone_id: null }).eq("id", row.id);
-  if (error) throw error;
 }
 
 function emptyResult(error: string): ZipResult {

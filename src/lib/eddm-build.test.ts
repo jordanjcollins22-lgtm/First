@@ -77,6 +77,6 @@ describe("scope and checkpoint parsing", () => {
   it("tolerates missing or odd values", () => {
     expect(scopeOf({ scope: null })).toEqual({ zips: [], replaceWaves: [] });
     expect(scopeOf({ scope: { zips: ["21014", 3], replaceWaves: "x" } })).toEqual({ zips: ["21014"], replaceWaves: [] });
-    expect(checkpointOf({ checkpoint: {} })).toEqual({ offset: 0, attempts: 0, replaced: false, phase: "routes", zips: {} });
+    expect(checkpointOf({ checkpoint: {} })).toEqual({ offset: 0, attempts: 0, replaced: false, phase: "routes", zoneIndex: 0, zips: {} });
   });
 });

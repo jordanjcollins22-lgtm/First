@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { eddmBuildStatus, pauseEddmBuild, resumeEddmBuild, startEddmBuild, type EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
 import { describeClusters, type UnservedCluster } from "@/lib/eddm-clusters";
+import type { ZoneRow } from "@/lib/data/zones";
+import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, modeOf, rankZones } from "@/lib/zones";
 
 /**
  * The door-hanger routes, built from USPS's carrier routes without drawing.
@@ -26,6 +28,8 @@ export function EddmBuildPanel({
   showUnserved,
   onToggleShowUnserved,
   onFlyTo,
+  zones,
+  onFocusZone,
 }: {
   build: EddmBuildStatus | null;
   summary: EddmRouteSummary;
@@ -33,7 +37,14 @@ export function EddmBuildPanel({
   showUnserved: boolean;
   onToggleShowUnserved: () => void;
   onFlyTo: (target: { lat: number; lng: number }) => void;
+  /** The zones, every house in exactly one, with how each is covered. */
+  zones: ZoneRow[];
+  onFocusZone: (id: string) => void;
 }) {
+  const [showAllZones, setShowAllZones] = useState(false);
+  const ranked = rankZones(zones);
+  const byMode = (m: string) => zones.filter((z) => z.mode === m);
+  const hours = (list: ZoneRow[]) => Math.round(list.reduce((s, z) => s + (z.minutes ?? 0), 0) / 60);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<EddmBuildStatus | null>(build);
@@ -112,6 +123,41 @@ export function EddmBuildPanel({
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {zones.length > 0 && (
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-xs font-medium">Zones: every house in exactly one, none overlapping</p>
+          <p className="text-xs text-muted-foreground">
+            {(["foot", "scooter", "vehicle"] as const)
+              .map((m) => `${byMode(m).length} ${MODE_LABEL[m].toLowerCase()} (${byMode(m).reduce((s, z) => s + z.houses, 0).toLocaleString()} doors, ${hours(byMode(m))} h)`)
+              .join(" · ")}
+            . Click a zone on the map for its walk and where to park.
+          </p>
+          <ul className="space-y-1">
+            {(showAllZones ? ranked : ranked.slice(0, 10)).map((z) => {
+              const mode = modeOf(z.mode);
+              return (
+                <li key={z.id} className="flex items-center gap-2 text-xs">
+                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: mode ? MODE_COLOR[mode] : "#94a3b8" }} title={mode ? MODE_LABEL[mode] : ""} />
+                  <span className="font-medium">{z.name}</span>
+                  <span className="truncate text-muted-foreground">
+                    {z.houses.toLocaleString()} doors · {formatMinutes(z.minutes)} · {crewFor(z.minutes)} people
+                    {z.clients ? ` · ${z.clients} client${z.clients === 1 ? "" : "s"}` : ""}
+                  </span>
+                  <button type="button" className="ml-auto inline-flex shrink-0 items-center gap-1 text-primary hover:underline" onClick={() => onFocusZone(z.id)} title="Show the zone and its walk">
+                    <MapPin className="h-3 w-3" /> Walk
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {zones.length > 10 && (
+            <button type="button" className="text-xs text-primary hover:underline" onClick={() => setShowAllZones((v) => !v)}>
+              {showAllZones ? "Show fewer" : `Show all ${zones.length} zones`}
+            </button>
+          )}
+        </div>
+      )}
 
       {built && (
         <div className="space-y-2 border-t border-border pt-3">

@@ -27,6 +27,7 @@ import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
 import { renderHouseCard, renderHouseCardLoading, type HouseFacts } from "@/lib/house-facts";
 import { matchesHighlight, type PointHighlight } from "@/lib/house-highlight";
+import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, MODE_WHY, modeOf, type ZoneProperties } from "@/lib/zones";
 import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
 if (env.mapboxToken) {
@@ -74,6 +75,13 @@ interface SatelliteMapViewProps {
    */
   showUnserved: boolean;
   unservedClusters: UnservedCluster[];
+  /**
+   * The door-hanger zones: a tiling of the county, no two overlapping,
+   * coloured by whether each is walked, scootered or driven.
+   */
+  showZones: boolean;
+  /** A zone to fly to and show the walk of, when the panel picks one. */
+  focusZone: { id: string; at: number } | null;
   /** Routes ticked for a mailing, drawn solid. */
   selectedEddmIds: string[];
   onToggleMailingRoute: (id: string) => void;
@@ -133,6 +141,17 @@ const EDDM_LABEL_LAYER = "eddm-routes-label";
 const EDDM_STREETS_SOURCE = "eddm-streets";
 const EDDM_STREETS_LAYER = "eddm-streets-line";
 const ALL_ADDRESSES_COUNT_LAYER = "all-addresses-cluster-count";
+const ZONES_SOURCE = "hanger-zones";
+const ZONES_FILL_LAYER = "hanger-zones-fill";
+const ZONES_LINE_LAYER = "hanger-zones-line";
+const ZONES_LABEL_LAYER = "hanger-zones-label";
+const WALK_SOURCE = "zone-walk";
+const WALK_LINE_LAYER = "zone-walk-line";
+const WALK_STOPS_LAYER = "zone-walk-stops";
+const WALK_ORDER_LAYER = "zone-walk-order";
+const WALK_MARKS_SOURCE = "zone-walk-marks";
+const WALK_MARKS_LAYER = "zone-walk-marks";
+const WALK_MARKS_LABEL_LAYER = "zone-walk-marks-label";
 const UNSERVED_SOURCE = "unserved-houses";
 const UNSERVED_LAYER = "unserved-houses-circle";
 const UNSERVED_GROUPS_SOURCE = "unserved-groups";
@@ -186,6 +205,88 @@ function openHouseCard(map: mapboxgl.Map, lngLat: [number, number], lookup: { id
     });
 }
 
+interface WalkAnswer {
+  zone: {
+    id: string;
+    name: string;
+    mode: string | null;
+    house_count: number;
+    path_km: number | null;
+    est_minutes: number | null;
+    walk_path: { lat: number; lng: number }[] | null;
+    park_point: { lat: number; lng: number } | null;
+    start_address: string | null;
+  };
+}
+
+/** Draws one zone's walk: the line through its doors, the doors numbered, the car. */
+async function showWalk(map: mapboxgl.Map, zoneId: string) {
+  const line = map.getSource(WALK_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+  const marks = map.getSource(WALK_MARKS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+  if (!line || !marks) return;
+  const res = await fetch(`/api/zones/${zoneId}/walk`, { cache: "no-store" });
+  if (!res.ok) return;
+  const { zone } = (await res.json()) as WalkAnswer;
+  const path = zone.walk_path ?? [];
+  const park = zone.park_point;
+  const coords: [number, number][] = [
+    ...(park ? [[park.lng, park.lat] as [number, number]] : []),
+    ...path.map((p) => [p.lng, p.lat] as [number, number]),
+    ...(park ? [[park.lng, park.lat] as [number, number]] : []),
+  ];
+  line.setData({
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: zone.id } },
+      ...path.map((p, i) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
+        properties: { i: i + 1 },
+      })),
+    ],
+  });
+  marks.setData({
+    type: "FeatureCollection",
+    features: [
+      ...(park
+        ? [{ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: [park.lng, park.lat] }, properties: { kind: "park", label: "P" } }]
+        : []),
+      ...(path[0]
+        ? [{ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: [path[0].lng, path[0].lat] }, properties: { kind: "start", label: "1" } }]
+        : []),
+    ],
+  });
+}
+
+function clearWalk(map: mapboxgl.Map) {
+  (map.getSource(WALK_SOURCE) as mapboxgl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: [] });
+  (map.getSource(WALK_MARKS_SOURCE) as mapboxgl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: [] });
+}
+
+function zoneCard(props: ZoneProperties): string {
+  const mode = modeOf(props.mode);
+  const modeLine = mode
+    ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:${MODE_COLOR[mode]};color:#fff;font-weight:600">${MODE_LABEL[mode]}</span> <span style="color:#666">${MODE_WHY[mode]}</span>`
+    : `<span style="color:#666">Not rated yet</span>`;
+  const time = props.minutes ? `${formatMinutes(props.minutes)} for one person, or ${crewFor(props.minutes)} people in a half-day` : "";
+  const hard = props.walkability === "hard" && props.reason ? `<div style="color:#c2410c">${escapeHtml(props.reason)}</div>` : "";
+  return (
+    `<div style="font:400 12.5px/1.35 system-ui;max-width:300px">` +
+    `<div style="font-weight:600;font-size:13px">Zone ${escapeHtml(props.name)}</div>` +
+    `<div style="margin:3px 0">${modeLine}</div>` +
+    `<div>${props.houses.toLocaleString()} doors · ${props.pathKm ?? "?"} km of path${props.clients ? ` · <b>${props.clients} client${props.clients === 1 ? "" : "s"}</b>` : ""}</div>` +
+    (time ? `<div style="color:#666">${escapeHtml(time)}</div>` : "") +
+    hard +
+    (props.startAddress ? `<div style="color:#666">Park by the route, start at ${escapeHtml(props.startAddress)}</div>` : "") +
+    `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
+    `<button type="button" data-act="walk" style="padding:4px 8px;border-radius:6px;background:#1d4ed8;color:#fff;font:500 12px system-ui">Show the walk</button>` +
+    (props.waveId
+      ? `<a href="/api/waves/${escapeHtml(props.waveId)}/door-list" style="padding:4px 8px;border-radius:6px;background:#2f6d3c;color:#fff;font:500 12px system-ui;text-decoration:none">Door list</a>`
+      : "") +
+    `</div></div>`
+  );
+}
+
 export function SatelliteMapView({
   waves,
   jobs,
@@ -199,6 +300,8 @@ export function SatelliteMapView({
   onUseRouteAsWave,
   showUnserved,
   unservedClusters,
+  showZones,
+  focusZone,
   selectedEddmIds,
   onToggleMailingRoute,
   densityCells,
@@ -416,6 +519,81 @@ export function SatelliteMapView({
           "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
         },
         paint: { "text-color": "#ffffff", "text-halo-color": "#7c2d12", "text-halo-width": 1.2 },
+      });
+
+      // The door-hanger zones: a tiling, coloured by how each is covered.
+      map.addSource(ZONES_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: ZONES_FILL_LAYER,
+        type: "fill",
+        source: ZONES_SOURCE,
+        paint: {
+          "fill-color": ["match", ["get", "mode"], "foot", MODE_COLOR.foot, "scooter", MODE_COLOR.scooter, "vehicle", MODE_COLOR.vehicle, "#94a3b8"],
+          "fill-opacity": 0.18,
+        },
+      });
+      map.addLayer({
+        id: ZONES_LINE_LAYER,
+        type: "line",
+        source: ZONES_SOURCE,
+        paint: {
+          "line-color": ["match", ["get", "mode"], "foot", MODE_COLOR.foot, "scooter", MODE_COLOR.scooter, "vehicle", MODE_COLOR.vehicle, "#94a3b8"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 15, 2.5],
+          "line-opacity": 0.9,
+        },
+      });
+      map.addLayer({
+        id: ZONES_LABEL_LAYER,
+        type: "symbol",
+        source: ZONES_SOURCE,
+        minzoom: 11,
+        layout: {
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["get", "houses"]], " doors"],
+          "text-size": 11,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+          "symbol-placement": "point",
+        },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#1f2937", "text-halo-width": 1.2 },
+      });
+      // One zone's walk, when asked for: the line, every door numbered, the car.
+      map.addSource(WALK_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: WALK_LINE_LAYER,
+        type: "line",
+        source: WALK_SOURCE,
+        filter: ["==", ["geometry-type"], "LineString"],
+        paint: { "line-color": "#1d4ed8", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.5, 17, 3.5], "line-opacity": 0.85 },
+      });
+      map.addLayer({
+        id: WALK_STOPS_LAYER,
+        type: "circle",
+        source: WALK_SOURCE,
+        filter: ["==", ["geometry-type"], "Point"],
+        minzoom: 15,
+        paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 15, 3, 19, 9], "circle-color": "#1d4ed8", "circle-stroke-color": "#fff", "circle-stroke-width": 1 },
+      });
+      map.addLayer({
+        id: WALK_ORDER_LAYER,
+        type: "symbol",
+        source: WALK_SOURCE,
+        filter: ["==", ["geometry-type"], "Point"],
+        minzoom: 17,
+        layout: { "text-field": ["to-string", ["get", "i"]], "text-size": 9, "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"], "text-allow-overlap": true },
+        paint: { "text-color": "#ffffff" },
+      });
+      map.addSource(WALK_MARKS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: WALK_MARKS_LAYER,
+        type: "circle",
+        source: WALK_MARKS_SOURCE,
+        paint: { "circle-radius": 11, "circle-color": ["match", ["get", "kind"], "park", "#111827", "#1d4ed8"], "circle-stroke-color": "#fff", "circle-stroke-width": 2 },
+      });
+      map.addLayer({
+        id: WALK_MARKS_LABEL_LAYER,
+        type: "symbol",
+        source: WALK_MARKS_SOURCE,
+        layout: { "text-field": ["get", "label"], "text-size": 11, "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"], "text-allow-overlap": true },
+        paint: { "text-color": "#ffffff" },
       });
 
       // Every address in the county, when asked for. Clustered from a
@@ -661,6 +839,31 @@ export function SatelliteMapView({
       });
       map.on("mouseenter", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = ""));
+
+      map.on("click", ZONES_FILL_LAYER, (e) => {
+        // Dots and routes on top of a zone are about themselves.
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, UNSERVED_LAYER] }).length > 0) return;
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const raw = feature.properties as Record<string, unknown>;
+        const parse = (v: unknown) => (typeof v === "string" ? (JSON.parse(v) as { lat: number; lng: number } | null) : (v as { lat: number; lng: number } | null));
+        const props: ZoneProperties = {
+          ...(raw as unknown as ZoneProperties),
+          park: raw.park ? parse(raw.park) : null,
+          start: raw.start ? parse(raw.start) : null,
+          houses: Number(raw.houses) || 0,
+          clients: Number(raw.clients) || 0,
+          minutes: raw.minutes == null ? null : Number(raw.minutes),
+          pathKm: raw.pathKm == null ? null : Number(raw.pathKm),
+        };
+        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "320px" }).setLngLat(e.lngLat).setHTML(zoneCard(props)).addTo(map);
+        popup.getElement()?.querySelector("button[data-act=walk]")?.addEventListener("click", () => {
+          void showWalk(map, props.id);
+          popup.remove();
+        });
+      });
+      map.on("mouseenter", ZONES_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", ZONES_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", UNSERVED_GROUPS_LAYER, (e) => {
         const feature = e.features?.[0];
@@ -983,6 +1186,58 @@ export function SatelliteMapView({
     };
   }, [showAllAddresses, pointHighlight, mapLoaded]);
 
+  // The zones, fetched once when asked for.
+  const zonesRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(ZONES_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+    if (!showZones) {
+      source.setData({ type: "FeatureCollection", features: [] });
+      clearWalk(map);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      if (!zonesRef.current) {
+        try {
+          const res = await fetch("/api/zones/geojson");
+          if (!res.ok) throw new Error(`${res.status}`);
+          zonesRef.current = (await res.json()) as GeoJSON.FeatureCollection;
+        } catch {
+          return;
+        }
+      }
+      if (cancelled) return;
+      source?.setData(zonesRef.current);
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [showZones, mapLoaded]);
+
+  // A zone picked from the list: fly to it and draw its walk.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current || !focusZone) return;
+    const feature = zonesRef.current?.features.find((f) => (f.properties as { id?: string } | null)?.id === focusZone.id);
+    if (feature && feature.geometry.type !== "GeometryCollection") {
+      const coords: number[][] = [];
+      const walk = (c: unknown): void => {
+        if (Array.isArray(c) && typeof c[0] === "number") coords.push(c as number[]);
+        else if (Array.isArray(c)) c.forEach(walk);
+      };
+      walk((feature.geometry as { coordinates: unknown }).coordinates);
+      if (coords.length > 0) {
+        const bounds = coords.reduce((b, c) => b.extend([c[0], c[1]]), new mapboxgl.LngLatBounds([coords[0][0], coords[0][1]], [coords[0][0], coords[0][1]]));
+        map.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 16 });
+      }
+    }
+    void showWalk(map, focusZone.id);
+  }, [focusZone, mapLoaded]);
+
   // The houses no route reaches, fetched once when asked for; the groups
   // come with the page.
   const unservedRef = useRef<[number, number, string, string][] | null>(null);
@@ -1132,7 +1387,7 @@ export function SatelliteMapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
-      {(showAllAddresses || showUnserved || houses.length > 0) && (
+      {(showAllAddresses || showUnserved || showZones || houses.length > 0) && (
         <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col gap-0.5 rounded-md bg-black/60 px-2 py-1.5 text-[11px] text-white">
           {(pointColorMode === "stage" || !showAllAddresses) &&
             RELATIONSHIP_STAGES.map((stage) => (
@@ -1160,6 +1415,13 @@ export function SatelliteMapView({
               Off any USPS route
             </span>
           )}
+          {showZones &&
+            (["foot", "scooter", "vehicle"] as const).map((m) => (
+              <span key={m} className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: MODE_COLOR[m] }} />
+                Zone: {MODE_LABEL[m].toLowerCase()}
+              </span>
+            ))}
         </div>
       )}
       {showAllAddresses && allAddressesNote && (

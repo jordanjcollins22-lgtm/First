@@ -771,6 +771,17 @@ export interface Database {
           park_point: Json | null;
           end_point: Json | null;
           start_address: string | null;
+          eddm_route_id: string | null;
+          zip: string | null;
+          /** foot | scooter | vehicle, from the path length per door. */
+          mode: string | null;
+          house_count: number;
+          path_km: number | null;
+          est_minutes: number | null;
+          median_gap_m: number | null;
+          /** The whole outline as GeoJSON, which may be several pieces. */
+          boundary_geojson: Json | null;
+          built_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -2593,6 +2604,15 @@ export interface Database {
       house_facts: { Args: { org: string; the_house: string }; Returns: Json };
       house_nearest: { Args: { org: string; at_lat: number; at_lng: number }; Returns: string | null };
       relationship_ownership_matrix: { Args: { org: string }; Returns: Json };
+      zone_adopt_leftovers: { Args: { org: string; the_zip: string | null }; Returns: number };
+      zone_ensure: { Args: { org: string; the_zip: string }; Returns: Json };
+      zone_outline: { Args: { the_zone: string; reach?: number; context?: number }; Returns: Json };
+      zone_walk: { Args: { the_zone: string }; Returns: Json };
+      zone_build: { Args: { the_zone: string }; Returns: Json };
+      zone_dedupe: { Args: { org: string }; Returns: Json };
+      zones_geojson: { Args: { org: string }; Returns: Json };
+      zone_settle: { Args: { the_zone: string }; Returns: Json };
+      zones_list: { Args: { org: string }; Returns: Json };
       /** The doors inside a drawn shape: count, stage breakdown, print run by design. */
       houses_coverage: {
         Args: { org: string; ring: Json | null; zips: Json | null; designs?: number };

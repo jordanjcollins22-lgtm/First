@@ -60,6 +60,7 @@ import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
 import type { MatrixRow, PointHighlight } from "@/lib/house-highlight";
+import type { ZoneRow } from "@/lib/data/zones";
 import type { EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
@@ -85,6 +86,7 @@ export function AttractorsDashboard({
   sdatJob,
   ownership,
   ownershipMatrix,
+  zones,
   densityPoints,
   keywords,
   rankScans,
@@ -112,6 +114,8 @@ export function AttractorsDashboard({
   sdatJob: SdatStatus | null;
   ownership: OwnershipSummary;
   ownershipMatrix: MatrixRow[];
+  /** The door-hanger zones, built from the USPS routes as a partition of the county. */
+  zones: ZoneRow[];
   /** Every address with what it has actually paid, for ranking areas. */
   densityPoints: DensityPoint[];
   /** Phrases we track, and the latest grid for each. */
@@ -167,6 +171,8 @@ export function AttractorsDashboard({
   // The houses no USPS route reaches; on once a build has run, because they
   // are the point of it.
   const [showUnserved, setShowUnserved] = useState(false);
+  const [showZones, setShowZones] = useState(zones.length > 0);
+  const [focusZone, setFocusZone] = useState<{ id: string; at: number } | null>(null);
   const [pointColorMode, setPointColorMode] = useState<PointColorMode>("stage");
   // A question over the county's dots, from the cross-check table; the map
   // shows only the houses that answer yes.
@@ -484,6 +490,9 @@ export function AttractorsDashboard({
         onToggleShowHouses={() => setShowHouses((v) => !v)}
         showAllAddresses={showAllAddresses}
         onToggleShowAllAddresses={() => setShowAllAddresses((v) => !v)}
+        showZones={showZones}
+        zoneCount={zones.length}
+        onToggleShowZones={() => setShowZones((v) => !v)}
         showUnserved={showUnserved}
         unservedCount={unservedClusters.reduce((sum, c) => sum + c.houses, 0)}
         onToggleShowUnserved={() => setShowUnserved((v) => !v)}
@@ -557,6 +566,8 @@ export function AttractorsDashboard({
                 onUseRouteAsWave={openWaveFromRoute}
                 showUnserved={showUnserved}
                 unservedClusters={unservedClusters}
+                showZones={showZones}
+                focusZone={focusZone}
                 pointColorMode={pointColorMode}
                 pointHighlight={pointHighlight?.value ?? null}
                 densityCells={mapCells}
@@ -639,6 +650,11 @@ export function AttractorsDashboard({
                 build={eddmBuild}
                 summary={eddmSummary}
                 clusters={unservedClusters}
+                zones={zones}
+                onFocusZone={(id) => {
+                  setShowZones(true);
+                  setFocusZone({ id, at: Date.now() });
+                }}
                 showUnserved={showUnserved}
                 onToggleShowUnserved={() => setShowUnserved((v) => !v)}
                 onFlyTo={(target) => {
