@@ -16,7 +16,7 @@ export async function GET() {
   const profile = await getCurrentProfile();
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("zones_geojson", { org: profile.organization_id });
+  const { data, error } = await supabase.rpc("summary_get", { org: profile.organization_id, the_key: "zones_geojson" });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? { type: "FeatureCollection", features: [] }, { headers: { "cache-control": "private, max-age=120" } });
 }

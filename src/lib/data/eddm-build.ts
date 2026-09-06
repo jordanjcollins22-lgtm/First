@@ -76,7 +76,7 @@ export async function listUnservedClusters(): Promise<UnservedCluster[]> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
   if (!org) return [];
-  const { data, error } = await supabase.rpc("eddm_unserved_cells", { org });
+  const { data, error } = await supabase.rpc("summary_get", { org, the_key: "eddm_unserved_cells" });
   if (error) throw error;
   return clusterCells((Array.isArray(data) ? data : []) as unknown as UnservedCell[]);
 }

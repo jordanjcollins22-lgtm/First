@@ -267,6 +267,12 @@ export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutc
     last_error: null,
     finished_at: finished ? new Date().toISOString() : null,
   });
+  if (finished) {
+    // The kept answers the roll changes: who owns what, the cross-check
+    // table, the kinds of door, and the map's points.
+    const { error } = await admin.rpc("summaries_refresh", { org: job.organization_id, keys: ["ownership_summary", "relationship_ownership_matrix", "kind_summary", "houses_map_points"] });
+    if (error) console.error("[sdat] summaries could not be refreshed:", error.message);
+  }
   return { status: finished ? "done" : "running", more, fetched: page.features.length, message: null };
 }
 

@@ -12,7 +12,7 @@ export async function listMarketingPlays(options: { sync?: boolean; includeDone?
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
   if (options.sync !== false) {
-    const { error } = await supabase.rpc("marketing_sync", { org });
+    const { error } = await supabase.rpc("marketing_sync_and_refresh", { org });
     if (error) console.error("[marketing] sync failed:", error.message);
   }
   const { data, error } = await supabase.rpc("marketing_plays_list", { org, include_done: options.includeDone !== false });

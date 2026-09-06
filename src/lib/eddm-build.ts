@@ -189,6 +189,16 @@ export async function runEddmBuildSteps(admin: Admin, first: JobRow): Promise<St
   return outcome;
 }
 
+/**
+ * The kept county-wide answers the build changes: the zones, their
+ * outlines, and the houses no route reaches. Refreshed once at the end so
+ * the page shows the new build the moment it says done.
+ */
+async function refreshSummaries(admin: Admin, org: string) {
+  const { error } = await admin.rpc("summaries_refresh", { org, keys: ["zones_list", "zones_geojson", "eddm_unserved_cells", "houses_unserved_points", "houses_map_points"] });
+  if (error) console.error("[eddm-build] summaries could not be refreshed:", error.message);
+}
+
 /** One ZIP. Expects the caller to hold the lease. */
 export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepOutcome> {
   const scope = scopeOf(job);
@@ -201,6 +211,7 @@ export async function runEddmBuildStep(admin: Admin, job: JobRow): Promise<StepO
       .from("gis_import_jobs")
       .update({ status: "done", lease_until: null, finished_at: now(), updated_at: now(), steps: job.steps + 1 })
       .eq("id", job.id);
+    await refreshSummaries(admin, org);
     return { status: "done", more: false, fetched: 0, message: "Every ZIP is built." };
   }
 
@@ -510,6 +521,7 @@ async function buildZones(
       updated_at: now(),
     })
     .eq("id", job.id);
+  if (finished) await refreshSummaries(admin, org);
   return {
     status: finished ? "done" : "running",
     more: !finished,

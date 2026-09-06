@@ -20,7 +20,7 @@ export async function GET() {
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("houses_map_points", { org: profile.organization_id });
+  const { data, error } = await supabase.rpc("summary_get", { org: profile.organization_id, the_key: "houses_map_points" });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(

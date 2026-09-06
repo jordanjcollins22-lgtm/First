@@ -999,6 +999,21 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
         Relationships: [];
       };
+      summary_cache: {
+        Row: {
+          organization_id: string;
+          key: string;
+          value: Json | null;
+          computed_at: string;
+          took_ms: number | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["summary_cache"]["Row"]> & {
+          organization_id: string;
+          key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["summary_cache"]["Row"]>;
+        Relationships: [];
+      };
       marketing_plays: {
         Row: {
           id: string;
@@ -2668,6 +2683,10 @@ export interface Database {
       zone_enclave_count: { Args: { org: string }; Returns: Json };
       zones_list: { Args: { org: string }; Returns: Json };
       marketing_sync: { Args: { org: string }; Returns: Json };
+      marketing_sync_and_refresh: { Args: { org: string }; Returns: Json };
+      summary_get: { Args: { org: string; the_key: string; max_age?: string }; Returns: Json };
+      summary_refresh: { Args: { org: string; the_key: string }; Returns: Json };
+      summaries_refresh: { Args: { org: string; keys?: string[] | null }; Returns: Json };
       marketing_play_set: { Args: { the_play: string; new_status: string; by: string | null; designs?: number }; Returns: Json };
       marketing_plays_list: { Args: { org: string; include_done?: boolean }; Returns: Json };
       marketing_knock_targets: { Args: { the_house: string }; Returns: Json };

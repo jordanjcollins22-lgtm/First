@@ -22,7 +22,7 @@ export async function ownershipSummary(): Promise<OwnershipSummary> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
   if (!org) return EMPTY_OWNERSHIP;
-  const { data, error } = await supabase.rpc("ownership_summary", { org });
+  const { data, error } = await supabase.rpc("summary_get", { org, the_key: "ownership_summary" });
   if (error) throw error;
   const raw = (data ?? {}) as Partial<OwnershipSummary>;
   return {
@@ -58,7 +58,7 @@ export async function relationshipOwnershipMatrix(): Promise<MatrixRow[]> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
   if (!org) return [];
-  const { data, error } = await supabase.rpc("relationship_ownership_matrix", { org });
+  const { data, error } = await supabase.rpc("summary_get", { org, the_key: "relationship_ownership_matrix" });
   if (error) throw error;
   return (Array.isArray(data) ? data : []) as MatrixRow[];
 }
@@ -68,7 +68,7 @@ export async function kindSummary(): Promise<Partial<Record<HouseKind, number>>>
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
   if (!org) return {};
-  const { data, error } = await supabase.rpc("kind_summary", { org });
+  const { data, error } = await supabase.rpc("summary_get", { org, the_key: "kind_summary" });
   if (error) throw error;
   const out: Partial<Record<HouseKind, number>> = {};
   for (const [k, v] of Object.entries((data ?? {}) as Record<string, unknown>)) out[k as HouseKind] = Number(v) || 0;

@@ -13,7 +13,8 @@ export async function listZones(): Promise<ZoneRow[]> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
   if (!org) return [];
-  const { data, error } = await supabase.rpc("zones_list", { org });
+  // Kept by the database and refreshed after builds, not worked out per page.
+  const { data, error } = await supabase.rpc("summary_get", { org, the_key: "zones_list" });
   if (error) throw error;
   return (Array.isArray(data) ? data : []) as unknown as ZoneRow[];
 }
