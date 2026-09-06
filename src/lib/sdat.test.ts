@@ -20,6 +20,42 @@ describe("discoverSdatFields", () => {
     expect(mapping.jurisdiction).toBe("JURSCODE");
     expect(sdatMappingIsUsable(mapping)).toBe(true);
   });
+  it("reads the open-data portal's long column names by prefix", () => {
+    const mapping = discoverSdatFields([
+      "county_name_mdp_field_cntyname",
+      "account_id_mdp_field_acctid",
+      "record_key_owner_occupancy_code_mdp_field_ooi_sdat_field_6",
+      "mdp_street_address_mdp_field_address",
+      "mdp_street_address_city_mdp_field_city",
+      "mdp_street_address_zip_code_mdp_field_zipcode",
+      "premise_address_number_mdp_field_premsnum_sdat_field_20",
+      "premise_address_name_mdp_field_premsnam_sdat_field_23",
+      "premise_address_type_mdp_field_premstyp_sdat_field_24",
+      "premise_address_city_mdp_field_premcity_sdat_field_25",
+      "premise_address_zip_code_mdp_field_premzip_sdat_field_26",
+      "land_use_code_mdp_field_lu_desclu_sdat_field_50",
+      "sales_segment_1_transfer_date_yyyy_mm_dd_mdp_field_tradate_sdat_field_89",
+      "sales_segment_1_consideration_mdp_field_considr1_sdat_field_90",
+      "current_assessment_year_total_assessment_sdat_field_172",
+      "c_a_m_a_system_data_year_built_yyyy_mdp_field_yearblt_sdat_field_235",
+    ]);
+    expect(mapping.county).toBe("county_name_mdp_field_cntyname");
+    expect(mapping.account).toBe("account_id_mdp_field_acctid");
+    expect(mapping.address).toBe("mdp_street_address_mdp_field_address");
+    expect(mapping.city).toBe("premise_address_city_mdp_field_premcity_sdat_field_25");
+    expect(mapping.zip).toBe("premise_address_zip_code_mdp_field_premzip_sdat_field_26");
+    expect(mapping.streetNumber).toBe("premise_address_number_mdp_field_premsnum_sdat_field_20");
+    expect(mapping.streetName).toBe("premise_address_name_mdp_field_premsnam_sdat_field_23");
+    expect(mapping.streetType).toBe("premise_address_type_mdp_field_premstyp_sdat_field_24");
+    expect(mapping.principalResidence).toBe("record_key_owner_occupancy_code_mdp_field_ooi_sdat_field_6");
+    expect(mapping.transferDate).toBe("sales_segment_1_transfer_date_yyyy_mm_dd_mdp_field_tradate_sdat_field_89");
+    expect(mapping.consideration).toBe("sales_segment_1_consideration_mdp_field_considr1_sdat_field_90");
+    expect(mapping.yearBuilt).toBe("c_a_m_a_system_data_year_built_yyyy_mdp_field_yearblt_sdat_field_235");
+    expect(mapping.assessedValue).toBe("current_assessment_year_total_assessment_sdat_field_172");
+    expect(mapping.landUse).toBe("land_use_code_mdp_field_lu_desclu_sdat_field_50");
+    expect(mapping.ownerName).toBeUndefined();
+  });
+
   it("is unusable without an address", () => {
     expect(sdatMappingIsUsable(discoverSdatFields(["OBJECTID", "OWNNAME1"]))).toBe(false);
     expect(sdatMappingIsUsable(discoverSdatFields(["STRTNUM", "STRTNAM"]))).toBe(true);

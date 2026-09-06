@@ -34,8 +34,11 @@ export function socrataCountUrl(url: string, where: string): string {
   return u.toString();
 }
 
-export function socrataPageUrl(url: string, where: string, offset: number, limit: number): string {
+export function socrataPageUrl(url: string, where: string, offset: number, limit: number, fields: string[] = []): string {
   const u = new URL(socrataBase(url));
+  // Only the columns we read: the roll has two hundred, and a page of a
+  // thousand rows of all of them is megabytes for nothing.
+  if (fields.length > 0) u.searchParams.set("$select", [...new Set(fields)].join(","));
   if (where && where !== "1=1") u.searchParams.set("$where", where);
   u.searchParams.set("$order", ":id");
   u.searchParams.set("$limit", String(Math.max(1, Math.floor(limit))));

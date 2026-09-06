@@ -50,7 +50,7 @@ const CANDIDATES: Record<SdatKey, string[]> = {
   account: ["ACCTID", "ACCOUNT_ID", "ACCT_ID", "ACCOUNTID", "ACCOUNT"],
   address: ["ADDRESS", "PREMISE_ADDRESS", "PREM_ADDR", "SITE_ADDR", "MDP_STREET_ADDRESS", "PREMADDR", "SITEADDR"],
   streetNumber: ["STRTNUM", "PREMISE_ADDRESS_NUMBER", "STREET_NUMBER", "HOUSE_NUMBER"],
-  streetName: ["STRTNAM", "PREMISE_ADDRESS_STREET", "PREMISE_ADDRESS_STREET_NAME", "STREET_NAME"],
+  streetName: ["STRTNAM", "PREMISE_ADDRESS_STREET", "PREMISE_ADDRESS_STREET_NAME", "PREMISE_ADDRESS_NAME", "STREET_NAME"],
   streetType: ["STRTSUF", "PREMISE_ADDRESS_TYPE", "PREMISE_ADDRESS_STREET_TYPE", "STREET_TYPE", "STRTTYP"],
   streetDirection: ["STRTDIR", "PREMISE_ADDRESS_DIRECTION", "STREET_DIRECTION"],
   unit: ["STRTUNT", "PREMISE_ADDRESS_UNIT", "UNIT"],
@@ -63,26 +63,39 @@ const CANDIDATES: Record<SdatKey, string[]> = {
   mailCity: ["OWNCITY", "OWNER_CITY", "MAILING_ADDRESS_CITY", "MAIL_CITY", "MAILCITY"],
   mailState: ["OWNSTA", "OWNER_STATE", "MAILING_ADDRESS_STATE", "MAIL_STATE", "MAILSTATE"],
   mailZip: ["OWNZIP", "OWNER_ZIP", "MAILING_ADDRESS_ZIP_CODE", "MAILING_ADDRESS_ZIP", "MAIL_ZIP", "MAILZIP"],
-  principalResidence: ["RESIDENT", "PRINCIPAL_RESIDENCE", "PRINCIPAL_RESIDENCE_INDICATOR", "PRINRES", "PRIN_RES", "HOMESTEAD", "OWNOCC"],
-  transferDate: ["TRADATE", "SALES_SEGMENT_1_TRANSFER_DATE", "TRANSFER_DATE", "LAST_SALE_DATE", "SALEDATE", "TRANSFER_DATE_1"],
+  principalResidence: ["RESIDENT", "PRINCIPAL_RESIDENCE", "PRINCIPAL_RESIDENCE_INDICATOR", "RECORD_KEY_OWNER_OCCUPANCY_CODE", "OWNER_OCCUPANCY_CODE", "OOI", "PRINRES", "PRIN_RES", "HOMESTEAD", "OWNOCC"],
+  transferDate: ["TRADATE", "SALES_SEGMENT_1_TRANSFER_DATE_YYYY_MM_DD", "SALES_SEGMENT_1_TRANSFER_DATE", "TRANSFER_DATE", "LAST_SALE_DATE", "SALEDATE", "TRANSFER_DATE_1"],
   consideration: ["CONSIDR1", "SALES_SEGMENT_1_CONSIDERATION", "CONSIDERATION", "SALE_PRICE", "SALEPRICE", "CONSIDERATION_1"],
-  yearBuilt: ["YEARBLT", "YEAR_BUILT", "YRBLT"],
+  yearBuilt: ["YEARBLT", "YEAR_BUILT", "C_A_M_A_SYSTEM_DATA_YEAR_BUILT_YYYY", "YRBLT"],
   landUse: ["LU", "LAND_USE", "LAND_USE_CODE", "LUCODE"],
   landUseDescription: ["DESCLU", "LAND_USE_DESCRIPTION", "LU_DESC"],
-  assessedValue: ["NFMTTLVL", "TOTAL_ASSESSMENT", "CURRENT_ASSESSMENT_YEAR_TOTAL_PHASE_IN_VALUE", "ASSESSMENT", "CURRENT_ASSESSMENT", "NFMTTL"],
+  assessedValue: ["NFMTTLVL", "TOTAL_ASSESSMENT", "CURRENT_ASSESSMENT_YEAR_TOTAL_ASSESSMENT", "CURRENT_ASSESSMENT_YEAR_TOTAL_PHASE_IN_VALUE", "ASSESSMENT", "CURRENT_ASSESSMENT", "NFMTTL"],
   jurisdiction: ["JURSCODE", "JURISDICTION_CODE", "JURIS", "JURSCD"],
   county: ["COUNTY", "COUNTY_NAME", "CNTYNAME", "JURISDICTION"],
 };
 
-/** Which of the layer's fields carry what. Names are matched case-insensitively. */
+/**
+ * Which of the layer's fields carry what. Names are matched
+ * case-insensitively, exactly first; then as a prefix, because the open-data
+ * portal names a column "premise_address_number_mdp_field_premsnum_sdat_field_20"
+ * and means PREMISE_ADDRESS_NUMBER. A prefix counts only when what follows
+ * it is one of the portal's suffixes, so PREMISE_ADDRESS_CITY is not taken
+ * for PREMISE_ADDRESS_CITY_SOMETHING_ELSE by accident.
+ */
 export function discoverSdatFields(names: string[]): SdatMapping {
-  const byUpper = new Map(names.map((n) => [n.toUpperCase(), n]));
+  const upper = names.map((n) => [n.toUpperCase(), n] as const);
+  const byUpper = new Map(upper);
   const mapping: SdatMapping = {};
   for (const key of Object.keys(CANDIDATES) as SdatKey[]) {
     for (const candidate of CANDIDATES[key]) {
-      const hit = byUpper.get(candidate);
-      if (hit) {
-        mapping[key] = hit;
+      const exact = byUpper.get(candidate);
+      if (exact) {
+        mapping[key] = exact;
+        break;
+      }
+      const prefixed = upper.find(([u]) => u.startsWith(candidate) && /^(_MDP_FIELD|_SDAT_FIELD)/.test(u.slice(candidate.length)));
+      if (prefixed) {
+        mapping[key] = prefixed[1];
         break;
       }
     }

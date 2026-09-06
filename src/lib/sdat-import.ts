@@ -209,7 +209,7 @@ export async function runSdatStep(admin: Admin, first: JobRow): Promise<StepOutc
   }
 
   const pageUrl = socrata
-    ? socrataPageUrl(job.layer_url, where, offset, pageSize)
+    ? socrataPageUrl(job.layer_url, where, offset, pageSize, Object.values(mapping).filter((f): f is string => typeof f === "string"))
     : queryUrl(job.layer_url, { where, offset, pageSize, afterObjectId, objectIdField, returnGeometry: false });
   const probe = await probeEndpoint(pageUrl, "background-job", PAGE_FETCH_TIMEOUT_MS);
   const page = socrata
