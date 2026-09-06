@@ -30,8 +30,9 @@ import type { Json } from "@/lib/supabase/database.types";
  */
 
 export const SDAT_KIND = "sdat";
-const PAGE_SIZE = 1000;
-const MIN_PAGE_SIZE = 100;
+/** Rows per page. The portal allows far more; with only our columns asked for, four thousand is a modest body. */
+const PAGE_SIZE = 4000;
+const MIN_PAGE_SIZE = 250;
 const MAX_PAGE_ATTEMPTS = 5;
 const PAGE_FETCH_TIMEOUT_MS = 25_000;
 const STEP_BUDGET_MS = 20_000;
