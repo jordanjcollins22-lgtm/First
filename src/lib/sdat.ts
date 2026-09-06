@@ -162,8 +162,9 @@ function integer(attrs: Record<string, unknown>, field: string | undefined): num
 }
 
 /**
- * A date as the roll writes it: "20240315", "2024-03-15", "03/15/2024", or
- * epoch milliseconds, as ArcGIS sends date fields. To ISO, or nothing.
+ * A date as the roll writes it: "20240315", "2024-03-15", "2024.03.15" (the
+ * open-data portal's spelling), "03/15/2024", or epoch milliseconds, as
+ * ArcGIS sends date fields. To ISO, or nothing.
  */
 export function parseSdatDate(value: unknown): string | null {
   if (value == null || value === "") return null;
@@ -176,7 +177,7 @@ export function parseSdatDate(value: unknown): string | null {
   const s = String(value).trim();
   let m = /^(\d{4})(\d{2})(\d{2})/.exec(s);
   if (m) return check(m[1], m[2], m[3]);
-  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  m = /^(\d{4})[-.\/](\d{2})[-.\/](\d{2})/.exec(s);
   if (m) return check(m[1], m[2], m[3]);
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
   if (m) return check(m[3], m[1].padStart(2, "0"), m[2].padStart(2, "0"));

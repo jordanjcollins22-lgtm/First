@@ -77,6 +77,7 @@ describe("dates and flags", () => {
     expect(parseSdatDate("20240315")).toBe("2024-03-15");
     expect(parseSdatDate("2024-03-15T00:00:00")).toBe("2024-03-15");
     expect(parseSdatDate("3/5/2024")).toBe("2024-03-05");
+    expect(parseSdatDate("2024.03.12")).toBe("2024-03-12");
     expect(parseSdatDate(1710460800000)).toBe("2024-03-15");
     expect(parseSdatDate("00000000")).toBeNull();
     expect(parseSdatDate(null)).toBeNull();
