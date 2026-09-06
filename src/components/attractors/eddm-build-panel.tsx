@@ -143,6 +143,9 @@ export function EddmBuildPanel({
                   <span className="truncate text-muted-foreground">
                     {z.houses.toLocaleString()} doors · {formatMinutes(z.minutes)} · {crewFor(z.minutes)} people
                     {z.clients ? ` · ${z.clients} client${z.clients === 1 ? "" : "s"}` : ""}
+                    {z.kinds && (z.kinds.apartment || z.kinds.business)
+                      ? ` · ${[z.kinds.apartment ? `${z.kinds.apartment} apartments` : null, z.kinds.business ? `${z.kinds.business} businesses` : null].filter(Boolean).join(", ")}`
+                      : ""}
                   </span>
                   <button type="button" className="ml-auto inline-flex shrink-0 items-center gap-1 text-primary hover:underline" onClick={() => onFocusZone(z.id)} title="Show the zone and its walk">
                     <MapPin className="h-3 w-3" /> Walk

@@ -61,6 +61,7 @@ import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
 import type { MatrixRow, PointHighlight } from "@/lib/house-highlight";
 import type { ZoneRow } from "@/lib/data/zones";
+import type { HouseKind } from "@/lib/house-geojson";
 import type { EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
@@ -86,6 +87,7 @@ export function AttractorsDashboard({
   sdatJob,
   ownership,
   ownershipMatrix,
+  houseKinds,
   zones,
   densityPoints,
   keywords,
@@ -114,6 +116,7 @@ export function AttractorsDashboard({
   sdatJob: SdatStatus | null;
   ownership: OwnershipSummary;
   ownershipMatrix: MatrixRow[];
+  houseKinds: Partial<Record<HouseKind, number>>;
   /** The door-hanger zones, built from the USPS routes as a partition of the county. */
   zones: ZoneRow[];
   /** Every address with what it has actually paid, for ranking areas. */
@@ -633,6 +636,7 @@ export function AttractorsDashboard({
                   if (mode !== "stage") setShowAllAddresses(true);
                 }}
                 matrix={ownershipMatrix}
+                kinds={houseKinds}
                 highlight={pointHighlight}
                 onHighlight={(next) => {
                   setPointHighlight(next);

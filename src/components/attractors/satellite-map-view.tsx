@@ -13,6 +13,9 @@ import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/ty
 import type { JobWithLocation } from "@/lib/data/jobs";
 import {
   housesToFeatures,
+  KIND_CODES,
+  KIND_COLOR,
+  KIND_LABEL,
   OWNERSHIP_COLOR,
   pointColorExpression,
   pointsToFeatures,
@@ -1403,6 +1406,13 @@ export function SatelliteMapView({
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: OWNERSHIP_COLOR.unknown }} />Not on the roll</span>
             </>
           )}
+          {showAllAddresses && pointColorMode === "kind" &&
+            KIND_CODES.filter((k) => k !== "unknown").map((k) => (
+              <span key={k} className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: KIND_COLOR[k] }} />
+                {KIND_LABEL[k]}
+              </span>
+            ))}
           {showAllAddresses && pointColorMode === "sold" && (
             <>
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SOLD_COLOR.recent }} />Sold in the last year</span>

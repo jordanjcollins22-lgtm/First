@@ -1,4 +1,5 @@
 import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL, type RelationshipStage } from "@/lib/house-relationship";
+import { KIND_COLOR, KIND_LABEL, type HouseKind } from "@/lib/house-geojson";
 
 /**
  * One house, everything known, as the map's card shows it.
@@ -14,6 +15,8 @@ export interface HouseFacts {
   lat: number;
   lng: number;
   countyPin: boolean;
+  /** What kind of door: home, townhome, condo, apartment, business, home with a business, institution, land. */
+  kind: { kind: string; units: number; basis: string | null } | null;
   stageRank: number;
   events: { kind: string; at: string; amountCents: number | null; note: string | null }[];
   contacts: { id: string; name: string | null; phone: string | null; role: string | null; doNotContact: boolean | null }[];
@@ -161,12 +164,27 @@ export function renderHouseCard(facts: HouseFacts): string {
       : "No route assigned yet";
   rows.push(section("Door hangers", `${routeLine}<div style="color:#666">${hung}</div>`));
 
+  const kind = kindLine(facts.kind);
   return (
     `<div style="font:400 12.5px/1.35 system-ui;max-width:300px">` +
-    `<div style="font-weight:600;font-size:13px;margin-bottom:4px">${escapeHtml(facts.address)}</div>` +
+    `<div style="font-weight:600;font-size:13px">${escapeHtml(facts.address)}</div>` +
+    `<div style="margin:2px 0 4px">${kind}</div>` +
     rows.join("") +
     `</div>`
   );
+}
+
+/** "Apartment · 179 units at this address · State land use M". */
+export function kindLine(kind: HouseFacts["kind"]): string {
+  const key = (kind?.kind ?? "unknown") as HouseKind;
+  const label = KIND_LABEL[key] ?? KIND_LABEL.unknown;
+  const color = KIND_COLOR[key] ?? KIND_COLOR.unknown;
+  const bits = [
+    kind && kind.units > 1 ? `${kind.units} units at this address` : null,
+    kind?.basis ? escapeHtml(kind.basis) : null,
+  ].filter(Boolean);
+  return `<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:${color};color:#fff;font-weight:600">${escapeHtml(label)}</span>` +
+    (bits.length ? ` <span style="color:#666">${bits.join(" · ")}</span>` : "");
 }
 
 function section(title: string, body: string): string {

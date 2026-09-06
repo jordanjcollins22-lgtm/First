@@ -20,6 +20,8 @@ export interface PointHighlight {
   soldRecently?: boolean;
   /** Only houses on a route that became a wave (true) or not (false). */
   walkableRoute?: boolean;
+  /** Kind codes to keep (see KIND_CODES); empty means any. */
+  kinds?: number[];
 }
 
 export const CLIENT_RANKS = [4, 5];
@@ -39,6 +41,10 @@ export const HIGHLIGHT_PRESETS: HighlightPreset[] = [
   { key: "new-owners-untouched", label: "New owners, not spoken to", why: "Sold within the year and nobody has knocked", highlight: { stages: [0], soldRecently: true } },
   { key: "hanger-targets", label: "Owners on a walkable route, not spoken to", why: "The door-hanger walk's best doors", highlight: { stages: [0], ownership: [1], walkableRoute: true } },
   { key: "clients-off-route", label: "Clients no walk reaches", why: "Referral country: the route around them is hard or missing", highlight: { stages: CLIENT_RANKS, walkableRoute: false } },
+  { key: "apartments", label: "Apartments and condos", why: "Shared entrances: hangers rarely reach the door", highlight: { kinds: [3, 4] } },
+  { key: "businesses", label: "Businesses", why: "Commercial parcels, not doors to hang", highlight: { kinds: [5, 7] } },
+  { key: "home-businesses", label: "Homes with a business", why: "A business run from the house: a different conversation", highlight: { kinds: [6] } },
+  { key: "clients-businesses", label: "Clients that are businesses", why: "Commercial accounts, by parcel or by who we know there", highlight: { stages: CLIENT_RANKS, kinds: [5, 6, 7] } },
 ];
 
 /** Whether one of the map's points answers the question. */
@@ -48,6 +54,8 @@ export function matchesHighlight(point: MapPoint, h: PointHighlight | null): boo
   const o = Number(point[3] ?? 0) || 0;
   const r = Number(point[4] ?? 0) || 0;
   const w = Number(point[5] ?? 0) || 0;
+  const k = Number(point[6] ?? 0) || 0;
+  if (h.kinds && h.kinds.length > 0 && !h.kinds.includes(k)) return false;
   if (h.stages && h.stages.length > 0 && !h.stages.includes(s)) return false;
   if (h.ownership && h.ownership.length > 0 && !h.ownership.includes(o)) return false;
   if (h.soldRecently && r !== 1) return false;
@@ -62,8 +70,13 @@ export type MatrixRow = [number, number, number, number];
 /** How many houses answer a question, from the counted matrix. */
 export function countHighlight(rows: MatrixRow[], h: PointHighlight): number {
   return rows
-    .filter(([s, o, w]) => matchesHighlight([0, 0, s, o, 0, w] as MapPoint, { ...h, soldRecently: false }))
+    .filter(([s, o, w]) => matchesHighlight([0, 0, s, o, 0, w] as MapPoint, { ...h, soldRecently: false, kinds: [] }))
     .reduce((sum, [, , , n]) => sum + n, 0);
+}
+
+/** Whether the counted matrix can answer a question at all: it knows nothing of kinds or sales. */
+export function matrixCanCount(h: PointHighlight): boolean {
+  return !h.soldRecently && !(h.kinds && h.kinds.length > 0);
 }
 
 export interface StageOwnershipRow {

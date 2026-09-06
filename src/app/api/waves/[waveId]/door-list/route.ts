@@ -5,6 +5,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { designsAvailable } from "@/lib/actions/house-coverage-actions";
 import { shapeFor } from "@/lib/coverage-shape";
 import { RELATIONSHIP_STAGES, STAGE_LABEL } from "@/lib/house-relationship";
+import { KIND_LABEL, type HouseKind } from "@/lib/house-geojson";
 import type { AttractorGeometry, AttractorGeometryType } from "@/types/domain";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -49,13 +50,14 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ wa
   });
   if (listError) return NextResponse.json({ error: listError.message }, { status: 500 });
 
-  const rows = (data ?? []) as [string, string, number, number, boolean, number, number, number, string?, string?][];
+  const rows = (data ?? []) as [string, string, number, number, boolean, number, number, number, string?, string?, string?][];
   const ownerWord = (o: string | undefined) => (o === "owner" ? "Owner lives there" : o === "absentee" ? "Absentee / rented" : "");
   const lines = [
-    ["Address", "Where we stand", "Hangers so far", "Design to hang", "Skip", "Owner", "Last sold", "Latitude", "Longitude"].join(","),
-    ...rows.map(([, address, rank, hangs, dnc, design, lat, lng, owner, lastSold]) =>
+    ["Address", "Kind", "Where we stand", "Hangers so far", "Design to hang", "Skip", "Owner", "Last sold", "Latitude", "Longitude"].join(","),
+    ...rows.map(([, address, rank, hangs, dnc, design, lat, lng, owner, lastSold, kind]) =>
       [
         csvCell(address),
+        csvCell(KIND_LABEL[(kind || "unknown") as HouseKind] ?? ""),
         csvCell(STAGE_LABEL[RELATIONSHIP_STAGES[rank] ?? "untouched"]),
         hangs,
         dnc ? "" : design,

@@ -5,7 +5,7 @@ import { listProperties } from "@/lib/data/properties";
 import { listHousesWithHistory } from "@/lib/data/houses";
 import { getEddmRates, listEddmMailings } from "@/lib/data/eddm";
 import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/data/eddm-build";
-import { EMPTY_OWNERSHIP, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
+import { EMPTY_OWNERSHIP, kindSummary, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
 import { listZones } from "@/lib/data/zones";
 import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
@@ -81,7 +81,7 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings, eddmBuild, eddmSummary, unservedClusters, sdatJob, ownership, ownershipMatrix, zones] =
+  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings, eddmBuild, eddmSummary, unservedClusters, sdatJob, ownership, ownershipMatrix, zones, houseKinds] =
     await Promise.all([
       listProperties(),
       listProfiles().catch(() => [] as Profile[]),
@@ -102,6 +102,7 @@ export default async function AttractorsPage({
       ownershipSummary().catch(() => EMPTY_OWNERSHIP),
       relationshipOwnershipMatrix().catch(() => []),
       listZones().catch(() => []),
+      kindSummary().catch(() => ({})),
     ]);
 
   return (
@@ -136,6 +137,7 @@ export default async function AttractorsPage({
         ownership={ownership}
         ownershipMatrix={ownershipMatrix}
         zones={zones}
+        houseKinds={houseKinds}
         densityPoints={densityPoints}
         profiles={profiles}
         currentProfileId={profile?.id ?? null}

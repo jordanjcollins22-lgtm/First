@@ -17,6 +17,12 @@ describe("matchesHighlight", () => {
     expect(matchesHighlight(spokenUnknownOffRoute, by["talked-renting"])).toBe(false);
     expect(matchesHighlight(clientRenting, by["clients-off-route"])).toBe(false);
   });
+  it("asks about the kind of door", () => {
+    const apartmentClient: MapPoint = [-76.3, 39.5, 4, 2, 0, 1, 4];
+    expect(matchesHighlight(apartmentClient, { kinds: [3, 4] })).toBe(true);
+    expect(matchesHighlight(apartmentClient, { kinds: [5] })).toBe(false);
+    expect(matchesHighlight(clientRenting, { kinds: [4] })).toBe(false);
+  });
   it("keeps everything with no question asked, and tolerates old three-number points", () => {
     expect(matchesHighlight(clientRenting, null)).toBe(true);
     expect(matchesHighlight([-76.3, 39.5, 4], { stages: [4] })).toBe(true);

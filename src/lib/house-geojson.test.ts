@@ -51,13 +51,13 @@ describe("parseBbox", () => {
 
 describe("pointsToFeatures", () => {
   it("turns bare points into features carrying their stage, ownership and recent sale", () => {
-    const points: MapPoint[] = [[-76.3483, 39.5359, 4, 2, 1, 1], [-76.3, 39.5, 0]];
+    const points: MapPoint[] = [[-76.3483, 39.5359, 4, 2, 1, 1, 5], [-76.3, 39.5, 0]];
     const features = pointsToFeatures(points);
     expect(features).toHaveLength(2);
     expect(features[0].geometry.coordinates).toEqual([-76.3483, 39.5359]);
-    expect(features[0].properties).toEqual({ s: 4, o: 2, r: 1, w: 1 });
+    expect(features[0].properties).toEqual({ s: 4, o: 2, r: 1, w: 1, k: 5 });
     // A point from before ownership was known carries zeros for it.
-    expect(features[1].properties).toEqual({ s: 0, o: 0, r: 0, w: 0 });
+    expect(features[1].properties).toEqual({ s: 0, o: 0, r: 0, w: 0, k: 0 });
   });
 
   it("drops a point that is not one", () => {

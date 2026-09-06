@@ -4,6 +4,8 @@ import type { ZoneProperties } from "@/lib/zones";
 
 export interface ZoneRow extends ZoneProperties {
   builtAt: string | null;
+  /** How many of the zone's doors are homes, apartments, businesses, and so on. */
+  kinds?: Record<string, number>;
 }
 
 /** Every built zone, without its outline: what the list needs. */

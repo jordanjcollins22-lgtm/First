@@ -996,6 +996,20 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["gis_import_jobs"]["Row"]>;
         Relationships: [];
       };
+      house_kinds: {
+        Row: {
+          house_id: string;
+          organization_id: string;
+          /** home | townhome | condo | apartment | business | home_business | institution | land | unknown */
+          kind: string;
+          units_at_address: number;
+          basis: string | null;
+          classified_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["house_kinds"]["Row"]> & { house_id: string; organization_id: string; kind: string };
+        Update: Partial<Database["public"]["Tables"]["house_kinds"]["Row"]>;
+        Relationships: [];
+      };
       house_ownership: {
         Row: {
           house_id: string;
@@ -2613,6 +2627,8 @@ export interface Database {
       zones_geojson: { Args: { org: string }; Returns: Json };
       zone_settle: { Args: { the_zone: string }; Returns: Json };
       zones_list: { Args: { org: string }; Returns: Json };
+      classify_houses: { Args: { org: string; the_zip: string | null }; Returns: Json };
+      kind_summary: { Args: { org: string }; Returns: Json };
       /** The doors inside a drawn shape: count, stage breakdown, print run by design. */
       houses_coverage: {
         Args: { org: string; ring: Json | null; zips: Json | null; designs?: number };

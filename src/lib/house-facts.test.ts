@@ -8,6 +8,7 @@ const base: HouseFacts = {
   lat: 39.5,
   lng: -76.3,
   countyPin: true,
+  kind: { kind: "townhome", units: 1, basis: "State land use TH; owner lives here" },
   stageRank: 4,
   events: [{ kind: "client", at: "2026-05-02T00:00:00Z", amountCents: 250000, note: null }],
   contacts: [{ id: "c1", name: "Pat <Smith>", phone: "410-555-0100", role: "owner", doNotContact: false }],
@@ -58,6 +59,13 @@ describe("renderHouseCard", () => {
     expect(html).toContain("USPS 21014 C002");
     expect(html).toContain("2 hangers so far");
     expect(html).toContain("State record");
+    expect(html).toContain("Townhome");
+  });
+  it("says what kind of door it is, with the units when there are many", () => {
+    const html = renderHouseCard({ ...base, kind: { kind: "apartment", units: 179, basis: "State land use M; 179 units at this address" } });
+    expect(html).toContain("Apartment");
+    expect(html).toContain("179 units at this address");
+    expect(renderHouseCard({ ...base, kind: null })).toContain("Not yet classified");
   });
   it("says when nothing reaches a house nobody knows", () => {
     const html = renderHouseCard({ ...base, stageRank: 0, events: [], contacts: [], ownership: null, route: null, unserved: true, hangers: { count: 0, last: null, designs: [] } });

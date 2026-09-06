@@ -3,6 +3,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { SDAT_KIND, describeSdatImport } from "@/lib/sdat-import";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { MatrixRow } from "@/lib/house-highlight";
+import type { HouseKind } from "@/lib/house-geojson";
 
 /** What the State's roll has told us about the county's houses, in counts. */
 export interface OwnershipSummary {
@@ -60,4 +61,16 @@ export async function relationshipOwnershipMatrix(): Promise<MatrixRow[]> {
   const { data, error } = await supabase.rpc("relationship_ownership_matrix", { org });
   if (error) throw error;
   return (Array.isArray(data) ? data : []) as MatrixRow[];
+}
+
+/** How many of each kind of door the county has. */
+export async function kindSummary(): Promise<Partial<Record<HouseKind, number>>> {
+  const supabase = await createClient();
+  const org = await getCurrentOrganizationId();
+  if (!org) return {};
+  const { data, error } = await supabase.rpc("kind_summary", { org });
+  if (error) throw error;
+  const out: Partial<Record<HouseKind, number>> = {};
+  for (const [k, v] of Object.entries((data ?? {}) as Record<string, unknown>)) out[k as HouseKind] = Number(v) || 0;
+  return out;
 }

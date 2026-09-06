@@ -9,7 +9,8 @@ import { pauseSdatImport, resumeSdatImport, sdatStatus, startSdatImport, type Sd
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import { DEFAULT_SDAT_URL } from "@/lib/sdat";
 import type { PointColorMode } from "@/lib/house-geojson";
-import { countHighlight, HIGHLIGHT_PRESETS, stageOwnershipTable, type MatrixRow, type PointHighlight } from "@/lib/house-highlight";
+import { countHighlight, HIGHLIGHT_PRESETS, matrixCanCount, stageOwnershipTable, type MatrixRow, type PointHighlight } from "@/lib/house-highlight";
+import { KIND_LABEL, type HouseKind } from "@/lib/house-geojson";
 
 /**
  * Who owns the houses, from the State's assessment roll.
@@ -25,6 +26,7 @@ export function OwnershipPanel({
   colorMode,
   onColorMode,
   matrix,
+  kinds,
   highlight,
   onHighlight,
 }: {
@@ -34,6 +36,8 @@ export function OwnershipPanel({
   onColorMode: (mode: PointColorMode) => void;
   /** Where we stand against who owns it, counted. */
   matrix: MatrixRow[];
+  /** How many of each kind of door the county has, once classified. */
+  kinds: Partial<Record<HouseKind, number>>;
   /** The question the map is currently showing the answer to. */
   highlight: { key: string; value: PointHighlight } | null;
   onHighlight: (next: { key: string; value: PointHighlight } | null) => void;
@@ -86,6 +90,16 @@ export function OwnershipPanel({
             : "Maryland's assessment roll says who owns every parcel, where the tax bill goes, and when it last sold. Read once for the county, it tells the map which houses are rented and which just changed hands."}
         </p>
       </div>
+
+      {Object.keys(kinds).length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {(["home", "townhome", "condo", "apartment", "business", "home_business", "institution", "land"] as HouseKind[])
+            .filter((k) => (kinds[k] ?? 0) > 0)
+            .map((k) => `${(kinds[k] ?? 0).toLocaleString()} ${KIND_LABEL[k].toLowerCase()}`)
+            .join(" · ")}
+          .
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {!running && (
@@ -181,7 +195,7 @@ export function OwnershipPanel({
                   }
                 >
                   {preset.label}
-                  {!preset.highlight.soldRecently && <span className="ml-1 opacity-70">{n.toLocaleString()}</span>}
+                  {matrixCanCount(preset.highlight) && <span className="ml-1 opacity-70">{n.toLocaleString()}</span>}
                 </button>
               );
             })}
@@ -197,7 +211,7 @@ export function OwnershipPanel({
       {known && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs">
           <span className="text-muted-foreground">Colour every address by</span>
-          {(["stage", "ownership", "sold"] as PointColorMode[]).map((mode) => (
+          {(["stage", "ownership", "sold", "kind"] as PointColorMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -208,7 +222,7 @@ export function OwnershipPanel({
                   : "rounded-md border border-border px-2 py-1 font-medium"
               }
             >
-              {mode === "stage" ? "Where we stand" : mode === "ownership" ? "Owner or rented" : "Sold this year"}
+              {mode === "stage" ? "Where we stand" : mode === "ownership" ? "Owner or rented" : mode === "sold" ? "Sold this year" : "Kind of door"}
             </button>
           ))}
         </div>

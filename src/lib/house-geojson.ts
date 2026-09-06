@@ -89,12 +89,16 @@ export const ALL_ADDRESSES_MIN_ZOOM = 13;
  * 2 absentee; soldRecently is 1 when the house changed hands in the last
  * year; walkableRoute is 1 when a USPS route that became a wave passes it.
  */
-export type MapPoint = [number, number, number] | [number, number, number, number, number] | [number, number, number, number, number, number];
+export type MapPoint =
+  | [number, number, number]
+  | [number, number, number, number, number]
+  | [number, number, number, number, number, number]
+  | [number, number, number, number, number, number, number];
 
 export interface PointFeature {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
-  properties: { s: number; o: number; r: number; w: number };
+  properties: { s: number; o: number; r: number; w: number; k: number };
 }
 
 /** Every point as a feature, carrying its stage rank, ownership and recent sale; the layer colours by one of them. */
@@ -102,19 +106,62 @@ export function pointsToFeatures(points: MapPoint[]): PointFeature[] {
   const out: PointFeature[] = [];
   for (const point of points) {
     if (!Array.isArray(point) || point.length < 3) continue;
-    const [lng, lat, s, o, r, w] = point;
+    const [lng, lat, s, o, r, w, k] = point;
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     out.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [lng, lat] },
-      properties: { s: Number(s) || 0, o: Number(o) || 0, r: Number(r) || 0, w: Number(w) || 0 },
+      properties: { s: Number(s) || 0, o: Number(o) || 0, r: Number(r) || 0, w: Number(w) || 0, k: Number(k) || 0 },
     });
   }
   return out;
 }
 
 /** What the county's dots are coloured by. */
-export type PointColorMode = "stage" | "ownership" | "sold";
+export type PointColorMode = "stage" | "ownership" | "sold" | "kind";
+
+/**
+ * What kind of door, as the points code it: 0 unknown, 1 home, 2 townhome,
+ * 3 condo, 4 apartment, 5 business, 6 home with a business, 7 institution,
+ * 8 land.
+ */
+export const KIND_CODES = ["unknown", "home", "townhome", "condo", "apartment", "business", "home_business", "institution", "land"] as const;
+export type HouseKind = (typeof KIND_CODES)[number];
+
+export const KIND_LABEL: Record<HouseKind, string> = {
+  unknown: "Not yet classified",
+  home: "Single-family home",
+  townhome: "Townhome",
+  condo: "Condo",
+  apartment: "Apartment",
+  business: "Business",
+  home_business: "Home with a business",
+  institution: "Church, school or public",
+  land: "Land, no dwelling",
+};
+
+export const KIND_COLOR: Record<HouseKind, string> = {
+  unknown: "#94a3b8",
+  home: "#22c55e",
+  townhome: "#84cc16",
+  condo: "#14b8a6",
+  apartment: "#0ea5e9",
+  business: "#f97316",
+  home_business: "#eab308",
+  institution: "#a855f7",
+  land: "#a8a29e",
+};
+
+export function kindCodeOf(kind: string | null | undefined): number {
+  const i = KIND_CODES.indexOf((kind ?? "unknown") as HouseKind);
+  return i < 0 ? 0 : i;
+}
+
+export function kindColorExpression(): unknown[] {
+  const cases: unknown[] = [];
+  KIND_CODES.forEach((kind, code) => cases.push(code, KIND_COLOR[kind]));
+  return ["match", ["get", "k"], ...cases, KIND_COLOR.unknown];
+}
 
 export const OWNERSHIP_COLOR = {
   unknown: "#94a3b8",
@@ -137,6 +184,7 @@ export function soldColorExpression(): unknown[] {
 export function pointColorExpression(mode: PointColorMode): unknown[] {
   if (mode === "ownership") return ownershipColorExpression();
   if (mode === "sold") return soldColorExpression();
+  if (mode === "kind") return kindColorExpression();
   return stageColorExpression();
 }
 
