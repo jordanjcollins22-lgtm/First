@@ -132,6 +132,7 @@ export function OpsPanel({ state, compact = false }: { state: OpsState; compact?
         </section>
       </div>
 
+      {!state.canSeeMoney ? null : (
       <section className="mt-4 border-t border-border pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">The plan</h3>
@@ -208,8 +209,9 @@ export function OpsPanel({ state, compact = false }: { state: OpsState; compact?
         {notice && <p className="mt-2 text-xs text-emerald-700">{notice}</p>}
         {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </section>
+      )}
 
-      {showLevers && (
+      {showLevers && state.canSeeMoney && (
         <section className="mt-3 border-t border-border pt-3">
           <p className="text-xs text-muted-foreground">
             What one job won costs from each lever, the business&apos;s own results weighed against a starting guess. The ramp spends on the cheapest first and skips any that does not pay for itself
@@ -237,7 +239,7 @@ export function OpsPanel({ state, compact = false }: { state: OpsState; compact?
         </section>
       )}
 
-      {showTargets && (
+      {showTargets && state.canSeeMoney && (
         <section className="mt-3 border-t border-border pt-3">
           <BankLink bank={state.bank} configured={state.bankConfigured} />
           <p className="mt-3 text-xs text-muted-foreground">

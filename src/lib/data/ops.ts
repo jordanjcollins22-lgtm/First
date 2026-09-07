@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { getCurrentProfile } from "@/lib/data/team";
+import { canSeeMoney } from "@/lib/affiliate-roles";
 import { isPlaidConfigured } from "@/lib/env";
 import { assessOps, DEFAULT_TARGETS, type LeverKey, type OpsAssessment, type OpsPulse, type OpsTargets } from "@/lib/ops";
 
@@ -35,6 +37,12 @@ export interface OpsState {
   bank: BankStatus;
   /** Whether the server has Plaid keys, so a bank can be linked at all. */
   bankConfigured: boolean;
+  /**
+   * Whether this person is one the money is for. When they are not, the
+   * cash never reaches the browser and the panel shows how the work is
+   * going without it.
+   */
+  canSeeMoney: boolean;
 }
 
 interface TargetsRow {
@@ -73,18 +81,26 @@ export function targetsFromRow(row: TargetsRow | null): OpsTargets {
  */
 export async function opsState(options: { fresh?: boolean } = {}): Promise<OpsState> {
   const supabase = await createClient();
+  const profile = await getCurrentProfile();
   const org = await getCurrentOrganizationId();
+  const money = canSeeMoney(profile?.roles ?? []);
   const [{ data: pulseRaw, error }, { data: targetsRow, error: targetsError }, { data: actionsRaw }, { data: bankRaw }] = await Promise.all([
     options.fresh ? supabase.rpc("summary_refresh", { org, the_key: "ops_pulse" }) : supabase.rpc("summary_get", { org, the_key: "ops_pulse" }),
     supabase.from("ops_targets").select("*").eq("organization_id", org).maybeSingle(),
-    supabase.rpc("ops_actions_list", { org, n: 5 }),
-    supabase.rpc("bank_status", { org }),
+    money ? supabase.rpc("ops_actions_list", { org, n: 5 }) : Promise.resolve({ data: [] }),
+    money ? supabase.rpc("bank_status", { org }) : Promise.resolve({ data: null }),
   ]);
   if (error) throw error;
   if (targetsError) throw targetsError;
-  const pulse = pulseRaw as unknown as OpsPulse;
-  if (!pulse || !Array.isArray(pulse.weeks)) throw new Error("The pulse has not been computed yet.");
-  const targets = targetsFromRow((targetsRow as unknown as TargetsRow | null) ?? null);
+  const whole = pulseRaw as unknown as OpsPulse;
+  if (!whole || !Array.isArray(whole.weeks)) throw new Error("The pulse has not been computed yet.");
+  const saved = targetsFromRow((targetsRow as unknown as TargetsRow | null) ?? null);
+  // Not theirs to see: the money leaves here rather than being hidden in
+  // the browser, and the cash signal reads as not known.
+  const pulse: OpsPulse = money
+    ? whole
+    : { ...whole, weeks: whole.weeks.map((w) => ({ ...w, cashIn: 0, cashOut: 0 })), cash: { ...whole.cash, invoicesOutstanding: 0, teamOwed: 0, overheadMonthly: 0, inSince: 0, outSince: 0, bankLinked: false, bankCash: null, bankAt: null, bankName: null, bankNeedsRelink: false } };
+  const targets: OpsTargets = money ? saved : { ...saved, cashOnHand: null, cashFloor: null };
   return {
     pulse,
     targets,
@@ -93,5 +109,6 @@ export async function opsState(options: { fresh?: boolean } = {}): Promise<OpsSt
     targetsSaved: targetsRow != null,
     bank: ((bankRaw as unknown as BankStatus | null) ?? NO_BANK),
     bankConfigured: isPlaidConfigured,
+    canSeeMoney: money,
   };
 }

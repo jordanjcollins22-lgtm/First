@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { opsState } from "@/lib/data/ops";
 import { planForDatabase, type LeverKey } from "@/lib/ops";
+import { canSeeMoney } from "@/lib/affiliate-roles";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -34,6 +35,13 @@ async function requireUser() {
   return profile;
 }
 
+/** Setting the targets and spending the money are for the money people. */
+async function requireMoney() {
+  const profile = await requireUser();
+  if (!canSeeMoney(profile.roles)) throw new Error("Only an owner, an admin or whoever keeps the books can change this.");
+  return profile;
+}
+
 export interface TargetsInput {
   evaluationsPerWeek: number;
   closeRate: number;
@@ -48,7 +56,7 @@ export interface TargetsInput {
 
 export async function saveOpsTargets(input: TargetsInput): Promise<ActionResult<null>> {
   return guard("saveOpsTargets", async () => {
-    const profile = await requireUser();
+    const profile = await requireMoney();
     const supabase = await createClient();
     const clean = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : lo));
     const { error } = await supabase.from("ops_targets").upsert({
@@ -76,7 +84,7 @@ export async function saveOpsTargets(input: TargetsInput): Promise<ActionResult<
 /** The plan as it stands, made into plays now. */
 export async function runRamp(): Promise<ActionResult<{ made: number }>> {
   return guard("runRamp", async () => {
-    const profile = await requireUser();
+    const profile = await requireMoney();
     const state = await opsState({ fresh: true });
     const plan = state.assessment.plan;
     if (plan.mode === "steady") throw new Error("Every signal is on target; there is nothing to ramp.");

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canSeeMoney,
   isAccountManager,
   isCrew,
   isEvaluator,
@@ -70,5 +71,16 @@ describe("isCrew", () => {
     expect(isCrew(["admin"])).toBe(false);
     expect(isCrew(["Account Manager"])).toBe(false);
     expect(isCrew([])).toBe(false);
+  });
+});
+
+describe("whose business the money is", () => {
+  it("is the owner's, the admin's and whoever keeps the books, however the role is written", () => {
+    expect(canSeeMoney(["admin"])).toBe(true);
+    expect(canSeeMoney(["Owner"])).toBe(true);
+    expect(canSeeMoney(["overhead", "crew"])).toBe(true);
+    expect(canSeeMoney(["account manager"])).toBe(false);
+    expect(canSeeMoney(["evaluator"])).toBe(false);
+    expect(canSeeMoney([])).toBe(false);
   });
 });

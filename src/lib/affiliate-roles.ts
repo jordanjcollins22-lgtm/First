@@ -16,6 +16,20 @@ export function isAccountManager(roles: string[]): boolean {
   return roles.some((r) => normalizeRole(r) === "account manager");
 }
 
+/**
+ * Whose business the money is.
+ *
+ * The same three the database itself uses to gate the ledger, the payroll
+ * and the overhead, so what the pulse shows and what the tables allow can
+ * never drift apart. An account manager or an evaluator sees how the work
+ * is going; the cash in the bank is not theirs to see.
+ */
+const MONEY_ROLES = ["admin", "owner", "overhead"];
+
+export function canSeeMoney(roles: string[]): boolean {
+  return roles.some((r) => MONEY_ROLES.includes(normalizeRole(r)));
+}
+
 /** Role names are free text an org defines itself — match loosely so
  * "Evaluator", "evaluator", "Account Manager", "account_manager" all count. */
 export function qualifiesForAffiliateLink(roles: string[]): boolean {
