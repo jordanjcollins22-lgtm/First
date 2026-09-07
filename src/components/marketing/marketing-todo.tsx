@@ -7,7 +7,7 @@ import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { approveMarketingPlay, editMarketingPlay, makeFlyerMailing, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
+import { approveMarketingPlay, approveMarketingPlays, editMarketingPlay, makeFlyerMailing, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
 import { describePlayTrust, type PlayReview } from "@/lib/marketing-approval";
 import {
   describePlays,
@@ -66,6 +66,7 @@ export function MarketingTodo({
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [bulk, setBulk] = useState(false);
   const [showDone, setShowDone] = useState(false);
   // What was just ticked or approved, before the page has caught up.
   const [local, setLocal] = useState<Record<string, Partial<MarketingPlay>>>({});
@@ -174,6 +175,35 @@ export function MarketingTodo({
         </p>
         {reviews.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">{describePlayTrust(reviews)}</p>}
       </div>
+      {waiting > 1 && (
+        <div className="rounded-lg border border-border/60 bg-background/60 p-2.5">
+          <p className="text-xs">
+            <span className="font-medium">{waiting} waiting for your approval.</span>{" "}
+            <span className="text-muted-foreground">
+              Nothing goes out until you say so. Read the list below, and if the set looks right, approve it in one go rather than one at a time — after ten of a kind go through untouched the app approves that kind itself.
+            </span>
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-1.5 h-7"
+            disabled={bulk}
+            onClick={() => {
+              setError(null);
+              setBulk(true);
+              startTransition(async () => {
+                const result = await approveMarketingPlays(plays.filter((p) => p.status === "open" && p.approval === "pending").map((p) => p.id));
+                setBulk(false);
+                if (!result.ok) setError(result.error);
+                else router.refresh();
+              });
+            }}
+          >
+            {bulk ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />} Approve all {waiting}
+          </Button>
+        </div>
+      )}
+
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {visible.length === 0 && !showDone && summary.done > 0 && <p className="text-xs text-muted-foreground">Nothing left to do.</p>}

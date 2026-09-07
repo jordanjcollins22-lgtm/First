@@ -121,6 +121,40 @@ export async function approveMarketingPlay(playId: string): Promise<ActionResult
 }
 
 /**
+ * A person's yes to a batch of plays they have just looked at.
+ *
+ * Ten approvals of a kind, untouched, and the app starts approving that
+ * kind itself. Getting to ten one click at a time is the manual work this
+ * app exists to remove, so a batch can go in one go -- each still recorded
+ * as its own decision, because that is what the learning counts.
+ */
+export async function approveMarketingPlays(playIds: string[]): Promise<ActionResult<{ approved: number; failed: number }>> {
+  return guard("approveMarketingPlays", async () => {
+    const profile = await requireUser();
+    const ids = [...new Set(playIds)].slice(0, 100);
+    if (ids.length === 0) throw new Error("Nothing to approve.");
+    const supabase = await createClient();
+    let approved = 0;
+    let failed = 0;
+    let lastError: string | null = null;
+    for (const playId of ids) {
+      const { data, error } = await supabase.rpc("marketing_play_review", { org: profile.organization_id, the_play: playId, decision: "approve", by: profile.id });
+      const result = (data ?? {}) as { ok?: boolean; error?: string };
+      if (error || !result.ok) {
+        failed++;
+        lastError = error?.message ?? result.error ?? "one could not be approved";
+        continue;
+      }
+      approved++;
+    }
+    if (approved === 0) throw new Error(lastError ?? "None could be approved.");
+    await relearn(profile.organization_id);
+    for (const page of PAGES) revalidatePath(page);
+    return { approved, failed };
+  });
+}
+
+/**
  * A person's changes to a play: doors (or routes) taken out, how many it
  * should be, and a word on why. Approved in the same breath when asked,
  * so one look is one click.

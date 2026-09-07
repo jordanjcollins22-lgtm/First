@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Loader2, MapPin, ShieldCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { reviewZone } from "@/lib/actions/zone-approval-actions";
+import { approveZones, reviewZone } from "@/lib/actions/zone-approval-actions";
 import type { ZoneApprovalState } from "@/lib/data/zone-approval";
 import { approvalQueue, describeTrust, REJECT_REASONS, summarizeApprovals, type RejectReason } from "@/lib/zone-approval";
 import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, modeOf, type ZoneMode } from "@/lib/zones";
@@ -28,10 +28,25 @@ export function ZoneApprovalPanel({ state, onFocusZone }: { state: ZoneApprovalS
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [bulk, setBulk] = useState(false);
 
   const queue = approvalQueue(state.zones);
   const summary = summarizeApprovals(state.zones);
   const visible = showAll ? queue : queue.slice(0, 6);
+
+  function approveMany(ids: string[]) {
+    setError(null);
+    setBulk(true);
+    startTransition(async () => {
+      const result = await approveZones(ids);
+      setBulk(false);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function decide(zoneId: string, decision: "approve" | "reject") {
     setError(null);
@@ -63,6 +78,27 @@ export function ZoneApprovalPanel({ state, onFocusZone }: { state: ZoneApprovalS
         </p>
         <p className="mt-1 text-[11px] text-muted-foreground">{describeTrust(state.streak)}</p>
       </div>
+      {queue.length > 1 && (
+        <div className="rounded-lg border border-border/60 bg-background/60 p-2.5">
+          <p className="text-xs">
+            <span className="font-medium">{queue.length} waiting.</span>{" "}
+            <span className="text-muted-foreground">
+              None of them are on the map yet. Look down the list, and if they are right, approve them together rather than one at a time — the first ten are what teach the app, and after that it approves the ordinary ones itself.
+            </span>
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            <Button type="button" size="sm" className="h-7" disabled={bulk} onClick={() => approveMany(visible.map((z) => z.id))}>
+              {bulk ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />} Approve the {visible.length} shown
+            </Button>
+            {queue.length > visible.length && (
+              <Button type="button" size="sm" variant="outline" className="h-7" disabled={bulk} onClick={() => approveMany(queue.slice(0, 100).map((z) => z.id))}>
+                Approve all {Math.min(queue.length, 100)}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {queue.length === 0 ? (
