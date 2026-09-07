@@ -244,30 +244,33 @@ BEGIN
   SELECT coalesce(sum(m), 0) INTO total_m FROM zw_leg_m;
   SELECT coalesce(array_agg(m ORDER BY seq), '{}') INTO gaps FROM zw_leg_m WHERE seq > 1 AND seq <= i;
 
+  -- Every street piece is a straight segment (USPS draws them so, and
+  -- noding only cuts them), so the way from one stop to the next along a
+  -- piece is the line between where the two are: a corner, or a door's
+  -- curb. That is the whole geometry, with no edge bookkeeping to get
+  -- wrong.
+  CREATE INDEX ON zw_nodes (vid);
   WITH pieces AS (
-    SELECT st.leg, st.path_seq,
-      CASE WHEN fu <= fv THEN ST_LineSubstring(e.geom, fu, fv) ELSE ST_Reverse(ST_LineSubstring(e.geom, fv, fu)) END AS piece
-    FROM (
-      SELECT st.*, e.geom,
-        CASE WHEN st.node < 0 THEN (SELECT fraction FROM zw_curb WHERE pid = -st.node) WHEN st.node = e.source THEN 0.0 ELSE 1.0 END AS fu,
-        CASE WHEN st.next_node < 0 THEN (SELECT fraction FROM zw_curb WHERE pid = -st.next_node) WHEN st.next_node = e.source THEN 0.0 ELSE 1.0 END AS fv
-      FROM zw_steps st JOIN zw_edges e ON e.id = st.edge WHERE st.edge <> -1 AND st.next_node IS NOT NULL
-    ) st JOIN zw_edges e ON e.id = st.edge
+    SELECT st.leg, st.path_seq, ST_MakeLine(pu.g, pv.g) AS piece
+    FROM zw_steps st
+    JOIN LATERAL (SELECT c.g FROM zw_curb c WHERE c.pid = -st.node UNION ALL SELECT nd.geom FROM zw_nodes nd WHERE nd.vid = st.node LIMIT 1) pu ON true
+    JOIN LATERAL (SELECT c.g FROM zw_curb c WHERE c.pid = -st.next_node UNION ALL SELECT nd.geom FROM zw_nodes nd WHERE nd.vid = st.next_node LIMIT 1) pv ON true
+    WHERE st.next_node IS NOT NULL
   ),
   same_edge AS (
-    SELECT l.seq AS leg, 0 AS path_seq,
-      CASE WHEN a.fraction <= b.fraction THEN ST_LineSubstring(e.geom, a.fraction, b.fraction) ELSE ST_Reverse(ST_LineSubstring(e.geom, b.fraction, a.fraction)) END AS piece
-    FROM zw_legs l JOIN zw_curb a ON a.pid = -l.source JOIN zw_curb b ON b.pid = -l.target JOIN zw_edges e ON e.id = a.edge_id
+    SELECT l.seq AS leg, 0 AS path_seq, ST_MakeLine(a.g, b.g) AS piece
+    FROM zw_legs l JOIN zw_curb a ON a.pid = -l.source JOIN zw_curb b ON b.pid = -l.target
     WHERE l.same_edge
   ),
   straight AS (
     SELECT l.seq AS leg, 0 AS path_seq, ST_MakeLine(a.g, b.g) AS piece
-    FROM zw_legs l
-    JOIN LATERAL (SELECT g FROM zw_pts WHERE pid = -l.source UNION ALL SELECT g FROM zw_curb WHERE pid = -l.source AND -l.source = n + 1 LIMIT 1) a ON true
-    JOIN LATERAL (SELECT g FROM zw_pts WHERE pid = -l.target UNION ALL SELECT g FROM zw_curb WHERE pid = -l.target AND -l.target = n + 1 LIMIT 1) b ON true
+    FROM zw_legs l JOIN zw_curb a ON a.pid = -l.source JOIN zw_curb b ON b.pid = -l.target
     WHERE l.straight
   )
-  SELECT ST_LineMerge(ST_Collect(piece ORDER BY leg, path_seq)) INTO line
+  -- Joined strictly in walking order. A merge by shared ends would put
+  -- the pieces back in its own order wherever the walk passes a corner
+  -- twice, and the line would leap across the zone between them.
+  SELECT ST_MakeLine(array_agg(piece ORDER BY leg, path_seq)) INTO line
   FROM (SELECT * FROM pieces UNION ALL SELECT * FROM same_edge UNION ALL SELECT * FROM straight) all_pieces
   WHERE piece IS NOT NULL AND NOT ST_IsEmpty(piece);
 
