@@ -1091,6 +1091,40 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["road_segments"]["Row"]>;
         Relationships: [];
       };
+      ops_targets: {
+        Row: {
+          organization_id: string;
+          evaluations_per_week: number;
+          close_rate: number;
+          weeks_booked_ahead: number;
+          cash_on_hand: number | null;
+          cash_as_of: string | null;
+          cash_floor: number | null;
+          marketing_share: number;
+          auto_ramp: boolean;
+          lever_costs: Json;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["ops_targets"]["Row"]> & { organization_id: string };
+        Update: Partial<Database["public"]["Tables"]["ops_targets"]["Row"]>;
+        Relationships: [];
+      };
+      ops_actions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          mode: string;
+          budget: number;
+          plan: Json;
+          made: Json;
+          by: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["ops_actions"]["Row"]> & { organization_id: string; mode: string };
+        Update: Partial<Database["public"]["Tables"]["ops_actions"]["Row"]>;
+        Relationships: [];
+      };
       summary_cache: {
         Row: {
           organization_id: string;
@@ -2786,6 +2820,9 @@ export interface Database {
       zones_rewalk_pending: { Args: { org: string }; Returns: number };
       zone_review: { Args: { org: string; the_zone: string; decision: string; reason?: string | null; note?: string | null; new_mode?: string | null; by?: string | null }; Returns: Json };
       zone_approvals: { Args: { org: string }; Returns: Json };
+      ops_pulse: { Args: { org: string }; Returns: Json };
+      ops_ramp: { Args: { org: string; the_mode: string; budget: number; plan: Json; by?: string | null; note?: string | null }; Returns: Json };
+      ops_actions_list: { Args: { org: string; n?: number }; Returns: Json };
       summary_get: { Args: { org: string; the_key: string; max_age?: string }; Returns: Json };
       summary_refresh: { Args: { org: string; the_key: string }; Returns: Json };
       summaries_refresh: { Args: { org: string; keys?: string[] | null }; Returns: Json };

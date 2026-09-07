@@ -192,7 +192,7 @@ export function MarketingTodo({
                 )}
                 <p className="truncate text-xs text-muted-foreground">{shortAddress(group.address)}</p>
               </div>
-              <span className={group.reason === "client" ? "shrink-0 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700" : "shrink-0 rounded bg-sky-600/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-700"}>
+              <span className={group.reason === "client" ? "shrink-0 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700" : group.reason === "ramp" ? "shrink-0 rounded bg-amber-600/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700" : "shrink-0 rounded bg-sky-600/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-700"}>
                 {REASON_LABEL[group.reason]}
               </span>
             </div>

@@ -10,7 +10,7 @@
  */
 
 export type PlayKind = "yard_sign" | "knocks" | "door_hangers" | "flyers";
-export type PlayReason = "evaluation" | "client";
+export type PlayReason = "evaluation" | "client" | "ramp";
 export type PlayStatus = "open" | "done" | "skipped";
 
 /** A USPS route as a flyers play carries it. */
@@ -71,12 +71,14 @@ export const KIND_LABEL: Record<PlayKind, string> = {
 export const REASON_LABEL: Record<PlayReason, string> = {
   evaluation: "Evaluation",
   client: "New client",
+  ramp: "Ramp",
 };
 
 /** The recipe, for the panel to say what happens on its own. */
 export const RECIPE: Record<PlayReason, string> = {
   evaluation: "100 door hangers in the house's zone",
   client: "a yard sign, 5 doors knocked, 100 door hangers, 1,000 flyers by EDDM",
+  ramp: "what the pulse asked for, on the cheapest levers, round the most recent evaluations and clients",
 };
 
 /** "1259 Collier Lane" from the geocoder's full line. */

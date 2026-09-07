@@ -26,6 +26,8 @@ import { getMyNotificationSettings } from "@/lib/data/notification-preferences";
 import { NotificationSettings } from "@/components/notifications/notification-settings";
 import { marketingState } from "@/lib/data/marketing";
 import { MarketingTodo } from "@/components/marketing/marketing-todo";
+import { opsState, type OpsState } from "@/lib/data/ops";
+import { OpsPanel } from "@/components/ops/ops-panel";
 
 /**
  * One person's own work — whoever they are.
@@ -134,6 +136,13 @@ async function OfficeDay() {
     return { plays: [], reviews: [], defaults: [], autoApproved: 0 };
   });
 
+  // The pulse: what is off, what is coming, and what to work on first. Its
+  // own read, allowed to fail on its own.
+  const ops: OpsState | null = await opsState().catch((err) => {
+    console.error("The pulse failed to load:", err);
+    return null;
+  });
+
   const { summary } = data;
   const nothing =
     data.evaluations.every((s) => s.rows.length === 0) && data.jobs.every((s) => s.rows.length === 0);
@@ -148,6 +157,8 @@ async function OfficeDay() {
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <EarlyStartQueue requests={earlyStarts} />
+
+      {ops && <OpsPanel state={ops} />}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile

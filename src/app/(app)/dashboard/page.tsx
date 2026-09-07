@@ -17,6 +17,8 @@ import type { ActivityItem } from "@/lib/activity";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { opsState, type OpsState } from "@/lib/data/ops";
+import { OpsPanel } from "@/components/ops/ops-panel";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -97,6 +99,11 @@ async function BusinessTab({
     );
   }
 
+  const ops: OpsState | null = await opsState().catch((err) => {
+    console.error("The pulse failed to load:", err);
+    return null;
+  });
+
   const { summary } = data;
 
   return (
@@ -115,6 +122,8 @@ async function BusinessTab({
           Your upcoming visits, what needs submitting, and the jobs you&apos;re managing &rarr;
         </span>
       </Link>
+
+      {ops && <OpsPanel state={ops} />}
 
       {/* Plain links, so the window survives a reload and can be bookmarked. */}
       <nav className="mb-4 flex gap-1 rounded-xl border border-white/60 bg-card/60 p-1 backdrop-blur-md">
