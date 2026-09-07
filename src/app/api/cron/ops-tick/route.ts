@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { targetsFromRow } from "@/lib/data/ops";
 import { assessOps, planForDatabase, type OpsPulse } from "@/lib/ops";
+import { syncOrganization } from "@/lib/plaid";
+import { isPlaidConfigured } from "@/lib/env";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -33,6 +35,11 @@ export async function GET(request: NextRequest) {
   const report: Record<string, unknown>[] = [];
   for (const org of orgs ?? []) {
     try {
+      // The bank first, so the cash the pulse judges is this morning's.
+      if (isPlaidConfigured) {
+        const banks = await syncOrganization(admin, org.id).catch((err) => ({ links: 0, failed: [String(err)] }));
+        if (banks.failed.length > 0) console.error(`[ops] bank read for ${org.name}:`, banks.failed.join("; "));
+      }
       const [{ data: pulseRaw, error: pulseError }, { data: targetsRow }, { data: last }] = await Promise.all([
         admin.rpc("summary_refresh", { org: org.id, the_key: "ops_pulse" }),
         admin.from("ops_targets").select("*").eq("organization_id", org.id).maybeSingle(),

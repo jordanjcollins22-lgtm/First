@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { isPlaidConfigured } from "@/lib/env";
 import { assessOps, DEFAULT_TARGETS, type LeverKey, type OpsAssessment, type OpsPulse, type OpsTargets } from "@/lib/ops";
 
 export interface OpsActionRow {
@@ -13,6 +14,16 @@ export interface OpsActionRow {
   at: string;
 }
 
+export interface BankStatus {
+  linked: boolean;
+  cash: number | null;
+  links: { id: string; institution: string | null; status: string; lastError: string | null; lastSyncedAt: string | null; linkedAt: string }[];
+  accounts: { id: string; accountId: string; linkId: string; name: string | null; mask: string | null; type: string | null; subtype: string | null; current: number | null; available: number | null; balanceAt: string | null; include: boolean }[];
+  transactions30: number;
+}
+
+export const NO_BANK: BankStatus = { linked: false, cash: null, links: [], accounts: [], transactions30: 0 };
+
 export interface OpsState {
   pulse: OpsPulse;
   targets: OpsTargets;
@@ -20,6 +31,10 @@ export interface OpsState {
   actions: OpsActionRow[];
   /** Whether a row of targets has been saved, or these are the defaults. */
   targetsSaved: boolean;
+  /** The linked bank, its accounts and balances; never its token. */
+  bank: BankStatus;
+  /** Whether the server has Plaid keys, so a bank can be linked at all. */
+  bankConfigured: boolean;
 }
 
 interface TargetsRow {
@@ -59,10 +74,11 @@ export function targetsFromRow(row: TargetsRow | null): OpsTargets {
 export async function opsState(options: { fresh?: boolean } = {}): Promise<OpsState> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
-  const [{ data: pulseRaw, error }, { data: targetsRow, error: targetsError }, { data: actionsRaw }] = await Promise.all([
+  const [{ data: pulseRaw, error }, { data: targetsRow, error: targetsError }, { data: actionsRaw }, { data: bankRaw }] = await Promise.all([
     options.fresh ? supabase.rpc("summary_refresh", { org, the_key: "ops_pulse" }) : supabase.rpc("summary_get", { org, the_key: "ops_pulse" }),
     supabase.from("ops_targets").select("*").eq("organization_id", org).maybeSingle(),
     supabase.rpc("ops_actions_list", { org, n: 5 }),
+    supabase.rpc("bank_status", { org }),
   ]);
   if (error) throw error;
   if (targetsError) throw targetsError;
@@ -75,5 +91,7 @@ export async function opsState(options: { fresh?: boolean } = {}): Promise<OpsSt
     assessment: assessOps(pulse, targets),
     actions: (Array.isArray(actionsRaw) ? actionsRaw : []) as unknown as OpsActionRow[],
     targetsSaved: targetsRow != null,
+    bank: ((bankRaw as unknown as BankStatus | null) ?? NO_BANK),
+    bankConfigured: isPlaidConfigured,
   };
 }

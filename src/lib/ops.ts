@@ -77,6 +77,12 @@ export interface OpsPulse {
     crewCostPerHour: number | null;
     postagePerPiece: number | null;
     printCostPerPiece: number | null;
+    /** From the linked bank, when there is one: the cash is read, never typed. */
+    bankLinked?: boolean;
+    bankCash?: number | null;
+    bankAt?: string | null;
+    bankName?: string | null;
+    bankNeedsRelink?: boolean;
   };
   levers: Partial<Record<LeverKey, { units: number; evaluations: number }>>;
   plays: {
@@ -279,10 +285,16 @@ export function closeRateOf(pulse: OpsPulse): { rate: number | null; decisions: 
   return { rate: decisions >= 3 ? won / decisions : null, decisions };
 }
 
-/** Cash today: what was typed in, carried forward by what came in and went out since. */
+/** Cash today: the bank's balance when a bank is linked; else what was typed in, carried forward by what came in and went out since. */
 export function cashToday(pulse: OpsPulse, targets: OpsTargets): number | null {
+  if (pulse.cash.bankLinked && pulse.cash.bankCash != null) return pulse.cash.bankCash;
   if (targets.cashOnHand == null) return null;
   return targets.cashOnHand + pulse.cash.inSince - pulse.cash.outSince;
+}
+
+/** Whether the cash is the bank's word rather than a person's. */
+export function cashFromBank(pulse: OpsPulse): boolean {
+  return Boolean(pulse.cash.bankLinked && pulse.cash.bankCash != null);
 }
 
 /** Overhead a week, plus what has been going out for crew, materials and the rest. */
@@ -368,8 +380,10 @@ export function signalsOf(pulse: OpsPulse, targets: OpsTargets): Signal[] {
     trend: cash == null ? null : trendOf(avg(recent.map((w) => w.cashIn - w.cashOut)), avg(before.map((w) => w.cashIn - w.cashOut))),
     why:
       cash == null
-        ? "Nobody has entered the cash on hand yet."
-        : `${money(cash)} today (${money(targets.cashOnHand ?? 0)} entered, ${money(pulse.cash.inSince)} in and ${money(pulse.cash.outSince)} out since)` +
+        ? "Nobody has entered the cash on hand yet, and no bank is linked."
+        : (cashFromBank(pulse)
+            ? `${money(cash)} in ${pulse.cash.bankName ?? "the bank"}${pulse.cash.bankNeedsRelink ? " (the bank login needs redoing, so this may be stale)" : ""}`
+            : `${money(cash)} today (${money(targets.cashOnHand ?? 0)} entered, ${money(pulse.cash.inSince)} in and ${money(pulse.cash.outSince)} out since)`) +
           (runway == null ? `; ${money(burn)} a week going out, covered by what comes in.` : `; shrinking ${money(-netWeekly)} a week, ${runway.toFixed(0)} weeks left.`),
     raw: cash,
   });
@@ -621,11 +635,20 @@ export function todosOf(pulse: OpsPulse, targets: OpsTargets, signals: Signal[],
       money: 0,
     });
   }
-  if (targets.cashOnHand == null) {
+  if (pulse.cash.bankNeedsRelink) {
+    out.push({
+      key: "relink-bank",
+      title: `Log in to ${pulse.cash.bankName ?? "the bank"} again`,
+      detail: "The bank link has lapsed; until it is redone the cash is whatever was last read.",
+      href: null,
+      severity: "watch",
+      money: 0,
+    });
+  } else if (targets.cashOnHand == null && !cashFromBank(pulse)) {
     out.push({
       key: "enter-cash",
-      title: "Enter the cash on hand",
-      detail: "Without it the app cannot tell when the money runs low or how much marketing it can afford.",
+      title: "Link the bank, or enter the cash on hand",
+      detail: "Without it the app cannot tell when the money runs low or how much marketing it can afford. Linking the bank means never typing it.",
       href: null,
       severity: "watch",
       money: 0,

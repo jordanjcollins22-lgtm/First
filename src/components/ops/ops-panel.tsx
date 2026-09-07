@@ -8,6 +8,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Loader2
 import { Button } from "@/components/ui/button";
 import { refreshPulse, runRamp, saveOpsTargets } from "@/lib/actions/ops-actions";
 import type { OpsState } from "@/lib/data/ops";
+import { BankLink } from "./bank-link";
 import { LEVERS, MODE_LABEL, STATUS_LABEL, type Forecast, type LeverRank, type Signal, type SignalStatus, type Todo } from "@/lib/ops";
 
 /**
@@ -238,16 +239,18 @@ export function OpsPanel({ state, compact = false }: { state: OpsState; compact?
 
       {showTargets && (
         <section className="mt-3 border-t border-border pt-3">
-          <p className="text-xs text-muted-foreground">
-            What the business wants, and the cash in the bank on a day. The app carries the cash forward with what has come in and gone out since, so it only needs entering when it is checked.
+          <BankLink bank={state.bank} configured={state.bankConfigured} />
+          <p className="mt-3 text-xs text-muted-foreground">
+            What the business wants
+            {state.bank.linked ? ". The cash is read from the bank." : ", and the cash in the bank on a day. The app carries the cash forward with what has come in and gone out since, so it only needs entering when it is checked."}
           </p>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Field label="Evaluations a week" value={form.evaluationsPerWeek} onChange={(v) => setForm((f) => ({ ...f, evaluationsPerWeek: v }))} />
             <Field label="Closing rate %" value={form.closeRate} onChange={(v) => setForm((f) => ({ ...f, closeRate: v }))} />
             <Field label="Weeks booked ahead" value={form.weeksBookedAhead} onChange={(v) => setForm((f) => ({ ...f, weeksBookedAhead: v }))} />
             <Field label="Marketing share %" value={form.marketingShare} onChange={(v) => setForm((f) => ({ ...f, marketingShare: v }))} hint="of the cash above the floor, a month" />
-            <Field label="Cash on hand $" value={form.cashOnHand} onChange={(v) => setForm((f) => ({ ...f, cashOnHand: v }))} placeholder="in the bank" />
-            <Field label="As of" value={form.cashAsOf} onChange={(v) => setForm((f) => ({ ...f, cashAsOf: v }))} type="date" />
+            {!state.bank.linked && <Field label="Cash on hand $" value={form.cashOnHand} onChange={(v) => setForm((f) => ({ ...f, cashOnHand: v }))} placeholder="in the bank" />}
+            {!state.bank.linked && <Field label="As of" value={form.cashAsOf} onChange={(v) => setForm((f) => ({ ...f, cashAsOf: v }))} type="date" />}
             <Field label="Cash floor $" value={form.cashFloor} onChange={(v) => setForm((f) => ({ ...f, cashFloor: v }))} placeholder={`${Math.round(pulse.cash.overheadMonthly * 2)} (two months' overhead)`} />
           </div>
           <div className="mt-2">

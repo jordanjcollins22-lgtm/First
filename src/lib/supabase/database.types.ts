@@ -1091,6 +1091,68 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["road_segments"]["Row"]>;
         Relationships: [];
       };
+      bank_links: {
+        Row: {
+          id: string;
+          organization_id: string;
+          item_id: string;
+          access_token: string;
+          institution_id: string | null;
+          institution_name: string | null;
+          cursor: string | null;
+          status: string;
+          last_error: string | null;
+          last_synced_at: string | null;
+          linked_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["bank_links"]["Row"]> & { organization_id: string; item_id: string; access_token: string };
+        Update: Partial<Database["public"]["Tables"]["bank_links"]["Row"]>;
+        Relationships: [];
+      };
+      bank_accounts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          link_id: string;
+          account_id: string;
+          name: string | null;
+          official_name: string | null;
+          mask: string | null;
+          type: string | null;
+          subtype: string | null;
+          current_balance: number | null;
+          available_balance: number | null;
+          currency: string | null;
+          balance_at: string | null;
+          include: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["bank_accounts"]["Row"]> & { organization_id: string; link_id: string; account_id: string };
+        Update: Partial<Database["public"]["Tables"]["bank_accounts"]["Row"]>;
+        Relationships: [];
+      };
+      bank_transactions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          account_id: string;
+          transaction_id: string;
+          amount: number;
+          posted_on: string;
+          name: string | null;
+          merchant: string | null;
+          category: string | null;
+          pending: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["bank_transactions"]["Row"]> & { organization_id: string; account_id: string; transaction_id: string; amount: number; posted_on: string };
+        Update: Partial<Database["public"]["Tables"]["bank_transactions"]["Row"]>;
+        Relationships: [];
+      };
       ops_targets: {
         Row: {
           organization_id: string;
@@ -2820,6 +2882,8 @@ export interface Database {
       zones_rewalk_pending: { Args: { org: string }; Returns: number };
       zone_review: { Args: { org: string; the_zone: string; decision: string; reason?: string | null; note?: string | null; new_mode?: string | null; by?: string | null }; Returns: Json };
       zone_approvals: { Args: { org: string }; Returns: Json };
+      bank_status: { Args: { org: string }; Returns: Json };
+      bank_cash: { Args: { org: string }; Returns: number };
       ops_pulse: { Args: { org: string }; Returns: Json };
       ops_ramp: { Args: { org: string; the_mode: string; budget: number; plan: Json; by?: string | null; note?: string | null }; Returns: Json };
       ops_actions_list: { Args: { org: string; n?: number }; Returns: Json };

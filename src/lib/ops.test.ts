@@ -62,6 +62,15 @@ describe("the signals", () => {
     expect(a.plan.hold).toMatch(/floor/);
     expect(a.ahead.find((f) => f.key === "cash")?.severity).not.toBe("ok");
   });
+  it("takes the cash from the bank when one is linked, whatever was typed", () => {
+    const p = pulse({ cash: { ...pulse().cash, bankLinked: true, bankCash: 31000, bankName: "FNB" } });
+    const a = assessOps(p, { ...targets, cashOnHand: 5000 });
+    expect(a.cash).toBe(31000);
+    expect(a.signals.find((s) => s.key === "cash")?.why).toMatch(/FNB/);
+    expect(a.now.some((t) => t.key === "enter-cash")).toBe(false);
+    const lapsed = assessOps(pulse({ cash: { ...pulse().cash, bankLinked: true, bankCash: 31000, bankName: "FNB", bankNeedsRelink: true } }), targets);
+    expect(lapsed.now.some((t) => t.key === "relink-bank")).toBe(true);
+  });
   it("counts a proposal unanswered a fortnight as a no", () => {
     const p = pulse({ now: { ...pulse().now, proposalsOpen: [{ id: "a", jobId: "j", customer: "X", address: "1 A St", total: 5000, sentAt: null, daysOpen: 20 }] } }, { won: 1, lost: 0 });
     expect(closeRateOf(p)).toEqual({ rate: 8 / 9, decisions: 9 });

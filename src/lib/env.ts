@@ -29,6 +29,12 @@ export const env = {
   stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
+  // Plaid, which reads the business's bank (FNB and most others): balances
+  // and transactions, so the cash on hand is never typed. Sandbox for
+  // trying it, production for the real bank.
+  plaidClientId: process.env.PLAID_CLIENT_ID ?? "",
+  plaidSecret: process.env.PLAID_SECRET ?? "",
+  plaidEnv: process.env.PLAID_ENV ?? "sandbox",
   // Harford County's ArcGIS REST endpoint: the address layer, or the service
   // or catalog above it, in which case the app finds the layer itself. Unset
   // means the county's public catalog, and discovery does the rest.
@@ -73,6 +79,8 @@ export const isRentcastConfigured = Boolean(env.rentcastApiKey);
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
+/** Reading the bank. Without it the cash on hand is typed in by hand. */
+export const isPlaidConfigured = Boolean(env.plaidClientId && env.plaidSecret);
 /**
  * Whether a client can pay without leaving our page.
  *
