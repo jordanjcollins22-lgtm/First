@@ -322,10 +322,10 @@ BEGIN
     ORDER BY hz.house_count ASC NULLS FIRST, hz.id
     LIMIT n
   LOOP
-    -- A big zone takes tens of seconds; it is started only at the top of
-    -- a tick, so it has the whole minute before the timeout.
+    -- A big zone takes ten seconds or so; it is started only in the first
+    -- half of a tick, so it is well inside the timeout.
     EXIT WHEN clock_timestamp() - t0 > interval '25 seconds';
-    EXIT WHEN z.houses > 600 AND clock_timestamp() - t0 > interval '3 seconds';
+    EXIT WHEN z.houses > 600 AND clock_timestamp() - t0 > interval '15 seconds';
     BEGIN
       PERFORM zone_walk(z.id);
     EXCEPTION WHEN OTHERS THEN
