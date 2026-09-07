@@ -241,7 +241,7 @@ export function OpsPanel({ state, compact = false }: { state: OpsState; compact?
 
       {showTargets && state.canSeeMoney && (
         <section className="mt-3 border-t border-border pt-3">
-          <BankLink bank={state.bank} configured={state.bankConfigured} />
+          <BankLink bank={state.bank} configured={state.bankConfigured} mode={state.bankMode} />
           <p className="mt-3 text-xs text-muted-foreground">
             What the business wants
             {state.bank.linked ? ". The cash is read from the bank." : ", and the cash in the bank on a day. The app carries the cash forward with what has come in and gone out since, so it only needs entering when it is checked."}

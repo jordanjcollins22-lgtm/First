@@ -1,6 +1,6 @@
 import { Configuration, CountryCode, PlaidApi, PlaidEnvironments, Products } from "plaid";
 
-import { env, isPlaidConfigured } from "@/lib/env";
+import { env, isPlaidConfigured, isPlaidLive } from "@/lib/env";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -31,7 +31,7 @@ export interface BankLinkRow {
 
 export function plaidClient(): PlaidApi {
   if (!isPlaidConfigured) throw new Error("PLAID_CLIENT_ID and PLAID_SECRET are not set on the server.");
-  const basePath = env.plaidEnv === "production" ? PlaidEnvironments.production : PlaidEnvironments.sandbox;
+  const basePath = isPlaidLive ? PlaidEnvironments.production : PlaidEnvironments.sandbox;
   return new PlaidApi(
     new Configuration({
       basePath,

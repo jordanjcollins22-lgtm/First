@@ -82,6 +82,14 @@ export const isStripeConfigured = Boolean(env.stripeSecretKey);
 /** Reading the bank. Without it the cash on hand is typed in by hand. */
 export const isPlaidConfigured = Boolean(env.plaidClientId && env.plaidSecret);
 /**
+ * Whether the bank being read is the real one.
+ *
+ * Anything but "production" is Plaid's pretend bank, whose balances are
+ * invented. Real marketing money must never be spent against invented
+ * cash, so the pulse ignores a sandbox balance and the panel says so.
+ */
+export const isPlaidLive = env.plaidEnv === "production";
+/**
  * Whether a client can pay without leaving our page.
  *
  * The secret key alone is enough to raise a hosted checkout and send them to

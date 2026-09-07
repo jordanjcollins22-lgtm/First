@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getCurrentProfile } from "@/lib/data/team";
 import { canSeeMoney } from "@/lib/affiliate-roles";
-import { isPlaidConfigured } from "@/lib/env";
+import { isPlaidConfigured, isPlaidLive } from "@/lib/env";
 import { assessOps, DEFAULT_TARGETS, type LeverKey, type OpsAssessment, type OpsPulse, type OpsTargets } from "@/lib/ops";
 
 export interface OpsActionRow {
@@ -37,6 +37,12 @@ export interface OpsState {
   bank: BankStatus;
   /** Whether the server has Plaid keys, so a bank can be linked at all. */
   bankConfigured: boolean;
+  /**
+   * "live" reads the real bank; "sandbox" reads Plaid's pretend one, whose
+   * balances are invented and so are kept out of the cash signal and the
+   * spending plan.
+   */
+  bankMode: "live" | "sandbox";
   /**
    * Whether this person is one the money is for. When they are not, the
    * cash never reaches the browser and the panel shows how the work is
@@ -97,8 +103,14 @@ export async function opsState(options: { fresh?: boolean } = {}): Promise<OpsSt
   const saved = targetsFromRow((targetsRow as unknown as TargetsRow | null) ?? null);
   // Not theirs to see: the money leaves here rather than being hidden in
   // the browser, and the cash signal reads as not known.
-  const pulse: OpsPulse = money
+  // A pretend bank's balance must never reach the cash signal: the plan
+  // spends real money against it. The accounts are still shown, labelled,
+  // so a link can be checked before the real keys go in.
+  const banked = money && (isPlaidLive || !whole.cash.bankLinked)
     ? whole
+    : { ...whole, cash: { ...whole.cash, bankLinked: false, bankCash: null, bankAt: null, bankNeedsRelink: false } };
+  const pulse: OpsPulse = money
+    ? banked
     : { ...whole, weeks: whole.weeks.map((w) => ({ ...w, cashIn: 0, cashOut: 0 })), cash: { ...whole.cash, invoicesOutstanding: 0, teamOwed: 0, overheadMonthly: 0, inSince: 0, outSince: 0, bankLinked: false, bankCash: null, bankAt: null, bankName: null, bankNeedsRelink: false } };
   const targets: OpsTargets = money ? saved : { ...saved, cashOnHand: null, cashFloor: null };
   return {
@@ -109,6 +121,7 @@ export async function opsState(options: { fresh?: boolean } = {}): Promise<OpsSt
     targetsSaved: targetsRow != null,
     bank: ((bankRaw as unknown as BankStatus | null) ?? NO_BANK),
     bankConfigured: isPlaidConfigured,
+    bankMode: isPlaidLive ? "live" : "sandbox",
     canSeeMoney: money,
   };
 }

@@ -21,7 +21,7 @@ function money(n: number | null): string {
   return n == null ? "—" : n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
-export function BankLink({ bank, configured }: { bank: BankStatus; configured: boolean }) {
+export function BankLink({ bank, configured, mode }: { bank: BankStatus; configured: boolean; mode: "live" | "sandbox" }) {
   const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
   const [relinkId, setRelinkId] = useState<string | null>(null);
@@ -117,6 +117,11 @@ export function BankLink({ bank, configured }: { bank: BankStatus; configured: b
         <p className="flex items-center gap-1.5 text-xs font-medium">
           <Landmark className="h-3.5 w-3.5" />
           {bank.linked ? `${bank.links.map((l) => l.institution ?? "Bank").join(", ")} linked` : "Bank"}
+          {configured && (
+            <span className={mode === "live" ? "rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700" : "rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"}>
+              {mode === "live" ? "live" : "test bank"}
+            </span>
+          )}
         </p>
         <div className="flex items-center gap-2">
           {bank.linked && (
@@ -142,7 +147,14 @@ export function BankLink({ bank, configured }: { bank: BankStatus; configured: b
       )}
       {!bank.linked && configured && (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Log in to FNB (or any bank) in Plaid&apos;s window; the app never sees the login. From then on the cash is read from the account every morning and nobody types a balance.
+          {mode === "live"
+            ? "Log in to FNB (or any bank) in Plaid's window; the app never sees the login. From then on the cash is read from the account every morning and nobody types a balance."
+            : "PLAID_ENV is not \u201cproduction\u201d, so this links Plaid's pretend bank (user_good / pass_good), not FNB. Good for checking the flow works; set it to production for the real account."}
+        </p>
+      )}
+      {bank.linked && mode !== "live" && (
+        <p className="mt-1 text-[11px] text-amber-700">
+          These are Plaid&apos;s invented balances, not your money, so the cash signal and the spending plan ignore them and still use the cash entered below. Set PLAID_ENV to production and link again for the real account.
         </p>
       )}
       {needsRelink && <p className="mt-1 text-[11px] text-amber-700">{needsRelink.institution ?? "The bank"} needs its login redone before it can be read again{needsRelink.lastError ? ` (${needsRelink.lastError})` : ""}.</p>}
