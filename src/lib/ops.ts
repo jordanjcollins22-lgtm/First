@@ -434,8 +434,8 @@ export function planOf(pulse: OpsPulse, targets: OpsTargets, signals: Signal[], 
 
   let hold: string | null = null;
   if (mode !== "steady") {
-    if (pulse.plays.open >= 30) hold = `${pulse.plays.open} marketing plays are already waiting to be done; doing them comes before making more.`;
-    else if (pulse.plays.pendingApproval >= 15) hold = `${pulse.plays.pendingApproval} plays are waiting for approval; approving them comes before making more.`;
+    if (pulse.plays.pendingApproval >= 15) hold = `${pulse.plays.pendingApproval} plays are waiting for approval; approving them comes before making more.`;
+    else if (pulse.plays.open >= 30) hold = `${pulse.plays.open} marketing plays are already waiting to be done; doing them comes before making more.`;
     else if (budget < 25) hold = cashBad ? "Cash is at the floor, so the paid levers stay off; the free ones are on the list." : "The budget is too small to put anything out.";
   }
 
