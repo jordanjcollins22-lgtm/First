@@ -5,7 +5,8 @@
 -- end to every other within eight metres, which is the square of the
 -- pieces: on four thousand of them it ran the database out of memory.
 -- Sidewalks are left out, and the roads, which meet exactly, are noded
--- without the matching. The re-walk cron is put back once this is in.
+-- without the matching. The re-walk cron is put back once this is in,
+-- twelve zones a minute now that a walk takes a second or two.
 
 CREATE OR REPLACE FUNCTION public.zone_walk(the_zone UUID)
 RETURNS JSONB LANGUAGE plpgsql SET search_path = public, pg_temp SET statement_timeout = '55s' AS $$
@@ -304,6 +305,6 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
     IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'zones-rewalk') THEN PERFORM cron.unschedule('zones-rewalk'); END IF;
-    PERFORM cron.schedule('zones-rewalk', '*/2 * * * *', 'SELECT public.zones_rewalk_tick(6)');
+    PERFORM cron.schedule('zones-rewalk', '* * * * *', 'SELECT public.zones_rewalk_tick(12)');
   END IF;
 END $$;
