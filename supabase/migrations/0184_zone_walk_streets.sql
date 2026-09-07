@@ -81,6 +81,7 @@ DECLARE
   cur INTEGER; cur_g geometry; nxt RECORD; i INTEGER := 0; total_m DOUBLE PRECISION := 0; gaps DOUBLE PRECISION[] := '{}';
   med DOUBLE PRECISION; the_mode TEXT; pace_kmh DOUBLE PRECISION; stop_s DOUBLE PRECISION; minutes INTEGER;
   path JSONB := '[]'::jsonb; first_addr TEXT; line geometry; line_json JSONB; strays INTEGER := 0; pass INTEGER;
+  leg_line geometry; passed RECORD; cur_edge BIGINT; nxt_edge BIGINT;
 BEGIN
   SELECT organization_id INTO org FROM hanger_zones WHERE id = the_zone;
 
@@ -111,7 +112,7 @@ BEGIN
   DROP TABLE IF EXISTS zw_edges;
   CREATE TEMP TABLE zw_edges (id BIGSERIAL, geom geometry, source BIGINT, target BIGINT, cost DOUBLE PRECISION, reverse_cost DOUBLE PRECISION) ON COMMIT DROP;
   INSERT INTO zw_edges (geom)
-  SELECT (d).geom FROM (SELECT ST_Dump(ST_Node(ST_Snap(c, c, 4.0))) AS d FROM (SELECT ST_Collect(g) AS c FROM zw_raw) cc) x WHERE ST_Length((d).geom) > 0.05;
+  SELECT (d).geom FROM (SELECT ST_Dump(ST_Node(ST_Snap(c, c, 8.0))) AS d FROM (SELECT ST_Collect(g) AS c FROM zw_raw) cc) x WHERE ST_Length((d).geom) > 0.05;
   DROP TABLE IF EXISTS zw_nodes;
   CREATE TEMP TABLE zw_nodes ON COMMIT DROP AS
   SELECT dense_rank() OVER (ORDER BY key) AS vid, key, geom FROM (
@@ -196,15 +197,46 @@ BEGIN
   CREATE TEMP TABLE zw_legs (seq INTEGER, source BIGINT, target BIGINT, guess_m DOUBLE PRECISION, straight BOOLEAN DEFAULT false, same_edge BOOLEAN DEFAULT false) ON COMMIT DROP;
   cur := n + 1; cur_g := park;
   LOOP
-    SELECT p.pid, p.address, p.ll, p.g, c.agg_cost AS cost INTO nxt
+    SELECT p.pid, p.address, p.ll, p.g, c.agg_cost AS cost, false AS guessed INTO nxt
     FROM zw_cost c JOIN zw_pts p ON p.pid = -c.end_vid
     WHERE c.start_vid = -cur AND NOT p.done
     ORDER BY c.agg_cost LIMIT 1;
     IF NOT FOUND THEN
-      SELECT p.pid, p.address, p.ll, p.g, ST_Distance(p.g, cur_g) * 1.3 AS cost INTO nxt
+      SELECT p.pid, p.address, p.ll, p.g, ST_Distance(p.g, cur_g) * 1.3 AS cost, true AS guessed INTO nxt
       FROM zw_pts p WHERE NOT p.done ORDER BY p.g <-> cur_g LIMIT 1;
       EXIT WHEN NOT FOUND;
     END IF;
+
+    -- The doors passed on the way there are taken in passing, in the
+    -- order met, rather than walked past and come back for. The way is
+    -- the street between the two; a door whose curb is on it is on the way.
+    IF NOT nxt.guessed THEN
+      SELECT edge_id INTO cur_edge FROM zw_curb WHERE pid = cur;
+      SELECT edge_id INTO nxt_edge FROM zw_curb WHERE pid = nxt.pid;
+      IF cur_edge = nxt_edge THEN
+        SELECT ST_MakeLine(a.g, b.g) INTO leg_line FROM zw_curb a, zw_curb b WHERE a.pid = cur AND b.pid = nxt.pid;
+      ELSE
+        SELECT ST_MakeLine(pos ORDER BY s.seq) INTO leg_line FROM (
+          SELECT w.seq, (SELECT c.g FROM zw_curb c WHERE c.pid = -w.node UNION ALL SELECT nd.geom FROM zw_nodes nd WHERE nd.vid = w.node LIMIT 1) AS pos
+          FROM pgr_withPoints('SELECT id, source, target, cost, reverse_cost FROM zw_edges', 'SELECT pid, edge_id, fraction, side FROM zw_curb',
+                              -cur, -nxt.pid, directed := false, driving_side := 'b', details := false) w) s;
+      END IF;
+      IF leg_line IS NOT NULL AND ST_GeometryType(leg_line) = 'ST_LineString' AND ST_NPoints(leg_line) >= 2 THEN
+        FOR passed IN
+          SELECT p.pid, p.address, p.ll, p.g FROM zw_curb c JOIN zw_pts p ON p.pid = c.pid
+          WHERE NOT p.done AND c.pid <> nxt.pid AND ST_DWithin(c.g, leg_line, 0.5)
+          ORDER BY ST_LineLocatePoint(leg_line, c.g)
+        LOOP
+          i := i + 1;
+          IF i = 1 THEN first_addr := passed.address; END IF;
+          INSERT INTO zw_legs (seq, source, target, guess_m) VALUES (i, -cur, -passed.pid, ST_Distance(passed.g, cur_g) * 1.3);
+          path := path || jsonb_build_object('lat', round(ST_Y(passed.ll)::numeric, 6), 'lng', round(ST_X(passed.ll)::numeric, 6));
+          UPDATE zw_pts SET done = true WHERE pid = passed.pid;
+          cur := passed.pid; cur_g := passed.g;
+        END LOOP;
+      END IF;
+    END IF;
+
     i := i + 1;
     IF i = 1 THEN first_addr := nxt.address; END IF;
     INSERT INTO zw_legs (seq, source, target, guess_m) VALUES (i, -cur, -nxt.pid, nxt.cost);
