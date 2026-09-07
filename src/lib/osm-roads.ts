@@ -63,6 +63,8 @@ export const ROAD_KINDS = [
   "secondary_link",
   "primary",
   "primary_link",
+  "trunk",
+  "trunk_link",
   "living_street",
   "service",
   "track",
