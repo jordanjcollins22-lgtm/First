@@ -5,6 +5,8 @@ import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { acquireLease, runSteps, tokenMatches } from "@/lib/gis-import-run";
 import { EDDM_BUILD_KIND, runEddmBuildSteps } from "@/lib/eddm-build";
 import { SDAT_KIND, runSdatSteps } from "@/lib/sdat-import";
+import { OSM_KIND } from "@/lib/osm-roads";
+import { runOsmSteps } from "@/lib/osm-import";
 import { serverEnvDiagnostic } from "@/lib/gis-probe";
 
 /**
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
     try {
       if (job.kind === EDDM_BUILD_KIND) await runEddmBuildSteps(admin, job);
       else if (job.kind === SDAT_KIND) await runSdatSteps(admin, job);
+      else if (job.kind === OSM_KIND) await runOsmSteps(admin, job);
       else await runSteps(admin, job, "background-job");
     } catch (err) {
       const message = messageOf(err);

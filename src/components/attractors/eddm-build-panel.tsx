@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Footprints, Loader2, MapPin, Pause, Play } from "lucide-react";
+import { Footprints, Loader2, MapPin, Pause, Play, Route } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { eddmBuildStatus, pauseEddmBuild, resumeEddmBuild, startEddmBuild, type EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
+import { roadsStatus, startRoadsImport, type RoadsStatus } from "@/lib/actions/roads-actions";
+import type { RoadsState } from "@/lib/data/roads";
 import { describeClusters, type UnservedCluster } from "@/lib/eddm-clusters";
 import type { ZoneRow } from "@/lib/data/zones";
 import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, modeOf, rankZones } from "@/lib/zones";
@@ -20,6 +22,11 @@ import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, modeOf, rankZones } fro
  * because the work is on the server and this page has no other way to know.
  * Under it, the houses no route reaches, grouped: a couple beside a route
  * are doors for the walk to take in; a few dozen together are a development.
+ *
+ * The roads come from OpenStreetMap: USPS draws each route's streets as
+ * islands, and a walk between two of them would otherwise cut through the
+ * woods. One button reads the county's roads in the background; the walks
+ * are then redrawn on them a few at a time.
  */
 export function EddmBuildPanel({
   build,
@@ -32,8 +39,11 @@ export function EddmBuildPanel({
   zoneScope,
   onZoneScope,
   onFocusZone,
+  roads,
 }: {
   build: EddmBuildStatus | null;
+  /** The county's roads from OpenStreetMap, and how far the walks are redrawn on them. */
+  roads: RoadsState;
   summary: EddmRouteSummary;
   clusters: UnservedCluster[];
   showUnserved: boolean;
@@ -57,6 +67,9 @@ export function EddmBuildPanel({
   const [status, setStatus] = useState<EddmBuildStatus | null>(build);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [roadsJob, setRoadsJob] = useState<RoadsStatus | null>(roads.job);
+  const [roadsError, setRoadsError] = useState<string | null>(null);
+  const [roadsPending, startRoads] = useTransition();
 
   // While a build runs, ask how far it has got, and refresh the page's data
   // when it finishes so the new waves and the unreached houses appear.
@@ -71,6 +84,32 @@ export function EddmBuildPanel({
     }, 8_000);
     return () => clearInterval(timer);
   }, [running, router]);
+
+  // The roads read runs on the server a tile at a time; ask after it now
+  // and then, and refresh the page when it is done so the redraw shows.
+  const roadsRunning = roadsJob?.status === "running";
+  useEffect(() => {
+    if (!roadsRunning && roads.zonesToRewalk === 0) return;
+    const timer = setInterval(async () => {
+      const result = await roadsStatus();
+      if (result.ok && result.value) setRoadsJob(result.value);
+      router.refresh();
+    }, 20_000);
+    return () => clearInterval(timer);
+  }, [roadsRunning, roads.zonesToRewalk, router]);
+
+  function readRoads() {
+    setRoadsError(null);
+    startRoads(async () => {
+      const result = await startRoadsImport();
+      if (!result.ok) {
+        setRoadsError(result.error);
+        return;
+      }
+      setRoadsJob(result.value);
+      router.refresh();
+    });
+  }
 
   function run(work: () => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>) {
     setError(null);
@@ -130,6 +169,33 @@ export function EddmBuildPanel({
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="flex items-center gap-1.5 text-xs font-medium">
+          <Route className="h-3.5 w-3.5" /> Roads from OpenStreetMap
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {roads.segments > 0
+            ? `${roads.segments.toLocaleString()} road pieces on file, so the walks follow real roads between USPS's streets.` +
+              (roads.zonesToRewalk > 0 ? ` ${roads.zonesToRewalk} zone${roads.zonesToRewalk === 1 ? "" : "s"} still being redrawn on them.` : "")
+            : "USPS draws each route's streets on their own; the road from one to the next is often missing, and a walk would cut through the woods. Read the county's roads once and every walk is redrawn on them."}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {!roadsRunning && (
+            <Button type="button" size="sm" variant={roads.segments > 0 ? "outline" : "default"} disabled={roadsPending} onClick={readRoads}>
+              {roadsPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Route className="mr-1 h-3.5 w-3.5" />}
+              {roads.segments > 0 ? "Read the roads again" : "Read the roads from OpenStreetMap"}
+            </Button>
+          )}
+        </div>
+        {roadsJob && (
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            {roadsRunning && <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" />}
+            <span>{roadsJob.summary}</span>
+          </p>
+        )}
+        {roadsError && <p className="text-xs text-destructive">{roadsError}</p>}
+      </div>
 
       {zones.length > 0 && (
         <div className="space-y-2 border-t border-border pt-3">

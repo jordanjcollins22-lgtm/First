@@ -5,6 +5,7 @@ import { listProperties } from "@/lib/data/properties";
 import { listHousesWithHistory } from "@/lib/data/houses";
 import { getEddmRates, listEddmMailings } from "@/lib/data/eddm";
 import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/data/eddm-build";
+import { roadsState } from "@/lib/data/roads";
 import { EMPTY_OWNERSHIP, kindSummary, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
 import { listZones } from "@/lib/data/zones";
 import { marketingState } from "@/lib/data/marketing";
@@ -83,7 +84,7 @@ export default async function AttractorsPage({
   // Properties are core data (migration 0001) so this should never fail in
   // practice; profiles depend on the later roles migration, so that one
   // falls back to an empty roster instead of taking the page down.
-  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings, eddmBuild, eddmSummary, unservedClusters, sdatJob, ownership, ownershipMatrix, zones, houseKinds] =
+  const [properties, profiles, houses, densityPoints, keywords, rankScans, previousRankPoints, eddmRates, eddmMailings, eddmBuild, eddmSummary, unservedClusters, roads, sdatJob, ownership, ownershipMatrix, zones, houseKinds] =
     await Promise.all([
       listProperties(),
       listProfiles().catch(() => [] as Profile[]),
@@ -100,6 +101,7 @@ export default async function AttractorsPage({
       latestEddmBuild().catch(() => null),
       eddmRouteSummary().catch(() => ({ routes: 0, walkable: 0, hard: 0, unknown: 0, waves: 0, housesOnRoutes: 0, zips: 0 })),
       listUnservedClusters().catch(() => []),
+      roadsState().catch(() => ({ job: null, segments: 0, zonesToRewalk: 0 })),
       latestSdatImport().catch(() => null),
       ownershipSummary().catch(() => EMPTY_OWNERSHIP),
       relationshipOwnershipMatrix().catch(() => []),
@@ -141,6 +143,7 @@ export default async function AttractorsPage({
         eddmBuild={eddmBuild}
         eddmSummary={eddmSummary}
         unservedClusters={unservedClusters}
+        roads={roads}
         sdatJob={sdatJob}
         ownership={ownership}
         ownershipMatrix={ownershipMatrix}

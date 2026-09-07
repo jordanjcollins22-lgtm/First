@@ -33,6 +33,7 @@ export interface Database {
           /** What a piece costs to print in-house, in dollars. */
           eddm_print_cost_per_piece: number;
           marketing_since: string;
+          roads_updated_at: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> & {
           name: string;
@@ -768,6 +769,7 @@ export interface Database {
           /** The streets, in the order to walk them. */
           walk_path: Json | null;
           walk_line?: Json | null;
+          walked_at?: string | null;
           /** A split part's own wave; the route's wave otherwise. */
           wave_id?: string | null;
           approval?: string;
@@ -1069,6 +1071,24 @@ export interface Database {
           kind: string;
         };
         Update: Partial<Database["public"]["Tables"]["marketing_defaults"]["Row"]>;
+        Relationships: [];
+      };
+      road_segments: {
+        Row: {
+          id: number;
+          organization_id: string;
+          tile: string;
+          osm_id: number | null;
+          highway: string | null;
+          name: string | null;
+          seg: unknown;
+          bbox: unknown;
+        };
+        Insert: Partial<Database["public"]["Tables"]["road_segments"]["Row"]> & {
+          organization_id: string;
+          tile: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["road_segments"]["Row"]>;
         Relationships: [];
       };
       summary_cache: {
@@ -2761,6 +2781,9 @@ export interface Database {
       zones_list: { Args: { org: string }; Returns: Json };
       marketing_sync: { Args: { org: string }; Returns: Json };
       marketing_sync_and_refresh: { Args: { org: string }; Returns: Json };
+      roads_load_tile: { Args: { org: string; the_tile: string; rows: Json; replace?: boolean }; Returns: number };
+      zones_rewalk_tick: { Args: { n?: number }; Returns: number };
+      zones_rewalk_pending: { Args: { org: string }; Returns: number };
       zone_review: { Args: { org: string; the_zone: string; decision: string; reason?: string | null; note?: string | null; new_mode?: string | null; by?: string | null }; Returns: Json };
       zone_approvals: { Args: { org: string }; Returns: Json };
       summary_get: { Args: { org: string; the_key: string; max_age?: string }; Returns: Json };

@@ -69,6 +69,7 @@ import type { HouseKind } from "@/lib/house-geojson";
 import type { EddmBuildStatus } from "@/lib/actions/eddm-build-actions";
 import type { EddmRouteSummary } from "@/lib/data/eddm-build";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
+import type { RoadsState } from "@/lib/data/roads";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "waves" | "clients";
@@ -88,6 +89,7 @@ export function AttractorsDashboard({
   eddmBuild,
   eddmSummary,
   unservedClusters,
+  roads,
   sdatJob,
   ownership,
   ownershipMatrix,
@@ -119,6 +121,8 @@ export function AttractorsDashboard({
   eddmBuild: EddmBuildStatus | null;
   eddmSummary: EddmRouteSummary;
   unservedClusters: UnservedCluster[];
+  /** The county's roads from OpenStreetMap, for walks that stay on them. */
+  roads: RoadsState;
   /** The State's roll: the last read of it, and what it says in counts. */
   sdatJob: SdatStatus | null;
   ownership: OwnershipSummary;
@@ -714,6 +718,7 @@ export function AttractorsDashboard({
                 build={eddmBuild}
                 summary={eddmSummary}
                 clusters={unservedClusters}
+                roads={roads}
                 zones={approvedZones}
                 zoneScope={zoneScope}
                 onZoneScope={setZoneScope}
