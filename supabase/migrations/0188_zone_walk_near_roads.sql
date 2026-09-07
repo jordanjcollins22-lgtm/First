@@ -317,12 +317,15 @@ BEGIN
   -- One at a time: a slow tick must not overlap the next.
   IF NOT pg_try_advisory_lock(hashtext('zones_rewalk_tick')) THEN RETURN 0; END IF;
   FOR z IN
-    SELECT hz.id, hz.organization_id FROM hanger_zones hz JOIN organizations o ON o.id = hz.organization_id
+    SELECT hz.id, hz.organization_id, coalesce(hz.house_count, 0) AS houses FROM hanger_zones hz JOIN organizations o ON o.id = hz.organization_id
     WHERE o.roads_updated_at IS NOT NULL AND (hz.walked_at IS NULL OR hz.walked_at < o.roads_updated_at)
     ORDER BY hz.house_count ASC NULLS FIRST, hz.id
     LIMIT n
   LOOP
+    -- A big zone takes tens of seconds; it is started only at the top of
+    -- a tick, so it has the whole minute before the timeout.
     EXIT WHEN clock_timestamp() - t0 > interval '25 seconds';
+    EXIT WHEN z.houses > 600 AND clock_timestamp() - t0 > interval '3 seconds';
     BEGIN
       PERFORM zone_walk(z.id);
     EXCEPTION WHEN OTHERS THEN
