@@ -181,37 +181,8 @@ export function openingSubtab(key: string, allowed: readonly string[], asked?: s
   return open[0]?.key ?? null;
 }
 
-/**
- * Where an old address goes now.
- *
- * Every page that was its own destination is a subtab of a module, and the
- * link somebody bookmarked or texted has to keep working. Kept here beside the
- * modules so a subtab and the addresses that reach it cannot drift apart.
- */
-export const MOVED: Record<string, string> = {
-  "/dashboard": "/my-day?tab=business",
-  "/notifications": "/my-day?tab=alerts",
-  "/pipeline": "/sales?tab=pipeline",
-  "/contacts": "/sales?tab=clients",
-  "/proposals": "/sales?tab=proposals",
-  "/evaluations": "/schedule?tab=calendar",
-  "/weather": "/schedule?tab=weather",
-  "/attractors": "/marketing?tab=map",
-  "/leads": "/marketing?tab=leads",
-  "/admin/door-hangers": "/marketing?tab=print",
-  "/admin/flyer": "/marketing?tab=print",
-  "/admin/social": "/marketing?tab=content",
-  "/admin/tools": "/more?tab=inventory",
-  "/admin/materials": "/more?tab=inventory",
-  "/admin/labels": "/more?tab=inventory",
-  "/admin/inventory-setup": "/more?tab=inventory",
-  "/admin/team": "/more?tab=team",
-  "/admin/payments": "/more?tab=finance",
-  "/admin/weeds": "/more?tab=field-guide",
-  "/admin/houses": "/more?tab=data",
-  "/admin/gis-import": "/more?tab=data",
-  "/knowledge-graph": "/more?tab=knowledge",
-};
+export { MOVED, REACHED_VIA_MORE } from "@/lib/moved-routes";
+
 
 /**
  * Every permission key the modules place somewhere.

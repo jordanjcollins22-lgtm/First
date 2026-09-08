@@ -7,6 +7,7 @@ import {
   moduleFor,
   navModules,
   openingSubtab,
+  REACHED_VIA_MORE,
   subtabsFor,
   unplacedTabKeys,
 } from "./modules";
@@ -114,6 +115,9 @@ describe("which subtab a link opens", () => {
 describe("old addresses", () => {
   it("sends every moved page to a subtab that exists", () => {
     for (const [from, to] of Object.entries(MOVED)) {
+      // Settings is not a module: it hangs off the admin role rather than a
+      // tab, for the reason permissions.ts gives.
+      if (to === "/admin/settings") continue;
       const [path, query] = to.split("?");
       const mod = moduleFor(path.replace("/", ""));
       expect(mod, `${from} goes to ${to}, which is not a module`).not.toBeNull();
@@ -139,6 +143,21 @@ describe("old addresses", () => {
   it("never sends a page to itself", () => {
     for (const [from, to] of Object.entries(MOVED)) {
       expect(to.split("?")[0]).not.toBe(from);
+    }
+  });
+
+  it("never redirects a page that More links to, which would be a loop", () => {
+    // More lists these and links to them. A redirect from one into More is a
+    // door that opens onto itself.
+    for (const path of Object.keys(REACHED_VIA_MORE)) {
+      expect(MOVED[path], `${path} is both a More destination and a redirect`).toBeUndefined();
+    }
+  });
+
+  it("puts every More destination under a group that exists", () => {
+    const groups = new Set(moduleFor("more")!.subtabs.map((s) => s.key));
+    for (const [path, group] of Object.entries(REACHED_VIA_MORE)) {
+      expect(groups.has(group), `${path} is filed under "${group}", which More has no group for`).toBe(true);
     }
   });
 });

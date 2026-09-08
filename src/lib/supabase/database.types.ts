@@ -2928,6 +2928,67 @@ export interface Database {
           },
         ];
       };
+      /** Money that came in and then went back out again. */
+      payment_adjustments: {
+        Row: {
+          id: string;
+          organization_id: string;
+          payment_id: string;
+          job_id: string | null;
+          /** refund | chargeback | reversal | void | correction */
+          kind: string;
+          amount_cents: number;
+          reason: string;
+          /** The processor's own id, so one webhook delivered twice deducts once. */
+          external_id: string | null;
+          recorded_by: string | null;
+          occurred_at: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["payment_adjustments"]["Row"]> & {
+          organization_id: string;
+          payment_id: string;
+          kind: string;
+          amount_cents: number;
+          reason: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payment_adjustments"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "payment_adjustments_payment_id_fkey";
+            columns: ["payment_id"];
+            referencedRelation: "payments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** What the work told the marketing: one opportunity per job, kind and week. */
+      marketing_events: {
+        Row: {
+          id: string;
+          organization_id: string;
+          /** evaluation_booked | job_scheduled | job_started | job_completed */
+          kind: string;
+          job_id: string | null;
+          property_id: string | null;
+          customer_id: string | null;
+          zone_id: string | null;
+          /** The Monday of the week: two events in one week are one trip. */
+          window_start: string;
+          occurred_at: string;
+          source: string | null;
+          detail: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["marketing_events"]["Row"]> & {
+          organization_id: string;
+          kind: string;
+          window_start: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["marketing_events"]["Row"]>;
+        Relationships: [];
+      };
       job_photos: {
         Row: {
           id: string;

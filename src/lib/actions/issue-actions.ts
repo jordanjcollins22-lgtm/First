@@ -7,6 +7,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { canOverrideGate, canSeeMoney } from "@/lib/affiliate-roles";
 import { blocksByDefault, isBlockingStage, isIssueType, isSeverity } from "@/lib/issues";
 import { GATE_LABEL, type GateKey } from "@/lib/readiness";
+import { isAdjustmentKind } from "@/lib/payments-net";
 
 export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -320,6 +321,60 @@ export async function setFinancialDisposition(input: {
       decided_by: profile.id,
     });
     if (error) throw error;
+
+    touch(input.jobId);
+    return { ok: true, value: null };
+  } catch (err) {
+    return failed(err);
+  }
+}
+
+/**
+ * Money that has gone back out again.
+ *
+ * The receipt is never edited and never deleted: the money really was taken on
+ * the day, and that is part of the job's history. What left is written beside
+ * it, and the readiness engine reads the difference -- so a deposit stops being
+ * satisfied the moment it is refunded, without anybody having to remember to
+ * un-tick something.
+ *
+ * `externalId` is the processor's own id where there is one. It is unique in
+ * the database, so the same webhook delivered twice takes the money off once.
+ */
+export async function recordPaymentAdjustment(input: {
+  paymentId: string;
+  jobId: string;
+  kind: string;
+  amountCents: number;
+  reason: string;
+  externalId?: string | null;
+}): Promise<ActionResult<null>> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, error: "Not signed in." };
+    if (!canSeeMoney(profile.roles ?? [])) {
+      return { ok: false, error: "Only somebody trusted with the money can record a refund or a reversal." };
+    }
+    if (!isAdjustmentKind(input.kind)) return { ok: false, error: "That is not a kind of adjustment." };
+    if (!Number.isFinite(input.amountCents) || input.amountCents <= 0) {
+      return { ok: false, error: "Say how much went back out." };
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 4) return { ok: false, error: "Say why. This is kept on the job." };
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("payment_adjustments").insert({
+      organization_id: profile.organization_id,
+      payment_id: input.paymentId,
+      job_id: input.jobId,
+      kind: input.kind,
+      amount_cents: Math.round(input.amountCents),
+      reason,
+      external_id: input.externalId ?? null,
+      recorded_by: profile.id,
+    });
+    // A repeat of a webhook we have already accounted for is not a failure.
+    if (error && !/duplicate key|unique constraint/i.test(error.message)) throw error;
 
     touch(input.jobId);
     return { ok: true, value: null };

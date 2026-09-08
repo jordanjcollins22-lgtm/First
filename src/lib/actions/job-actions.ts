@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { marketingContext, recordMarketingEvent } from "@/lib/data/marketing-events";
+import type { MarketingEventKind } from "@/lib/marketing-events";
+
 import { revalidateJobViews } from "@/lib/revalidate-job";
 
 import { createClient } from "@/lib/supabase/server";
@@ -60,6 +63,34 @@ export async function updateJobStatus(jobId: string, status: string) {
   const { error } = await supabase.from("jobs").update({ status }).eq("id", jobId);
   if (error) throw error;
   revalidatePath("/attractors");
+
+  // After the write, and unable to undo it. A crew starting work and a job
+  // finishing are both worth something to the marketing -- a van on the
+  // street, a finished garden to photograph -- and neither is worth failing
+  // the status change for.
+  if (status === "in_progress") await tellMarketing("job_started", jobId);
+  if (status === "completed") await tellMarketing("job_completed", jobId);
+}
+
+/**
+ * What the work tells the marketing.
+ *
+ * Never throws and never awaits anything the caller depends on: the
+ * operational write has already happened by the time this runs, and a
+ * marketing row that will not insert must not undo a job that did.
+ */
+async function tellMarketing(kind: MarketingEventKind, jobId: string) {
+  try {
+    const context = await marketingContext(jobId);
+    await recordMarketingEvent({
+      kind,
+      jobId,
+      occurredAt: new Date().toISOString(),
+      ...context,
+    });
+  } catch (err) {
+    console.error("[marketing] event not recorded:", kind, jobId, err);
+  }
 }
 
 /**
@@ -117,6 +148,13 @@ export async function updateJobDates(
   const { error } = await supabase.from("jobs").update(patch).eq("id", jobId);
   if (error) throw error;
   revalidatePath("/attractors");
+
+  // Booking an evaluation puts a van on a street; scheduling the work puts one
+  // there again. Both are opportunities for the neighbours, and the same job
+  // rescheduled within a week updates the one opportunity rather than making
+  // another.
+  if (dates.evaluationDate) await tellMarketing("evaluation_booked", jobId);
+  if (dates.projectStartDate) await tellMarketing("job_scheduled", jobId);
 }
 
 /**

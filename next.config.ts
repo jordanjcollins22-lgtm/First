@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { MOVED } from "./src/lib/moved-routes";
+
 /**
  * Files in /public that the browser asks for on nearly every visit.
  *
@@ -21,6 +23,38 @@ const DAY = 60 * 60 * 24;
 const WEEK = DAY * 7;
 
 const nextConfig: NextConfig = {
+  /**
+   * The pages that were absorbed into a workflow module.
+   *
+   * Read straight from the table in src/lib/modules.ts, so the redirect and
+   * the subtab it lands on cannot drift apart -- a test walks that table and
+   * fails if a destination stops existing.
+   *
+   * Done here rather than by replacing the page files, because the module
+   * pages import those page components: Sales renders the pipeline page,
+   * Marketing renders the map. Next checks redirects before the filesystem,
+   * so the URL is unreachable while the component behind it is still there to
+   * be composed. Query strings are carried across, so a link to
+   * /attractors?zone=abc still lands on that zone.
+   *
+   * Temporary (307) rather than permanent (308) on purpose: a 308 is cached
+   * by the browser forever, and an address the business might want back is
+   * not worth making unrecoverable to save one hop.
+   *
+   * Nothing public is in here. Booking links, proposal tokens, progress
+   * links, advertiser uploads, weed QR codes and stock stickers are printed on
+   * paper and sitting in people's inboxes; they keep their addresses, and a
+   * test asserts it. So do the job deep links -- the work order and the
+   * directions -- which crews open from their phones.
+   */
+  async redirects() {
+    return Object.entries(MOVED).map(([source, destination]) => ({
+      source,
+      destination,
+      permanent: false,
+    }));
+  },
+
   async headers() {
     return CACHEABLE_PUBLIC_FILES.map((source) => ({
       source,

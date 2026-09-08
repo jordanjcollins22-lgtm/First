@@ -3,6 +3,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { Issue, IssueSeverity, IssueType, BlockingStage } from "@/lib/issues";
 import type { ConfirmationState, GateKey, GateOverride, JobFacts } from "@/lib/readiness";
 import { jobRequirements } from "@/lib/data/job-requirements";
+import { describeNet, netAppliedToJob, type Adjustment, type Receipt } from "@/lib/payments-net";
 
 interface IssueRow {
   id: string;
@@ -172,7 +173,7 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
         .select("deposit_cents, total_cents, status")
         .eq("job_id", jobId)
         .maybeSingle(),
-      supabase.from("payments").select("amount_cents, received_at").eq("job_id", jobId),
+      supabase.from("payments").select("id, job_id, amount_cents, received_at").eq("job_id", jobId),
       supabase.from("invoices").select("id, amount, status, paid_at, sent_at").eq("job_id", jobId).maybeSingle(),
       supabase
         .from("job_proposals")
@@ -224,18 +225,26 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
   );
 
   const depositRequiredCents = Number(plan?.deposit_cents ?? 0);
-  // Only money actually recorded as received, and only against this job.
-  //
-  // The limitation, said out loud: the payments table has no status column
-  // and no reversal record -- a row exists when money was taken, and a
-  // refund or a chargeback has nowhere to be written. So this is the sum of
-  // recorded receipts, which overstates nothing today but would not know
-  // about a reversal if one happened. When payment states exist, they are
-  // filtered here.
-  const receipts = (paid ?? []) as { amount_cents: number | null; received_at: string | null }[];
-  const depositReceivedCents = receipts
-    .filter((row) => row.received_at != null)
-    .reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0);
+
+  // Net money, not gross receipts. A refund, a chargeback or a reversal is
+  // written beside the receipt rather than on it, and what counts here is the
+  // difference -- otherwise a deposit check goes on saying "paid" for a job
+  // whose money left three weeks ago.
+  const rows = (paid ?? []) as { id: string; job_id: string | null; amount_cents: number | null; received_at: string | null }[];
+  const receipts: Receipt[] = rows.map((row) => ({
+    id: row.id,
+    jobId: row.job_id,
+    amountCents: Number(row.amount_cents ?? 0),
+    receivedAt: row.received_at,
+  }));
+  const { data: adjustmentRows } = await supabase
+    .from("payment_adjustments")
+    .select("payment_id, kind, amount_cents")
+    .in("payment_id", receipts.length > 0 ? receipts.map((r) => r.id) : ["none"]);
+  const adjustments: Adjustment[] = ((adjustmentRows ?? []) as { payment_id: string; kind: string; amount_cents: number }[]).map(
+    (row) => ({ paymentId: row.payment_id, kind: row.kind as Adjustment["kind"], amountCents: Number(row.amount_cents) })
+  );
+  const depositReceivedCents = netAppliedToJob(jobId, receipts, adjustments);
 
   const settled = Boolean(invoice?.paid_at) || invoice?.status === "paid";
   const outstanding = invoice == null ? null : settled ? 0 : Number(invoice.amount ?? 0);
@@ -283,7 +292,7 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
     depositReceivedCents,
     depositSource:
       depositRequiredCents > 0
-        ? "The payment plan's deposit, against receipts recorded on this job"
+        ? `The payment plan's deposit, against net money on this job — ${describeNet(receipts, adjustments, jobId)}`
         : "No deposit is required by the payment plan",
 
     evaluationPhotos: inPhase("evaluation"),

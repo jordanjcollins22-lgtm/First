@@ -14,7 +14,6 @@ import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
-import { PrintMenu } from "@/components/marketing/print-menu";
 import { listBusinessLocations } from "@/lib/data/locations";
 
 export default async function InventoryPage() {
@@ -91,7 +90,6 @@ export default async function InventoryPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-start gap-2">
-          <PrintMenu />
           <Link
             href="/admin/inventory-setup"
             className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
