@@ -7,6 +7,8 @@ import { listWeeds, weedPhotoUrl } from "@/lib/data/weeds";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { columnsFor, groupWeeds, isSheetView, weedScanPath, weedsFor, type Weed } from "@/lib/weeds";
 import { qrSvg } from "@/lib/qr";
+import Link from "next/link";
+
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PrintButton } from "@/components/weeds/print-button";
 
@@ -15,6 +17,13 @@ interface Cell {
   photoUrl: string | null;
   qr: string;
 }
+
+/**
+ * Never prerendered. The guide puts itself in the first time it is opened, so
+ * a copy of this page frozen at build time is a copy taken before the weeds
+ * existed -- which is how it came to show two of sixty-three.
+ */
+export const dynamic = "force-dynamic";
 
 /**
  * The printed guide.
@@ -76,11 +85,20 @@ export default async function WeedSheetPage({
           {missingPhotos > 0 && (
             <p className="mt-1 text-sm text-amber-700">
               {missingPhotos} {missingPhotos === 1 ? "weed has" : "weeds have"} no print photo yet and will come out as
-              an empty square. Upload one on the guide before this goes to the printer.
+              an empty square.{" "}
+              <Link href="/admin/weeds" className="font-medium underline">
+                Add photos in the Weed Guide
+              </Link>{" "}
+              before this goes to the printer.
             </p>
           )}
         </div>
-        <PrintButton />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/weeds" className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent">
+            Back to the guide
+          </Link>
+          <PrintButton />
+        </div>
       </div>
 
       <div className="print-root">
@@ -114,8 +132,14 @@ export default async function WeedSheetPage({
                         )}
                       </div>
                       <p className="text-[10px] font-semibold leading-tight">{weed.common}</p>
+                      {/* The client sheet is a picture and a name: a homeowner
+                          points at a weed, they do not treat it. The crew's
+                          carries what a crew has to know. */}
                       {view === "crew" && (
-                        <p className="text-[8px] italic leading-tight text-black/60">{weed.scientific}</p>
+                        <>
+                          <p className="text-[8px] italic leading-tight text-black/60">{weed.scientific}</p>
+                          {weed.prep && <p className="mt-0.5 text-[8px] leading-tight text-black/70">{weed.prep}</p>}
+                        </>
                       )}
                       <div className="mt-1 flex items-center gap-1">
                         <span

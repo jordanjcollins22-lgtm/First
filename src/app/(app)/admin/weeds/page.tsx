@@ -4,10 +4,16 @@ import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import { listWeeds } from "@/lib/data/weeds";
-import { groupWeeds } from "@/lib/weeds";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { WeedRow } from "@/components/weeds/weed-row";
+import { WeedGuide } from "@/components/weeds/weed-guide";
+
+/**
+ * Never prerendered. The guide puts itself in the first time it is opened, so
+ * a copy of this page frozen at build time is a copy taken before the weeds
+ * existed -- which is how it came to show two of sixty-three.
+ */
+export const dynamic = "force-dynamic";
 
 /**
  * The weed guide.
@@ -26,7 +32,6 @@ export default async function WeedGuidePage() {
   if (!allowed) redirect("/admin/tools");
 
   const weeds = await listWeeds();
-  const blocks = groupWeeds(weeds);
   const onClientSheet = weeds.filter((w) => w.client).length;
   const withoutPhoto = weeds.filter((w) => !w.printPhotoId).length;
   const clientWithoutPhoto = weeds.filter((w) => w.client && !w.printPhotoId).length;
@@ -37,8 +42,9 @@ export default async function WeedGuidePage() {
         <div>
           <h1 className="text-xl font-semibold">Weed Guide</h1>
           <p className="text-sm text-muted-foreground">
-            {weeds.length} weeds, {onClientSheet} of them on the sheet clients are given. Every printed row carries its
-            own code; scanning it opens that weed with all its photos.
+            One list of {weeds.length} weeds. The tick on each says whether it also goes on the sheet clients are
+            given — {onClientSheet} of them do. The client sheet shows the picture and the name; the crew sheet shows
+            the same weeds it is ticked for plus the scientific name and the prep note.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -65,30 +71,14 @@ export default async function WeedGuidePage() {
               {clientWithoutPhoto > 0 && ` — ${clientWithoutPhoto} of them on the client sheet`}.
             </p>
             <p className="text-amber-800">
-              They come out as empty squares. The client sheet is the one that goes out to a house, so those are worth
-              doing first.
+              They come out as empty squares. Press <strong>Add the photo</strong> on a weed below to put one in; the
+              list starts on exactly the ones still missing.
             </p>
           </CardContent>
         </Card>
       )}
 
-      {blocks.map((block) => (
-        <Card key={block.group}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              {block.group}
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {block.weeds.length} · {block.weeds.filter((w) => w.client).length} on the client sheet
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 md:grid-cols-2">
-            {block.weeds.map((weed) => (
-              <WeedRow key={weed.id} weed={weed} />
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+      <WeedGuide weeds={weeds} />
     </div>
   );
 }

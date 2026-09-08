@@ -30,17 +30,28 @@ export function WeedRow({ weed }: { weed: Weed }) {
   const [saved, setSaved] = useState(false);
   const [, startTransition] = useTransition();
 
-  async function upload(file: File | undefined) {
-    if (!file) return;
+  /**
+   * Photos in, however many were picked.
+   *
+   * A weed is four different-looking things depending on whether it has
+   * flowered, so somebody adding photos is almost never adding one. They go
+   * up in the order they were chosen, and the first one to arrive on a weed
+   * with none becomes the one that prints.
+   */
+  async function upload(files: FileList | null) {
+    const chosen = Array.from(files ?? []);
+    if (chosen.length === 0) return;
     setUploading(true);
     setError(null);
     try {
       const supabase = createClient();
-      const path = `${weed.slug}/${uuid()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("weed-photos").upload(path, file, { upsert: false });
-      if (uploadError) throw uploadError;
-      const result = await addWeedPhoto({ weedId: weed.id, path });
-      if (!result.ok) throw new Error(result.error);
+      for (const file of chosen) {
+        const path = `${weed.slug}/${uuid()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from("weed-photos").upload(path, file, { upsert: false });
+        if (uploadError) throw uploadError;
+        const result = await addWeedPhoto({ weedId: weed.id, path });
+        if (!result.ok) throw new Error(result.error);
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -126,17 +137,34 @@ export function WeedRow({ weed }: { weed: Weed }) {
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="flex h-16 w-20 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent"
+          className={`flex h-16 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium ${
+            weed.photos.length === 0
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "border border-dashed border-border text-muted-foreground hover:bg-accent"
+          }`}
         >
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
-          <span className="text-[9px]">Add photo</span>
+          {uploading ? "Uploading" : weed.photos.length === 0 ? "Add the photo" : "Add more"}
         </button>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => upload(e.target.files)}
+        />
       </div>
 
-      {weed.photos.length === 0 && (
+      {weed.photos.length === 0 ? (
         <p className="mt-1.5 text-[11px] text-amber-700">
-          No photo yet, so this weed prints as an empty square. The first one added becomes the one that prints.
+          No photo yet, so this weed prints as an empty square. The first one added becomes the one that prints; add as
+          many as you like and the rest show on the phone when the code is scanned.
+        </p>
+      ) : (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          The one ringed with the printer mark goes on paper. The other {Math.max(weed.photos.length - 1, 0)} show when
+          the code is scanned.
         </p>
       )}
 
