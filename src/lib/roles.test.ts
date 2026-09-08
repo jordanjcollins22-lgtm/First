@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CANONICAL,
+  LEGACY_ALIASES,
   canRunJobs,
   canSeeCompanyMoney,
   canSeeJobMoney,
@@ -149,5 +151,37 @@ describe("what a role would see before anybody configures it", () => {
     expect(defaultShowsModule(["evaluator", "account manager"], "marketing")).toBe(true);
     // One role with no opinion about a module means the whole module.
     expect(defaultSubtabs(["evaluator", "account manager"], "sales")).toBeNull();
+  });
+});
+
+describe("the canonical names", () => {
+  it("gives Project Lead a name of its own rather than borrowing one", () => {
+    expect(CANONICAL["project-lead"]).toEqual(["project lead"]);
+    expect(hasRole(["project lead"], "project-lead")).toBe(true);
+  });
+
+  it("still answers to what people were called before it existed", () => {
+    // Until an admin moves each person across in Settings, nobody loses a
+    // screen. Delete LEGACY_ALIASES -- and this test -- when the table is
+    // empty in the database.
+    expect(LEGACY_ALIASES["project-lead"]).toEqual(["lead", "foreman"]);
+    expect(hasRole(["foreman"], "project-lead")).toBe(true);
+    expect(hasRole(["technician"], "project-technician")).toBe(true);
+  });
+
+  it("keeps admin owner-level, because three people hold it and it is not going anywhere", () => {
+    expect(CANONICAL.owner).toContain("admin");
+    expect(isOwnerLevel(["admin"])).toBe(true);
+    expect(isOwnerLevel(["owner"])).toBe(true);
+  });
+
+  it("never lets one name mean two roles", () => {
+    const seen = new Map<string, string>();
+    for (const [key, names] of Object.entries(CANONICAL)) {
+      for (const name of [...names, ...(LEGACY_ALIASES[key as keyof typeof LEGACY_ALIASES] ?? [])]) {
+        expect(seen.has(name), `"${name}" is both ${seen.get(name)} and ${key}`).toBe(false);
+        seen.set(name, key);
+      }
+    }
   });
 });

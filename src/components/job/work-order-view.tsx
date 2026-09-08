@@ -10,6 +10,7 @@ import type { PhotoMark } from "@/lib/photo-review";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
 import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { JobStatus } from "@/types/domain";
+import type { ScopeChange } from "@/lib/data/exceptions";
 import { formatJobNumber } from "@/lib/job-number";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
 import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
@@ -53,6 +54,7 @@ export function WorkOrderView({
   completedByName,
   completionNotes,
   accountManager,
+  approvedAdditions,
   back,
 }: {
   jobId: string;
@@ -83,6 +85,8 @@ export function WorkOrderView({
   completionNotes: string | null;
   /** Who to ring when something on site does not match the sheet. */
   accountManager: { name: string; phone: string | null } | null;
+  /** Extra work the client agreed to after the job was sold. */
+  approvedAdditions: ScopeChange[];
   /** Where the back link goes. Defaults to the crew's day, which is where a
    * crew member came from; the office opens this from the job and wants to go
    * back there instead. */
@@ -156,6 +160,23 @@ export function WorkOrderView({
             number: i + 1,
           }))}
         />
+      )}
+
+      {/* Agreed after the job was sold, and kept apart from it. The crew has
+          to be able to tell the difference between what was bought and what
+          was added, and the record of what was sold never changes. */}
+      {approvedAdditions.length > 0 && (
+        <section className="rounded-xl border border-emerald-500/50 bg-emerald-50/60 p-4 dark:bg-emerald-500/5">
+          <h2 className="mb-2 text-sm font-semibold">Added since — approved</h2>
+          <ol className="flex flex-col gap-2">
+            {approvedAdditions.map((change) => (
+              <li key={change.id} className="text-sm">
+                {change.requestedNote}
+                {change.terms && <span className="block text-xs text-muted-foreground">{change.terms}</span>}
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
 
       {/* Whatever is neither a zone nor a measurement — the gate that stays

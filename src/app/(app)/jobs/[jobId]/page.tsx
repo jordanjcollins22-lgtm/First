@@ -21,6 +21,19 @@ import { visibilityFor } from "@/lib/roles";
 import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
 import { FieldScreen } from "@/components/job/field-screen";
 import { IssuesPanel } from "@/components/issues/issues-panel";
+import { ExceptionsPanel } from "@/components/exceptions/exceptions-panel";
+import { ScopeChangesPanel } from "@/components/exceptions/scope-changes-panel";
+import { JobHistory } from "@/components/exceptions/job-history";
+import {
+  executableAdditions,
+  jobProgress,
+  listAuditEvents,
+  listCrewAssignments,
+  listJobExceptions,
+  listScopeChanges,
+} from "@/lib/data/exceptions";
+import { canDecideException, canReviewScopeChange, EXCEPTION_KINDS } from "@/lib/exceptions";
+import { roleKeysOf } from "@/lib/roles";
 import { ReadinessPanel } from "@/components/readiness/readiness-panel";
 import { ConfirmationsPanel } from "@/components/readiness/confirmations-panel";
 import { activityLabel, isWarm } from "@/lib/proposal-views";
@@ -796,7 +809,15 @@ async function OverviewTab(jobId: string, roles: string[]) {
 }
 
 async function FieldTab(jobId: string, address: string | null, phone: string | null, roles: string[]) {
-  const [facts, issues] = await Promise.all([jobFacts(jobId), listJobIssues(jobId).catch(() => [])]);
+  const [facts, issues, additions, progress] = await Promise.all([
+    jobFacts(jobId),
+    listJobIssues(jobId).catch(() => []),
+    // Only what the client has actually approved. An unapproved change request
+    // is deliberately not on this screen: the crew's copy of "what may I do"
+    // has to be the same as the client's copy of "what did I agree to".
+    executableAdditions(jobId).catch(() => []),
+    jobProgress(jobId).catch(() => ({ units: [], summary: null })),
+  ]);
   const scopeLines = facts.servicesDefined ? ["See the site plan for the areas and measurements."] : [];
   return (
     <FieldScreen
@@ -806,13 +827,57 @@ async function FieldTab(jobId: string, address: string | null, phone: string | n
       clientPhone={phone}
       issues={issues}
       canDecideBlocking={canOverrideGate(roles)}
+      approvedAdditions={additions}
+      progress={progress.units}
     />
   );
 }
 
+/**
+ * Everything unresolved about this job, in the order somebody would deal with
+ * it: what the field reported, what the client is being asked to agree, what
+ * is blocking, and then the record of what was decided.
+ */
 async function IssuesTab(jobId: string, roles: string[]) {
-  const issues = await listJobIssues(jobId).catch(() => []);
-  return <IssuesPanel jobId={jobId} issues={issues} canDecideBlocking={canOverrideGate(roles)} />;
+  const keys = roleKeysOf(roles);
+  const [issues, exceptions, changes, assignments, events] = await Promise.all([
+    listJobIssues(jobId).catch(() => []),
+    listJobExceptions(jobId).catch(() => []),
+    listScopeChanges(jobId).catch(() => []),
+    listCrewAssignments(jobId).catch(() => []),
+    listAuditEvents(jobId).catch(() => []),
+  ]);
+
+  // Worked out on the server, per kind, and sent as an answer rather than as
+  // the roles themselves -- the client component never has to decide who
+  // somebody is.
+  const canDecide = Object.fromEntries(EXCEPTION_KINDS.map((kind) => [kind, canDecideException(keys, kind)]));
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Reported from the field</h3>
+        <ExceptionsPanel exceptions={exceptions} canDecide={canDecide} />
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Change requests</h3>
+        <ScopeChangesPanel changes={changes} canReview={canReviewScopeChange(keys)} />
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Issues</h3>
+        <IssuesPanel jobId={jobId} issues={issues} canDecideBlocking={canOverrideGate(roles)} />
+      </section>
+
+      <details className="rounded-lg border border-border p-3">
+        <summary className="cursor-pointer text-sm font-semibold">History</summary>
+        <div className="mt-3">
+          <JobHistory assignments={assignments} events={events} />
+        </div>
+      </details>
+    </div>
+  );
 }
 
 /** The gate between "the field work looks done" and "this job is closed". */

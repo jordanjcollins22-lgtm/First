@@ -4,6 +4,7 @@ import { type Issue, type IssueSeverity, type BlockingStage } from "@/lib/issues
 import { evaluateGate, type GateOverride } from "@/lib/readiness";
 import { jobFacts, jobInvoicedAt } from "@/lib/data/issues";
 import { attentionReasons, type AttentionReason } from "@/lib/attention";
+import { jobsWithOpenExceptions, type ExceptionLoad } from "@/lib/data/exceptions";
 import type { BoardJob } from "@/lib/job-board";
 
 export interface JobStanding {
@@ -98,9 +99,14 @@ export async function jobStanding(jobs: readonly BoardJob[]): Promise<JobStandin
   // Every job that could be ready, plus every job an issue already names, plus
   // finished work that might still be owed for. Nothing else needs its facts
   // read, and reading them is several queries a job.
+  // One read for the whole organisation rather than a query a job: what the
+  // field has reported and what is waiting on a desk.
+  const load: Map<string, ExceptionLoad> = await jobsWithOpenExceptions().catch(() => new Map());
+
   const worthAsking = new Set<string>([
     ...candidates.map((job) => job.id),
     ...byJob.keys(),
+    ...load.keys(),
     ...jobs.filter((job) => job.status === "completed").map((job) => job.id),
   ]);
 
@@ -143,6 +149,11 @@ export async function jobStanding(jobs: readonly BoardJob[]): Promise<JobStandin
         balanceOutstanding: facts.balanceOutstanding,
         invoicedAt: facts.invoiceRaised ? invoicedAt : null,
         financialDisposition: facts.financialDisposition,
+        crewStopped: load.get(job.id)?.blocking ?? 0,
+        openExceptions: load.get(job.id)?.open ?? 0,
+        changesAwaitingReview: load.get(job.id)?.awaitingReview ?? 0,
+        changesAwaitingClient: load.get(job.id)?.awaitingClient ?? 0,
+        oldestSentToClientAt: load.get(job.id)?.oldestSentToClientAt ?? null,
       },
       issues,
       now

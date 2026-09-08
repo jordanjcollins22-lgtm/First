@@ -15,6 +15,7 @@ import { getProposalForJob } from "@/lib/data/proposals";
 import { capabilities } from "@/lib/job-stage";
 import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { EvaluationStatus, JobStatus, ProposalSiteImageTransform } from "@/types/domain";
+import { executableAdditions, type ScopeChange } from "@/lib/data/exceptions";
 
 export interface WorkOrderPageData {
   /**
@@ -42,6 +43,14 @@ export interface WorkOrderPageData {
   completionNotes: string | null;
   /** Notes the evaluator pinned to the picture, in the order they are numbered. */
   marks: CanvasMark[];
+  /**
+   * Work the client agreed to after the job was sold.
+   *
+   * Approved ones only. An unapproved change request is deliberately absent
+   * from the crew sheet: the crew's copy of "what may I do" has to be the same
+   * as the client's copy of "what did I agree to".
+   */
+  approvedAdditions: ScopeChange[];
   order: WorkOrder;
   jobNumber: number | null;
   address: string;
@@ -138,7 +147,13 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
       ).data as { full_name: string | null; email: string } | null)
     : null;
 
+  // Extra work the client has agreed to since the job was sold. Beside the
+  // sold scope on the sheet, never merged into it: the crew has to be able to
+  // see which is which, and the sold scope stays what was sold.
+  const approvedAdditions = await executableAdditions(jobId).catch(() => []);
+
   return {
+    approvedAdditions,
     photos,
     photoZones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
     photoMarks,

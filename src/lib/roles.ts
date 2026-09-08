@@ -26,19 +26,45 @@ function normalise(role: string): string {
 }
 
 /**
- * The names each role answers to.
+ * The canonical name of each role: the one an admin ticks boxes against on the
+ * Permissions screen, and the one `role_permissions` is keyed by.
  *
- * "crew" is a project technician: it is what the business has called the
- * people doing the work since before this vocabulary existed, and the three
- * people holding it should not lose their screens over a renaming.
+ * Owner-level is the exception and is deliberately two names rather than one.
+ * `admin` is a system role three people hold and is not going anywhere;
+ * `owner` exists beside it for a business that wants the distinction. Both
+ * answer for the business, so both are owner-level.
  */
-const NAMES: Record<RoleKey, string[]> = {
-  owner: ["owner", "admin", "manager"],
+export const CANONICAL: Record<RoleKey, string[]> = {
+  owner: ["owner", "admin"],
   "account-manager": ["account manager"],
   evaluator: ["evaluator"],
-  "project-lead": ["project lead", "lead", "foreman"],
-  "project-technician": ["project technician", "technician", "crew"],
+  "project-lead": ["project lead"],
+  "project-technician": ["crew"],
 };
+
+/**
+ * Names that are on their way out.
+ *
+ * `project lead` is a real role now, with its own row in `roles` and its own
+ * grants in `role_permissions`. These are what people were called before it
+ * existed, and they are honoured only so nobody loses a screen on the day the
+ * role appeared -- an admin moves each person across in Settings, one at a
+ * time, because a migration that reassigned people's roles at three in the
+ * morning would be making a decision about people with nobody watching.
+ *
+ * Delete this table once nobody holds any of them; `roles.test.ts` names it so
+ * the deletion is a visible change rather than a forgotten one.
+ */
+export const LEGACY_ALIASES: Partial<Record<RoleKey, string[]>> = {
+  owner: ["manager"],
+  "project-lead": ["lead", "foreman"],
+  "project-technician": ["technician"],
+};
+
+/** Every name a role answers to: the canonical ones, plus what it used to be. */
+const NAMES: Record<RoleKey, string[]> = Object.fromEntries(
+  (Object.keys(CANONICAL) as RoleKey[]).map((key) => [key, [...CANONICAL[key], ...(LEGACY_ALIASES[key] ?? [])]])
+) as Record<RoleKey, string[]>;
 
 export function roleKeysOf(roles: readonly string[]): RoleKey[] {
   const held = roles.map(normalise);

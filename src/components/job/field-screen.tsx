@@ -3,6 +3,10 @@ import { Camera, ClipboardList, Map, Navigation, Phone } from "lucide-react";
 
 import type { Issue } from "@/lib/issues";
 import { IssuesPanel } from "@/components/issues/issues-panel";
+import { ReportException } from "@/components/exceptions/report-exception";
+import { ProgressPanel } from "@/components/exceptions/progress-panel";
+import type { ProgressUnit } from "@/lib/exceptions";
+import type { ScopeChange } from "@/lib/data/exceptions";
 
 /**
  * The crew's screen, for a phone in a garden.
@@ -24,6 +28,9 @@ export function FieldScreen({
   clientPhone,
   issues,
   canDecideBlocking,
+  approvedAdditions,
+  progress,
+  workSessionId = null,
 }: {
   jobId: string;
   address: string | null;
@@ -31,6 +38,10 @@ export function FieldScreen({
   clientPhone: string | null;
   issues: Issue[];
   canDecideBlocking: boolean;
+  /** Extra work the client has agreed to since. Approved, or it is not here. */
+  approvedAdditions: ScopeChange[];
+  progress: ProgressUnit[];
+  workSessionId?: string | null;
 }) {
   const maps = address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}` : null;
 
@@ -103,6 +114,35 @@ export function FieldScreen({
         <p className="mt-1 text-xs text-muted-foreground">
           Something different on site? Report it below rather than changing the scope — it gets recorded as a change.
         </p>
+      </section>
+
+      {/* Approved changes, kept separate from what was sold rather than mixed
+          into it. The crew needs to know these are extra and that somebody
+          agreed them; the sold scope stays the sold scope. */}
+      {approvedAdditions.length > 0 && (
+        <section>
+          <h2 className="mb-1.5 text-sm font-semibold">Also approved since</h2>
+          <ul className="space-y-1 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
+            {approvedAdditions.map((change) => (
+              <li key={change.id} className="text-sm">
+                {change.requestedNote}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section>
+        <h2 className="mb-1.5 text-sm font-semibold">What got done</h2>
+        <ProgressPanel jobId={jobId} units={progress} workSessionId={workSessionId} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold">Something come up?</h2>
+        <p className="text-xs text-muted-foreground">
+          Report it here instead of ringing the office. Whoever can decide it gets it straight away.
+        </p>
+        <ReportException jobId={jobId} workSessionId={workSessionId} />
       </section>
 
       <IssuesPanel jobId={jobId} issues={issues} canDecideBlocking={canDecideBlocking} compact />

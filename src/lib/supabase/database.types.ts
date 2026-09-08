@@ -3089,6 +3089,195 @@ export interface Database {
           },
         ];
       };
+      /** A field report that something did not go as sold. */
+      job_exceptions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          work_session_id: string | null;
+          kind: string;
+          state: string;
+          summary: string;
+          detail: string | null;
+          /** The reporter's own answer to "can you carry on". Not a verdict on the job. */
+          blocks_work: boolean;
+          issue_id: string | null;
+          scope_change_id: string | null;
+          reported_by: string | null;
+          reported_at: string;
+          acknowledged_by: string | null;
+          acknowledged_at: string | null;
+          resolution: string | null;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_exceptions"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          kind: string;
+          summary: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_exceptions"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_exceptions_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** The only route by which the work a crew is asked to do can grow. */
+      job_scope_changes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          exception_id: string | null;
+          requested_by: string | null;
+          requested_at: string;
+          requested_note: string;
+          proposed: Json;
+          status: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_note: string | null;
+          price_cents: number | null;
+          terms: string | null;
+          priced_by: string | null;
+          priced_at: string | null;
+          client_approval_required: boolean;
+          approval_waived_reason: string | null;
+          sent_to_client_at: string | null;
+          client_decision: string | null;
+          client_decision_at: string | null;
+          client_decision_note: string | null;
+          client_decision_channel: string | null;
+          client_decision_recorded_by: string | null;
+          /** Stamped by trigger on approval. Null means the crew may not do it. */
+          executable_at: string | null;
+          supersedes_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_scope_changes"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          requested_note: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_scope_changes"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_scope_changes_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** Which bits of the job got done, and why the rest did not. */
+      job_work_progress: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          unit_kind: string;
+          unit_key: string;
+          unit_label: string | null;
+          state: string;
+          portion_pct: number | null;
+          note: string | null;
+          exception_id: string | null;
+          work_session_id: string | null;
+          recorded_by: string | null;
+          recorded_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_work_progress"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          unit_kind: string;
+          unit_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_work_progress"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_work_progress_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** Who was on the job, including who used to be. Written by trigger from job_crew. */
+      job_crew_assignments: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          profile_id: string;
+          role: string;
+          assigned_by: string | null;
+          assigned_at: string;
+          unassigned_at: string | null;
+          unassigned_by: string | null;
+          unassign_reason: string | null;
+          replaced_by_profile_id: string | null;
+          exception_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_crew_assignments"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_crew_assignments"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_crew_assignments_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** Append-only. The database refuses an UPDATE or a DELETE on this table. */
+      job_audit_events: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          subject_kind: string;
+          subject_id: string;
+          action: string;
+          from_state: string | null;
+          to_state: string | null;
+          actor: string | null;
+          actor_roles: string[];
+          note: string | null;
+          detail: Json;
+          at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_audit_events"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          subject_kind: string;
+          subject_id: string;
+          action: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "job_audit_events_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -3178,6 +3367,29 @@ export interface Database {
         Returns: Json;
       };
       /** The houses inside a map viewport, and whether anything has happened to each. */
+      /** Sold scope plus what the client has approved since. */
+      job_executable_additions: {
+        Args: { job: string };
+        Returns: {
+          scope_change_id: string;
+          requested_note: string;
+          proposed: Json;
+          price_cents: number | null;
+          terms: string | null;
+          approved_at: string;
+        }[];
+      };
+      /** What is waiting on somebody, per job, for the boards. */
+      jobs_with_open_exceptions: {
+        Args: { org: string };
+        Returns: {
+          job_id: string;
+          open_exceptions: number;
+          blocking_exceptions: number;
+          awaiting_review: number;
+          awaiting_client: number;
+        }[];
+      };
       houses_in_bbox: {
         Args: { org: string; min_lat: number; min_lng: number; max_lat: number; max_lng: number; max_rows?: number };
         Returns: { id: string; address: string; lat: number; lng: number; untouched: boolean }[];

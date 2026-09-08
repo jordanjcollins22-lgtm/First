@@ -20,12 +20,36 @@
 import { needsAttention, type Issue } from "@/lib/issues";
 
 export type AttentionKind =
+  | "crew-stopped"
   | "blocking-issue"
   | "critical-issue"
   | "starting-not-ready"
   | "confirmations-overdue"
+  | "change-awaiting-review"
+  | "exception-unanswered"
   | "closeout-overdue"
+  | "change-awaiting-client"
   | "payment-overdue";
+
+/**
+ * How urgent each kind is, spaced so a new one can be put between two
+ * existing ones without renumbering the lot.
+ *
+ * A crew standing in a garden is the top of the list and always will be: it is
+ * the only reason here that is costing money by the minute.
+ */
+const RANK: Record<AttentionKind, number> = {
+  "crew-stopped": 0,
+  "blocking-issue": 10,
+  "critical-issue": 20,
+  "confirmations-overdue": 30,
+  "change-awaiting-review": 35,
+  "starting-not-ready": 40,
+  "exception-unanswered": 45,
+  "closeout-overdue": 50,
+  "change-awaiting-client": 55,
+  "payment-overdue": 60,
+};
 
 export interface AttentionReason {
   kind: AttentionKind;
@@ -51,12 +75,24 @@ export interface AttentionFacts {
   invoicedAt: string | null;
   /** Set when somebody has decided what happens about the balance. */
   financialDisposition: string | null;
+  /** Open exceptions where the person who reported it said they are stopped. */
+  crewStopped?: number;
+  /** Open exceptions of any kind, stopped or not. */
+  openExceptions?: number;
+  /** Change requests sitting on an account manager's desk. */
+  changesAwaitingReview?: number;
+  /** Change requests sitting with the client. */
+  changesAwaitingClient?: number;
+  /** When the oldest of those went out, so silence can be aged. */
+  oldestSentToClientAt?: string | null;
 }
 
 /** How long a thing is allowed to sit before it is worth somebody's attention. */
 export const DAYS_BEFORE_START_MUST_BE_READY = 3;
 export const DAYS_BEFORE_CLOSEOUT_IS_LATE = 7;
 export const DAYS_BEFORE_PAYMENT_IS_CHASED = 14;
+/** A change request the client has not answered stops being "sent" and starts being "ignored". */
+export const DAYS_BEFORE_A_CHANGE_IS_CHASED = 3;
 
 /**
  * Whole days between two moments, counted the way a person counts them.
@@ -85,6 +121,17 @@ export function attentionReasons(
 ): AttentionReason[] {
   const reasons: AttentionReason[] = [];
 
+  // A crew is standing in a garden, unable to work. Above everything else,
+  // because it is the only thing here costing money by the minute.
+  const stopped = facts.crewStopped ?? 0;
+  if (stopped > 0) {
+    reasons.push({
+      kind: "crew-stopped",
+      says: stopped === 1 ? "A crew is stopped on site" : `${stopped} reports say a crew is stopped on site`,
+      rank: RANK["crew-stopped"],
+    });
+  }
+
   const open = issues.filter((issue) => issue.status === "open");
   const stopping = open.filter((issue) => issue.blocking);
   const critical = open.filter((issue) => issue.severity === "critical" && !issue.blocking);
@@ -93,14 +140,14 @@ export function attentionReasons(
     reasons.push({
       kind: "blocking-issue",
       says: `${stopping.length} open ${stopping.length === 1 ? "issue is" : "issues are"} stopping this job`,
-      rank: 0,
+      rank: RANK["blocking-issue"],
     });
   }
   if (critical.length > 0) {
     reasons.push({
       kind: "critical-issue",
       says: `${critical.length} critical ${critical.length === 1 ? "issue" : "issues"} open`,
-      rank: 1,
+      rank: RANK["critical-issue"],
     });
   }
 
@@ -117,7 +164,7 @@ export function attentionReasons(
             : days === 0
               ? "Starts today and is still not ready"
               : `Starts in ${days} ${days === 1 ? "day" : "days"} and is still not ready`,
-        rank: days <= 0 ? 2 : 3,
+        rank: days <= 0 ? RANK["confirmations-overdue"] : RANK["starting-not-ready"],
       });
     }
   }
@@ -129,7 +176,7 @@ export function attentionReasons(
       reasons.push({
         kind: "closeout-overdue",
         says: `Field work finished ${days} days ago and closeout is not done`,
-        rank: 4,
+        rank: RANK["closeout-overdue"],
       });
     }
   }
@@ -148,10 +195,52 @@ export function attentionReasons(
       reasons.push({
         kind: "payment-overdue",
         says: `Unpaid ${days} days after invoicing`,
-        rank: 5,
+        rank: RANK["payment-overdue"],
       });
     } else if (facts.status === "completed") {
-      reasons.push({ kind: "payment-overdue", says: "Work finished, payment still due", rank: 6 });
+      reasons.push({ kind: "payment-overdue", says: "Work finished, payment still due", rank: RANK["payment-overdue"] });
+    }
+  }
+
+  // Somebody in the field is waiting on a decision. A change request nobody
+  // has picked up is the one that turns into a phone call to the owner, which
+  // is the thing this whole system exists to stop.
+  const forReview = facts.changesAwaitingReview ?? 0;
+  if (forReview > 0) {
+    reasons.push({
+      kind: "change-awaiting-review",
+      says:
+        forReview === 1
+          ? "A change request is waiting to be reviewed"
+          : `${forReview} change requests are waiting to be reviewed`,
+      rank: RANK["change-awaiting-review"],
+    });
+  }
+
+  // Open reports that are not a stopped crew and not a change request: a
+  // broken mower, a late start, materials that turned up wrong. Counted rather
+  // than listed, because at this level the question is which job needs
+  // somebody, not what exactly happened on it.
+  const otherOpen = Math.max(0, (facts.openExceptions ?? 0) - stopped - forReview);
+  if (otherOpen > 0) {
+    reasons.push({
+      kind: "exception-unanswered",
+      says: otherOpen === 1 ? "A field report has not been answered" : `${otherOpen} field reports have not been answered`,
+      rank: RANK["exception-unanswered"],
+    });
+  }
+
+  // The client has had it for days and said nothing. Only aged: a change sent
+  // this morning is not a problem, it is a change that was sent this morning.
+  const withClient = facts.changesAwaitingClient ?? 0;
+  if (withClient > 0 && facts.oldestSentToClientAt) {
+    const days = daysBetween(facts.oldestSentToClientAt, now);
+    if (days >= DAYS_BEFORE_A_CHANGE_IS_CHASED) {
+      reasons.push({
+        kind: "change-awaiting-client",
+        says: `A change request has been with the client ${days} days`,
+        rank: RANK["change-awaiting-client"],
+      });
     }
   }
 
