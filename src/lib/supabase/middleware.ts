@@ -18,7 +18,10 @@ import type { Database } from "./database.types";
  * ends: we texted local businesses a link that took them straight to a staff
  * sign-in screen.
  */
-export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer"] as const;
+// /w is what a printed weed QR opens: a homeowner in their own garden as
+// often as a crew member, and a sign-in wall there makes the printed code
+// worthless.
+export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/w"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

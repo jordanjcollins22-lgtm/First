@@ -38,6 +38,11 @@ const DESTINATIONS: readonly Destination[] = [
     label: "Labels & codes",
     description: "QR stickers for stock, and the print sheet.",
   },
+  {
+    href: "/admin/weeds",
+    label: "Weed Guide",
+    description: "Client sheet and crew reference, each weed scannable.",
+  },
 ];
 
 export function PrintMenu() {

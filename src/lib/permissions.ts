@@ -78,6 +78,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup", parent: "tools" },
   { key: "labels", label: "Labels & Codes", href: "/admin/labels", parent: "tools" },
   { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
+  { key: "weeds", label: "Weed Guide", href: "/admin/weeds", parent: "tools" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
@@ -111,6 +112,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/jobs/[jobId]/directions":
     "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page — " +
     "it shows a property address, which anybody who can open the job can already see.",
+  "/admin/weeds/sheet":
+    "The printed weed guide, at its own URL so it can be opened in a tab and printed. Guarded by the " +
+    "Weed Guide tab like the page it is reached from — it is the same sixty-three plants, laid out for " +
+    "paper.",
   "/jobs/[jobId]/work-order":
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +

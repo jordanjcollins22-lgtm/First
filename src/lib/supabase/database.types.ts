@@ -736,6 +736,63 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["flyer_ad_spots"]["Row"]>;
         Relationships: [];
       };
+      /** The weed guide's plants: one list, printed two ways. */
+      weeds: {
+        Row: {
+          id: string;
+          organization_id: string;
+          slug: string;
+          common_name: string;
+          scientific_name: string;
+          weed_group: string;
+          on_client_sheet: boolean;
+          /** Six characters of the stock-label alphabet, printed under the photo. */
+          code: string;
+          /** The one photo that goes on paper. */
+          print_photo_id: string | null;
+          /** What to do before treating it; shared with the prep checklist. */
+          prep: string | null;
+          position: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["weeds"]["Row"]> & {
+          organization_id: string;
+          slug: string;
+          common_name: string;
+          scientific_name: string;
+          weed_group: string;
+          code: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["weeds"]["Row"]>;
+        Relationships: [];
+      };
+      weed_photos: {
+        Row: {
+          id: string;
+          organization_id: string;
+          weed_id: string;
+          path: string;
+          caption: string | null;
+          credit: string | null;
+          position: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["weed_photos"]["Row"]> & {
+          organization_id: string;
+          weed_id: string;
+          path: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["weed_photos"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "weed_photos_weed_id_fkey";
+            columns: ["weed_id"];
+            referencedRelation: "weeds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       hanger_routes: {
         Row: {
           id: string;
@@ -2914,6 +2971,16 @@ export interface Database {
       /** The doors inside a drawn shape, one row each, for the walker's sheet. */
       houses_door_list: {
         Args: { org: string; ring: Json | null; zips: Json | null; designs?: number; max_rows?: number };
+        Returns: Json;
+      };
+      /** The weed guide as it ships, put in for a business that has none. */
+      weeds_install: {
+        Args: { org: string; rows: Json };
+        Returns: number;
+      };
+      /** One weed for the page its printed QR opens. Readable without a login. */
+      weed_by_code: {
+        Args: { the_code: string };
         Returns: Json;
       };
       /** Every mappable house as [lng, lat, stageRank], in one JSON value. */

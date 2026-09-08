@@ -271,3 +271,38 @@ body {
     height: 11in !important;
   }
 }
+
+/* ------------------------------------------------------------------
+   The weed guide.
+
+   Two sheets from one list: the client's four across, big enough to
+   recognise a weed from the kerb, and the crew's five across with the
+   scientific names. Neither is a fixed number of pages — a business that
+   takes six weeds off the client sheet should get a shorter sheet, not a
+   blank half-page — so the browser paginates and the rules here only say
+   what must not be broken across a page.
+   ------------------------------------------------------------------ */
+@media print {
+  .weed-sheet {
+    width: 8.5in;
+    padding: 0.4in 0.35in;
+  }
+
+  /* A weed split down the middle by a page break is two useless halves: the
+     photo on one page and the name on the next. */
+  .weed-cell {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* A heading alone at the foot of a page sends the crew to the wrong list. */
+  .weed-group-head {
+    break-after: avoid;
+    page-break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .weed-group {
+    break-before: auto;
+  }
+}
