@@ -8,9 +8,10 @@ import { ModuleShell, holdsAny } from "@/components/module-shell";
 // had them, so this move cannot change what anybody can see.
 import PipelinePage from "@/app/(app)/pipeline/page";
 import LeadsPage from "@/app/(app)/leads/page";
-import EvaluationsPage from "@/app/(app)/evaluations/page";
 import ProposalsPage from "@/app/(app)/proposals/page";
 import ContactsPage from "@/app/(app)/contacts/page";
+import { listSalesEvaluations } from "@/lib/data/sales-evaluations";
+import { EvaluationBuckets } from "@/components/sales/evaluation-buckets";
 
 /**
  * Selling, in the order it happens.
@@ -40,7 +41,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       content={{
         ...(pipeline ? { pipeline: <PipelinePage /> } : {}),
         ...(leads ? { leads: <LeadsPage /> } : {}),
-        ...(evaluations ? { evaluations: <EvaluationsPage /> } : {}),
+        ...(evaluations
+          ? {
+              evaluations: (
+                <EvaluationBuckets evaluations={await listSalesEvaluations().catch(() => [])} now={new Date().toISOString()} />
+              ),
+            }
+          : {}),
         ...(proposals ? { proposals: <ProposalsPage /> } : {}),
         ...(clients ? { clients: <ContactsPage /> } : {}),
       }}

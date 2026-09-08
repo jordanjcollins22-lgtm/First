@@ -23,7 +23,7 @@ import { WeatherMap } from "@/components/weather/weather-map";
  * Schedule shows it beside the forecast; this page shows it above one. Both
  * render this, so there is one calendar and not two that drift.
  */
-export async function CalendarTab() {
+export async function CalendarTab({ section = "all" }: { section?: "all" | "calendar" | "booking" } = {}) {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
@@ -52,6 +52,7 @@ export async function CalendarTab() {
 
   return (
     <MyEvaluationsContent
+      section={section}
       schedule={schedule}
       calendars={calendarData?.[0]}
       teamMembers={calendarData?.[1].map((p) => ({ id: p.id, name: p.full_name || p.email }))}

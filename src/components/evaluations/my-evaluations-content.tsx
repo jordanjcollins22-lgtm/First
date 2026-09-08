@@ -7,15 +7,28 @@ import { MyBookingLink } from "@/components/booking/booking-links-panel";
 import type { MyScheduleData } from "@/lib/data/my-schedule";
 import type { CalendarWithMembers } from "@/types/domain";
 
-/** The full Calendar page content — shared by /evaluations and the
- * homepage (for team members without New Property access) so they're always
- * exactly the same page, not two things that can drift apart. */
+/**
+ * A part of the Calendar page, or all of it.
+ *
+ * Shared by /evaluations, the Schedule module and the homepage (for team
+ * members without New Property access) so they are always exactly the same
+ * page, not things that can drift apart.
+ *
+ * Schedule shows the grid and the booking links as separate tabs, which they
+ * separate into cleanly -- they are two components sitting side by side here.
+ * Availability deliberately does not separate: the weekly hours and the days
+ * off are drawn on the calendar grid itself, inside EvaluationsView, which is
+ * where somebody looks at them. Pulling them out would mean rewriting the
+ * grid to satisfy a tab, and would leave a person checking who is free on a
+ * different screen from the one showing what they are booked on.
+ */
 export async function MyEvaluationsContent({
   schedule,
   calendars,
   teamMembers,
   bookingLinks,
   myBookingLink,
+  section = "all",
 }: {
   schedule: MyScheduleData;
   /** Admin-only calendar management, shown inline under the schedule. */
@@ -24,6 +37,8 @@ export async function MyEvaluationsContent({
   bookingLinks?: BookingLinksData;
   /** The viewer's own affiliate link, if they have one. */
   myBookingLink?: string | null;
+  /** Which half to draw. "all" is the whole page, as it was. */
+  section?: "all" | "calendar" | "booking";
 }) {
   const {
     profile,
@@ -62,14 +77,25 @@ export async function MyEvaluationsContent({
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="mb-1 text-2xl font-bold">{isAdmin ? "Team Calendar" : "My Calendar"}</h1>
-      <p className="mb-6 text-muted-foreground">
-        {isAdmin
-          ? "Every evaluation across the team — who, where, when, and status."
-          : "Evaluations assigned to you — where to go, when, and your progress on each one."}
-      </p>
-      <JobBriefings briefings={briefings} />
-      <EvaluationsView
+      {section === "booking" ? (
+        <>
+          <h1 className="mb-1 text-2xl font-bold">Booking</h1>
+          <p className="mb-6 text-muted-foreground">
+            The links clients use to book themselves in, and the calendars those bookings land on.
+          </p>
+        </>
+      ) : (
+        <>
+          <h1 className="mb-1 text-2xl font-bold">{isAdmin ? "Team Calendar" : "My Calendar"}</h1>
+          <p className="mb-6 text-muted-foreground">
+            {isAdmin
+              ? "Every evaluation across the team — who, where, when, and status."
+              : "Evaluations assigned to you — where to go, when, and your progress on each one."}
+          </p>
+        </>
+      )}
+      {section !== "booking" && <JobBriefings briefings={briefings} />}
+      {section !== "booking" && <EvaluationsView
         overdue={overdue}
         upcoming={upcoming}
         past={past}
@@ -82,9 +108,9 @@ export async function MyEvaluationsContent({
         allDaysOff={allDaysOff}
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
-      />
-      {myBookingLink && <MyBookingLink link={myBookingLink} />}
-      {isAdmin && calendars && teamMembers && (
+      />}
+      {section !== "calendar" && myBookingLink && <MyBookingLink link={myBookingLink} />}
+      {section !== "calendar" && isAdmin && calendars && teamMembers && (
         <CalendarSettings calendars={calendars} teamMembers={teamMembers} bookingLinks={bookingLinks} />
       )}
     </div>

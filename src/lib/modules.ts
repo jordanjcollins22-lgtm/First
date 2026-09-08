@@ -83,8 +83,14 @@ export const MODULES: readonly AppModule[] = [
     href: "/schedule",
     question: "When does it happen?",
     subtabs: [
-      { key: "calendar", label: "Calendar", tabs: ["evaluations"], blurb: "Evaluations, work sessions, availability and booking links." },
+      // Availability is not a tab of its own on purpose: the weekly hours and
+      // the days off are drawn on the grid itself, which is where somebody
+      // looks at them. Separating them would mean rewriting the grid to
+      // satisfy a tab, and would put "who is free" on a different screen from
+      // "what they are booked on".
+      { key: "calendar", label: "Calendar", tabs: ["evaluations"], blurb: "Evaluations and work sessions, with everyone's hours and days off on the grid." },
       { key: "weather", label: "Weather", tabs: ["evaluations", "weather"], blurb: "What the forecasts agree on, and where they do not." },
+      { key: "booking", label: "Booking", tabs: ["evaluations"], blurb: "The links clients book themselves with, and the calendars those land on." },
     ],
   },
   {
