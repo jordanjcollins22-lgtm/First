@@ -104,9 +104,19 @@ export async function jobStanding(jobs: readonly BoardJob[]): Promise<JobStandin
     ...jobs.filter((job) => job.status === "completed").map((job) => job.id),
   ]);
 
-  for (const job of jobs) {
-    if (!worthAsking.has(job.id)) continue;
-    const facts = await jobFacts(job.id).catch(() => null);
+  // Asked together rather than one after another. Each job's facts are about
+  // ten reads, and in series that is the page sitting there while a hundred
+  // round trips go out one at a time.
+  const asked = jobs.filter((job) => worthAsking.has(job.id));
+  const gathered = await Promise.all(
+    asked.map(async (job) => ({
+      job,
+      facts: await jobFacts(job.id).catch(() => null),
+      invoicedAt: await jobInvoicedAt(job.id).catch(() => null),
+    }))
+  );
+
+  for (const { job, facts, invoicedAt } of gathered) {
     if (!facts) continue;
     const issues = byJob.get(job.id) ?? [];
 
@@ -131,7 +141,7 @@ export async function jobStanding(jobs: readonly BoardJob[]): Promise<JobStandin
         completedAt: job.completedAt,
         closeoutDone: closeout.open,
         balanceOutstanding: facts.balanceOutstanding,
-        invoicedAt: facts.invoiceRaised ? await jobInvoicedAt(job.id).catch(() => null) : null,
+        invoicedAt: facts.invoiceRaised ? invoicedAt : null,
         financialDisposition: facts.financialDisposition,
       },
       issues,

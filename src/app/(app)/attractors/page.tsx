@@ -110,7 +110,10 @@ export default async function AttractorsPage({
     ]);
   // The marketing to do, synced on the way in so a client who paid a
   // minute ago is already on it.
-  const marketing = await marketingState({ sync: true }).catch(() => ({ plays: [], reviews: [], defaults: [], autoApproved: 0 }));
+  // Read rather than synced, for the reason My Day gives: the sync can
+  // outrun the API's statement limit, and when it does this page silently
+  // shows no marketing at all. The cron keeps it fresh every five minutes.
+  const marketing = await marketingState({ sync: false }).catch(() => ({ plays: [], reviews: [], defaults: [], autoApproved: 0 }));
   // Which zones a person has approved for the map, and the app's own pass
   // over the rest once it has earned the trust.
   const approvals = await zoneApprovalState().catch(() => ({ zones: [], reviews: [], streak: 0, level: "ask_all" as const, autoApproved: 0 }));

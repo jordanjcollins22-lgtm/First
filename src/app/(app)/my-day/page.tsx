@@ -129,9 +129,15 @@ async function OfficeDay() {
     return [];
   });
 
-  // The marketing every evaluation and client set off, to tick off. Synced
-  // on the way in; allowed to fail on its own.
-  const marketing = await marketingState({ sync: true }).catch((err) => {
+  // The marketing every evaluation and client set off, to tick off.
+  //
+  // Read, not synced. The sync used to run here on every load and was timing
+  // out against the API's statement limit -- so opening the app meant waiting
+  // out the timeout before the page would draw, which is what "it will not
+  // open" looks like from the outside. The marketing-sync cron does the same
+  // work every five minutes and finishes in hundredths of a second, so the
+  // data on this page is at most five minutes old and costs nothing to show.
+  const marketing = await marketingState({ sync: false }).catch((err) => {
     console.error("Marketing plays failed to load:", err);
     return { plays: [], reviews: [], defaults: [], autoApproved: 0 };
   });
