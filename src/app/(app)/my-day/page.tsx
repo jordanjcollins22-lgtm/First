@@ -88,28 +88,48 @@ async function OfficeDay() {
     );
   }
 
-  let data: DashboardData | null = null;
-  try {
-    data = await getDashboard("today", new Date(), { forProfileId: profile.id });
-  } catch (err) {
-    console.error("My Day failed to load:", err);
-  }
-
-  // The forward-looking half: what is booked, what is owed, what is running.
-  // Same rows as the board above, read a different way.
-  const work: MyWork | null = await loadJobInputs({ forProfileId: profile.id })
-    .then((inputs) => buildMyWork(inputs))
-    .catch((err) => {
-      console.error("My work failed to load:", err);
-      return null;
-    });
-
-  // Their own book, loaded separately so a money table that isn't set up costs
-  // the commission panel rather than the whole day.
-  const commission: CommissionSummary | null = await getCommissionFor(profile).catch((err) => {
-    console.error("Commission failed to load:", err);
-    return null;
-  });
+  // Six reads, together rather than one after another.
+  //
+  // They do not depend on each other -- the board, the forward work, the
+  // book, the early starts, the marketing and the pulse are six separate
+  // questions about the same person -- and asked in series they were six
+  // round trips the page sat through end to end. Each still fails on its own:
+  // a money table that is not set up costs the commission panel and nothing
+  // else, which is why every one of them carries its own catch.
+  const [data, work, commission, earlyStarts, marketing, ops] = await Promise.all([
+    getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
+      console.error("My Day failed to load:", err);
+      return null as DashboardData | null;
+    }),
+    loadJobInputs({ forProfileId: profile.id })
+      .then((inputs) => buildMyWork(inputs))
+      .catch((err) => {
+        console.error("My work failed to load:", err);
+        return null as MyWork | null;
+      }),
+    getCommissionFor(profile).catch((err) => {
+      console.error("Commission failed to load:", err);
+      return null as CommissionSummary | null;
+    }),
+    pendingEarlyStarts().catch((err) => {
+      console.error("Early start requests failed to load:", err);
+      return [];
+    }),
+    // Read, not synced. The sync used to run here on every load and was
+    // timing out against the API's statement limit -- so opening the app
+    // meant waiting out the timeout before the page would draw, which is
+    // what "it will not open" looks like from the outside. The
+    // marketing-sync cron does the same work every five minutes and
+    // finishes in hundredths of a second.
+    marketingState({ sync: false }).catch((err) => {
+      console.error("Marketing plays failed to load:", err);
+      return { plays: [], reviews: [], defaults: [], autoApproved: 0 };
+    }),
+    opsState().catch((err) => {
+      console.error("The pulse failed to load:", err);
+      return null as OpsState | null;
+    }),
+  ]);
 
   if (!data) {
     return (
@@ -121,33 +141,6 @@ async function OfficeDay() {
       </div>
     );
   }
-
-  // Loaded on its own and allowed to fail on its own: a queue that needs a
-  // migration should cost this panel, not the whole day.
-  const earlyStarts = await pendingEarlyStarts().catch((err) => {
-    console.error("Early start requests failed to load:", err);
-    return [];
-  });
-
-  // The marketing every evaluation and client set off, to tick off.
-  //
-  // Read, not synced. The sync used to run here on every load and was timing
-  // out against the API's statement limit -- so opening the app meant waiting
-  // out the timeout before the page would draw, which is what "it will not
-  // open" looks like from the outside. The marketing-sync cron does the same
-  // work every five minutes and finishes in hundredths of a second, so the
-  // data on this page is at most five minutes old and costs nothing to show.
-  const marketing = await marketingState({ sync: false }).catch((err) => {
-    console.error("Marketing plays failed to load:", err);
-    return { plays: [], reviews: [], defaults: [], autoApproved: 0 };
-  });
-
-  // The pulse: what is off, what is coming, and what to work on first. Its
-  // own read, allowed to fail on its own.
-  const ops: OpsState | null = await opsState().catch((err) => {
-    console.error("The pulse failed to load:", err);
-    return null;
-  });
 
   const { summary } = data;
   const nothing =
