@@ -106,18 +106,34 @@ export interface GateResult {
  */
 export interface JobFacts {
   status: string;
+
+  /**
+   * Whether the job says what work is being done at all.
+   *
+   * Everything downstream depends on it: what needs measuring, what materials
+   * are needed, what tools. A job with no services is not a job needing no
+   * materials, it is a job nobody has described -- so this fails first and the
+   * checks that depend on it do not pretend to have an answer.
+   */
+  servicesDefined: boolean;
+  servicesSource: string;
+
+  /** Read off the accepted proposal, falling back to the job's status. */
   proposalAccepted: boolean;
+  proposalSource: string;
 
   /** Whether any service on this job is priced by measurement. */
   measurementRequired: boolean;
   measurementsPresent: boolean;
-  scopeDocumented: boolean;
 
   scheduled: boolean;
   crewAssigned: boolean;
-  workOrderReady: boolean;
 
-  /** Three-state, derived from stock and service requirements, or confirmed by hand. */
+  /** Whether the crew sheet can actually be produced for this job. */
+  workOrderReady: boolean;
+  workOrderSource: string;
+
+  /** Three-state, derived where it can be proved and confirmed by hand where not. */
   materials: ConfirmationState;
   materialsSource: string;
   equipment: ConfirmationState;
@@ -128,9 +144,13 @@ export interface JobFacts {
   /** Money required before the work starts, in cents. Zero means none is. */
   depositRequiredCents: number;
   depositReceivedCents: number;
+  depositSource: string;
 
-  beforePhotos: number;
+  /** Photos by the phase they were taken in, never by kind alone. */
+  evaluationPhotos: number;
+  preworkPhotos: number;
   afterPhotos: number;
+
   walkthroughDone: boolean;
   invoiceRaised: boolean;
   /** Null when there is no invoice, so nothing is known either way. */
@@ -170,6 +190,52 @@ function fromConfirmation(
 }
 
 /**
+ * The first question, and the one everything else waits on.
+ *
+ * A job with no services is not a job that needs no materials and no
+ * measuring -- it is a job nobody has described yet. Saying "measurements
+ * required" about it would be a guess dressed as a requirement, so this fails
+ * instead and the downstream checks stay quiet until it passes.
+ */
+function servicesCheck(facts: JobFacts): GateCheck {
+  return {
+    key: "services",
+    label: "Work and services defined",
+    applies: true,
+    passed: facts.servicesDefined,
+    blocking: true,
+    source: facts.servicesSource,
+    reason: "Nothing says what work this job is. Add the services on the Scope tab.",
+  };
+}
+
+/** Did the client accept? Asked of the proposal itself wherever there is one. */
+function acceptedCheck(facts: JobFacts): GateCheck {
+  return {
+    key: "accepted",
+    label: "Proposal accepted",
+    applies: true,
+    passed: facts.proposalAccepted,
+    blocking: true,
+    source: facts.proposalSource,
+    reason: "The client has not accepted the proposal.",
+  };
+}
+
+/** Money in, against money required before the work starts. */
+function depositCheck(facts: JobFacts, required: boolean): GateCheck {
+  return {
+    key: "deposit",
+    label: "Required payment satisfied",
+    applies: required,
+    passed: facts.depositReceivedCents >= facts.depositRequiredCents,
+    blocking: true,
+    source: facts.depositSource,
+    reason: `${money(facts.depositRequiredCents - facts.depositReceivedCents)} of the deposit is still outstanding.`,
+  };
+}
+
+/**
  * The checks each gate makes.
  *
  * `blocking` is the judgment call: only what actually stops a crew. Missing
@@ -183,77 +249,37 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
   switch (gate) {
     case "proposal":
       return [
+        servicesCheck(facts),
         {
           key: "measurements",
           label: "Measurements taken",
-          applies: facts.measurementRequired,
+          // Only once the work is described. An undefined job is not a job
+          // needing no measurements; the check above is what fails.
+          applies: facts.servicesDefined && facts.measurementRequired,
           passed: facts.measurementsPresent,
           blocking: true,
-          source: "The site plan, against the services being quoted",
+          source: "The site plan, against the pricing basis of the services sold",
           reason: "A service on this job is priced by measurement. Draw it on the Site plan tab.",
-        },
-        {
-          key: "scope",
-          label: "Scope written down",
-          applies: true,
-          passed: facts.scopeDocumented,
-          blocking: true,
-          source: "The job's scope",
-          reason: "Add what is being quoted on the Scope tab.",
         },
         {
           key: "eval-photos",
           label: "Photos from the evaluation",
           applies: true,
-          passed: facts.beforePhotos > 0,
+          passed: facts.evaluationPhotos > 0,
           blocking: false,
-          source: "Job photos marked 'before'",
-          reason: "No photos yet. A quote without them is harder to defend later.",
+          source: "Job photos taken during the evaluation",
+          reason: "No photos from the evaluation. A quote without them is harder to defend later.",
         },
       ];
 
     case "booking":
-      return [
-        {
-          key: "accepted",
-          label: "Proposal accepted",
-          applies: true,
-          passed: facts.proposalAccepted,
-          blocking: true,
-          source: "The proposal's status",
-          reason: "The client has not accepted the proposal.",
-        },
-        {
-          key: "deposit",
-          label: "Required payment satisfied",
-          applies: depositRequired,
-          passed: facts.depositReceivedCents >= facts.depositRequiredCents,
-          blocking: true,
-          source: "The payment plan's deposit, against payments received",
-          reason: `${money(facts.depositRequiredCents - facts.depositReceivedCents)} of the deposit is still outstanding.`,
-        },
-      ];
+      return [acceptedCheck(facts), depositCheck(facts, depositRequired)];
 
     case "ready":
       return [
-        {
-          key: "accepted",
-          label: "Proposal accepted",
-          applies: true,
-          passed: facts.proposalAccepted,
-          blocking: true,
-          source: "The proposal's status",
-          reason: "The client has not accepted the proposal.",
-        },
-        {
-          key: "deposit",
-          label: "Required payment satisfied",
-          applies: depositRequired,
-          passed: facts.depositReceivedCents >= facts.depositRequiredCents,
-          blocking: true,
-          source: "The payment plan's deposit, against payments received",
-          reason: `${money(facts.depositRequiredCents - facts.depositReceivedCents)} of the deposit is still outstanding.`,
-        },
+        servicesCheck(facts),
+        acceptedCheck(facts),
+        depositCheck(facts, depositRequired),
         {
           key: "scheduled",
           label: "Scheduled",
@@ -274,15 +300,15 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
         },
         fromConfirmation(
           "materials",
-          "Materials confirmed",
-          facts.materials,
+          "Materials confirmed for this job",
+          facts.servicesDefined ? facts.materials : "required_unconfirmed",
           facts.materialsSource,
           "Nobody has confirmed the materials for this job. Confirm them on the Plan tab."
         ),
         fromConfirmation(
           "equipment",
-          "Equipment confirmed",
-          facts.equipment,
+          "Equipment confirmed for this job",
+          facts.servicesDefined ? facts.equipment : "required_unconfirmed",
           facts.equipmentSource,
           "Nobody has confirmed the equipment for this job. Confirm it on the Plan tab."
         ),
@@ -299,8 +325,8 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
           applies: true,
           passed: facts.workOrderReady,
           blocking: false,
-          source: "The site plan",
-          reason: "The work order prints from the job, so this is a convenience, not a stopper.",
+          source: facts.workOrderSource,
+          reason: "The crew sheet cannot be produced yet. It is a convenience, not a stopper.",
         },
       ];
 
@@ -308,12 +334,15 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
       return [
         {
           key: "before-photos",
-          label: "Before photos taken",
+          label: "Before photos taken on site today",
           applies: true,
-          passed: facts.beforePhotos > 0,
+          // Deliberately not the evaluation's photos. Those were taken weeks
+          // ago; the point of these is documenting the ground as the crew
+          // found it this morning.
+          passed: facts.preworkPhotos > 0,
           blocking: true,
-          source: "Job photos marked 'before'",
-          reason: "Take the before photos on the Field tab before starting.",
+          source: "Job photos taken at the start of the work, not at the evaluation",
+          reason: "Photograph the site as you found it, on the Field tab, before starting.",
         },
         {
           key: "crew",

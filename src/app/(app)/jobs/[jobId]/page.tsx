@@ -790,7 +790,7 @@ async function OverviewTab(jobId: string, roles: string[]) {
 
 async function FieldTab(jobId: string, address: string | null, phone: string | null, roles: string[]) {
   const [facts, issues] = await Promise.all([jobFacts(jobId), listJobIssues(jobId).catch(() => [])]);
-  const scopeLines = facts.scopeDocumented ? ["See the site plan for the areas and measurements."] : [];
+  const scopeLines = facts.servicesDefined ? ["See the site plan for the areas and measurements."] : [];
   return (
     <FieldScreen
       jobId={jobId}

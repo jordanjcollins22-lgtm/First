@@ -16,7 +16,8 @@ import type { ConfirmationState } from "@/lib/readiness";
 export interface JobRequirements {
   /** Service type ids on the job, from the scope and what the client asked for. */
   serviceTypeIds: string[];
-  /** Any of them priced by measurement. */
+  servicesSource: string;
+  /** Any of them priced by measurement. Meaningless until services are known. */
   measurementRequired: boolean;
   materials: ConfirmationState;
   materialsSource: string;
@@ -51,32 +52,45 @@ function serviceIdsFrom(zones: unknown, requested: { service_type_id: string }[]
 }
 
 /**
- * Whether the stock behind a requirement is actually there.
+ * What the inventory can and cannot prove.
  *
- * On hand above its reorder threshold, or on order. Both are real evidence
- * from the inventory the business already keeps; neither is somebody's
- * assumption. Where a requirement exists and the stock is not there, the state
- * is `required_unconfirmed` -- which fails the gate, and is cleared either by
- * the stock arriving or by a manager confirming it by hand.
+ * It cannot prove enough. The reorder threshold answers "should we buy more
+ * mulch", not "are there forty bags set aside for the Henderson job", and
+ * treating the first as the second is how a crew arrives with three bags. The
+ * app has no per-job quantities and no reservations, so it cannot do the
+ * arithmetic, and it does not pretend to: a job with requirements is
+ * `required_unconfirmed` until a person confirms it, whatever the shelf says.
+ *
+ * The stock is still read, because it is worth telling that person what they
+ * are about to confirm -- "nothing on the shelf and nothing on order" is a
+ * different conversation from "plenty in stock". When
+ * `job_material_requirements.quantity_required` and reservations exist, this
+ * is where the proof goes and the confirmation becomes the exception.
+ *
+ * The only thing it settles on its own is the negative: no service on this job
+ * lists any, so there is nothing to confirm.
  */
 function stockState(
+  what: string,
   rows: { name: string; quantity: number | null; threshold: number | null; onOrder: boolean }[]
 ): { state: ConfirmationState; source: string } {
   if (rows.length === 0) {
-    return { state: "not_required", source: "No service on this job lists any" };
+    return { state: "not_required", source: `No service on this job lists any ${what}` };
   }
-  const short = rows.filter((row) => {
-    if (row.onOrder) return false;
-    const have = row.quantity ?? 0;
-    const floor = row.threshold ?? 0;
-    return have <= floor;
-  });
-  if (short.length === 0) {
-    return { state: "confirmed", source: `In stock or on order: ${rows.map((r) => r.name).join(", ")}` };
-  }
+  const bare = rows.filter((row) => !row.onOrder && (row.quantity ?? 0) <= 0);
+  const ordered = rows.filter((row) => row.onOrder);
+  const held = rows.filter((row) => !row.onOrder && (row.quantity ?? 0) > 0);
+
+  const notes: string[] = [];
+  if (bare.length > 0) notes.push(`none in stock and none on order: ${bare.map((r) => r.name).join(", ")}`);
+  if (ordered.length > 0) notes.push(`on order: ${ordered.map((r) => r.name).join(", ")}`);
+  if (held.length > 0) notes.push(`some in stock: ${held.map((r) => r.name).join(", ")}`);
+
   return {
     state: "required_unconfirmed",
-    source: `Not in stock and not on order: ${short.map((r) => r.name).join(", ")}`,
+    // Said plainly, because the person confirming needs to know the app is
+    // showing them evidence rather than an answer.
+    source: `${rows.length} needed by the services sold — ${notes.join("; ")}. Stock cannot prove enough for this job, so somebody has to confirm it.`,
   };
 }
 
@@ -96,14 +110,15 @@ export async function jobRequirements(jobId: string): Promise<JobRequirements> {
   if (serviceTypeIds.length === 0) {
     return {
       serviceTypeIds: [],
-      // Nothing is known about what this job sells, so nothing can be
-      // declared unnecessary: measuring is required until the scope says
-      // otherwise. Unknown is not "not needed" any more than it is "fine".
-      measurementRequired: true,
+      servicesSource: "Nothing on the scope and nothing the client asked for",
+      // Not "measurement required" -- that would be a guess dressed as a
+      // requirement. The services check is what fails; everything downstream
+      // waits for it rather than inventing an answer.
+      measurementRequired: false,
       materials: "required_unconfirmed",
-      materialsSource: "No services on the job yet, so nothing can be confirmed",
+      materialsSource: "The work is not described yet, so nothing can be worked out",
       equipment: "required_unconfirmed",
-      equipmentSource: "No services on the job yet, so nothing can be confirmed",
+      equipmentSource: "The work is not described yet, so nothing can be worked out",
     };
   }
 
@@ -130,6 +145,7 @@ export async function jobRequirements(jobId: string): Promise<JobRequirements> {
   ]);
 
   const materialState = stockState(
+    "materials",
     ((materials ?? []) as { name: string; quantity_on_hand: number | null; reorder_threshold: number | null; on_order: boolean | null }[]).map(
       (row) => ({
         name: row.name,
@@ -139,7 +155,11 @@ export async function jobRequirements(jobId: string): Promise<JobRequirements> {
       })
     )
   );
+  // Equipment is not a consumable. What matters is whether the machine can go
+  // to this job on the day, and the app has no assignment or reservation
+  // record to read that from -- so, like materials, it needs a person.
   const toolState = stockState(
+    "equipment",
     ((tools ?? []) as { name: string; quantity: number | null; reorder_threshold: number | null; on_order: boolean | null }[]).map(
       (row) => ({
         name: row.name,
@@ -152,6 +172,7 @@ export async function jobRequirements(jobId: string): Promise<JobRequirements> {
 
   return {
     serviceTypeIds,
+    servicesSource: `${serviceTypeIds.length} ${serviceTypeIds.length === 1 ? "service" : "services"} on the job`,
     measurementRequired,
     materials: materialState.state,
     materialsSource: materialState.source,

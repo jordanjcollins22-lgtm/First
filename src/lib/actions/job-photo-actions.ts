@@ -35,7 +35,19 @@ export async function attachJobPhoto(
   path: string,
   kind: JobPhotoKind,
   caption: string | null,
-  zone: { id: string; name: string } | null = null
+  zone: { id: string; name: string } | null = null,
+  /**
+   * When in the job's life this was taken.
+   *
+   * Separate from `kind`, and it has to be, because "before" cannot tell a
+   * photo from the evaluation apart from one taken on the morning the crew
+   * arrived. The readiness checks read this, never the kind: an evaluation
+   * photo must not let a crew start without documenting what they found.
+   *
+   * Left null only by callers written before phases existed; the fallback
+   * below is deliberately the cautious one.
+   */
+  phase: JobPhotoPhase | null = null
 ): Promise<AttachResult> {
   try {
     const profile = await getCurrentProfile();
@@ -56,6 +68,11 @@ export async function attachJobPhoto(
         organization_id: organizationId,
         path,
         kind,
+        // A caller that did not say gets the phase read off the job's own
+        // state: work under way means the crew is on site, anything earlier
+        // is the evaluation. Never the other way round -- guessing "prework"
+        // is what would let somebody skip the photo that matters.
+        phase: phase ?? (await phaseFor(jobId, kind)),
         zone_id: zone?.id ?? null,
         zone_name: zone?.name ?? null,
         caption: caption?.trim() || null,
@@ -213,4 +230,23 @@ export async function reopenCompletedJob(jobId: string): Promise<PhotoResult> {
     console.error("reopenCompletedJob failed:", err);
     return { ok: false, message: "Couldn't reopen that job." };
   }
+}
+
+export type JobPhotoPhase = "evaluation" | "prework" | "progress" | "after" | "issue";
+
+/**
+ * The phase a photo belongs to when the caller did not say.
+ *
+ * Read off where the job is: a "before" photo on a job that has not started is
+ * an evaluation photo, and one taken while the work is under way is the crew
+ * documenting the site. The cautious direction on purpose -- an evaluation
+ * photo miscounted as pre-work would let a crew start with no record of what
+ * they found, and that is the failure this whole distinction exists to stop.
+ */
+async function phaseFor(jobId: string, kind: string): Promise<JobPhotoPhase> {
+  if (kind === "after") return "after";
+  if (kind === "during") return "progress";
+  const supabase = await createClient();
+  const { data } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
+  return data?.status === "in_progress" ? "prework" : "evaluation";
 }

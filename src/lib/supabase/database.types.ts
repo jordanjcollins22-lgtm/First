@@ -2935,6 +2935,14 @@ export interface Database {
           organization_id: string;
           path: string;
           kind: string;
+          /**
+           * When in the job's life it was taken: evaluation | prework |
+           * progress | after | issue. Distinct from `kind`, which cannot tell
+           * a photo from the evaluation apart from one taken on the morning.
+           */
+          phase?: string | null;
+          /** The visit it was taken on, where there is one. */
+          work_session_id?: string | null;
           zone_id: string | null;
           zone_name: string | null;
           caption: string | null;

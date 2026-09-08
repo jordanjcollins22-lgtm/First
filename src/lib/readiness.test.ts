@@ -13,28 +13,37 @@ import {
 /** A job with everything actually confirmed — not merely uncomplained-about. */
 const READY_FACTS: JobFacts = {
   status: "approved",
+
+  servicesDefined: true,
+  servicesSource: "2 services on the job",
+
   proposalAccepted: true,
+  proposalSource: "The proposal's own status (accepted)",
 
   measurementRequired: true,
   measurementsPresent: true,
-  scopeDocumented: true,
 
   scheduled: true,
   crewAssigned: true,
+
   workOrderReady: true,
+  workOrderSource: "Date and services present",
 
   materials: "confirmed",
-  materialsSource: "In stock",
+  materialsSource: "Confirmed by hand",
   equipment: "confirmed",
-  equipmentSource: "In stock",
+  equipmentSource: "Confirmed by hand",
   access: "confirmed",
   accessSource: "Gate code on file",
 
   depositRequiredCents: 0,
   depositReceivedCents: 0,
+  depositSource: "No deposit is required",
 
-  beforePhotos: 2,
+  evaluationPhotos: 3,
+  preworkPhotos: 2,
   afterPhotos: 0,
+
   walkthroughDone: false,
   invoiceRaised: false,
   balanceOutstanding: null,
@@ -105,8 +114,8 @@ describe("unknown is not confirmed", () => {
   });
 
   it("says where the answer came from, so nobody has to guess what proved it", () => {
-    const result = evaluateGate("ready", facts({ materialsSource: "In stock or on order: Mulch" }));
-    expect(check(result, "materials")!.source).toBe("In stock or on order: Mulch");
+    const result = evaluateGate("ready", facts({ materialsSource: "Confirmed by hand on the Plan tab" }));
+    expect(check(result, "materials")!.source).toBe("Confirmed by hand on the Plan tab");
   });
 });
 
@@ -121,6 +130,24 @@ describe("a check the job does not need is not a check", () => {
     const result = evaluateGate("proposal", facts({ measurementRequired: false, measurementsPresent: false }));
     expect(check(result, "measurements")).toBeUndefined();
     expect(result.open).toBe(true);
+  });
+
+  it("fails on the work not being described rather than inventing a requirement", () => {
+    // A job with no services is not a job needing no materials. It is a job
+    // nobody has described, and saying "measurements required" about it would
+    // be a guess dressed as a requirement.
+    const result = evaluateGate("proposal", facts({ servicesDefined: false, measurementRequired: false }));
+    expect(check(result, "services")!.state).toBe("failed");
+    expect(check(result, "measurements")).toBeUndefined();
+    expect(result.open).toBe(false);
+  });
+
+  it("holds the confirmations shut until the work is described", () => {
+    // Even where the stock happens to say "confirmed", an undescribed job
+    // cannot have had its materials verified.
+    const result = evaluateGate("ready", facts({ servicesDefined: false, materials: "confirmed" }));
+    expect(check(result, "materials")!.state).toBe("failed");
+    expect(result.stoppers.map((c) => c.key)).toContain("services");
   });
 
   it("still asks for it where a service is priced by measurement", () => {
@@ -280,5 +307,53 @@ describe("the one-line version", () => {
 describe("the order of the gates", () => {
   it("carries every earlier gate", () => {
     expect(gatesUpTo("ready")).toEqual(["proposal", "booking", "ready"]);
+  });
+});
+
+describe("evaluation photos are not pre-work photos", () => {
+  it("does not let a photo from the evaluation start the job", () => {
+    // Taken weeks ago at the evaluation. The point of the pre-work photo is
+    // documenting the ground as the crew found it this morning.
+    const result = evaluateGate("start", facts({ evaluationPhotos: 6, preworkPhotos: 0 }));
+    expect(result.open).toBe(false);
+    expect(result.stoppers.map((c) => c.key)).toEqual(["before-photos"]);
+  });
+
+  it("opens once the crew has photographed the site on arrival", () => {
+    expect(evaluateGate("start", facts({ evaluationPhotos: 0, preworkPhotos: 1 })).open).toBe(true);
+  });
+
+  it("does not let a pre-work photo stand in for the evaluation's", () => {
+    const result = evaluateGate("proposal", facts({ evaluationPhotos: 0, preworkPhotos: 4 }));
+    expect(check(result, "eval-photos")!.state).toBe("warning");
+  });
+
+  it("counts after photos by phase too", () => {
+    expect(evaluateGate("closeout", facts({ afterPhotos: 0 })).open).toBe(false);
+    expect(evaluateGate("closeout", facts({ afterPhotos: 1 })).open).toBe(true);
+  });
+});
+
+describe("the proposal answers whether it was accepted", () => {
+  it("says which record settled it", () => {
+    const result = evaluateGate("ready", facts({ proposalSource: "The proposal's own status (accepted)" }));
+    expect(check(result, "accepted")!.source).toContain("proposal's own status");
+  });
+
+  it("says plainly when it fell back to the job's status", () => {
+    const result = evaluateGate(
+      "ready",
+      facts({ proposalSource: "No proposal record; falling back to the job's status" })
+    );
+    expect(check(result, "accepted")!.source).toContain("falling back");
+  });
+});
+
+describe("the crew sheet is its own question", () => {
+  it("does not pass merely because a site plan exists", () => {
+    const result = evaluateGate("ready", facts({ measurementsPresent: true, workOrderReady: false }));
+    expect(check(result, "work-order")!.state).toBe("warning");
+    // And still only a warning: it prints on demand.
+    expect(result.open).toBe(true);
   });
 });

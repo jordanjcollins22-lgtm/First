@@ -150,12 +150,20 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
         .eq("id", jobId)
         .maybeSingle(),
       supabase.from("job_crew").select("profile_id").eq("job_id", jobId),
-      supabase.from("job_photos").select("kind").eq("job_id", jobId),
+      supabase.from("job_photos").select("kind, phase").eq("job_id", jobId),
       supabase.from("canvas_designs").select("id, zones").eq("job_id", jobId).maybeSingle(),
       supabase.from("job_walkthroughs").select("status").eq("job_id", jobId).limit(50),
     ]);
 
-  const [requirements, { data: confirmations }, { data: plan }, { data: paid }, { data: invoice }, { data: disposition }] =
+  const [
+    requirements,
+    { data: confirmations },
+    { data: plan },
+    { data: paid },
+    { data: invoice },
+    { data: proposal },
+    { data: disposition },
+  ] =
     await Promise.all([
       jobRequirements(jobId),
       supabase.from("job_confirmations").select("kind, state").eq("job_id", jobId),
@@ -164,8 +172,15 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
         .select("deposit_cents, total_cents, status")
         .eq("job_id", jobId)
         .maybeSingle(),
-      supabase.from("payments").select("amount_cents").eq("job_id", jobId),
+      supabase.from("payments").select("amount_cents, received_at").eq("job_id", jobId),
       supabase.from("invoices").select("id, amount, status, paid_at, sent_at").eq("job_id", jobId).maybeSingle(),
+      supabase
+        .from("job_proposals")
+        .select("status, approved_at")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       supabase
         .from("job_financial_dispositions")
         .select("state")
@@ -174,7 +189,12 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
         .maybeSingle(),
     ]);
 
-  const kinds = ((photos ?? []) as { kind: string | null }[]).map((row) => row.kind);
+  // Photos are counted by the phase they were taken in, never by kind alone.
+  // A photo from the evaluation is not a photo of the ground as the crew
+  // found it this morning, and letting the first stand in for the second is
+  // how a job starts with no record of what it looked like beforehand.
+  const shots = (photos ?? []) as { kind: string | null; phase: string | null }[];
+  const inPhase = (phase: string) => shots.filter((row) => row.phase === phase).length;
   const zones = (design?.zones as unknown[] | null) ?? [];
   const status = (job?.status as string) ?? "estimating";
 
@@ -204,25 +224,53 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
   );
 
   const depositRequiredCents = Number(plan?.deposit_cents ?? 0);
-  const depositReceivedCents = ((paid ?? []) as { amount_cents: number | null }[]).reduce(
-    (sum, row) => sum + Number(row.amount_cents ?? 0),
-    0
-  );
+  // Only money actually recorded as received, and only against this job.
+  //
+  // The limitation, said out loud: the payments table has no status column
+  // and no reversal record -- a row exists when money was taken, and a
+  // refund or a chargeback has nowhere to be written. So this is the sum of
+  // recorded receipts, which overstates nothing today but would not know
+  // about a reversal if one happened. When payment states exist, they are
+  // filtered here.
+  const receipts = (paid ?? []) as { amount_cents: number | null; received_at: string | null }[];
+  const depositReceivedCents = receipts
+    .filter((row) => row.received_at != null)
+    .reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0);
 
   const settled = Boolean(invoice?.paid_at) || invoice?.status === "paid";
   const outstanding = invoice == null ? null : settled ? 0 : Number(invoice.amount ?? 0);
 
+  // The proposal itself is the strongest answer to "did the client accept".
+  // The job's status is the fallback for records written before proposals
+  // carried one, and it says which was used.
+  const proposalStatus = (proposal?.status as string | null) ?? null;
+  const acceptedByProposal = proposalStatus === "accepted" || Boolean(proposal?.approved_at);
+  const acceptedByStatus = ["approved", "in_progress", "completed"].includes(status);
+
+  // A crew sheet needs somewhere to go and something to do there. It renders
+  // from the job rather than being generated and stored, so this asks whether
+  // the job holds enough to render one -- not whether a site plan exists.
+  const workOrderReady = Boolean(job?.project_start_date) && requirements.serviceTypeIds.length > 0;
+
   return {
     status,
-    proposalAccepted: ["approved", "in_progress", "completed"].includes(status),
+
+    servicesDefined: requirements.serviceTypeIds.length > 0,
+    servicesSource: requirements.servicesSource,
+
+    proposalAccepted: acceptedByProposal || acceptedByStatus,
+    proposalSource: proposalStatus
+      ? `The proposal's own status (${proposalStatus})`
+      : "No proposal record; falling back to the job's status",
 
     measurementRequired: requirements.measurementRequired,
     measurementsPresent: zones.length > 0,
-    scopeDocumented: zones.length > 0 || requirements.serviceTypeIds.length > 0,
 
     scheduled: Boolean(job?.project_start_date),
     crewAssigned: Boolean(job?.assigned_to) || (crew ?? []).length > 0,
-    workOrderReady: zones.length > 0,
+
+    workOrderReady,
+    workOrderSource: "Whether the job has a date and services to render a crew sheet from",
 
     materials: materials.state,
     materialsSource: materials.source,
@@ -233,9 +281,14 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
 
     depositRequiredCents,
     depositReceivedCents,
+    depositSource:
+      depositRequiredCents > 0
+        ? "The payment plan's deposit, against receipts recorded on this job"
+        : "No deposit is required by the payment plan",
 
-    beforePhotos: kinds.filter((kind) => kind === "before").length,
-    afterPhotos: kinds.filter((kind) => kind === "after").length,
+    evaluationPhotos: inPhase("evaluation"),
+    preworkPhotos: inPhase("prework"),
+    afterPhotos: inPhase("after"),
     walkthroughDone: ((walkthrough ?? []) as { status: string }[]).some((row) => row.status === "completed"),
     invoiceRaised: Boolean(invoice?.id),
     balanceOutstanding: outstanding,
