@@ -17,6 +17,7 @@ import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
 import { jobFacts, listGateOverrides, listJobIssues } from "@/lib/data/issues";
 import { evaluateGate } from "@/lib/readiness";
 import { canOverrideGate } from "@/lib/affiliate-roles";
+import { visibilityFor } from "@/lib/roles";
 import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
 import { FieldScreen } from "@/components/job/field-screen";
 import { IssuesPanel } from "@/components/issues/issues-panel";
@@ -381,6 +382,12 @@ export default async function JobPage({
   // the job: one phone number, in the place a phone number belongs.
   const clientPhone = job.property?.customers?.phone ?? null;
 
+  // What this person is given, decided once. A project lead runs the job and
+  // needs every measurement on it; what the client is paying is not theirs,
+  // and the honest way to withhold it is not to put it in the answer. A
+  // hidden panel is not a permission -- anybody can open the network tab.
+  const seen = visibilityFor(viewer?.roles ?? []);
+
   const outstanding = outstandingFor({
     stage,
     evaluationBooked: Boolean(job.evaluation_date),
@@ -488,7 +495,7 @@ export default async function JobPage({
               </div>
             ),
           },
-          {
+          ...(!seen.jobMoney ? [] : [{
             id: "proposal",
             title: "Proposal",
             hint: proposal ? (proposalViewHint ?? proposal.status) : "Not built yet",
@@ -510,7 +517,7 @@ export default async function JobPage({
                 }
               />
             ),
-          },
+          }]),
           {
             id: "schedule",
             title: "Schedule",
@@ -650,7 +657,7 @@ export default async function JobPage({
               </div>
             ),
           },
-          {
+          ...(!seen.jobMoney ? [] : [{
             id: "payment",
             title: "Payment",
             hint: `${paymentPlans.length} plan${paymentPlans.length === 1 ? "" : "s"}`,
@@ -666,14 +673,14 @@ export default async function JobPage({
                 {(can.invoice.available || invoice) && <InvoicePanel invoice={invoice} />}
               </div>
             ),
-          },
-          {
+          }]),
+          ...(!seen.jobMoney ? [] : [{
             id: "invoice",
             title: "Invoice",
             hint: invoice ? "Raised" : "Not raised",
             lockedReason: can.invoice.available || invoice ? null : "Not until the work is done.",
             body: <InvoicePanel invoice={invoice} />,
-          },
+          }]),
           {
             id: "messages",
             title: "Notes and client conversation",
