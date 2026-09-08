@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canOverrideGate,
   canSeeMoney,
   isAccountManager,
   isCrew,
@@ -82,5 +83,19 @@ describe("whose business the money is", () => {
     expect(canSeeMoney(["account manager"])).toBe(false);
     expect(canSeeMoney(["evaluator"])).toBe(false);
     expect(canSeeMoney([])).toBe(false);
+  });
+});
+
+describe("who may override a failed gate check", () => {
+  it("is the people who answer for the job going wrong", () => {
+    expect(canOverrideGate(["admin"])).toBe(true);
+    expect(canOverrideGate(["owner"])).toBe(true);
+    expect(canOverrideGate(["Manager"])).toBe(true);
+  });
+
+  it("is not the crew, who raise an issue instead", () => {
+    expect(canOverrideGate(["crew"])).toBe(false);
+    expect(canOverrideGate(["evaluator"])).toBe(false);
+    expect(canOverrideGate([])).toBe(false);
   });
 });

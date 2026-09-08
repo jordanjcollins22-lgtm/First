@@ -13,8 +13,14 @@ import { getProposalForJob } from "@/lib/data/proposals";
 import { viewsForJob } from "@/lib/data/proposal-views";
 import { settleProposalForJob } from "@/lib/actions/proposal-settlement";
 import { JobSummary } from "@/components/job/job-summary";
-import { JobSections } from "@/components/job/job-sections";
 import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
+import { jobFacts, listGateOverrides, listJobIssues } from "@/lib/data/issues";
+import { evaluateGate } from "@/lib/readiness";
+import { canOverrideGate } from "@/lib/affiliate-roles";
+import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
+import { FieldScreen } from "@/components/job/field-screen";
+import { IssuesPanel } from "@/components/issues/issues-panel";
+import { ReadinessPanel } from "@/components/readiness/readiness-panel";
 import { activityLabel, isWarm } from "@/lib/proposal-views";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
@@ -64,11 +70,14 @@ import { serviceLabelFor } from "@/lib/zone-scope";
 
 export default async function JobPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ jobId: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { jobId } = await params;
+  const { view } = (await searchParams) ?? {};
 
   // Reachable from Project Data, the calendar and the pipeline — anyone who
   // can see the job in one of those can open it. Assignment counts too: a
@@ -438,8 +447,13 @@ export default async function JobPage({
 
       <JobSummary items={outstanding} />
 
-      <JobSections
+      <JobTabbedSections
+        initialTab={view}
         defaultOpen={sectionToOpen(outstanding)}
+        overview={await OverviewTab(jobId, viewer?.roles ?? [])}
+        field={await FieldTab(jobId, job.property?.address ?? null, viewer?.roles ?? [])}
+        issues={await IssuesTab(jobId, viewer?.roles ?? [])}
+        closeout={await CloseoutTab(jobId, viewer?.roles ?? [])}
         sections={[
           {
             id: "map",
@@ -728,6 +742,69 @@ export default async function JobPage({
         ]}
       />
 
+    </div>
+  );
+}
+
+/**
+ * What is stopping this job, first thing.
+ *
+ * Not a status but the checks themselves, so somebody reading NOT READY knows
+ * which one thing to go and fix.
+ */
+async function OverviewTab(jobId: string, roles: string[]) {
+  const [facts, issues, overrides] = await Promise.all([
+    jobFacts(jobId),
+    listJobIssues(jobId).catch(() => []),
+    listGateOverrides(jobId).catch(() => ({}) as Awaited<ReturnType<typeof listGateOverrides>>),
+  ]);
+  // Which gate matters depends on where the job is: quoting work is judged on
+  // whether it can be quoted, sold work on whether it can start, and work in
+  // hand on whether it can be closed.
+  const gate = facts.status === "estimating" ? "proposal" : facts.status === "approved" ? "ready" : "closeout";
+  const result = evaluateGate(gate, facts, issues, overrides[gate] ?? []);
+  return <ReadinessPanel jobId={jobId} result={result} canOverride={canOverrideGate(roles)} />;
+}
+
+async function FieldTab(jobId: string, address: string | null, roles: string[]) {
+  const [facts, issues] = await Promise.all([jobFacts(jobId), listJobIssues(jobId).catch(() => [])]);
+  const scopeLines = facts.scopeDocumented ? ["See the site plan for the areas and measurements."] : [];
+  return (
+    <FieldScreen
+      jobId={jobId}
+      address={address}
+      scopeLines={scopeLines}
+      clientPhone={null}
+      issues={issues}
+      canDecideBlocking={canOverrideGate(roles)}
+    />
+  );
+}
+
+async function IssuesTab(jobId: string, roles: string[]) {
+  const issues = await listJobIssues(jobId).catch(() => []);
+  return <IssuesPanel jobId={jobId} issues={issues} canDecideBlocking={canOverrideGate(roles)} />;
+}
+
+/** The gate between "the field work looks done" and "this job is closed". */
+async function CloseoutTab(jobId: string, roles: string[]) {
+  const [facts, issues, overrides] = await Promise.all([
+    jobFacts(jobId),
+    listJobIssues(jobId).catch(() => []),
+    listGateOverrides(jobId).catch(() => ({}) as Awaited<ReturnType<typeof listGateOverrides>>),
+  ]);
+  return (
+    <div className="space-y-3">
+      <ReadinessPanel
+        jobId={jobId}
+        result={evaluateGate("closeout", facts, issues, overrides.closeout ?? [])}
+        canOverride={canOverrideGate(roles)}
+      />
+      <ReadinessPanel
+        jobId={jobId}
+        result={evaluateGate("completed", facts, issues, overrides.completed ?? [])}
+        canOverride={canOverrideGate(roles)}
+      />
     </div>
   );
 }

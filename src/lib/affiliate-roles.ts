@@ -62,3 +62,18 @@ export function isFieldOnly(roles: string[]): boolean {
   if (roles.length === 0) return false;
   return !roles.some(isOfficeRole);
 }
+
+/**
+ * Who may override a failed gate check.
+ *
+ * Deliberately narrow. An override lets a job past a check that is genuinely
+ * failing, so it belongs to whoever answers for the job going wrong -- not to
+ * whoever happens to be standing in the garden when the gate is locked. A crew
+ * member raises an issue instead, which is the honest record of the same
+ * situation.
+ */
+const OVERRIDE_ROLES = ["admin", "owner", "manager"];
+
+export function canOverrideGate(roles: string[]): boolean {
+  return roles.some((role) => OVERRIDE_ROLES.includes(normalizeRole(role)));
+}

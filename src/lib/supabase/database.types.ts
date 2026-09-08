@@ -2808,6 +2808,79 @@ export interface Database {
           },
         ];
       };
+      /** One way to say something is wrong on a job. */
+      job_issues: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          customer_id: string | null;
+          property_id: string | null;
+          type: string;
+          severity: string;
+          title: string;
+          description: string | null;
+          status: string;
+          owner_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          due_at: string | null;
+          /** Its own field, not read off the severity: a manager can decide otherwise. */
+          blocking: boolean;
+          blocking_stage: string | null;
+          resolution: string | null;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_issues"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          type: string;
+          severity: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_issues"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_issues_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** A failed check somebody took responsibility for letting past. */
+      job_gate_overrides: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          gate: string;
+          check_key: string;
+          reason: string;
+          overridden_by: string | null;
+          overridden_at: string;
+          withdrawn_at: string | null;
+          withdrawn_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_gate_overrides"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          gate: string;
+          check_key: string;
+          reason: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_gate_overrides"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "job_gate_overrides_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       job_photos: {
         Row: {
           id: string;

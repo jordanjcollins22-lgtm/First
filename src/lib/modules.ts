@@ -99,13 +99,15 @@ export const MODULES: readonly AppModule[] = [
     href: "/jobs",
     question: "How do we perform and close the work?",
     subtabs: [
-      // Ready and Needs attention are not here yet on purpose: Ready is the
-      // answer to a set of pre-start checks and Needs attention is the open
-      // blocking issues, and neither exists. A tab that shows the wrong jobs
-      // is worse than a missing one -- somebody would drive to a job this
-      // screen called Ready.
+      // Ready and Needs attention are computed every time they are asked,
+      // never stored: Ready is the answer to the pre-start checks, and Needs
+      // attention is the open blocking issues. Neither is a status somebody
+      // sets, so neither can be left switched on after the fact it described
+      // has gone away.
       { key: "upcoming", label: "Upcoming", tabs: ["job-detail"], blurb: "Sold work, scheduled or waiting to be." },
+      { key: "ready", label: "Ready", tabs: ["job-detail"], blurb: "Every pre-start check passing and nothing blocking. Safe to send a crew." },
       { key: "active", label: "Active", tabs: ["job-detail"], blurb: "Being worked on now." },
+      { key: "attention", label: "Needs attention", tabs: ["job-detail"], blurb: "Something unresolved is stopping these, whatever else they are." },
       { key: "completed", label: "Completed", tabs: ["job-detail"], blurb: "Finished work." },
     ],
   },

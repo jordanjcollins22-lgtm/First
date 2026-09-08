@@ -16,17 +16,30 @@ function when(value: string | null): string {
  * row is the link, so a thumb finds it on a phone without hunting for the job
  * number.
  */
-export function JobBoardList({ jobs, view }: { jobs: BoardJob[]; view: JobView }) {
+export function JobBoardList({
+  jobs,
+  view,
+  waiting,
+  empty,
+}: {
+  jobs: BoardJob[];
+  view: JobView;
+  /** Why a job is not ready, by job id. Shown on the row where it is known. */
+  waiting?: Map<string, string>;
+  /** What to say when there is nothing, where the view has its own words. */
+  empty?: string;
+}) {
   const rows = sortForView(jobs, view);
 
   if (rows.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        {view === "upcoming"
+        {empty ??
+          (view === "upcoming"
           ? "No sold work waiting. Accepted proposals land here."
           : view === "active"
             ? "Nothing being worked on right now."
-            : "No finished jobs yet."}
+            : "No finished jobs yet.")}
       </p>
     );
   }
@@ -49,6 +62,11 @@ export function JobBoardList({ jobs, view }: { jobs: BoardJob[]; view: JobView }
               <span className="block truncate text-xs text-muted-foreground">
                 {job.address ?? "No address"} · {job.name}
               </span>
+              {waiting?.get(job.id) && (
+                <span className="mt-0.5 block truncate text-xs text-amber-700 dark:text-amber-400">
+                  {waiting.get(job.id)}
+                </span>
+              )}
             </span>
             <span className="shrink-0 text-right text-xs text-muted-foreground">
               <span className="block">{when(view === "completed" ? job.completedAt : job.startsOn)}</span>
