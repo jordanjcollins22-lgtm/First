@@ -105,6 +105,8 @@ export interface OpsTargets {
   marketingShare: number;
   autoRamp: boolean;
   leverCosts: Partial<Record<LeverKey, number>>;
+  /** Hours a week the owner wants to be down to. Their number, not a benchmark. */
+  ownerHoursPerWeek: number;
 }
 
 export const DEFAULT_TARGETS: OpsTargets = {
@@ -117,6 +119,7 @@ export const DEFAULT_TARGETS: OpsTargets = {
   marketingShare: 0.25,
   autoRamp: true,
   leverCosts: {},
+  ownerHoursPerWeek: 5,
 };
 
 /** What a job is worth to the business once the crew and materials are paid. */

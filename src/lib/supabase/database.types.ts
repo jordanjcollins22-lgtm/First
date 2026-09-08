@@ -1226,6 +1226,7 @@ export interface Database {
           marketing_share: number;
           auto_ramp: boolean;
           lever_costs: Json;
+          owner_hours_per_week: number;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["ops_targets"]["Row"]> & { organization_id: string };
@@ -3278,6 +3279,29 @@ export interface Database {
           },
         ];
       };
+      /** Time the owner (or anybody senior) lost to the work, by category. */
+      owner_interventions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          occurred_on: string;
+          minutes: number;
+          category: string;
+          job_id: string | null;
+          note: string | null;
+          recorded_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["owner_interventions"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          minutes: number;
+          category: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["owner_interventions"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -3388,6 +3412,18 @@ export interface Database {
           blocking_exceptions: number;
           awaiting_review: number;
           awaiting_client: number;
+        }[];
+      };
+      /** Owner time and owner-only decisions, by week. */
+      owner_intervention_load: {
+        Args: { org: string; weeks?: number };
+        Returns: {
+          week_start: string;
+          logged_minutes: number;
+          entries: number;
+          top_category: string | null;
+          top_category_minutes: number;
+          owner_touches: number;
         }[];
       };
       houses_in_bbox: {

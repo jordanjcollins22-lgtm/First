@@ -60,6 +60,12 @@ export const MODULES: readonly AppModule[] = [
     subtabs: [
       { key: "today", label: "Today", tabs: [], blurb: "Your evaluations, jobs, calls and follow-ups." },
       { key: "attention", label: "Needs attention", tabs: [], blurb: "What is stuck, and what it is waiting on." },
+      // Behind the same permission as Business, which nobody has been granted
+      // and so falls to admins -- and the page narrows it again to owner-level.
+      // "Am I still the bottleneck" is nobody's question but the person
+      // answerable for it, and a door that opens on somebody else's screen is
+      // worse than no door.
+      { key: "growth", label: "Growth", tabs: ["dashboard"], blurb: "Five numbers, the one thing in the way, and one button." },
       { key: "business", label: "Business", tabs: ["dashboard"], blurb: "The pulse, the targets and the money." },
       { key: "alerts", label: "Alerts", tabs: [] },
     ],

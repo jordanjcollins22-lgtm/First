@@ -21,6 +21,9 @@ import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
 import { PageTabs } from "@/components/ui/page-tabs";
+import { GrowthView } from "@/components/growth/growth-view";
+import { growthView } from "@/lib/data/growth";
+import { isOwnerLevel } from "@/lib/roles";
 import { isTwilioConfigured } from "@/lib/env";
 import { getMyNotificationSettings } from "@/lib/data/notification-preferences";
 import { NotificationSettings } from "@/components/notifications/notification-settings";
@@ -68,6 +71,17 @@ export default async function MyDayPage() {
       <PageTabs
         tabs={[
           { key: "day", label: "My Day", content: day },
+          // Owner-level only, and not because the numbers are secret -- they
+          // are on Business too. It is that the question this tab answers is
+          // "is the business getting better and what is in my way", which is
+          // nobody's question but the person answerable for it.
+          {
+            key: "growth",
+            label: "Growth",
+            visible: isOwnerLevel(viewer?.roles ?? []),
+            blurb: "Five numbers, the one thing in the way, and one button.",
+            content: isOwnerLevel(viewer?.roles ?? []) ? await GrowthTab() : null,
+          },
           // Personal settings on the personal screen. They were a nav entry
           // of their own for something nobody opens twice a year.
           { key: "alerts", label: "Alerts", content: await AlertsTab() },
@@ -362,5 +376,36 @@ async function AlertsTab() {
         channels={settings.channels}
       />
     </div>
+  );
+}
+
+/**
+ * The owner's Sunday-night screen.
+ *
+ * Every number is read off the same assessment the Business tab uses, so the
+ * two can never disagree about a figure they both show. It fails on its own:
+ * a pulse that has not been computed costs this tab and nothing else on the
+ * page.
+ */
+async function GrowthTab() {
+  const view = await growthView().catch((err) => {
+    console.error("Growth view failed to load:", err);
+    return null;
+  });
+  if (!view) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        The business pulse has not been computed yet, so there is nothing honest to show here.
+      </p>
+    );
+  }
+  return (
+    <GrowthView
+      kpis={view.kpis}
+      bottleneck={view.bottleneck}
+      weeks={view.weeks}
+      ownerHoursTarget={view.ownerHoursTarget}
+      canSetTarget
+    />
   );
 }

@@ -61,6 +61,7 @@ interface TargetsRow {
   marketing_share: number;
   auto_ramp: boolean;
   lever_costs: Partial<Record<LeverKey, number>> | null;
+  owner_hours_per_week?: number | string | null;
 }
 
 export function targetsFromRow(row: TargetsRow | null): OpsTargets {
@@ -75,6 +76,7 @@ export function targetsFromRow(row: TargetsRow | null): OpsTargets {
     marketingShare: Number(row.marketing_share),
     autoRamp: Boolean(row.auto_ramp),
     leverCosts: row.lever_costs ?? {},
+    ownerHoursPerWeek: row.owner_hours_per_week == null ? DEFAULT_TARGETS.ownerHoursPerWeek : Number(row.owner_hours_per_week),
   };
 }
 
