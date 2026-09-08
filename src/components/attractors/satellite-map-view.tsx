@@ -30,7 +30,7 @@ import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
 import { renderHouseCard, renderHouseCardLoading, type HouseFacts } from "@/lib/house-facts";
 import { matchesHighlight, type PointHighlight } from "@/lib/house-highlight";
-import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, MODE_WHY, modeOf, type ZoneProperties } from "@/lib/zones";
+import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, MODE_WHY, modeOf, walkRunsOf, type WalkLine, type ZoneProperties } from "@/lib/zones";
 import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
 if (env.mapboxToken) {
@@ -271,8 +271,7 @@ interface WalkAnswer {
     path_km: number | null;
     est_minutes: number | null;
     walk_path: { lat: number; lng: number }[] | null;
-    /** [lng, lat] along the streets walked; null when no street reaches the zone. */
-    walk_line: [number, number][] | null;
+    walk_line: WalkLine;
     park_point: { lat: number; lng: number } | null;
     start_address: string | null;
   };
@@ -289,17 +288,20 @@ async function showWalk(map: mapboxgl.Map, zoneId: string) {
   const path = zone.walk_path ?? [];
   const park = zone.park_point;
   // The line is the streets walked; only a zone no street reaches falls
-  // back to door-to-door straight lines.
-  const streets = Array.isArray(zone.walk_line) && zone.walk_line.length > 1 ? zone.walk_line : null;
-  const coords: [number, number][] = streets ?? [
-    ...(park ? [[park.lng, park.lat] as [number, number]] : []),
-    ...path.map((p) => [p.lng, p.lat] as [number, number]),
-    ...(park ? [[park.lng, park.lat] as [number, number]] : []),
+  // back to door-to-door straight lines. Where no road joins two parts of
+  // a zone the round comes back in pieces, and the gap between them is
+  // left blank rather than drawn through whatever is in the way.
+  const runs = walkRunsOf(zone.walk_line) ?? [
+    [
+      ...(park ? [[park.lng, park.lat] as [number, number]] : []),
+      ...path.map((p) => [p.lng, p.lat] as [number, number]),
+      ...(park ? [[park.lng, park.lat] as [number, number]] : []),
+    ],
   ];
   line.setData({
     type: "FeatureCollection",
     features: [
-      { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: zone.id } },
+      { type: "Feature", geometry: { type: "MultiLineString", coordinates: runs }, properties: { id: zone.id } },
       ...path.map((p, i) => ({
         type: "Feature" as const,
         geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
@@ -332,6 +334,11 @@ function zoneCard(props: ZoneProperties): string {
     : `<span style="color:#666">Not rated yet</span>`;
   const time = props.minutes ? `${formatMinutes(props.minutes)} for one person, or ${crewFor(props.minutes)} people in a half-day` : "";
   const hard = props.walkability === "hard" && props.reason ? `<div style="color:#c2410c">${escapeHtml(props.reason)}</div>` : "";
+  // No road joins the parts of this zone, so the round is drawn in pieces
+  // and the walker drives between them. Several means it wants splitting.
+  const breaks = props.breaks
+    ? `<div style="color:#a16207">${props.breaks === 1 ? "One gap" : `${props.breaks} gaps`} with no road across${props.jumpKm ? `, ${props.jumpKm} km of driving` : ""}</div>`
+    : "";
   return (
     `<div style="font:400 12.5px/1.35 system-ui;max-width:300px">` +
     `<div style="font-weight:600;font-size:13px">Zone ${escapeHtml(props.name)}</div>` +
@@ -339,6 +346,7 @@ function zoneCard(props: ZoneProperties): string {
     `<div>${props.houses.toLocaleString()} doors · ${props.pathKm ?? "?"} km of path${props.clients ? ` · <b>${props.clients} client${props.clients === 1 ? "" : "s"}</b>` : ""}</div>` +
     (time ? `<div style="color:#666">${escapeHtml(time)}</div>` : "") +
     hard +
+    breaks +
     (props.startAddress ? `<div style="color:#666">Park by the route, start at ${escapeHtml(props.startAddress)}</div>` : "") +
     `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
     `<button type="button" data-act="walk" style="padding:4px 8px;border-radius:6px;background:#1d4ed8;color:#fff;font:500 12px system-ui">Show the walk</button>` +
@@ -936,6 +944,8 @@ export function SatelliteMapView({
           clients: Number(raw.clients) || 0,
           minutes: raw.minutes == null ? null : Number(raw.minutes),
           pathKm: raw.pathKm == null ? null : Number(raw.pathKm),
+          breaks: raw.breaks == null ? 0 : Number(raw.breaks),
+          jumpKm: raw.jumpKm == null ? 0 : Number(raw.jumpKm),
         };
         // A roof inside the zone is a house first; the zone's card is for the
         // ground between them.

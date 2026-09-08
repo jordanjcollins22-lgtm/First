@@ -770,6 +770,10 @@ export interface Database {
           walk_path: Json | null;
           walk_line?: Json | null;
           walked_at?: string | null;
+          /** Gaps in the round: places no road joins, driven rather than walked. */
+          walk_breaks?: number | null;
+          /** How far those gaps are, together, in metres. */
+          walk_jump_m?: number | null;
           /** A split part's own wave; the route's wave otherwise. */
           wave_id?: string | null;
           approval?: string;

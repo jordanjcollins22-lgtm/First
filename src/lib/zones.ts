@@ -53,6 +53,28 @@ export interface ZoneProperties {
   active?: boolean;
   /** Marketing plays still to do in it. */
   open?: number;
+  /** Gaps in the round: places no road joins, driven rather than walked. */
+  breaks?: number;
+  /** How far those gaps are, together, in kilometres. */
+  jumpKm?: number;
+}
+
+/**
+ * The streets of a round: [lng, lat] along them, or a list of those when
+ * no road joins two parts of a zone. Null when no street reaches it.
+ */
+export type WalkLine = [number, number][] | [number, number][][] | null;
+
+/**
+ * The walked streets as a list of runs. One run is the whole round; more
+ * than one means the road network breaks and the walker drives between
+ * them, so nothing is drawn across the gap.
+ */
+export function walkRunsOf(walkLine: WalkLine): [number, number][][] | null {
+  if (!Array.isArray(walkLine) || walkLine.length === 0) return null;
+  const nested = Array.isArray(walkLine[0]) && Array.isArray((walkLine[0] as unknown[])[0]);
+  const runs = (nested ? (walkLine as [number, number][][]) : [walkLine as [number, number][]]).filter((run) => run.length > 1);
+  return runs.length > 0 ? runs : null;
 }
 
 /** "3 h 40 min", "45 min". */
