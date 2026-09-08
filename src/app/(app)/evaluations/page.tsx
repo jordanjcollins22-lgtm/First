@@ -17,7 +17,13 @@ import {
 import { ForecastStrip } from "@/components/weather/forecast-strip";
 import { WeatherMap } from "@/components/weather/weather-map";
 
-export default async function EvaluationsPage() {
+/**
+ * The calendar half on its own.
+ *
+ * Schedule shows it beside the forecast; this page shows it above one. Both
+ * render this, so there is one calendar and not two that drift.
+ */
+export async function CalendarTab() {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
@@ -45,16 +51,22 @@ export default async function EvaluationsPage() {
   ]);
 
   return (
-    <div className="px-4 py-4 sm:py-6">
-      <PageTabs
-        tabs={[
-          { key: "calendar", label: "Calendar", content: <MyEvaluationsContent
+    <MyEvaluationsContent
       schedule={schedule}
       calendars={calendarData?.[0]}
       teamMembers={calendarData?.[1].map((p) => ({ id: p.id, name: p.full_name || p.email }))}
       bookingLinks={booking.bookingLinks}
       myBookingLink={booking.myBookingLink}
-    /> },
+    />
+  );
+}
+
+export default async function EvaluationsPage() {
+  return (
+    <div className="px-4 py-4 sm:py-6">
+      <PageTabs
+        tabs={[
+          { key: "calendar", label: "Calendar", content: await CalendarTab() },
           // You check the forecast to decide what to book, so it belongs next
           // to what is booked rather than on a page of its own.
           { key: "weather", label: "Weather", content: await WeatherTab() },
@@ -64,7 +76,7 @@ export default async function EvaluationsPage() {
   );
 }
 
-async function WeatherTab() {
+export async function WeatherTab() {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">

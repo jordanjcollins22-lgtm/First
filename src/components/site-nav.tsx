@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { Menu, Plus, X } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
 import { isFieldOnly } from "@/lib/affiliate-roles";
-import { moreTabs, primaryNav } from "@/lib/nav-groups";
+import { navModules } from "@/lib/modules";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
@@ -46,16 +46,13 @@ export function SiteNav({
   const links = fieldOnly
     ? [{ href: "/my-day", label: "My Day" }]
     : [
-        // Never tab-gated: this shows the signed-in person their own work, so
-        // there is nothing a tick would be protecting.
-        { href: "/my-day", label: "My Day" },
-        ...primaryNav(allowedTabs).map((entry) => ({ href: entry.href, label: entry.label })),
+        // Six pieces of work rather than thirty-three pages. A module with
+        // nothing open inside it is left out entirely — a door that opens on
+        // a refusal is worse than no door.
+        ...navModules(allowedTabs).map((mod) => ({ href: mod.href, label: mod.label })),
         // Gated on the admin role itself, never on the table it edits —
         // otherwise one stray uncheck would take away the way back in.
         ...(roles.includes("admin") ? [{ href: "/admin/settings", label: "Settings" }] : []),
-        // The drawer. Only shown when there is something in it, because an
-        // empty More is a promise of more that is not there.
-        ...(moreTabs(allowedTabs).length > 0 ? [{ href: "/more", label: "More" }] : []),
       ];
 
   useEffect(() => {
@@ -80,11 +77,20 @@ export function SiteNav({
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-3 text-sm font-medium">
-      {/* One shortcut in the bar itself, and only where there's room for it.
-          The pipeline rather than a tool: it is the screen the office lives on. */}
-      {!fieldOnly && can("pipeline") && (
-        <Link href="/pipeline" className="hidden hover:text-primary sm:inline">
-          Pipeline
+      {/* The two things somebody reaches for without meaning to navigate:
+          starting the next job, and the messages waiting on them. Everything
+          else is a destination and lives in the menu. */}
+      {!fieldOnly && can("conversations") && (
+        <Link href="/conversations" aria-label="Inbox" className="hidden hover:text-primary sm:inline">
+          Inbox
+        </Link>
+      )}
+      {!fieldOnly && can("new-property") && (
+        <Link
+          href="/"
+          className="hidden items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-primary-foreground hover:bg-primary/90 sm:inline-flex"
+        >
+          <Plus className="h-4 w-4" /> New
         </Link>
       )}
 
