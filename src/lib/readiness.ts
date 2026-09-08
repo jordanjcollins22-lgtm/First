@@ -8,11 +8,22 @@
  * the list of checks with ticks and crosses against them, because a person
  * looking at NOT READY needs to know which one thing to go and fix.
  *
- * Two rules keep this honest.
+ * Three rules keep this honest.
  *
- * A check that fails is never quietly turned into a check that passed. Real
- * work needs exceptions -- the client rang and said the gate is open, use the
- * side path -- so a manager can override a failed check, and the override is a
+ * **Unknown is not confirmed.** A check that needs evidence and has none fails.
+ * It does not pass because nobody has reported a problem: "no material issue
+ * has been raised" and "the mulch is on the truck" are not the same sentence,
+ * and a crew must never be sent out on the first one. Every confirmation is
+ * three-state -- not required, required and unconfirmed, or confirmed -- and
+ * the middle state is a failure, not a shrug.
+ *
+ * **A check that does not apply is not a check.** A bush trim needs no square
+ * footage, so the measurement check does not fail on it, it does not appear.
+ * Applicability is read off the services the job actually sold.
+ *
+ * **A failing check is never quietly turned into a passing one.** Real work
+ * needs exceptions -- the client rang and said the gate is open, use the side
+ * path -- so a manager can override a failed check, and the override is a
  * record with their name, the time, the reason and which check it covers. The
  * check still reads as failed. It reads as failed *and overridden by Jordan at
  * 7:40am because the client confirmed access by phone*, which is the true
@@ -27,10 +38,23 @@ import { blockingStage, type BlockingStage, type Issue } from "@/lib/issues";
 
 export type GateKey = "proposal" | "booking" | "ready" | "start" | "closeout" | "completed";
 
+/**
+ * The three states every confirmation has.
+ *
+ * `required_unconfirmed` is the important one and the default. A job whose
+ * materials nobody has looked at is not a job whose materials are fine.
+ */
+export type ConfirmationState = "not_required" | "required_unconfirmed" | "confirmed";
+
+/** What a check came out as. */
+export type CheckState = "passed" | "failed" | "warning" | "not_required" | "overridden";
+
 export interface GateCheck {
   key: string;
   label: string;
   passed: boolean;
+  /** False when the job does not need this at all: it is not shown as failing. */
+  applies: boolean;
   /**
    * Whether failing it stops the job. A check that only warns is shown and
    * counted, and the gate opens anyway.
@@ -38,6 +62,8 @@ export interface GateCheck {
   blocking: boolean;
   /** What is wrong and what would fix it. Shown to the person, not logged. */
   reason?: string;
+  /** Where the answer came from, so nobody has to guess what proved it. */
+  source?: string;
 }
 
 export interface GateOverride {
@@ -54,11 +80,12 @@ export interface CheckResult extends GateCheck {
   override: GateOverride | null;
   /** Failed, and neither passing nor overridden: this is what is stopping it. */
   stopping: boolean;
+  state: CheckState;
 }
 
 export interface GateResult {
   gate: GateKey;
-  /** Every check, passed or not, in the order they are worth reading. */
+  /** Every check that applies, in the order they are worth reading. */
   checks: CheckResult[];
   /** Open issues holding this gate. */
   blockingIssues: Issue[];
@@ -70,24 +97,46 @@ export interface GateResult {
   stoppers: CheckResult[];
 }
 
-/** The facts a gate is decided from. Assembled by the data layer, judged here. */
+/**
+ * The facts a gate is decided from. Assembled by the data layer, judged here.
+ *
+ * Everything here is either read off an authoritative record -- the services
+ * sold, the stock, the payment plan, the payments received -- or is an
+ * explicit confirmation somebody made. Nothing is inferred from silence.
+ */
 export interface JobFacts {
   status: string;
   proposalAccepted: boolean;
-  depositSatisfied: boolean;
+
+  /** Whether any service on this job is priced by measurement. */
+  measurementRequired: boolean;
+  measurementsPresent: boolean;
+  scopeDocumented: boolean;
+
   scheduled: boolean;
   crewAssigned: boolean;
   workOrderReady: boolean;
-  materialsConfirmed: boolean;
-  accessConfirmed: boolean;
-  measurementsPresent: boolean;
-  scopeDocumented: boolean;
+
+  /** Three-state, derived from stock and service requirements, or confirmed by hand. */
+  materials: ConfirmationState;
+  materialsSource: string;
+  equipment: ConfirmationState;
+  equipmentSource: string;
+  access: ConfirmationState;
+  accessSource: string;
+
+  /** Money required before the work starts, in cents. Zero means none is. */
+  depositRequiredCents: number;
+  depositReceivedCents: number;
+
   beforePhotos: number;
   afterPhotos: number;
   walkthroughDone: boolean;
   invoiceRaised: boolean;
-  /** Optional, so a job with no money owed is not held up by a payment check. */
+  /** Null when there is no invoice, so nothing is known either way. */
   balanceOutstanding: number | null;
+  /** Set where somebody has decided what happens about an unpaid balance. */
+  financialDisposition: string | null;
 }
 
 const GATE_ORDER: readonly GateKey[] = ["proposal", "booking", "ready", "start", "closeout", "completed"];
@@ -101,37 +150,64 @@ export const GATE_LABEL: Record<GateKey, string> = {
   completed: "Fully closed",
 };
 
+/** A confirmation, as a check: unknown fails, and "not needed" is not a failure. */
+function fromConfirmation(
+  key: string,
+  label: string,
+  state: ConfirmationState,
+  source: string,
+  reason: string
+): GateCheck {
+  return {
+    key,
+    label,
+    applies: state !== "not_required",
+    passed: state === "confirmed",
+    blocking: true,
+    source,
+    reason,
+  };
+}
+
 /**
  * The checks each gate makes.
  *
- * `blocking` is the judgment call the brief asks for: only what actually stops
- * a crew. Measurements missing stops a proposal, because a quote without them
- * is a guess. Photos missing at closeout only warns, because the work is done
- * and chasing a photo is not a reason to leave a job open for a week.
+ * `blocking` is the judgment call: only what actually stops a crew. Missing
+ * measurements stop a proposal for a service priced by the square foot,
+ * because a quote without them is a guess -- and do not exist at all for a
+ * bush trim. A missing work order only warns, because it prints on demand.
  */
 function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
+  const depositRequired = facts.depositRequiredCents > 0;
+
   switch (gate) {
     case "proposal":
       return [
         {
           key: "measurements",
           label: "Measurements taken",
+          applies: facts.measurementRequired,
           passed: facts.measurementsPresent,
           blocking: true,
-          reason: "Draw the site plan on the job's Site plan tab.",
+          source: "The site plan, against the services being quoted",
+          reason: "A service on this job is priced by measurement. Draw it on the Site plan tab.",
         },
         {
           key: "scope",
           label: "Scope written down",
+          applies: true,
           passed: facts.scopeDocumented,
           blocking: true,
-          reason: "Add the services being quoted on the Scope tab.",
+          source: "The job's scope",
+          reason: "Add what is being quoted on the Scope tab.",
         },
         {
           key: "eval-photos",
           label: "Photos from the evaluation",
+          applies: true,
           passed: facts.beforePhotos > 0,
           blocking: false,
+          source: "Job photos marked 'before'",
           reason: "No photos yet. A quote without them is harder to defend later.",
         },
       ];
@@ -141,16 +217,20 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
         {
           key: "accepted",
           label: "Proposal accepted",
+          applies: true,
           passed: facts.proposalAccepted,
           blocking: true,
+          source: "The proposal's status",
           reason: "The client has not accepted the proposal.",
         },
         {
           key: "deposit",
           label: "Required payment satisfied",
-          passed: facts.depositSatisfied,
+          applies: depositRequired,
+          passed: facts.depositReceivedCents >= facts.depositRequiredCents,
           blocking: true,
-          reason: "The deposit or payment condition on this job is not met.",
+          source: "The payment plan's deposit, against payments received",
+          reason: `${money(facts.depositRequiredCents - facts.depositReceivedCents)} of the deposit is still outstanding.`,
         },
       ];
 
@@ -159,50 +239,67 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
         {
           key: "accepted",
           label: "Proposal accepted",
+          applies: true,
           passed: facts.proposalAccepted,
           blocking: true,
+          source: "The proposal's status",
           reason: "The client has not accepted the proposal.",
         },
         {
           key: "deposit",
           label: "Required payment satisfied",
-          passed: facts.depositSatisfied,
+          applies: depositRequired,
+          passed: facts.depositReceivedCents >= facts.depositRequiredCents,
           blocking: true,
-          reason: "The deposit or payment condition on this job is not met.",
+          source: "The payment plan's deposit, against payments received",
+          reason: `${money(facts.depositRequiredCents - facts.depositReceivedCents)} of the deposit is still outstanding.`,
         },
         {
           key: "scheduled",
           label: "Scheduled",
+          applies: true,
           passed: facts.scheduled,
           blocking: true,
+          source: "The job's start date",
           reason: "Give the job a start date on the Plan tab.",
         },
         {
           key: "crew",
           label: "Crew assigned",
+          applies: true,
           passed: facts.crewAssigned,
           blocking: true,
+          source: "The job's crew",
           reason: "Nobody is assigned. Add the crew on the Plan tab.",
         },
-        {
-          key: "materials",
-          label: "Materials confirmed",
-          passed: facts.materialsConfirmed,
-          blocking: true,
-          reason: "Confirm the materials are on hand or ordered.",
-        },
-        {
-          key: "access",
-          label: "Access confirmed",
-          passed: facts.accessConfirmed,
-          blocking: true,
-          reason: "Gate codes, parking and where the truck goes are not recorded.",
-        },
+        fromConfirmation(
+          "materials",
+          "Materials confirmed",
+          facts.materials,
+          facts.materialsSource,
+          "Nobody has confirmed the materials for this job. Confirm them on the Plan tab."
+        ),
+        fromConfirmation(
+          "equipment",
+          "Equipment confirmed",
+          facts.equipment,
+          facts.equipmentSource,
+          "Nobody has confirmed the equipment for this job. Confirm it on the Plan tab."
+        ),
+        fromConfirmation(
+          "access",
+          "Access confirmed",
+          facts.access,
+          facts.accessSource,
+          "Gate codes, parking and where the truck goes are not recorded. Confirm them on the Plan tab."
+        ),
         {
           key: "work-order",
           label: "Work order available",
+          applies: true,
           passed: facts.workOrderReady,
           blocking: false,
+          source: "The site plan",
           reason: "The work order prints from the job, so this is a convenience, not a stopper.",
         },
       ];
@@ -212,72 +309,86 @@ function checksFor(gate: GateKey, facts: JobFacts): GateCheck[] {
         {
           key: "before-photos",
           label: "Before photos taken",
+          applies: true,
           passed: facts.beforePhotos > 0,
           blocking: true,
+          source: "Job photos marked 'before'",
           reason: "Take the before photos on the Field tab before starting.",
         },
         {
           key: "crew",
           label: "Crew assigned",
+          applies: true,
           passed: facts.crewAssigned,
           blocking: true,
+          source: "The job's crew",
           reason: "Nobody is assigned to this job.",
         },
       ];
 
     case "closeout":
+      // Field work only. Nothing about money: the landscaping being finished
+      // and the bill being paid are different facts about different people.
       return [
         {
           key: "after-photos",
           label: "After photos taken",
+          applies: true,
           passed: facts.afterPhotos > 0,
           blocking: true,
+          source: "Job photos marked 'after'",
           reason: "Take the after photos on the Field tab.",
         },
         {
           key: "walkthrough",
           label: "Client walkthrough done",
+          applies: true,
           passed: facts.walkthroughDone,
           blocking: false,
+          source: "The job's walkthrough record",
           reason: "No walkthrough recorded. Note the exception if the client was not there.",
         },
       ];
 
     case "completed":
+      // The work is finished and billed. An unpaid balance does not hold this
+      // shut -- the landscaping really is done -- it keeps the job in Needs
+      // attention until it is settled or somebody records what happens about
+      // it. See attentionReasons.
       return [
         {
           key: "after-photos",
           label: "After photos taken",
+          applies: true,
           passed: facts.afterPhotos > 0,
           blocking: true,
+          source: "Job photos marked 'after'",
           reason: "Take the after photos on the Field tab.",
         },
         {
           key: "invoice",
           label: "Invoice raised",
+          applies: true,
           passed: facts.invoiceRaised,
           blocking: true,
+          source: "The job's invoice",
           reason: "Raise the invoice on the Billing tab.",
-        },
-        {
-          key: "balance",
-          label: "Balance settled",
-          // A job with nothing outstanding, and a job whose balance is
-          // unknown, both pass: chasing money is not what "the work is
-          // finished" means, and it warns rather than stops.
-          passed: facts.balanceOutstanding == null || facts.balanceOutstanding <= 0,
-          blocking: false,
-          reason: "There is still a balance on this job.",
         },
         {
           key: "walkthrough",
           label: "Client walkthrough done, or the exception noted",
+          applies: true,
           passed: facts.walkthroughDone,
           blocking: false,
+          source: "The job's walkthrough record",
           reason: "No walkthrough recorded.",
         },
       ];
   }
+}
+
+function money(cents: number): string {
+  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
 /** Which gates come before this one, so a later gate carries the earlier ones. */
@@ -289,9 +400,10 @@ export function gatesUpTo(gate: GateKey): GateKey[] {
 /**
  * One gate, judged.
  *
- * An override never turns a cross into a tick. It sits beside the failed check
- * and stops it stopping the job, and the check still reads as failed -- which
- * is the true thing, and is what somebody wants to see three weeks later.
+ * A check the job does not need is dropped rather than shown passing: a bush
+ * trim's readiness should not read "measurements taken ✓" when nothing was
+ * measured. An override never turns a cross into a tick; it sits beside the
+ * failed check and stops it stopping the job.
  */
 export function evaluateGate(
   gate: GateKey,
@@ -301,18 +413,24 @@ export function evaluateGate(
 ): GateResult {
   const byCheck = new Map(overrides.map((o) => [o.checkKey, o]));
 
-  const checks: CheckResult[] = checksFor(gate, facts).map((check) => {
-    const override = byCheck.get(check.key) ?? null;
-    return {
-      ...check,
-      override,
-      stopping: !check.passed && check.blocking && override == null,
-    };
-  });
+  const checks: CheckResult[] = checksFor(gate, facts)
+    .filter((check) => check.applies)
+    .map((check) => {
+      const override = byCheck.get(check.key) ?? null;
+      const stopping = !check.passed && check.blocking && override == null;
+      const state: CheckState = check.passed
+        ? "passed"
+        : override != null
+          ? "overridden"
+          : check.blocking
+            ? "failed"
+            : "warning";
+      return { ...check, override, stopping, state };
+    });
 
   const held = blockingStage(issues, gate as BlockingStage);
   const stoppers = checks.filter((check) => check.stopping);
-  const warnings = checks.filter((check) => !check.passed && !check.blocking);
+  const warnings = checks.filter((check) => check.state === "warning");
 
   return {
     gate,
@@ -327,9 +445,10 @@ export function evaluateGate(
 /**
  * Whether a job is Ready to start, in the sense the Jobs board means it.
  *
- * Sold work that has passed every blocking pre-start check and has no blocking
- * issue open. Nothing is stored: ask again after somebody confirms the mulch
- * and the answer changes on its own.
+ * Sold work, scheduled, with every applicable blocking pre-start check passed
+ * or formally overridden, every required confirmation actually made, and no
+ * blocking issue open against the Ready stage. Nothing is stored: ask again
+ * after somebody confirms the mulch and the answer changes on its own.
  */
 export function isReady(facts: JobFacts, issues: readonly Issue[], overrides: readonly GateOverride[]): boolean {
   if (facts.status !== "approved") return false;

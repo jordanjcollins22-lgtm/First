@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { Issue, IssueSeverity, IssueType, BlockingStage } from "@/lib/issues";
-import type { GateKey, GateOverride, JobFacts } from "@/lib/readiness";
+import type { ConfirmationState, GateKey, GateOverride, JobFacts } from "@/lib/readiness";
+import { jobRequirements } from "@/lib/data/job-requirements";
 
 interface IssueRow {
   id: string;
@@ -123,17 +124,25 @@ export async function listGateOverrides(jobId: string): Promise<Record<GateKey, 
 }
 
 /**
- * The facts a gate is decided from, gathered from what the job already holds.
+ * The facts a gate is decided from, gathered from what the business already
+ * knows.
  *
- * Nothing new is stored: every one of these is read off a record the app was
- * already keeping. Two are read off issues rather than a field of their own --
- * materials and access are confirmed by the absence of an open issue saying
- * they are not, which is how a crew already reports them.
+ * Every one of these comes from an authoritative record -- the services sold,
+ * the stock behind them, the payment plan, the payments received, the photos
+ * taken -- or from an explicit confirmation somebody made and signed. None of
+ * it is inferred from the absence of a complaint. "Nobody has reported a
+ * material problem" is not evidence that the mulch is on the truck, and a crew
+ * must never be sent out on it.
+ *
+ * A confirmation somebody made and a problem somebody later reported are both
+ * kept. The confirmation is not erased when an issue opens: the issue fails
+ * the gate on its own, and the record still shows that the materials were
+ * confirmed on Tuesday and that the supplier rang on Wednesday.
  */
 export async function jobFacts(jobId: string): Promise<JobFacts> {
   const supabase = await createClient();
 
-  const [{ data: job }, { data: crew }, { data: photos }, { data: issues }, { data: design }, { data: walkthrough }] =
+  const [{ data: job }, { data: crew }, { data: photos }, { data: design }, { data: walkthrough }] =
     await Promise.all([
       supabase
         .from("jobs")
@@ -142,43 +151,101 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
         .maybeSingle(),
       supabase.from("job_crew").select("profile_id").eq("job_id", jobId),
       supabase.from("job_photos").select("kind").eq("job_id", jobId),
-      supabase.from("job_issues").select("type, status").eq("job_id", jobId).eq("status", "open"),
       supabase.from("canvas_designs").select("id, zones").eq("job_id", jobId).maybeSingle(),
       supabase.from("job_walkthroughs").select("status").eq("job_id", jobId).limit(50),
     ]);
 
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("id, amount, status, paid_at")
-    .eq("job_id", jobId)
-    .maybeSingle();
+  const [requirements, { data: confirmations }, { data: plan }, { data: paid }, { data: invoice }, { data: disposition }] =
+    await Promise.all([
+      jobRequirements(jobId),
+      supabase.from("job_confirmations").select("kind, state").eq("job_id", jobId),
+      supabase
+        .from("payment_plans")
+        .select("deposit_cents, total_cents, status")
+        .eq("job_id", jobId)
+        .maybeSingle(),
+      supabase.from("payments").select("amount_cents").eq("job_id", jobId),
+      supabase.from("invoices").select("id, amount, status, paid_at, sent_at").eq("job_id", jobId).maybeSingle(),
+      supabase
+        .from("job_financial_dispositions")
+        .select("state")
+        .eq("job_id", jobId)
+        .is("cleared_at", null)
+        .maybeSingle(),
+    ]);
 
-  const openTypes = new Set(((issues ?? []) as { type: string }[]).map((row) => row.type));
   const kinds = ((photos ?? []) as { kind: string | null }[]).map((row) => row.kind);
   const zones = (design?.zones as unknown[] | null) ?? [];
   const status = (job?.status as string) ?? "estimating";
-  // An invoice marked paid owes nothing; one that is not owes its amount.
-  // No invoice at all is "not known", which warns rather than blocks.
+
+  // A hand confirmation always wins over the derived state, in both
+  // directions: somebody who has looked at the shelf knows more than the
+  // stock count does, and somebody who marks a job as needing no materials is
+  // telling the truth about a job the service list cannot describe.
+  const byKind = new Map(
+    ((confirmations ?? []) as { kind: string; state: string }[]).map((row) => [row.kind, row.state as ConfirmationState])
+  );
+  const confirmed = (kind: string, derived: ConfirmationState, source: string) => {
+    const hand = byKind.get(kind);
+    return hand
+      ? ({ state: hand, source: "Confirmed by hand on the Plan tab" } as const)
+      : ({ state: derived, source } as const);
+  };
+
+  const materials = confirmed("materials", requirements.materials, requirements.materialsSource);
+  const equipment = confirmed("equipment", requirements.equipment, requirements.equipmentSource);
+  // Access has no record anywhere else to read, so it starts as required and
+  // unconfirmed. That is the point: getting onto a property is not something
+  // to discover on the morning.
+  const access = confirmed(
+    "access",
+    "required_unconfirmed",
+    "Nobody has recorded gate codes, parking or where the truck goes"
+  );
+
+  const depositRequiredCents = Number(plan?.deposit_cents ?? 0);
+  const depositReceivedCents = ((paid ?? []) as { amount_cents: number | null }[]).reduce(
+    (sum, row) => sum + Number(row.amount_cents ?? 0),
+    0
+  );
+
   const settled = Boolean(invoice?.paid_at) || invoice?.status === "paid";
   const outstanding = invoice == null ? null : settled ? 0 : Number(invoice.amount ?? 0);
 
   return {
     status,
-    // Sold is sold: the proposal was accepted the moment the job left quoting.
     proposalAccepted: ["approved", "in_progress", "completed"].includes(status),
-    // An open payment issue is the only thing that says a deposit is missing.
-    depositSatisfied: !openTypes.has("payment"),
+
+    measurementRequired: requirements.measurementRequired,
+    measurementsPresent: zones.length > 0,
+    scopeDocumented: zones.length > 0 || requirements.serviceTypeIds.length > 0,
+
     scheduled: Boolean(job?.project_start_date),
     crewAssigned: Boolean(job?.assigned_to) || (crew ?? []).length > 0,
     workOrderReady: zones.length > 0,
-    materialsConfirmed: !openTypes.has("material") && !openTypes.has("equipment"),
-    accessConfirmed: !openTypes.has("access"),
-    measurementsPresent: zones.length > 0,
-    scopeDocumented: zones.length > 0,
+
+    materials: materials.state,
+    materialsSource: materials.source,
+    equipment: equipment.state,
+    equipmentSource: equipment.source,
+    access: access.state,
+    accessSource: access.source,
+
+    depositRequiredCents,
+    depositReceivedCents,
+
     beforePhotos: kinds.filter((kind) => kind === "before").length,
     afterPhotos: kinds.filter((kind) => kind === "after").length,
     walkthroughDone: ((walkthrough ?? []) as { status: string }[]).some((row) => row.status === "completed"),
     invoiceRaised: Boolean(invoice?.id),
     balanceOutstanding: outstanding,
+    financialDisposition: (disposition?.state as string | null) ?? null,
   };
+}
+
+/** When the bill went out, for judging how late a payment is. */
+export async function jobInvoicedAt(jobId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("invoices").select("sent_at, created_at").eq("job_id", jobId).maybeSingle();
+  return (data?.sent_at as string | null) ?? (data?.created_at as string | null) ?? null;
 }

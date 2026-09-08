@@ -2808,6 +2808,53 @@ export interface Database {
           },
         ];
       };
+      /** Positive evidence that something needed for a job is actually in hand. */
+      job_confirmations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          /** materials | equipment | access */
+          kind: string;
+          /** not_required | required_unconfirmed | confirmed */
+          state: string;
+          note: string | null;
+          confirmed_by: string | null;
+          confirmed_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_confirmations"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          kind: string;
+          state: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_confirmations"]["Row"]>;
+        Relationships: [];
+      };
+      /** What is happening about a balance nobody is going to pay in the ordinary way. */
+      job_financial_dispositions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          /** waived | written_off | refunded | payment_plan | disputed | collections */
+          state: string;
+          reason: string;
+          decided_by: string | null;
+          decided_at: string;
+          cleared_at: string | null;
+          cleared_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_financial_dispositions"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          state: string;
+          reason: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_financial_dispositions"]["Row"]>;
+        Relationships: [];
+      };
       /** One way to say something is wrong on a job. */
       job_issues: {
         Row: {

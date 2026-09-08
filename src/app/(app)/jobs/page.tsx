@@ -55,7 +55,16 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         ),
         active: <JobBoardList jobs={jobsInView(jobs, "active")} view="active" />,
         attention: (
-          <JobBoardList jobs={attention} view="upcoming" empty="Nothing is stuck. No blocking issues are open." />
+          <JobBoardList
+            jobs={attention}
+            view="upcoming"
+            waiting={
+              standing
+                ? new Map([...standing.why].map(([id, reasons]) => [id, reasons.map((r) => r.says).join(" · ")]))
+                : undefined
+            }
+            empty="Nothing is stuck. No blocking issues, and nothing overdue."
+          />
         ),
         completed: <JobBoardList jobs={jobsInView(jobs, "completed")} view="completed" />,
       }}

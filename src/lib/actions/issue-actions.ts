@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
-import { canOverrideGate } from "@/lib/affiliate-roles";
+import { canOverrideGate, canSeeMoney } from "@/lib/affiliate-roles";
 import { blocksByDefault, isBlockingStage, isIssueType, isSeverity } from "@/lib/issues";
 import { GATE_LABEL, type GateKey } from "@/lib/readiness";
 
@@ -227,6 +227,98 @@ export async function withdrawOverride(input: {
       .eq("gate", input.gate)
       .eq("check_key", input.checkKey)
       .is("withdrawn_at", null);
+    if (error) throw error;
+
+    touch(input.jobId);
+    return { ok: true, value: null };
+  } catch (err) {
+    return failed(err);
+  }
+}
+
+/**
+ * Somebody confirms a thing is actually in hand.
+ *
+ * This is the positive evidence the readiness engine wants, and it is
+ * deliberately a separate act from resolving an issue. A confirmation answers
+ * "have we verified what needs to be true"; an issue answers "is there a known
+ * problem". Both can be true at once: the materials were confirmed on Tuesday
+ * and the supplier rang on Wednesday, and the job stops for the second without
+ * the first being rubbed out.
+ */
+export async function setConfirmation(input: {
+  jobId: string;
+  kind: "materials" | "equipment" | "access";
+  state: "not_required" | "required_unconfirmed" | "confirmed";
+  note?: string | null;
+}): Promise<ActionResult<null>> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, error: "Not signed in." };
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("job_confirmations").upsert(
+      {
+        organization_id: profile.organization_id,
+        job_id: input.jobId,
+        kind: input.kind,
+        state: input.state,
+        note: input.note?.trim() || null,
+        confirmed_by: profile.id,
+        confirmed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "job_id,kind" }
+    );
+    if (error) throw error;
+
+    touch(input.jobId);
+    return { ok: true, value: null };
+  } catch (err) {
+    return failed(err);
+  }
+}
+
+/**
+ * What is happening about money the business is not going to be paid in the
+ * ordinary way.
+ *
+ * A balance does not stop a job being Completed -- the landscaping really is
+ * finished -- but it does not get to disappear either. It keeps the job in
+ * Needs attention until it is settled or until somebody records, here, that it
+ * is waived, written off, refunded, on a plan, disputed or with collections.
+ * There is no way to make it quiet by pretending it was paid.
+ */
+export async function setFinancialDisposition(input: {
+  jobId: string;
+  state: "waived" | "written_off" | "refunded" | "payment_plan" | "disputed" | "collections";
+  reason: string;
+}): Promise<ActionResult<null>> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, error: "Not signed in." };
+    if (!canSeeMoney(profile.roles ?? [])) {
+      return { ok: false, error: "Only somebody trusted with the money can decide what happens to a balance." };
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 4) return { ok: false, error: "Say why. This is kept on the job." };
+
+    const supabase = await createClient();
+    // The previous decision is closed rather than deleted: what the business
+    // decided in March is part of the job's history in June.
+    await supabase
+      .from("job_financial_dispositions")
+      .update({ cleared_at: new Date().toISOString(), cleared_by: profile.id })
+      .eq("job_id", input.jobId)
+      .is("cleared_at", null);
+
+    const { error } = await supabase.from("job_financial_dispositions").insert({
+      organization_id: profile.organization_id,
+      job_id: input.jobId,
+      state: input.state,
+      reason,
+      decided_by: profile.id,
+    });
     if (error) throw error;
 
     touch(input.jobId);

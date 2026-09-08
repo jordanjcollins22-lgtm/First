@@ -21,6 +21,7 @@ import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
 import { FieldScreen } from "@/components/job/field-screen";
 import { IssuesPanel } from "@/components/issues/issues-panel";
 import { ReadinessPanel } from "@/components/readiness/readiness-panel";
+import { ConfirmationsPanel } from "@/components/readiness/confirmations-panel";
 import { activityLabel, isWarm } from "@/lib/proposal-views";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
@@ -89,7 +90,7 @@ export default async function JobPage({
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
-    .select("*, property:properties(address, lat, lng, customers(id, name))")
+    .select("*, property:properties(address, lat, lng, customers(id, name, phone))")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -118,7 +119,7 @@ export default async function JobPage({
       address: string;
       lat: number;
       lng: number;
-      customers: { id: string; name: string } | null;
+      customers: { id: string; name: string; phone: string | null } | null;
     } | null;
   };
 
@@ -376,6 +377,10 @@ export default async function JobPage({
     photosByZone[zone] = [...(photosByZone[zone] ?? []), photo.kind];
   }
 
+  // The client's number, read off the customer record rather than copied onto
+  // the job: one phone number, in the place a phone number belongs.
+  const clientPhone = job.property?.customers?.phone ?? null;
+
   const outstanding = outstandingFor({
     stage,
     evaluationBooked: Boolean(job.evaluation_date),
@@ -451,7 +456,7 @@ export default async function JobPage({
         initialTab={view}
         defaultOpen={sectionToOpen(outstanding)}
         overview={await OverviewTab(jobId, viewer?.roles ?? [])}
-        field={await FieldTab(jobId, job.property?.address ?? null, viewer?.roles ?? [])}
+        field={await FieldTab(jobId, job.property?.address ?? null, clientPhone, viewer?.roles ?? [])}
         issues={await IssuesTab(jobId, viewer?.roles ?? [])}
         closeout={await CloseoutTab(jobId, viewer?.roles ?? [])}
         sections={[
@@ -763,10 +768,27 @@ async function OverviewTab(jobId: string, roles: string[]) {
   // hand on whether it can be closed.
   const gate = facts.status === "estimating" ? "proposal" : facts.status === "approved" ? "ready" : "closeout";
   const result = evaluateGate(gate, facts, issues, overrides[gate] ?? []);
-  return <ReadinessPanel jobId={jobId} result={result} canOverride={canOverrideGate(roles)} />;
+  return (
+    <div className="space-y-3">
+      <ReadinessPanel jobId={jobId} result={result} canOverride={canOverrideGate(roles)} />
+      {/* The way to clear a failing confirmation, on the screen that reports
+          it failing. */}
+      {gate === "ready" && (
+        <ConfirmationsPanel
+          jobId={jobId}
+          states={{ materials: facts.materials, equipment: facts.equipment, access: facts.access }}
+          sources={{
+            materials: facts.materialsSource,
+            equipment: facts.equipmentSource,
+            access: facts.accessSource,
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
-async function FieldTab(jobId: string, address: string | null, roles: string[]) {
+async function FieldTab(jobId: string, address: string | null, phone: string | null, roles: string[]) {
   const [facts, issues] = await Promise.all([jobFacts(jobId), listJobIssues(jobId).catch(() => [])]);
   const scopeLines = facts.scopeDocumented ? ["See the site plan for the areas and measurements."] : [];
   return (
@@ -774,7 +796,7 @@ async function FieldTab(jobId: string, address: string | null, roles: string[]) 
       jobId={jobId}
       address={address}
       scopeLines={scopeLines}
-      clientPhone={null}
+      clientPhone={phone}
       issues={issues}
       canDecideBlocking={canOverrideGate(roles)}
     />

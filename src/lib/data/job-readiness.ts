@@ -1,17 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
-import { needsAttention, type Issue, type IssueSeverity, type BlockingStage } from "@/lib/issues";
+import { type Issue, type IssueSeverity, type BlockingStage } from "@/lib/issues";
 import { evaluateGate, type GateOverride } from "@/lib/readiness";
-import { jobFacts } from "@/lib/data/issues";
+import { jobFacts, jobInvoicedAt } from "@/lib/data/issues";
+import { attentionReasons, type AttentionReason } from "@/lib/attention";
 import type { BoardJob } from "@/lib/job-board";
 
 export interface JobStanding {
-  /** Sold work with every blocking pre-start check passing. */
+  /** Sold work with every applicable blocking pre-start check passing. */
   ready: Set<string>;
-  /** Anything with an unresolved blocking or critical issue on it. */
+  /** Anything an issue or a derived reason says wants looking at. */
   attention: Set<string>;
-  /** What is stopping each job, for the row. */
+  /** What is stopping each job from being ready, for the row. */
   line: Map<string, string>;
+  /** Why each job is in Needs attention, in the words somebody would use. */
+  why: Map<string, AttentionReason[]>;
 }
 
 interface IssueRow {
@@ -58,11 +61,6 @@ export async function jobStanding(jobs: readonly BoardJob[]): Promise<JobStandin
     byJob.set(row.job_id, list);
   }
 
-  const attention = new Set<string>();
-  for (const [jobId, issues] of byJob) {
-    if (needsAttention(issues)) attention.add(jobId);
-  }
-
   const candidates = jobs.filter((job) => job.status === "approved");
   const { data: overrideData } = await supabase
     .from("job_gate_overrides")
@@ -93,20 +91,57 @@ export async function jobStanding(jobs: readonly BoardJob[]): Promise<JobStandin
 
   const ready = new Set<string>();
   const line = new Map<string, string>();
-  for (const job of candidates) {
+  const why = new Map<string, AttentionReason[]>();
+  const attention = new Set<string>();
+  const now = new Date().toISOString();
+
+  // Every job that could be ready, plus every job an issue already names, plus
+  // finished work that might still be owed for. Nothing else needs its facts
+  // read, and reading them is several queries a job.
+  const worthAsking = new Set<string>([
+    ...candidates.map((job) => job.id),
+    ...byJob.keys(),
+    ...jobs.filter((job) => job.status === "completed").map((job) => job.id),
+  ]);
+
+  for (const job of jobs) {
+    if (!worthAsking.has(job.id)) continue;
     const facts = await jobFacts(job.id).catch(() => null);
     if (!facts) continue;
-    const result = evaluateGate("ready", facts, byJob.get(job.id) ?? [], overridesByJob.get(job.id) ?? []);
-    if (result.open) ready.add(job.id);
-    else {
+    const issues = byJob.get(job.id) ?? [];
+
+    const result = evaluateGate("ready", facts, issues, overridesByJob.get(job.id) ?? []);
+    const isReadyNow = job.status === "approved" && result.open;
+    if (isReadyNow) ready.add(job.id);
+    else if (job.status === "approved") {
       const bits: string[] = [];
       if (result.stoppers.length > 0) bits.push(result.stoppers.map((c) => c.label).join(", "));
       if (result.blockingIssues.length > 0) {
         bits.push(`${result.blockingIssues.length} blocking ${result.blockingIssues.length === 1 ? "issue" : "issues"}`);
       }
-      line.set(job.id, `Waiting on: ${bits.join(" · ")}`);
+      if (bits.length > 0) line.set(job.id, `Waiting on: ${bits.join(" · ")}`);
+    }
+
+    const closeout = evaluateGate("closeout", facts, issues, []);
+    const reasons = attentionReasons(
+      {
+        status: facts.status,
+        startsOn: job.startsOn,
+        ready: isReadyNow,
+        completedAt: job.completedAt,
+        closeoutDone: closeout.open,
+        balanceOutstanding: facts.balanceOutstanding,
+        invoicedAt: facts.invoiceRaised ? await jobInvoicedAt(job.id).catch(() => null) : null,
+        financialDisposition: facts.financialDisposition,
+      },
+      issues,
+      now
+    );
+    if (reasons.length > 0) {
+      attention.add(job.id);
+      why.set(job.id, reasons);
     }
   }
 
-  return { ready, attention, line };
+  return { ready, attention, line, why };
 }
