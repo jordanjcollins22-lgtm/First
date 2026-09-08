@@ -14,7 +14,10 @@ describe("tiles", () => {
   it("asks Overpass for the ways a person can use", () => {
     const q = overpassQuery(tilesFor(HARFORD_BBOX, 1, 1)[0]);
     expect(q).toContain('way["highway"~"^(residential|');
-    expect(q).toContain("footway");
+    // Sidewalks and woodland trails are not roads a round is walked on.
+    expect(q).not.toContain("footway");
+    expect(q).not.toContain("path");
+    expect(q).not.toContain("cycleway");
     expect(q).not.toContain("motorway");
     expect(q).toContain("out geom;");
   });

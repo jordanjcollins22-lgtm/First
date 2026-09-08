@@ -53,6 +53,13 @@ function round6(v: number): number {
 /**
  * What a person on foot, a scooter or a van can use. Motorways and their
  * ramps are out; so are steps, and things that are not ways at all.
+ *
+ * Sidewalks, trails and cycleways are out too. A sidewalk is drawn as a
+ * piece every ten metres beside every street and outnumbers the streets
+ * four to one, for a line the walk already refuses to use; a path is
+ * usually a trail through the woods, which is the one place a door-hanger
+ * round must never go. Between them they were a quarter of every road in
+ * the county, stored and indexed for nothing.
  */
 export const ROAD_KINDS = [
   "residential",
@@ -70,9 +77,6 @@ export const ROAD_KINDS = [
   "track",
   "road",
   "pedestrian",
-  "footway",
-  "path",
-  "cycleway",
 ];
 
 export function overpassQuery(tile: Tile): string {
