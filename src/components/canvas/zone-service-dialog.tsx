@@ -13,7 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   extensionForImage,
+  fileFromDataUrl,
+  imageUrlFromHtml,
   imagesFromClipboard,
+  isDataImageUrl,
+  isFetchableImageUrl,
   pasteIsForTyping,
   readClipboardImages,
 } from "@/lib/pasted-images";
@@ -589,24 +593,63 @@ export function ZoneServiceDialog({
    * right screen for it". A paste into a box somebody is typing in belongs to
    * that box and is left alone.
    */
+  /**
+   * The picture a copied piece of a document was pointing at.
+   *
+   * Copying an image out of Google Docs, a web page or an email puts the HTML
+   * that held it on the clipboard and leaves the picture where it was, named
+   * by address. So the clipboard says there is no picture on it while the
+   * person doing the copying is looking straight at one, which is exactly what
+   * this looked like from the outside.
+   *
+   * A picture spelled out in the address is read here. One stored on somebody
+   * else's domain is fetched by our server, because the browser is not allowed
+   * to. See api/paste-image.
+   */
+  async function imageFromHtml(html: string): Promise<File[]> {
+    const url = imageUrlFromHtml(html);
+    if (!url) return [];
+    if (isDataImageUrl(url)) {
+      const file = fileFromDataUrl(url);
+      return file ? [file] : [];
+    }
+    if (!isFetchableImageUrl(url)) return [];
+    const response = await fetch(`/api/paste-image?url=${encodeURIComponent(url)}`, { cache: "no-store" });
+    if (!response.ok) return [];
+    const blob = await response.blob();
+    if (blob.size === 0) return [];
+    return [new File([blob], `pasted.${extensionForImage(blob.type)}`, { type: blob.type })];
+  }
+
   /** How many photographs the last paste put on, until it has been seen. */
   const [pasted, setPasted] = useState<number | null>(null);
   const pasteRef = useRef(uploadPhotos);
+  const htmlRef = useRef(imageFromHtml);
   useEffect(() => {
     pasteRef.current = uploadPhotos;
+    htmlRef.current = imageFromHtml;
   });
   useEffect(() => {
     if (!open) return;
     const onPaste = (event: ClipboardEvent) => {
       if (pasteIsForTyping(event.target)) return;
       const images = imagesFromClipboard(event.clipboardData);
-      if (images.length === 0) return;
+      const html = images.length === 0 ? (event.clipboardData?.getData("text/html") ?? "") : "";
+      if (images.length === 0 && !imageUrlFromHtml(html)) return;
       event.preventDefault();
       // Said, not jumped to. Moving somebody off the summary they were reading
       // to a step they then have to walk back from is a worse answer to "did
       // that work?" than telling them it worked.
-      setPasted(images.length);
-      void pasteRef.current(images);
+      setPasted(images.length || 1);
+      void (async () => {
+        const files = images.length > 0 ? images : await htmlRef.current(html);
+        if (files.length === 0) {
+          setPasted(null);
+          return;
+        }
+        setPasted(files.length);
+        await pasteRef.current(files);
+      })();
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -629,9 +672,26 @@ export function ZoneServiceDialog({
         setPhotoError("This browser won't let a button read the clipboard. Press Ctrl+V (Cmd+V on a Mac) instead.");
         return;
       }
-      const images = await readClipboardImages(await clipboard.read());
+      const entries = await clipboard.read();
+      let images = await readClipboardImages(entries);
+
       if (images.length === 0) {
-        setPhotoError("No picture on the clipboard. Copy one, then press Paste.");
+        // Nothing image-shaped, so look for a picture the copied markup was
+        // pointing at. This is the Google Docs case.
+        const holder = entries.find((entry) => entry.types.includes("text/html"));
+        if (holder) {
+          setPhotoError(null);
+          setPhotoUploading(true);
+          try {
+            images = await imageFromHtml(await (await holder.getType("text/html")).text());
+          } finally {
+            setPhotoUploading(false);
+          }
+        }
+      }
+
+      if (images.length === 0) {
+        setPhotoError("No picture on the clipboard. Copy the image itself, then press Paste.");
         return;
       }
       setPasted(images.length);
@@ -1256,7 +1316,8 @@ export function ZoneServiceDialog({
           {photoError && <p className="text-xs text-destructive">{photoError}</p>}
           <p className="text-[10px] text-muted-foreground">
             Photos already on your phone work too — no signal needed until you&apos;re back online to save. At a
-            desk, copy a picture from anywhere and press Paste, or Ctrl+V (Cmd+V on a Mac).
+            desk, copy a picture from anywhere and press Paste, or Ctrl+V (Cmd+V on a Mac). Copying it out of
+            a document works too.
           </p>
           {markPromptQueue.length > 0 && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">

@@ -127,3 +127,78 @@ export async function readClipboardImages(entries: readonly ClipboardEntry[]): P
   }
   return found;
 }
+
+/**
+ * The picture behind a copied piece of a document.
+ *
+ * Copying an image out of Google Docs, a web page or an email does not put an
+ * image on the clipboard at all. It puts the HTML that was holding the image,
+ * with the picture itself left where it was and referred to by address. So the
+ * clipboard says "no picture here" while the person doing the copying is
+ * looking straight at one.
+ *
+ * The address is in that HTML, and it is one of two things: the picture
+ * spelled out in the link itself, or a link to somewhere it is stored.
+ */
+export function imageUrlFromHtml(html: string): string | null {
+  const match = html.match(/<img\b[^>]*?\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  const raw = match?.[2] ?? match?.[3] ?? match?.[4];
+  if (!raw) return null;
+  // The HTML on a clipboard is HTML, so an ampersand in a query string arrives
+  // escaped and the address does not work until it is put back.
+  const url = raw.trim().replace(/&amp;/gi, "&").replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+  return url || null;
+}
+
+/** A picture spelled out in the address itself rather than stored somewhere. */
+export function isDataImageUrl(url: string): boolean {
+  return /^data:image\//i.test(url.trim());
+}
+
+/**
+ * A picture read out of a data address.
+ *
+ * Base64 only. The other encoding a data address can use is percent-escaping,
+ * which nothing puts a photograph in.
+ */
+export function fileFromDataUrl(url: string, name = "pasted"): File | null {
+  const match = url.trim().match(/^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i);
+  if (!match) return null;
+  const [, type, base64] = match;
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    if (bytes.length === 0) return null;
+    return new File([bytes], `${name}.${extensionForImage(type)}`, { type });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether an address is one we are willing to go and fetch.
+ *
+ * Somebody's clipboard is not a trusted source of addresses, and fetching one
+ * happens on our server with our network. So: only the public web over https,
+ * and nothing pointing back inside. A hostname with no dot in it is a machine
+ * on a local network; an address written as numbers is one being written as
+ * numbers for a reason.
+ */
+export function isFetchableImageUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+  if (!host.includes(".")) return false;
+  if (host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".localhost")) return false;
+  // An IPv4 address, or an IPv6 one in its brackets.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false;
+  if (host.startsWith("[")) return false;
+  return true;
+}

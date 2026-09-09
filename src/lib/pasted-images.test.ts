@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   extensionForImage,
+  fileFromDataUrl,
+  imageUrlFromHtml,
   imagesFromClipboard,
+  isDataImageUrl,
+  isFetchableImageUrl,
   isImageType,
   pasteIsForTyping,
   pickImageType,
@@ -176,5 +180,80 @@ describe("reading pictures off the system clipboard", () => {
 
   it("gives back nothing for an empty clipboard", async () => {
     expect(await readClipboardImages([])).toEqual([]);
+  });
+});
+
+describe("finding the picture behind copied document content", () => {
+  it("finds the address in what Google Docs puts on the clipboard", () => {
+    // Copying an image out of a document puts the HTML that held it on the
+    // clipboard, with the picture left where it was.
+    const html = `<meta charset='utf-8'><img src="https://lh7-rt.googleusercontent.com/docsz/abc?w=600&amp;h=400">`;
+    expect(imageUrlFromHtml(html)).toBe("https://lh7-rt.googleusercontent.com/docsz/abc?w=600&h=400");
+  });
+
+  it("reads single quotes and bare addresses too", () => {
+    expect(imageUrlFromHtml("<img src='https://example.com/a.png'>")).toBe("https://example.com/a.png");
+    expect(imageUrlFromHtml("<img src=https://example.com/a.png >")).toBe("https://example.com/a.png");
+  });
+
+  it("takes the first picture when the copy held several", () => {
+    const html = '<img src="https://example.com/one.png"><img src="https://example.com/two.png">';
+    expect(imageUrlFromHtml(html)).toBe("https://example.com/one.png");
+  });
+
+  it("finds nothing in markup with no picture in it", () => {
+    expect(imageUrlFromHtml("<p>Just some words.</p>")).toBeNull();
+    expect(imageUrlFromHtml("")).toBeNull();
+  });
+});
+
+describe("a picture spelled out in the address itself", () => {
+  const PIXEL =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+  it("recognises one", () => {
+    expect(isDataImageUrl(PIXEL)).toBe(true);
+    expect(isDataImageUrl("https://example.com/a.png")).toBe(false);
+    expect(isDataImageUrl("data:text/plain;base64,aGk=")).toBe(false);
+  });
+
+  it("reads it out as a file", () => {
+    const image = fileFromDataUrl(PIXEL);
+    expect(image?.type).toBe("image/png");
+    expect(image?.name).toBe("pasted.png");
+    expect(image?.size).toBeGreaterThan(0);
+  });
+
+  it("gives back nothing for one it cannot read", () => {
+    expect(fileFromDataUrl("data:image/png;base64,!!!!not base64!!!!")).toBeNull();
+    expect(fileFromDataUrl("data:image/png;base64,")).toBeNull();
+    expect(fileFromDataUrl("https://example.com/a.png")).toBeNull();
+  });
+});
+
+describe("whether an address is one we will go and fetch", () => {
+  it("takes a public https address", () => {
+    expect(isFetchableImageUrl("https://lh7-rt.googleusercontent.com/docsz/abc")).toBe(true);
+  });
+
+  it("refuses anything that is not https", () => {
+    // A clipboard is not a trusted source of addresses and the fetch happens
+    // on our server, with our network.
+    expect(isFetchableImageUrl("http://example.com/a.png")).toBe(false);
+    expect(isFetchableImageUrl("file:///etc/passwd")).toBe(false);
+  });
+
+  it("refuses anything pointing back inside", () => {
+    expect(isFetchableImageUrl("https://localhost/a.png")).toBe(false);
+    expect(isFetchableImageUrl("https://intranet/a.png")).toBe(false);
+    expect(isFetchableImageUrl("https://printer.local/a.png")).toBe(false);
+    expect(isFetchableImageUrl("https://169.254.169.254/latest/meta-data/")).toBe(false);
+    expect(isFetchableImageUrl("https://10.0.0.5/a.png")).toBe(false);
+    expect(isFetchableImageUrl("https://[::1]/a.png")).toBe(false);
+  });
+
+  it("refuses something that is not an address at all", () => {
+    expect(isFetchableImageUrl("not a url")).toBe(false);
+    expect(isFetchableImageUrl("")).toBe(false);
   });
 });
