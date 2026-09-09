@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import type { ConfirmationState } from "@/lib/readiness";
 
@@ -94,7 +96,8 @@ function stockState(
   };
 }
 
-export async function jobRequirements(jobId: string): Promise<JobRequirements> {
+/** Cached per request: jobFacts asks, and so does anything pricing the same job. */
+export const jobRequirements = cache(async function jobRequirements(jobId: string): Promise<JobRequirements> {
   const supabase = await createClient();
 
   const [{ data: design }, { data: requested }] = await Promise.all([
@@ -179,4 +182,4 @@ export async function jobRequirements(jobId: string): Promise<JobRequirements> {
     equipment: toolState.state,
     equipmentSource: toolState.source,
   };
-}
+});

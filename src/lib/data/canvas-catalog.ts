@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { listTools } from "./tools";
 import { listMaterials } from "./materials";
@@ -39,7 +41,12 @@ export interface CanvasCatalog {
   markup: Markup;
 }
 
-export async function getCanvasCatalog(): Promise<CanvasCatalog> {
+/**
+ * Cached per request. Nine reads of tables that change when somebody edits the
+ * price list, asked once per job being priced -- so a page costing twelve jobs
+ * asked for the same catalog twelve times.
+ */
+export const getCanvasCatalog = cache(async function getCanvasCatalog(): Promise<CanvasCatalog> {
   const supabase = await createClient();
   const [
     tools,
@@ -93,4 +100,4 @@ export async function getCanvasCatalog(): Promise<CanvasCatalog> {
     serviceTools: (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[],
     serviceMaterialRules: (serviceMaterialsRes.data ?? []) as unknown as ServiceMaterialRule[],
   };
-}
+});

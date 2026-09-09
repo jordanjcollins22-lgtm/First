@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { Issue, IssueSeverity, IssueType, BlockingStage } from "@/lib/issues";
@@ -63,7 +65,8 @@ async function nameMap(ids: (string | null)[]): Promise<Map<string, string>> {
   );
 }
 
-export async function listJobIssues(jobId: string): Promise<Issue[]> {
+/** Cached per request: the job page reads the same list from three tabs. */
+export const listJobIssues = cache(async function listJobIssues(jobId: string): Promise<Issue[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("job_issues")
@@ -74,7 +77,7 @@ export async function listJobIssues(jobId: string): Promise<Issue[]> {
   const rows = (data ?? []) as unknown as IssueRow[];
   const names = await nameMap(rows.flatMap((row) => [row.owner_id, row.created_by, row.resolved_by]));
   return rows.map((row) => toIssue(row, names));
-}
+});
 
 /** Every open issue in the business, for the board and My Day. */
 export async function listOpenIssues(): Promise<Issue[]> {
@@ -93,7 +96,8 @@ export async function listOpenIssues(): Promise<Issue[]> {
   return rows.map((row) => toIssue(row, names));
 }
 
-export async function listGateOverrides(jobId: string): Promise<Record<GateKey, GateOverride[]>> {
+/** Cached per request: every gate on the job page asks for the same overrides. */
+export const listGateOverrides = cache(async function listGateOverrides(jobId: string): Promise<Record<GateKey, GateOverride[]>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("job_gate_overrides")
@@ -122,7 +126,7 @@ export async function listGateOverrides(jobId: string): Promise<Record<GateKey, 
     });
   }
   return byGate;
-}
+});
 
 /**
  * The facts a gate is decided from, gathered from what the business already
@@ -140,7 +144,17 @@ export async function listGateOverrides(jobId: string): Promise<Record<GateKey, 
  * the gate on its own, and the record still shows that the materials were
  * confirmed on Tuesday and that the supplier rang on Wednesday.
  */
-export async function jobFacts(jobId: string): Promise<JobFacts> {
+/**
+ * Cached for the length of one request.
+ *
+ * Assembling one job's facts is about eighteen round trips, and the job page
+ * asks for them from four different tabs -- the overview, the field screen, the
+ * issues list and the closeout gate -- because each one needs to evaluate a
+ * different gate against the same job. That was seventy-odd round trips to
+ * answer one question four times. The facts cannot change while the request is
+ * in flight, so they are worked out once.
+ */
+export const jobFacts = cache(async function jobFacts(jobId: string): Promise<JobFacts> {
   const supabase = await createClient();
 
   const [{ data: job }, { data: crew }, { data: photos }, { data: design }, { data: walkthrough }] =
@@ -303,11 +317,12 @@ export async function jobFacts(jobId: string): Promise<JobFacts> {
     balanceOutstanding: outstanding,
     financialDisposition: (disposition?.state as string | null) ?? null,
   };
-}
+});
 
 /** When the bill went out, for judging how late a payment is. */
-export async function jobInvoicedAt(jobId: string): Promise<string | null> {
+/** Cached per request. */
+export const jobInvoicedAt = cache(async function jobInvoicedAt(jobId: string): Promise<string | null> {
   const supabase = await createClient();
   const { data } = await supabase.from("invoices").select("sent_at, created_at").eq("job_id", jobId).maybeSingle();
   return (data?.sent_at as string | null) ?? (data?.created_at as string | null) ?? null;
-}
+});

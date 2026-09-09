@@ -19,10 +19,11 @@ export async function listOrganizations(): Promise<Organization[]> {
   return (data ?? []) as unknown as Organization[];
 }
 
-export async function getCurrentOrganization(): Promise<Organization> {
+/** Cached per request: the layout, the catalog and half the pricing all want it. */
+export const getCurrentOrganization = cache(async function getCurrentOrganization(): Promise<Organization> {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
   const { data, error } = await supabase.from("organizations").select("*").eq("id", organizationId).single();
   if (error) throw error;
   return data as unknown as Organization;
-}
+});
