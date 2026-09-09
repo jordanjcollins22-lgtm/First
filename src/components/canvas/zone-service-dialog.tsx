@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, type MouseEvent as ReactMouseEvent, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, Check, ImagePlus, Loader2, Pencil, X } from "lucide-react";
 
@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { extensionForImage, imagesFromClipboard, pasteIsForTyping } from "@/lib/pasted-images";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -532,9 +533,14 @@ export function ZoneServiceDialog({
           .map((m) => ({ name: m.name }))
       : [];
 
-  async function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    e.target.value = "";
+  /**
+   * Put photographs on this zone, however they arrived.
+   *
+   * One path for the camera, the file picker and the clipboard, so a pasted
+   * photograph is stored, named and queued for marking exactly like one that
+   * came off a phone.
+   */
+  async function uploadPhotos(files: File[]) {
     if (files.length === 0) return;
 
     if (!jobId) {
@@ -548,7 +554,9 @@ export function ZoneServiceDialog({
       const supabase = createClient();
       const uploaded: string[] = [];
       for (const file of files) {
-        const extension = file.name.split(".").pop() || "jpg";
+        // A pasted screenshot has no filename at all, so the extension comes
+        // from what the clipboard says it is. See lib/pasted-images.ts.
+        const extension = extensionForImage(file.type, file.name);
         const path = `${jobId}/zone-photos/${crypto.randomUUID()}.${extension}`;
         const { error } = await supabase.storage.from("canvas-images").upload(path, file);
         if (error) throw error;
@@ -561,6 +569,54 @@ export function ZoneServiceDialog({
     } finally {
       setPhotoUploading(false);
     }
+  }
+
+  /**
+   * Paste a photograph straight onto the zone.
+   *
+   * An evaluator back at a desk already has the picture on screen: in a text
+   * message, an email, a screenshot they just took. Saving it to disk and
+   * hunting for it in a file picker is the long way round to a thing every
+   * other application does with two keys.
+   *
+   * It works from anywhere in the dialog, not only the photos step, because
+   * the gesture is "this picture belongs to this zone" and not "I am on the
+   * right screen for it". A paste into a box somebody is typing in belongs to
+   * that box and is left alone.
+   */
+  /** How many photographs the last paste put on, until it has been seen. */
+  const [pasted, setPasted] = useState<number | null>(null);
+  const pasteRef = useRef(uploadPhotos);
+  useEffect(() => {
+    pasteRef.current = uploadPhotos;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const onPaste = (event: ClipboardEvent) => {
+      if (pasteIsForTyping(event.target)) return;
+      const images = imagesFromClipboard(event.clipboardData);
+      if (images.length === 0) return;
+      event.preventDefault();
+      // Said, not jumped to. Moving somebody off the summary they were reading
+      // to a step they then have to walk back from is a worse answer to "did
+      // that work?" than telling them it worked.
+      setPasted(images.length);
+      void pasteRef.current(images);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [open]);
+
+  useEffect(() => {
+    if (pasted === null || photoUploading) return;
+    const timer = setTimeout(() => setPasted(null), 5000);
+    return () => clearTimeout(timer);
+  }, [pasted, photoUploading]);
+
+  async function handlePhotosChange(e: ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    e.target.value = "";
+    await uploadPhotos(files);
   }
 
   function handleRemovePhoto(index: number) {
@@ -1150,7 +1206,8 @@ export function ZoneServiceDialog({
           </div>
           {photoError && <p className="text-xs text-destructive">{photoError}</p>}
           <p className="text-[10px] text-muted-foreground">
-            Photos already on your phone work too — no signal needed until you&apos;re back online to save.
+            Photos already on your phone work too — no signal needed until you&apos;re back online to save. At a
+            desk, copy a picture from anywhere and paste it here.
           </p>
           {markPromptQueue.length > 0 && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
@@ -1305,6 +1362,36 @@ export function ZoneServiceDialog({
           <DialogDescription>Answer a few quick questions about this zone.</DialogDescription>
         </DialogHeader>
         {body}
+        {/* A paste works from any step, so what it did has to be visible from
+            any step. */}
+        {pasted !== null && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-xs">
+            {photoError ? (
+              <span className="text-destructive">{photoError}</span>
+            ) : photoUploading ? (
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                Adding {pasted} pasted {pasted === 1 ? "photo" : "photos"}...
+              </span>
+            ) : (
+              <span>
+                {pasted} pasted {pasted === 1 ? "photo" : "photos"} added to {zoneName}.
+              </span>
+            )}
+            {currentStep !== "photos" && !photoUploading && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPasted(null);
+                  setStepKey("photos");
+                }}
+                className="shrink-0 font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Show me
+              </button>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
