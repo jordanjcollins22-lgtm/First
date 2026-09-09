@@ -1,7 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { isAccountManager } from "@/lib/affiliate-roles";
-import { commissionFor, type CommissionJobInput, type CommissionSummary } from "@/lib/commission";
+import {
+  commissionFor,
+  type CommissionJobInput,
+  type CommissionLine,
+  type CommissionSummary,
+} from "@/lib/commission";
 import type { Profile } from "@/types/domain";
 
 async function safe<T>(query: PromiseLike<{ data: T[] | null }>): Promise<T[]> {
@@ -17,6 +22,9 @@ interface JobMoney {
   collected: Map<string, number>;
   contract: Map<string, number | null>;
   openTickets: Map<string, number>;
+  /** Commission already handed over, per job. */
+  paidOut: Map<string, number>;
+  lastPaidAt: Map<string, string>;
 }
 
 /**
@@ -31,17 +39,24 @@ interface JobMoney {
  * account manager does not add four more round trips.
  */
 async function loadMoney(jobIds: string[]): Promise<JobMoney> {
-  const empty: JobMoney = { collected: new Map(), contract: new Map(), openTickets: new Map() };
+  const empty: JobMoney = {
+    collected: new Map(),
+    contract: new Map(),
+    openTickets: new Map(),
+    paidOut: new Map(),
+    lastPaidAt: new Map(),
+  };
   if (jobIds.length === 0) return empty;
 
   const supabase = await createClient();
-  const [invoices, ledger, proposals, tickets] = await Promise.all([
+  const [invoices, ledger, proposals, tickets, payouts] = await Promise.all([
     safe(supabase.from("invoices").select("job_id, amount, status, paid_at").in("job_id", jobIds)),
     safe(
       supabase.from("ledger_entries").select("job_id, amount, direction").eq("direction", "in").in("job_id", jobIds)
     ),
     safe(supabase.from("job_proposals").select("job_id, total_cost").in("job_id", jobIds)),
     safe(supabase.from("job_tickets").select("job_id, status").in("job_id", jobIds)),
+    safe(supabase.from("commission_payouts").select("job_id, amount, paid_at").in("job_id", jobIds)),
   ]);
 
   const collected = new Map<string, number>();
@@ -72,7 +87,18 @@ async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     }
   }
 
-  return { collected, contract, openTickets };
+  // What has actually been handed over. Summed rather than flagged: a job
+  // part paid and then collected on again owes the difference, and a flag
+  // would say settled and be wrong.
+  const paidOut = new Map<string, number>();
+  const lastPaidAt = new Map<string, string>();
+  for (const row of payouts as { job_id: string; amount: number; paid_at: string }[]) {
+    paidOut.set(row.job_id, (paidOut.get(row.job_id) ?? 0) + (Number(row.amount) || 0));
+    const seen = lastPaidAt.get(row.job_id);
+    if (!seen || row.paid_at > seen) lastPaidAt.set(row.job_id, row.paid_at);
+  }
+
+  return { collected, contract, openTickets, paidOut, lastPaidAt };
 }
 
 function toInputs(jobs: JobWithLocation[], money: JobMoney): CommissionJobInput[] {
@@ -87,6 +113,8 @@ function toInputs(jobs: JobWithLocation[], money: JobMoney): CommissionJobInput[
     // context for the collected figure, never the basis for the commission.
     contractValue: money.contract.get(job.id) ?? null,
     openTickets: money.openTickets.get(job.id) ?? 0,
+    paidOut: money.paidOut.get(job.id) ?? 0,
+    lastPaidAt: money.lastPaidAt.get(job.id) ?? null,
   }));
 }
 
@@ -135,4 +163,71 @@ export async function getCommissionByManager(profiles: Profile[]): Promise<Manag
     // Somebody with nothing on their book is not a row worth printing.
     .filter((b) => b.summary.lines.length > 0)
     .sort((a, b) => b.summary.earned - a.summary.earned);
+}
+
+/** One job's commission, for the person whose commission it is. */
+export interface JobCommission {
+  line: CommissionLine;
+  /** Whose book it sits on. */
+  managerName: string;
+  /** Whether the person looking at it is that manager. */
+  mine: boolean;
+  /** Every payment already recorded against it. */
+  payouts: { id: string; amount: number; paidAt: string; reference: string | null }[];
+}
+
+/**
+ * The commission on one job, for the job's own page.
+ *
+ * An account manager standing on a project wants to know what it is worth to
+ * them and whether it has been paid, and going to the Money page to find out
+ * is a trip nobody makes. Shown on the job, where the question is asked.
+ *
+ * Nothing here for somebody who neither manages the client nor runs the
+ * money: what a colleague earns is not everybody's business.
+ */
+export async function getJobCommission(jobId: string, viewer: Profile): Promise<JobCommission | null> {
+  const supabase = await createClient();
+  const all = await listJobsWithLocation();
+  const job = all.find((j) => j.id === jobId);
+  const managerId = job?.property.customer.account_manager_id ?? null;
+  if (!job || !managerId) return null;
+
+  const mine = managerId === viewer.id;
+  const runsTheMoney = viewer.roles.includes("admin") || viewer.roles.includes("overhead");
+  if (!mine && !runsTheMoney) return null;
+
+  const { data: manager } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, commission_pct")
+    .eq("id", managerId)
+    .maybeSingle();
+  if (!manager) return null;
+
+  const money = await loadMoney([job.id]);
+  const summary = commissionFor(toInputs([job], money), manager.commission_pct);
+  const line = summary.lines[0];
+  if (!line) return null;
+
+  const payouts = await safe(
+    supabase
+      .from("commission_payouts")
+      .select("id, amount, paid_at, reference")
+      .eq("job_id", job.id)
+      .order("paid_at", { ascending: false })
+  );
+
+  return {
+    line,
+    managerName: manager.full_name || manager.email,
+    mine,
+    payouts: (payouts as { id: string; amount: number; paid_at: string; reference: string | null }[]).map(
+      (row) => ({
+        id: row.id,
+        amount: Number(row.amount) || 0,
+        paidAt: row.paid_at,
+        reference: row.reference,
+      })
+    ),
+  };
 }

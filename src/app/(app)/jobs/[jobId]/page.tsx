@@ -77,7 +77,9 @@ import { costJob, costZone, zoneCrewHours, allMaterialLineItems, formatMaterialQ
 import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import { resolveBaseUrl } from "@/lib/app-url";
 import type { WorkZone } from "@/components/canvas/types";
-import type { EvaluationStatus, JobCrewMember, JobStatus } from "@/types/domain";
+import type { EvaluationStatus, JobCrewMember, JobStatus, Profile } from "@/types/domain";
+import { getJobCommission } from "@/lib/data/commission";
+import { JobCommissionPanel } from "@/components/payments/job-commission";
 import { requireJobAccess } from "@/lib/data/access";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { isAccountManager } from "@/lib/affiliate-roles";
@@ -475,7 +477,7 @@ export default async function JobPage({
       <JobTabbedSections
         initialTab={view}
         defaultOpen={sectionToOpen(outstanding)}
-        overview={await OverviewTab(jobId, viewer?.roles ?? [])}
+        overview={await OverviewTab(jobId, viewer?.roles ?? [], viewer)}
         field={await FieldTab(jobId, job.property?.address ?? null, clientPhone, viewer?.roles ?? [])}
         issues={await IssuesTab(jobId, viewer?.roles ?? [])}
         closeout={await CloseoutTab(jobId, viewer?.roles ?? [])}
@@ -777,11 +779,14 @@ export default async function JobPage({
  * Not a status but the checks themselves, so somebody reading NOT READY knows
  * which one thing to go and fix.
  */
-async function OverviewTab(jobId: string, roles: string[]) {
-  const [facts, issues, overrides] = await Promise.all([
+async function OverviewTab(jobId: string, roles: string[], viewer: Profile | null) {
+  const [facts, issues, overrides, commission] = await Promise.all([
     jobFacts(jobId),
     listJobIssues(jobId).catch(() => []),
     listGateOverrides(jobId).catch(() => ({}) as Awaited<ReturnType<typeof listGateOverrides>>),
+    // Nothing for anybody who neither manages this client nor runs the money:
+    // what a colleague earns is not everybody's business.
+    viewer ? getJobCommission(jobId, viewer).catch(() => null) : null,
   ]);
   // Which gate matters depends on where the job is: quoting work is judged on
   // whether it can be quoted, sold work on whether it can start, and work in
@@ -791,6 +796,7 @@ async function OverviewTab(jobId: string, roles: string[]) {
   return (
     <div className="space-y-3">
       <ReadinessPanel jobId={jobId} result={result} canOverride={canOverrideGate(roles)} />
+      {commission && <JobCommissionPanel commission={commission} />}
       {/* The way to clear a failing confirmation, on the screen that reports
           it failing. */}
       {gate === "ready" && (

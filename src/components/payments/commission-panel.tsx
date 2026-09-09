@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { STATE_LABELS, type CommissionSummary } from "@/lib/commission";
+import { MarkCommissionPaid } from "@/components/payments/mark-commission-paid";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -18,10 +19,16 @@ export function CommissionPanel({
   summary,
   title,
   subtitle,
+  profileId,
+  canMarkPaid = false,
 }: {
   summary: CommissionSummary;
   title?: string;
   subtitle?: string;
+  /** Whose book this is, when somebody may record a payment against it. */
+  profileId?: string;
+  /** Only for whoever actually sends the money. */
+  canMarkPaid?: boolean;
 }) {
   return (
     <section className="rounded-xl border border-white/60 bg-card/60 p-3 backdrop-blur-md">
@@ -33,11 +40,27 @@ export function CommissionPanel({
       )}
       {subtitle && <p className="mb-2 text-xs text-muted-foreground">{subtitle}</p>}
 
-      <div className="mb-3 grid grid-cols-3 gap-2">
+      <div className="mb-3 grid grid-cols-4 gap-2">
         <Tile label="Payable" value={money(summary.earned)} strong />
         <Tile label="Held" value={money(summary.held)} alert={summary.held > 0} />
         <Tile label="Accruing" value={money(summary.accruing)} />
+        {/* The answer to "have I been paid", which is the question somebody
+            with a finished job actually opens this to ask. */}
+        <Tile label="Paid out" value={money(summary.paid)} />
       </div>
+
+      {canMarkPaid && profileId && summary.earned > 0 && (
+        <MarkCommissionPaid
+          profileId={profileId}
+          lines={summary.lines
+            .filter((line) => line.state === "earned" && line.amount > 0)
+            .map((line) => ({
+              jobId: line.jobId,
+              customerName: line.customerName,
+              amount: line.amount,
+            }))}
+        />
+      )}
 
       {summary.lines.length === 0 ? (
         <p className="text-xs text-muted-foreground">No jobs on this book yet.</p>
@@ -48,7 +71,11 @@ export function CommissionPanel({
               <Link
                 href={`/jobs/${line.jobId}`}
                 className={`block rounded-lg border p-2.5 hover:bg-accent/50 ${
-                  line.state === "held" ? "border-amber-400/70 bg-amber-50/60" : "border-border bg-background/60"
+                  line.state === "held"
+                    ? "border-amber-400/70 bg-amber-50/60"
+                    : line.state === "paid"
+                      ? "border-border/60 bg-background/40 opacity-80"
+                      : "border-border bg-background/60"
                 }`}
               >
                 <div className="flex items-baseline justify-between gap-2">
@@ -63,13 +90,16 @@ export function CommissionPanel({
                         ? "font-semibold text-emerald-700"
                         : line.state === "held"
                           ? "font-semibold text-amber-800"
-                          : ""
+                          : line.state === "paid"
+                            ? "font-semibold text-muted-foreground"
+                            : ""
                     }
                   >
                     {STATE_LABELS[line.state]}
                   </span>
                   <span>{money(line.collected)} collected</span>
                   {line.outstanding > 0 && <span>{money(line.outstanding)} still out</span>}
+                  {line.paidOut > 0 && <span>{money(line.paidOut)} paid out</span>}
                 </p>
                 {line.reason && <p className="text-[11px] text-muted-foreground">{line.reason}</p>}
               </Link>
@@ -80,7 +110,8 @@ export function CommissionPanel({
 
       <p className="mt-2 text-[11px] text-muted-foreground">
         Commission is a share of money actually received, not of what was quoted, and becomes payable once the
-        job is finished with no tickets open on it.
+        job is finished with no tickets open on it. A job goes back to payable if more money comes in after it
+        was paid out on, because the share grows with what is collected.
       </p>
     </section>
   );
@@ -94,7 +125,7 @@ function Tile({ label, value, strong, alert }: { label: string; value: string; s
       }`}
     >
       <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className={`tabular-nums ${strong ? "text-lg font-bold" : "text-base font-semibold"}`}>{value}</p>
+      <p className={`tabular-nums ${strong ? "text-lg font-bold" : "text-sm font-semibold"}`}>{value}</p>
     </div>
   );
 }

@@ -1857,6 +1857,29 @@ export interface Database {
           },
         ];
       };
+      commission_payouts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          job_id: string;
+          amount: number;
+          paid_at: string;
+          method: string | null;
+          reference: string | null;
+          note: string | null;
+          recorded_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["commission_payouts"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          job_id: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["commission_payouts"]["Row"]>;
+        Relationships: [];
+      };
       client_consent: {
         Row: {
           id: string;

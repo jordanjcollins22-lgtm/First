@@ -85,7 +85,15 @@ export function PaymentsDashboard({
         <TabsContent value="commission">
           <div className="flex flex-col gap-3">
             {commission.map((book) => (
-              <CommissionPanel key={book.profileId} summary={book.summary} title={book.personName} />
+              <CommissionPanel
+                key={book.profileId}
+                summary={book.summary}
+                title={book.personName}
+                profileId={book.profileId}
+                // This screen is already gated on being whoever sends the
+                // money, so anybody looking at it may say it has been sent.
+                canMarkPaid
+              />
             ))}
           </div>
         </TabsContent>
