@@ -14,6 +14,10 @@ import { getReceivedPayments } from "@/lib/data/received-payments";
 import { ReceivedPanel } from "@/components/payments/received-panel";
 import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
 import { RecordPaymentPanel } from "@/components/payments/record-payment-panel";
+import { PaymentsHealthBanner } from "@/components/payments/payments-health-banner";
+import { paymentsHealthFor } from "@/lib/data/payments-health";
+import { getCurrentOrganization } from "@/lib/data/organizations";
+import { respondedMoment } from "@/lib/proposal-accepted";
 
 /**
  * Money in and out, all of it.
@@ -41,6 +45,21 @@ export default async function PaymentsPage({
   } catch (err) {
     console.error("Payments page failed to load:", err);
   }
+
+  // Whether we can still take money. Read on its own and allowed to fail on
+  // its own — a page about money should not go blank because the table that
+  // says whether Stripe is up has not been created yet.
+  const organization = await getCurrentOrganization().catch(() => null);
+  const health = organization
+    ? await paymentsHealthFor(organization.id).catch(() => null)
+    : null;
+  const downSince =
+    health?.state === "down" && health.changedAt
+      ? (() => {
+          const moment = respondedMoment(health.changedAt, organization?.reminder_time_zone);
+          return moment ? `${moment.day} at ${moment.time} ${moment.zone}` : null;
+        })()
+      : null;
 
   // Loaded separately: commission is a read across four other tables, and a
   // problem in any of them should cost that one tab rather than the page.
@@ -70,6 +89,11 @@ export default async function PaymentsPage({
         Everything in and out — cash jobs, team pay, materials and overhead. Invoices live on
         Proposals &amp; Invoices.
       </p>
+      <PaymentsHealthBanner
+        state={health?.state ?? "ok"}
+        detail={health?.detail ?? null}
+        since={downSince}
+      />
       <PageTabs
         tabs={[
           {

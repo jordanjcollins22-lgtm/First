@@ -2496,6 +2496,21 @@ export interface Database {
           },
         ];
       };
+      payments_health: {
+        Row: {
+          organization_id: string;
+          state: string;
+          detail: string | null;
+          checked_at: string;
+          changed_at: string;
+          last_alert_at: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["payments_health"]["Row"]> & {
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payments_health"]["Row"]>;
+        Relationships: [];
+      };
       job_proposals: {
         Row: {
           id: string;

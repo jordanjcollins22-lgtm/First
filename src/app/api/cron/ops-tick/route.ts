@@ -6,6 +6,7 @@ import { targetsFromRow } from "@/lib/data/ops";
 import { assessOps, planForDatabase, type OpsPulse } from "@/lib/ops";
 import { syncOrganization } from "@/lib/plaid";
 import { isPlaidConfigured } from "@/lib/env";
+import { probeStripe, recordPaymentsHealth } from "@/lib/data/payments-health";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -35,6 +36,22 @@ export async function GET(request: NextRequest) {
   const report: Record<string, unknown>[] = [];
   for (const org of orgs ?? []) {
     try {
+      // Can we still take money? Asked outright, once a morning, because a
+      // rolled key changes nothing visible in the app: proposals still go
+      // out, clients still accept, and the first anybody hears is a client
+      // mentioning the payment page would not load. The answer is recorded
+      // either way; a text only goes when it changes.
+      const health = await probeStripe();
+      const state = await recordPaymentsHealth({
+        organizationId: org.id,
+        businessName: org.name,
+        verdict: health.verdict,
+        detail: health.detail,
+      }).catch((err) => {
+        console.error(`[ops] payments check for ${org.name}:`, err);
+        return null;
+      });
+
       // The bank first, so the cash the pulse judges is this morning's.
       if (isPlaidConfigured) {
         const banks = await syncOrganization(admin, org.id).catch((err) => ({ links: 0, failed: [String(err)] }));
@@ -49,7 +66,7 @@ export async function GET(request: NextRequest) {
       const pulse = pulseRaw as unknown as OpsPulse;
       const targets = targetsFromRow((targetsRow as unknown as Parameters<typeof targetsFromRow>[0]) ?? null);
       const a = assessOps(pulse, targets);
-      const entry: Record<string, unknown> = { org: org.name, mode: a.plan.mode, worst: a.worst, budget: a.plan.budget, hold: a.plan.hold };
+      const entry: Record<string, unknown> = { org: org.name, mode: a.plan.mode, worst: a.worst, budget: a.plan.budget, hold: a.plan.hold, payments: state ?? "unchecked" };
 
       const daysSinceLast = last ? (Date.now() - new Date(last.created_at).getTime()) / 86_400_000 : Infinity;
       const dueAgain = a.plan.mode === "all_out" ? daysSinceLast >= 3 : daysSinceLast >= 7;

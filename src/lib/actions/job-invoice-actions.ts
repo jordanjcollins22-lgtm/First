@@ -5,6 +5,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isStripeConfigured } from "@/lib/env";
 import { createAndSendInvoice } from "@/lib/invoicing";
 import { revalidateJobViews } from "@/lib/revalidate-job";
+import { reportStripeFailure } from "@/lib/data/payments-health";
 
 export type RaiseResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -61,6 +62,9 @@ export async function raiseInvoiceForJob(jobId: string): Promise<RaiseResult> {
     await createAndSendInvoice(jobId, proposal.id, amount);
   } catch (err) {
     console.error("raising an invoice failed:", err);
+    // If Stripe itself is the problem rather than this one contact, that is
+    // worth waking somebody over — every other payment is failing too.
+    reportStripeFailure(proposal.organization_id, err).catch(() => {});
     return { ok: false, message: "Stripe wouldn't take that. Check the contact's details and try again." };
   }
 

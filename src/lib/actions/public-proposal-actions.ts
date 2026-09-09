@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice } from "@/lib/invoicing";
+import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import { getJobCustomerContact } from "@/lib/job-customer";
@@ -405,6 +406,10 @@ export async function choosePaymentPath(input: {
       // invoice that was raised instead went out for nothing, which nobody
       // found for five days.
       console.error("proposal checkout would not start:", err);
+      // And say so out loud if the reason was Stripe itself. A rolled key
+      // costs every payment after it, so the office hears at the first one
+      // rather than at the daily check tomorrow.
+      reportStripeFailure(proposal.organization_id, err).catch(() => {});
     }
 
     if (!checkoutUrl && option.id === "full") {
@@ -415,6 +420,7 @@ export async function choosePaymentPath(input: {
         .then(() => true)
         .catch((err) => {
           console.error("falling back to an invoice failed too:", err);
+          reportStripeFailure(proposal.organization_id, err).catch(() => {});
           return false;
         });
 
