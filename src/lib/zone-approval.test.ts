@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { approvalPolicy, approvalQueue, approvalStreak, approvedShape, describeTrust, summarizeApprovals, trustLevel, type ZoneApprovalRow, type ZoneReview } from "./zone-approval";
+import { approvalPolicy, approvalQueue, approvalStreak, approvedShape, describeTrust, summarizeApprovals, trustLevel, worstFault, type WalkFault, type ZoneApprovalRow, type ZoneReview } from "./zone-approval";
 
 function zone(over: Partial<ZoneApprovalRow>): ZoneApprovalRow {
   return { id: "z", name: "21014 C001", approval: "pending", needsApproval: true, mode: "foot", houses: 400, gapM: 20, pathKm: 8, minutes: 300, isPart: false, active: false, approvedAt: null, note: null, ...over };
@@ -47,5 +47,75 @@ describe("the queue and the words", () => {
     expect(describeTrust(3)).toMatch(/after 7 more/);
     expect(describeTrust(12)).toMatch(/only unusual/);
     expect(describeTrust(30)).toMatch(/exceptional/);
+  });
+});
+
+describe("a route that could hurt somebody is never approved on the app's own say-so", () => {
+  const shape = approvedShape([
+    { zoneId: "a", zoneName: "A", decision: "approve", reason: null, note: null, mode: "foot", newMode: null, houses: 400, gapM: 30, pathKm: 12, at: "2026-01-01" },
+  ]);
+
+  const crossing: WalkFault = {
+    kind: "unsafe_crossing",
+    severity: "bad",
+    count: 34,
+    says: "The round crosses Pulaski Highway on foot 34 times.",
+  };
+
+  it("asks about a bad route however much trust there is", () => {
+    for (const level of ["ask_unusual", "ask_exceptional"] as const) {
+      const policy = approvalPolicy(
+        zone({ mode: "foot", houses: 400, gapM: 30, quality: "bad", faults: [crossing] }),
+        shape,
+        level
+      );
+      expect(policy.decision).toBe("ask");
+      expect(policy.why).toBe("The round crosses Pulaski Highway on foot 34 times.");
+    }
+  });
+
+  it("would have approved the very same zone without the fault", () => {
+    // Doors and spacing are exactly what the learning approves. The fault
+    // report is the only thing that can tell the two apart.
+    const policy = approvalPolicy(zone({ mode: "foot", houses: 400, gapM: 30 }), shape, "ask_exceptional");
+    expect(policy.decision).toBe("auto");
+  });
+
+  it("puts the dangerous fault first when a zone has several", () => {
+    const policy = approvalPolicy(
+      zone({
+        mode: "foot",
+        houses: 400,
+        gapM: 30,
+        quality: "bad",
+        faults: [
+          { kind: "disconnected", severity: "bad", count: 4, says: "The round is in 5 pieces." },
+          crossing,
+        ],
+      }),
+      shape,
+      "ask_exceptional"
+    );
+    expect(policy.why).toBe("The round crosses Pulaski Highway on foot 34 times.");
+  });
+
+  it("does not stop an approval for a fault that only wastes a morning", () => {
+    const policy = approvalPolicy(
+      zone({
+        mode: "foot",
+        houses: 400,
+        gapM: 30,
+        quality: "check",
+        faults: [{ kind: "doors_not_passed", severity: "check", count: 108, says: "108 doors are off the line." }],
+      }),
+      shape,
+      "ask_exceptional"
+    );
+    expect(policy.decision).toBe("auto");
+  });
+
+  it("says nothing about a zone walked before the check existed", () => {
+    expect(worstFault(zone({ quality: null }))).toBeNull();
+    expect(worstFault(zone({ quality: "unknown" }))).toBeNull();
   });
 });

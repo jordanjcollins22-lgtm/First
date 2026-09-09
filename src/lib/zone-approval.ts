@@ -18,6 +18,17 @@ export type Approval = "pending" | "approved" | "auto" | "rejected";
 export type Decision = "approve" | "reject" | "auto";
 export type RejectReason = "mode" | "shape" | "walk" | "split" | "other";
 
+/** How good the drawn route is, from `zone_walk_faults`. */
+export type WalkQuality = "good" | "check" | "bad" | "unknown";
+
+export interface WalkFault {
+  kind: "disconnected" | "no_road_under_it" | "unsafe_crossing" | "doors_not_passed";
+  severity: "check" | "bad";
+  count: number;
+  /** The fault in its own words, already worded for a person. */
+  says: string;
+}
+
 export interface ZoneApprovalRow {
   id: string;
   name: string;
@@ -35,6 +46,9 @@ export interface ZoneApprovalRow {
   active: boolean;
   approvedAt: string | null;
   note: string | null;
+  /** Null on a zone that has not been walked since the check existed. */
+  quality?: WalkQuality | null;
+  faults?: WalkFault[];
 }
 
 export interface ZoneReview {
@@ -125,6 +139,13 @@ export interface Policy {
  * established; it is the kind of zone the build gets wrong.
  */
 export function approvalPolicy(zone: ZoneApprovalRow, shape: ApprovedShape, level: TrustLevel): Policy {
+  // A bad route always asks, at every level of trust, and nothing below is
+  // consulted. The app learned what an approved zone looks like from doors and
+  // spacing, and a round that crosses a trunk road thirty-four times looks
+  // exactly like a good one on both -- so the only thing that can tell them
+  // apart is the fault report, and it outranks the learning entirely.
+  const worst = worstFault(zone);
+  if (worst) return { decision: "ask", why: worst.says };
   if (level === "ask_all") return { decision: "ask", why: "still learning what an approved zone looks like" };
   const mode = zone.mode ?? "";
   const slack = level === "ask_unusual" ? 0.5 : 1;
@@ -139,6 +160,22 @@ export function approvalPolicy(zone: ZoneApprovalRow, shape: ApprovedShape, leve
     return { decision: "ask", why: zone.gapM > gap.max ? "doors further apart than any approved zone of its kind" : "doors closer together than any approved zone of its kind" };
   }
   return { decision: "auto", why: `like the ${mode} zones already approved` };
+}
+
+/**
+ * The fault worth stopping an approval for, or null when there is none.
+ *
+ * Only the bad ones stop it. A round with a hundred and eight doors reached
+ * from a back road is worth somebody's eye but is not dangerous, and stopping
+ * every zone that has anything at all to say about it would make the queue the
+ * manual work this app exists to remove.
+ */
+export function worstFault(zone: ZoneApprovalRow): WalkFault | null {
+  if (zone.quality !== "bad") return null;
+  const bad = (zone.faults ?? []).filter((f) => f.severity === "bad");
+  // Crossing a main road on foot first: it is the only one that can hurt
+  // somebody, rather than merely waste their morning.
+  return bad.find((f) => f.kind === "unsafe_crossing") ?? bad[0] ?? null;
 }
 
 /** The zones waiting for a person, the ones with our work in them first, then the biggest. */

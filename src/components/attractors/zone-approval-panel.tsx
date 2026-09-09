@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, MapPin, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Check, Loader2, MapPin, ShieldCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { approveZones, reviewZone } from "@/lib/actions/zone-approval-actions";
@@ -125,6 +125,27 @@ export function ZoneApprovalPanel({ state, onFocusZone }: { state: ZoneApprovalS
                   {z.gapM != null ? ` · ${Math.round(z.gapM)} m between doors` : ""}
                   {z.approval === "rejected" ? ` · sent back${z.note ? `: ${z.note}` : ""}, rebuilt since` : ""}
                 </p>
+
+                {/* What is wrong with the drawn route, in the fault's own
+                    words. Above the buttons rather than below them: it is the
+                    thing that should change the decision, and a warning
+                    somebody has to scroll past is a warning they approve over. */}
+                {(z.faults ?? []).length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {(z.faults ?? []).map((f) => (
+                      <li
+                        key={f.kind}
+                        className={
+                          "flex items-start gap-1 text-[11px] " +
+                          (f.severity === "bad" ? "text-destructive" : "text-amber-700 dark:text-amber-300")
+                        }
+                      >
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        {f.says}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {!open ? (
                   <div className="mt-1.5 flex gap-2">
                     <Button type="button" size="sm" className="h-7" disabled={working} onClick={() => decide(z.id, "approve")}>
