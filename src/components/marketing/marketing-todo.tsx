@@ -7,8 +7,9 @@ import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { addMarketingPlayDoors, approveMarketingPlay, approveMarketingPlays, editMarketingPlay, makeFlyerMailing, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
-import { RouteHousePicker } from "@/components/marketing/route-house-picker";
+import { addMarketingPlayDoors, approveMarketingPlay, approveMarketingPlays, editMarketingPlay, makeFlyerMailing, setMarketingPlayOrder, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
+import { RouteHousePicker, type PickerMode } from "@/components/marketing/route-house-picker";
+import type { Point } from "@/lib/route-order";
 import type { ZoneHouse } from "@/app/api/marketing/[playId]/zone-houses/route";
 import { describePlayTrust, type PlayReview } from "@/lib/marketing-approval";
 import {
@@ -73,7 +74,7 @@ export function MarketingTodo({
   // What was just ticked or approved, before the page has caught up.
   const [local, setLocal] = useState<Record<string, Partial<MarketingPlay>>>({});
   // The play being edited, with its doors.
-  const [editing, setEditing] = useState<{ id: string; doors: Door[]; routes: { id: string; zip: string; routeId: string; pieces: number }[]; remove: Set<string>; add: Set<string>; zoneHouses: ZoneHouse[]; quantity: number; note: string; loading: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; doors: Door[]; routes: { id: string; zip: string; routeId: string; pieces: number }[]; remove: Set<string>; add: Set<string>; zoneHouses: ZoneHouse[]; mode: PickerMode; order: string[]; line: Point[]; quantity: number; note: string; loading: boolean } | null>(null);
 
   const merged = plays.map((p) => ({ ...p, ...(local[p.id] ?? {}) }));
   const summary = summarizePlays(merged);
@@ -112,7 +113,7 @@ export function MarketingTodo({
 
   async function startEdit(play: MarketingPlay) {
     setError(null);
-    setEditing({ id: play.id, doors: [], routes: [], remove: new Set(), add: new Set(), zoneHouses: [], quantity: play.quantity, note: "", loading: true });
+    setEditing({ id: play.id, doors: [], routes: [], remove: new Set(), add: new Set(), zoneHouses: [], mode: "pick", order: [], line: [], quantity: play.quantity, note: "", loading: true });
     onShowDoors?.(play.id);
     try {
       const res = await fetch(`/api/marketing/${play.id}/doors`, { cache: "no-store" });
@@ -158,11 +159,27 @@ export function MarketingTodo({
         }
       }
       const result = await editMarketingPlay({ playId: play.id, remove, quantity, note: editing.note, approve: true });
-      setBusy(null);
       if (!result.ok) {
+        setBusy(null);
         setError(result.error);
         return;
       }
+
+      // The order last, so it is applied to the round as it finally stands
+      // rather than to the one that existed before doors moved.
+      if (editing.order.length > 0) {
+        const ordered = await setMarketingPlayOrder({
+          playId: play.id,
+          order: editing.order,
+          line: editing.line.length > 1 ? editing.line : null,
+        });
+        if (!ordered.ok) {
+          setBusy(null);
+          setError(ordered.error);
+          return;
+        }
+      }
+      setBusy(null);
       patch(play.id, { approval: "approved", quantity: result.value.quantity });
       setEditing(null);
       onShowDoors?.(null);
@@ -315,8 +332,54 @@ export function MarketingTodo({
                                   puts it on the round; tapping a filled one
                                   takes it off — the same two edits the list
                                   makes, on the thing they are actually about. */}
+                              {/* Three ways to say the same two things: which
+                                  doors, and in what order. The router's order
+                                  is the default and stays one tap away. */}
+                              {editing.zoneHouses.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {(
+                                    [
+                                      ["pick", "Pick doors"],
+                                      ["order", "Tap in order"],
+                                      ["line", "Draw the line"],
+                                    ] as [PickerMode, string][]
+                                  ).map(([m, label]) => (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setEditing((x) => (x ? { ...x, mode: m } : x))}
+                                      className={`min-h-9 rounded-md border px-2.5 text-xs ${
+                                        editing.mode === m
+                                          ? "border-primary bg-primary/10 font-medium text-primary"
+                                          : "border-border hover:bg-accent/50"
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                  {(editing.order.length > 0 || editing.line.length > 0) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditing((x) => (x ? { ...x, order: [], line: [] } : x))}
+                                      className="min-h-9 px-2 text-xs text-muted-foreground underline"
+                                    >
+                                      Clear the order
+                                    </button>
+                                  )}
+                                  {editing.order.length > 0 && (
+                                    <span className="text-[11px] text-primary">
+                                      {editing.order.length} in order
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               {editing.zoneHouses.length > 0 && (
                                 <RouteHousePicker
+                                  mode={editing.mode}
+                                  order={editing.order}
+                                  onOrder={(order) => setEditing((x) => (x ? { ...x, order } : x))}
+                                  line={editing.line}
+                                  onLine={(line) => setEditing((x) => (x ? { ...x, line } : x))}
                                   houses={editing.zoneHouses}
                                   on={
                                     new Set(

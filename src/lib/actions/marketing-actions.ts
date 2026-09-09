@@ -264,3 +264,41 @@ export async function addMarketingPlayDoors(
     return { quantity: result.quantity ?? 0, added: result.added ?? 0 };
   });
 }
+
+/**
+ * Say what order a round is walked in.
+ *
+ * Two ways in, one thing out: a list of house ids. Drawing a line orders the
+ * doors by where they fall along it; tapping them in order is the order. The
+ * line itself is kept so it can be shown back and adjusted rather than redrawn
+ * from nothing.
+ *
+ * Passing an empty list clears it, and the round goes back to the router's
+ * order — which is the right default and should stay one keystroke away.
+ */
+export async function setMarketingPlayOrder(input: {
+  playId: string;
+  /** House ids in walking order. Empty clears the hand-made order. */
+  order: string[];
+  /** The line that produced it, when one was drawn. */
+  line?: { lat: number; lng: number }[] | null;
+}): Promise<ActionResult<{ ordered: number; cleared: boolean }>> {
+  return guard("setMarketingPlayOrder", async () => {
+    const profile = await requireUser();
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("marketing_play_set_order", {
+      org: profile.organization_id,
+      the_play: input.playId,
+      order_ids: input.order.length > 0 ? input.order : null,
+      line: (input.line && input.line.length > 1 ? input.line : null) as never,
+      by: profile.id,
+    });
+    if (error) throw error;
+    const result = (data ?? {}) as { ok?: boolean; error?: string; ordered?: number; cleared?: boolean };
+    if (!result.ok) throw new Error(result.error ?? "That order could not be saved.");
+
+    for (const page of PAGES) revalidatePath(page);
+    revalidatePath("/my-day");
+    return { ordered: result.ordered ?? 0, cleared: Boolean(result.cleared) };
+  });
+}

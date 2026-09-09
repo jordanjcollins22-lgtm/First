@@ -1295,6 +1295,10 @@ export interface Database {
           assigned_to: string | null;
           assigned_at: string | null;
           assigned_by: string | null;
+          walk_order: Json;
+          walk_order_line: Json;
+          walk_order_set_at: string | null;
+          walk_order_set_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -3433,6 +3437,11 @@ export interface Database {
       };
       /** One round's doors in the order the zone is actually walked. */
       marketing_play_route: { Args: { the_play: string }; Returns: Json };
+      /** Say what order a round is walked in, by hand. */
+      marketing_play_set_order: {
+        Args: { org: string; the_play: string; order_ids: string[] | null; line?: Json; by?: string | null };
+        Returns: Json;
+      };
       /** Put doors back on a round. Only houses inside its own zone. */
       marketing_play_add_doors: {
         Args: { org: string; the_play: string; add: string[]; by?: string | null };

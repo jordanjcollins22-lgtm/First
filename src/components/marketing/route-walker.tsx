@@ -30,6 +30,7 @@ export function RouteWalker({
   doors,
   park,
   walked,
+  byHand,
 }: {
   playId: string;
   zoneName: string | null;
@@ -37,6 +38,8 @@ export function RouteWalker({
   doors: Stop[];
   park: { lat: number; lng: number } | null;
   walked: boolean;
+  /** Somebody set this order themselves, so the router's warning does not apply. */
+  byHand: boolean;
 }) {
   const [done, setDone] = useState(0);
   const [finishing, setFinishing] = useState(false);
@@ -73,7 +76,13 @@ export function RouteWalker({
         </div>
       </div>
 
-      {!walked && (
+      {byHand && (
+        <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs">
+          This round is in the order somebody set for it, not the router&apos;s.
+        </p>
+      )}
+
+      {!walked && !byHand && (
         <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
           This zone has not been walked by the router yet, so the doors are in the order they were picked rather
           than the order they are best walked in.

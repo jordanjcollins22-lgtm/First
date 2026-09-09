@@ -37,6 +37,7 @@ export default async function RoutePage({ params }: { params: Promise<{ playId: 
       doors={route.doors}
       park={route.park}
       walked={route.walked}
+      byHand={route.byHand}
     />
   );
 }

@@ -206,3 +206,129 @@ BEGIN
 END $function$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- A round can be walked in the order a person says.
+--
+-- The router works out a good order and it is usually right, but it does not
+-- know that this cul-de-sac is easier from the top, or that the crew parks by
+-- the school and works outwards, or that the far side of the main road is
+-- somebody else's round. Those are things a person knows and a shortest-path
+-- algorithm cannot be told.
+--
+-- Two ways to say it, one thing stored: draw the line the walk should follow,
+-- or tap the doors in the order you want them. Both produce house ids in order.
+--
+-- It is applied rather than trusted, because it goes stale -- doors get added
+-- after it was set and doors on it get taken off. Ids no longer on the round
+-- are ignored, and doors added since fall in behind in the router's order.
+-- Nothing is ever dropped for being absent from the list: dropping a door
+-- silently is how a street gets missed.
+--
+-- walk_order_line keeps the line that was drawn so it can be shown back and
+-- adjusted rather than redrawn from nothing. It describes the shape of the
+-- walk, not the walk itself -- a line up one side of a street and back down the
+-- other passes nowhere near most of the doors it orders.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE public.marketing_plays
+  ADD COLUMN IF NOT EXISTS walk_order JSONB,
+  ADD COLUMN IF NOT EXISTS walk_order_line JSONB,
+  ADD COLUMN IF NOT EXISTS walk_order_set_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS walk_order_set_by UUID;
+
+CREATE OR REPLACE FUNCTION public.marketing_play_set_order(
+  org uuid, the_play uuid, order_ids uuid[], line jsonb DEFAULT NULL, by uuid DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE p RECORD; kept UUID[];
+BEGIN
+  PERFORM assert_own_org(org);
+  SELECT * INTO p FROM marketing_plays WHERE id = the_play AND organization_id = org;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'error', 'That round is not there.'); END IF;
+
+  -- Clearing it puts the round back on the router's order.
+  IF order_ids IS NULL OR array_length(order_ids, 1) IS NULL THEN
+    UPDATE marketing_plays
+    SET walk_order = NULL, walk_order_line = NULL, walk_order_set_at = NULL, walk_order_set_by = NULL,
+        updated_at = now()
+    WHERE id = the_play;
+    RETURN jsonb_build_object('ok', true, 'ordered', 0, 'cleared', true);
+  END IF;
+
+  -- Only doors actually on this round, first mention wins.
+  SELECT array_agg(id ORDER BY ord) INTO kept
+  FROM (
+    SELECT DISTINCT ON (a.id) a.id, a.ord
+    FROM unnest(order_ids) WITH ORDINALITY a(id, ord)
+    WHERE p.targets ? a.id::text
+    ORDER BY a.id, a.ord
+  ) u;
+
+  IF kept IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'None of those doors are on this round.');
+  END IF;
+
+  UPDATE marketing_plays
+  SET walk_order = to_jsonb(kept), walk_order_line = line,
+      walk_order_set_at = now(), walk_order_set_by = by, updated_at = now()
+  WHERE id = the_play;
+
+  RETURN jsonb_build_object('ok', true, 'ordered', array_length(kept, 1),
+                            'total', jsonb_array_length(p.targets));
+END $function$;
+
+-- The route prefers what a person said, and falls back to the walk.
+CREATE OR REPLACE FUNCTION public.marketing_play_route(the_play uuid)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SET search_path TO 'public'
+AS $function$
+  WITH play AS (
+    SELECT m.id, m.targets, m.zone_id, m.walk_order, m.walk_order_line,
+           z.walk_path, z.park_point, z.mode, z.name AS zone_name
+    FROM marketing_plays m
+    LEFT JOIN hanger_zones z ON z.id = m.zone_id
+    WHERE m.id = the_play
+  ),
+  walk AS (
+    SELECT o.ord, (o.step->>'lat')::float8 AS lat, (o.step->>'lng')::float8 AS lng
+    FROM play p, jsonb_array_elements(coalesce(p.walk_path, '[]'::jsonb)) WITH ORDINALITY o(step, ord)
+  ),
+  doors AS (
+    SELECT th.id, th.address, th.lat, th.lng, o.ord AS chosen_ord
+    FROM play p, jsonb_array_elements_text(p.targets) WITH ORDINALITY o(id, ord)
+    JOIN houses th ON th.id = (o.id)::uuid
+    WHERE th.lat IS NOT NULL AND th.lng IS NOT NULL
+  ),
+  -- Where a person put each door. Doors they did not mention sort after every
+  -- one they did, rather than being dropped.
+  said AS (
+    SELECT (o.id)::uuid AS id, o.ord
+    FROM play p, jsonb_array_elements_text(coalesce(p.walk_order, '[]'::jsonb)) WITH ORDINALITY o(id, ord)
+  ),
+  placed AS (
+    SELECT d.id, d.address, d.lat, d.lng, s.ord AS said_ord,
+           coalesce((SELECT w.ord FROM walk w
+                     ORDER BY (w.lat - d.lat) ^ 2 + (w.lng - d.lng) ^ 2 LIMIT 1), d.chosen_ord) AS walk_ord,
+           d.chosen_ord
+    FROM doors d LEFT JOIN said s ON s.id = d.id
+  )
+  SELECT jsonb_build_object(
+    'zoneName', (SELECT zone_name FROM play),
+    'mode', (SELECT mode FROM play),
+    'park', (SELECT park_point FROM play),
+    'walked', (SELECT walk_path IS NOT NULL FROM play),
+    'byHand', (SELECT walk_order IS NOT NULL FROM play),
+    'line', (SELECT walk_order_line FROM play),
+    'doors', coalesce((
+      SELECT jsonb_agg(jsonb_build_object('id', id, 'address', address, 'lat', lat, 'lng', lng)
+                       ORDER BY said_ord NULLS LAST, walk_ord, chosen_ord)
+      FROM placed), '[]'::jsonb)
+  );
+$function$;
+
+NOTIFY pgrst, 'reload schema';

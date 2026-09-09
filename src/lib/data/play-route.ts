@@ -23,6 +23,8 @@ export interface PlayRoute {
   park: { lat: number; lng: number } | null;
   /** False when the zone has never been walked, so the order is the fallback one. */
   walked: boolean;
+  /** True when a person said what order this is walked in. */
+  byHand: boolean;
   doors: RouteDoor[];
 }
 
@@ -37,6 +39,7 @@ export async function playRoute(playId: string): Promise<PlayRoute | null> {
     mode: raw.mode ?? null,
     park: raw.park ?? null,
     walked: Boolean(raw.walked),
+    byHand: Boolean(raw.byHand),
     doors: raw.doors,
   };
 }
