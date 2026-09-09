@@ -17,7 +17,7 @@ import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { computeProposalTotal } from "@/lib/proposal-pricing";
-import { scopeTextFor, serviceLabelFor } from "@/lib/zone-scope";
+import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
@@ -76,15 +76,31 @@ export async function generateProposal(
 
   const pricingBy = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
 
-  const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone) => {
+  // Worked out for the whole plan at once rather than a zone at a time. The
+  // crew does the same thing in every lawn area and the same thing in every
+  // bed, so the paragraph belongs to the service and every area of it gets the
+  // same one. A note typed on one area during the evaluation still wins for
+  // that area, because it was written about that area.
+  const scopeInputs: ZoneScopeInput[] = zones.map((zone) => {
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
     // A service this business invented has no built-in definition, and its
     // name lives on the pricing row. Without this the label fell through to
     // the raw `custom-<uuid>` and the client read a database id.
     const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
-    const pricing = pricingRow
-      ? { name: pricingRow.name, scopeTemplate: pricingRow.scope_template }
-      : undefined;
+    return {
+      serviceId: zone.service?.typeId ?? null,
+      def,
+      pricing: pricingRow ? { name: pricingRow.name, scopeTemplate: pricingRow.scope_template } : undefined,
+      values: zone.service?.values ?? {},
+      notes: zone.service?.notes,
+    };
+  });
+  const scopeTexts = scopesForZones(scopeInputs);
+
+  const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone, index) => {
+    const def = scopeInputs[index].def;
+    const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
+    const pricing = scopeInputs[index].pricing;
     // Priced one area at a time as well as all together, so that a client who
     // later asks to drop an area can be shown the price they were quoted
     // minus that area — rather than whatever today's rate card would say.
@@ -92,12 +108,7 @@ export async function generateProposal(
     return {
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricing),
-      scopeText: scopeTextFor({
-        def,
-        pricing,
-        values: zone.service?.values ?? {},
-        notes: zone.service?.notes,
-      }),
+      scopeText: scopeTexts[index],
       photoPaths: zone.service?.photos ?? [],
       points: zone.points,
       color: zone.color,

@@ -4,8 +4,11 @@ import {
   displayLabel,
   looksLikeRawId,
   scopeTextFor,
+  scopesForZones,
   serviceLabelFor,
   zoneNeedsScope,
+  zonesSharingService,
+  type ZoneScopeInput,
 } from "./zone-scope";
 
 const CUSTOM_ID = "custom-488c16d9-2617-46ea-8635-cb7ce7bd8448";
@@ -117,5 +120,124 @@ describe("displayLabel", () => {
 
   it("leaves a good label untouched", () => {
     expect(displayLabel("Mulch", { name: "Something else" })).toBe("Mulch");
+  });
+});
+
+/** A zone of one service, with whatever the evaluator answered on it. */
+function zone(serviceId: string, extra: Partial<ZoneScopeInput> = {}): ZoneScopeInput {
+  return {
+    serviceId,
+    def: { label: "Lawn Care", autoScope: (() => "Mow, edge, blow off.") as never },
+    ...extra,
+  };
+}
+
+describe("one scope per service, across every area of it", () => {
+  it("gives three lawn areas the same paragraph", () => {
+    const scopes = scopesForZones([zone("lawn-care"), zone("lawn-care"), zone("lawn-care")]);
+    expect(scopes).toEqual(["Mow, edge, blow off.", "Mow, edge, blow off.", "Mow, edge, blow off."]);
+  });
+
+  it("keeps different services apart", () => {
+    const beds = { def: { label: "Beds", autoScope: (() => "Weed, edge, mulch.") as never } };
+    const scopes = scopesForZones([zone("lawn-care"), zone("landscape-bed", beds)]);
+    expect(scopes).toEqual(["Mow, edge, blow off.", "Weed, edge, mulch."]);
+  });
+
+  it("lets a note on one area stay on that area", () => {
+    // The exception the evaluation records: this bed has the fence to work
+    // around, and that is true of this bed and no other.
+    const scopes = scopesForZones([
+      zone("lawn-care"),
+      zone("lawn-care", { notes: "Gate is padlocked — the client leaves the key under the pot." }),
+      zone("lawn-care"),
+    ]);
+    expect(scopes[0]).toBe("Mow, edge, blow off.");
+    expect(scopes[1]).toBe("Gate is padlocked — the client leaves the key under the pot.");
+    expect(scopes[2]).toBe("Mow, edge, blow off.");
+  });
+
+  it("does not let one area's note become every area's scope", () => {
+    const scopes = scopesForZones([
+      zone("lawn-care", { notes: "Watch the sprinkler heads by the drive." }),
+      zone("lawn-care"),
+    ]);
+    expect(scopes[1]).toBe("Mow, edge, blow off.");
+  });
+
+  it("uses the business's own wording for the service when it has one", () => {
+    const pricing = { name: "Lawn Care", scopeTemplate: "Cut at three inches, every seven days." };
+    const scopes = scopesForZones([zone("lawn-care", { pricing }), zone("lawn-care")]);
+    // Written once against the service, so it reaches every area of it --
+    // including the ones whose own pricing row was not looked up.
+    expect(scopes).toEqual([
+      "Cut at three inches, every seven days.",
+      "Cut at three inches, every seven days.",
+    ]);
+  });
+
+  it("does not let one oddly answered area rewrite the rest", () => {
+    // Four areas say one thing and one says another; the four win.
+    const odd = { def: { label: "Lawn Care", autoScope: (() => "Mow only.") as never } };
+    const scopes = scopesForZones([
+      zone("lawn-care"),
+      zone("lawn-care"),
+      zone("lawn-care", odd),
+      zone("lawn-care"),
+    ]);
+    expect(scopes.every((s) => s === "Mow, edge, blow off.")).toBe(true);
+  });
+
+  it("takes the first when two readings are equally common", () => {
+    const other = { def: { label: "Lawn Care", autoScope: (() => "Mow only.") as never } };
+    const scopes = scopesForZones([zone("lawn-care"), zone("lawn-care", other)]);
+    expect(scopes).toEqual(["Mow, edge, blow off.", "Mow, edge, blow off."]);
+  });
+
+  it("leaves a zone with no service to itself", () => {
+    const scopes = scopesForZones([
+      { serviceId: null, notes: "Odd corner, see photo." },
+      { serviceId: null },
+      zone("lawn-care"),
+    ]);
+    expect(scopes).toEqual(["Odd corner, see photo.", "", "Mow, edge, blow off."]);
+  });
+
+  it("says nothing rather than something wrong when there is nothing to say", () => {
+    expect(scopesForZones([{ serviceId: "lawn-care" }])).toEqual([""]);
+  });
+
+  it("gives back nothing for no zones", () => {
+    expect(scopesForZones([])).toEqual([]);
+  });
+
+  it("agrees with the single-zone answer when there is only one zone", () => {
+    const one = zone("lawn-care", { notes: "  " });
+    expect(scopesForZones([one])[0]).toBe(scopeTextFor(one));
+  });
+});
+
+describe("which other areas are the same service", () => {
+  const zones = [
+    { serviceId: "lawn-care" },
+    { serviceId: "landscape-bed" },
+    { serviceId: "lawn-care" },
+    { serviceId: "lawn-care" },
+  ];
+
+  it("finds the others and leaves this one out", () => {
+    expect(zonesSharingService(zones, 0)).toEqual([2, 3]);
+  });
+
+  it("finds none when the service appears once", () => {
+    expect(zonesSharingService(zones, 1)).toEqual([]);
+  });
+
+  it("finds none for a zone with no service", () => {
+    expect(zonesSharingService([{ serviceId: null }, { serviceId: null }], 0)).toEqual([]);
+  });
+
+  it("finds none for an index that is not there", () => {
+    expect(zonesSharingService(zones, 9)).toEqual([]);
   });
 });

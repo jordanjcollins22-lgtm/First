@@ -11,6 +11,7 @@ import { ViewCount } from "@/components/proposal/view-count";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import { suggestZoneScope } from "@/lib/actions/scope-suggestion-actions";
+import { zonesSharingService } from "@/lib/zone-scope";
 import { effectiveMultiplier, type Markup } from "@/lib/job-costing";
 import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
 
@@ -348,7 +349,7 @@ export function ProposalPanel({
                   {/* Under the box it fills, not in a toolbar at the top: the
                       evaluator's notes for this zone are what it writes from,
                       and this is the only place that is obvious. */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleSuggest(i)}
@@ -370,6 +371,32 @@ export function ProposalPanel({
                     {suggestError?.index === i && (
                       <span className="text-xs text-muted-foreground">{suggestError.message}</span>
                     )}
+                    {/* The scope already arrives shared: every area of a
+                        service gets the same paragraph. This is for after an
+                        edit, so a change made in one area does not quietly
+                        leave the other three describing the old job. */}
+                    {(() => {
+                      const others = zonesSharingService(
+                        draftZones.map((z) => ({ serviceId: z.serviceLabel })),
+                        i
+                      );
+                      const behind = others.filter((j) => draftZones[j].scopeText !== zone.scopeText);
+                      if (behind.length === 0) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraftZones((prev) =>
+                              prev.map((z, j) => (behind.includes(j) ? { ...z, scopeText: zone.scopeText } : z))
+                            )
+                          }
+                          className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                        >
+                          Use this for the other {behind.length} {zone.serviceLabel} area
+                          {behind.length === 1 ? "" : "s"}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}

@@ -111,3 +111,115 @@ export function displayLabel(stored: string, pricing: PricingRowLike | undefined
   const fromPricing = pricing?.name?.trim();
   return fromPricing || "Service";
 }
+
+/**
+ * One zone, and which service it is, for working out scopes together.
+ *
+ * The service id is what makes zones the same job. Two lawn care areas on one
+ * property are the same work done twice, not two different pieces of work.
+ */
+export interface ZoneScopeInput extends ScopeInput {
+  /** The service this zone is. Zones that share it share their scope. */
+  serviceId?: string | null;
+}
+
+/**
+ * The scope for every zone, answered one service at a time.
+ *
+ * The crew does the same thing in every lawn area, and the same thing in every
+ * bed, so a proposal that describes each area differently is describing a job
+ * nobody is going to do. Worse, the differences were accidental: the wording
+ * is generated from the evaluator's answers, and two areas answered slightly
+ * differently produced two paragraphs that read as two different services.
+ *
+ * So the paragraph belongs to the service, and every area of that service gets
+ * it. The one exception is the thing that was actually said about one area: a
+ * note typed on a zone during the evaluation is about that area -- the bed with
+ * the fence to work around, the strip the dog is in -- and it stays there.
+ *
+ * Where a business has written its own wording for a service, that is the
+ * shared scope. Where it has not, the shared scope is whichever generated
+ * paragraph most of that service's areas produced, so one area answered oddly
+ * does not rewrite the other five.
+ */
+export function scopesForZones(zones: readonly ZoneScopeInput[]): string[] {
+  const shared = new Map<string, string>();
+
+  for (const [key, group] of byService(zones)) {
+    const preset = group.map((zone) => zone.pricing?.scopeTemplate?.trim()).find(Boolean);
+    if (preset) {
+      shared.set(key, preset);
+      continue;
+    }
+    const generated = group
+      .map((zone) => zone.def?.autoScope?.((zone.values ?? {}) as never)?.trim())
+      .filter((text): text is string => Boolean(text));
+    shared.set(key, commonest(generated));
+  }
+
+  return zones.map((zone, index) => {
+    // What somebody wrote standing in front of this area beats anything a
+    // preset or a template can say about the service in general.
+    const notes = zone.notes?.trim();
+    if (notes) return notes;
+    return shared.get(serviceKey(zone, index)) ?? "";
+  });
+}
+
+/**
+ * Which other zones are the same service as this one.
+ *
+ * The office edits scope one area at a time; this is what lets it say "and the
+ * other three areas of this too" without anybody counting.
+ */
+export function zonesSharingService(
+  zones: readonly { serviceId?: string | null }[],
+  index: number
+): number[] {
+  const id = zones[index]?.serviceId?.trim();
+  if (!id) return [];
+  return zones.reduce<number[]>((out, zone, i) => {
+    if (i !== index && zone.serviceId?.trim() === id) out.push(i);
+    return out;
+  }, []);
+}
+
+/** A zone with no service is its own group: there is nothing to share with. */
+function serviceKey(zone: ZoneScopeInput, index: number): string {
+  const id = zone.serviceId?.trim();
+  return id ? `service:${id}` : `zone:${index}`;
+}
+
+function byService(zones: readonly ZoneScopeInput[]): Map<string, ZoneScopeInput[]> {
+  const groups = new Map<string, ZoneScopeInput[]>();
+  zones.forEach((zone, index) => {
+    const key = serviceKey(zone, index);
+    const list = groups.get(key) ?? [];
+    list.push(zone);
+    groups.set(key, list);
+  });
+  return groups;
+}
+
+/**
+ * The text that came up most often, and the earliest one when it is a tie.
+ *
+ * A count rather than a merge: the wording is a whole sentence about how the
+ * work is done, and half of one sentence joined to half of another is not a
+ * scope of work. What most of the areas said is the closest thing to what the
+ * crew is going to do.
+ */
+function commonest(texts: readonly string[]): string {
+  let best = "";
+  let bestCount = 0;
+  const counts = new Map<string, number>();
+  for (const text of texts) {
+    const count = (counts.get(text) ?? 0) + 1;
+    counts.set(text, count);
+    if (count > bestCount) {
+      best = text;
+      bestCount = count;
+    }
+  }
+  return best;
+}
