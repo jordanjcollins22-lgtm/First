@@ -1,20 +1,23 @@
 import { checkTabAccess } from "@/lib/data/access";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { posterBookingPath } from "@/lib/neighborhood-poster";
-import { renderPoster } from "@/lib/poster-render";
+import { renderSign } from "@/lib/poster-render";
 
 /**
- * The neighbourhood sign, as a file the office printer can take.
+ * The neighbourhood sign, as sheets the office printer can take.
  *
  * A twenty by thirty frame is not a size any printer here can make, and a
  * print shop is a day and a drive for a sign that goes out this afternoon. So
- * it comes back as letter sheets to cut out and tape together, drawn at the
- * real size rather than scaled up from a picture.
+ * it comes back as cutouts: every phrase printed at its finished size on its
+ * own sheet, cut out on straight lines and laid on the board. Nothing has to
+ * be joined to anything, which is the difference between a sign somebody
+ * makes in ten minutes and one they give up on.
  *
  * The size is a parameter because frames vary. Twenty by thirty is the
  * default; ?w=24&h=36 is a different frame and the same sign.
  */
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const { allowed, profile } = await checkTabAccess("signs");
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
   const organization = await getCurrentOrganization();
   const origin = new URL(request.url).origin;
 
-  const { bytes } = await renderPoster({
+  const { bytes } = await renderSign({
     width,
     height,
     businessName: organization.name,

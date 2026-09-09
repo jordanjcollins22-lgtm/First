@@ -126,8 +126,8 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "price. It is reached from the crew's own screen on a job, because handing it over is done at a " +
     "door and not at a desk.",
   "/admin/marketing/poster/pdf":
-    "The sign itself, cut into letter sheets. Guarded by the Neighborhood Sign tab, like the page it is " +
-    "reached from.",
+    "The sign itself, as cutouts on letter sheets. Guarded by the Neighborhood Sign tab, like the page it " +
+    "is reached from.",
   "/admin/weeds/sheet/pdf":
     "The same two sheets as a file, drawn page by page rather than printed by a browser. Gated exactly " +
     "as the page is: the crew's reference behind the Weed Guide tab, the client's handout open to " +
