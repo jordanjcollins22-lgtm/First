@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Camera, Check, ImagePlus, Loader2, Pencil, X } from "lucide-react";
+import { Camera, Check, ClipboardPaste, ImagePlus, Loader2, Pencil, X } from "lucide-react";
 
 import {
   Dialog,
@@ -11,7 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { extensionForImage, imagesFromClipboard, pasteIsForTyping } from "@/lib/pasted-images";
+import {
+  extensionForImage,
+  imagesFromClipboard,
+  pasteIsForTyping,
+  readClipboardImages,
+} from "@/lib/pasted-images";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -606,6 +611,35 @@ export function ZoneServiceDialog({
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, [open]);
+
+  /**
+   * The Paste button.
+   *
+   * The keyboard shortcut is handed a paste event with the files already on
+   * it. A button has to go and ask the system clipboard, which is a different
+   * browser interface: it can raise a permission prompt, and Firefox does not
+   * implement it for images at all. So when asking does not work, it says
+   * which keys do, because those always do.
+   */
+  async function handlePasteButton() {
+    setPhotoError(null);
+    try {
+      const clipboard = navigator.clipboard as { read?: () => Promise<ClipboardItem[]> } | undefined;
+      if (!clipboard?.read) {
+        setPhotoError("This browser won't let a button read the clipboard. Press Ctrl+V (Cmd+V on a Mac) instead.");
+        return;
+      }
+      const images = await readClipboardImages(await clipboard.read());
+      if (images.length === 0) {
+        setPhotoError("No picture on the clipboard. Copy one, then press Paste.");
+        return;
+      }
+      setPasted(images.length);
+      await uploadPhotos(images);
+    } catch {
+      setPhotoError("Couldn't read the clipboard. Press Ctrl+V (Cmd+V on a Mac) instead.");
+    }
+  }
 
   useEffect(() => {
     if (pasted === null || photoUploading) return;
@@ -1203,11 +1237,26 @@ export function ZoneServiceDialog({
                 onChange={handlePhotosChange}
               />
             </label>
+            {/* A button as well as the shortcut. The shortcut is faster once
+                you know it is there, and nobody knows it is there. */}
+            <button
+              type="button"
+              onClick={handlePasteButton}
+              disabled={photoUploading}
+              title="Paste a picture you have copied"
+              className={cn(
+                "flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent",
+                photoUploading ? "pointer-events-none opacity-60" : "cursor-pointer"
+              )}
+            >
+              {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardPaste className="h-4 w-4" />}
+              <span className="text-[10px]">{photoUploading ? "Uploading..." : "Paste"}</span>
+            </button>
           </div>
           {photoError && <p className="text-xs text-destructive">{photoError}</p>}
           <p className="text-[10px] text-muted-foreground">
             Photos already on your phone work too — no signal needed until you&apos;re back online to save. At a
-            desk, copy a picture from anywhere and paste it here.
+            desk, copy a picture from anywhere and press Paste, or Ctrl+V (Cmd+V on a Mac).
           </p>
           {markPromptQueue.length > 0 && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">

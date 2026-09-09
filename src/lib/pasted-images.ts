@@ -83,3 +83,47 @@ export function pasteIsForTyping(target: EventTarget | null): boolean {
   const tag = String(element.tagName ?? "").toUpperCase();
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable === true;
 }
+
+/**
+ * The image type to ask a clipboard entry for.
+ *
+ * A single copied picture is offered in several forms at once, and the choice
+ * between them matters: PNG is lossless and universally readable, so it wins
+ * where it is offered. Anything else image-shaped will do. The HTML and the
+ * plain text that came along are not pictures.
+ */
+export function pickImageType(types: readonly string[]): string | null {
+  const images = types.filter(isImageType);
+  if (images.length === 0) return null;
+  return images.find((type) => type.toLowerCase() === "image/png") ?? images[0];
+}
+
+/** As much of a clipboard entry as reading a picture out of it needs. */
+export interface ClipboardEntry {
+  types: readonly string[];
+  getType: (type: string) => Promise<Blob>;
+}
+
+/**
+ * The pictures on the system clipboard, read on purpose rather than caught.
+ *
+ * The keyboard shortcut hands us a paste event with the files already on it.
+ * A button has to go and ask, which is a different browser interface, may
+ * raise a permission prompt, and is not implemented everywhere. So this reads
+ * what it can and the caller falls back to telling somebody to press the keys,
+ * which always works.
+ */
+export async function readClipboardImages(entries: readonly ClipboardEntry[]): Promise<File[]> {
+  const found: File[] = [];
+  for (const entry of entries) {
+    const type = pickImageType(entry.types);
+    if (!type) continue;
+    try {
+      const blob = await entry.getType(type);
+      found.push(new File([blob], `pasted.${extensionForImage(type)}`, { type }));
+    } catch {
+      // One unreadable entry is not a reason to drop the others.
+    }
+  }
+  return found;
+}

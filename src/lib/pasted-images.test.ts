@@ -5,6 +5,8 @@ import {
   imagesFromClipboard,
   isImageType,
   pasteIsForTyping,
+  pickImageType,
+  readClipboardImages,
 } from "@/lib/pasted-images";
 
 /** A stand-in for a File, which vitest's environment does not always give us. */
@@ -124,5 +126,55 @@ describe("whose paste it is", () => {
 
   it("takes a paste with no target at all", () => {
     expect(pasteIsForTyping(null)).toBe(false);
+  });
+});
+
+describe("choosing which form of a copied picture to ask for", () => {
+  it("prefers png, which is lossless and read by everything", () => {
+    expect(pickImageType(["image/jpeg", "image/png"])).toBe("image/png");
+  });
+
+  it("takes whatever picture is on offer when there is no png", () => {
+    expect(pickImageType(["text/html", "image/webp"])).toBe("image/webp");
+  });
+
+  it("ignores the text and markup that came with it", () => {
+    expect(pickImageType(["text/html", "text/plain"])).toBeNull();
+    expect(pickImageType([])).toBeNull();
+  });
+});
+
+describe("reading pictures off the system clipboard", () => {
+  const entry = (types: string[], blob: Blob | Error = new Blob(["x"])) => ({
+    types,
+    getType: async () => {
+      if (blob instanceof Error) throw blob;
+      return blob;
+    },
+  });
+
+  it("makes a named file out of what it read", async () => {
+    const [image] = await readClipboardImages([entry(["image/png"])]);
+    expect(image.type).toBe("image/png");
+    expect(image.name).toBe("pasted.png");
+  });
+
+  it("skips an entry with no picture in it", async () => {
+    expect(await readClipboardImages([entry(["text/plain"])])).toEqual([]);
+  });
+
+  it("keeps the others when one entry will not open", async () => {
+    // A clipboard entry that refuses to be read is not a reason to lose the
+    // picture beside it.
+    const images = await readClipboardImages([
+      entry(["image/png"], new Error("denied")),
+      entry(["image/jpeg"]),
+    ]);
+    expect(images).toHaveLength(1);
+    expect(images[0].type).toBe("image/jpeg");
+  });
+
+  it("gives back nothing for an empty clipboard", async () => {
+    expect(await readClipboardImages([])).toEqual([]);
   });
 });
