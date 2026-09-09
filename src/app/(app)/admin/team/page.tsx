@@ -24,6 +24,9 @@ import { PhoneInput } from "@/components/team/phone-input";
 import { EditTeamMember } from "@/components/team/edit-team-member";
 import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
 import { startImpersonation } from "@/lib/actions/impersonation-actions";
+import { CalibrationPanel } from "@/components/growth/calibration-panel";
+import { calibrationReport } from "@/lib/data/calibration";
+import { canSell, isOwnerLevel } from "@/lib/roles";
 import type {
   CustomRole,
   MeasurementBasis,
@@ -304,6 +307,16 @@ export default async function TeamServicesPage() {
               )}
             </div>
 
+            {/* What the work actually takes, against what it is sold as
+                taking. Above the price list rather than below it: the numbers
+                in the list are the thing this is about. */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>How long it really takes</CardTitle>
+              </CardHeader>
+              <CardContent>{await CalibrationSection()}</CardContent>
+            </Card>
+
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Add a service</CardTitle>
@@ -387,5 +400,34 @@ export default async function TeamServicesPage() {
         }
       />
     </div>
+  );
+}
+
+/**
+ * Quoted hours against clocked hours.
+ *
+ * Fails on its own: a time table that will not read costs this card and
+ * nothing else on the page.
+ */
+async function CalibrationSection() {
+  const [report, viewer] = await Promise.all([
+    calibrationReport().catch((err) => {
+      console.error("Calibration failed to load:", err);
+      return null;
+    }),
+    getCurrentProfile().catch(() => null),
+  ]);
+  if (!report) {
+    return <p className="text-sm text-muted-foreground">The measured times could not be read just now.</p>;
+  }
+  const roles = (viewer?.roles ?? []) as string[];
+  return (
+    <CalibrationPanel
+      services={report.services}
+      headline={report.headline}
+      crewCostPerHourCents={report.crewCostPerHourCents}
+      jobsWithoutTime={report.jobsWithoutTime}
+      canApply={isOwnerLevel(roles) || canSell(roles)}
+    />
   );
 }
