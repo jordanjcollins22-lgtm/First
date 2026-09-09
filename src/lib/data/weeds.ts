@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { env } from "@/lib/env";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { WEED_GROUPS, WEED_SEED, type Weed, type WeedGroup, type WeedPhoto } from "@/lib/weeds";
 
@@ -127,4 +128,29 @@ export async function weedByCode(code: string): Promise<ScannedWeed | null> {
 export async function weedPhotoUrl(path: string): Promise<string> {
   const supabase = await createClient();
   return supabase.storage.from("weed-photos").getPublicUrl(path).data.publicUrl;
+}
+
+/**
+ * The same photo, cropped to the box the sheet gives it and always a JPEG.
+ *
+ * A PDF can carry a JPEG or a PNG and nothing else, and the photos people
+ * have uploaded are a mixture of JPEG, PNG, WebP and one GIF. Storage's own
+ * transformer settles both at once: it crops to the aspect the sheet wants
+ * so the picture is not squashed, and it answers in whatever format the
+ * request will accept -- which, for us, is JPEG only.
+ *
+ * Asked for at print resolution rather than screen: a photo about an inch and
+ * a half across wants five hundred pixels to look like a photograph on paper
+ * instead of a thumbnail somebody enlarged.
+ */
+export function weedPhotoJpegUrl(path: string, width: number, height: number): string {
+  const base = env.supabaseUrl.replace(/\/$/, "");
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  const query = new URLSearchParams({
+    width: String(Math.round(width)),
+    height: String(Math.round(height)),
+    resize: "cover",
+    quality: "80",
+  });
+  return `${base}/storage/v1/render/image/public/weed-photos/${encoded}?${query.toString()}`;
 }

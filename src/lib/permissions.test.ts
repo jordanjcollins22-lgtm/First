@@ -7,10 +7,18 @@ import { tabFor, tabLabel, TABS, UNGOVERNED_ROUTES, tabsAllowedForRoles, unconfi
 
 const APP_DIR = join(process.cwd(), "src", "app", "(app)");
 
-/** Every route under the (app) group that renders a page. */
+/**
+ * Every route under the (app) group that answers a request.
+ *
+ * Route handlers count as well as pages. One of them serves the whole weed
+ * sheet as a file, and a thing that hands over content needs a decision about
+ * who may have it just as much as a page does.
+ */
 function findRoutes(dir: string, prefix = ""): string[] {
   const routes: string[] = [];
-  if (existsSync(join(dir, "page.tsx"))) routes.push(prefix === "" ? "/" : prefix);
+  if (existsSync(join(dir, "page.tsx")) || existsSync(join(dir, "route.ts"))) {
+    routes.push(prefix === "" ? "/" : prefix);
+  }
 
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
@@ -29,7 +37,7 @@ describe("page permissions registry", () => {
 
     const ungoverned = routes.filter((r) => !governed.has(r) && !exempt.has(r));
 
-    // If this fails you added a page. Put it in TABS so it shows up on the
+    // If this fails you added a page or a route handler. Put it in TABS so it shows up on the
     // permissions matrix, or in UNGOVERNED_ROUTES with the reason it isn't a
     // tab. Either way somebody decided, which is the point.
     expect(ungoverned, `Ungoverned pages: ${ungoverned.join(", ")}`).toEqual([]);

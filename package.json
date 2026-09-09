@@ -38,6 +38,7 @@
     "mapbox-gl": "^3.28.1",
     "mapbox-gl-draw-rectangle-mode": "^1.0.4",
     "next": "16.3.0",
+    "pdf-lib": "^1.17.1",
     "plaid": "^47.0.0",
     "qrcode": "^1.5.4",
     "react": "19.2.8",

@@ -80,15 +80,17 @@ export function FieldScreen({
         </Link>
         {/* The sheet we hand over, from the screen of the person standing at
             the door. It was only ever reachable from an admin tool, so in
-            practice nobody on site could produce one. Opens in its own tab:
-            printing it should not cost the crew the job they are on. */}
+            practice nobody on site could produce one. The PDF rather than the
+            page, because this is a phone and a phone's browser is the thing
+            that has been cutting the tops off the back pages. Opens in its own
+            tab: printing it should not cost the crew the job they are on. */}
         <Link
-          href="/admin/weeds/sheet?view=client"
+          href="/admin/weeds/sheet/pdf?view=client"
           target="_blank"
           rel="noopener noreferrer"
           className="col-span-2 flex min-h-14 items-center justify-center gap-2 rounded-xl border border-border bg-card/60 text-sm font-semibold"
         >
-          <Leaf className="h-5 w-5" /> Weed sheet for the client
+          <Leaf className="h-5 w-5" /> Weed sheet for the client (PDF)
         </Link>
         {clientPhone && (
           <a

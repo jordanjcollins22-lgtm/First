@@ -47,19 +47,33 @@ export default async function WeedGuidePage() {
             the same weeds it is ticked for plus the scientific name and the prep note.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/weeds/sheet?view=client"
-            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-          >
-            Client sheet
-          </Link>
-          <Link
-            href="/admin/weeds/sheet?view=crew"
-            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-          >
-            Crew reference
-          </Link>
+        {/* Two sheets, two ways each. The page is the quick look; the PDF is
+            what goes to a printer, because printing the page leaves the
+            margins to the browser and phones get them wrong. */}
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/weeds/sheet?view=client"
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Client sheet
+            </Link>
+            <Link
+              href="/admin/weeds/sheet?view=crew"
+              className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              Crew reference
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <a href="/admin/weeds/sheet/pdf?view=client" className="text-primary hover:underline">
+              Client sheet PDF
+            </a>
+            <span className="text-muted-foreground">·</span>
+            <a href="/admin/weeds/sheet/pdf?view=crew" className="text-primary hover:underline">
+              Crew reference PDF
+            </a>
+          </div>
         </div>
       </header>
 

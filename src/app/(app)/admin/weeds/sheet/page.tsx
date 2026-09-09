@@ -115,6 +115,19 @@ export default async function WeedSheetPage({
             Every row carries its own code —
             scanning it opens that weed with all its photos.
           </p>
+          {/* Printing this page hands the layout to whichever browser is
+              holding it, and on a phone that has twice meant the top of the
+              back pages missing. The PDF is drawn by us, page by page, so it
+              is the one to send to a printer or to email somebody. */}
+          <p className="mt-1 text-sm">
+            <Link href={`/admin/weeds/sheet/pdf?view=${view}`} className="font-medium text-primary hover:underline">
+              Download the PDF
+            </Link>{" "}
+            <span className="text-muted-foreground">
+              to print this properly, especially from a phone. Printing the page itself leaves the margins up to the
+              browser, and phones get them wrong.
+            </span>
+          </p>
           {/* The back of every sheet came out upside down, which is a printer
               setting and not something a web page can see or change. Saying so
               here, next to the button, is the only place it helps: by the time
@@ -146,6 +159,12 @@ export default async function WeedSheetPage({
               Back to the guide
             </Link>
           )}
+          <a
+            href={`/admin/weeds/sheet/pdf?view=${view}`}
+            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Download PDF
+          </a>
           <PrintButton />
         </div>
       </div>

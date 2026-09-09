@@ -123,6 +123,11 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "plant photographs, plant names and a code that books us, and it names no client, no job and no " +
     "price. It is reached from the crew's own screen on a job, because handing it over is done at a " +
     "door and not at a desk.",
+  "/admin/weeds/sheet/pdf":
+    "The same two sheets as a file, drawn page by page rather than printed by a browser. Gated exactly " +
+    "as the page is: the crew's reference behind the Weed Guide tab, the client's handout open to " +
+    "anybody signed in. It exists because printing HTML leaves the margins to whichever browser is " +
+    "holding it, and on a phone that meant the top of every page after the first was cut off.",
   "/jobs/[jobId]/work-order":
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +
