@@ -177,10 +177,16 @@ export function capabilities(input: StageInput): Record<Capability, Availability
 
     requestWalkthrough: fromVerdict(canRequestWalkthrough(started, input.walkthroughs ?? [])),
 
-    // Invoicing before the work is done is how a business gets a reputation.
-    invoice: stage === "done" || started
+    // Open the moment they sign. Waiting for a crew to turn up meant a job
+    // that was sold on Monday had no way to take a deposit until Thursday,
+    // and the deposit is the thing that pays for the materials the crew is
+    // turning up with. What stops a business invoicing for work it has not
+    // done is the amount on the invoice, not a locked tab.
+    invoice: sold
       ? OK
-      : { available: false, reason: "Invoice once the work has actually started." },
+      : evaluated
+        ? { available: false, reason: "Get the proposal accepted first — there is nothing agreed to bill for." }
+        : { available: false, reason: "Finish the evaluation and get the proposal accepted first." },
 
     tickets: started
       ? OK

@@ -9,6 +9,7 @@ import { InvoicesPanel } from "@/components/payments/invoices-panel";
 import { getReconciliationRows } from "@/lib/data/client-invoices";
 import { reconcile } from "@/lib/accounting-reconcile";
 import { MoneyPanel } from "@/components/payments/money-panel";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 
 /**
  * What we asked for, in both forms it takes.
@@ -55,10 +56,13 @@ export default async function ProposalsPage() {
 }
 
 async function ProposalsTab() {
-  const proposals = await listAllProposals().catch((err) => {
-    console.error("Proposals failed to load:", err);
-    return [];
-  });
+  const [proposals, organization] = await Promise.all([
+    listAllProposals().catch((err) => {
+      console.error("Proposals failed to load:", err);
+      return [];
+    }),
+    getCurrentOrganization(),
+  ]);
 
   return (
     <div>
@@ -66,7 +70,7 @@ async function ProposalsTab() {
         Proposals generate automatically once an evaluation is submitted — edit the price or scope,
         then approve to send.
       </p>
-      <ProposalsView proposals={proposals} />
+      <ProposalsView proposals={proposals} timeZone={organization.reminder_time_zone ?? null} />
     </div>
   );
 }

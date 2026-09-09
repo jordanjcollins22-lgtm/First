@@ -29,11 +29,12 @@ export type ProposalListProposal = Pick<
   | "total_cost"
   | "scope_snapshot"
   | "generated_at"
+  | "responded_at"
   | "client_response_note"
 >;
 
 const PROPOSAL_COLUMNS =
-  "id, job_id, token, status, total_cost, scope_snapshot, generated_at, client_response_note";
+  "id, job_id, token, status, total_cost, scope_snapshot, generated_at, responded_at, client_response_note";
 
 /** Everything 0131 created. `requested_via` arrived later, in 0133, so it is
  * asked for separately — a deployment part-way between the two should lose

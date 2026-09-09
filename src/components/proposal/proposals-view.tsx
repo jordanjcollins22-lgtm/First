@@ -11,13 +11,24 @@ import type { ProposalWithJob } from "@/lib/data/all-proposals";
 import { ViewCount } from "@/components/proposal/view-count";
 import { TrimPanel } from "@/components/proposal/trim-panel";
 import { editHeadline, priceMoveLabel } from "@/lib/proposal-trim";
+import { responseLabel } from "@/lib/proposal-accepted";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove: boolean }) {
+function ProposalRow({
+  item,
+  showApprove,
+  timeZone,
+}: {
+  item: ProposalWithJob;
+  showApprove: boolean;
+  timeZone: string | null;
+}) {
   const { proposal, job, viewLabel, viewsWarm, edits } = item;
+  // When they answered, not just that they did. Same wording as the job page.
+  const responded = responseLabel(proposal.status, proposal.responded_at, timeZone);
   const [total, setTotal] = useState(String(Math.round(proposal.total_cost ?? 0)));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +72,12 @@ function ProposalRow({ item, showApprove }: { item: ProposalWithJob; showApprove
       {/* Whether they have actually read it. Sent and read are different
           facts, and the office only ever had the first one. */}
       <ViewCount label={viewLabel} warm={viewsWarm} />
+
+      {/* And when they answered. The timestamp was always recorded and never
+          shown, so "when did they sign?" was answered from memory. */}
+      {responded && (
+        <p className="text-xs font-medium text-muted-foreground">{responded}</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
@@ -168,22 +185,31 @@ function ProposalListSection({
   items,
   showApprove,
   emptyLabel,
+  timeZone,
 }: {
   items: ProposalWithJob[];
   showApprove: boolean;
   emptyLabel: string;
+  timeZone: string | null;
 }) {
   if (items.length === 0) return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
   return (
     <div className="flex flex-col gap-3">
       {items.map((item) => (
-        <ProposalRow key={item.proposal.id} item={item} showApprove={showApprove} />
+        <ProposalRow key={item.proposal.id} item={item} showApprove={showApprove} timeZone={timeZone} />
       ))}
     </div>
   );
 }
 
-export function ProposalsView({ proposals }: { proposals: ProposalWithJob[] }) {
+export function ProposalsView({
+  proposals,
+  timeZone = null,
+}: {
+  proposals: ProposalWithJob[];
+  /** The clock the office keeps, so a signature is not dated by the server. */
+  timeZone?: string | null;
+}) {
   const needsApproval = proposals.filter((p) => p.proposal.status === "needs_approval");
   const sent = proposals.filter((p) => p.proposal.status === "sent");
   const declined = proposals.filter((p) => p.proposal.status === "declined");
@@ -198,16 +224,16 @@ export function ProposalsView({ proposals }: { proposals: ProposalWithJob[] }) {
         <TabsTrigger value="accepted">Accepted ({accepted.length})</TabsTrigger>
       </TabsList>
       <TabsContent value="needs_approval">
-        <ProposalListSection items={needsApproval} showApprove emptyLabel="Nothing waiting on you." />
+        <ProposalListSection items={needsApproval} showApprove emptyLabel="Nothing waiting on you." timeZone={timeZone} />
       </TabsContent>
       <TabsContent value="sent">
-        <ProposalListSection items={sent} showApprove={false} emptyLabel="Nothing sent yet." />
+        <ProposalListSection items={sent} showApprove={false} emptyLabel="Nothing sent yet." timeZone={timeZone} />
       </TabsContent>
       <TabsContent value="declined">
-        <ProposalListSection items={declined} showApprove={false} emptyLabel="No declined proposals." />
+        <ProposalListSection items={declined} showApprove={false} emptyLabel="No declined proposals." timeZone={timeZone} />
       </TabsContent>
       <TabsContent value="accepted">
-        <ProposalListSection items={accepted} showApprove={false} emptyLabel="No accepted proposals yet." />
+        <ProposalListSection items={accepted} showApprove={false} emptyLabel="No accepted proposals yet." timeZone={timeZone} />
       </TabsContent>
     </Tabs>
   );

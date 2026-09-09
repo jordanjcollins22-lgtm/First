@@ -48,6 +48,7 @@ import { listJobEntries, listPayPeople } from "@/lib/data/time-clock";
 import { listPlansForJob } from "@/lib/data/payment-plans";
 import { PaymentPlanPanel } from "@/components/payments/payment-plan-panel";
 import { isStripeConfigured } from "@/lib/env";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
 import { isAccountManager as isManagerRole } from "@/lib/affiliate-roles";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
@@ -61,7 +62,8 @@ import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
-import { InvoicePanel } from "@/components/job/invoice-panel";
+import { InvoiceSection } from "@/components/job/invoice-section";
+import { responseLabel } from "@/lib/proposal-accepted";
 import { SchedulePanel } from "@/components/job/schedule-panel";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { BeforeAfterPanel } from "@/components/marketing/before-after-panel";
@@ -163,6 +165,7 @@ export default async function JobPage({
     ownerRow,
     viewer,
     proposalViews,
+    organization,
   ] = await Promise.all([
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
@@ -234,6 +237,10 @@ export default async function JobPage({
     // Reached through the job rather than the proposal, so it does not have
     // to wait for the proposal to come back first.
     viewsForJob(jobId).catch(() => null),
+    // Cached per request, so this costs nothing the layout has not already
+    // paid. Wanted for the clock the office keeps: a timestamp rendered in
+    // the server's UTC dates an evening signature to the following morning.
+    getCurrentOrganization(),
   ]);
 
   // Names for whoever asked for or decided a walkthrough, plus the sign-off.
@@ -267,6 +274,14 @@ export default async function JobPage({
 
   // The same wording as the pipeline card and the proposals list.
   const proposalViewHint = proposalViews ? activityLabel(proposalViews, new Date()) : null;
+
+  // When they answered, in the office's own clock. Worded once, so the
+  // proposal panel and the invoice cannot date the same signature differently.
+  const respondedLabel = responseLabel(
+    proposal?.status ?? null,
+    proposal?.responded_at ?? null,
+    organization.reminder_time_zone
+  );
 
   // Covers the client who paid and closed the tab on Stripe's receipt without
   // ever landing back on our page. Their money is in and nothing here knew
@@ -530,6 +545,7 @@ export default async function JobPage({
                 viewsWarm={
                   proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
                 }
+                respondedLabel={respondedLabel}
               />
             ),
           }]),
@@ -685,16 +701,32 @@ export default async function JobPage({
                   suggestedTotal={proposal?.total_cost ?? null}
                   stripeReady={isStripeConfigured}
                 />
-                {(can.invoice.available || invoice) && <InvoicePanel invoice={invoice} />}
+                {(can.invoice.available || invoice) && (
+                  <InvoiceSection
+                    jobId={jobId}
+                    invoice={invoice}
+                    acceptedLabel={respondedLabel}
+                    agreedTotal={proposal?.total_cost ?? null}
+                    stripeReady={isStripeConfigured}
+                  />
+                )}
               </div>
             ),
           }]),
           ...(!seen.jobMoney ? [] : [{
             id: "invoice",
             title: "Invoice",
-            hint: invoice ? "Raised" : "Not raised",
-            lockedReason: can.invoice.available || invoice ? null : "Not until the work is done.",
-            body: <InvoicePanel invoice={invoice} />,
+            hint: invoice ? "Raised" : can.invoice.available ? "Ready to raise" : "Not raised",
+            lockedReason: can.invoice.available || invoice ? null : can.invoice.reason,
+            body: (
+              <InvoiceSection
+                jobId={jobId}
+                invoice={invoice}
+                acceptedLabel={respondedLabel}
+                agreedTotal={proposal?.total_cost ?? null}
+                stripeReady={isStripeConfigured}
+              />
+            ),
           }]),
           {
             id: "messages",

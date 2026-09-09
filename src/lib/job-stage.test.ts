@@ -154,10 +154,30 @@ describe("capabilities", () => {
     expect(capabilities(job({ evaluationStatus: "completed" })).scheduleEstimate.available).toBe(false);
   });
 
-  it("refuses to invoice work that has not started", () => {
+  it("opens invoicing the moment the proposal is accepted", () => {
+    // A job sold on Monday used to have no way to take a deposit until a crew
+    // turned up on Thursday, which is the wrong way round: the deposit is what
+    // pays for the materials they turn up with.
     expect(capabilities(job({ evaluationStatus: "completed", proposalStatus: "accepted" })).invoice.available).toBe(
-      false
+      true
     );
+    expect(capabilities(job({ status: "approved" })).invoice.available).toBe(true);
+  });
+
+  it("still refuses to invoice a job nobody has agreed to", () => {
+    const unsold = capabilities(job({ evaluationStatus: "completed", proposalStatus: "sent" })).invoice;
+    expect(unsold.available).toBe(false);
+    expect(unsold.available === false && unsold.reason).toContain("accepted");
+  });
+
+  it("tells somebody at the very start what has to happen first", () => {
+    const early = capabilities(job({ evaluationStatus: "scheduled" })).invoice;
+    expect(early.available).toBe(false);
+    expect(early.available === false && early.reason).toContain("evaluation");
+  });
+
+  it("never opens invoicing on a cancelled job", () => {
+    expect(capabilities(job({ status: "cancelled", proposalStatus: "accepted" })).invoice.available).toBe(false);
   });
 
   it("locks everything on a cancelled job except its ticket history", () => {

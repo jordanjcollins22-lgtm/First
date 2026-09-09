@@ -66,6 +66,7 @@ export function ProposalPanel({
   discounts,
   viewLabel = null,
   viewsWarm = false,
+  respondedLabel = null,
 }: {
   jobId: string;
   proposal: JobProposal | null;
@@ -80,6 +81,8 @@ export function ProposalPanel({
    * yet. Internal only — this never reaches the public page. */
   viewLabel?: string | null;
   viewsWarm?: boolean;
+  /** "Accepted Tue, Sep 8, 2026 at 9:14 PM EDT". Null until they answer. */
+  respondedLabel?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -282,6 +285,9 @@ export function ProposalPanel({
               {STATUS_LABEL[proposal.status]}
             </span>
           )}
+          {/* When they answered, not just that they did. It is the date the
+              deposit runs from and the answer to "when did I agree to this?" */}
+          {respondedLabel && <span className="text-xs text-muted-foreground">{respondedLabel}</span>}
         </div>
         <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => handleGenerate()}>
           {proposal ? "Regenerate from site map" : "Generate now"}
