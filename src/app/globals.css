@@ -282,7 +282,29 @@ body {
    blank half-page — so the browser paginates and the rules here only say
    what must not be broken across a page.
    ------------------------------------------------------------------ */
+/* The scannable square, on screen and on paper.
+   Sized in inches for print because that is the unit that decides whether a
+   phone can read it: the address is 39 characters, which at error level M is a
+   29-module grid, and three-quarters of an inch puts each module at about
+   0.024in -- roughly seven dots on a 300dpi printer, which is comfortable.
+   It was 28px for a 37-module grid before, or 0.75 of a pixel per module. */
+.weed-qr {
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
 @media print {
+  .weed-qr {
+    width: 0.75in !important;
+    height: 0.75in !important;
+  }
+
+  /* Anti-aliasing is what turns a small code into grey mush. */
+  .weed-qr svg {
+    shape-rendering: crispEdges;
+    image-rendering: pixelated;
+  }
+
   .weed-sheet {
     width: 8.5in;
     padding: 0.4in 0.35in;

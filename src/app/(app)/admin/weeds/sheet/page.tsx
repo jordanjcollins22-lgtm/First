@@ -64,7 +64,10 @@ export default async function WeedSheetPage({
       return {
         weed,
         photoUrl: print ? await weedPhotoUrl(print.path) : null,
-        qr: await qrSvg(`${origin}${weedScanPath(weed.code)}`, 96),
+        // "M" rather than "H", and generated large: this square is printed
+        // about three-quarters of an inch across, so what decides whether a
+        // phone reads it is how big one module is. See lib/qr.ts.
+        qr: await qrSvg(`${origin}${weedScanPath(weed.code)}`, 256, "M"),
       };
     })
   );
@@ -81,6 +84,17 @@ export default async function WeedSheetPage({
           <p className="text-sm text-muted-foreground">
             {shown.length} weeds{view === "crew" ? ", with scientific names" : ""}. Every row carries its own code —
             scanning it opens that weed with all its photos.
+          </p>
+          {/* The back of every sheet came out upside down, which is a printer
+              setting and not something a web page can see or change. Saying so
+              here, next to the button, is the only place it helps: by the time
+              the paper is in somebody's hand it is too late. Both names for the
+              setting are given because printers disagree about what to call it. */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Printing double-sided? Set the printer to flip on the{" "}
+            <strong className="font-medium text-foreground">long edge</strong> (some drivers call it
+            &ldquo;book&rdquo; binding). Flipping on the short edge — &ldquo;calendar&rdquo; or
+            &ldquo;tablet&rdquo; — turns the back of every sheet upside down.
           </p>
           {missingPhotos > 0 && (
             <p className="mt-1 text-sm text-amber-700">
@@ -141,13 +155,20 @@ export default async function WeedSheetPage({
                           {weed.prep && <p className="mt-0.5 text-[8px] leading-tight text-black/70">{weed.prep}</p>}
                         </>
                       )}
-                      <div className="mt-1 flex items-center gap-1">
+                      {/* The code is the reason the sheet is worth printing,
+                          so it gets the room to work. It used to be twenty-eight
+                          pixels square for a thirty-seven module grid -- under a
+                          pixel a module, which prints as a grey smudge and
+                          scans as nothing at all. */}
+                      <div className="mt-1 flex items-center gap-1.5">
                         <span
-                          className="block h-7 w-7 shrink-0 [&>svg]:h-full [&>svg]:w-full"
+                          className="weed-qr block shrink-0 bg-white [&>svg]:h-full [&>svg]:w-full"
                           aria-hidden
                           dangerouslySetInnerHTML={{ __html: cell?.qr ?? "" }}
                         />
-                        <span className="font-mono text-[8px] tracking-wider text-black/70">{weed.code}</span>
+                        <span className="min-w-0 truncate font-mono text-[9px] font-medium leading-tight tracking-wider text-black">
+                          {weed.code}
+                        </span>
                       </div>
                     </article>
                   );
