@@ -165,6 +165,7 @@ export function ProposalView({
             // one service, and it buries the one area that is different.
             const { shared, exceptions } = shareScope(group.zones.map((zone) => zone.scopeText ?? ""));
             const apart = new Set(exceptions);
+            const namesAreas = group.zones.length > 1 || !hasOwnBlock(group.zones[0], apart.has(0));
             return (
             <div key={group.service} className="flex flex-col gap-3">
               {/* Always. The service used to be named inside each area's box,
@@ -172,7 +173,42 @@ export function ProposalView({
                   to name it in. For a service with one area the heading is
                   just its name, which is what that box said anyway. */}
               <h3 className="text-base font-semibold">{groupHeading(group)}</h3>
-              {shared && <ScopeText text={shared} />}
+
+              {/* Framed like everything else on the page. The scope moved out
+                  of the per-area boxes and briefly lost the box with it, which
+                  left the one thing a client is agreeing to as loose text
+                  between two headings. */}
+              {(shared || namesAreas) && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border p-4">
+                  {shared && <ScopeText text={shared} />}
+                  {namesAreas && (
+                    /* The areas it covers, named, each one a way to ask about
+                       that area. Twenty boxes saying only a zone number was
+                       twenty boxes of scrolling between the work and the
+                       price. An area that already has a block of its own is
+                       named in it, so it is not named twice. */
+                    <p className="border-t border-border/60 pt-3 text-sm text-muted-foreground">
+                      Covers{" "}
+                      {group.zones.map((zone, i) => (
+                        <span key={`${group.service}-name-${i}`}>
+                          {i > 0 ? ", " : ""}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReference(zoneReference(zone.zoneName, labelFor(zone.serviceLabel)));
+                              messageBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }}
+                            className="font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
+                          >
+                            {zone.zoneName}
+                          </button>
+                        </span>
+                      ))}
+                      .
+                    </p>
+                  )}
+                </div>
+              )}
 
               {group.zones.map((zone, i) => {
                 // An area earns a block of its own by having something of its
@@ -225,32 +261,6 @@ export function ProposalView({
                 );
               })}
 
-              {/* The areas it covers, named, each one a way to ask about that
-                  area. Twenty boxes saying only a zone number was twenty boxes
-                  of scrolling between the work and the price. A single area
-                  that already has a block of its own is named in it, so it is
-                  not named twice. */}
-              {(group.zones.length > 1 || !hasOwnBlock(group.zones[0], apart.has(0))) && (
-              <p className="text-sm text-muted-foreground">
-                Covers{" "}
-                {group.zones.map((zone, i) => (
-                  <span key={`${group.service}-name-${i}`}>
-                    {i > 0 ? ", " : ""}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReference(zoneReference(zone.zoneName, labelFor(zone.serviceLabel)));
-                        messageBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }}
-                      className="font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
-                    >
-                      {zone.zoneName}
-                    </button>
-                  </span>
-                ))}
-                .
-              </p>
-              )}
             </div>
             );
           })
