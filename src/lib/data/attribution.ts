@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { embedded } from "@/lib/postgrest";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { netAppliedToJob, type Adjustment, type Receipt } from "@/lib/payments-net";
 import {
@@ -149,7 +150,9 @@ export async function attributionReport(days = 365): Promise<AttributionReport> 
     referred_by_profile_id: string | null;
     property_id: string | null;
     properties: { address: string | null; customer_id: string | null } | null;
-    job_proposals: { client_chosen_day: string | null; payment_path: string | null }[] | null;
+    // PostgREST sends this as one object, not an array: job_proposals has a
+    // UNIQUE on job_id. Both shapes are accepted rather than assumed.
+    job_proposals: { client_chosen_day: string | null; payment_path: string | null }[] | { client_chosen_day: string | null; payment_path: string | null } | null;
   }[];
 
   // Clients who had already finished a job before this one was sold.
@@ -198,7 +201,7 @@ export async function attributionReport(days = 365): Promise<AttributionReport> 
       sourceWaveChannel: wave ? channelOf(wave.type_id) : null,
       referredByProfileId: row.referred_by_profile_id,
       hadEarlierCompletedJob: hadEarlier,
-      cameThroughBookingLink: (row.job_proposals ?? []).some((p) => p.client_chosen_day != null),
+      cameThroughBookingLink: embedded(row.job_proposals).some((p) => p.client_chosen_day != null),
       campaignsInRange,
       // Off the map means nothing could be checked, which is a different
       // sentence from "nothing reached them".

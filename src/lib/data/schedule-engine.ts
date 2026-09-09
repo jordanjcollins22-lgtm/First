@@ -6,6 +6,7 @@ import { jobStanding } from "@/lib/data/job-readiness";
 import { listBoardJobs } from "@/lib/data/job-board";
 import { fetchForecasts, isRoughDay, describeWeather } from "@/lib/weather";
 import { roleKeysOf } from "@/lib/roles";
+import { embedded } from "@/lib/postgrest";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { zoneCrewHours } from "@/lib/proposal-pricing";
 import type { WorkZone } from "@/components/canvas/types";
@@ -257,10 +258,11 @@ export async function scheduleSuggestions(): Promise<EngineOutput> {
     created_at: string;
     properties: { lat: number | null; lng: number | null; address: string | null } | null;
     job_requested_services?: { service_type_id: string }[];
-    job_proposals?: { client_chosen_day: string | null; status: string }[];
+    // One object rather than an array: job_proposals has a UNIQUE on job_id.
+    job_proposals?: { client_chosen_day: string | null; status: string }[] | { client_chosen_day: string | null; status: string } | null;
   }): SchedulableJob => {
-    const services = (row.job_requested_services ?? []).map((s) => s.service_type_id);
-    const accepted = (row.job_proposals ?? []).find((p) => p.status === "accepted" || p.status === "approved");
+    const services = embedded(row.job_requested_services).map((s) => s.service_type_id);
+    const accepted = embedded(row.job_proposals).find((p) => p.status === "accepted" || p.status === "approved");
     return {
       jobId: row.id,
       label: row.properties?.address || row.name,
