@@ -47,19 +47,44 @@ export async function createAndSendInvoice(jobId: string, proposalId: string, am
         phone: contact.phone || undefined,
       });
 
+  const expectedCents = Math.round(amount * 100);
+
+  // The invoice first, then the line on it. The other way round — a pending
+  // invoice item, then an invoice that is meant to sweep it up — is what sent
+  // a client a bill for nothing: `pending_invoice_items_behavior` defaults to
+  // "exclude", so the invoice was created without the line, finalized at zero
+  // and sent. The item stayed pending on the customer, unbilled. Naming the
+  // behaviour as well, because it is a default that has already changed once.
+  const draft = await stripe.invoices.create({
+    customer: stripeCustomer.id,
+    collection_method: "send_invoice",
+    days_until_due: 30,
+    pending_invoice_items_behavior: "exclude",
+  });
+  const draftId = draft.id;
+  if (!draftId) throw new Error("Stripe did not return an invoice to bill against.");
+
   await stripe.invoiceItems.create({
     customer: stripeCustomer.id,
-    amount: Math.round(amount * 100),
+    invoice: draftId,
+    amount: expectedCents,
     currency: "usd",
     description: job.name || "Landscaping services",
   });
 
-  let stripeInvoice = await stripe.invoices.create({
-    customer: stripeCustomer.id,
-    collection_method: "send_invoice",
-    days_until_due: 30,
-  });
-  stripeInvoice = await stripe.invoices.finalizeInvoice(stripeInvoice.id);
+  // Read the price back off Stripe rather than trusting that what we asked
+  // for is what it holds. A draft can still be deleted, so a bill for the
+  // wrong amount dies here instead of going to a client — which is the whole
+  // difference between the bug above being caught and being posted.
+  const priced = await stripe.invoices.retrieve(draftId);
+  if (priced.total !== expectedCents) {
+    await stripe.invoices.del(draftId).catch(() => {});
+    throw new Error(
+      `Stripe priced this invoice at ${priced.total} cents, not ${expectedCents}. Nothing was sent.`
+    );
+  }
+
+  const stripeInvoice = await stripe.invoices.finalizeInvoice(draftId);
 
   const { error } = await admin.from("invoices").insert({
     organization_id: contact.organizationId,

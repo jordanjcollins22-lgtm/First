@@ -396,16 +396,44 @@ export async function choosePaymentPath(input: {
           .update({ checkout_session_id: started.sessionId })
           .eq("id", proposal.id);
       }
-    } catch {
+    } catch (err) {
       // Fall through to the invoice. The choice is already recorded, and a
       // payment we could not start is not a reason to lose it.
+      //
+      // Logged, though. This used to be a bare catch, so the one client whose
+      // checkout would not open left no record of why anywhere — and the
+      // invoice that was raised instead went out for nothing, which nobody
+      // found for five days.
+      console.error("proposal checkout would not start:", err);
     }
 
     if (!checkoutUrl && option.id === "full") {
-      // Best-effort, like acceptance itself: an invoice that failed to send
-      // is something the office can see and resend rather than a decision
-      // that got lost.
-      createAndSendInvoice(proposal.job_id, proposal.id, dueNowCents / 100).catch(() => {});
+      // Awaited rather than fired off. Whether a client can pay is the whole
+      // question this function answers, and answering "we'll be in touch"
+      // while both ways of paying have failed is how a sale sits still.
+      const billed = await createAndSendInvoice(proposal.job_id, proposal.id, dueNowCents / 100)
+        .then(() => true)
+        .catch((err) => {
+          console.error("falling back to an invoice failed too:", err);
+          return false;
+        });
+
+      if (!billed) {
+        // Let go of the claim. It exists to stop a second invoice or a second
+        // plan against the same job, and neither was raised — so holding it
+        // only locks the client out of the one screen that could take their
+        // money. Safe here and nowhere else: the plan branch has a plan.
+        await admin
+          .from("job_proposals")
+          .update({ payment_path: null, payment_path_at: null })
+          .eq("id", proposal.id);
+
+        revalidateJobViews(proposal.job_id);
+        return {
+          ok: false,
+          message: "We couldn't start the payment just now. Please try again in a minute.",
+        };
+      }
     }
 
     notifyJobTeam(
