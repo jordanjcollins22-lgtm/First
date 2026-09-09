@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  WEED_GROUPS,
+  WEED_SEED,
+  bookingPath,
   columnsFor,
   groupWeeds,
   isSheetView,
-  WEED_GROUPS,
-  WEED_SEED,
+  showsBookingOffer,
   weedScanPath,
   weedsFor,
   type WeedGroup,
@@ -78,5 +80,24 @@ describe("the view in a link", () => {
 describe("where a scan lands", () => {
   it("is short, and relative to whatever domain served the sheet", () => {
     expect(weedScanPath("K7M2QP")).toBe("/w/K7M2QP");
+  });
+});
+
+describe("the offer at the end of the client's sheet", () => {
+  it("is on the client's sheet and nowhere else", () => {
+    // A crew knows the root rule, and is not booking its own company.
+    expect(showsBookingOffer("client")).toBe(true);
+    expect(showsBookingOffer("crew")).toBe(false);
+  });
+
+  it("carries the business through, so the booking lands on the right one", () => {
+    expect(bookingPath("js-landscaping-md-00000000")).toBe("/book?org=js-landscaping-md-00000000");
+  });
+
+  it("still points somewhere when no slug has been minted yet", () => {
+    // A code that goes to the plain booking page beats no code at all.
+    expect(bookingPath(null)).toBe("/book");
+    expect(bookingPath(undefined)).toBe("/book");
+    expect(bookingPath("")).toBe("/book");
   });
 });

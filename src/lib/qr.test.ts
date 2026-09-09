@@ -54,3 +54,14 @@ describe("a QR that has to survive a printer", () => {
     expect(modules(await qrSvg(SCAN_URL))).toBe(modules(await qrSvg(SCAN_URL, 128, "H")));
   });
 });
+
+describe("the booking code on the client's sheet", () => {
+  it("stays coarse enough to scan at an inch, despite the longer address", async () => {
+    // /book?org=<slug> is 67 characters against the weed code's 39, so it
+    // needs a bigger grid — and therefore a bigger square, which is why the
+    // sheet prints this one at an inch rather than three-quarters.
+    const url = "https://app.jslandscapingmd.com/book?org=js-landscaping-md-00000000";
+    const grid = modules(await qrSvg(url, 256, "M"));
+    expect((1 * 300) / grid).toBeGreaterThan(4);
+  });
+});

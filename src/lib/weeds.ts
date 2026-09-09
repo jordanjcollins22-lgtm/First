@@ -185,3 +185,25 @@ export function columnsFor(view: SheetView): number {
 export function weedScanPath(code: string): string {
   return `/w/${code}`;
 }
+
+/**
+ * Whether the sheet ends with the caution and the offer to do it for them.
+ *
+ * The client's, and only the client's. A crew already knows that half of these
+ * come back worse if you leave the root, and they are not going to scan a code
+ * to book their own company.
+ */
+export function showsBookingOffer(view: SheetView): boolean {
+  return view === "client";
+}
+
+/**
+ * Where the offer's code sends somebody.
+ *
+ * The organisation slug carries the booking through to the right business. The
+ * booking page works without it, so a business that has never been given a slug
+ * still gets a code that goes somewhere rather than no code at all.
+ */
+export function bookingPath(orgSlug: string | null | undefined): string {
+  return orgSlug ? `/book?org=${orgSlug}` : "/book";
+}

@@ -5,7 +5,16 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import { listWeeds, weedPhotoUrl } from "@/lib/data/weeds";
 import { getCurrentOrganization } from "@/lib/data/organizations";
-import { columnsFor, groupWeeds, isSheetView, weedScanPath, weedsFor, type Weed } from "@/lib/weeds";
+import {
+  bookingPath,
+  columnsFor,
+  groupWeeds,
+  isSheetView,
+  showsBookingOffer,
+  weedScanPath,
+  weedsFor,
+  type Weed,
+} from "@/lib/weeds";
 import { qrSvg } from "@/lib/qr";
 import Link from "next/link";
 
@@ -71,6 +80,15 @@ export default async function WeedSheetPage({
       };
     })
   );
+  // The client's sheet ends with an offer, and the offer needs somewhere to
+  // go. The org slug carries the booking through to the right business; the
+  // page works without it, so a business that has not been given a slug still
+  // gets a working code rather than none.
+  const bookingUrl = `${origin}${bookingPath(organization.slug)}`;
+  const bookingQr = showsBookingOffer(view)
+    ? await qrSvg(bookingUrl, 256, "M").catch(() => null)
+    : null;
+
   const byWeedId = new Map(cells.map((cell) => [cell.weed.id, cell]));
   const blocks = groupWeeds(shown);
   const columns = columnsFor(view);
@@ -176,6 +194,33 @@ export default async function WeedSheetPage({
               </div>
             </section>
           ))}
+
+          {/* The client's sheet closes with the two things a homeowner holding
+              it needs from us: the warning that makes the difference between
+              pulling a weed and propagating it, and an easy way to hand the job
+              over. Kept off the crew's sheet -- they know, and they are not
+              booking themselves. */}
+          {showsBookingOffer(view) && (
+            <section className="weed-cta mt-4 flex items-start gap-3 rounded border-2 border-black/60 p-3">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[12px] font-bold leading-tight">Careful pulling these</h3>
+                <p className="mt-1 text-[10px] leading-snug text-black/80">
+                  Some of these spread if they are not taken out properly. Leave a piece of root behind and one
+                  plant can come back as several — and a few of them are easier to make worse than to fix.
+                </p>
+                <p className="mt-1.5 text-[11px] font-semibold leading-snug">
+                  Would you like a hand? Scan to book us.
+                </p>
+              </div>
+              {bookingQr && (
+                <span
+                  className="weed-book-qr block shrink-0 bg-white [&>svg]:h-full [&>svg]:w-full"
+                  aria-hidden
+                  dangerouslySetInnerHTML={{ __html: bookingQr }}
+                />
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>

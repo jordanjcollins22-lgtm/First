@@ -293,14 +293,34 @@ body {
   height: 4.5rem;
 }
 
+/* The booking code on the client's sheet. Bigger than a weed's: it holds a
+   longer address, and it is the one code on the page we actually want a
+   stranger to scan from across a kitchen table. */
+.weed-book-qr {
+  width: 6rem;
+  height: 6rem;
+}
+
 @media print {
   .weed-qr {
     width: 0.75in !important;
     height: 0.75in !important;
   }
 
+  .weed-book-qr {
+    width: 1in !important;
+    height: 1in !important;
+  }
+
+  /* An offer split down the middle by a page break is not an offer. */
+  .weed-cta {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   /* Anti-aliasing is what turns a small code into grey mush. */
-  .weed-qr svg {
+  .weed-qr svg,
+  .weed-book-qr svg {
     shape-rendering: crispEdges;
     image-rendering: pixelated;
   }
