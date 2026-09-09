@@ -82,6 +82,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "reminders", label: "Client Reminders", href: "/admin/reminders", parent: "tools" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
+  { key: "signs", label: "Neighborhood Sign", href: "/admin/marketing/poster" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
 ];
 
@@ -124,12 +125,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "plant photographs, plant names and a code that books us, and it names no client, no job and no " +
     "price. It is reached from the crew's own screen on a job, because handing it over is done at a " +
     "door and not at a desk.",
-  "/admin/marketing/poster":
-    "The neighbourhood sign, and the sizes of frame it fits. Guarded by the Door Hangers tab, which " +
-    "is where the rest of the printed marketing lives -- whoever puts hangers on doors is whoever puts a " +
-    "sign in a lawn, and a second tick for the same person is a second thing to forget.",
   "/admin/marketing/poster/pdf":
-    "The sign itself, cut into letter sheets. Same gate as the page it is reached from.",
+    "The sign itself, cut into letter sheets. Guarded by the Neighborhood Sign tab, like the page it is " +
+    "reached from.",
   "/admin/weeds/sheet/pdf":
     "The same two sheets as a file, drawn page by page rather than printed by a browser. Gated exactly " +
     "as the page is: the crew's reference behind the Weed Guide tab, the client's handout open to " +

@@ -128,7 +128,7 @@ export const MODULES: readonly AppModule[] = [
     subtabs: [
       { key: "map", label: "Map", tabs: ["project-data"], blurb: "The county, the houses, the zones and the routes." },
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "Prospects, targets, coverage and the playbooks." },
-      { key: "print", label: "Print", tabs: ["door-hangers", "flyer"], blurb: "Door hangers, the flyer and its ad squares." },
+      { key: "print", label: "Print", tabs: ["door-hangers", "signs", "flyer"], blurb: "Door hangers, the neighbourhood sign, the flyer and its ad squares." },
       { key: "content", label: "Content", tabs: ["social"], blurb: "Before and after posts from the crew's own photos." },
       // Money the business actually received, traced back to what brought it
       // in -- and, just as plainly, the work that cannot be traced at all.

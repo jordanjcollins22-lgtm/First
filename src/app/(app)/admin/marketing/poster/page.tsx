@@ -27,12 +27,12 @@ const SIZES = [
 
 export default async function PosterPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("door-hangers", "/admin/tools");
+  await requireTab("signs", "/admin/tools");
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
       <header>
-        <h1 className="text-xl font-semibold">Neighbourhood sign</h1>
+        <h1 className="text-xl font-semibold">Neighborhood Sign</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           &ldquo;We&apos;re working in your neighborhood&rdquo; with a scannable offer, for a picture frame in a
           lawn or a window while a crew is on the street. It prints on the office printer in pieces, because

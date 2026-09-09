@@ -17,7 +17,7 @@ import { renderPoster } from "@/lib/poster-render";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const { allowed, profile } = await checkTabAccess("door-hangers");
+  const { allowed, profile } = await checkTabAccess("signs");
   if (!profile) return new Response("Sign in first.", { status: 401 });
   if (!allowed) return new Response("Not yours to open.", { status: 403 });
 
