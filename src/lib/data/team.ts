@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { getUserWithRetry } from "@/lib/supabase/auth-guard";
 import { createClient } from "@/lib/supabase/server";
 import { getViewAsProfileId } from "@/lib/impersonation";
@@ -34,7 +36,23 @@ export async function listProfiles(): Promise<Profile[]> {
   return (profiles ?? []).map((p) => ({ ...p, roles: rolesByProfile.get(p.id) ?? [] })) as unknown as Profile[];
 }
 
-async function fetchProfileById(id: string): Promise<Profile | null> {
+/**
+ * Asked once per request, however many times it is called.
+ *
+ * Working out who somebody is costs an HTTP call to Supabase's auth server
+ * plus two queries, and three hundred and fifty call sites ask. On My Day that
+ * came to somewhere between fifteen and twenty-five identical round trips
+ * before a single row of the person's actual work had been read -- most of a
+ * page load spent re-answering a question whose answer cannot change while the
+ * request is in flight.
+ *
+ * React's cache() is scoped to one server request and nothing else: two people
+ * loading a page at the same moment never share an answer, and the next
+ * request asks again. So the "checked fresh on every call" the view-as switch
+ * relies on stays true in the only sense that matters -- it is checked fresh on
+ * every page load, and a switch takes effect on the next one.
+ */
+const fetchProfileById = cache(async function fetchProfileById(id: string): Promise<Profile | null> {
   const supabase = await createClient();
   const [{ data: profile, error: profileError }, { data: profileRoles, error: rolesError }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", id).maybeSingle(),
@@ -45,11 +63,11 @@ async function fetchProfileById(id: string): Promise<Profile | null> {
   if (rolesError) throw rolesError;
 
   return { ...profile, roles: (profileRoles ?? []).map((r) => r.role_name) } as unknown as Profile;
-}
+});
 
 /** The actually-signed-in account, ignoring any "view as" switch — use this for
  * anything auth-sensitive (granting/revoking the switch itself, audit trails). */
-export async function getRealProfile(): Promise<Profile | null> {
+export const getRealProfile = cache(async function getRealProfile(): Promise<Profile | null> {
   const supabase = await createClient();
 
   // Retried once when the check fails for a reason that was not an answer.
@@ -60,7 +78,7 @@ export async function getRealProfile(): Promise<Profile | null> {
   const user = data.user as { id: string } | null;
   if (!user) return null;
   return fetchProfileById(user.id);
-}
+});
 
 /**
  * The profile the app should behave as. Normally the signed-in account, but
@@ -70,7 +88,7 @@ export async function getRealProfile(): Promise<Profile | null> {
  * until they switch back. Only ever swaps for admins, and only within their
  * own organization, checked fresh on every call.
  */
-export async function getCurrentProfile(): Promise<Profile | null> {
+export const getCurrentProfile = cache(async function getCurrentProfile(): Promise<Profile | null> {
   const real = await getRealProfile();
   if (!real || !real.roles.includes("admin")) return real;
 
@@ -80,4 +98,4 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   const target = await fetchProfileById(viewAsId);
   if (!target || target.organization_id !== real.organization_id) return real;
   return target;
-}
+});

@@ -20,6 +20,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
+import { Suspense } from "react";
+
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
 import { growthView } from "@/lib/data/growth";
@@ -75,16 +77,33 @@ export default async function MyDayPage() {
           // are on Business too. It is that the question this tab answers is
           // "is the business getting better and what is in my way", which is
           // nobody's question but the person answerable for it.
+          // Streamed, not awaited. Both of these are secondary screens behind a
+          // tab nobody has clicked yet, and awaiting them here meant the day --
+          // the thing somebody actually opened the app for -- could not be
+          // drawn until the pulse, the owner's hours and the alert settings had
+          // all been read. They now arrive underneath it.
           {
             key: "growth",
             label: "Growth",
             visible: isOwnerLevel(viewer?.roles ?? []),
             blurb: "Five numbers, the one thing in the way, and one button.",
-            content: isOwnerLevel(viewer?.roles ?? []) ? await GrowthTab() : null,
+            content: isOwnerLevel(viewer?.roles ?? []) ? (
+              <Suspense fallback={<TabLoading />}>
+                <GrowthTab />
+              </Suspense>
+            ) : null,
           },
           // Personal settings on the personal screen. They were a nav entry
           // of their own for something nobody opens twice a year.
-          { key: "alerts", label: "Alerts", content: await AlertsTab() },
+          {
+            key: "alerts",
+            label: "Alerts",
+            content: (
+              <Suspense fallback={<TabLoading />}>
+                <AlertsTab />
+              </Suspense>
+            ),
+          },
         ]}
       />
     </div>
@@ -407,5 +426,15 @@ async function GrowthTab() {
       ownerHoursTarget={view.ownerHoursTarget}
       canSetTarget
     />
+  );
+}
+
+/** A tab that has not arrived yet. Quiet: nobody is looking at it. */
+function TabLoading() {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      <div className="h-5 w-48 animate-pulse rounded-md bg-muted" />
+      <div className="h-24 animate-pulse rounded-xl border border-border/60 bg-card/40" />
+    </div>
   );
 }

@@ -3,7 +3,6 @@ import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listRolePermissions } from "@/lib/data/permissions";
@@ -41,15 +40,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let impersonatingName: string | null = null;
   let orgName: string | null = null;
   if (isSupabaseConfigured) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    userEmail = user?.email ?? null;
-    if (user) {
-      const [profile, realProfile, org] = await Promise.all([
+    // getRealProfile already asks the auth server and memoises the answer for
+    // this request; a bare auth.getUser() here was a second HTTP round trip to
+    // Supabase on the critical path of every single page, for an email address
+    // the profile already carries.
+    const realProfile = await getRealProfile();
+    userEmail = realProfile?.email ?? null;
+    if (realProfile) {
+      const [profile, org] = await Promise.all([
         getCurrentProfile(),
-        getRealProfile(),
         getCurrentOrganization().catch(() => null),
       ]);
       roles = profile?.roles ?? [];

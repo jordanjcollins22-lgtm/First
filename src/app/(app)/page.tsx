@@ -13,6 +13,7 @@ import { checkTabAccess } from "@/lib/data/access";
 import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
 import { isAccountManager, isFieldOnly } from "@/lib/affiliate-roles";
+import { MOVED } from "@/lib/moved-routes";
 
 export default async function Home({
   searchParams,
@@ -32,9 +33,15 @@ export default async function Home({
   // thing wants to know what is happening today before they want to start
   // anything new. ?new=1 is how the nav still reaches the form — without it
   // the redirect would swallow the only link to it.
+  // Straight to where /dashboard now lives, rather than to /dashboard and
+  // letting next.config bounce it on. Opening the app was three round trips --
+  // this page, the redirect, then the destination -- and the first two of them
+  // are a full server render and a wasted hop before anything is drawn. The
+  // address is read from the same table the redirect uses, so the two can
+  // never disagree about where the dashboard went.
   if (!wantsForm && profile?.roles.includes("admin")) {
     const { allowed: canSeeDashboard } = await checkTabAccess("dashboard");
-    if (canSeeDashboard) redirect("/dashboard");
+    if (canSeeDashboard) redirect(MOVED["/dashboard"] ?? "/dashboard");
   }
 
   // And an account manager lands on their own version of it, for the same
