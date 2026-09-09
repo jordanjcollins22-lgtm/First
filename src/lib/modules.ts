@@ -130,6 +130,9 @@ export const MODULES: readonly AppModule[] = [
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "Prospects, targets, coverage and the playbooks." },
       { key: "print", label: "Print", tabs: ["door-hangers", "flyer"], blurb: "Door hangers, the flyer and its ad squares." },
       { key: "content", label: "Content", tabs: ["social"], blurb: "Before and after posts from the crew's own photos." },
+      // Money the business actually received, traced back to what brought it
+      // in -- and, just as plainly, the work that cannot be traced at all.
+      { key: "attribution", label: "What worked", tabs: ["project-data", "leads"], blurb: "Where the money came from, and where it honestly cannot be traced." },
     ],
   },
   {

@@ -8,6 +8,8 @@ import LeadsPage from "@/app/(app)/leads/page";
 import DoorHangersPage from "@/app/(app)/admin/door-hangers/page";
 import FlyerPage from "@/app/(app)/admin/flyer/page";
 import SocialPage from "@/app/(app)/admin/social/page";
+import { AttributionPanel } from "@/components/marketing/attribution-panel";
+import { attributionReport } from "@/lib/data/attribution";
 
 /**
  * Where the next customer comes from.
@@ -48,7 +50,25 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
             }
           : {}),
         ...(content ? { content: <SocialPage /> } : {}),
+        ...(map || leads ? { attribution: await AttributionTab() } : {}),
       }}
     />
   );
+}
+
+/**
+ * What actually brought the work in.
+ *
+ * Fails on its own: a payments table that will not read costs this subtab and
+ * nothing else on the module.
+ */
+async function AttributionTab() {
+  const report = await attributionReport().catch((err) => {
+    console.error("Attribution failed to load:", err);
+    return null;
+  });
+  if (!report) {
+    return <p className="text-sm text-muted-foreground">The attribution could not be worked out just now.</p>;
+  }
+  return <AttributionPanel totals={report.totals} health={report.health} jobs={report.jobs} />;
 }
