@@ -25,9 +25,10 @@ import type { BookingOptions } from "./booking-options";
 /**
  * The chrome the wizard draws around itself, with nothing in it yet.
  *
- * It is the same wrapper, heading block and five-step bar, so the form does
+ * It is the same wrapper, heading block and four-step bar, so the form does
  * not jump when the real thing replaces it. This is what gets baked into the
- * prerendered HTML.
+ * prerendered HTML — so the count here has to match the wizard's steps, or the
+ * bar visibly resizes the moment the options land.
  */
 export function BookingFormSkeleton() {
   return (
@@ -37,7 +38,7 @@ export function BookingFormSkeleton() {
         <div className="h-4 w-64 animate-pulse rounded bg-muted" />
       </div>
       <div className="flex items-center gap-1">
-        {[0, 1, 2, 3, 4].map((i) => (
+        {[0, 1, 2, 3].map((i) => (
           <div key={i} className="flex flex-1 flex-col items-center gap-1">
             <div className="h-1.5 w-full rounded-full bg-muted" />
             <div className="h-2 w-10 rounded bg-muted" />
@@ -132,6 +133,8 @@ export function BookingForm() {
       referredByProfileId={options.referredByProfileId}
       services={options.services}
       slots={options.slots}
+      linkRef={ref}
+      linkOrg={org}
     />
   );
 }

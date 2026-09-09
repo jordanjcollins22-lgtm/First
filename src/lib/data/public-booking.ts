@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { BookedTime } from "@/lib/booking-availability";
+import type { BookedNearby } from "@/lib/booking-recommendation";
+import { embeddedOne } from "@/lib/postgrest";
 import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
 export interface BookingContext {
@@ -111,10 +113,22 @@ export interface AvailabilityData {
   weeklyAvailability: WeeklyAvailability[];
   daysOff: DayOff[];
   bookedTimes: BookedTime[];
+  /**
+   * Where the already-booked evaluations are, for working out which free hour
+   * sits next to one near the caller.
+   *
+   * This never leaves the server. It is somebody's home address reduced to two
+   * numbers, and the booking page is opened by strangers -- so the ranking is
+   * done here and only the answer ("we're already close by around then") is
+   * sent to the browser.
+   */
+  bookedPlaces: BookedNearby[];
 }
 
 export async function listAvailabilityData(evaluatorIds: string[]): Promise<AvailabilityData> {
-  if (evaluatorIds.length === 0) return { weeklyAvailability: [], daysOff: [], bookedTimes: [] };
+  if (evaluatorIds.length === 0) {
+    return { weeklyAvailability: [], daysOff: [], bookedTimes: [], bookedPlaces: [] };
+  }
 
   const admin = createAdminClient();
   const [{ data: weekly, error: weeklyError }, { data: daysOff, error: daysOffError }, { data: jobs, error: jobsError }] =
@@ -123,7 +137,7 @@ export async function listAvailabilityData(evaluatorIds: string[]): Promise<Avai
       admin.from("availability_days_off").select("*").in("profile_id", evaluatorIds),
       admin
         .from("jobs")
-        .select("assigned_to, evaluation_date, evaluation_end_date")
+        .select("assigned_to, evaluation_date, evaluation_end_date, properties(lat, lng)")
         .in("assigned_to", evaluatorIds)
         .not("evaluation_date", "is", null)
         .neq("status", "cancelled"),
@@ -142,5 +156,20 @@ export async function listAvailabilityData(evaluatorIds: string[]): Promise<Avai
         iso: j.evaluation_date as string,
         endIso: j.evaluation_end_date,
       })),
+    bookedPlaces: (jobs ?? [])
+      .filter((j) => j.evaluation_date)
+      .map((j) => {
+        const place = embeddedOne(j.properties as { lat: number | null; lng: number | null } | null);
+        return {
+          iso: j.evaluation_date as string,
+          endIso: j.evaluation_end_date,
+          lat: place?.lat ?? null,
+          lng: place?.lng ?? null,
+        };
+      })
+      // An evaluation whose property was never put on the map cannot tell us
+      // anything about travel, so it is left out rather than counted as being
+      // at the origin.
+      .filter((p) => p.lat != null && p.lng != null),
   };
 }
