@@ -133,6 +133,19 @@ export default async function WeedSheetPage({
         </div>
       </div>
 
+      {/* The page box, declared here rather than in globals.css because a
+          page box cannot be selected by class and the app's other printed
+          things -- the flyer, the door hanger -- are full bleed and want no
+          margin at all. This route is the one that runs to several pages, so
+          it is the one that needs a margin the paper gets on every one of
+          them. Half an inch clears the unprintable strip on every consumer
+          printer we have seen; without it the second and third pages started
+          at the physical edge and came out with their top row cut off. */}
+      <style>{`@media print {
+        @page { size: letter portrait; margin: 0.5in 0.4in; }
+        .print-root { left: 0; right: 0; width: auto !important; }
+      }`}</style>
+
       <div className="print-root">
         <div className="weed-sheet mx-auto w-full bg-white text-black">
           <header className="mb-3 flex items-baseline justify-between border-b border-black/20 pb-2">
