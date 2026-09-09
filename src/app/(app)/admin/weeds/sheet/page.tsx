@@ -10,6 +10,7 @@ import {
   columnsFor,
   groupWeeds,
   isSheetView,
+  printedPrep,
   rowsOf,
   showsBookingOffer,
   weedScanPath,
@@ -244,7 +245,11 @@ export default async function WeedSheetPage({
                       {view === "crew" && (
                         <>
                           <p className="text-[8px] italic leading-tight text-black/60">{weed.scientific}</p>
-                          {weed.prep && <p className="mt-0.5 text-[8px] leading-tight text-black/70">{weed.prep}</p>}
+                          {/* One line: a cell has room for one, and the rest
+                              of the note is for whoever scans the code. */}
+                          {printedPrep(weed.prep) && (
+                            <p className="mt-0.5 text-[8px] leading-tight text-black/70">{printedPrep(weed.prep)}</p>
+                          )}
                         </>
                       )}
                       {/* The code is the reason the sheet is worth printing,

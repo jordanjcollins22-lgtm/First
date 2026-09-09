@@ -6,6 +6,7 @@ import {
   bookingPath,
   columnsFor,
   groupWeeds,
+  printedPrep,
   rowsOf,
   isSheetView,
   showsBookingOffer,
@@ -134,5 +135,48 @@ describe("cutting a group into rows", () => {
   it("agrees with the sheets it is used for", () => {
     expect(rowsOf(five, columnsFor("client"))).toEqual([["a", "b", "c", "d"], ["e"]]);
     expect(rowsOf(five, columnsFor("crew"))).toEqual([five]);
+  });
+});
+
+describe("the printed part of a prep note", () => {
+  it("is the first line, because a cell has room for one", () => {
+    expect(printedPrep("Take the runners too.\nCreeps in from the lawn, then stands straight up.")).toBe(
+      "Take the runners too."
+    );
+  });
+
+  it("is the whole note when the note is one line", () => {
+    expect(printedPrep("Take the runners too.")).toBe("Take the runners too.");
+  });
+
+  it("skips blank lines rather than printing nothing", () => {
+    expect(printedPrep("\n\n  Take the runners too.\nAnd the rest.")).toBe("Take the runners too.");
+  });
+
+  it("is nothing when there is no note", () => {
+    expect(printedPrep(null)).toBe("");
+    expect(printedPrep(undefined)).toBe("");
+    expect(printedPrep("   ")).toBe("");
+  });
+});
+
+describe("Kentucky bluegrass", () => {
+  const bluegrass = WEED_SEED.find((w) => w.slug === "poa-pratensis");
+
+  it("is in the guide, among the grasses", () => {
+    expect(bluegrass?.group).toBe("Grassy weeds");
+    expect(bluegrass?.scientific).toBe("Poa pratensis");
+  });
+
+  it("is on the crew's reference and not the client's handout", () => {
+    // It is the client's own lawn in the wrong place, like the tall fescue
+    // clumps and the quackgrass beside it. The crew needs to recognise it;
+    // showing a homeowner their own grass as a weed does not help anybody.
+    expect(bluegrass?.client).toBe(false);
+  });
+
+  it("sits next to the other bluegrass, so the two are compared", () => {
+    const annual = WEED_SEED.findIndex((w) => w.slug === "poa-annua");
+    expect(WEED_SEED[annual + 1]?.slug).toBe("poa-pratensis");
   });
 });

@@ -8,6 +8,7 @@ import {
   bookingPath,
   groupWeeds,
   isSheetView,
+  printedPrep,
   rowsOf,
   showsBookingOffer,
   weedScanPath,
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
         ),
         1
       );
-      const hasPrep = row.some((weed) => Boolean(weed.prep?.trim()));
+      const hasPrep = row.some((weed) => Boolean(printedPrep(weed.prep)));
       const height = cellHeight(geometry, view, lines, hasPrep);
       heightOfRow.set(row[0], height);
       blocks.push({ kind: "row", weeds: row, height: height + GAP });
@@ -367,7 +368,9 @@ function drawCell(
     }
     cursor += LEADING.small;
 
-    const prep = truncate(latin1(weed.prep ?? ""), geometry.innerWidth, measure(fonts.regular, FONT_SIZES.small));
+    // One line of the note: the cell has room for one, and the rest of it is
+    // for whoever scans the code, where there is room.
+    const prep = truncate(latin1(printedPrep(weed.prep)), geometry.innerWidth, measure(fonts.regular, FONT_SIZES.small));
     if (prep) {
       page.drawText(prep, {
         x: left,

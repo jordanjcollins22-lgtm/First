@@ -88,6 +88,11 @@ export const WEED_SEED: readonly WeedSeed[] = [
   { slug: "digitaria-ischaemum", common: "Smooth Crabgrass", scientific: "Digitaria ischaemum", group: "Grassy weeds", client: false },
   { slug: "eleusine-indica", common: "Goosegrass", scientific: "Eleusine indica", group: "Grassy weeds", client: true },
   { slug: "poa-annua", common: "Annual Bluegrass", scientific: "Poa annua", group: "Grassy weeds", client: true },
+  // The lawn, in the beds. It creeps in on runners and then stands straight
+  // up where nothing mows it, which is why it is on the crew's list and not
+  // the client's: a homeowner is being shown weeds, and this is their grass in
+  // the wrong place.
+  { slug: "poa-pratensis", common: "Kentucky Bluegrass", scientific: "Poa pratensis", group: "Grassy weeds", client: false },
   { slug: "setaria-pumila", common: "Yellow Foxtail", scientific: "Setaria pumila", group: "Grassy weeds", client: false },
   { slug: "setaria-viridis", common: "Green Foxtail", scientific: "Setaria viridis", group: "Grassy weeds", client: false },
   { slug: "echinochloa-crus-galli", common: "Barnyardgrass", scientific: "Echinochloa crus-galli", group: "Grassy weeds", client: false },
@@ -196,6 +201,19 @@ export function rowsOf<T>(weeds: readonly T[], columns: number): T[][] {
   const rows: T[][] = [];
   for (let i = 0; i < weeds.length; i += columns) rows.push(weeds.slice(i, i + columns));
   return rows;
+}
+
+/**
+ * The part of a prep note that goes on the printed sheet.
+ *
+ * A cell gives the note one line about thirty characters wide, so a note
+ * written to be read on a phone comes out as half a sentence and an ellipsis.
+ * The first line is the printed one and the rest is for whoever scans the
+ * code, where there is room for it. Write the note that way round: the short
+ * instruction first, everything else under it.
+ */
+export function printedPrep(prep: string | null | undefined): string {
+  return (prep ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "";
 }
 
 /** Where a scan of a weed's code lands. Short, so the QR stays coarse. */
