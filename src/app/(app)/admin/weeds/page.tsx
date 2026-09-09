@@ -66,11 +66,21 @@ export default async function WeedGuidePage() {
             </Link>
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
-            <a href="/admin/weeds/sheet/pdf?view=client" className="text-primary hover:underline">
+            <a
+              href="/admin/weeds/sheet/pdf?view=client"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
               Client sheet PDF
             </a>
             <span className="text-muted-foreground">·</span>
-            <a href="/admin/weeds/sheet/pdf?view=crew" className="text-primary hover:underline">
+            <a
+              href="/admin/weeds/sheet/pdf?view=crew"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
               Crew reference PDF
             </a>
           </div>

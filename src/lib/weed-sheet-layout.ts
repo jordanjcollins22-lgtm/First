@@ -290,6 +290,20 @@ export function latin1(text: string): string {
   return out;
 }
 
+/**
+ * How the browser should treat the file.
+ *
+ * Inline, unless somebody asked to save it. A file sent as an attachment is
+ * saved and not shown, and on a phone that means it disappears into Files with
+ * no viewer, no share button and no way to print -- which is the one thing the
+ * PDF was made for. Sent inline it opens in the browser's own PDF viewer,
+ * where print and share are right there. The name still travels with it, so
+ * saving it from the viewer still lands a sensibly named file.
+ */
+export function contentDisposition(view: SheetView, business: string, download: boolean): string {
+  return `${download ? "attachment" : "inline"}; filename="${fileNameFor(view, business)}"`;
+}
+
 /** What the file is called when it lands in somebody's downloads. */
 export function fileNameFor(view: SheetView, business: string): string {
   const slug = business

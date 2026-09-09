@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   columnX,
+  contentDisposition,
   fileNameFor,
   geometryFor,
   GAP,
@@ -199,5 +200,27 @@ describe("what the file is called", () => {
 
   it("does not leave a stray dash at either end", () => {
     expect(fileNameFor("client", "  Green & Co.  ")).toBe("green-co-weed-sheet.pdf");
+  });
+});
+
+describe("how the browser is told to treat the file", () => {
+  it("opens it rather than saving it", () => {
+    // Saved, it lands in Files on a phone with no viewer and no print button,
+    // which is the one thing this file exists for.
+    expect(contentDisposition("client", "JS Landscaping MD", false)).toBe(
+      'inline; filename="js-landscaping-md-weed-sheet.pdf"'
+    );
+  });
+
+  it("saves it when the link asked for that", () => {
+    expect(contentDisposition("crew", "JS Landscaping MD", true)).toBe(
+      'attachment; filename="js-landscaping-md-weed-reference.pdf"'
+    );
+  });
+
+  it("carries the name either way, so saving from the viewer still names it", () => {
+    for (const download of [true, false]) {
+      expect(contentDisposition("client", "Green & Co.", download)).toContain("green-co-weed-sheet.pdf");
+    }
   });
 });

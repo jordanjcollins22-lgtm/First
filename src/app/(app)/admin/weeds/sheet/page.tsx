@@ -120,13 +120,24 @@ export default async function WeedSheetPage({
               back pages missing. The PDF is drawn by us, page by page, so it
               is the one to send to a printer or to email somebody. */}
           <p className="mt-1 text-sm">
-            <Link href={`/admin/weeds/sheet/pdf?view=${view}`} className="font-medium text-primary hover:underline">
-              Download the PDF
-            </Link>{" "}
+            <a
+              href={`/admin/weeds/sheet/pdf?view=${view}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary hover:underline"
+            >
+              Open the PDF
+            </a>{" "}
             <span className="text-muted-foreground">
-              to print this properly, especially from a phone. Printing the page itself leaves the margins up to the
-              browser, and phones get them wrong.
+              to print this properly, especially from a phone. It opens in the viewer, where print and share are. Or{" "}
             </span>
+            <a
+              href={`/admin/weeds/sheet/pdf?view=${view}&download=1`}
+              className="text-primary hover:underline"
+            >
+              save it
+            </a>
+            <span className="text-muted-foreground"> to email it to somebody.</span>
           </p>
           {/* The back of every sheet came out upside down, which is a printer
               setting and not something a web page can see or change. Saying so
@@ -159,11 +170,16 @@ export default async function WeedSheetPage({
               Back to the guide
             </Link>
           )}
+          {/* Opened, not downloaded. A downloaded file on a phone goes into
+              Files with no viewer and no print button, which is the whole
+              reason somebody came here. */}
           <a
             href={`/admin/weeds/sheet/pdf?view=${view}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
           >
-            Download PDF
+            Open PDF
           </a>
           <PrintButton />
         </div>

@@ -24,9 +24,9 @@ import {
   MARGIN_SIDE,
   PAGE_HEIGHT,
   PAGE_WIDTH,
-  columnX,
-  fileNameFor,
   cellHeight,
+  columnX,
+  contentDisposition,
   geometryFor,
   latin1,
   paginate,
@@ -66,8 +66,11 @@ const MUTED = rgb(0.42, 0.42, 0.42);
 const PHOTO_BACKING = rgb(0.94, 0.94, 0.94);
 
 export async function GET(request: Request) {
-  const raw = new URL(request.url).searchParams.get("view");
+  const params = new URL(request.url).searchParams;
+  const raw = params.get("view");
   const view = isSheetView(raw) ? raw : "client";
+  // Opened, unless the link asked for it to be saved. See contentDisposition.
+  const download = params.get("download") === "1";
 
   // The same split the page itself makes: the crew's reference is the guide
   // in another shape and is gated like the guide; the client's sheet is a
@@ -158,9 +161,12 @@ export async function GET(request: Request) {
   return new Response(bytes as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${fileNameFor(view, organization.name)}"`,
+      "Content-Disposition": contentDisposition(view, organization.name, download),
       "Content-Length": String(bytes.length),
-      "Cache-Control": "private, no-store",
+      // Not "no-store": Safari's built-in viewer wants to be able to hold the
+      // file it is showing, and refusing it that has been known to leave a
+      // blank tab. Nobody else's copy, and never a stale sheet.
+      "Cache-Control": "private, max-age=0, must-revalidate",
     },
   });
 }
