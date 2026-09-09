@@ -181,6 +181,23 @@ export function columnsFor(view: SheetView): number {
   return view === "client" ? 4 : 5;
 }
 
+/**
+ * A group's weeds cut into rows, so a row can be an element of its own.
+ *
+ * One grid holding every weed in a group is one box as far as the printer is
+ * concerned: "keep this together" on a cell inside it is a request browsers
+ * are free to ignore, and they do, which is how a page came to start with the
+ * bottom half of somebody's photograph. A row that is its own box is a request
+ * they honour. It also gives each row somewhere to carry the space that keeps
+ * it off the top edge of the paper.
+ */
+export function rowsOf<T>(weeds: readonly T[], columns: number): T[][] {
+  if (columns < 1) return weeds.length > 0 ? [[...weeds]] : [];
+  const rows: T[][] = [];
+  for (let i = 0; i < weeds.length; i += columns) rows.push(weeds.slice(i, i + columns));
+  return rows;
+}
+
 /** Where a scan of a weed's code lands. Short, so the QR stays coarse. */
 export function weedScanPath(code: string): string {
   return `/w/${code}`;

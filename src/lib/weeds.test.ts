@@ -6,6 +6,7 @@ import {
   bookingPath,
   columnsFor,
   groupWeeds,
+  rowsOf,
   isSheetView,
   showsBookingOffer,
   weedScanPath,
@@ -99,5 +100,39 @@ describe("the offer at the end of the client's sheet", () => {
     expect(bookingPath(null)).toBe("/book");
     expect(bookingPath(undefined)).toBe("/book");
     expect(bookingPath("")).toBe("/book");
+  });
+});
+
+describe("cutting a group into rows", () => {
+  const five = ["a", "b", "c", "d", "e"];
+
+  it("fills each row before starting the next", () => {
+    expect(rowsOf(five, 2)).toEqual([["a", "b"], ["c", "d"], ["e"]]);
+  });
+
+  it("leaves the last row short rather than padding it out", () => {
+    // A short last row keeps its columns; stretching two cells across five
+    // would make the tail of a group look like a different sheet.
+    expect(rowsOf(five, 5)).toEqual([five]);
+    expect(rowsOf(five, 4)).toEqual([["a", "b", "c", "d"], ["e"]]);
+  });
+
+  it("gives back nothing for no weeds", () => {
+    expect(rowsOf([], 5)).toEqual([]);
+  });
+
+  it("keeps every weed exactly once", () => {
+    for (const columns of [1, 2, 3, 4, 5, 6]) {
+      expect(rowsOf(five, columns).flat()).toEqual(five);
+    }
+  });
+
+  it("does not lose the weeds if it is asked for no columns", () => {
+    expect(rowsOf(five, 0).flat()).toEqual(five);
+  });
+
+  it("agrees with the sheets it is used for", () => {
+    expect(rowsOf(five, columnsFor("client"))).toEqual([["a", "b", "c", "d"], ["e"]]);
+    expect(rowsOf(five, columnsFor("crew"))).toEqual([five]);
   });
 });

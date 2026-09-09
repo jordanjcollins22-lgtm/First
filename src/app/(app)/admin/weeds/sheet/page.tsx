@@ -10,6 +10,7 @@ import {
   columnsFor,
   groupWeeds,
   isSheetView,
+  rowsOf,
   showsBookingOffer,
   weedScanPath,
   weedsFor,
@@ -158,13 +159,13 @@ export default async function WeedSheetPage({
           printer we have seen; without it the second and third pages started
           at the physical edge and came out with their top row cut off. */}
       <style>{`@media print {
-        @page { size: letter portrait; margin: 0.5in 0.4in; }
+        @page { size: letter portrait; margin: 0.35in 0.4in; }
         .print-root { left: 0; right: 0; width: auto !important; }
       }`}</style>
 
       <div className="print-root">
         <div className="weed-sheet mx-auto w-full bg-white text-black">
-          <header className="mb-3 flex items-baseline justify-between border-b border-black/20 pb-2">
+          <header className="weed-head mb-3 flex items-baseline justify-between border-b border-black/20 pb-2">
             <h2 className="text-base font-semibold">
               {organization.name} · {view === "client" ? "Common lawn weeds" : "Weed reference"}
             </h2>
@@ -176,11 +177,20 @@ export default async function WeedSheetPage({
               <h3 className="weed-group-head mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-black/70">
                 {block.group}
               </h3>
+              {/* A row at a time, each its own box. One grid holding the whole
+                  group is one box to the printer, and "keep this cell
+                  together" inside it is advice a browser may ignore -- which
+                  is how a page came to begin with the bottom half of a
+                  photograph. A row that is its own box is kept together, and
+                  it is also what carries the space that keeps the first row on
+                  a page clear of the paper's edge. */}
+              {rowsOf(block.weeds, columns).map((row, rowIndex) => (
               <div
-                className="grid gap-2"
+                key={rowIndex}
+                className="weed-row grid gap-2"
                 style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
               >
-                {block.weeds.map((weed) => {
+                {row.map((weed) => {
                   const cell = byWeedId.get(weed.id);
                   return (
                     <article key={weed.id} className="weed-cell rounded border border-black/20 p-1.5">
@@ -221,6 +231,7 @@ export default async function WeedSheetPage({
                   );
                 })}
               </div>
+              ))}
             </section>
           ))}
 

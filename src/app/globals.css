@@ -301,6 +301,12 @@ body {
   height: 6rem;
 }
 
+/* On screen the rows are only rows; the space between them is the space a
+   grid's gap used to give them. */
+.weed-row + .weed-row {
+  margin-top: 0.5rem;
+}
+
 @media print {
   .weed-qr {
     width: 0.75in !important;
@@ -338,10 +344,35 @@ body {
   }
 
   /* A weed split down the middle by a page break is two useless halves: the
-     photo on one page and the name on the next. */
+     photo on one page and the name on the next. The row is what carries this
+     now: "keep this cell together" inside one big grid is advice a browser is
+     free to ignore, and both of the ones we print from do. A row that is its
+     own box is kept together. The rule stays on the cell as well, because it
+     costs nothing and says what we actually mean. */
+  .weed-row,
   .weed-cell {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  /* The belt to the page margin's braces.
+     
+     A page box margin is the right way to keep print off the edge of the
+     paper, and where it is honoured this is merely generous. Safari on a
+     phone -- which is what this actually gets printed from -- may use the
+     printer's margins instead of ours, and then the only space at the top of
+     page two is whatever the thing that lands there brought with it. So the
+     three things that can land there bring their own: padding belongs to the
+     box, and a box that starts a page starts that page with its padding. */
+  .weed-head,
+  .weed-row,
+  .weed-group-head,
+  .weed-cta {
+    padding-top: 0.25in;
+  }
+
+  .weed-row + .weed-row {
+    margin-top: 0;
   }
 
   /* A heading alone at the foot of a page sends the crew to the wrong list. */
