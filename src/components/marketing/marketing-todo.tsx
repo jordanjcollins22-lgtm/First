@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil } from "lucide-react";
@@ -8,7 +8,7 @@ import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { addMarketingPlayDoors, approveMarketingPlay, approveMarketingPlays, editMarketingPlay, makeFlyerMailing, setMarketingPlayOrder, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
-import { RouteHousePicker, type PickerMode } from "@/components/marketing/route-house-picker";
+import { idsOnRound, MODE_LABEL, toggleHouse, type PickerMode, type RouteEdit } from "@/lib/route-edit";
 import type { Point } from "@/lib/route-order";
 import type { ZoneHouse } from "@/app/api/marketing/[playId]/zone-houses/route";
 import { describePlayTrust, type PlayReview } from "@/lib/marketing-approval";
@@ -54,6 +54,7 @@ export function MarketingTodo({
   onFocusZone,
   onFlyTo,
   onShowDoors,
+  onRouteEdit,
 }: {
   plays: MarketingPlay[];
   /** The decisions so far, for saying how much the app still asks. */
@@ -64,6 +65,15 @@ export function MarketingTodo({
   onFlyTo?: (target: { lat: number; lng: number }) => void;
   /** On the map page: light up a play's doors. */
   onShowDoors?: (playId: string | null) => void;
+  /**
+   * On the map page: hand the round being edited to the big map.
+   *
+   * The doors and the walking order are edited on the county map, not on a
+   * thumbnail in this panel, because two doors twenty feet apart have to be
+   * separate things to tap. The state stays here, with the save and the undo;
+   * only the drawing and the taps happen over there.
+   */
+  onRouteEdit?: (edit: RouteEdit | null) => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -75,6 +85,39 @@ export function MarketingTodo({
   const [local, setLocal] = useState<Record<string, Partial<MarketingPlay>>>({});
   // The play being edited, with its doors.
   const [editing, setEditing] = useState<{ id: string; doors: Door[]; routes: { id: string; zip: string; routeId: string; pieces: number }[]; remove: Set<string>; add: Set<string>; zoneHouses: ZoneHouse[]; mode: PickerMode; order: string[]; line: Point[]; quantity: number; note: string; loading: boolean } | null>(null);
+
+  // The big map is told about the round being edited, and told again on every
+  // tap. The callback is held in a ref so that a parent which hands down a
+  // fresh arrow each render does not restart this.
+  const routeEditRef = useRef(onRouteEdit);
+  useEffect(() => {
+    routeEditRef.current = onRouteEdit;
+  });
+  useEffect(() => {
+    const publish = routeEditRef.current;
+    if (!publish) return;
+    if (!editing || editing.zoneHouses.length === 0) {
+      publish(null);
+      return;
+    }
+    publish({
+      playId: editing.id,
+      houses: editing.zoneHouses,
+      on: idsOnRound(editing.zoneHouses, { remove: editing.remove, add: editing.add }),
+      mode: editing.mode,
+      order: editing.order,
+      line: editing.line,
+      onToggle: (houseId) =>
+        setEditing((x) =>
+          x ? { ...x, ...toggleHouse(x.zoneHouses, { remove: x.remove, add: x.add }, houseId) } : x
+        ),
+      onOrder: (order) => setEditing((x) => (x ? { ...x, order } : x)),
+      onLine: (line) => setEditing((x) => (x ? { ...x, line } : x)),
+    });
+  }, [editing]);
+
+  // Leaving the page mid-edit should not leave the round drawn on the map.
+  useEffect(() => () => routeEditRef.current?.(null), []);
 
   const merged = plays.map((p) => ({ ...p, ...(local[p.id] ?? {}) }));
   const summary = summarizePlays(merged);
@@ -122,9 +165,9 @@ export function MarketingTodo({
       setEditing((e) => (e && e.id === play.id ? { ...e, doors: body.doors ?? [], routes: body.routes ?? flyerRoutesOf(play), loading: false } : e));
 
       // The whole zone, so houses that are not on the round can be tapped on
-      // to it. Fetched after the doors and allowed to fail on its own: the
-      // list still works without a map.
-      if (play.kind === "door_hangers" || play.kind === "knocks") {
+      // to it. Only where there is a map to draw it on, and fetched after the
+      // doors and allowed to fail on its own: the list still works without it.
+      if (onRouteEdit && (play.kind === "door_hangers" || play.kind === "knocks")) {
         try {
           const zoneRes = await fetch(`/api/marketing/${play.id}/zone-houses`, { cache: "no-store" });
           const zoneBody = (await zoneRes.json()) as { houses?: ZoneHouse[] };
@@ -135,6 +178,7 @@ export function MarketingTodo({
       }
     } catch (err) {
       setEditing(null);
+      onShowDoors?.(null);
       setError(err instanceof Error ? err.message : "Could not load the doors.");
     }
   }
@@ -328,88 +372,58 @@ export function MarketingTodo({
                                   {play.kind === "door_hangers" && <span className="text-muted-foreground">nearest the house, never one you take out</span>}
                                 </label>
                               )}
-                              {/* The map, above the list. Tapping a hollow house
-                                  puts it on the round; tapping a filled one
-                                  takes it off — the same two edits the list
-                                  makes, on the thing they are actually about. */}
-                              {/* Three ways to say the same two things: which
-                                  doors, and in what order. The router's order
-                                  is the default and stays one tap away. */}
+                              {/* Which doors, and in what order, are two
+                                  questions about a place, so both are asked on
+                                  the county map rather than in here. This
+                                  panel keeps the controls, the count and the
+                                  save; the taps happen over there, where two
+                                  doors twenty feet apart are two dots. */}
                               {editing.zoneHouses.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  {(
-                                    [
-                                      ["pick", "Pick doors"],
-                                      ["order", "Tap in order"],
-                                      ["line", "Draw the line"],
-                                    ] as [PickerMode, string][]
-                                  ).map(([m, label]) => (
-                                    <button
-                                      key={m}
-                                      type="button"
-                                      onClick={() => setEditing((x) => (x ? { ...x, mode: m } : x))}
-                                      className={`min-h-9 rounded-md border px-2.5 text-xs ${
-                                        editing.mode === m
-                                          ? "border-primary bg-primary/10 font-medium text-primary"
-                                          : "border-border hover:bg-accent/50"
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                  {(editing.order.length > 0 || editing.line.length > 0) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditing((x) => (x ? { ...x, order: [], line: [] } : x))}
-                                      className="min-h-9 px-2 text-xs text-muted-foreground underline"
-                                    >
-                                      Clear the order
-                                    </button>
-                                  )}
-                                  {editing.order.length > 0 && (
-                                    <span className="text-[11px] text-primary">
-                                      {editing.order.length} in order
+                                <div className="space-y-1.5 rounded-md border border-primary/30 bg-primary/5 p-2">
+                                  <p className="flex items-center gap-1 text-[11px] font-medium text-primary">
+                                    <MapPin className="h-3 w-3" /> Editing this round on the map
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {(["pick", "order", "line"] as PickerMode[]).map((m) => (
+                                      <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => setEditing((x) => (x ? { ...x, mode: m } : x))}
+                                        className={`min-h-9 rounded-md border px-2.5 text-xs ${
+                                          editing.mode === m
+                                            ? "border-primary bg-primary/10 font-medium text-primary"
+                                            : "border-border bg-background hover:bg-accent/50"
+                                        }`}
+                                      >
+                                        {MODE_LABEL[m]}
+                                      </button>
+                                    ))}
+                                    {(editing.order.length > 0 || editing.line.length > 0) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditing((x) => (x ? { ...x, order: [], line: [] } : x))}
+                                        className="min-h-9 px-2 text-xs text-muted-foreground underline"
+                                      >
+                                        Clear the order
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {editing.zoneHouses.length} houses in the zone,{" "}
+                                    <span className="text-foreground">
+                                      {idsOnRound(editing.zoneHouses, { remove: editing.remove, add: editing.add }).size} on the round
                                     </span>
-                                  )}
+                                    {editing.order.length > 0 ? `, ${editing.order.length} in order` : ""}.
+                                  </p>
                                 </div>
                               )}
-                              {editing.zoneHouses.length > 0 && (
-                                <RouteHousePicker
-                                  mode={editing.mode}
-                                  order={editing.order}
-                                  onOrder={(order) => setEditing((x) => (x ? { ...x, order } : x))}
-                                  line={editing.line}
-                                  onLine={(line) => setEditing((x) => (x ? { ...x, line } : x))}
-                                  houses={editing.zoneHouses}
-                                  on={
-                                    new Set(
-                                      editing.zoneHouses
-                                        .filter((h) => (h.on && !editing.remove.has(h.id)) || editing.add.has(h.id))
-                                        .map((h) => h.id)
-                                    )
-                                  }
-                                  onToggle={(houseId) =>
-                                    setEditing((x) => {
-                                      if (!x) return x;
-                                      const house = x.zoneHouses.find((h) => h.id === houseId);
-                                      if (!house) return x;
-                                      const remove = new Set(x.remove);
-                                      const add = new Set(x.add);
-                                      // On the round means either it started
-                                      // there and has not been removed, or it
-                                      // has been added since.
-                                      const currentlyOn = (house.on && !remove.has(houseId)) || add.has(houseId);
-                                      if (currentlyOn) {
-                                        add.delete(houseId);
-                                        if (house.on) remove.add(houseId);
-                                      } else {
-                                        remove.delete(houseId);
-                                        if (!house.on) add.add(houseId);
-                                      }
-                                      return { ...x, remove, add };
-                                    })
-                                  }
-                                />
+                              {!onRouteEdit && (play.kind === "door_hangers" || play.kind === "knocks") && play.zoneId && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  <Link href={`/attractors?zone=${play.zoneId}`} className="text-primary hover:underline">
+                                    Open the map
+                                  </Link>{" "}
+                                  to add doors or say what order the round is walked in. Here you can only take doors off it.
+                                </p>
                               )}
                               {editing.add.size > 0 && (
                                 <p className="text-[11px] text-primary">

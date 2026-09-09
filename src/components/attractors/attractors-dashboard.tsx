@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus, Settings2, Star } from "lucide-react";
 
@@ -57,6 +57,7 @@ import { unionBoundary } from "@/lib/eddm-mailing";
 import { EddmBuildPanel } from "./eddm-build-panel";
 import { MarketingTodo } from "@/components/marketing/marketing-todo";
 import type { MarketingState } from "@/lib/data/marketing";
+import type { RouteEdit } from "@/lib/route-edit";
 import type { ZoneApprovalState } from "@/lib/data/zone-approval";
 import { ZoneApprovalPanel } from "./zone-approval-panel";
 import { OwnershipPanel } from "./ownership-panel";
@@ -198,6 +199,11 @@ export function AttractorsDashboard({
   const [zoneScope, setZoneScope] = useState<"active" | "all">("active");
   // A play whose doors are lit up on the map while it is looked at.
   const [focusPlay, setFocusPlay] = useState<{ id: string; at: number } | null>(null);
+  // The round being edited, handed over by the marketing list so the doors
+  // and the walking order are chosen on the county map rather than on a
+  // thumbnail beside it. The list still owns the edits and the save.
+  const [routeEdit, setRouteEdit] = useState<RouteEdit | null>(null);
+  const mapCardRef = useRef<HTMLDivElement>(null);
   // Only approved zones are on the map; the one being looked at joins them.
   const approvedZoneIds = useMemo(() => new Set(approvals.zones.filter((z) => !z.needsApproval).map((z) => z.id)), [approvals]);
   const approvedZones = useMemo(() => zones.filter((z) => approvedZoneIds.has(z.id)), [zones, approvedZoneIds]);
@@ -582,7 +588,7 @@ export function AttractorsDashboard({
           </Tabs>
         </Card>
 
-        <Card className="relative h-[70vh] overflow-hidden p-0">
+        <Card ref={mapCardRef} className="relative h-[70vh] overflow-hidden p-0">
           {viewMode === "satellite" ? (
             isMapboxConfigured ? (
               <SatelliteMapView
@@ -602,6 +608,7 @@ export function AttractorsDashboard({
                 zoneScope={zoneScope}
                 visibleZoneIds={visibleZoneIds}
                 focusPlay={focused ? null : focusPlay}
+                routeEdit={focused ? null : routeEdit}
                 focusZone={focused ? null : focusZone}
                 pointColorMode={pointColorMode}
                 pointHighlight={pointHighlight?.value ?? null}
@@ -663,7 +670,17 @@ export function AttractorsDashboard({
                 plays={marketing.plays}
                 reviews={marketing.reviews}
                 autoApproved={marketing.autoApproved}
-                onShowDoors={(id) => setFocusPlay(id ? { id, at: Date.now() } : null)}
+                onShowDoors={(id) => {
+                  setFocusPlay(id ? { id, at: Date.now() } : null);
+                  // The editing happens on the map, so the map is what should
+                  // be in front of whoever just pressed Edit -- and the map is
+                  // a screen away from the list on anything but a desk.
+                  if (id) {
+                    setViewMode("satellite");
+                    mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }
+                }}
+                onRouteEdit={setRouteEdit}
                 onFocusZone={(id) => {
                   setShowZones(true);
                   setFocusZone({ id, at: Date.now() });

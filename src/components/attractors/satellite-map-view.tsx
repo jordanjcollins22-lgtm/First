@@ -31,6 +31,8 @@ import type { UnservedCluster } from "@/lib/eddm-clusters";
 import { renderHouseCard, renderHouseCardLoading, type HouseFacts } from "@/lib/house-facts";
 import { matchesHighlight, type PointHighlight } from "@/lib/house-highlight";
 import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, MODE_WHY, modeOf, walkRunsOf, type WalkLine, type ZoneProperties } from "@/lib/zones";
+import { orderAlongLine } from "@/lib/route-order";
+import { MODE_HINT as ROUND_MODE_HINT, toggleOrder, type RouteEdit } from "@/lib/route-edit";
 import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
 if (env.mapboxToken) {
@@ -91,6 +93,20 @@ interface SatelliteMapViewProps {
   focusZone: { id: string; at: number } | null;
   /** A marketing play whose doors to light up, while it is being looked at. */
   focusPlay?: { id: string; at: number } | null;
+  /**
+   * A door-hanger round being edited, drawn on this map rather than a small
+   * one beside it.
+   *
+   * Editing a round is two questions about a place — which doors, and in what
+   * order — and both were being answered on a map the size of a postcard in
+   * the side panel. Doors a few metres apart were the same dot there, so the
+   * answer was a guess. The round is edited here, on the map that is already
+   * showing the county, because the edit has to be accurate.
+   *
+   * While this is set the map belongs to the edit: a tap is a door on or off
+   * the round, not a popup about the house under it.
+   */
+  routeEdit?: RouteEdit | null;
   /** Routes ticked for a mailing, drawn solid. */
   selectedEddmIds: string[];
   onToggleMailingRoute: (id: string) => void;
@@ -162,6 +178,11 @@ const WALK_MARKS_SOURCE = "zone-walk-marks";
 const PLAY_DOORS_SOURCE = "play-doors";
 const PLAY_DOORS_LAYER = "play-doors-circle";
 const PLAY_DOORS_LABEL_LAYER = "play-doors-label";
+const ROUTE_EDIT_SOURCE = "route-edit-houses";
+const ROUTE_EDIT_LAYER = "route-edit-houses-circle";
+const ROUTE_EDIT_SEQ_LAYER = "route-edit-houses-seq";
+const ROUTE_LINE_SOURCE = "route-edit-line";
+const ROUTE_LINE_LAYER = "route-edit-line-line";
 const WALK_MARKS_LAYER = "zone-walk-marks";
 const WALK_MARKS_LABEL_LAYER = "zone-walk-marks-label";
 const UNSERVED_SOURCE = "unserved-houses";
@@ -375,6 +396,7 @@ export function SatelliteMapView({
   visibleZoneIds,
   focusZone,
   focusPlay = null,
+  routeEdit = null,
   selectedEddmIds,
   onToggleMailingRoute,
   densityCells,
@@ -404,6 +426,12 @@ export function SatelliteMapView({
   const onToggleMailingRouteRef = useRef(onToggleMailingRoute);
   const selectedEddmRef = useRef<Set<string>>(new Set());
   const onSelectJobRef = useRef(onSelectJob);
+  // The round being edited is read from a ref inside the map's own handlers,
+  // which are registered once on load. Without this they would close over the
+  // first render's props, and every tap after the first would be ignored.
+  const routeEditRef = useRef<RouteEdit | null>(routeEdit);
+  /** The round the map has already framed, so it frames each one once. */
+  const framedRoundRef = useRef<string | null>(null);
   useEffect(() => {
     onUseRouteAsWaveRef.current = onUseRouteAsWave;
     onToggleMailingRouteRef.current = onToggleMailingRoute;
@@ -413,6 +441,7 @@ export function SatelliteMapView({
     onGeometryDrawnRef.current = onGeometryDrawn;
     onSelectWaveRef.current = onSelectWave;
     onSelectJobRef.current = onSelectJob;
+    routeEditRef.current = routeEdit;
   });
 
   // Mount the map once.
@@ -861,11 +890,19 @@ export function SatelliteMapView({
         paint: { "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1.2 },
       });
 
+      // While a round is being edited every tap on this map is about the
+      // round: a door on it or off it, a place in the walking order, a point
+      // on the line. So the map's other answers -- house cards, zone cards,
+      // picking a job -- stand down until the edit is saved or cancelled.
+      const editingRound = () => routeEditRef.current !== null;
+
       map.on("click", WAVES_FILL_LAYER, (e) => {
+        if (editingRound()) return;
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectWaveRef.current(id);
       });
       map.on("click", LEADS_LAYER, (e) => {
+        if (editingRound()) return;
         const feature = e.features?.[0];
         const point = feature?.geometry as GeoJSON.Point | undefined;
         if (!feature || !point) return;
@@ -891,6 +928,7 @@ export function SatelliteMapView({
       });
 
       map.on("click", HOUSES_LAYER, (e) => {
+        if (editingRound()) return;
         const feature = e.features?.[0];
         const point = feature?.geometry as GeoJSON.Point | undefined;
         if (!feature || !point) return;
@@ -901,6 +939,7 @@ export function SatelliteMapView({
       map.on("mouseleave", HOUSES_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", ALL_ADDRESSES_CLUSTER_LAYER, (e) => {
+        if (editingRound()) return;
         const feature = e.features?.[0];
         const point = feature?.geometry as GeoJSON.Point | undefined;
         const clusterId = feature?.properties?.cluster_id;
@@ -915,6 +954,7 @@ export function SatelliteMapView({
       map.on("mouseleave", ALL_ADDRESSES_CLUSTER_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", ALL_ADDRESSES_LAYER, (e) => {
+        if (editingRound()) return;
         // A dot with a story on top of it is handled by that layer.
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER] }).length > 0) return;
         const feature = e.features?.[0];
@@ -930,6 +970,7 @@ export function SatelliteMapView({
       map.on("mouseleave", ALL_ADDRESSES_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", ZONES_FILL_LAYER, (e) => {
+        if (editingRound()) return;
         // Dots and routes on top of a zone are about themselves.
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, UNSERVED_LAYER] }).length > 0) return;
         const feature = e.features?.[0];
@@ -959,6 +1000,7 @@ export function SatelliteMapView({
       });
       // Anywhere else on the map: the house under the click, if there is one.
       map.on("click", (e) => {
+        if (editingRound()) return;
         const layers = [HOUSES_LAYER, ALL_ADDRESSES_LAYER, ALL_ADDRESSES_CLUSTER_LAYER, JOBS_LAYER, LEADS_LAYER, UNSERVED_LAYER, UNSERVED_GROUPS_LAYER, ZONES_FILL_LAYER, EDDM_FILL_LAYER, WAVES_FILL_LAYER, LOCATIONS_LAYER, AREAS_FILL_LAYER].filter((l) => map.getLayer(l));
         if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
         openHouseCardAt(map, [e.lngLat.lng, e.lngLat.lat]);
@@ -967,6 +1009,7 @@ export function SatelliteMapView({
       map.on("mouseleave", ZONES_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", UNSERVED_GROUPS_LAYER, (e) => {
+        if (editingRound()) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as { houses: number; kind: string; sample: string; zip: string | null };
@@ -986,6 +1029,7 @@ export function SatelliteMapView({
       map.on("mouseenter", UNSERVED_GROUPS_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", UNSERVED_GROUPS_LAYER, () => (map.getCanvas().style.cursor = ""));
       map.on("click", UNSERVED_LAYER, (e) => {
+        if (editingRound()) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as { address: string };
@@ -1001,6 +1045,7 @@ export function SatelliteMapView({
       map.on("mouseleave", UNSERVED_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", EDDM_FILL_LAYER, async (e) => {
+        if (editingRound()) return;
         // A dot on top of a route is about the dot.
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER] }).length > 0) return;
         const feature = e.features?.[0];
@@ -1084,6 +1129,7 @@ export function SatelliteMapView({
       map.on("mouseleave", EDDM_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", JOBS_LAYER, (e) => {
+        if (editingRound()) return;
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectJobRef.current(id);
         const coords = e.features?.[0]?.geometry as GeoJSON.Point | undefined;
@@ -1095,6 +1141,77 @@ export function SatelliteMapView({
       map.on("mouseleave", WAVES_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
       map.on("mouseenter", JOBS_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", JOBS_LAYER, () => (map.getCanvas().style.cursor = ""));
+
+      // The round being edited, last so it sits on top of the county. The
+      // drawn line goes under the doors, so a door is never hidden by it.
+      map.addSource(ROUTE_LINE_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: ROUTE_LINE_LAYER,
+        type: "line",
+        source: ROUTE_LINE_SOURCE,
+        paint: { "line-color": "#fb923c", "line-width": 3, "line-dasharray": [2, 1] },
+      });
+      map.addSource(ROUTE_EDIT_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: ROUTE_EDIT_LAYER,
+        type: "circle",
+        source: ROUTE_EDIT_SOURCE,
+        paint: {
+          // Bigger than the county's dots because they are the thing being
+          // aimed at, and bigger again once numbered, to fit the number.
+          "circle-radius": ["case", ["has", "seq"], 11, ["get", "on"], 8, 6],
+          "circle-color": ["case", ["has", "seq"], "#ea580c", ["get", "on"], "#22c55e", "#ffffff"],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": ["case", ["has", "seq"], "#7c2d12", ["get", "on"], "#14532d", "#334155"],
+        },
+      });
+      // The walking position, drawn on the door itself. Nothing else on the
+      // map says which is first, and "first" is the whole point of the mode.
+      map.addLayer({
+        id: ROUTE_EDIT_SEQ_LAYER,
+        type: "symbol",
+        source: ROUTE_EDIT_SOURCE,
+        filter: ["has", "seq"],
+        layout: {
+          "text-field": ["to-string", ["get", "seq"]],
+          "text-size": 11,
+          "text-font": ["DIN Offc Pro Bold", "Arial Unicode MS Bold"],
+          "text-allow-overlap": true,
+        },
+        paint: { "text-color": "#ffffff" },
+      });
+
+      map.on("click", ROUTE_EDIT_LAYER, (e) => {
+        const edit = routeEditRef.current;
+        const id = e.features?.[0]?.properties?.id;
+        if (!edit || typeof id !== "string") return;
+        if (edit.mode === "order") {
+          edit.onOrder(toggleOrder(edit.order, id));
+          return;
+        }
+        // While the line is being drawn a door is part of the picture, not a
+        // thing to tap; the click below puts a point down instead.
+        if (edit.mode === "line") return;
+        edit.onToggle(id);
+      });
+
+      // Drawing the line: each click drops a point, and the doors are ordered
+      // along it as it goes, so the numbers appear while it is being drawn
+      // rather than after it is finished.
+      map.on("click", (e) => {
+        const edit = routeEditRef.current;
+        if (!edit || edit.mode !== "line") return;
+        if (map.queryRenderedFeatures(e.point, { layers: [ROUTE_EDIT_LAYER] }).length > 0) return;
+        const line = [...edit.line, { lat: e.lngLat.lat, lng: e.lngLat.lng }];
+        edit.onLine(line);
+        if (line.length >= 2) {
+          const eligible = edit.houses.filter((h) => edit.on.has(h.id));
+          edit.onOrder(orderAlongLine(eligible, line).ordered);
+        }
+      });
+
+      map.on("mouseenter", ROUTE_EDIT_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", ROUTE_EDIT_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       loadedRef.current = true;
       setMapLoaded(true);
@@ -1337,7 +1454,9 @@ export function SatelliteMapView({
     if (!map || !loadedRef.current) return;
     const source = map.getSource(PLAY_DOORS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
     if (!source) return;
-    if (!focusPlay) {
+    // Once the round is being edited, its own layer draws every door in the
+    // zone; these would be the same doors again, a second dot deep.
+    if (!focusPlay || routeEdit) {
       source.setData({ type: "FeatureCollection", features: [] });
       return;
     }
@@ -1362,7 +1481,66 @@ export function SatelliteMapView({
     return () => {
       cancelled = true;
     };
-  }, [focusPlay, mapLoaded]);
+  }, [focusPlay, routeEdit, mapLoaded]);
+
+  // The round being edited: every house in its zone, filled if it is on the
+  // round, hollow if it is not, numbered if the order has been said. Redrawn
+  // on every tap, so an edit is visible before it is saved.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const houses = map.getSource(ROUTE_EDIT_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    const line = map.getSource(ROUTE_LINE_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!houses || !line) return;
+
+    if (!routeEdit || routeEdit.houses.length === 0) {
+      houses.setData({ type: "FeatureCollection", features: [] });
+      line.setData({ type: "FeatureCollection", features: [] });
+      framedRoundRef.current = null;
+      return;
+    }
+
+    const position = new Map(routeEdit.order.map((id, i) => [id, i + 1]));
+    houses.setData({
+      type: "FeatureCollection",
+      features: routeEdit.houses.map((house) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [house.lng, house.lat] },
+        properties: {
+          id: house.id,
+          address: house.address,
+          on: routeEdit.on.has(house.id),
+          // Absent rather than zero: the layers filter on whether it is there.
+          ...(position.has(house.id) ? { seq: position.get(house.id) } : {}),
+        },
+      })),
+    });
+    line.setData({
+      type: "FeatureCollection",
+      features:
+        routeEdit.line.length > 1
+          ? [
+              {
+                type: "Feature" as const,
+                properties: {},
+                geometry: { type: "LineString" as const, coordinates: routeEdit.line.map((p) => [p.lng, p.lat]) },
+              },
+            ]
+          : [],
+    });
+
+    // Framed once, when the round is opened. Doing it on every tap would drag
+    // the map out from under the person editing it.
+    if (framedRoundRef.current !== routeEdit.playId) {
+      framedRoundRef.current = routeEdit.playId;
+      const first = routeEdit.houses[0];
+      const bounds = routeEdit.houses.reduce(
+        (b, h) => b.extend([h.lng, h.lat]),
+        new mapboxgl.LngLatBounds([first.lng, first.lat], [first.lng, first.lat])
+      );
+      map.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 18 });
+    }
+  }, [routeEdit, mapLoaded]);
 
   // A zone picked from the list: fly to it and draw its walk.
   useEffect(() => {
@@ -1533,6 +1711,11 @@ export function SatelliteMapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {routeEdit && routeEdit.houses.length > 0 && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 max-w-[90%] -translate-x-1/2 rounded-full bg-black/75 px-3 py-1.5 text-center text-xs text-white shadow-lg">
+          {ROUND_MODE_HINT[routeEdit.mode]}
+        </div>
+      )}
       {(showAllAddresses || showUnserved || showZones || houses.length > 0) && (
         <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col gap-0.5 rounded-md bg-black/60 px-2 py-1.5 text-[11px] text-white">
           {(pointColorMode === "stage" || !showAllAddresses) &&
