@@ -297,3 +297,18 @@ describe("editHeadline", () => {
     ).toBe("Note added");
   });
 });
+
+describe("putting a laid-out scope back together", () => {
+  it("keeps the headings and the bullets when one line comes off", () => {
+    // Flattening it was turning a tidy list back into the wall of text it was
+    // tidied out of, every time a single line was removed.
+    const text = "Beds\n• Weed by hand.\n• Edge the borders.\n• Top up the mulch.";
+    const survivors = scopeLines(text).filter((line) => line !== "Edge the borders.");
+    expect(joinScopeLines(survivors, true)).toBe("Beds\n• Weed by hand.\n• Top up the mulch.");
+  });
+
+  it("leaves a paragraph a paragraph", () => {
+    const text = "Edge the bed. Lay mulch.";
+    expect(joinScopeLines(scopeLines(text), false)).toBe(text);
+  });
+});

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   briefFor,
   cleanScopeText,
+  cleanTidyText,
   hasQuantity,
   splitSentences,
   worthSuggesting,
@@ -143,5 +144,43 @@ describe("cleanScopeText", () => {
 
   it("collapses the whitespace a dash swap can leave behind", () => {
     expect(cleanScopeText("Trim the shrubs  —  then clear up.")).toBe("Trim the shrubs, then clear up.");
+  });
+});
+
+describe("cleaning up a laid-out reply", () => {
+  it("keeps the lines, which is the whole point", () => {
+    const reply = "Beds\n• Weed by hand.\n• Edge the borders.";
+    expect(cleanTidyText(reply)).toBe(reply);
+  });
+
+  it("keeps the blank line between one group and the next", () => {
+    expect(cleanTidyText("A\n• one\n\nB\n• two")).toBe("A\n• one\n\nB\n• two");
+  });
+
+  it("takes off a model's opening label", () => {
+    expect(cleanTidyText("Here it is:\n\nBeds\n• Weed.")).toBe("Beds\n• Weed.");
+  });
+
+  it("takes off a code fence", () => {
+    expect(cleanTidyText("```\nBeds\n• Weed.\n```")).toBe("Beds\n• Weed.");
+  });
+
+  it("applies the house style on dashes", () => {
+    expect(cleanTidyText("• Weed the beds — by hand.")).toBe("• Weed the beds, by hand.");
+  });
+
+  it("keeps a number, because taking one out would be removing something", () => {
+    // The opposite of the write-from-notes path: these words are the
+    // business's own and a client has been quoted against them.
+    const line = "• Cut at three inches, every 7 days.";
+    expect(cleanTidyText(line)).toBe(line);
+  });
+
+  it("does not run three blank lines together", () => {
+    expect(cleanTidyText("A\n• one\n\n\n\nB\n• two")).toBe("A\n• one\n\nB\n• two");
+  });
+
+  it("gives back nothing for nothing", () => {
+    expect(cleanTidyText("   ")).toBe("");
   });
 });

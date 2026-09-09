@@ -7,6 +7,7 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { THUMBNAIL } from "@/lib/storage-image-url";
+import { ScopeText } from "@/components/proposal/scope-text";
 import { ResizedImage } from "./resized-image";
 import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
@@ -176,7 +177,7 @@ export function ProposalView({
                   Ask about this
                 </button>
               </div>
-              {zone.scopeText && <p className="text-sm text-muted-foreground">{zone.scopeText}</p>}
+              {zone.scopeText && <ScopeText text={zone.scopeText} />}
               {zone.photoPaths.length > 0 && (
                 /* Whole photos, not squares cut out of the middle of them.
                    A square crop of a wide garden shot is a close-up of the

@@ -10,7 +10,7 @@ import { DiscountSelect } from "@/components/canvas/discount-select";
 import { ViewCount } from "@/components/proposal/view-count";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
-import { suggestZoneScope } from "@/lib/actions/scope-suggestion-actions";
+import { suggestZoneScope, tidyZoneScope } from "@/lib/actions/scope-suggestion-actions";
 import { groupScopeByService } from "@/lib/zone-scope";
 import { effectiveMultiplier, type Markup } from "@/lib/job-costing";
 import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
@@ -115,6 +115,34 @@ export function ProposalPanel({
    * presses Save changes. Asking them to approve the suggestion and then
    * approve the proposal is one approval too many.
    */
+  /**
+   * Lay out the wording that is already in the box.
+   *
+   * Reorganises and nothing else: the lines grouped under their headings, one
+   * thing per line. Nothing is added and nothing is dropped, and that is
+   * checked on the way back rather than trusted. See scope-suggestion-actions.
+   */
+  function handleTidy(index: number, applyTo: number[] = [index]) {
+    const zone = draftZones[index];
+    if (!zone) return;
+    setSuggestError(null);
+    setSuggesting(index);
+    startTransition(async () => {
+      try {
+        const result = await tidyZoneScope({ scopeText: zone.scopeText, serviceLabel: zone.serviceLabel });
+        if (result.ok) {
+          setDraftZones((prev) =>
+            prev.map((z, j) => (applyTo.includes(j) ? { ...z, scopeText: result.text } : z))
+          );
+        } else {
+          setSuggestError({ index, message: result.message });
+        }
+      } finally {
+        setSuggesting(null);
+      }
+    });
+  }
+
   function handleSuggest(index: number, applyTo: number[] = [index]) {
     const zone = draftZones[index];
     if (!zone) return;
@@ -379,21 +407,32 @@ export function ProposalPanel({
                             the evaluator's notes are what it writes from, and
                             this is the only place that is obvious. */}
                         <div className="flex flex-wrap items-center gap-2">
+                          {/* Two different jobs, and which one there is to do
+                              depends on whether anything is written yet. With
+                              wording in the box it is laid out and not
+                              rewritten; with an empty box there is nothing to
+                              lay out, so it is drafted from the notes. */}
                           <button
                             type="button"
-                            onClick={() => handleSuggest(first, together)}
+                            onClick={() =>
+                              draftZones[first]?.scopeText.trim()
+                                ? handleTidy(first, together)
+                                : handleSuggest(first, together)
+                            }
                             disabled={isPending}
                             className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
                           >
                             {suggesting === first ? (
                               <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                                Writing from the notes...
+                                Working...
                               </>
                             ) : (
                               <>
                                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                                Suggest from evaluator notes
+                                {draftZones[first]?.scopeText.trim()
+                                  ? "Tidy this up, same words"
+                                  : "Draft from evaluator notes"}
                               </>
                             )}
                           </button>

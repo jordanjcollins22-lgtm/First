@@ -20,6 +20,7 @@
 
 import type { ProposalZoneSnapshot } from "@/types/domain";
 import { sourceLabel } from "@/lib/change-source";
+import { tidyScope } from "@/lib/scope-format";
 
 /**
  * The written lines of an area's scope, as separate removable things.
@@ -48,8 +49,16 @@ export function scopeLines(scopeText: string): string[] {
   return bySentence.length > 0 ? bySentence : [text];
 }
 
-/** Back to something a client reads, once some lines have gone. */
-export function joinScopeLines(lines: string[]): string {
+/**
+ * Back to something a client reads, once some lines have gone.
+ *
+ * A scope that was laid out in headings and bullets is put back that way; one
+ * that was written as a paragraph stays a paragraph. Joining everything with
+ * spaces flattened a laid-out scope every time a single line came off it,
+ * which turned a tidy list into the wall of text it was tidied out of.
+ */
+export function joinScopeLines(lines: string[], laidOut = false): string {
+  if (laidOut) return tidyScope(lines.join("\n"));
   return lines.join(" ").replace(/\s+/g, " ").trim();
 }
 
@@ -123,7 +132,7 @@ export function trimProposal(input: TrimInput): TrimResult {
       removedLines.push({ zoneName: zone.zoneName, line });
       return false;
     });
-    kept.push({ ...zone, scopeText: joinScopeLines(survivors) });
+    kept.push({ ...zone, scopeText: joinScopeLines(survivors, zone.scopeText.includes("\n")) });
   }
 
   const removedCents = removedZones.reduce((sum, z) => sum + (z.priceCents ?? 0), 0);
