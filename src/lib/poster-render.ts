@@ -4,14 +4,17 @@ import QRCode from "qrcode";
 import { COLOURS, posterBookingPath } from "@/lib/neighborhood-poster";
 import {
   inchesAndSixteenths,
-  placement,
+  MAX_PIECE_HEIGHT,
+  MAX_PIECE_WIDTH,
   planPieces,
   SHEET,
+  SHEET_MARGIN,
   type Board,
   type Measure,
   type Piece,
   type PiecePlan,
 } from "@/lib/poster-pieces";
+import { packSheets, type PackedSheet } from "@/lib/sheet-packing";
 
 /**
  * The neighbourhood sign, printed as cutouts.
@@ -32,8 +35,18 @@ import {
  */
 
 const PT = 72;
-/** The margin round a cutout on its sheet, and where the label goes. */
-const SHEET_EDGE = 0.3;
+
+/** What one sheet can carry, once the printer's own margins are gone. */
+const USABLE = { width: MAX_PIECE_WIDTH, height: MAX_PIECE_HEIGHT };
+
+/**
+ * The lane left between two cutouts on a sheet.
+ *
+ * Wide enough to get a blade down without touching either neighbour, and to
+ * print the piece's number beside it. Two shapes sharing an edge cannot be cut
+ * apart at all.
+ */
+const GUTTER = 0.3;
 
 export interface SignInput {
   /** The backing board or frame, in inches. Twenty by thirty is the usual. */
@@ -66,11 +79,31 @@ export async function renderSign(input: SignInput): Promise<RenderedSign> {
   const plan = planPieces(board, input.businessName, measure);
   const code = qrMatrix(input.bookingUrl);
 
-  drawMap(pdf, plan, bold, plain, input.businessName);
-  drawChecklist(pdf, plan, bold, plain);
-  for (const [index, piece] of plan.pieces.entries()) {
-    drawCutout(pdf, piece, index + 1, plan, { bold, oblique, code });
-  }
+  // Numbered before they are packed, so the number is the piece's place on the
+  // sign rather than wherever the packer happened to put it. Somebody reading
+  // the map wants to find number seven, not to know it was packed ninth.
+  const numbered = plan.pieces.map((piece, i) => ({
+    piece,
+    number: i + 1,
+    width: piece.width,
+    height: piece.height,
+  }));
+
+  // As many as will fit each sheet and still come apart with a blade. One
+  // cutout per sheet made a fourteen-page file of which eleven pages were a
+  // strip of words and eight inches of white.
+  const sheets = packSheets(numbered, USABLE, GUTTER);
+
+  const sheetOf = new Map<string, number>();
+  sheets.forEach((sheet, index) => {
+    for (const placed of sheet.placements) sheetOf.set(placed.item.piece.id, index + 1);
+  });
+
+  drawMap(pdf, plan, bold, plain, input.businessName, sheets.length);
+  drawChecklist(pdf, plan, bold, plain, sheetOf);
+  sheets.forEach((sheet, index) => {
+    drawSheet(pdf, sheet, index + 1, sheets.length, { bold, oblique, code });
+  });
 
   return { bytes: await pdf.save(), plan };
 }
@@ -106,14 +139,15 @@ function drawMap(
   plan: PiecePlan,
   bold: PDFFont,
   plain: PDFFont,
-  businessName: string
+  businessName: string,
+  sheetCount: number
 ) {
   const page = pdf.addPage([8.5 * PT, 11 * PT]);
   const { board } = plan;
 
   page.drawText("Where each cutout goes", { x: 0.5 * PT, y: 10.4 * PT, size: 15, font: bold });
   page.drawText(
-    `${businessName} · ${board.width} × ${board.height}in board · ${plan.pieces.length} cutouts · this sheet is not for cutting`,
+    `${businessName} · ${board.width} × ${board.height}in board · ${plan.pieces.length} cutouts on ${sheetCount} sheet${sheetCount === 1 ? "" : "s"} · this sheet is not for cutting`,
     { x: 0.5 * PT, y: 10.15 * PT, size: 9, font: plain, color: rgb(0.4, 0.4, 0.4) }
   );
 
@@ -176,7 +210,7 @@ function drawMap(
   });
 
   page.drawText(
-    "Numbers are the page each cutout is printed on, after this sheet and the list.",
+    "The list overleaf says which sheet each number is printed on, and where it goes on the board.",
     { x: 0.5 * PT, y: 0.45 * PT, size: 8, font: plain, color: rgb(0.45, 0.45, 0.45) }
   );
 }
@@ -187,12 +221,19 @@ function drawMap(
  * Columns rather than sentences. Somebody with a tape measure is reading down
  * one number at a time, and a sentence per row makes them find it each time.
  */
-function drawChecklist(pdf: PDFDocument, plan: PiecePlan, bold: PDFFont, plain: PDFFont) {
+function drawChecklist(
+  pdf: PDFDocument,
+  plan: PiecePlan,
+  bold: PDFFont,
+  plain: PDFFont,
+  sheetOf: Map<string, number>
+) {
   const rows = plan.pieces.map((piece, i) => {
     const fromLeft = piece.x;
     const fromRight = plan.board.width - piece.x - piece.width;
     return {
       number: i + 1,
+      sheet: String(sheetOf.get(piece.id) ?? "—"),
       what: piece.kind === "qr" ? "The code" : piece.text,
       size: `${inchesAndSixteenths(piece.width)} × ${inchesAndSixteenths(piece.height)}`,
       down: inchesAndSixteenths(piece.y),
@@ -200,7 +241,7 @@ function drawChecklist(pdf: PDFDocument, plan: PiecePlan, bold: PDFFont, plain: 
     };
   });
 
-  const COLUMNS = { number: 0.5, what: 0.9, size: 4.0, down: 5.6, across: 6.7 };
+  const COLUMNS = { number: 0.5, what: 0.9, sheet: 3.8, size: 4.5, down: 6.0, across: 7.1 };
   const PER_PAGE = 22;
 
   for (let start = 0; start < rows.length; start += PER_PAGE) {
@@ -215,6 +256,7 @@ function drawChecklist(pdf: PDFDocument, plan: PiecePlan, bold: PDFFont, plain: 
     const heading = (text: string, x: number) =>
       page.drawText(text, { x: x * PT, y: 9.8 * PT, size: 7.5, font: bold, color: grey });
     heading("What it says", COLUMNS.what);
+    heading("Sheet", COLUMNS.sheet);
     heading("Cut it", COLUMNS.size);
     heading("Down", COLUMNS.down);
     heading("Across", COLUMNS.across);
@@ -222,12 +264,13 @@ function drawChecklist(pdf: PDFDocument, plan: PiecePlan, bold: PDFFont, plain: 
     let y = 9.5;
     for (const row of rows.slice(start, start + PER_PAGE)) {
       page.drawText(`${row.number}.`, { x: COLUMNS.number * PT, y: y * PT, size: 10, font: bold });
-      page.drawText(truncate(row.what, bold, 10, (COLUMNS.size - COLUMNS.what - 0.15) * PT), {
+      page.drawText(truncate(row.what, bold, 10, (COLUMNS.sheet - COLUMNS.what - 0.15) * PT), {
         x: COLUMNS.what * PT,
         y: y * PT,
         size: 10,
         font: bold,
       });
+      page.drawText(row.sheet, { x: COLUMNS.sheet * PT, y: y * PT, size: 9, font: bold });
       page.drawText(row.size, { x: COLUMNS.size * PT, y: y * PT, size: 9, font: plain, color: grey });
       page.drawText(row.down, { x: COLUMNS.down * PT, y: y * PT, size: 9, font: plain, color: grey });
       page.drawText(row.across, { x: COLUMNS.across * PT, y: y * PT, size: 9, font: plain, color: grey });
@@ -247,54 +290,88 @@ interface CutoutFonts {
   code: { size: number; bits: boolean[] };
 }
 
+/** One item as the packer sees it: a cutout that knows its number. */
+interface PackedPiece {
+  piece: Piece;
+  number: number;
+  width: number;
+  height: number;
+}
+
 /**
- * One cutout, on its own sheet, at the size it will be on the sign.
+ * One sheet, carrying as many cutouts as would fit.
  *
- * Printed actual size or the sign comes out wrong, so the sheet says so where
- * somebody will read it. The label sits in the printer's margin outside the
- * cut line, which means it is gone the moment the piece is cut out and cannot
- * end up on the finished sign.
+ * Printed actual size or the sign comes out the wrong size for the frame, so
+ * the sheet says so where somebody will read it.
+ *
+ * Every number sits in the lane above its cutout rather than on it, which is
+ * what makes the lane worth its width twice over: it is where the blade goes
+ * and it is where the label goes, and both are gone the moment the piece is
+ * cut out. A number printed inside a shape ends up on the finished sign.
  */
-function drawCutout(pdf: PDFDocument, piece: Piece, number: number, plan: PiecePlan, fonts: CutoutFonts) {
+function drawSheet(
+  pdf: PDFDocument,
+  sheet: PackedSheet<PackedPiece>,
+  number: number,
+  total: number,
+  fonts: CutoutFonts
+) {
   const page = pdf.addPage([SHEET.width * PT, SHEET.height * PT]);
 
-  const x = (SHEET.width - piece.width) / 2;
-  const top = Math.max(SHEET_EDGE, (SHEET.height - piece.height) / 2);
-  const bottom = SHEET.height - top - piece.height;
+  // Sheet coordinates run from the top left of the usable area; the page's
+  // own origin is bottom left, so y is flipped once, here.
+  const px = (x: number) => (SHEET_MARGIN + x) * PT;
+  const pyTop = (y: number) => (SHEET.height - SHEET_MARGIN - y) * PT;
 
-  page.drawText(
-    `${number} of ${plan.pieces.length} · ${placement(piece, plan.board)} · print actual size, not "fit to page"`,
-    { x: 0.25 * PT, y: (SHEET.height - 0.19) * PT, size: 7.5, font: fonts.bold, color: rgb(0.45, 0.45, 0.45) }
-  );
+  for (const placed of sheet.placements) {
+    const { piece } = placed.item;
+    const left = px(placed.x);
+    const top = pyTop(placed.y);
+    const bottom = top - piece.height * PT;
 
-  // The cut line, on the boundary rather than outside it: a guide printed
-  // beyond the shape is a grey line left on the sign.
-  page.drawRectangle({
-    x: x * PT,
-    y: bottom * PT,
-    width: piece.width * PT,
-    height: piece.height * PT,
-    color: piece.fill ? hex(piece.fill) : rgb(1, 1, 1),
-    borderColor: rgb(0.7, 0.7, 0.7),
-    borderWidth: 0.5,
-    borderDashArray: [4, 3],
-  });
+    // The cut line, on the boundary rather than outside it: a guide printed
+    // beyond the shape is a grey line left on the sign.
+    page.drawRectangle({
+      x: left,
+      y: bottom,
+      width: piece.width * PT,
+      height: piece.height * PT,
+      color: piece.fill ? hex(piece.fill) : rgb(1, 1, 1),
+      borderColor: rgb(0.7, 0.7, 0.7),
+      borderWidth: 0.5,
+      borderDashArray: [4, 3],
+    });
 
-  if (piece.kind === "qr") {
-    drawQr(page, fonts.code, x * PT, bottom * PT, piece.width * PT, hex(COLOURS.ink));
-    return;
+    page.drawText(String(placed.item.number), {
+      x: left,
+      y: top + 0.06 * PT,
+      size: 7,
+      font: fonts.bold,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+
+    if (piece.kind === "qr") {
+      drawQr(page, fonts.code, left, bottom, piece.width * PT, hex(COLOURS.ink));
+      continue;
+    }
+
+    const font = piece.italic ? fonts.oblique : fonts.bold;
+    const size = piece.fontSize * PT;
+    const wide = font.widthOfTextAtSize(piece.text, size);
+    page.drawText(piece.text, {
+      x: left + (piece.width * PT - wide) / 2,
+      y: top - (0.16 + piece.fontSize * 0.72) * PT,
+      size,
+      font,
+      color: hex(piece.colour),
+    });
   }
 
-  const font = piece.italic ? fonts.oblique : fonts.bold;
-  const size = piece.fontSize * PT;
-  const wide = font.widthOfTextAtSize(piece.text, size);
-  page.drawText(piece.text, {
-    x: x * PT + (piece.width * PT - wide) / 2,
-    y: (bottom + piece.height) * PT - (0.16 + piece.fontSize * 0.72) * PT,
-    size,
-    font,
-    color: hex(piece.colour),
-  });
+  // At the foot, so it never crowds the numbers along the top row.
+  page.drawText(
+    `Sheet ${number} of ${total} · cut along the dashed lines · print actual size, not "fit to page"`,
+    { x: 0.25 * PT, y: 0.12 * PT, size: 7.5, font: fonts.bold, color: rgb(0.45, 0.45, 0.45) }
+  );
 }
 
 function truncate(text: string, font: PDFFont, size: number, room: number): string {

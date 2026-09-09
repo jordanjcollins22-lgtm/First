@@ -6,6 +6,8 @@ import { getCurrentOrganization } from "@/lib/data/organizations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { SignPreview } from "@/components/marketing/sign-preview";
 import { planPieces, signMeasure } from "@/lib/poster-render";
+import { MAX_PIECE_HEIGHT, MAX_PIECE_WIDTH } from "@/lib/poster-pieces";
+import { packSheets } from "@/lib/sheet-packing";
 
 /**
  * The neighbourhood sign, and the sizes of frame it fits.
@@ -41,14 +43,21 @@ export default async function PosterPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           &ldquo;We&apos;re working in your neighborhood&rdquo; with a scannable offer, for a picture frame in a
           lawn or a window while a crew is on the street. It prints on the office printer as cutouts: each
-          phrase at its finished size on its own sheet. Cut them out and lay them on the board. Nothing joins
-          to anything, so there are no seams to line up.
+          phrase at its finished size, packed several to a page. Cut them out and lay them on the board.
+          Nothing joins to anything, so there are no seams to line up.
         </p>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {SIZES.map((size) => {
           const plan = planPieces({ width: size.width, height: size.height }, organization.name, measure);
+          // The same packing the file uses, so the count here cannot disagree
+          // with what comes out of the printer.
+          const sheets = packSheets(
+            plan.pieces.map((piece) => ({ width: piece.width, height: piece.height })),
+            { width: MAX_PIECE_WIDTH, height: MAX_PIECE_HEIGHT },
+            0.3
+          ).length;
           const href = `/admin/marketing/poster/pdf?w=${size.width}&h=${size.height}`;
           return (
             <div key={`${size.width}x${size.height}`} className="flex gap-3 rounded-lg border border-border p-3">
@@ -59,8 +68,8 @@ export default async function PosterPage() {
               </p>
               <p className="text-xs text-muted-foreground">{size.note}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                {plan.pieces.length} cutout{plan.pieces.length === 1 ? "" : "s"}, one per sheet, plus a map and
-                a list.
+                {plan.pieces.length} cutout{plan.pieces.length === 1 ? "" : "s"} on {sheets} sheet
+                {sheets === 1 ? "" : "s"}, plus a map and a list.
               </p>
               <div className="mt-2 flex flex-wrap gap-2 text-sm">
                 <a
@@ -86,8 +95,8 @@ export default async function PosterPage() {
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
           <li>Print it. Actual size, not &ldquo;fit to page&rdquo;, or the cutouts come out the wrong size for
             the frame.</li>
-          <li>Cut each sheet on its dashed outline. Every cut is a straight line, so a paper trimmer does the
-            lot in a couple of minutes.</li>
+          <li>Cut along the dashed outlines. Several cutouts share a sheet, and they are arranged so every
+            cut is a straight line all the way across — a paper trimmer does the lot in a couple of minutes.</li>
           <li>Lay them on the board using the first two sheets: the map shows the whole sign with every piece
             numbered, and the list gives each one&apos;s size and how far down and across it goes.</li>
           <li>Tape or glue the backs once you are happy with where they sit. A piece an eighth of an inch out

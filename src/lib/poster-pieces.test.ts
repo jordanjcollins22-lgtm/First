@@ -6,7 +6,6 @@ import {
   MAX_PIECE_HEIGHT,
   MAX_PIECE_WIDTH,
   overlaps,
-  placement,
   planPieces,
   rowPieces,
   type Board,
@@ -247,23 +246,6 @@ describe("the order of the lines, against real capitals", () => {
   it("keeps the small print the smallest thing on it", () => {
     const others = ["name", "working", "neighborhood", "get-a", "offer-1", "offer-2", "scan"];
     for (const other of others) expect(cap("fallback")).toBeLessThan(cap(other));
-  });
-});
-
-describe("telling somebody where a cutout goes", () => {
-  it("says centred when it is centred, rather than a measurement to ignore", () => {
-    const piece = { x: 5, y: 3, width: 10, height: 2 } as never as Parameters<typeof placement>[0];
-    expect(placement(piece, FRAME)).toContain("centred");
-  });
-
-  it("measures from the left when it is not centred", () => {
-    const piece = { x: 2, y: 3, width: 4, height: 2 } as never as Parameters<typeof placement>[0];
-    expect(placement(piece, FRAME)).toContain("from the left edge");
-  });
-
-  it("says how far down, in the units on a tape measure", () => {
-    const piece = { x: 5, y: 3.25, width: 10, height: 2 } as never as Parameters<typeof placement>[0];
-    expect(placement(piece, FRAME)).toContain("3 1/4in");
   });
 });
 

@@ -298,17 +298,6 @@ export function overlaps(a: Piece, b: Piece): boolean {
   );
 }
 
-/** How to place one cutout, written the way somebody with a ruler works. */
-export function placement(piece: Piece, board: Board): string {
-  const fromLeft = piece.x;
-  const fromRight = board.width - piece.x - piece.width;
-  const centred = Math.abs(fromLeft - fromRight) < 0.05;
-  const across = centred
-    ? "centred across the board"
-    : `${inchesAndSixteenths(fromLeft)} from the left edge`;
-  return `${inchesAndSixteenths(piece.y)} down from the top, ${across}`;
-}
-
 /** The same measurement as a fraction, for somebody holding a tape measure. */
 export function inchesAndSixteenths(value: number): string {
   const whole = Math.floor(value + 1e-9);
