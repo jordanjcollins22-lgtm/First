@@ -8,6 +8,8 @@ import { lookupPropertyDetails } from "@/lib/rentcast";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
+import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
+import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -37,7 +39,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * webhook). Re-validates everything server-side since none of it can be
  * trusted from the client.
  */
-export async function submitPublicBooking(input: SubmitPublicBookingInput): Promise<{ jobId: string }> {
+export async function submitPublicBooking(
+  input: SubmitPublicBookingInput
+): Promise<{ jobId: string; mode: EvaluationMode }> {
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
   const email = input.email.trim().toLowerCase();
@@ -50,7 +54,12 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
   if (!address || typeof input.lat !== "number" || typeof input.lng !== "number") {
     throw new Error("Select your address from the search results.");
   }
-  if (!BUDGET_RANGES.includes(input.budgetRange as (typeof BUDGET_RANGES)[number])) {
+  // Optional, and it has to actually be optional. The form has said so since
+  // the brackets were added, but this refused a blank one — so anybody who
+  // skipped the question lost the appointment on the final click, which is
+  // the exact failure the "Not sure yet" bracket was added to prevent.
+  const budgetRange = input.budgetRange?.trim() ?? "";
+  if (budgetRange && !BUDGET_RANGES.includes(budgetRange as (typeof BUDGET_RANGES)[number])) {
     throw new Error("Select a budget range.");
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) {
@@ -82,9 +91,19 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
   const end = new Date(evaluationDateTime.getTime() + SLOT_MINUTES * 60_000);
   const blocks = await getBusyBlocksAsAdmin().catch(() => []);
 
-  const evaluatorId =
-    freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end })[0] ?? null;
-  if (!evaluatorId) throw new Error("That time was just booked — please pick another.");
+  const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end });
+  if (stillFree.length === 0) throw new Error("That time was just booked — please pick another.");
+
+  // Which of the free ones, rather than whichever the database named first.
+  // That used to decide it, so one person collected the bookings and the rest
+  // waited. Now it goes to whoever is already going that way, and failing
+  // that to whoever has the lightest day.
+  const choice = chooseEvaluator(stillFree, await daysFor(admin, stillFree, input.date), {
+    lat: input.lat,
+    lng: input.lng,
+  });
+  if (!choice) throw new Error("That time was just booked — please pick another.");
+  const evaluatorId = choice.evaluatorId;
 
   const { data: activeServices, error: servicesError } = await admin
     .from("services")
@@ -162,6 +181,12 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
     }
   }
 
+  // Decided here as well as in the browser. The client is told which kind of
+  // evaluation they are getting before they pick a time, but what is written
+  // down is worked out from the coordinates on the server, where nobody can
+  // edit it into a free visit three states away.
+  const mode = modeForAddress(input.lat, input.lng);
+
   const { data: job, error: jobError } = await admin
     .from("jobs")
     .insert({
@@ -170,8 +195,9 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
       assigned_to: evaluatorId,
       evaluation_date: iso,
       evaluation_status: "scheduled",
+      evaluation_mode: mode.mode,
       client_notes: input.notes.trim() || null,
-      budget_range: input.budgetRange,
+      budget_range: budgetRange || null,
       referred_by_profile_id: input.referredByProfileId,
     })
     .select()
@@ -193,5 +219,63 @@ export async function submitPublicBooking(input: SubmitPublicBookingInput): Prom
   // rather than at the next nightly sweep.
   await reconcileProspects(admin).catch(() => null);
 
-  return { jobId: job.id };
+  return { jobId: job.id, mode: mode.mode };
+}
+
+/**
+ * What each candidate's day already looks like, so the choice is informed.
+ *
+ * One read for the lot rather than one per person. Coordinates come along
+ * because "is anybody already going that way" is the first question, and they
+ * never leave the server — the client is told who is coming, not where
+ * anybody else lives.
+ */
+async function daysFor(
+  admin: ReturnType<typeof createAdminClient>,
+  evaluatorIds: string[],
+  date: string
+): Promise<EvaluatorDay[]> {
+  const dayStart = new Date(`${date}T00:00:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+
+  const { data: rows } = await admin
+    .from("jobs")
+    .select("assigned_to, evaluation_date, properties(lat, lng)")
+    .in("assigned_to", evaluatorIds)
+    .gte("evaluation_date", dayStart.toISOString())
+    .lt("evaluation_date", dayEnd.toISOString());
+
+  const visits = new Map<string, { lat: number | null; lng: number | null }[]>();
+  for (const raw of rows ?? []) {
+    const row = raw as unknown as {
+      assigned_to: string | null;
+      properties: { lat: number | null; lng: number | null } | null;
+    };
+    if (!row.assigned_to) continue;
+    const list = visits.get(row.assigned_to) ?? [];
+    list.push({ lat: row.properties?.lat ?? null, lng: row.properties?.lng ?? null });
+    visits.set(row.assigned_to, list);
+  }
+
+  // When nobody is nearby and the days are equally light, it goes to whoever
+  // has waited longest, so it rotates instead of settling on one name.
+  const { data: latest } = await admin
+    .from("jobs")
+    .select("assigned_to, created_at")
+    .in("assigned_to", evaluatorIds)
+    .not("evaluation_date", "is", null)
+    .order("created_at", { ascending: false });
+
+  const lastBooked = new Map<string, string>();
+  for (const row of (latest ?? []) as { assigned_to: string | null; created_at: string }[]) {
+    if (row.assigned_to && !lastBooked.has(row.assigned_to)) {
+      lastBooked.set(row.assigned_to, row.created_at);
+    }
+  }
+
+  return evaluatorIds.map((id) => ({
+    evaluatorId: id,
+    visits: visits.get(id) ?? [],
+    lastBookedAt: lastBooked.get(id) ?? null,
+  }));
 }

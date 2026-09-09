@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { CheckCircle2, Loader2, MapPin, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { CheckCircle2, Loader2, MapPin, Search, UserCheck, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,14 @@ import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
 import type { BookingTimes, OfferedTime } from "@/app/book/times/route";
 import { RecommendedTimes } from "@/components/booking/recommended-times";
+import { modeForAddress } from "@/lib/evaluation-mode";
+import {
+  MEMORY_KEY,
+  readRemembered,
+  rememberBooking,
+  summarise,
+  type RememberedBooking,
+} from "@/lib/booking-memory";
 
 /**
  * Booking a free evaluation, in the order somebody is willing to answer.
@@ -68,6 +76,57 @@ function formatTimeLabel(time: string): string {
   return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+/**
+ * The remembered booking, as an external store.
+ *
+ * Module level so the function identities never change between renders, which
+ * is what useSyncExternalStore needs to avoid resubscribing on every one.
+ */
+const MEMORY_EVENT = "booking-memory";
+
+function subscribeToMemory(onChange: () => void): () => void {
+  // "storage" covers another tab; the custom event covers this one, which
+  // does not fire "storage" for its own writes.
+  window.addEventListener("storage", onChange);
+  window.addEventListener(MEMORY_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(MEMORY_EVENT, onChange);
+  };
+}
+
+function memorySnapshot(): string | null {
+  try {
+    return window.localStorage.getItem(MEMORY_KEY);
+  } catch {
+    // A browser refusing storage is a browser that gets the plain form.
+    return null;
+  }
+}
+
+/** Nothing, on the server. The card appears at hydration or not at all. */
+function serverMemorySnapshot(): string | null {
+  return null;
+}
+
+function writeMemory(value: string): void {
+  try {
+    window.localStorage.setItem(MEMORY_KEY, value);
+    window.dispatchEvent(new Event(MEMORY_EVENT));
+  } catch {
+    // The booking still happened, which is the point.
+  }
+}
+
+function forgetMemory(): void {
+  try {
+    window.localStorage.removeItem(MEMORY_KEY);
+    window.dispatchEvent(new Event(MEMORY_EVENT));
+  } catch {
+    // Nothing to do.
+  }
+}
+
 export function BookingWizard({
   organizationId,
   organizationName,
@@ -87,7 +146,12 @@ export function BookingWizard({
   linkOrg: string | null;
 }) {
   const [step, setStep] = useState(1);
-  const [booked, setBooked] = useState<{ date: string; time: string; address: string } | null>(null);
+  const [booked, setBooked] = useState<{
+    date: string;
+    time: string;
+    address: string;
+    digital: boolean;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -114,6 +178,17 @@ export function BookingWizard({
   // The ranked times, worked out on the server once it knows the address.
   const [times, setTimes] = useState<BookingTimes | null>(null);
   const [timesLoading, setTimesLoading] = useState(false);
+
+  // What this browser already knows about whoever is holding it.
+  //
+  // Subscribed to rather than read into state in an effect. localStorage is an
+  // external store and this is the hook for one: the server snapshot is null,
+  // so the prerendered page has no card and the client fills it in on
+  // hydration without a cascading render. Clearing it in another tab, or in
+  // this one, updates the card too.
+  const savedRaw = useSyncExternalStore(subscribeToMemory, memorySnapshot, serverMemorySnapshot);
+  const remembered = useMemo(() => readRemembered(savedRaw), [savedRaw]);
+  const [dismissedMemory, setDismissedMemory] = useState(false);
 
   const lat = selectedAddress?.lat ?? null;
   const lng = selectedAddress?.lng ?? null;
@@ -166,6 +241,37 @@ export function BookingWizard({
     }, 300);
   }
 
+  /**
+   * Take the details this browser already has and get out of the way.
+   *
+   * Everything the form asks for except what they want doing, filled at once,
+   * and straight to the time picker — which is the only part of a second
+   * booking that is genuinely a new decision.
+   */
+  function useRemembered(saved: RememberedBooking) {
+    setFirstName(saved.firstName);
+    setLastName(saved.lastName);
+    setEmail(saved.email);
+    setPhone(saved.phone);
+    setAddressQuery(saved.address);
+    setSelectedAddress({
+      fullAddress: saved.address,
+      lat: saved.lat,
+      lng: saved.lng,
+    } as GeocodeSuggestion);
+    setSuggestions([]);
+    setError(null);
+    setStep(2);
+  }
+
+  function forgetRemembered() {
+    // Both, deliberately. Clearing the store is the real thing; the flag
+    // covers a browser that refuses to forget, so the card still goes away
+    // when somebody says it is not their house.
+    setDismissedMemory(true);
+    forgetMemory();
+  }
+
   function toggleService(id: string) {
     setSelectedServiceIds((prev) => {
       const next = new Set(prev);
@@ -184,7 +290,7 @@ export function BookingWizard({
 
     startTransition(async () => {
       try {
-        await submitPublicBooking({
+        const result = await submitPublicBooking({
           organizationId,
           referredByProfileId,
           candidateEvaluatorIds: selectedSlot.evaluatorIds,
@@ -203,7 +309,25 @@ export function BookingWizard({
           // yet is still somebody who wants us to come and look.
           budgetRange: budgetRange || "Not sure yet",
         });
-        setBooked({ date: selectedSlot.date, time: selectedSlot.time, address: selectedAddress.fullAddress });
+        // Kept in their own browser so a second booking is a tap rather than
+        // the same four fields typed again on a phone.
+        const keep = rememberBooking({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          address: selectedAddress.fullAddress,
+          lat: selectedAddress.lat,
+          lng: selectedAddress.lng,
+        });
+        if (keep) writeMemory(keep);
+        setBooked({
+          date: selectedSlot.date,
+          time: selectedSlot.time,
+          address: selectedAddress.fullAddress,
+          // What the server decided, not what the browser guessed.
+          digital: result.mode === "digital",
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
       }
@@ -222,7 +346,11 @@ export function BookingWizard({
           <p className="font-medium">What happens next</p>
           <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
             <li>A confirmation is on its way to {email}.</li>
-            <li>We walk the property with you — about an hour.</li>
+            <li>
+              {booked.digital
+                ? "We walk the property with you over a video call — about an hour."
+                : "We walk the property with you — about an hour."}
+            </li>
             <li>You get a written proposal with a fixed price. No obligation.</li>
           </ul>
         </div>
@@ -237,6 +365,11 @@ export function BookingWizard({
     selectedAddress && isMapboxConfigured
       ? `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x?access_token=${env.mapboxToken}`
       : null;
+
+  // Whether somebody is driving to this one. Worked out in the browser purely
+  // so the client can be told before they commit; what gets written down is
+  // decided again on the server, from the same coordinates.
+  const mode = selectedAddress ? modeForAddress(selectedAddress.lat, selectedAddress.lng) : null;
 
   // The ranked list once the server has answered, the plain one until then.
   const allTimes: AvailableSlotGroup[] = times
@@ -299,6 +432,32 @@ export function BookingWizard({
           </div>
         ))}
       </div>
+
+      {/* ------------------------------------ 0. we have been here before */}
+      {step === 1 && remembered && !dismissedMemory && (
+        <div className="flex flex-col gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold">Welcome back — shall we use these?</p>
+          </div>
+          <div className="text-sm">
+            <p className="font-medium">{summarise(remembered).name}</p>
+            <p className="text-muted-foreground">{summarise(remembered).address}</p>
+            <p className="text-xs text-muted-foreground">{summarise(remembered).contact}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="h-11" onClick={() => useRemembered(remembered)}>
+              Use these details
+            </Button>
+            <Button type="button" variant="outline" className="h-11" onClick={forgetRemembered}>
+              Somewhere else
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Saved on this device from your last booking. We never see it until you book.
+          </p>
+        </div>
+      )}
 
       {/* ---------------------------------------------------- 1. the address */}
       {step === 1 && (
@@ -452,6 +611,16 @@ export function BookingWizard({
       {/* ------------------------------------------------------- 3. the time */}
       {step === 3 && (
         <div className="flex flex-col gap-4">
+          {/* Which kind of evaluation this address gets, said before they pick
+              a time rather than after they have booked one. Somebody two hours
+              away should know it is a video call while they still have the
+              choice, not discover it in a confirmation email. */}
+          {mode?.mode === "digital" && (
+            <div className="flex gap-2.5 rounded-lg border border-border bg-accent/40 px-3 py-2.5">
+              <Video className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <p className="text-sm text-muted-foreground">{mode.says}</p>
+            </div>
+          )}
           <div>
             <p className="font-medium">When suits you?</p>
             <p className="text-sm text-muted-foreground">
