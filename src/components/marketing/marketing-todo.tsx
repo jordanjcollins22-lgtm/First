@@ -7,7 +7,9 @@ import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { approveMarketingPlay, approveMarketingPlays, editMarketingPlay, makeFlyerMailing, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
+import { addMarketingPlayDoors, approveMarketingPlay, approveMarketingPlays, editMarketingPlay, makeFlyerMailing, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
+import { RouteHousePicker } from "@/components/marketing/route-house-picker";
+import type { ZoneHouse } from "@/app/api/marketing/[playId]/zone-houses/route";
 import { describePlayTrust, type PlayReview } from "@/lib/marketing-approval";
 import {
   describePlays,
@@ -71,7 +73,7 @@ export function MarketingTodo({
   // What was just ticked or approved, before the page has caught up.
   const [local, setLocal] = useState<Record<string, Partial<MarketingPlay>>>({});
   // The play being edited, with its doors.
-  const [editing, setEditing] = useState<{ id: string; doors: Door[]; routes: { id: string; zip: string; routeId: string; pieces: number }[]; remove: Set<string>; quantity: number; note: string; loading: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; doors: Door[]; routes: { id: string; zip: string; routeId: string; pieces: number }[]; remove: Set<string>; add: Set<string>; zoneHouses: ZoneHouse[]; quantity: number; note: string; loading: boolean } | null>(null);
 
   const merged = plays.map((p) => ({ ...p, ...(local[p.id] ?? {}) }));
   const summary = summarizePlays(merged);
@@ -110,13 +112,26 @@ export function MarketingTodo({
 
   async function startEdit(play: MarketingPlay) {
     setError(null);
-    setEditing({ id: play.id, doors: [], routes: [], remove: new Set(), quantity: play.quantity, note: "", loading: true });
+    setEditing({ id: play.id, doors: [], routes: [], remove: new Set(), add: new Set(), zoneHouses: [], quantity: play.quantity, note: "", loading: true });
     onShowDoors?.(play.id);
     try {
       const res = await fetch(`/api/marketing/${play.id}/doors`, { cache: "no-store" });
       const body = (await res.json()) as { doors?: Door[]; routes?: { id: string; zip: string; routeId: string; pieces: number }[]; error?: string };
       if (!res.ok) throw new Error(body.error ?? "Could not load the doors.");
       setEditing((e) => (e && e.id === play.id ? { ...e, doors: body.doors ?? [], routes: body.routes ?? flyerRoutesOf(play), loading: false } : e));
+
+      // The whole zone, so houses that are not on the round can be tapped on
+      // to it. Fetched after the doors and allowed to fail on its own: the
+      // list still works without a map.
+      if (play.kind === "door_hangers" || play.kind === "knocks") {
+        try {
+          const zoneRes = await fetch(`/api/marketing/${play.id}/zone-houses`, { cache: "no-store" });
+          const zoneBody = (await zoneRes.json()) as { houses?: ZoneHouse[] };
+          setEditing((e) => (e && e.id === play.id ? { ...e, zoneHouses: zoneBody.houses ?? [] } : e));
+        } catch {
+          // No map, just the list.
+        }
+      }
     } catch (err) {
       setEditing(null);
       setError(err instanceof Error ? err.message : "Could not load the doors.");
@@ -126,10 +141,22 @@ export function MarketingTodo({
   function saveEdit(play: MarketingPlay) {
     if (!editing) return;
     const remove = [...editing.remove];
+    const add = [...editing.add];
     const quantity = play.kind === "door_hangers" || play.kind === "knocks" ? editing.quantity : null;
     setError(null);
     setBusy(play.id);
     startTransition(async () => {
+      // Additions first. Removing re-approves the round as its last act, so
+      // doing it the other way round would leave the added doors sitting on a
+      // round that had just been sent back to pending.
+      if (add.length > 0) {
+        const added = await addMarketingPlayDoors(play.id, add);
+        if (!added.ok) {
+          setBusy(null);
+          setError(added.error);
+          return;
+        }
+      }
       const result = await editMarketingPlay({ playId: play.id, remove, quantity, note: editing.note, approve: true });
       setBusy(null);
       if (!result.ok) {
@@ -283,6 +310,48 @@ export function MarketingTodo({
                                   />
                                   {play.kind === "door_hangers" && <span className="text-muted-foreground">nearest the house, never one you take out</span>}
                                 </label>
+                              )}
+                              {/* The map, above the list. Tapping a hollow house
+                                  puts it on the round; tapping a filled one
+                                  takes it off — the same two edits the list
+                                  makes, on the thing they are actually about. */}
+                              {editing.zoneHouses.length > 0 && (
+                                <RouteHousePicker
+                                  houses={editing.zoneHouses}
+                                  on={
+                                    new Set(
+                                      editing.zoneHouses
+                                        .filter((h) => (h.on && !editing.remove.has(h.id)) || editing.add.has(h.id))
+                                        .map((h) => h.id)
+                                    )
+                                  }
+                                  onToggle={(houseId) =>
+                                    setEditing((x) => {
+                                      if (!x) return x;
+                                      const house = x.zoneHouses.find((h) => h.id === houseId);
+                                      if (!house) return x;
+                                      const remove = new Set(x.remove);
+                                      const add = new Set(x.add);
+                                      // On the round means either it started
+                                      // there and has not been removed, or it
+                                      // has been added since.
+                                      const currentlyOn = (house.on && !remove.has(houseId)) || add.has(houseId);
+                                      if (currentlyOn) {
+                                        add.delete(houseId);
+                                        if (house.on) remove.add(houseId);
+                                      } else {
+                                        remove.delete(houseId);
+                                        if (!house.on) add.add(houseId);
+                                      }
+                                      return { ...x, remove, add };
+                                    })
+                                  }
+                                />
+                              )}
+                              {editing.add.size > 0 && (
+                                <p className="text-[11px] text-primary">
+                                  {editing.add.size} door{editing.add.size === 1 ? "" : "s"} added
+                                </p>
                               )}
                               {editing.doors.length > 0 && (
                                 <div className="max-h-56 overflow-y-auto rounded border border-border/60">

@@ -31,6 +31,8 @@ import { getMyNotificationSettings } from "@/lib/data/notification-preferences";
 import { NotificationSettings } from "@/components/notifications/notification-settings";
 import { marketingState } from "@/lib/data/marketing";
 import { MarketingTodo } from "@/components/marketing/marketing-todo";
+import { MyRoutes } from "@/components/marketing/my-routes";
+import { playsAssignedTo } from "@/lib/marketing-plays";
 import { opsState, type OpsState } from "@/lib/data/ops";
 import { OpsPanel } from "@/components/ops/ops-panel";
 
@@ -242,7 +244,12 @@ async function OfficeDay() {
         </>
       )}
 
-      {marketing.plays.length > 0 && (
+      {/* The rounds given to this person, above the general to-do list: it is
+          their work, with a street and a start button, rather than something
+          the business might do. */}
+      <MyRoutes plays={playsAssignedTo(marketing.plays, profile.id)} />
+
+            {marketing.plays.length > 0 && (
         <div className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
           <MarketingTodo plays={marketing.plays} reviews={marketing.reviews} autoApproved={marketing.autoApproved} />
         </div>

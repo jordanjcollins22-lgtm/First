@@ -42,9 +42,20 @@ export interface MarketingPlay {
   zoneMode: string | null;
   /** Whether the zone has been approved for the map; null when the play has no zone. */
   zoneApproved?: boolean | null;
-  /** pending until a person (or, with trust earned, the app) approves it. */
-  approval?: "pending" | "approved" | "auto";
+  /**
+   * pending until a person (or, with trust earned, the app) approves it.
+   *
+   * "approve" is what the database actually holds — marketing_play_review
+   * writes the decision verb straight into the column — and "approved" is what
+   * the optimistic UI has always written. Both are here because both occur;
+   * use `isApproved` rather than comparing, or this bites again.
+   */
+  approval?: "pending" | "approve" | "approved" | "auto";
   approvedAt?: string | null;
+  /** Whose round this is. Set to the evaluator when it is approved; editable after. */
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedAt?: string | null;
   /** Doors or routes a person took out. */
   removedCount?: number;
   /** House ids for doors; FlyerRoute objects for flyers. */
@@ -261,4 +272,24 @@ export function describePlays(summary: PlaySummary): string {
   if (summary.hangersToGo > 0) parts.push(`${summary.hangersToGo.toLocaleString()} hangers to hang`);
   if (summary.flyersToGo > 0) parts.push(`${summary.flyersToGo.toLocaleString()} flyers to mail`);
   return `${parts.join(", ")}.`;
+}
+
+/**
+ * Whether a round has been approved, whichever spelling reached the row.
+ *
+ * The database stores the decision verb ("approve"), the optimistic UI has
+ * always written the adjective ("approved"), and nothing noticed for months
+ * because every check happened to be `!== "pending"`. One function, so the next
+ * check is right by default.
+ */
+export function isApproved(approval: MarketingPlay["approval"]): boolean {
+  return approval === "approve" || approval === "approved" || approval === "auto";
+}
+
+/** Rounds this person has been given, still to do. */
+export function playsAssignedTo<T extends { assignedTo?: string | null; status: PlayStatus }>(
+  plays: readonly T[],
+  profileId: string
+): T[] {
+  return plays.filter((play) => play.assignedTo === profileId && play.status === "open");
 }

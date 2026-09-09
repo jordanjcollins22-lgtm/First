@@ -1292,6 +1292,9 @@ export interface Database {
           approved_at: string | null;
           approved_by: string | null;
           removed: Json;
+          assigned_to: string | null;
+          assigned_at: string | null;
+          assigned_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -3427,6 +3430,13 @@ export interface Database {
           top_category_minutes: number;
           owner_touches: number;
         }[];
+      };
+      /** One round's doors in the order the zone is actually walked. */
+      marketing_play_route: { Args: { the_play: string }; Returns: Json };
+      /** Put doors back on a round. Only houses inside its own zone. */
+      marketing_play_add_doors: {
+        Args: { org: string; the_play: string; add: string[]; by?: string | null };
+        Returns: Json;
       };
       houses_in_bbox: {
         Args: { org: string; min_lat: number; min_lng: number; max_lat: number; max_lng: number; max_rows?: number };

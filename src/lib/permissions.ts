@@ -102,6 +102,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "page that could be locked away by the thing it fixes is a trap.",
   "/admin/database": "Redirects to Settings, where it is a tab.",
   "/today": "Redirects to My Day, which shows a crew member their own stops.",
+  "/routes/[playId]":
+    "One door-hanger round, walked door by door on a phone. Reached from My Day by whoever the round " +
+    "was given to, and guarded on that — a tick somebody forgot to grant is the difference between a " +
+    "round getting walked and somebody standing on a kerb looking at a refusal.",
   "/my-day":
     "Whoever is signed in, looking at their own work — stops for a crew member, clients and jobs " +
     "for anybody else. It shows one person their own day and nobody else's, so there is nothing to " +

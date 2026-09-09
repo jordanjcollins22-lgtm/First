@@ -187,3 +187,80 @@ export async function editMarketingPlay(input: { playId: string; remove?: string
     return { quantity: result.quantity ?? 0 };
   });
 }
+
+/**
+ * Give a round to somebody, or take it back.
+ *
+ * Approving a round already assigns it to whoever did the evaluation, which is
+ * right nearly always -- they have just been on that street. This is for the
+ * rest of the time: the person is away, or somebody else is out that way
+ * anyway. Passing null puts it back on nobody.
+ */
+export async function assignMarketingPlay(
+  playId: string,
+  profileId: string | null
+): Promise<ActionResult<{ assignedTo: string | null }>> {
+  return guard("assignMarketingPlay", async () => {
+    const profile = await requireUser();
+    const supabase = await createClient();
+
+    if (profileId) {
+      // Only somebody in this business, checked here rather than trusted from
+      // a form: the id arrives from a browser.
+      const { data: target } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", profileId)
+        .eq("organization_id", profile.organization_id)
+        .maybeSingle();
+      if (!target) throw new Error("That person is not on this team.");
+    }
+
+    const { error } = await supabase
+      .from("marketing_plays")
+      .update({
+        assigned_to: profileId,
+        assigned_at: profileId ? new Date().toISOString() : null,
+        assigned_by: profileId ? profile.id : null,
+      })
+      .eq("id", playId)
+      .eq("organization_id", profile.organization_id);
+    if (error) throw error;
+
+    for (const page of PAGES) revalidatePath(page);
+    revalidatePath("/my-day");
+    return { assignedTo: profileId };
+  });
+}
+
+/**
+ * Put doors back on a round.
+ *
+ * The other half of editing: taking doors off has always been possible, adding
+ * them never was, so a round could only ever shrink. Only houses inside the
+ * round's own zone are allowed -- a round is a walk, and a door three miles
+ * outside it is not on that walk.
+ */
+export async function addMarketingPlayDoors(
+  playId: string,
+  houseIds: string[]
+): Promise<ActionResult<{ quantity: number; added: number }>> {
+  return guard("addMarketingPlayDoors", async () => {
+    const profile = await requireUser();
+    if (houseIds.length === 0) throw new Error("No doors given.");
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("marketing_play_add_doors", {
+      org: profile.organization_id,
+      the_play: playId,
+      add: houseIds,
+      by: profile.id,
+    });
+    if (error) throw error;
+    const result = (data ?? {}) as { ok?: boolean; error?: string; quantity?: number; added?: number };
+    if (!result.ok) throw new Error(result.error ?? "Those doors could not be added.");
+
+    await relearn(profile.organization_id);
+    for (const page of PAGES) revalidatePath(page);
+    return { quantity: result.quantity ?? 0, added: result.added ?? 0 };
+  });
+}
