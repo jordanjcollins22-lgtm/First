@@ -188,3 +188,45 @@ export function sameContent(before: string, after: string): boolean {
   for (const [key, n] of a) if (b.get(key) !== n) return false;
   return true;
 }
+
+/** What a service's areas say, and which of them say something else. */
+export interface SharedScope {
+  /** The wording most of the areas carry. */
+  shared: string;
+  /** The areas that say something else, by their place in the list. */
+  exceptions: number[];
+}
+
+/**
+ * The one scope a service's areas share.
+ *
+ * Twenty lawn areas that all say the same thing said it twenty times on the
+ * client's proposal: the same six hundred words, twenty times, under a heading
+ * that had already told them there were twenty areas. It reads as twenty
+ * charges for one service and it buries the areas that genuinely are
+ * different.
+ *
+ * So the wording is found once here and printed once. An area that says
+ * something else is named, because that is the point of it being different.
+ */
+export function shareScope(scopes: readonly string[]): SharedScope {
+  const trimmed = scopes.map((scope) => (scope ?? "").trim());
+  const shared = commonestScope(trimmed);
+  return { shared, exceptions: trimmed.map((scope, i) => (scope === shared ? -1 : i)).filter((i) => i >= 0) };
+}
+
+/** The wording that came up most often, and the earliest one when it is a tie. */
+function commonestScope(scopes: readonly string[]): string {
+  let best = "";
+  let bestCount = 0;
+  const counts = new Map<string, number>();
+  for (const scope of scopes) {
+    const count = (counts.get(scope) ?? 0) + 1;
+    counts.set(scope, count);
+    if (count > bestCount) {
+      best = scope;
+      bestCount = count;
+    }
+  }
+  return best;
+}

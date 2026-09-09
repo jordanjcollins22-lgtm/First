@@ -6,6 +6,7 @@ import {
   parseScope,
   renderScope,
   sameContent,
+  shareScope,
   scopeContent,
   tidyScope,
 } from "@/lib/scope-format";
@@ -195,5 +196,41 @@ describe("reducing a line to what it says", () => {
 
   it("is empty for punctuation alone", () => {
     expect(normaliseItem("•  —  .")).toBe("");
+  });
+});
+
+describe("the one scope a service's areas share", () => {
+  it("finds it when every area says the same thing", () => {
+    const result = shareScope(["Mow and edge.", "Mow and edge.", "Mow and edge."]);
+    expect(result.shared).toBe("Mow and edge.");
+    expect(result.exceptions).toEqual([]);
+  });
+
+  it("names the area that says something else", () => {
+    const result = shareScope(["Mow and edge.", "Mow and edge.", "Gate is padlocked."]);
+    expect(result.shared).toBe("Mow and edge.");
+    expect(result.exceptions).toEqual([2]);
+  });
+
+  it("takes the wording most of them carry", () => {
+    const result = shareScope(["a", "b", "b"]);
+    expect(result.shared).toBe("b");
+    expect(result.exceptions).toEqual([0]);
+  });
+
+  it("ignores the spacing around it", () => {
+    expect(shareScope(["  Mow.  ", "Mow."]).exceptions).toEqual([]);
+  });
+
+  it("handles a service with one area", () => {
+    expect(shareScope(["Mow."])).toEqual({ shared: "Mow.", exceptions: [] });
+  });
+
+  it("handles a service whose areas say nothing at all", () => {
+    expect(shareScope(["", "  "])).toEqual({ shared: "", exceptions: [] });
+  });
+
+  it("handles no areas", () => {
+    expect(shareScope([])).toEqual({ shared: "", exceptions: [] });
   });
 });

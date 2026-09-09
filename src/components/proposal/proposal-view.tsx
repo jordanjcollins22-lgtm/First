@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { THUMBNAIL } from "@/lib/storage-image-url";
 import { ScopeText } from "@/components/proposal/scope-text";
+import { shareScope } from "@/lib/scope-format";
 import { ResizedImage } from "./resized-image";
-import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
+import { groupByService, groupHeading } from "@/lib/service-grouping";
 import { respondToProposal } from "@/lib/actions/public-proposal-actions";
 import { ObjectionsPanel } from "@/components/proposal/objections-panel";
 import type { ScopeLine } from "@/lib/objections";
@@ -31,6 +32,18 @@ import type { JobMessage, ProposalStatus } from "@/types/domain";
 function formatTotal(total: number | null): string {
   if (total == null) return "Contact us for pricing";
   return `$${Math.round(total).toLocaleString()}`;
+}
+
+/**
+ * Whether an area is worth a block of its own.
+ *
+ * It has earned one by having something of its own to show: wording written
+ * about that area, or photographs of it. An area that only repeats the
+ * service's scope is named in the line under it instead.
+ */
+function hasOwnBlock(zone: { scopeText: string; photoPaths: string[] } | undefined, differs: boolean): boolean {
+  if (!zone) return false;
+  return (differs && Boolean(zone.scopeText?.trim())) || zone.photoPaths.length > 0;
 }
 
 export function ProposalView({
@@ -56,7 +69,6 @@ export function ProposalView({
   const scopeGroups = groupByService(
     proposal.scope_snapshot.map((zone) => ({ ...zone, serviceLabel: labelFor(zone.serviceLabel) }))
   );
-  const grouped = worthGrouping(scopeGroups);
 
   function labelFor(stored: string): string {
     return displayLabel(stored, serviceNames[stored] ? { name: serviceNames[stored] } : undefined);
@@ -147,21 +159,31 @@ export function ProposalView({
           /* Gathered by service. Six lawn areas listed separately reads as
              being charged six times for lawn care; under one heading it reads
              as what it is, which is one service in six places. */
-          scopeGroups.map((group) => (
+          scopeGroups.map((group) => {
+            // Said once for the service, not once for every area of it. The
+            // same six hundred words twenty times reads as twenty charges for
+            // one service, and it buries the one area that is different.
+            const { shared, exceptions } = shareScope(group.zones.map((zone) => zone.scopeText ?? ""));
+            const apart = new Set(exceptions);
+            return (
             <div key={group.service} className="flex flex-col gap-3">
-              {grouped && (
-                <h3 className="text-base font-semibold">{groupHeading(group)}</h3>
-              )}
+              {/* Always. The service used to be named inside each area's box,
+                  and areas that say nothing of their own no longer have a box
+                  to name it in. For a service with one area the heading is
+                  just its name, which is what that box said anyway. */}
+              <h3 className="text-base font-semibold">{groupHeading(group)}</h3>
+              {shared && <ScopeText text={shared} />}
 
-              {group.zones.map((zone, i) => (
+              {group.zones.map((zone, i) => {
+                // An area earns a block of its own by having something of its
+                // own to show: wording written about it, or photographs of it.
+                const ownScope = apart.has(i) ? (zone.scopeText ?? "").trim() : "";
+                if (!hasOwnBlock(zone, apart.has(i))) return null;
+                return (
             <div key={`${group.service}-${i}`} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold">{zone.zoneName}</p>
-                  {/* Only where the heading is not already saying it. */}
-                  {!grouped && (
-                    <p className="text-sm text-primary">{labelFor(zone.serviceLabel)}</p>
-                  )}
                 </div>
                 {/* One tap to ask about this area specifically. The
                     alternative is a client typing "the one by the fence" and
@@ -177,7 +199,7 @@ export function ProposalView({
                   Ask about this
                 </button>
               </div>
-              {zone.scopeText && <ScopeText text={zone.scopeText} />}
+              {ownScope && <ScopeText text={ownScope} />}
               {zone.photoPaths.length > 0 && (
                 /* Whole photos, not squares cut out of the middle of them.
                    A square crop of a wide garden shot is a close-up of the
@@ -200,9 +222,38 @@ export function ProposalView({
                 </div>
               )}
             </div>
-              ))}
+                );
+              })}
+
+              {/* The areas it covers, named, each one a way to ask about that
+                  area. Twenty boxes saying only a zone number was twenty boxes
+                  of scrolling between the work and the price. A single area
+                  that already has a block of its own is named in it, so it is
+                  not named twice. */}
+              {(group.zones.length > 1 || !hasOwnBlock(group.zones[0], apart.has(0))) && (
+              <p className="text-sm text-muted-foreground">
+                Covers{" "}
+                {group.zones.map((zone, i) => (
+                  <span key={`${group.service}-name-${i}`}>
+                    {i > 0 ? ", " : ""}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReference(zoneReference(zone.zoneName, labelFor(zone.serviceLabel)));
+                        messageBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
+                      className="font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
+                    >
+                      {zone.zoneName}
+                    </button>
+                  </span>
+                ))}
+                .
+              </p>
+              )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
