@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   displayLabel,
+  groupScopeByService,
   looksLikeRawId,
   scopeTextFor,
   scopesForZones,
   serviceLabelFor,
   zoneNeedsScope,
-  zonesSharingService,
   type ZoneScopeInput,
 } from "./zone-scope";
 
@@ -217,27 +217,73 @@ describe("one scope per service, across every area of it", () => {
   });
 });
 
-describe("which other areas are the same service", () => {
-  const zones = [
-    { serviceId: "lawn-care" },
-    { serviceId: "landscape-bed" },
-    { serviceId: "lawn-care" },
-    { serviceId: "lawn-care" },
-  ];
-
-  it("finds the others and leaves this one out", () => {
-    expect(zonesSharingService(zones, 0)).toEqual([2, 3]);
+describe("gathering the areas into one row per service", () => {
+  it("gives a service one row however many areas it has", () => {
+    const groups = groupScopeByService([
+      { serviceLabel: "Lawn Care", scopeText: "Mow, edge, blow off." },
+      { serviceLabel: "Lawn Care", scopeText: "Mow, edge, blow off." },
+      { serviceLabel: "Lawn Care", scopeText: "Mow, edge, blow off." },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].zones).toEqual([0, 1, 2]);
+    expect(groups[0].shared).toBe("Mow, edge, blow off.");
+    expect(groups[0].exceptions).toEqual([]);
   });
 
-  it("finds none when the service appears once", () => {
-    expect(zonesSharingService(zones, 1)).toEqual([]);
+  it("keeps the services in the order they appear", () => {
+    const groups = groupScopeByService([
+      { serviceLabel: "Lawn Care", scopeText: "a" },
+      { serviceLabel: "Beds", scopeText: "b" },
+      { serviceLabel: "Lawn Care", scopeText: "a" },
+    ]);
+    expect(groups.map((g) => g.serviceLabel)).toEqual(["Lawn Care", "Beds"]);
+    expect(groups[0].zones).toEqual([0, 2]);
+    expect(groups[1].zones).toEqual([1]);
   });
 
-  it("finds none for a zone with no service", () => {
-    expect(zonesSharingService([{ serviceId: null }, { serviceId: null }], 0)).toEqual([]);
+  it("gives an area that says something else a box of its own", () => {
+    // Where an evaluator's note about one particular area lives. Folding it
+    // into the shared box would throw away the reason it is different.
+    const groups = groupScopeByService([
+      { serviceLabel: "Beds", scopeText: "Weed, edge, mulch." },
+      { serviceLabel: "Beds", scopeText: "Weed, edge, mulch." },
+      { serviceLabel: "Beds", scopeText: "Fence panel comes off first." },
+    ]);
+    expect(groups[0].shared).toBe("Weed, edge, mulch.");
+    expect(groups[0].exceptions).toEqual([2]);
   });
 
-  it("finds none for an index that is not there", () => {
-    expect(zonesSharingService(zones, 9)).toEqual([]);
+  it("treats blank as an answer, so one box fills all the empty ones", () => {
+    const groups = groupScopeByService([
+      { serviceLabel: "Snow Removal", scopeText: "" },
+      { serviceLabel: "Snow Removal", scopeText: "" },
+    ]);
+    expect(groups[0].shared).toBe("");
+    expect(groups[0].exceptions).toEqual([]);
+  });
+
+  it("takes the wording most of the areas carry", () => {
+    const groups = groupScopeByService([
+      { serviceLabel: "Lawn Care", scopeText: "Mow, edge, blow off." },
+      { serviceLabel: "Lawn Care", scopeText: "Mow only." },
+      { serviceLabel: "Lawn Care", scopeText: "Mow, edge, blow off." },
+    ]);
+    expect(groups[0].shared).toBe("Mow, edge, blow off.");
+    expect(groups[0].exceptions).toEqual([1]);
+  });
+
+  it("loses no area", () => {
+    const zones = [
+      { serviceLabel: "Lawn Care", scopeText: "a" },
+      { serviceLabel: "Beds", scopeText: "b" },
+      { serviceLabel: "Lawn Care", scopeText: "c" },
+      { serviceLabel: "Trimming", scopeText: "" },
+    ];
+    const covered = groupScopeByService(zones).flatMap((g) => g.zones).sort();
+    expect(covered).toEqual([0, 1, 2, 3]);
+  });
+
+  it("gives back nothing for no areas", () => {
+    expect(groupScopeByService([])).toEqual([]);
   });
 });

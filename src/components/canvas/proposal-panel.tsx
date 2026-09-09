@@ -11,7 +11,7 @@ import { ViewCount } from "@/components/proposal/view-count";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import { suggestZoneScope } from "@/lib/actions/scope-suggestion-actions";
-import { zonesSharingService } from "@/lib/zone-scope";
+import { groupScopeByService } from "@/lib/zone-scope";
 import { effectiveMultiplier, type Markup } from "@/lib/job-costing";
 import type { Discount, JobProposal, ProposalZoneSnapshot } from "@/types/domain";
 
@@ -98,6 +98,14 @@ export function ProposalPanel({
   const [suggesting, setSuggesting] = useState<number | null>(null);
   /** Why a suggestion did not arrive, against the zone that asked for it. */
   const [suggestError, setSuggestError] = useState<{ index: number; message: string } | null>(null);
+  /**
+   * Areas somebody has chosen to word separately, for this edit.
+   *
+   * An area whose wording already differs is separate on its own account and
+   * needs no remembering. This is for the other direction: pulling one area
+   * out of the shared box before there is anything different to see.
+   */
+  const [separate, setSeparate] = useState<Set<number>>(new Set());
 
   /**
    * Draft a zone's scope line from what the evaluator recorded.
@@ -107,7 +115,7 @@ export function ProposalPanel({
    * presses Save changes. Asking them to approve the suggestion and then
    * approve the proposal is one approval too many.
    */
-  function handleSuggest(index: number) {
+  function handleSuggest(index: number, applyTo: number[] = [index]) {
     const zone = draftZones[index];
     if (!zone) return;
     // Matched by name rather than by position: the breakdown comes from the
@@ -130,7 +138,7 @@ export function ProposalPanel({
         });
         if (result.ok) {
           setDraftZones((prev) =>
-            prev.map((z, j) => (j === index ? { ...z, scopeText: result.text } : z))
+            prev.map((z, j) => (applyTo.includes(j) ? { ...z, scopeText: result.text } : z))
           );
         } else {
           setSuggestError({ index, message: result.message });
@@ -195,6 +203,9 @@ export function ProposalPanel({
     setDraftTotal(String(Math.round(proposal.total_cost ?? 0)));
     setDraftZones(proposal.scope_snapshot.map((z) => ({ ...z })));
     setDraftDiscountId(proposal.discount_id);
+    // Whichever areas were pulled out of a shared box last time were pulled
+    // out for that edit. What survives between edits is the wording itself.
+    setSeparate(new Set());
     setError(null);
     setEditing(true);
   }
@@ -333,73 +344,124 @@ export function ProposalPanel({
                   return Math.max(0, Math.round(subtotal - discountAmount)).toLocaleString();
                 })()}
               </p>
-              {draftZones.map((zone, i) => (
-                <div key={i} className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    {zone.zoneName} — {zone.serviceLabel}
-                  </label>
-                  <Textarea
-                    value={zone.scopeText}
-                    onChange={(e) =>
-                      setDraftZones((prev) => prev.map((z, j) => (j === i ? { ...z, scopeText: e.target.value } : z)))
-                    }
-                    rows={2}
-                    className="text-sm"
-                  />
-                  {/* Under the box it fills, not in a toolbar at the top: the
-                      evaluator's notes for this zone are what it writes from,
-                      and this is the only place that is obvious. */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSuggest(i)}
-                      disabled={isPending}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
-                    >
-                      {suggesting === i ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                          Writing from the notes...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                          Suggest from evaluator notes
-                        </>
+              {/* One box per service, not one per area. Twenty lawn areas
+                  used to be the same paragraph typed twenty times, or -- what
+                  actually happened -- typed once and left to differ in the
+                  other nineteen. Write what is happening once and every area
+                  of that service says it. */}
+              {groupScopeByService(draftZones).map((group) => {
+                const apart = new Set([...group.exceptions, ...[...separate].filter((i) => group.zones.includes(i))]);
+                const together = group.zones.filter((i) => !apart.has(i));
+                const first = together[0] ?? group.zones[0];
+                return (
+                  <div key={group.serviceLabel} className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {group.serviceLabel}
+                      {group.zones.length > 1 && (
+                        <span className="ml-1.5 font-normal">
+                          — {together.length} of {group.zones.length} area{group.zones.length === 1 ? "" : "s"}
+                        </span>
                       )}
-                    </button>
-                    {suggestError?.index === i && (
-                      <span className="text-xs text-muted-foreground">{suggestError.message}</span>
-                    )}
-                    {/* The scope already arrives shared: every area of a
-                        service gets the same paragraph. This is for after an
-                        edit, so a change made in one area does not quietly
-                        leave the other three describing the old job. */}
-                    {(() => {
-                      const others = zonesSharingService(
-                        draftZones.map((z) => ({ serviceId: z.serviceLabel })),
-                        i
-                      );
-                      const behind = others.filter((j) => draftZones[j].scopeText !== zone.scopeText);
-                      if (behind.length === 0) return null;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() =>
+                    </label>
+                    {together.length > 0 && (
+                      <>
+                        <Textarea
+                          value={draftZones[first]?.scopeText ?? ""}
+                          onChange={(e) =>
                             setDraftZones((prev) =>
-                              prev.map((z, j) => (behind.includes(j) ? { ...z, scopeText: zone.scopeText } : z))
+                              prev.map((z, j) => (together.includes(j) ? { ...z, scopeText: e.target.value } : z))
                             )
                           }
-                          className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                          rows={2}
+                          className="text-sm"
+                        />
+                        {/* Under the box it fills, not in a toolbar at the top:
+                            the evaluator's notes are what it writes from, and
+                            this is the only place that is obvious. */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSuggest(first, together)}
+                            disabled={isPending}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
+                          >
+                            {suggesting === first ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                                Writing from the notes...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                                Suggest from evaluator notes
+                              </>
+                            )}
+                          </button>
+                          {suggestError && together.includes(suggestError.index) && (
+                            <span className="text-xs text-muted-foreground">{suggestError.message}</span>
+                          )}
+                        </div>
+                        {group.zones.length > 1 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Covers{" "}
+                            {together.map((j, k) => (
+                              <span key={j}>
+                                {k > 0 ? ", " : ""}
+                                {draftZones[j].zoneName}{" "}
+                                <button
+                                  type="button"
+                                  onClick={() => setSeparate((prev) => new Set(prev).add(j))}
+                                  className="text-primary underline-offset-2 hover:underline"
+                                  title={`Write something different for ${draftZones[j].zoneName}`}
+                                >
+                                  (separately)
+                                </button>
+                              </span>
+                            ))}
+                            .
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {/* An area that says something else. This is where a note
+                        typed standing in front of that area survives, so it is
+                        never quietly folded into the shared wording. */}
+                    {[...apart].sort((a, b) => a - b).map((j) => (
+                      <div key={j} className="flex flex-col gap-1.5 border-l-2 border-primary/30 pl-2">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          {draftZones[j].zoneName} — written for this area only
+                        </label>
+                        <Textarea
+                          value={draftZones[j].scopeText}
+                          onChange={(e) =>
+                            setDraftZones((prev) =>
+                              prev.map((z, k) => (k === j ? { ...z, scopeText: e.target.value } : z))
+                            )
+                          }
+                          rows={2}
+                          className="text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSeparate((prev) => {
+                              const next = new Set(prev);
+                              next.delete(j);
+                              return next;
+                            });
+                            setDraftZones((prev) =>
+                              prev.map((z, k) => (k === j ? { ...z, scopeText: group.shared } : z))
+                            );
+                          }}
+                          className="self-start text-[11px] font-semibold text-primary underline-offset-2 hover:underline"
                         >
-                          Use this for the other {behind.length} {zone.serviceLabel} area
-                          {behind.length === 1 ? "" : "s"}
+                          Use the {group.serviceLabel} wording instead
                         </button>
-                      );
-                    })()}
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={isPending}>
                   Cancel

@@ -166,24 +166,6 @@ export function scopesForZones(zones: readonly ZoneScopeInput[]): string[] {
   });
 }
 
-/**
- * Which other zones are the same service as this one.
- *
- * The office edits scope one area at a time; this is what lets it say "and the
- * other three areas of this too" without anybody counting.
- */
-export function zonesSharingService(
-  zones: readonly { serviceId?: string | null }[],
-  index: number
-): number[] {
-  const id = zones[index]?.serviceId?.trim();
-  if (!id) return [];
-  return zones.reduce<number[]>((out, zone, i) => {
-    if (i !== index && zone.serviceId?.trim() === id) out.push(i);
-    return out;
-  }, []);
-}
-
 /** A zone with no service is its own group: there is nothing to share with. */
 function serviceKey(zone: ZoneScopeInput, index: number): string {
   const id = zone.serviceId?.trim();
@@ -222,4 +204,53 @@ function commonest(texts: readonly string[]): string {
     }
   }
   return best;
+}
+
+/** A service, every area of it, and the wording they share. */
+export interface ScopeGroup {
+  serviceLabel: string;
+  /** Every area this service covers, by index, in the order they appear. */
+  zones: number[];
+  /** The wording most of those areas carry: what the one box holds. */
+  shared: string;
+  /** The areas that say something else, and so keep a box of their own. */
+  exceptions: number[];
+}
+
+/**
+ * The proposal's areas gathered into one row per service.
+ *
+ * Writing the scope was a box per area, so twenty lawn areas was the same
+ * paragraph typed twenty times, or -- what actually happened -- typed once and
+ * left to differ in the other nineteen. It is one box per service now: write
+ * what is happening once, and every area of that service says it.
+ *
+ * An area that already says something else keeps its own box under the shared
+ * one rather than being overwritten. That is where an evaluator's note about
+ * one particular area lives, and it is the whole reason the exception exists.
+ */
+export function groupScopeByService(
+  zones: readonly { serviceLabel: string; scopeText: string }[]
+): ScopeGroup[] {
+  const order: string[] = [];
+  const indexes = new Map<string, number[]>();
+  zones.forEach((zone, index) => {
+    const label = zone.serviceLabel;
+    if (!indexes.has(label)) {
+      indexes.set(label, []);
+      order.push(label);
+    }
+    indexes.get(label)!.push(index);
+  });
+
+  return order.map((serviceLabel) => {
+    const group = indexes.get(serviceLabel)!;
+    const shared = commonest(group.map((index) => zones[index].scopeText ?? ""));
+    return {
+      serviceLabel,
+      zones: group,
+      shared,
+      exceptions: group.filter((index) => (zones[index].scopeText ?? "") !== shared),
+    };
+  });
 }
