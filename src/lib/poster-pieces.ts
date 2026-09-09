@@ -31,6 +31,15 @@ export const PADDING = 0.16;
 /** Between two halves of a line that had to be cut apart. */
 const WORD_GAP = 0.28;
 
+/**
+ * Between two lines of a phrase that wrapped.
+ *
+ * Small, because each cutout already carries its own white edge — two stacked
+ * lines have a third of an inch of paper between them before this is added.
+ * It only has to stop the cut lines touching.
+ */
+const LINE_GAP = 0.06;
+
 /** A capital occupies about this much of the point size in Helvetica. */
 const CAP = 0.72;
 
@@ -89,57 +98,114 @@ export function rowPieces(spec: RowSpec, board: Board, measure: Measure, sideMar
   const roomForText = MAX_PIECE_WIDTH - 2 * PADDING;
 
   let fontSize = spec.capHeight / CAP;
-  // A single word that will not fit a sheet at this size is the only reason to
-  // shrink. Checked before splitting, because splitting cannot help it.
+  // The one thing that can force the type down: a single word too wide for a
+  // sheet. Nothing else can, now that a long line wraps instead of shrinking.
   const widest = () => Math.max(...words.map((word) => measure(word, fontSize, spec.italic)));
   while (widest() > roomForText && fontSize > 0.02) fontSize *= 0.97;
 
-  // And never wider, all together, than the board it is going on.
-  const whole = measure(spec.text, fontSize, spec.italic);
-  const spacesWide = (words.length - 1) * WORD_GAP + words.length * 2 * PADDING;
-  if (whole + spacesWide > usable) fontSize *= usable / (whole + spacesWide);
+  const gap = Math.max(WORD_GAP, measure(" ", fontSize, spec.italic) || fontSize * 0.28);
 
-  const spaceWidth = measure(" ", fontSize, spec.italic) || fontSize * 0.28;
-
-  // Greedy: as many words on a cutout as will fit one sheet.
-  const groups: string[][] = [];
-  let current: string[] = [];
-  for (const word of words) {
-    const attempt = [...current, word];
-    if (current.length > 0 && measure(attempt.join(" "), fontSize, spec.italic) > roomForText) {
-      groups.push(current);
-      current = [word];
-      continue;
+  /** As many words per cutout as will fit one sheet. */
+  const group = (line: string[]): string[][] => {
+    const groups: string[][] = [];
+    let current: string[] = [];
+    for (const word of line) {
+      const attempt = [...current, word];
+      if (current.length > 0 && measure(attempt.join(" "), fontSize, spec.italic) > roomForText) {
+        groups.push(current);
+        current = [word];
+        continue;
+      }
+      current = attempt;
     }
-    current = attempt;
+    if (current.length > 0) groups.push(current);
+    return groups;
+  };
+
+  const widthOf = (groups: string[][]): number =>
+    groups.reduce((total, g) => total + measure(g.join(" "), fontSize, spec.italic) + 2 * PADDING, 0) +
+    gap * (groups.length - 1);
+
+  /** Break the words into lines, none wider than the limit. */
+  const wrapAt = (limit: number): string[][] => {
+    const out: string[][] = [];
+    let line: string[] = [];
+    for (const word of words) {
+      const attempt = [...line, word];
+      if (line.length > 0 && widthOf(group(attempt)) > limit) {
+        out.push(line);
+        line = [word];
+        continue;
+      }
+      line = attempt;
+    }
+    if (line.length > 0) out.push(line);
+    return out;
+  };
+
+  // Wrap rather than shrink. A line too wide for the board used to bring its
+  // own type down until the whole thing fitted across in one go, which is why
+  // "SCAN TO CLAIM YOUR DISCOUNT" ended up half the height of the word above
+  // it. Two lines of big type read from a car; one line of small type does not.
+  let lines = wrapAt(usable);
+
+  // Then even the lines up. Filling each line to the brim leaves whatever is
+  // left over stranded on the last one — "truck." alone under a full line
+  // reads as a mistake. The narrowest width that still needs the same number
+  // of lines is the one that shares the words out evenly, and it is found by
+  // halving rather than reasoned about.
+  if (lines.length > 1) {
+    let tooNarrow = 0;
+    let wideEnough = usable;
+    for (let i = 0; i < 24; i += 1) {
+      const mid = (tooNarrow + wideEnough) / 2;
+      if (wrapAt(mid).length <= lines.length) wideEnough = mid;
+      else tooNarrow = mid;
+    }
+    lines = wrapAt(wideEnough);
   }
-  if (current.length > 0) groups.push(current);
 
   const height = fontSize * CAP + 2 * PADDING;
-  const widths = groups.map((g) => measure(g.join(" "), fontSize, spec.italic) + 2 * PADDING);
-  // The gap between cutouts is at least a word space, so the words read at
-  // roughly the spacing they were set at even though each carries its own edge.
-  const gap = Math.max(WORD_GAP, spaceWidth);
-  const rowWidth = widths.reduce((total, w) => total + w, 0) + gap * (groups.length - 1);
+  const pieces: Piece[] = [];
+  let index = 0;
 
-  let x = (board.width - rowWidth) / 2;
-  return groups.map((group, i) => {
-    const piece: Piece = {
-      id: groups.length === 1 ? spec.id : `${spec.id}-${i + 1}`,
-      kind: "text",
-      text: group.join(" "),
-      fontSize,
-      width: widths[i],
-      height,
-      x,
-      y: 0,
-      fill: spec.fill,
-      colour: spec.colour,
-      italic: spec.italic,
-    };
-    x += widths[i] + gap;
-    return piece;
+  lines.forEach((line, lineIndex) => {
+    const groups = group(line);
+    const widths = groups.map((g) => measure(g.join(" "), fontSize, spec.italic) + 2 * PADDING);
+    const rowWidth = widths.reduce((total, w) => total + w, 0) + gap * (groups.length - 1);
+    let x = (board.width - rowWidth) / 2;
+    const y = lineIndex * (height + LINE_GAP);
+
+    groups.forEach((g, i) => {
+      index += 1;
+      pieces.push({
+        // Numbered across the whole row, so a row that wraps still reads
+        // 1, 2, 3 down the board rather than restarting on each line.
+        id: `${spec.id}-${index}`,
+        kind: "text",
+        text: g.join(" "),
+        fontSize,
+        width: widths[i],
+        height,
+        x,
+        y,
+        fill: spec.fill,
+        colour: spec.colour,
+        italic: spec.italic,
+      });
+      x += widths[i] + gap;
+    });
   });
+
+  // A row that came out as one cutout keeps its plain name, so the common case
+  // reads "get-a" rather than "get-a-1".
+  if (pieces.length === 1) pieces[0].id = spec.id;
+  return pieces;
+}
+
+/** How tall a row is once its lines are counted. */
+export function rowHeight(pieces: Piece[]): number {
+  return pieces.reduce((tallest, piece) => Math.max(tallest, piece.y + piece.height), 0);
 }
 
 /** The margin down either side of the board, as a fraction of its width. */
@@ -155,17 +221,19 @@ const MAX_GAP = 0.055;
  * Fractions rather than inches so the same sign comes out right in a twenty by
  * thirty frame, a two foot by three, or whatever is in the garage.
  *
- * The sizes are picked against what a sheet of paper can actually carry, not
- * against what would look best on a board of that size. A single word cannot
- * be wider than a sheet, and "NEIGHBORHOOD" fills one at about four fifths of
- * an inch of capital — so a design that asks for two inches gets four fifths,
- * silently, and the line meant to be the small one ends up the big one. Asking
- * for roughly what is available keeps the order of the lines real: WE'RE
- * WORKING is the biggest thing on the sign, then DISCOUNT, and GET A is the
- * lead-in it looks like.
+ * Every line asks for about as much as a sheet of paper can give it, because
+ * this is read from a moving car and a line nobody can read from the road is
+ * a line that may as well not be on the sign.
  *
- * Past about a two foot by three board the words stop growing, because the
- * paper stops. That is a fact about the printer rather than a decision here.
+ * One ceiling is real and cannot be argued with: a single word cannot be wider
+ * than a sheet. "NEIGHBORHOOD" fills one at about seven eighths of an inch of
+ * capital, so no board size will ever make that word bigger without splitting
+ * it in half or setting it in a narrower face. A line of several words has no
+ * such limit — it wraps onto a second line and keeps its size.
+ *
+ * The order still has to hold. Asking for more than paper can give is what
+ * once left "GET A", the small lead-in, set larger than the offer it leads
+ * into, because the offer was silently cut down and the lead-in was not.
  */
 interface RowPlan {
   id: string;
@@ -178,18 +246,18 @@ interface RowPlan {
 }
 
 const SIGN_ROWS: readonly RowPlan[] = [
-  { id: "name", text: null, cap: 0.032, fill: null, colour: COLOURS.ink },
-  { id: "working", text: "WE'RE WORKING", cap: 0.047, fill: null, colour: COLOURS.ink },
-  { id: "neighborhood", text: "IN YOUR NEIGHBORHOOD", cap: 0.028, fill: null, colour: COLOURS.deep },
-  { id: "get-a", text: "GET A", cap: 0.018, fill: COLOURS.deep, colour: COLOURS.paper },
-  { id: "offer-1", text: "NEIGHBORHOOD", cap: 0.027, fill: COLOURS.deep, colour: COLOURS.paper },
-  { id: "offer-2", text: "DISCOUNT", cap: 0.045, fill: COLOURS.deep, colour: COLOURS.paper },
-  { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", cap: 0.022, fill: null, colour: COLOURS.ink },
+  { id: "name", text: null, cap: 0.045, fill: null, colour: COLOURS.ink },
+  { id: "working", text: "WE'RE WORKING", cap: 0.055, fill: null, colour: COLOURS.ink },
+  { id: "neighborhood", text: "IN YOUR NEIGHBORHOOD", cap: 0.040, fill: null, colour: COLOURS.deep },
+  { id: "get-a", text: "GET A", cap: 0.028, fill: COLOURS.deep, colour: COLOURS.paper },
+  { id: "offer-1", text: "NEIGHBORHOOD", cap: 0.040, fill: COLOURS.deep, colour: COLOURS.paper },
+  { id: "offer-2", text: "DISCOUNT", cap: 0.055, fill: COLOURS.deep, colour: COLOURS.paper },
+  { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", cap: 0.033, fill: null, colour: COLOURS.ink },
   { id: "qr", text: "", cap: 0, fill: null, colour: COLOURS.ink },
   {
     id: "fallback",
     text: "Can't scan? Call or text the number on our truck.",
-    cap: 0.013,
+    cap: 0.020,
     fill: null,
     colour: COLOURS.ink,
     italic: true,
@@ -256,7 +324,7 @@ export function planPieces(board: Board, businessName: string, measure: Measure)
   let scale = 1;
   let rows = build(scale);
   const stackHeight = (built: Piece[][]) =>
-    built.reduce((total, row) => total + row[0].height, 0) +
+    built.reduce((total, row) => total + rowHeight(row), 0) +
     board.height * MIN_GAP * Math.max(0, built.length - 1) +
     2 * endMargin;
   while (stackHeight(rows) > board.height && scale > 0.2) {
@@ -264,7 +332,7 @@ export function planPieces(board: Board, businessName: string, measure: Measure)
     rows = build(scale);
   }
 
-  const heights = rows.reduce((total, row) => total + row[0].height, 0);
+  const heights = rows.reduce((total, row) => total + rowHeight(row), 0);
   const slack = board.height - 2 * endMargin - heights;
   const gap = Math.max(
     board.height * MIN_GAP,
@@ -275,8 +343,10 @@ export function planPieces(board: Board, businessName: string, measure: Measure)
 
   const pieces: Piece[] = [];
   for (const row of rows) {
-    for (const piece of row) pieces.push({ ...piece, y });
-    y += row[0].height + gap;
+    // A row's pieces already carry their own y within the row, for a phrase
+    // that wrapped onto two lines. The row's top is added to that.
+    for (const piece of row) pieces.push({ ...piece, y: y + piece.y });
+    y += rowHeight(row) + gap;
   }
 
   return { board, pieces };

@@ -17,6 +17,19 @@ const halfWidth: Measure = (text, size) => text.length * size * 0.5;
 
 const FRAME: Board = { width: 20, height: 30 };
 
+/** The pieces grouped by the line of the phrase they sit on. */
+function byLine(pieces: ReturnType<typeof rowPieces>) {
+  const lines = new Map<number, typeof pieces>();
+  for (const piece of pieces) {
+    const list = lines.get(piece.y) ?? [];
+    list.push(piece);
+    lines.set(piece.y, list);
+  }
+  return Array.from(lines.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, list]) => list.sort((a, b) => a.x - b.x));
+}
+
 describe("one line, as the cutouts it becomes", () => {
   it("keeps a short line as one cutout", () => {
     const pieces = rowPieces(
@@ -74,16 +87,18 @@ describe("one line, as the cutouts it becomes", () => {
     expect(big[0].fontSize * 0.72).toBeLessThan(6);
   });
 
-  it("centres the row across the board", () => {
+  it("centres every line across the board", () => {
     const pieces = rowPieces(
-      { id: "row", text: "WE'RE WORKING", capHeight: 2, fill: null, colour: "#000000" },
+      { id: "row", text: "SCAN TO CLAIM YOUR DISCOUNT", capHeight: 1.4, fill: null, colour: "#000000" },
       FRAME,
       halfWidth,
       1
     );
-    const left = pieces[0].x;
-    const right = FRAME.width - (pieces[pieces.length - 1].x + pieces[pieces.length - 1].width);
-    expect(left).toBeCloseTo(right, 6);
+    for (const line of byLine(pieces)) {
+      const left = line[0].x;
+      const right = FRAME.width - (line[line.length - 1].x + line[line.length - 1].width);
+      expect(left).toBeCloseTo(right, 6);
+    }
   });
 
   it("leaves a gap between two cutouts, because that gap is the word space", () => {
@@ -93,9 +108,11 @@ describe("one line, as the cutouts it becomes", () => {
       halfWidth,
       1
     );
-    for (let i = 1; i < pieces.length; i += 1) {
-      const gap = pieces[i].x - (pieces[i - 1].x + pieces[i - 1].width);
-      expect(gap).toBeGreaterThan(0.1);
+    for (const line of byLine(pieces)) {
+      for (let i = 1; i < line.length; i += 1) {
+        const gap = line[i].x - (line[i - 1].x + line[i - 1].width);
+        expect(gap).toBeGreaterThan(0.1);
+      }
     }
   });
 
@@ -115,6 +132,89 @@ describe("one line, as the cutouts it becomes", () => {
     expect(
       rowPieces({ id: "x", text: "WORDS", capHeight: 0, fill: null, colour: "#000000" }, FRAME, halfWidth, 1)
     ).toEqual([]);
+  });
+});
+
+describe("a phrase too wide for the board", () => {
+  it("wraps onto a second line rather than shrinking to fit across", () => {
+    // The change that made the small lines readable. A long phrase used to
+    // bring its own type down until it fitted the board in one go, so the
+    // call to action ended up half the height of the word above it.
+    const wide = rowPieces(
+      { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", capHeight: 1.4, fill: null, colour: "#000" },
+      FRAME,
+      halfWidth,
+      1
+    );
+    expect(byLine(wide).length).toBeGreaterThan(1);
+    // And kept the size it asked for, since no single word needed cutting down.
+    expect(wide[0].fontSize * 0.72).toBeCloseTo(1.4, 6);
+  });
+
+  it("keeps every line inside the board", () => {
+    const pieces = rowPieces(
+      { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", capHeight: 1.4, fill: null, colour: "#000" },
+      FRAME,
+      halfWidth,
+      1
+    );
+    for (const piece of pieces) {
+      expect(piece.x).toBeGreaterThanOrEqual(-1e-9);
+      expect(piece.x + piece.width).toBeLessThanOrEqual(FRAME.width + 1e-9);
+    }
+  });
+
+  it("stacks the lines rather than printing them through each other", () => {
+    const lines = byLine(
+      rowPieces(
+        { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", capHeight: 1.4, fill: null, colour: "#000" },
+        FRAME,
+        halfWidth,
+        1
+      )
+    );
+    for (let i = 1; i < lines.length; i += 1) {
+      expect(lines[i][0].y).toBeGreaterThanOrEqual(lines[i - 1][0].y + lines[i - 1][0].height);
+    }
+  });
+
+  it("shares the words out evenly instead of stranding one on the last line", () => {
+    // Filling each line to the brim left "truck." alone under a full line,
+    // which reads as a mistake rather than as a second line.
+    const lines = byLine(
+      rowPieces(
+        { id: "f", text: "Can't scan? Call or text the number on our truck.", capHeight: 0.6, fill: null, colour: "#000" },
+        FRAME,
+        halfWidth,
+        1
+      )
+    );
+    const widths = lines.map((line) =>
+      line.reduce((total, piece) => total + piece.width, 0)
+    );
+    const widest = Math.max(...widths);
+    const narrowest = Math.min(...widths);
+    expect(narrowest / widest).toBeGreaterThan(0.5);
+  });
+
+  it("says the whole phrase, in order, however it wrapped", () => {
+    const pieces = rowPieces(
+      { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", capHeight: 1.4, fill: null, colour: "#000" },
+      FRAME,
+      halfWidth,
+      1
+    );
+    expect(byLine(pieces).flat().map((p) => p.text).join(" ")).toBe("SCAN TO CLAIM YOUR DISCOUNT");
+  });
+
+  it("numbers the cutouts straight through, not restarting each line", () => {
+    const pieces = rowPieces(
+      { id: "scan", text: "SCAN TO CLAIM YOUR DISCOUNT", capHeight: 1.4, fill: null, colour: "#000" },
+      FRAME,
+      halfWidth,
+      1
+    );
+    expect(pieces.map((p) => p.id)).toEqual(pieces.map((_, i) => `scan-${i + 1}`));
   });
 });
 
