@@ -21,7 +21,10 @@ import type { Database } from "./database.types";
 // /w is what a printed weed QR opens: a homeowner in their own garden as
 // often as a crew member, and a sign-in wall there makes the printed code
 // worthless.
-export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/w"] as const;
+// /u is the unsubscribe link in an email. Somebody clicking it does not have
+// an account, and a sign-in wall in front of an unsubscribe is how an
+// unsubscribe becomes a spam report.
+export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/w", "/u"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

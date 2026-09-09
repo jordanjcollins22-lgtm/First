@@ -146,6 +146,7 @@ export const MODULES: readonly AppModule[] = [
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments"] },
       { key: "field-guide", label: "Field guide", tabs: ["weeds"] },
+      { key: "messaging", label: "Client messaging", tabs: ["reminders"] },
       { key: "data", label: "Data & integrations", tabs: ["house-review", "gis-import"] },
       { key: "knowledge", label: "Knowledge graph", tabs: ["knowledge-graph"] },
     ],

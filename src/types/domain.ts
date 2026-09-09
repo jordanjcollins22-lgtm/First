@@ -11,6 +11,13 @@ export interface Organization {
   id: string;
   name: string;
   slug: string | null;
+  /** The master switch for automated client reminders. Off until turned on. */
+  client_reminders_enabled?: boolean | null;
+  /** The clock quiet hours are read against: the client's, not the server's. */
+  reminder_time_zone?: string | null;
+  /** First and last hour a client may be written to, in that clock. */
+  reminder_quiet_start?: number | null;
+  reminder_quiet_end?: number | null;
   crew_cost_per_hour: number | null;
   /** What direct cost is multiplied by to reach the quoted price. */
   price_multiplier: number;

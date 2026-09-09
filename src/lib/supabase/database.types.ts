@@ -19,6 +19,10 @@ export interface Database {
       organizations: {
         Row: {
           id: string;
+          client_reminders_enabled: boolean;
+          reminder_time_zone: string;
+          reminder_quiet_start: number;
+          reminder_quiet_end: number;
           name: string;
           slug: string | null;
           crew_cost_per_hour: number | null;
@@ -46,6 +50,7 @@ export interface Database {
       customers: {
         Row: {
           id: string;
+          unsubscribe_token: string | null;
           stripe_customer_id: string | null;
           organization_id: string;
           name: string;
@@ -1851,6 +1856,69 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      client_consent: {
+        Row: {
+          id: string;
+          organization_id: string;
+          customer_id: string;
+          channel: "sms" | "email";
+          state: "unknown" | "granted" | "revoked";
+          source: string;
+          evidence: string | null;
+          changed_at: string;
+          changed_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["client_consent"]["Row"]> & {
+          organization_id: string;
+          customer_id: string;
+          channel: "sms" | "email";
+        };
+        Update: Partial<Database["public"]["Tables"]["client_consent"]["Row"]>;
+        Relationships: [];
+      };
+      client_message_log: {
+        Row: {
+          id: string;
+          organization_id: string;
+          customer_id: string | null;
+          channel: "sms" | "email";
+          kind: string;
+          reference_id: string | null;
+          dedupe_key: string;
+          status: "sent" | "skipped" | "failed";
+          skip_reason: string | null;
+          detail: string | null;
+          provider_id: string | null;
+          body: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["client_message_log"]["Row"]> & {
+          organization_id: string;
+          channel: "sms" | "email";
+          kind: string;
+          dedupe_key: string;
+          status: "sent" | "skipped" | "failed";
+        };
+        Update: Partial<Database["public"]["Tables"]["client_message_log"]["Row"]>;
+        Relationships: [];
+      };
+      reminder_rules: {
+        Row: {
+          organization_id: string;
+          kind: string;
+          enabled: boolean;
+          channels: string[];
+          offsets_hours: number[];
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["reminder_rules"]["Row"]> & {
+          organization_id: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reminder_rules"]["Row"]>;
+        Relationships: [];
       };
       notification_log: {
         Row: {
