@@ -53,11 +53,18 @@ export default async function WeedSheetPage({
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
-  const { allowed } = await checkTabAccess("weeds");
-  if (!allowed) redirect("/admin/tools");
-
   const { view: rawView } = await searchParams;
   const view = isSheetView(rawView) ? rawView : "client";
+
+  // The crew's reference is the guide in another shape, so it is gated like
+  // the guide. The client's sheet is not: it is plant photographs, plant names
+  // and a code that books us, and it says nothing about this business, this
+  // client or anybody's job. Behind the Weed Guide tab it was reachable only
+  // by an admin, which left the crew standing at somebody's door with no way
+  // to produce the thing they were meant to hand over.
+  const { allowed: canEditGuide, profile } = await checkTabAccess("weeds");
+  if (!profile) redirect("/login");
+  if (view === "crew" && !canEditGuide) redirect("/admin/tools");
 
   const [weeds, organization, headerList] = await Promise.all([listWeeds(), getCurrentOrganization(), headers()]);
 
@@ -100,7 +107,11 @@ export default async function WeedSheetPage({
         <div>
           <h1 className="text-lg font-semibold">{view === "client" ? "Client weed sheet" : "Crew weed reference"}</h1>
           <p className="text-sm text-muted-foreground">
-            {shown.length} weeds{view === "crew" ? ", with scientific names" : ""}. Every row carries its own code —
+            {shown.length} weeds{view === "crew" ? ", with scientific names" : ""}.{" "}
+            {view === "client"
+              ? "This is the one to leave with the client: the weeds they will point at, and an offer at the bottom to take the job on. "
+              : ""}
+            Every row carries its own code —
             scanning it opens that weed with all its photos.
           </p>
           {/* The back of every sheet came out upside down, which is a printer
@@ -114,7 +125,10 @@ export default async function WeedSheetPage({
             &ldquo;book&rdquo; binding). Flipping on the short edge — &ldquo;calendar&rdquo; or
             &ldquo;tablet&rdquo; — turns the back of every sheet upside down.
           </p>
-          {missingPhotos > 0 && (
+          {/* Only for whoever can do something about it. A crew member about to
+              hand this over cannot add a photo, and telling them one is missing
+              is telling them their sheet is wrong with no way to fix it. */}
+          {canEditGuide && missingPhotos > 0 && (
             <p className="mt-1 text-sm text-amber-700">
               {missingPhotos} {missingPhotos === 1 ? "weed has" : "weeds have"} no print photo yet and will come out as
               an empty square.{" "}
@@ -126,9 +140,11 @@ export default async function WeedSheetPage({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/admin/weeds" className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent">
-            Back to the guide
-          </Link>
+          {canEditGuide && (
+            <Link href="/admin/weeds" className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent">
+              Back to the guide
+            </Link>
+          )}
           <PrintButton />
         </div>
       </div>

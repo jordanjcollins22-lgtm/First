@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Camera, ClipboardList, Map, Navigation, Phone } from "lucide-react";
+import { Camera, ClipboardList, Leaf, Map, Navigation, Phone } from "lucide-react";
 
 import type { Issue } from "@/lib/issues";
 import { IssuesPanel } from "@/components/issues/issues-panel";
@@ -77,6 +77,18 @@ export function FieldScreen({
           className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-border bg-card/60 text-sm font-semibold"
         >
           <Camera className="h-5 w-5" /> Photos
+        </Link>
+        {/* The sheet we hand over, from the screen of the person standing at
+            the door. It was only ever reachable from an admin tool, so in
+            practice nobody on site could produce one. Opens in its own tab:
+            printing it should not cost the crew the job they are on. */}
+        <Link
+          href="/admin/weeds/sheet?view=client"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="col-span-2 flex min-h-14 items-center justify-center gap-2 rounded-xl border border-border bg-card/60 text-sm font-semibold"
+        >
+          <Leaf className="h-5 w-5" /> Weed sheet for the client
         </Link>
         {clientPhone && (
           <a

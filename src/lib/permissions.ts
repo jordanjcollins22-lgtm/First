@@ -117,9 +117,12 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page — " +
     "it shows a property address, which anybody who can open the job can already see.",
   "/admin/weeds/sheet":
-    "The printed weed guide, at its own URL so it can be opened in a tab and printed. Guarded by the " +
-    "Weed Guide tab like the page it is reached from — it is the same sixty-three plants, laid out for " +
-    "paper.",
+    "The printed weed guide, at its own URL so it can be opened in a tab and printed. The crew's " +
+    "reference is guarded by the Weed Guide tab like the page it is reached from — it is the same " +
+    "sixty-three plants, laid out for paper. The client's sheet needs only a signed-in person: it is " +
+    "plant photographs, plant names and a code that books us, and it names no client, no job and no " +
+    "price. It is reached from the crew's own screen on a job, because handing it over is done at a " +
+    "door and not at a desk.",
   "/jobs/[jobId]/work-order":
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +
