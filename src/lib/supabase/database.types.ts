@@ -26,6 +26,8 @@ export interface Database {
           overhead_percent: number;
           measurement_unit: string;
           measurement_basis: string;
+          /** The scheduling engine is off until a business asks for it. */
+          schedule_engine_enabled: boolean;
           created_at: string;
           updated_at: string;
           /** USPS EDDM Retail postage per piece, in dollars. A setting because USPS revises it. */

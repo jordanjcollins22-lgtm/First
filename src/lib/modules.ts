@@ -97,6 +97,9 @@ export const MODULES: readonly AppModule[] = [
       { key: "calendar", label: "Calendar", tabs: ["evaluations"], blurb: "Evaluations and work sessions, with everyone's hours and days off on the grid." },
       { key: "weather", label: "Weather", tabs: ["evaluations", "weather"], blurb: "What the forecasts agree on, and where they do not." },
       { key: "booking", label: "Booking", tabs: ["evaluations"], blurb: "The links clients book themselves with, and the calendars those land on." },
+      // Last, and never the opening subtab: the calendar is the thing somebody
+      // came for, and a suggestion is an opinion about it.
+      { key: "suggestions", label: "Suggestions", tabs: ["evaluations"], blurb: "What the calendar would do, if you agreed with it. It books nothing on its own." },
     ],
   },
   {
