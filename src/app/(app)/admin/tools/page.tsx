@@ -15,6 +15,8 @@ import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
 import { InventoryValueSummary } from "@/components/inventory/inventory-value-summary";
+import { listKitContainers } from "@/lib/data/kit-containers";
+import { containersValue } from "@/lib/kit-containers";
 import { listBusinessLocations } from "@/lib/data/locations";
 
 export default async function InventoryPage() {
@@ -38,6 +40,10 @@ export default async function InventoryPage() {
     // Same places as the Project Data map — one list, not two.
     listBusinessLocations().catch(() => []),
   ]);
+
+  // The bins and rigs the kits travel in. Spending like anything else, and
+  // never fatal: a total short by the crates beats a page that will not load.
+  const containers = await listKitContainers().catch(() => []);
 
   const linksByTool = new Map<string, string[]>();
   for (const link of linksRes.data ?? []) {
@@ -143,7 +149,14 @@ export default async function InventoryPage() {
         showMaterials={materialsAllowed}
         toolsContent={
           <>
-            <InventoryValueSummary tools={valued(equipment)} gear={valued(gear)} />
+            <InventoryValueSummary
+              tools={valued(equipment)}
+              gear={valued(gear)}
+              containers={{
+                count: containers.filter((container) => !container.archivedAt).length,
+                value: containersValue(containers),
+              }}
+            />
 
             <Card className="mb-6">
               <CardHeader>

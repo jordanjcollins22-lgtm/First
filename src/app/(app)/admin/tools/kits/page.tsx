@@ -4,8 +4,11 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { listKitTools } from "@/lib/data/tools";
+import { listKitContainers } from "@/lib/data/kit-containers";
 import { kitNumbers, toolsInKit, toolsInNoKit } from "@/lib/kit-sheet";
+import { storedInLabel } from "@/lib/kit-containers";
 import { PrintPdfButton } from "@/components/print/print-pdf-button";
+import { ContainerPanel } from "@/components/kit/container-panel";
 
 /**
  * The kit checklists, and what is on each one.
@@ -24,12 +27,16 @@ export default async function KitsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("tools", "/my-day");
 
-  const tools = await listKitTools().catch(() => []);
+  const [tools, containers] = await Promise.all([
+    listKitTools().catch(() => []),
+    listKitContainers().catch(() => []),
+  ]);
   const kits = kitNumbers(tools);
   const strays = toolsInNoKit(tools);
   const missingPhoto = tools.filter((tool) => !tool.imagePath).length;
   const missingDescription = tools.filter((tool) => !(tool.description ?? "").trim()).length;
   const missingBin = tools.filter((tool) => !(tool.storageLocation ?? "").trim()).length;
+  const kitsWithNoContainer = kitNumbers(tools).filter((kit) => !storedInLabel(containers, kit));
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
@@ -37,8 +44,9 @@ export default async function KitsPage() {
         <h1 className="text-xl font-semibold">Kit Checklists</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           One printed sheet per kit, on 8.5 × 11, with a box to tick beside every tool, a photo of it and
-          the bin it goes back to. Made fresh each time you print, so a tool added to a kit today is on
-          today&apos;s sheet.
+          the bin it goes back to. The sheet names what the kit travels in and lists that thing&apos;s own
+          parts, so a cracked crate gets caught at the van. Made fresh each time you print, so a tool
+          added to a kit today is on today&apos;s sheet.
         </p>
       </header>
 
@@ -54,11 +62,13 @@ export default async function KitsPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {kits.map((kit) => {
             const inKit = toolsInKit(tools, kit);
+            const storedIn = storedInLabel(containers, kit);
             return (
               <div key={kit} className="rounded-lg border border-border p-3">
                 <p className="text-sm font-semibold">Kit {kit}</p>
                 <p className="text-xs text-muted-foreground">
                   {inKit.length} tool{inKit.length === 1 ? "" : "s"}
+                  {storedIn ? ` · in the ${storedIn}` : ""}
                 </p>
                 <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                   {inKit.map((tool) => tool.name).join(", ")}
@@ -69,6 +79,8 @@ export default async function KitsPage() {
           })}
         </div>
       )}
+
+      <ContainerPanel containers={containers} />
 
       <section className="rounded-lg border border-border p-3">
         <h3 className="text-sm font-semibold">Everything at once</h3>
@@ -98,7 +110,7 @@ export default async function KitsPage() {
         </section>
       )}
 
-      {(missingPhoto > 0 || missingDescription > 0 || missingBin > 0) && (
+      {(missingPhoto > 0 || missingDescription > 0 || missingBin > 0 || kitsWithNoContainer.length > 0) && (
         <section className="rounded-lg border border-border p-3 text-sm">
           <h3 className="font-semibold">What would make the sheets more useful</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
@@ -106,6 +118,13 @@ export default async function KitsPage() {
               <li>
                 {missingPhoto} tool{missingPhoto === 1 ? " has" : "s have"} no photo. A name alone means
                 somebody has to know what it looks like already.
+              </li>
+            )}
+            {kitsWithNoContainer.length > 0 && (
+              <li>
+                Kit{kitsWithNoContainer.length === 1 ? " " : "s "}
+                {kitsWithNoContainer.join(", ")} {kitsWithNoContainer.length === 1 ? "has" : "have"} no
+                container recorded, so the sheet cannot say what the whole lot travels in.
               </li>
             )}
             {missingBin > 0 && (

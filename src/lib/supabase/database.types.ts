@@ -2528,6 +2528,55 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["recommendations"]["Row"]>;
         Relationships: [];
       };
+      kit_containers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          kits: number[];
+          kind: string;
+          quantity: number | null;
+          cost: number | null;
+          purchase_url: string | null;
+          broken: number;
+          on_order: boolean;
+          reorder_threshold: number | null;
+          image_path: string | null;
+          notes: string | null;
+          archived_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["kit_containers"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kit_containers"]["Row"]>;
+        Relationships: [];
+      };
+      kit_container_parts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          container_id: string;
+          name: string;
+          quantity: number;
+          cost: number | null;
+          purchase_url: string | null;
+          broken: number;
+          on_order: boolean;
+          notes: string | null;
+          position: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["kit_container_parts"]["Row"]> & {
+          organization_id: string;
+          container_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kit_container_parts"]["Row"]>;
+        Relationships: [];
+      };
       community_groups: {
         Row: {
           id: string;

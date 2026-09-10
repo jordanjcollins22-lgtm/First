@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { checkTabAccess } from "@/lib/data/access";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listKitTools, toolPhotoJpegUrl } from "@/lib/data/tools";
+import { listKitContainers } from "@/lib/data/kit-containers";
 import { latin1, truncate, wrapText } from "@/lib/print-text";
 import {
   CHECKBOX,
@@ -20,6 +21,7 @@ import {
   kitQuantity,
   layoutFor,
   paginate,
+  sheetRows,
   sheetsFor,
   whereLabel,
   type KitSheet,
@@ -63,8 +65,14 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const download = params.get("download") === "1";
 
-  const [tools, organization] = await Promise.all([listKitTools(), getCurrentOrganization()]);
-  const sheets = sheetsFor(tools, params.get("kit"));
+  const [tools, organization, containers] = await Promise.all([
+    listKitTools(),
+    getCurrentOrganization(),
+    // Never fatal. A checklist without the bin named is still the checklist;
+    // a download that fails because a container query timed out is not.
+    listKitContainers().catch(() => []),
+  ]);
+  const sheets = sheetsFor(tools, params.get("kit"), containers);
 
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${organization.name} — kit checklist`);
@@ -76,7 +84,7 @@ export async function GET(request: Request) {
   // The biggest box any sheet will draw a photo in, so one fetch serves them
   // all at a size that is never scaled up.
   const widest = sheets.reduce((biggest, sheet) => {
-    const layout = layoutFor(sheet.tools.length);
+    const layout = layoutFor(sheetRows(sheet).length);
     return Math.max(biggest, layout.photoWidth, layout.photoHeight);
   }, 0);
   const photos = await loadPhotos(pdf, sheets.flatMap((sheet) => sheet.tools), widest);
@@ -93,8 +101,9 @@ export async function GET(request: Request) {
     // Worked out per kit: a kit of two gets rows three times the height of a
     // kit of fifteen, because it has the page to spare and the photograph is
     // the part somebody actually reads.
-    const layout = layoutFor(sheet.tools.length);
-    const pages = paginate(sheet.tools, layout.rowsPerPage);
+    const rows = sheetRows(sheet);
+    const layout = layoutFor(rows.length);
+    const pages = paginate(rows, layout.rowsPerPage);
     pages.forEach((toolsOnPage, index) => {
       drawPage(pdf, {
         sheet,
@@ -158,7 +167,9 @@ function drawPage(pdf: PDFDocument, input: PageInput) {
   });
 
   const count = `${input.sheet.tools.length} ${input.sheet.tools.length === 1 ? "tool" : "tools"}`;
-  const meta = latin1(`${input.business} · ${count} · printed ${input.printedOn}`);
+  const parts = input.sheet.partRows?.length ?? 0;
+  const partCount = parts > 0 ? ` · ${parts} bin part${parts === 1 ? "" : "s"}` : "";
+  const meta = latin1(`${input.business} · ${count}${partCount} · printed ${input.printedOn}`);
   page.drawText(meta, {
     x: left,
     y: y - FONT.kit - 12,
@@ -167,14 +178,25 @@ function drawPage(pdf: PDFDocument, input: PageInput) {
     color: grey,
   });
 
-  const instruction = "Tick each one back in, and check it went to the bin named.";
-  page.drawText(instruction, {
-    x: left,
-    y: y - FONT.kit - 24,
-    size: FONT.meta,
-    font: input.plain,
-    color: grey,
-  });
+  // What it all travels in, first, because somebody holding this sheet is
+  // stood in front of the thing and needs to know they have the right one.
+  // Left off entirely when nobody has said: a line saying nothing is a line
+  // that could have been a tool.
+  const storedIn = input.sheet.storedIn?.trim();
+  const instruction = storedIn
+    ? `Stored in: ${storedIn}. Tick each one back in, and check it went to the bin named.`
+    : "Tick each one back in, and check it went to the bin named.";
+  const room = PAGE_WIDTH - 2 * MARGIN;
+  page.drawText(
+    latin1(truncate(instruction, room, (line) => input.plain.widthOfTextAtSize(line, FONT.meta))),
+    {
+      x: left,
+      y: y - FONT.kit - 24,
+      size: FONT.meta,
+      font: input.plain,
+      color: grey,
+    }
+  );
 
   y -= HEADER_HEIGHT;
   page.drawLine({

@@ -14,15 +14,24 @@ import { money, valueInventory, type ValuedTool } from "@/lib/inventory-value";
 export function InventoryValueSummary({
   tools,
   gear,
+  containers,
 }: {
   tools: readonly ValuedTool[];
   gear: readonly ValuedTool[];
+  /** The bins and rigs the kits travel in, which are spending too. */
+  containers: { count: number; value: number };
 }) {
   const all = [...tools, ...gear];
   const total = valueInventory(all);
-  if (all.length === 0) return null;
+  if (all.length === 0 && containers.count === 0) return null;
 
   const equipment = valueInventory(tools);
+
+  // Counted in what was spent, and left out of what it would fetch. A used
+  // trash can on a dolly is worth what somebody will pay for a used trash can
+  // on a dolly, which is nothing, and pretending otherwise inflates the one
+  // number somebody would act on.
+  const purchase = total.purchase + containers.value;
 
   const caveats: string[] = [];
   if (total.unpriced > 0) {
@@ -30,6 +39,11 @@ export function InventoryValueSummary({
       `${total.unpriced} with no price on ${total.unpriced === 1 ? "it" : "them"} yet (${total.unpricedNames.join(", ")}${
         total.unpriced > total.unpricedNames.length ? " and more" : ""
       }), so both totals are short by whatever those cost.`
+    );
+  }
+  if (containers.count > 0) {
+    caveats.push(
+      `Includes ${money(containers.value)} of kit containers (${containers.count}), counted in what was spent and left out of what it would fetch.`
     );
   }
   if (total.rentals > 0) {
@@ -45,15 +59,15 @@ export function InventoryValueSummary({
       <div className="grid grid-cols-2 divide-x divide-border">
         <Figure
           label="Purchase value"
-          value={money(total.purchase)}
+          value={money(purchase)}
           detail={`What ${total.items} item${total.items === 1 ? "" : "s"} cost`}
         />
         <Figure
           label="Sell value"
           value={money(total.sell)}
           detail={
-            total.purchase > 0
-              ? `About ${Math.round((total.sell / total.purchase) * 100)}% back`
+            purchase > 0
+              ? `About ${Math.round((total.sell / purchase) * 100)}% back`
               : "What they would fetch"
           }
         />

@@ -18,6 +18,8 @@
  * is the part worth checking.
  */
 
+import { containersForKit, storedInLabel, type KitContainer } from "@/lib/kit-containers";
+
 export const PAGE_WIDTH = 612;
 export const PAGE_HEIGHT = 792;
 export const MARGIN = 36;
@@ -88,6 +90,31 @@ export interface KitSheet {
   kit: number | null;
   title: string;
   tools: KitTool[];
+  /**
+   * What the kit travels in, printed at the top.
+   *
+   * Null when nobody has said, and the line is left off rather than printed
+   * empty — a sheet that spends a line saying nothing is a sheet with one
+   * fewer tool on it.
+   */
+  storedIn?: string | null;
+  /**
+   * The container's own parts, ticked alongside the tools.
+   *
+   * The dolly, the can, the straps. They are on the sheet because the moment
+   * somebody is stood at the van counting things back in is the moment a
+   * cracked crate gets noticed, and a crack nobody wrote down is a crack
+   * discovered on the next job instead.
+   */
+  partRows?: KitTool[];
+}
+
+/**
+ * Everything with a box beside it on one sheet: the tools, then the bin's own
+ * parts. The parts go last because the tools are what somebody came to count.
+ */
+export function sheetRows(sheet: KitSheet): KitTool[] {
+  return [...sheet.tools, ...(sheet.partRows ?? [])];
 }
 
 /**
@@ -217,7 +244,11 @@ export function toolsInNoKit(tools: KitTool[]): KitTool[] {
  * that runs on from the bottom of another kit is one somebody will tick
  * against the wrong van.
  */
-export function sheetsFor(tools: KitTool[], want: string | null): KitSheet[] {
+export function sheetsFor(
+  tools: KitTool[],
+  want: string | null,
+  containers: readonly KitContainer[] = []
+): KitSheet[] {
   const asked = (want ?? "all").trim().toLowerCase();
 
   if (asked === "inventory") {
@@ -234,16 +265,50 @@ export function sheetsFor(tools: KitTool[], want: string | null): KitSheet[] {
     return [{ kit: null, title: "Not in any kit", tools: toolsInNoKit(tools) }];
   }
 
-  const one = Number(asked);
-  if (Number.isInteger(one) && one > 0) {
-    return [{ kit: one, title: `Kit ${one}`, tools: toolsInKit(tools, one) }];
-  }
-
-  return kitNumbers(tools).map((kit) => ({
+  const forKit = (kit: number): KitSheet => ({
     kit,
     title: `Kit ${kit}`,
     tools: toolsInKit(tools, kit),
-  }));
+    storedIn: storedInLabel(containers, kit),
+    partRows: containerRows(containers, kit),
+  });
+
+  const one = Number(asked);
+  if (Number.isInteger(one) && one > 0) return [forKit(one)];
+
+  return kitNumbers(tools).map(forKit);
+}
+
+/**
+ * The container's own parts, as rows with a box beside them.
+ *
+ * Shaped as tools so they need no new drawing code, and because on the page
+ * they are the same thing: something that should be there, with a picture of
+ * where it goes. What is different is what happens when one is missing — a
+ * tool went astray, a snapped bungee has to be bought — and that is why they
+ * are named as parts rather than quietly mixed in with the shovels.
+ *
+ * Only for a rig somebody built. A crate off a shelf has no parts to count,
+ * and printing "DeWalt crate: 1 crate" wastes the line.
+ */
+export function containerRows(containers: readonly KitContainer[], kit: number | null): KitTool[] {
+  const rows: KitTool[] = [];
+  for (const container of containersForKit(containers, kit)) {
+    for (const part of container.parts.slice().sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))) {
+      rows.push({
+        id: `part:${part.id}`,
+        name: part.name,
+        description: `Part of the ${container.name}. Check it is not broken.`,
+        imagePath: null,
+        howToUrl: null,
+        storageLocation: container.name,
+        quantity: part.quantity,
+        kits: kit == null ? [] : [kit],
+        kitQuantities: kit == null ? {} : { [String(kit)]: part.quantity },
+      });
+    }
+  }
+  return rows;
 }
 
 /**

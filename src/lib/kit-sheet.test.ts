@@ -14,12 +14,14 @@ import {
   PAGE_WIDTH,
   paginate,
   TARGET_PAGES,
+  sheetRows,
   sheetsFor,
   toolsInKit,
   toolsInNoKit,
   whereLabel,
   type KitTool,
 } from "@/lib/kit-sheet";
+import type { KitContainer } from "@/lib/kit-containers";
 
 function tool(name: string, over: Partial<KitTool> = {}): KitTool {
   return {
@@ -304,5 +306,75 @@ describe("what the file is called", () => {
     const sheets = sheetsFor(SHOP, "2");
     expect(contentDisposition(sheets, "J's", false)).toMatch(/^inline;/);
     expect(contentDisposition(sheets, "J's", true)).toMatch(/^attachment;/);
+  });
+});
+
+
+describe("what the kit travels in", () => {
+  const dolly: KitContainer = {
+    id: "c1",
+    name: "Trash can dolly setup",
+    kits: [1, 2],
+    kind: "built",
+    quantity: 1,
+    cost: null,
+    purchaseUrl: null,
+    broken: 0,
+    onOrder: false,
+    reorderThreshold: null,
+    imagePath: null,
+    notes: null,
+    archivedAt: null,
+    parts: [
+      { id: "p1", name: "Trash can", quantity: 1, cost: 30, purchaseUrl: null, broken: 0, onOrder: false, notes: null, position: 0 },
+      { id: "p2", name: "Bungee", quantity: 2, cost: 4, purchaseUrl: null, broken: 0, onOrder: false, notes: null, position: 1 },
+    ],
+  };
+
+  it("names the container on the sheets for the kits it carries", () => {
+    const sheets = sheetsFor(SHOP, "all", [dolly]);
+    expect(sheets.find((sheet) => sheet.kit === 1)?.storedIn).toBe("Trash can dolly setup");
+    expect(sheets.find((sheet) => sheet.kit === 2)?.storedIn).toBe("Trash can dolly setup");
+    expect(sheets.find((sheet) => sheet.kit === 3)?.storedIn).toBeNull();
+  });
+
+  it("puts the rig's own parts on the sheet, so a broken one is caught at the van", () => {
+    const sheet = sheetsFor(SHOP, "1", [dolly])[0];
+    const rows = sheetRows(sheet);
+    expect(rows.map((row) => row.name)).toContain("Trash can");
+    expect(rows.map((row) => row.name)).toContain("Bungee");
+  });
+
+  it("keeps the parts out of the tool count, because they are not tools", () => {
+    const sheet = sheetsFor(SHOP, "1", [dolly])[0];
+    expect(sheet.tools).toHaveLength(2);
+    expect(sheetRows(sheet)).toHaveLength(4);
+  });
+
+  it("lists the parts after the tools, which is what somebody came to count", () => {
+    const rows = sheetRows(sheetsFor(SHOP, "1", [dolly])[0]);
+    expect(rows[rows.length - 1].name).toBe("Bungee");
+  });
+
+  it("says how many of a part the setup takes", () => {
+    const rows = sheetRows(sheetsFor(SHOP, "1", [dolly])[0]);
+    expect(kitQuantity(rows.find((row) => row.name === "Bungee")!, 1)).toBe(2);
+  });
+
+  it("sends a part back to the container it belongs to", () => {
+    const rows = sheetRows(sheetsFor(SHOP, "1", [dolly])[0]);
+    expect(whereLabel(rows.find((row) => row.name === "Trash can")!)).toBe("Trash can dolly setup");
+  });
+
+  it("leaves the whole-inventory sheet alone: a stocktake is not a kit", () => {
+    const sheet = sheetsFor(SHOP, "inventory", [dolly])[0];
+    expect(sheetRows(sheet)).toHaveLength(SHOP.length);
+    expect(sheet.storedIn ?? null).toBeNull();
+  });
+
+  it("behaves exactly as before when nobody has recorded a container", () => {
+    const sheet = sheetsFor(SHOP, "1")[0];
+    expect(sheetRows(sheet)).toEqual(sheet.tools);
+    expect(sheet.storedIn).toBeNull();
   });
 });
