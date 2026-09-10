@@ -19,6 +19,8 @@ import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { opsState, type OpsState } from "@/lib/data/ops";
 import { OpsPanel } from "@/components/ops/ops-panel";
+import { getEvaluationBoard } from "@/lib/data/evaluation-board";
+import { EvaluationBoardView } from "@/components/evaluations/evaluation-board";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -49,11 +51,53 @@ export default async function DashboardPage({
       <PageTabs
         tabs={[
           { key: "business", label: "Business", content: await BusinessTab({ searchParams }) },
+          // Everything booked and everything already done, with the ones an
+          // account manager still owes a write-up on at the top. It had no
+          // home: the selling screen dropped an evaluation the moment it
+          // produced a proposal, so "what have we actually done" was
+          // unanswerable.
+          { key: "evaluations", label: "Evaluations", content: await EvaluationsTab() },
           // How every role moves through the business, step by step. It had
           // its own nav entry for something read once a quarter.
           { key: "journeys", label: "Journeys", content: await JourneysTab() },
         ]}
       />
+    </div>
+  );
+}
+
+/**
+ * Every evaluation, before and after.
+ *
+ * Its own tab rather than another band on the business screen, because it is a
+ * list somebody works through rather than a number they read.
+ */
+async function EvaluationsTab() {
+  const board = await getEvaluationBoard().catch((err) => {
+    console.error("Evaluations failed to load:", err);
+    return null;
+  });
+
+  if (!board) {
+    return (
+      <div>
+        <h1 className="mb-1 text-2xl font-bold">Evaluations</h1>
+        <p className="rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
+          Couldn&apos;t load the evaluations right now. Reload the page.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold">Evaluations</h1>
+      <p className="mb-3 text-muted-foreground">
+        {board.counts["needs-submitting"] > 0
+          ? `${board.counts["needs-submitting"]} still to be written up, ${board.counts.upcoming} coming up, ${board.counts.submitted} already submitted.`
+          : `${board.counts.upcoming} coming up, ${board.counts.submitted} already submitted. Nothing is waiting on a write-up.`}
+      </p>
+      <EvaluationBoardView board={board} />
     </div>
   );
 }
