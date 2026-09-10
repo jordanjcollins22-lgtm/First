@@ -311,9 +311,12 @@ export function RecommendationForm() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <Button type="button" className="h-11" disabled={pending} onClick={submit}>
+      {/* Held while the picture is being read, so a fast finger cannot record
+          the reply before the boxes are filled -- or upload the screenshot a
+          second time because the first one had not landed yet. */}
+      <Button type="button" className="h-11" disabled={pending || reading} onClick={submit}>
         {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-        {pending ? "Getting your link…" : "Get my link and wording"}
+        {pending ? "Getting your link…" : reading ? "Reading the post…" : "Get my link and wording"}
       </Button>
     </div>
   );
