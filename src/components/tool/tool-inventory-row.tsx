@@ -14,6 +14,8 @@ import { ToolOrderStatus } from "./tool-order-status";
 import { ToolOwnershipSelect } from "./tool-ownership-select";
 import { ToolCategorySelect } from "./tool-category-select";
 import { ToolStorageLocationInput } from "./tool-storage-location-input";
+import { ToolDescriptionInput } from "./tool-description-input";
+import { ToolVideoLinkInput } from "@/components/service-pricing/tool-video-link-input";
 import { ToolShopLocationInput } from "./tool-shop-location-input";
 import { ToolPurchaseLinkInput } from "./tool-purchase-link-input";
 import { ToolNotOwnedReasonInput } from "./tool-not-owned-reason-input";
@@ -129,6 +131,12 @@ export function ToolInventoryRow({
                 <span className="text-xs text-muted-foreground">Photo</span>
                 <ToolImageUpload toolId={tool.id} imagePath={tool.image_path} />
               </div>
+              {/* Wide, because it is a sentence. It is the line the kit sheet
+                  prints under the name for somebody who has never held this. */}
+              <div className="flex min-w-64 flex-1 flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">What it&apos;s for</span>
+                <ToolDescriptionInput toolId={tool.id} initialDescription={tool.description} />
+              </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Tracked as</span>
                 <ToolCategorySelect toolId={tool.id} category={tool.category} />
@@ -136,6 +144,13 @@ export function ToolInventoryRow({
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Purchase link</span>
                 <ToolPurchaseLinkInput toolId={tool.id} initialUrl={tool.purchase_url} />
+              </div>
+              {/* Editable here as well as on Services. The kit sheet turns it
+                  into a code somebody scans at the van, so this is where
+                  whoever is filling the sheets in will look for it. */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">How to use it</span>
+                <ToolVideoLinkInput toolId={tool.id} initialUrl={tool.how_to_url} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Where in the shop</span>

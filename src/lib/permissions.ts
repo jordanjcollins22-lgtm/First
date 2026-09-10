@@ -79,6 +79,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "labels", label: "Labels & Codes", href: "/admin/labels", parent: "tools" },
   { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
   { key: "weeds", label: "Weed Guide", href: "/admin/weeds", parent: "tools" },
+  { key: "kits", label: "Kit Checklists", href: "/admin/tools/kits", parent: "tools" },
   { key: "reminders", label: "Client Reminders", href: "/admin/reminders", parent: "tools" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
@@ -128,6 +129,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/admin/marketing/poster/pdf":
     "The sign itself, as cutouts on letter sheets. Guarded by the Neighborhood Sign tab, like the page it " +
     "is reached from.",
+  "/admin/tools/kits/pdf":
+    "The kit checklist as a file, drawn page by page rather than printed by a browser. Guarded by the " +
+    "Inventory tab, like the page it is reached from. It names tools, photographs and bins, and no money.",
   "/admin/weeds/sheet/pdf":
     "The same two sheets as a file, drawn page by page rather than printed by a browser. Gated exactly " +
     "as the page is: the crew's reference behind the Weed Guide tab, the client's handout open to " +

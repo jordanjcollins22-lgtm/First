@@ -90,6 +90,13 @@ export default async function InventoryPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-start gap-2">
+          {/* Where somebody already is when they think "I need the kit sheet". */}
+          <Link
+            href="/admin/tools/kits"
+            className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            Kit checklists
+          </Link>
           <Link
             href="/admin/inventory-setup"
             className="whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"

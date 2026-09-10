@@ -141,7 +141,7 @@ export const MODULES: readonly AppModule[] = [
     href: "/more",
     question: "Where are the company and admin tools?",
     subtabs: [
-      { key: "inventory", label: "Inventory", tabs: ["tools", "materials", "labels", "inventory-setup"] },
+      { key: "inventory", label: "Inventory", tabs: ["tools", "materials", "labels", "inventory-setup", "kits"] },
       { key: "team", label: "Team", tabs: ["team"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments"] },

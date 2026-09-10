@@ -253,6 +253,22 @@ export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | nu
   revalidatePath("/canvas");
 }
 
+/**
+ * One line on what the tool is for, printed on the kit checklist.
+ *
+ * Trimmed to a length that fits the row it is drawn in. A paragraph typed here
+ * would be cut off with an ellipsis on the sheet, so it is cut off here where
+ * whoever typed it can see it happen and rewrite it.
+ */
+export async function updateToolDescription(id: string, description: string | null) {
+  const supabase = await createClient();
+  const trimmed = description?.trim().slice(0, 160) || null;
+  const { error } = await supabase.from("tools").update({ description: trimmed }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/admin/tools/kits");
+}
+
 /** YouTube (or any) link showing how to use this tool — surfaces on services and job checklists. */
 export async function updateToolHowToUrl(id: string, howToUrl: string | null) {
   const supabase = await createClient();
@@ -260,6 +276,7 @@ export async function updateToolHowToUrl(id: string, howToUrl: string | null) {
   if (error) throw error;
   revalidatePath("/admin/tools");
   revalidatePath("/admin/team");
+  revalidatePath("/admin/tools/kits");
   revalidatePath("/canvas");
 }
 

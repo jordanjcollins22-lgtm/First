@@ -378,6 +378,8 @@ export interface Tool {
   is_delivered: boolean;
   purchase_url: string | null;
   how_to_url: string | null;
+  /** One line on what it is for, printed on the kit checklist. */
+  description: string | null;
   reorder_threshold: number | null;
   on_order: boolean;
   not_owned_reason: string | null;

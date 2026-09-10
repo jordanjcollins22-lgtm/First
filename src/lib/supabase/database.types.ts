@@ -2062,6 +2062,7 @@ export interface Database {
           is_delivered: boolean;
           purchase_url: string | null;
           how_to_url: string | null;
+          description: string | null;
           reorder_threshold: number | null;
           on_order: boolean;
           not_owned_reason: string | null;
