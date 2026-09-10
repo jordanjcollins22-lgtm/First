@@ -5,6 +5,7 @@ import { requireTab } from "@/lib/data/access";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { SignPreview } from "@/components/marketing/sign-preview";
+import { PrintPdfButton } from "@/components/print/print-pdf-button";
 import { planPieces, signMeasure } from "@/lib/poster-render";
 import { MAX_PIECE_HEIGHT, MAX_PIECE_WIDTH } from "@/lib/poster-pieces";
 import { packSheets } from "@/lib/sheet-packing";
@@ -71,16 +72,11 @@ export default async function PosterPage() {
                 {plan.pieces.length} cutout{plan.pieces.length === 1 ? "" : "s"} on {sheets} sheet
                 {sheets === 1 ? "" : "s"}, plus a map and a list.
               </p>
-              <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-                >
-                  Open PDF
-                </a>
-                <a href={`${href}&download=1`} className="text-xs text-primary hover:underline">
+              <div className="mt-2 flex flex-wrap items-start gap-3">
+                {/* Handed to the phone rather than opened in a tab: with the
+                    app on a home screen there is no toolbar to print from. */}
+                <PrintPdfButton href={href} fallbackName="neighborhood-sign.pdf" />
+                <a href={`${href}&download=1`} className="mt-1.5 text-xs text-primary hover:underline">
                   Save it
                 </a>
               </div>

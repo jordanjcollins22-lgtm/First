@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { isSupabaseConfigured } from "@/lib/env";
+import { PrintPdfButton } from "@/components/print/print-pdf-button";
 import { checkTabAccess } from "@/lib/data/access";
 import { listWeeds } from "@/lib/data/weeds";
 import { Card, CardContent } from "@/components/ui/card";
@@ -65,24 +66,19 @@ export default async function WeedGuidePage() {
               Crew reference
             </Link>
           </div>
-          <div className="flex flex-wrap gap-2 text-sm">
-            <a
+          {/* Buttons rather than links to the file: with the app on a home
+              screen there is no browser toolbar to print from. */}
+          <div className="flex flex-wrap items-start gap-3">
+            <PrintPdfButton
               href="/admin/weeds/sheet/pdf?view=client"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Client sheet PDF
-            </a>
-            <span className="text-muted-foreground">·</span>
-            <a
+              label="Client sheet"
+              fallbackName="weed-sheet.pdf"
+            />
+            <PrintPdfButton
               href="/admin/weeds/sheet/pdf?view=crew"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Crew reference PDF
-            </a>
+              label="Crew reference"
+              fallbackName="weed-reference.pdf"
+            />
           </div>
         </div>
       </header>

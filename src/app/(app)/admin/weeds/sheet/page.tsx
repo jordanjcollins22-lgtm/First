@@ -21,6 +21,7 @@ import { qrSvg } from "@/lib/qr";
 import Link from "next/link";
 
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { PrintPdfButton } from "@/components/print/print-pdf-button";
 import { PrintButton } from "@/components/weeds/print-button";
 
 interface Cell {
@@ -120,25 +121,15 @@ export default async function WeedSheetPage({
               holding it, and on a phone that has twice meant the top of the
               back pages missing. The PDF is drawn by us, page by page, so it
               is the one to send to a printer or to email somebody. */}
-          <p className="mt-1 text-sm">
-            <a
-              href={`/admin/weeds/sheet/pdf?view=${view}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-primary hover:underline"
-            >
-              Open the PDF
-            </a>{" "}
-            <span className="text-muted-foreground">
-              to print this properly, especially from a phone. It opens in the viewer, where print and share are. Or{" "}
-            </span>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use the Print button above to send this to a printer, especially from a phone. Or{" "}
             <a
               href={`/admin/weeds/sheet/pdf?view=${view}&download=1`}
               className="text-primary hover:underline"
             >
               save it
-            </a>
-            <span className="text-muted-foreground"> to email it to somebody.</span>
+            </a>{" "}
+            to email it to somebody.
           </p>
           {/* The back of every sheet came out upside down, which is a printer
               setting and not something a web page can see or change. Saying so
@@ -171,17 +162,17 @@ export default async function WeedSheetPage({
               Back to the guide
             </Link>
           )}
-          {/* Opened, not downloaded. A downloaded file on a phone goes into
-              Files with no viewer and no print button, which is the whole
-              reason somebody came here. */}
-          <a
+          {/* Not a link to the file. The app runs from a home screen with no
+              browser chrome, so a PDF opened in a window there has no toolbar
+              and no print button — the document appears and there is no way to
+              get it out. This hands it to the operating system's share sheet,
+              which has Print on it. */}
+          <PrintPdfButton
             href={`/admin/weeds/sheet/pdf?view=${view}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-          >
-            Open PDF
-          </a>
+            label="Print PDF"
+            fallbackName="weed-sheet.pdf"
+            className="px-3 py-2 text-sm"
+          />
           <PrintButton />
         </div>
       </div>

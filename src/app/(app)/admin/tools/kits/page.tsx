@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Printer } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { listKitTools } from "@/lib/data/tools";
 import { kitNumbers, toolsInKit, toolsInNoKit } from "@/lib/kit-sheet";
+import { PrintPdfButton } from "@/components/print/print-pdf-button";
 
 /**
  * The kit checklists, and what is on each one.
@@ -133,17 +133,12 @@ export default async function KitsPage() {
 function PrintLinks({ query }: { query: string }) {
   const href = `/admin/tools/kits/pdf?${query}`;
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-      >
-        <Printer className="h-3.5 w-3.5" />
-        Print
-      </a>
-      <a href={`${href}&download=1`} className="text-xs text-primary hover:underline">
+    <div className="mt-2 flex flex-wrap items-start gap-3">
+      {/* Not a plain link. On a phone with the app on the home screen there is
+          no browser toolbar, so a PDF opened in a tab has no print button at
+          all — this hands the file to the operating system instead. */}
+      <PrintPdfButton href={href} fallbackName="kit-checklist.pdf" />
+      <a href={`${href}&download=1`} className="mt-1.5 text-xs text-primary hover:underline">
         Save it
       </a>
     </div>
