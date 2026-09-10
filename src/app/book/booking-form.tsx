@@ -63,6 +63,8 @@ export function BookingForm() {
   const searchParams = useSearchParams();
   const ref = searchParams.get("ref");
   const org = searchParams.get("org");
+  // Which posted reply this came through, when it came through one.
+  const rec = searchParams.get("rec");
 
   // The answer is stored with the link it was fetched for rather than being
   // cleared when the link changes. Clearing would mean writing state during
@@ -135,6 +137,7 @@ export function BookingForm() {
       slots={options.slots}
       linkRef={ref}
       linkOrg={org}
+      referralCode={rec}
     />
   );
 }

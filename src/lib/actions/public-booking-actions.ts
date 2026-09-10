@@ -29,6 +29,8 @@ export interface SubmitPublicBookingInput {
   requestedServiceTypeIds: string[];
   notes: string;
   budgetRange: string;
+  /** The code off a posted recommendation link, if this came through one. */
+  referralCode?: string | null;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -187,6 +189,11 @@ export async function submitPublicBooking(
   // edit it into a free visit three states away.
   const mode = modeForAddress(input.lat, input.lng);
 
+  // Only a code we actually issued. Anybody can put ?rec=whatever in a URL,
+  // and a made-up code stored on a job would show up as a booking credited to
+  // a group nobody ever posted in.
+  const referralCode = await knownReferralCode(admin, input.organizationId, input.referralCode);
+
   const { data: job, error: jobError } = await admin
     .from("jobs")
     .insert({
@@ -196,6 +203,7 @@ export async function submitPublicBooking(
       evaluation_date: iso,
       evaluation_status: "scheduled",
       evaluation_mode: mode.mode,
+      referral_code: referralCode,
       client_notes: input.notes.trim() || null,
       budget_range: budgetRange || null,
       referred_by_profile_id: input.referredByProfileId,
@@ -278,4 +286,27 @@ async function daysFor(
     visits: visits.get(id) ?? [],
     lastBookedAt: lastBooked.get(id) ?? null,
   }));
+}
+
+/**
+ * The recommendation code off the link, if it is one of ours.
+ *
+ * Checked rather than trusted. A code nobody issued, stored on a job, becomes
+ * a booking credited to a group nobody ever posted in — which is worse than
+ * no attribution at all, because somebody would act on it.
+ */
+async function knownReferralCode(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  code: string | null | undefined
+): Promise<string | null> {
+  const wanted = (code ?? "").trim().toLowerCase();
+  if (!wanted || wanted.length > 32) return null;
+  const { data } = await admin
+    .from("recommendations")
+    .select("code")
+    .eq("organization_id", organizationId)
+    .eq("code", wanted)
+    .maybeSingle();
+  return data?.code ?? null;
 }

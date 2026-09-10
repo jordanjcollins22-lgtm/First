@@ -1605,6 +1605,7 @@ export interface Database {
           evaluation_date: string | null;
           evaluation_end_date: string | null;
           evaluation_mode: string;
+          referral_code: string | null;
           evaluation_status: string;
           project_start_date: string | null;
           project_end_date: string | null;
@@ -2502,6 +2503,29 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      recommendations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          code: string;
+          platform: string;
+          group_name: string | null;
+          asked_by: string | null;
+          screenshot_path: string | null;
+          note: string | null;
+          posted_at: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["recommendations"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          code: string;
+          platform: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["recommendations"]["Row"]>;
+        Relationships: [];
       };
       payments_health: {
         Row: {

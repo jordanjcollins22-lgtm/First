@@ -135,6 +135,7 @@ export function BookingWizard({
   slots,
   linkRef,
   linkOrg,
+  referralCode,
 }: {
   organizationId: string;
   organizationName: string;
@@ -144,6 +145,13 @@ export function BookingWizard({
   /** The ?ref= and ?org= off the booking link, so the times endpoint resolves the same business. */
   linkRef: string | null;
   linkOrg: string | null;
+  /**
+   * The ?rec= off the link, when this came through a reply somebody posted.
+   *
+   * Carried through untouched and handed to the server, which decides whether
+   * it is a code we issued. A stranger can put anything in a URL.
+   */
+  referralCode: string | null;
 }) {
   const [step, setStep] = useState(1);
   const [booked, setBooked] = useState<{
@@ -244,11 +252,15 @@ export function BookingWizard({
   /**
    * Take the details this browser already has and get out of the way.
    *
+   * Not a hook, despite what a name starting with "use" would have implied —
+   * it is an ordinary click handler, and the old name had the linter treating
+   * it as one.
+   *
    * Everything the form asks for except what they want doing, filled at once,
    * and straight to the time picker — which is the only part of a second
    * booking that is genuinely a new decision.
    */
-  function useRemembered(saved: RememberedBooking) {
+  function applyRemembered(saved: RememberedBooking) {
     setFirstName(saved.firstName);
     setLastName(saved.lastName);
     setEmail(saved.email);
@@ -304,6 +316,7 @@ export function BookingWizard({
           lat: selectedAddress.lat,
           lng: selectedAddress.lng,
           requestedServiceTypeIds: Array.from(selectedServiceIds),
+          referralCode,
           notes,
           // Never blocks the booking. Somebody who has not thought about money
           // yet is still somebody who wants us to come and look.
@@ -446,7 +459,7 @@ export function BookingWizard({
             <p className="text-xs text-muted-foreground">{summarise(remembered).contact}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="h-11" onClick={() => useRemembered(remembered)}>
+            <Button type="button" className="h-11" onClick={() => applyRemembered(remembered)}>
               Use these details
             </Button>
             <Button type="button" variant="outline" className="h-11" onClick={forgetRemembered}>
