@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   affordability,
+  towShortfalls,
   failureChanceWithin,
   fleetWeeklyRiskCost,
   monthlySwap,
@@ -31,6 +32,7 @@ function asset(over: Partial<FleetAsset> = {}): FleetAsset {
     lastBreakdownOn: null,
     monthlyCost: null,
     resaleValue: null,
+    towRatingLb: null,
     notes: null,
     retiredOn: null,
     ...over,
@@ -47,6 +49,7 @@ function target(over: Partial<FleetTarget> = {}): FleetTarget {
     monthlyCents: 120_000,
     replacesAssetId: null,
     priority: 1,
+    towRatingLb: null,
     url: null,
     notes: null,
     orderedOn: null,
@@ -246,5 +249,56 @@ describe("percent", () => {
   it("does not round a real chance down to nothing", () => {
     expect(percent(0.004)).toBe("under 1%");
     expect(percent(0.42)).toBe("42%");
+  });
+});
+
+describe("a replacement that cannot do the job", () => {
+  it("says so when the new one tows less than the old one", () => {
+    // The Titan pulls 11,000. The cheaper rear-wheel-drive Cybertruck pulls
+    // 7,500, and nobody would find that out until a loaded trailer was on it.
+    const titan = asset({ id: "titan", towRatingLb: 11_000 });
+    const short = target({ replacesAssetId: "titan", towRatingLb: 7_500 });
+    const found = towShortfalls([titan], [short]);
+    expect(found).toHaveLength(1);
+    expect(found[0].shortLb).toBe(3_500);
+  });
+
+  it("is quiet when the new one matches, because parity is not a fault", () => {
+    const titan = asset({ id: "titan", towRatingLb: 11_000 });
+    expect(
+      towShortfalls([titan], [target({ replacesAssetId: "titan", towRatingLb: 11_000 })])
+    ).toEqual([]);
+  });
+
+  it("says nothing when either rating is unknown, rather than crying wolf", () => {
+    // Guessing an unstated rating is zero would fire on every trailer in the
+    // list, and a warning that fires on everything is one nobody reads.
+    const titan = asset({ id: "titan", towRatingLb: null });
+    expect(
+      towShortfalls([titan], [target({ replacesAssetId: "titan", towRatingLb: 7_500 })])
+    ).toEqual([]);
+  });
+
+  it("ignores something already bought, which is no longer a decision", () => {
+    const titan = asset({ id: "titan", towRatingLb: 11_000 });
+    expect(
+      towShortfalls(
+        [titan],
+        [target({ replacesAssetId: "titan", towRatingLb: 7_500, boughtOn: "2026-01-01" })]
+      )
+    ).toEqual([]);
+  });
+
+  it("puts the biggest shortfall first", () => {
+    const a = asset({ id: "a", towRatingLb: 11_000 });
+    const b = asset({ id: "b", towRatingLb: 9_000 });
+    const found = towShortfalls(
+      [a, b],
+      [
+        target({ id: "t1", replacesAssetId: "b", towRatingLb: 7_500 }),
+        target({ id: "t2", replacesAssetId: "a", towRatingLb: 7_500 }),
+      ]
+    );
+    expect(found[0].asset.id).toBe("a");
   });
 });

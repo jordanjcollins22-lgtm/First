@@ -5,6 +5,7 @@ import { DEFAULT_RESERVE } from "@/lib/debt-plan";
 import {
   affordability,
   fleetWeeklyRiskCost,
+  towShortfalls,
   monthlySwap,
   rankRisk,
   tradeInCents,
@@ -17,6 +18,7 @@ import {
   type FleetTarget,
   type MonthlySwap,
   type TargetKind,
+  type TowShortfall,
 } from "@/lib/fleet";
 
 /**
@@ -42,6 +44,8 @@ export interface FleetBoard {
   weeklyCents: number;
   /** When each unbought target can be collected, in priority order. */
   plan: { target: FleetTarget; when: Affordability }[];
+  /** Replacements that cannot pull what they are replacing. */
+  towShortfalls: TowShortfall[];
   /** What could not be read, said plainly rather than shown as a zero. */
   missing: string[];
 }
@@ -66,7 +70,7 @@ export async function getFleetBoard(): Promise<FleetBoard> {
     supabase
       .from("fleet_assets")
       .select(
-        "id, name, kind, year, make, model, mileage, condition, breakdowns_12mo, last_breakdown_on, monthly_cost, resale_value, notes, retired_on"
+        "id, name, kind, year, make, model, mileage, condition, breakdowns_12mo, last_breakdown_on, monthly_cost, resale_value, tow_rating_lb, notes, retired_on"
       )
       .eq("organization_id", organizationId)
       .order("retired_on", { ascending: true, nullsFirst: true })
@@ -74,7 +78,7 @@ export async function getFleetBoard(): Promise<FleetBoard> {
     supabase
       .from("fleet_targets")
       .select(
-        "id, name, kind, cost_cents, deposit_cents, monthly_cents, replaces_asset_id, priority, url, notes, ordered_on, bought_on"
+        "id, name, kind, cost_cents, deposit_cents, monthly_cents, replaces_asset_id, priority, tow_rating_lb, url, notes, ordered_on, bought_on"
       )
       .eq("organization_id", organizationId)
       .order("bought_on", { ascending: true, nullsFirst: true })
@@ -94,6 +98,7 @@ export async function getFleetBoard(): Promise<FleetBoard> {
     lastBreakdownOn: row.last_breakdown_on,
     monthlyCost: row.monthly_cost == null ? null : Number(row.monthly_cost),
     resaleValue: row.resale_value == null ? null : Number(row.resale_value),
+    towRatingLb: row.tow_rating_lb,
     notes: row.notes,
     retiredOn: row.retired_on,
   }));
@@ -107,6 +112,7 @@ export async function getFleetBoard(): Promise<FleetBoard> {
     monthlyCents: row.monthly_cents,
     replacesAssetId: row.replaces_asset_id,
     priority: row.priority ?? 100,
+    towRatingLb: row.tow_rating_lb,
     url: row.url,
     notes: row.notes,
     orderedOn: row.ordered_on,
@@ -160,6 +166,7 @@ export async function getFleetBoard(): Promise<FleetBoard> {
     tradeInCents: trade,
     weeklyCents,
     plan,
+    towShortfalls: towShortfalls(assets, targets),
     missing,
   };
 }

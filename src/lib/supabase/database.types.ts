@@ -2520,6 +2520,7 @@ export interface Database {
           last_breakdown_on: string | null;
           monthly_cost: number | null;
           resale_value: number | null;
+          tow_rating_lb: number | null;
           notes: string | null;
           retired_on: string | null;
           created_at: string;
@@ -2543,6 +2544,7 @@ export interface Database {
           monthly_cents: number | null;
           replaces_asset_id: string | null;
           priority: number;
+          tow_rating_lb: number | null;
           url: string | null;
           notes: string | null;
           ordered_on: string | null;

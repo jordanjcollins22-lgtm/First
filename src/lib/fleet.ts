@@ -54,6 +54,8 @@ export interface FleetAsset {
   lastBreakdownOn: string | null;
   monthlyCost: number | null;
   resaleValue: number | null;
+  /** What it is rated to tow, in pounds. Null on trailers. */
+  towRatingLb: number | null;
   notes: string | null;
   retiredOn: string | null;
 }
@@ -198,6 +200,8 @@ export interface FleetTarget {
   monthlyCents: number | null;
   replacesAssetId: string | null;
   priority: number;
+  /** What the replacement is rated to tow, in pounds. */
+  towRatingLb: number | null;
   url: string | null;
   notes: string | null;
   orderedOn: string | null;
@@ -350,6 +354,51 @@ export function tradeInCents(
       .filter((asset) => retiring.has(asset.id) && !asset.retiredOn)
       .reduce((sum, asset) => sum + (asset.resaleValue ?? 0) * 100, 0)
   );
+}
+
+/**
+ * A replacement that cannot do the job of the thing it replaces.
+ *
+ * The one mistake in a plan like this that is expensive to undo. Everything
+ * else is a number that can be edited; a truck in the drive that will not pull
+ * the trailer is a truck that has to be sold again at a loss.
+ *
+ * Only ever reported when both ratings are known. Guessing that an unstated
+ * rating is zero would cry wolf on every trailer in the list, and a warning
+ * that fires on everything is a warning nobody reads.
+ */
+export interface TowShortfall {
+  target: FleetTarget;
+  asset: FleetAsset;
+  targetLb: number;
+  assetLb: number;
+  shortLb: number;
+}
+
+export function towShortfalls(
+  assets: readonly FleetAsset[],
+  targets: readonly FleetTarget[]
+): TowShortfall[] {
+  const byId = new Map(assets.map((asset) => [asset.id, asset]));
+  const out: TowShortfall[] = [];
+
+  for (const target of targets) {
+    if (target.boughtOn || !target.replacesAssetId) continue;
+    const asset = byId.get(target.replacesAssetId);
+    if (!asset) continue;
+    if (target.towRatingLb == null || asset.towRatingLb == null) continue;
+    if (target.towRatingLb >= asset.towRatingLb) continue;
+
+    out.push({
+      target,
+      asset,
+      targetLb: target.towRatingLb,
+      assetLb: asset.towRatingLb,
+      shortLb: asset.towRatingLb - target.towRatingLb,
+    });
+  }
+
+  return out.sort((a, b) => b.shortLb - a.shortLb);
 }
 
 function clamp(value: number, low: number, high: number): number {

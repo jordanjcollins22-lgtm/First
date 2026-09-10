@@ -36,6 +36,21 @@ export function FleetBoardView({ board }: { board: FleetBoard }) {
         />
       </div>
 
+      {/* Loudest thing on the page when it fires. Every other number here is
+          an estimate somebody can edit; a truck in the drive that will not pull
+          the trailer has to be sold again at a loss. */}
+      {board.towShortfalls.map((short) => (
+        <p
+          key={short.target.id}
+          className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm"
+        >
+          <span className="font-semibold">{short.target.name}</span> tows{" "}
+          {short.targetLb.toLocaleString()} lb. The {short.asset.name} it replaces tows{" "}
+          {short.assetLb.toLocaleString()} lb, so this is {short.shortLb.toLocaleString()} lb less
+          than you have now.
+        </p>
+      ))}
+
       {board.missing.length > 0 && (
         <p className="rounded-lg border border-border p-3 text-xs text-muted-foreground">
           {board.missing.join(" ")}
@@ -94,6 +109,11 @@ function Plan({ board }: { board: FleetBoard }) {
               {target.monthlyCents != null && target.monthlyCents > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {money(target.monthlyCents / 100)}/mo after
+                </span>
+              )}
+              {target.towRatingLb != null && (
+                <span className="text-xs text-muted-foreground">
+                  tows {target.towRatingLb.toLocaleString()} lb
                 </span>
               )}
               {target.url && (
@@ -249,6 +269,7 @@ function AssetRow({ risk }: { risk: AssetRisk }) {
       <p className="mt-1 text-xs text-muted-foreground">
         {percent(risk.in30Days)} chance in the next 30 days, {percent(risk.in90Days)} in 90.
         Expected cost of another week on it: {money(risk.weeklyCost)}.
+        {asset.towRatingLb != null && ` Tows ${asset.towRatingLb.toLocaleString()} lb.`}
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
