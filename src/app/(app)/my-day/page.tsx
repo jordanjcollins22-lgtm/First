@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronRight, MessageSquarePlus } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
@@ -191,6 +192,23 @@ async function OfficeDay() {
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <EarlyStartQueue requests={earlyStarts} />
+
+      {/* The cheapest lead in the business, and it only happens if somebody
+          remembers it exists. Put where everybody starts their day rather
+          than four taps into a marketing menu. */}
+      <Link
+        href="/admin/recommendations"
+        className="mb-6 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3 transition-colors hover:bg-primary/10"
+      >
+        <MessageSquarePlus className="h-5 w-5 shrink-0 text-primary" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Someone asked for a landscaper?</span>
+          <span className="block text-xs text-muted-foreground">
+            Upload the screenshot and get a comment to paste, with your own link in it.
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
 
       {ops && <OpsPanel state={ops} />}
 

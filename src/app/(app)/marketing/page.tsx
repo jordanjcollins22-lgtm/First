@@ -8,6 +8,7 @@ import LeadsPage from "@/app/(app)/leads/page";
 import DoorHangersPage from "@/app/(app)/admin/door-hangers/page";
 import FlyerPage from "@/app/(app)/admin/flyer/page";
 import SocialPage from "@/app/(app)/admin/social/page";
+import RecommendationsPage from "@/app/(app)/admin/recommendations/page";
 import { AttributionPanel } from "@/components/marketing/attribution-panel";
 import { attributionReport } from "@/lib/data/attribution";
 
@@ -24,12 +25,13 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab } = await searchParams;
 
-  const [map, leads, hangers, flyer, content] = await Promise.all([
+  const [map, leads, hangers, flyer, content, recommendations] = await Promise.all([
     holdsAny(["project-data"]),
     holdsAny(["leads"]),
     holdsAny(["door-hangers"]),
     holdsAny(["flyer"]),
     holdsAny(["social"]),
+    holdsAny(["recommendations"]),
   ]);
 
   return (
@@ -49,7 +51,16 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
               ),
             }
           : {}),
-        ...(content ? { content: <SocialPage /> } : {}),
+        ...(content || recommendations
+          ? {
+              content: (
+                <div className="space-y-8">
+                  {recommendations && <RecommendationsPage />}
+                  {content && <SocialPage />}
+                </div>
+              ),
+            }
+          : {}),
         ...(map || leads ? { attribution: await AttributionTab() } : {}),
       }}
     />
