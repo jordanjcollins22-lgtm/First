@@ -16,6 +16,7 @@ import {
   type OutreachResponse,
 } from "@/lib/outreach-links";
 import { recordResponse } from "@/lib/actions/outreach-link-actions";
+import { CopyButton } from "@/components/groups/copy-button";
 import type { OutreachBoard, OutreachListRow } from "@/lib/data/outreach-links";
 
 /**
@@ -231,6 +232,15 @@ function LinkRow({ row }: { row: OutreachListRow }) {
 
       {row.note && <p className="mt-1 text-sm">{row.note}</p>}
 
+      {/* Both halves of a reply, weeks later. The link on its own is only
+          useful for a post nobody has written yet; the words are what somebody
+          came back for when a paste failed or the phone locked. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <CopyButton text={row.link} label="Copy link" />
+        {row.comment && <CopyButton text={row.comment} label="Copy comment" />}
+        {row.comment && <ShowComment comment={row.comment} />}
+      </div>
+
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>{row.personName}</span>
         <span>{new Date(row.postedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
@@ -266,5 +276,33 @@ function LinkRow({ row }: { row: OutreachListRow }) {
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * The words, on request.
+ *
+ * Folded away rather than printed, because a list of twenty replies is a list
+ * somebody scans and twenty paragraphs is a list nobody scans. The copy button
+ * beside it is the common case; reading it is the rarer one.
+ */
+function ShowComment({ comment }: { comment: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="text-xs text-muted-foreground underline"
+      >
+        {open ? "Hide it" : "Read it"}
+      </button>
+      {open && (
+        <p className="w-full whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2 text-xs leading-5">
+          {comment}
+        </p>
+      )}
+    </>
   );
 }

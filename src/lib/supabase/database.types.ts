@@ -2580,6 +2580,7 @@ export interface Database {
           responded_at: string | null;
           response: string | null;
           response_note: string | null;
+          comment: string | null;
           posted_at: string;
           created_at: string;
         };

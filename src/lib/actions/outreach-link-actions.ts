@@ -27,7 +27,7 @@ import {
 } from "@/lib/outreach-links";
 
 export type RecordResult =
-  | { ok: true; code: string; link: string; drafts: PostDraft[] }
+  | { ok: true; id: string; code: string; link: string; drafts: PostDraft[] }
   | { ok: false; error: string };
 
 /**
@@ -176,7 +176,7 @@ export async function recordOutreach(input: {
   // The column is unique, so a clash is a rejected insert and not a duplicate.
   let code = makeCode();
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const { error } = await supabase.from("outreach_links").insert({
+    const { data, error } = await supabase.from("outreach_links").insert({
       organization_id: profile.organization_id,
       profile_id: profile.id,
       code,
@@ -188,9 +188,9 @@ export async function recordOutreach(input: {
       service: input.service.trim().slice(0, 120) || null,
       note: input.note.trim().slice(0, 500) || null,
       screenshot_path: input.screenshotPath,
-    });
+    }).select("id").single();
 
-    if (!error) {
+    if (!error && data) {
       revalidatePath("/admin/outreach");
       // Short, and through our own route, so every open is counted. Where it
       // lands is worked out at click time from the code, so a link already
@@ -199,6 +199,7 @@ export async function recordOutreach(input: {
       const link = trackedLink(baseUrl, code);
       return {
         ok: true,
+        id: data.id,
         code,
         link,
         drafts: draftPosts(
@@ -213,7 +214,9 @@ export async function recordOutreach(input: {
       };
     }
 
-    if (!/duplicate|unique/i.test(error.message)) return { ok: false, error: error.message };
+    if (error && !/duplicate|unique/i.test(error.message)) {
+      return { ok: false, error: error.message };
+    }
     code = makeCode();
   }
 
@@ -341,6 +344,36 @@ export async function recordResponse(input: {
       responded_at: input.response ? new Date().toISOString() : null,
       response_note: input.response ? input.note.trim().slice(0, 300) || null : null,
     })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/outreach");
+  return { ok: true };
+}
+
+/**
+ * Keep the comment that was written for a post.
+ *
+ * It used to be produced, shown once, pasted and thrown away. Fine right up
+ * until the paste fails, the phone locks, or somebody wants to answer a second
+ * post in the same group and would rather start from what worked than from a
+ * blank box. Cheap to keep and impossible to recover.
+ *
+ * Never fatal: a comment on screen that failed to save is still a comment on
+ * screen, and interrupting somebody mid-paste to tell them about a database
+ * write is the wrong trade.
+ */
+export async function saveComment(input: {
+  id: string;
+  comment: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("outreach_links")
+    .update({ comment: input.comment.trim().slice(0, 4000) || null })
     .eq("id", input.id);
   if (error) return { ok: false, error: error.message };
 

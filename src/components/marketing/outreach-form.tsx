@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Check, Copy, ImagePlus, Loader2, Send } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import {
   draftCommentFromScreenshot,
   readRecommendationScreenshot,
   recordOutreach,
+  saveComment,
 } from "@/lib/actions/outreach-link-actions";
 import {
   goesToOnePerson,
@@ -70,7 +71,7 @@ export function OutreachForm() {
   const [readNote, setReadNote] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ link: string; drafts: PostDraft[] } | null>(null);
+  const [result, setResult] = useState<{ id: string; link: string; drafts: PostDraft[] } | null>(null);
   // Written from the screenshot, and the reason to upload one. Null while it
   // is being written, and stays null when there was no picture to read.
   const [comment, setComment] = useState<string | null>(null);
@@ -87,7 +88,17 @@ export function OutreachForm() {
    * somebody who types faster than the model reads simply keeps what they
    * typed.
    */
-  function pick(chosen: File | null) {
+  /**
+   * Paste a screenshot straight in.
+   *
+   * On a phone a screenshot goes to the clipboard before it goes anywhere
+   * else, and on a desktop nobody wants to find the file again in Downloads.
+   * Both of those end in the same gesture, so it may as well work.
+   *
+   * Only while nothing has been chosen yet, so a paste into the note box
+   * cannot silently replace the picture somebody already picked.
+   */
+  const pick = useCallback(function pick(chosen: File | null) {
     setFile(chosen);
     setShotPath(null);
     setAgeDays(null);
@@ -156,7 +167,32 @@ export function OutreachForm() {
         setReading(false);
       }
     })();
-  }
+  }, []);
+
+  /**
+   * Paste a screenshot straight in.
+   *
+   * On a phone a screenshot is on the clipboard before it is anywhere else,
+   * and on a desktop nobody wants to go and find the file again in Downloads.
+   * Both end in the same gesture, so it may as well work.
+   *
+   * Ignored once a picture has been chosen, so a paste meant for the note box
+   * cannot silently replace it.
+   */
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      if (file || result) return;
+      const image = Array.from(event.clipboardData?.files ?? []).find((item) =>
+        item.type.startsWith("image/")
+      );
+      if (!image) return;
+      event.preventDefault();
+      pick(image);
+    }
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [file, result, pick]);
 
   function submit() {
     setError(null);
@@ -188,7 +224,7 @@ export function OutreachForm() {
         screenshotPath,
       });
       if (!outcome.ok) return setError(outcome.error);
-      setResult({ link: outcome.link, drafts: outcome.drafts });
+      setResult({ id: outcome.id, link: outcome.link, drafts: outcome.drafts });
 
       // The written-by-hand wordings are already on screen, so this can take
       // its time. Somebody with no screenshot simply uses those.
@@ -202,8 +238,14 @@ export function OutreachForm() {
           ageDays,
         });
         setWriting(false);
-        if (written.ok) setComment(written.comment);
-        else setCommentNote(written.error);
+        if (written.ok) {
+          setComment(written.comment);
+          // Kept so it can be copied again. A comment shown once and thrown
+          // away is a comment lost the moment a paste fails or a phone locks.
+          void saveComment({ id: outcome.id, comment: written.comment });
+        } else {
+          setCommentNote(written.error);
+        }
       }
     });
   }
@@ -270,14 +312,14 @@ export function OutreachForm() {
         <span className="text-xs font-medium">
           Screenshot of the post{" "}
           <span className="font-normal text-muted-foreground">
-            Everything below fills itself in, and the comment gets written for this exact post. Kept
-            private.
+            Choose one or just paste it. Everything below fills itself in, and the comment gets
+            written for this exact post. Kept private.
           </span>
         </span>
         <div className="flex items-center gap-2">
           <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-border px-3 text-xs text-muted-foreground hover:bg-accent">
             <ImagePlus className="h-4 w-4" />
-            {file ? file.name : "Choose an image"}
+            {file ? file.name : "Choose an image, or paste one"}
             <input
               type="file"
               accept={SHOT_TYPES.join(",")}
