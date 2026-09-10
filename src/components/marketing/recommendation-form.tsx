@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Check, Copy, ImagePlus, Loader2, Send } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -54,6 +54,14 @@ export function RecommendationForm() {
   // How old the post is, off the screenshot. Nothing shows it; it decides
   // which opener the comment gets.
   const [ageDays, setAgeDays] = useState<number | null>(null);
+  // What the last reading put in each box.
+  //
+  // A second screenshot has to be able to replace its own earlier answers,
+  // or picking the right picture after the wrong one leaves the wrong group
+  // in the field that everything is counted by. Anything a person typed is
+  // theirs and survives. A ref rather than state: it is read inside an async
+  // handler that would otherwise close over a stale copy.
+  const filled = useRef({ groupName: "", askedBy: "", note: "" });
   const [readNote, setReadNote] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,17 +116,36 @@ export function RecommendationForm() {
           return;
         }
 
-        // Only ever fills a box that is empty. Somebody who typed the group
-        // name while this was running meant that one.
+        // Fills a box that is empty, or one this reader filled last time.
+        // Somebody who typed the group name while it was reading meant that
+        // one, and it is left alone.
+        const mine = filled.current;
+        const take = (current: string, previous: string, next: string) =>
+          current.trim() === "" || current === previous ? next : current;
+
         if (read.platform) setPlatform(read.platform);
-        setGroupName((current) => current.trim() || read.groupName || "");
-        setAskedBy((current) => current.trim() || read.askedBy || "");
-        setNote((current) => current.trim() || read.note);
+        const groupNext = read.groupName ?? "";
+        const askedNext = read.askedBy ?? "";
+        setGroupName((current) => take(current, mine.groupName, groupNext));
+        setAskedBy((current) => take(current, mine.askedBy, askedNext));
+        setNote((current) => take(current, mine.note, read.note));
+        filled.current = { groupName: groupNext, askedBy: askedNext, note: read.note };
         setAgeDays(read.ageDays);
+        // Named outright when a box came back empty, because "it filled
+        // everything in" and "it filled two of three in" look identical on a
+        // screen and only one of them needs somebody to finish the job.
+        const blank = [
+          groupNext ? null : "the group",
+          askedNext ? null : "who asked",
+          read.note.trim() ? null : "what they want",
+        ].filter((word): word is string => word != null);
+
         setReadNote(
-          read.worthAnswering
-            ? "Read from the screenshot. Change anything that is wrong."
-            : "Read it, but this looks like an advert rather than somebody asking for work."
+          !read.worthAnswering
+            ? "Read it, but this looks like an advert rather than somebody asking for work."
+            : blank.length === 0
+              ? "Read from the screenshot. Change anything that is wrong."
+              : `Read from the screenshot. It couldn't find ${listOf(blank)} — fill that in.`
         );
       } finally {
         setReading(false);
@@ -353,4 +380,10 @@ function CopyBlock({ tone, text, highlight }: { tone: string; text: string; high
       <p className="mt-1.5 whitespace-pre-wrap break-words text-sm">{text}</p>
     </div>
   );
+}
+
+/** "the group and who asked", the way somebody would say it. */
+function listOf(words: string[]): string {
+  if (words.length <= 1) return words[0] ?? "";
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }

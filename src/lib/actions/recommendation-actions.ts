@@ -49,7 +49,14 @@ export async function createShotUpload(input: {
 
   const supabase = await createClient();
   const { data, error } = await supabase.storage.from("recommendation-shots").createSignedUploadUrl(path);
-  if (error || !data) return { ok: false, error: error?.message ?? "Couldn't get a place to put it." };
+  if (error || !data) {
+    // Said plainly and logged properly. A storage policy that refuses the
+    // write used to reach somebody standing in a garden as "new row violates
+    // row-level security policy", which tells them nothing they can act on
+    // and tells anybody watching how the database is built.
+    console.error("couldn't open an upload slot for a screenshot:", error);
+    return { ok: false, error: "Couldn't upload that just now. Try again in a moment." };
+  }
   return { ok: true, path: data.path, token: data.token };
 }
 
