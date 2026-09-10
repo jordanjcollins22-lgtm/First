@@ -147,6 +147,9 @@ export const MODULES: readonly AppModule[] = [
     question: "Where are the company and admin tools?",
     subtabs: [
       { key: "inventory", label: "Inventory", tabs: ["tools", "materials", "labels", "inventory-setup", "kits"] },
+      // Next to Inventory because it is the same question at a bigger size:
+      // what do we own, what is it worth, and what is about to need replacing.
+      { key: "fleet", label: "Fleet", tabs: ["fleet"] },
       { key: "team", label: "Team", tabs: ["team"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments"] },

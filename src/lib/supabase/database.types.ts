@@ -2505,6 +2505,58 @@ export interface Database {
           },
         ];
       };
+      fleet_assets: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          kind: string;
+          year: number | null;
+          make: string | null;
+          model: string | null;
+          mileage: number | null;
+          condition: string;
+          breakdowns_12mo: number;
+          last_breakdown_on: string | null;
+          monthly_cost: number | null;
+          resale_value: number | null;
+          notes: string | null;
+          retired_on: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["fleet_assets"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["fleet_assets"]["Row"]>;
+        Relationships: [];
+      };
+      fleet_targets: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          kind: string;
+          cost_cents: number | null;
+          deposit_cents: number | null;
+          monthly_cents: number | null;
+          replaces_asset_id: string | null;
+          priority: number;
+          url: string | null;
+          notes: string | null;
+          ordered_on: string | null;
+          bought_on: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["fleet_targets"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["fleet_targets"]["Row"]>;
+        Relationships: [];
+      };
       outreach_links: {
         Row: {
           id: string;
