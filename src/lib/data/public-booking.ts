@@ -38,7 +38,7 @@ export async function resolveBookingContext(params: {
   if (params.ref) {
     const { data: profile, error } = await admin
       .from("profiles")
-      .select("id, organization_id")
+      .select("id, organization_id, does_evaluations")
       .eq("affiliate_slug", params.ref)
       .maybeSingle();
     if (error) throw error;
@@ -65,7 +65,7 @@ export async function resolveBookingContext(params: {
       organizationId: org.id,
       organizationName: org.name,
       referredByProfileId: profile.id,
-      dedicatedEvaluatorId: canDoEvaluations(roles) ? profile.id : null,
+      dedicatedEvaluatorId: canDoEvaluations(roles, profile.does_evaluations) ? profile.id : null,
     };
   }
 
@@ -158,7 +158,10 @@ export async function listPublicServices(organizationId: string): Promise<Public
  * evaluator's own link (a generic ad, or an account manager's referral link). */
 export async function listOrgEvaluatorIds(organizationId: string): Promise<string[]> {
   const admin = createAdminClient();
-  const { data: profiles, error } = await admin.from("profiles").select("id").eq("organization_id", organizationId);
+  const { data: profiles, error } = await admin
+    .from("profiles")
+    .select("id, does_evaluations")
+    .eq("organization_id", organizationId);
   if (error) throw error;
   if (!profiles || profiles.length === 0) return [];
 
@@ -179,7 +182,7 @@ export async function listOrgEvaluatorIds(organizationId: string): Promise<strin
   }
 
   return profiles
-    .filter((p) => canDoEvaluations(rolesByProfile.get(p.id) ?? []))
+    .filter((p) => canDoEvaluations(rolesByProfile.get(p.id) ?? [], p.does_evaluations))
     .map((p) => p.id);
 }
 

@@ -48,6 +48,14 @@ export interface BoardEvaluation {
   assignedToName: string | null;
   /** Whether a proposal has actually been generated from it. */
   hasProposal: boolean;
+  /**
+   * Whether whoever it is on can actually be sent to a property.
+   *
+   * Null when nobody is assigned. False is the interesting one: an evaluation
+   * sitting on a crew member is not late, it is lost, and it will stay lost
+   * because the person holding it was never going to write it up.
+   */
+  assigneeDoesEvaluations: boolean | null;
 }
 
 /**
@@ -129,6 +137,32 @@ export function stateCounts(
   return counts;
 }
 
+/**
+ * Evaluations parked on somebody who does not do them.
+ *
+ * A different problem from a late one and it needs saying differently. A late
+ * write-up is somebody being busy; this is an evaluation that will never be
+ * written, because the person holding it does not visit properties and nobody
+ * told them otherwise. It sits there ageing quietly in the owed pile,
+ * indistinguishable from real work, which is how one of them reached a month.
+ *
+ * Only ever reported where somebody is assigned and we know they do not do
+ * them. An unassigned evaluation is its own problem and already has its own
+ * pile.
+ */
+export function misassigned(
+  evaluations: readonly BoardEvaluation[],
+  now: string
+): BoardEvaluation[] {
+  return evaluations
+    .filter((evaluation) => {
+      const state = stateOf(evaluation, now);
+      if (state !== "needs-submitting" && state !== "upcoming") return false;
+      return evaluation.assignedToId != null && evaluation.assigneeDoesEvaluations === false;
+    })
+    .sort((a, b) => (a.at ?? "9999").localeCompare(b.at ?? "9999"));
+}
+
 export interface OwnerPile {
   assignedToId: string | null;
   name: string;
@@ -136,6 +170,8 @@ export interface OwnerPile {
   /** The oldest one they owe, in days. Null when none of theirs is dated. */
   oldestDays: number | null;
   upcoming: number;
+  /** Whether this person does evaluations at all. */
+  doesEvaluations: boolean | null;
 }
 
 /**
@@ -162,6 +198,7 @@ export function byOwner(evaluations: readonly BoardEvaluation[], now: string): O
       owed: 0,
       oldestDays: null,
       upcoming: 0,
+      doesEvaluations: evaluation.assignedToId == null ? null : evaluation.assigneeDoesEvaluations,
     };
 
     if (state === "upcoming") {

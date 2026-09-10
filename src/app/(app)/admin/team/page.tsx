@@ -11,6 +11,8 @@ import { isSupabaseConfigured, isSupabaseAdminConfigured } from "@/lib/env";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { RoleCheckboxes } from "@/components/team/role-checkboxes";
+import { DoesEvaluationsToggle } from "@/components/team/does-evaluations-toggle";
+import { canDoEvaluations } from "@/lib/affiliate-roles";
 import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
 import { ResetPasswordControl } from "@/components/team/reset-password-control";
 import { ManageRoles } from "@/components/team/manage-roles";
@@ -225,6 +227,22 @@ export default async function TeamServicesPage() {
                             />
                           ) : (
                             <span className="capitalize">{profile.roles.join(", ") || "—"}</span>
+                          )}
+                          {/* Under the roles because it is the exception to
+                              them, and next to them because that is where
+                              somebody looks when an evaluation lands on the
+                              wrong person. */}
+                          {isAdmin && (
+                            <div className="mt-1.5">
+                              <p className="mb-0.5 text-[11px] text-muted-foreground">
+                                Does evaluations
+                              </p>
+                              <DoesEvaluationsToggle
+                                profileId={profile.id}
+                                initial={profile.does_evaluations ?? null}
+                                roleSays={canDoEvaluations(profile.roles)}
+                              />
+                            </div>
                           )}
                         </td>
                         {isAdmin && (

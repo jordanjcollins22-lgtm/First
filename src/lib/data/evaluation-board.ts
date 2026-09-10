@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import { canDoEvaluations } from "@/lib/affiliate-roles";
 import {
   byOwner,
   inState,
+  misassigned,
   stateCounts,
   type BoardEvaluation,
   type EvaluationState,
@@ -28,7 +30,7 @@ interface Row {
   evaluation_date: string | null;
   assigned_to: string | null;
   properties: { address: string | null; customers: { name: string | null } | null } | null;
-  profiles: { full_name: string | null; email: string | null } | null;
+  profiles: { full_name: string | null; email: string | null; does_evaluations: boolean | null } | null;
 }
 
 export interface EvaluationBoard {
@@ -38,6 +40,8 @@ export interface EvaluationBoard {
   submitted: BoardEvaluation[];
   counts: Record<EvaluationState, number>;
   owners: OwnerPile[];
+  /** Live evaluations parked on somebody who does not visit properties. */
+  misassigned: BoardEvaluation[];
   now: string;
 }
 
@@ -52,7 +56,8 @@ export async function getEvaluationBoard(): Promise<EvaluationBoard> {
     .from("jobs")
     .select(
       "id, job_number, status, evaluation_status, evaluation_date, assigned_to, " +
-        "properties!inner(address, customers(name)), profiles!jobs_assigned_to_fkey(full_name, email)"
+        "properties!inner(address, customers(name)), " +
+        "profiles!jobs_assigned_to_fkey(full_name, email, does_evaluations)"
     )
     .order("evaluation_date", { ascending: false, nullsFirst: false })
     .limit(LIMIT);
@@ -77,6 +82,32 @@ export async function getEvaluationBoard(): Promise<EvaluationBoard> {
     }
   }
 
+  // Whether each assignee can be sent to a property. Read once from the roles
+  // rather than per row, because an evaluation sitting on a crew member is a
+  // different problem from a late one and has to be named as one.
+  const assignees = Array.from(
+    new Set(rows.map((row) => row.assigned_to).filter((id): id is string => Boolean(id)))
+  );
+  const canEvaluate = new Map<string, boolean>();
+  if (assignees.length > 0) {
+    const [{ data: profiles }, { data: roleRows }] = await Promise.all([
+      supabase.from("profiles").select("id, does_evaluations").in("id", assignees),
+      supabase.from("profile_roles").select("profile_id, role_name").in("profile_id", assignees),
+    ]);
+    const rolesOf = new Map<string, string[]>();
+    for (const role of roleRows ?? []) {
+      const list = rolesOf.get(role.profile_id) ?? [];
+      list.push(role.role_name);
+      rolesOf.set(role.profile_id, list);
+    }
+    for (const profile of profiles ?? []) {
+      canEvaluate.set(
+        profile.id,
+        canDoEvaluations(rolesOf.get(profile.id) ?? [], profile.does_evaluations)
+      );
+    }
+  }
+
   const all: BoardEvaluation[] = rows.map((row) => ({
     jobId: row.id,
     jobNumber: row.job_number,
@@ -88,6 +119,7 @@ export async function getEvaluationBoard(): Promise<EvaluationBoard> {
     assignedToId: row.assigned_to,
     assignedToName: row.profiles?.full_name || row.profiles?.email || null,
     hasProposal: withProposals.has(row.id),
+    assigneeDoesEvaluations: row.assigned_to == null ? null : canEvaluate.get(row.assigned_to) ?? null,
   }));
 
   return {
@@ -97,6 +129,7 @@ export async function getEvaluationBoard(): Promise<EvaluationBoard> {
     submitted: inState(all, "submitted", now),
     counts: stateCounts(all, now),
     owners: byOwner(all, now),
+    misassigned: misassigned(all, now),
     now,
   };
 }

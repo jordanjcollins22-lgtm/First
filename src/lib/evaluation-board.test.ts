@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   byOwner,
   daysWaiting,
+  misassigned,
   inState,
   stateCounts,
   stateOf,
@@ -23,6 +24,7 @@ function evaluation(over: Partial<BoardEvaluation> = {}): BoardEvaluation {
     assignedToId: "p1",
     assignedToName: "Jace",
     hasProposal: false,
+    assigneeDoesEvaluations: true,
     ...over,
   };
 }
@@ -194,5 +196,61 @@ describe("what each account manager owes", () => {
 
   it("leaves out the ones already submitted, which nobody owes anything on", () => {
     expect(byOwner([evaluation({ hasProposal: true })], NOW)).toEqual([]);
+  });
+});
+
+describe("evaluations parked on somebody who does not do them", () => {
+  it("names one sitting on a crew member", () => {
+    // Not late, lost. The person holding it was never going to write it up,
+    // and it ages quietly in the owed pile looking exactly like real work.
+    const found = misassigned(
+      [
+        evaluation({ jobId: "crew", assignedToName: "Shalon", assigneeDoesEvaluations: false }),
+        evaluation({ jobId: "fine", assignedToName: "Jace", assigneeDoesEvaluations: true }),
+      ],
+      NOW
+    );
+    expect(found.map((e) => e.jobId)).toEqual(["crew"]);
+  });
+
+  it("catches an upcoming one too, while there is still time to move it", () => {
+    const found = misassigned(
+      [
+        evaluation({
+          jobId: "soon",
+          at: "2026-09-20T12:00:00Z",
+          assigneeDoesEvaluations: false,
+        }),
+      ],
+      NOW
+    );
+    expect(found).toHaveLength(1);
+  });
+
+  it("says nothing about an unassigned one, which has its own pile", () => {
+    const found = misassigned(
+      [evaluation({ assignedToId: null, assignedToName: null, assigneeDoesEvaluations: null })],
+      NOW
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("says nothing once it is submitted, since nobody owes anything on it", () => {
+    const found = misassigned(
+      [evaluation({ hasProposal: true, assigneeDoesEvaluations: false })],
+      NOW
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("puts the longest-waiting one first", () => {
+    const found = misassigned(
+      [
+        evaluation({ jobId: "recent", at: "2026-09-08T12:00:00Z", assigneeDoesEvaluations: false }),
+        evaluation({ jobId: "old", at: "2026-08-01T12:00:00Z", assigneeDoesEvaluations: false }),
+      ],
+      NOW
+    );
+    expect(found.map((e) => e.jobId)).toEqual(["old", "recent"]);
   });
 });

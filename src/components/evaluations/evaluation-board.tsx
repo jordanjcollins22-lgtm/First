@@ -40,6 +40,32 @@ export function EvaluationBoardView({ board }: { board: EvaluationBoard }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Louder than the late list, and above it. A late write-up is somebody
+          being busy; this is an evaluation that will never be written, because
+          the person holding it does not visit properties. */}
+      {board.misassigned.length > 0 && (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-3">
+          <h3 className="text-sm font-semibold">
+            {board.misassigned.length} assigned to somebody who doesn&apos;t do evaluations
+          </h3>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {board.misassigned.map((evaluation) => (
+              <li key={evaluation.jobId} className="text-xs">
+                <Link href={`/jobs/${evaluation.jobId}`} className="underline">
+                  {evaluation.customerName ?? "No name"}
+                </Link>{" "}
+                is on {evaluation.assignedToName ?? "somebody"}
+                {(() => {
+                  const waiting = daysWaiting(evaluation, board.now);
+                  return waiting != null && waiting > 0 ? `, ${waiting} days now` : "";
+                })()}
+                . Reassign it or it never gets written.
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {board.owners.some((owner) => owner.owed > 0) && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
           <h3 className="text-sm font-semibold">Who owes a write-up</h3>
@@ -53,6 +79,7 @@ export function EvaluationBoardView({ board }: { board: EvaluationBoard }) {
                   {owner.owed} to submit
                   {owner.oldestDays != null && `, the oldest ${owner.oldestDays} days ago`}
                   {owner.upcoming > 0 && `, and ${owner.upcoming} coming up`}
+                  {owner.doesEvaluations === false && " — doesn't do evaluations"}
                 </li>
               ))}
           </ul>

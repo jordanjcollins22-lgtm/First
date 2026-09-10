@@ -1694,6 +1694,7 @@ export interface Database {
           commission_pct: number | null;
           affiliate_slug: string | null;
           is_affiliate: boolean;
+          does_evaluations: boolean | null;
           phone: string | null;
           created_at: string;
           updated_at: string;

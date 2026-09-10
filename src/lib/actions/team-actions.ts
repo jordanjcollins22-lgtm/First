@@ -378,3 +378,35 @@ export async function updateTeamMemberDetails(
     return { ok: false, message: err instanceof Error ? err.message : "Something went wrong." };
   }
 }
+
+/**
+ * Say whether somebody can be sent to a property.
+ *
+ * Null puts them back on their role names, which is where everybody started
+ * and where anybody who has not thought about it should stay. True and false
+ * are a decision, and they beat whatever the role happens to be called --
+ * because "admin" is a real answer to what somebody is and no answer at all to
+ * whether they visit houses.
+ */
+export async function setDoesEvaluations(input: {
+  profileId: string;
+  value: boolean | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const caller = await getCurrentProfile();
+  if (!caller?.roles.includes("admin")) {
+    return { ok: false, error: "Only an admin can change who does evaluations." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ does_evaluations: input.value })
+    .eq("id", input.profileId)
+    .eq("organization_id", caller.organization_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/team");
+  revalidatePath("/dashboard");
+  revalidatePath("/evaluations");
+  return { ok: true };
+}

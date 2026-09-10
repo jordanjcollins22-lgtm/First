@@ -42,7 +42,13 @@ export function canSeeMoney(roles: string[]): boolean {
  * Role names are free text an org defines itself, so this matches loosely:
  * "Evaluator", "evaluator", "Account Manager" and "account_manager" all count.
  */
-export function canDoEvaluations(roles: string[]): boolean {
+export function canDoEvaluations(roles: string[], explicit?: boolean | null): boolean {
+  // Somebody who has actually thought about it wins. Role names are free text
+  // an organisation invents for itself, so they will never reliably answer
+  // "can this person be sent to a house" -- the owner here does half the
+  // evaluations and is only ever going to be called "admin", and a crew member
+  // had one sitting on him for a month.
+  if (explicit != null) return explicit;
   return isEvaluator(roles) || isAccountManager(roles);
 }
 

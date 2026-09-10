@@ -233,6 +233,15 @@ export interface Profile {
   affiliate_slug: string | null;
   /** Granted by an admin — gives them their own booking link. */
   is_affiliate: boolean;
+  /**
+   * Whether they can be booked for an evaluation.
+   *
+   * Null falls back to the role names, which is what it used to be inferred
+   * from entirely. True and false are somebody having decided, and win --
+   * because "admin" is a real answer to what somebody is called and no answer
+   * at all to whether they visit properties.
+   */
+  does_evaluations: boolean | null;
   phone: string | null;
   /** Licence details only matter for people who drive for the business. */
   drives_for_company: boolean;
