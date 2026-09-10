@@ -23,6 +23,16 @@ export interface CommentBrief {
   note: string;
   /** The group or neighbourhood, for tone rather than for content. */
   where: string;
+  /**
+   * How many days ago it was posted, when the screenshot said.
+   *
+   * The opener turns on this and nothing else. Told outright rather than left
+   * to be judged from the picture, because "3d" in grey text at the top of a
+   * screenshot is exactly the sort of thing a reader skips, and getting it
+   * wrong means opening "if you haven't gotten this taken care of yet" under
+   * a post from an hour ago.
+   */
+  ageDays?: number | null;
 }
 
 /**
@@ -67,6 +77,18 @@ export function commentBrief(brief: CommentBrief): string {
   const lines = ["Here is the post. Write the comment."];
   if (brief.where.trim()) lines.push(`It was posted in: ${brief.where.trim()}`);
   if (brief.note.trim()) lines.push(`What we know about it: ${brief.note.trim()}`);
+
+  const age = brief.ageDays;
+  if (typeof age === "number") {
+    lines.push(
+      age <= 0
+        ? "It was posted today, so use the plain opener."
+        : age === 1
+          ? "It was posted yesterday, so use the plain opener."
+          : `It was posted ${age} days ago, so open with "If you haven't gotten this taken care of yet".`
+    );
+  }
+
   return lines.join("\n");
 }
 

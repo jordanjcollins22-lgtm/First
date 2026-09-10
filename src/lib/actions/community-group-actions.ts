@@ -2,12 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import Anthropic from "@anthropic-ai/sdk";
-
 import { createClient } from "@/lib/supabase/server";
-import { env, isAnthropicConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
-import { readTriage, triageBrief, triageSystemPrompt } from "@/lib/group-triage";
+import { readPostFromScreenshot } from "@/lib/data/read-post";
 import {
   GROUP_PLATFORMS,
   POST_KINDS,
@@ -191,79 +188,48 @@ export async function triagePost(input: {
   const blockWords = group.block_words ?? [];
   const local = triageLocally(input.pastedText, { blockWords, services });
 
-  const fallback: TriageReading = {
-    kind: local.kind,
-    service: local.service,
-    urgency: local.urgency,
-    author: null,
-    summary: "",
-    matchedWords: local.matchedWords,
-    readByModel: false,
-  };
+  if (!input.pastedText.trim() && !input.screenshotPath) {
+    return fail("Paste the post, or add a screenshot of it.");
+  }
 
-  const hasText = input.pastedText.trim().length > 0;
-  if (!hasText && !input.screenshotPath) return fail("Paste the post, or add a screenshot of it.");
-  if (!isAnthropicConfigured) return { ok: true, value: fallback };
+  const read = await readPostFromScreenshot({
+    screenshotPath: input.screenshotPath,
+    pastedText: input.pastedText,
+    note: input.note,
+    groupName: group.name,
+    services,
+    blockWords,
+  });
 
-  try {
-    const content: Anthropic.ContentBlockParam[] = [];
-
-    if (input.screenshotPath) {
-      const { data: file } = await supabase.storage
-        .from("recommendation-shots")
-        .download(input.screenshotPath);
-      if (file) {
-        const type =
-          file.type === "image/png" || file.type === "image/webp" ? file.type : "image/jpeg";
-        content.push({
-          type: "image",
-          source: { type: "base64", media_type: type, data: Buffer.from(await file.arrayBuffer()).toString("base64") },
-        });
-      }
-    }
-
-    content.push({ type: "text", text: triageBrief({ pastedText: input.pastedText, note: input.note }) });
-
-    const client = new Anthropic({ apiKey: env.anthropicApiKey });
-    const response = await client.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 800,
-      thinking: { type: "adaptive" },
-      // Sorting is a smaller job than writing the reply, and it runs on every
-      // post rather than the ones somebody chose to answer.
-      output_config: { effort: "low" },
-      system: triageSystemPrompt({ groupName: group.name, services, blockWords }),
-      messages: [{ role: "user", content }],
-    });
-
-    if (response.stop_reason === "refusal") return { ok: true, value: fallback };
-
-    const raw = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
-
-    const read = readTriage(raw, services);
-    if (!read) return { ok: true, value: fallback };
-
+  if (!read) {
     return {
       ok: true,
       value: {
-        kind: read.kind,
-        service: read.service,
-        urgency: read.urgency,
-        author: read.author,
-        summary: read.summary,
-        // Both readings, because a phrase the keyword list caught is a phrase
-        // the group's own rules name, and that is the one worth quoting back.
-        matchedWords: Array.from(new Set([...local.matchedWords, ...read.matchedWords])),
-        readByModel: true,
+        kind: local.kind,
+        service: local.service,
+        urgency: local.urgency,
+        author: null,
+        summary: "",
+        matchedWords: local.matchedWords,
+        readByModel: false,
       },
     };
-  } catch (err) {
-    console.error("group triage failed:", err);
-    return { ok: true, value: fallback };
   }
+
+  return {
+    ok: true,
+    value: {
+      kind: read.kind,
+      service: read.service,
+      urgency: read.urgency,
+      author: read.author,
+      summary: read.summary,
+      // Both readings, because a phrase the keyword list caught is a phrase
+      // the group's own rules name, and that is the one worth quoting back.
+      matchedWords: Array.from(new Set([...local.matchedWords, ...read.matchedWords])),
+      readByModel: true,
+    },
+  };
 }
 
 /** File a post, however it was sorted. */

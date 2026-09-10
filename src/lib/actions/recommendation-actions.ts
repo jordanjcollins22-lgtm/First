@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { commentBrief, commentSystemPrompt, finishComment, looksUsable } from "@/lib/comment-prompt";
 import { getCurrentProfile } from "@/lib/data/team";
+import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import {
@@ -50,6 +51,72 @@ export async function createShotUpload(input: {
   const { data, error } = await supabase.storage.from("recommendation-shots").createSignedUploadUrl(path);
   if (error || !data) return { ok: false, error: error?.message ?? "Couldn't get a place to put it." };
   return { ok: true, path: data.path, token: data.token };
+}
+
+export type ReadResult =
+  | {
+      ok: true;
+      platform: Platform | null;
+      groupName: string | null;
+      askedBy: string | null;
+      note: string;
+      ageDays: number | null;
+      /** False when the post is an advert or ordinary chatter, not a lead. */
+      worthAnswering: boolean;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Read the screenshot and fill the form in.
+ *
+ * The form used to ask for the platform, the group, who asked and what they
+ * want, which is four things to type standing in somebody's garden. Three of
+ * them are already in the picture: the group is written across the top, the
+ * name is beside the profile picture, and the app is obvious from the chrome
+ * around it. So the picture is read and the boxes come back filled, leaving a
+ * person to correct rather than compose.
+ *
+ * Everything it returns is editable afterwards. A group name read slightly
+ * wrong is a tally split in two, so the person who was there gets the last
+ * word — but they get it by glancing at a filled box rather than typing into
+ * an empty one.
+ */
+export async function readRecommendationScreenshot(input: {
+  screenshotPath: string;
+}): Promise<ReadResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isAnthropicConfigured) {
+    return { ok: false, error: "Reading screenshots isn't set up on this site yet." };
+  }
+
+  const services = await activeServiceNames(profile.organization_id);
+  const read = await readPostFromScreenshot({
+    screenshotPath: input.screenshotPath,
+    pastedText: "",
+    note: "",
+    // Left empty on purpose: this is somebody else's group, so the picture is
+    // the only thing that knows its name.
+    groupName: "",
+    services,
+    blockWords: [],
+  });
+
+  if (!read) return { ok: false, error: "Couldn't read that one. Fill it in and carry on." };
+
+  // The service where the post named one, because that is the word a proposal
+  // gets built from, and the sentence otherwise.
+  const note = [read.service, read.summary].filter(Boolean).join(" — ");
+
+  return {
+    ok: true,
+    platform: read.platform,
+    groupName: read.groupName,
+    askedBy: read.author,
+    note,
+    ageDays: read.ageDays,
+    worthAnswering: read.kind === "request",
+  };
 }
 
 /**
@@ -144,6 +211,8 @@ export async function draftCommentFromScreenshot(input: {
   link: string;
   groupName: string;
   note: string;
+  /** How old the post is, from the reading. Decides the opener. */
+  ageDays: number | null;
 }): Promise<CommentResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -182,6 +251,7 @@ export async function draftCommentFromScreenshot(input: {
                 businessName: organization.name,
                 note: input.note,
                 where: input.groupName,
+                ageDays: input.ageDays,
               }),
             },
           ],

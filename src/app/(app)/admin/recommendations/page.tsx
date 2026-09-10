@@ -33,9 +33,10 @@ export default async function RecommendationsPage() {
       <header>
         <h1 className="text-xl font-semibold">Recommendations</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Somebody asked for a landscaper in a group. Record where you saw it and you get a link that is
-          yours and belongs to that one reply, with wording to paste. Anything that comes of it lands
-          against you and against that group.
+          Somebody asked for a landscaper in a group. Screenshot it and the rest fills itself in: the
+          group, who asked and what they want are read straight off the picture. You get a link that
+          is yours and belongs to that one reply, and a comment written for that exact post. Anything
+          that comes of it lands against you and against that group.
         </p>
       </header>
 
