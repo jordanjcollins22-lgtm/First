@@ -15,6 +15,9 @@ import { ReceivedPanel } from "@/components/payments/received-panel";
 import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
 import { RecordPaymentPanel } from "@/components/payments/record-payment-panel";
 import { PaymentsHealthBanner } from "@/components/payments/payments-health-banner";
+import { DebtPlanPanel } from "@/components/payments/debt-plan-panel";
+import { getDebtInputs } from "@/lib/data/debt-plan";
+import { planDebt } from "@/lib/debt-plan";
 import { paymentsHealthFor } from "@/lib/data/payments-health";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { respondedMoment } from "@/lib/proposal-accepted";
@@ -116,6 +119,15 @@ export default async function PaymentsPage({
             label: "Received",
             content: await ReceivedTab(),
           },
+          // What is owed and what to pay, in one place. Card debt, wages and
+          // unpaid invoices lived on three screens that never met, which is
+          // how a card ends up over its limit while there is money in the
+          // current account.
+          {
+            key: "debt",
+            label: "Debt & plan",
+            content: await DebtTab(isAdmin || !!profile?.roles.includes("overhead")),
+          },
           // Hours are money: this is what the day cost in wages, and the only
           // honest input to what a job cost. Admin only — correcting a logged
           // time is not something the person who logged it should do.
@@ -180,4 +192,36 @@ async function TimeTab(searchParams: Promise<{ day?: string }>) {
   ]);
 
   return <Timesheet entries={entries} people={people} day={day} />;
+}
+
+/**
+ * What is owed, and what to pay out of what has arrived.
+ *
+ * Read on its own and allowed to fail on its own: it talks to the bank feed
+ * and to Stripe, and neither should be able to take the Money page down.
+ */
+async function DebtTab(canEdit: boolean) {
+  const inputs = await getDebtInputs().catch((err) => {
+    console.error("Debt plan failed to load:", err);
+    return null;
+  });
+
+  if (!inputs) {
+    return (
+      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
+        Couldn&apos;t read the accounts. Check the bank links under Money and try again.
+      </p>
+    );
+  }
+
+  return (
+    <DebtPlanPanel
+      plan={planDebt(inputs.cards, inputs.cash)}
+      cards={inputs.cards}
+      cash={inputs.cash}
+      balancesAt={inputs.balancesAt}
+      missing={inputs.missing}
+      canEdit={canEdit}
+    />
+  );
 }

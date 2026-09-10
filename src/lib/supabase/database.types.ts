@@ -1195,6 +1195,10 @@ export interface Database {
           currency: string | null;
           balance_at: string | null;
           include: boolean;
+          credit_limit: number | null;
+          apr: number | null;
+          minimum_payment: number | null;
+          payment_due_day: number | null;
           created_at: string;
           updated_at: string;
         };
