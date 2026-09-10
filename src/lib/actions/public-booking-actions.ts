@@ -10,6 +10,7 @@ import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
+import { ensureClientAccount } from "@/lib/data/client-accounts";
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -226,6 +227,11 @@ export async function submitPublicBooking(
   // They've just become a client — take them off the cold-prospect list now
   // rather than at the next nightly sweep.
   await reconcileProspects(admin).catch(() => null);
+
+  // And give them a way back in. No password: they ask for a code when they
+  // want to see their quote again, instead of hunting for our email. Carries
+  // no organization, so the signup trigger gives it no staff access at all.
+  await ensureClientAccount({ customerId, email }).catch(() => null);
 
   return { jobId: job.id, mode: mode.mode };
 }

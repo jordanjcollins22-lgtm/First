@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
+import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
@@ -33,6 +35,21 @@ export const viewport = {
   userScalable: true,
 };
 
+/**
+ * Whether anybody is signed in at all.
+ *
+ * Told apart from "signed in as staff" so a client with an account is sent to
+ * their own page while a stranger with no session is left to the middleware,
+ * which sends them to sign in.
+ */
+async function isSignedIn(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return Boolean(user);
+}
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let userEmail: string | null = null;
   let roles: string[] = [];
@@ -45,6 +62,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Supabase on the critical path of every single page, for an email address
     // the profile already carries.
     const realProfile = await getRealProfile();
+
+    // Signed in with no profile is a client, not a member of staff. Every
+    // guard below would refuse them one page at a time and bounce them to the
+    // next, so they are sent to their own corner once, here. This is the only
+    // place that knows the difference before a page starts refusing things.
+    if (!realProfile && (await isSignedIn())) redirect("/my");
+
     userEmail = realProfile?.email ?? null;
     if (realProfile) {
       const [profile, org] = await Promise.all([

@@ -50,6 +50,7 @@ export interface Database {
       customers: {
         Row: {
           id: string;
+          auth_user_id: string | null;
           unsubscribe_token: string | null;
           stripe_customer_id: string | null;
           organization_id: string;
