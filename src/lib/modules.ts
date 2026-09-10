@@ -129,7 +129,7 @@ export const MODULES: readonly AppModule[] = [
       { key: "map", label: "Map", tabs: ["project-data"], blurb: "The county, the houses, the zones and the routes." },
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "Prospects, targets, coverage and the playbooks." },
       { key: "print", label: "Print", tabs: ["door-hangers", "signs", "flyer"], blurb: "Door hangers, the neighbourhood sign, the flyer and its ad squares." },
-      { key: "content", label: "Content", tabs: ["social", "recommendations"], blurb: "Before and after posts from the crew's own photos, and replies to people asking for a landscaper." },
+      { key: "content", label: "Content", tabs: ["social", "recommendations"], blurb: "Before and after posts from the crew's own photos, and a tracked link on every post, comment and message that goes out." },
       // The groups the business runs, rather than the ones it answers posts
       // in. Next to Content because it is the same job on the other side of
       // the fence: one is replying in somebody else's group, this is owning

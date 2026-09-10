@@ -309,7 +309,7 @@ async function knownReferralCode(
   const wanted = (code ?? "").trim().toLowerCase();
   if (!wanted || wanted.length > 32) return null;
   const { data } = await admin
-    .from("recommendations")
+    .from("outreach_links")
     .select("code")
     .eq("organization_id", organizationId)
     .eq("code", wanted)

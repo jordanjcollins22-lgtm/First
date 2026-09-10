@@ -82,7 +82,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "kits", label: "Kit Checklists", href: "/admin/tools/kits", parent: "tools" },
   { key: "reminders", label: "Client Reminders", href: "/admin/reminders", parent: "tools" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
-  { key: "recommendations", label: "Recommendations", href: "/admin/recommendations" },
+  { key: "recommendations", label: "Link Tracking", href: "/admin/outreach" },
   { key: "groups", label: "Local Groups", href: "/admin/groups" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
   { key: "signs", label: "Neighborhood Sign", href: "/admin/marketing/poster" },

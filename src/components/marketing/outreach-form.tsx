@@ -11,16 +11,19 @@ import {
   createShotUpload,
   draftCommentFromScreenshot,
   readRecommendationScreenshot,
-  recordRecommendation,
-} from "@/lib/actions/recommendation-actions";
+  recordOutreach,
+} from "@/lib/actions/outreach-link-actions";
 import {
+  goesToOnePerson,
   groupWordFor,
   MAX_SHOT_BYTES,
+  OUTREACH_KINDS,
   PLATFORMS,
   SHOT_TYPES,
+  type OutreachKind,
   type Platform,
   type PostDraft,
-} from "@/lib/recommendations";
+} from "@/lib/outreach-links";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -42,9 +45,11 @@ import { createClient } from "@/lib/supabase/client";
  * group can be counted, and a code somebody typed themselves would be a code
  * nothing recorded.
  */
-export function RecommendationForm() {
+export function OutreachForm() {
+  const [kind, setKind] = useState<OutreachKind>("comment");
   const [platform, setPlatform] = useState<Platform>("facebook");
   const [groupName, setGroupName] = useState("");
+  const [fromPage, setFromPage] = useState("");
   const [askedBy, setAskedBy] = useState("");
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -172,7 +177,16 @@ export function RecommendationForm() {
         screenshotPath = slot.path;
       }
 
-      const outcome = await recordRecommendation({ platform, groupName, askedBy, note, screenshotPath });
+      const outcome = await recordOutreach({
+        kind,
+        platform,
+        audience: groupName,
+        fromPage,
+        sentTo: askedBy,
+        service: "",
+        note,
+        screenshotPath,
+      });
       if (!outcome.ok) return setError(outcome.error);
       setResult({ link: outcome.link, drafts: outcome.drafts });
 
@@ -200,8 +214,8 @@ export function RecommendationForm() {
         <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
           <p className="text-sm font-semibold">Recorded. Here&apos;s what to paste.</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            This link is yours and belongs to this one reply, so anything that comes of it lands against
-            you and against this group.
+            This link is yours and belongs to this one post. Every open is counted against it, so you
+            find out whether the room even clicks, not just whether anybody booked.
           </p>
         </div>
 
@@ -241,6 +255,7 @@ export function RecommendationForm() {
             setGroupName("");
             setAskedBy("");
             setNote("");
+            filled.current = { groupName: "", askedBy: "", note: "" };
           }}
         >
           Record another
@@ -287,6 +302,27 @@ export function RecommendationForm() {
       {!reading && readNote && <p className="text-xs text-muted-foreground">{readNote}</p>}
 
       <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium">What carried the link?</span>
+        <div className="flex flex-wrap gap-1.5">
+          {OUTREACH_KINDS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setKind(option.key)}
+              className={cn(
+                "min-h-9 rounded-full border px-3 text-xs",
+                kind === option.key
+                  ? "border-primary bg-primary/10 font-medium text-primary"
+                  : "border-border text-muted-foreground hover:bg-accent"
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium">Where was it?</span>
         <div className="flex flex-wrap gap-1.5">
           {PLATFORMS.map((option) => (
@@ -322,12 +358,32 @@ export function RecommendationForm() {
         />
       </label>
 
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium">
-          Who asked? <span className="font-normal text-muted-foreground">First name is plenty</span>
-        </span>
-        <Input value={askedBy} onChange={(e) => setAskedBy(e.target.value)} className="h-10" />
-      </label>
+      {!goesToOnePerson(kind) && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">
+            Posted from{" "}
+            <span className="font-normal text-muted-foreground">
+              Which of our pages or accounts. Worth counting once posts go out on a schedule.
+            </span>
+          </span>
+          <Input
+            value={fromPage}
+            onChange={(e) => setFromPage(e.target.value)}
+            placeholder="JS Landscaping MD page"
+            className="h-10"
+          />
+        </label>
+      )}
+
+      {goesToOnePerson(kind) && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">
+            Who was it sent to?{" "}
+            <span className="font-normal text-muted-foreground">First name is plenty</span>
+          </span>
+          <Input value={askedBy} onChange={(e) => setAskedBy(e.target.value)} className="h-10" />
+        </label>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium">

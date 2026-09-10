@@ -6,7 +6,7 @@ import { stripeClient } from "@/lib/stripe-customer";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
 import { dollars, passExpiry } from "@/lib/community-groups";
-import { makeCode } from "@/lib/recommendations";
+import { makeCode } from "@/lib/outreach-links";
 
 /**
  * A local business paying to post in one of our groups.

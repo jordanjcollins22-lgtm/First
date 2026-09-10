@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { createShotUpload } from "@/lib/actions/recommendation-actions";
-import { MAX_SHOT_BYTES, SHOT_TYPES } from "@/lib/recommendations";
+import { createShotUpload } from "@/lib/actions/outreach-link-actions";
+import { MAX_SHOT_BYTES, SHOT_TYPES } from "@/lib/outreach-links";
 import { POST_KINDS, URGENCIES, type PostKind, type Urgency } from "@/lib/community-groups";
 import {
   recordGroupPost,

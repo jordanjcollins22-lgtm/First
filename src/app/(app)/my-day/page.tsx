@@ -197,7 +197,7 @@ async function OfficeDay() {
           remembers it exists. Put where everybody starts their day rather
           than four taps into a marketing menu. */}
       <Link
-        href="/admin/recommendations"
+        href="/admin/outreach"
         className="mb-6 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3 transition-colors hover:bg-primary/10"
       >
         <MessageSquarePlus className="h-5 w-5 shrink-0 text-primary" />

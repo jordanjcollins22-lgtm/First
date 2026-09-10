@@ -2505,27 +2505,51 @@ export interface Database {
           },
         ];
       };
-      recommendations: {
+      outreach_links: {
         Row: {
           id: string;
           organization_id: string;
           profile_id: string;
           code: string;
+          kind: string;
           platform: string;
-          group_name: string | null;
-          asked_by: string | null;
+          audience: string | null;
+          from_page: string | null;
+          sent_to: string | null;
+          service: string | null;
           screenshot_path: string | null;
           note: string | null;
+          click_count: number;
+          first_click_at: string | null;
+          last_click_at: string | null;
+          responded_at: string | null;
+          response: string | null;
+          response_note: string | null;
           posted_at: string;
           created_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["recommendations"]["Row"]> & {
+        Insert: Partial<Database["public"]["Tables"]["outreach_links"]["Row"]> & {
           organization_id: string;
           profile_id: string;
           code: string;
           platform: string;
         };
-        Update: Partial<Database["public"]["Tables"]["recommendations"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["outreach_links"]["Row"]>;
+        Relationships: [];
+      };
+      outreach_clicks: {
+        Row: {
+          id: string;
+          organization_id: string;
+          link_id: string;
+          clicked_at: string;
+          source: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_clicks"]["Row"]> & {
+          organization_id: string;
+          link_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_clicks"]["Row"]>;
         Relationships: [];
       };
       kit_containers: {

@@ -14,13 +14,17 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import {
   draftPosts,
   makeCode,
-  recommendationLink,
+  trackedLink,
   MAX_SHOT_BYTES,
+  OUTREACH_KINDS,
   PLATFORMS,
+  RESPONSES,
   SHOT_TYPES,
+  type OutreachKind,
+  type OutreachResponse,
   type Platform,
   type PostDraft,
-} from "@/lib/recommendations";
+} from "@/lib/outreach-links";
 
 export type RecordResult =
   | { ok: true; code: string; link: string; drafts: PostDraft[] }
@@ -137,10 +141,16 @@ export async function readRecommendationScreenshot(input: {
  * is not an admin task, and an affiliate who cannot record their own reply is
  * an affiliate who stops making them.
  */
-export async function recordRecommendation(input: {
+export async function recordOutreach(input: {
+  kind: OutreachKind;
   platform: Platform;
-  groupName: string;
-  askedBy: string;
+  /** The group, neighbourhood, subreddit or feed it landed in. */
+  audience: string;
+  /** Which of our pages or accounts it went out from, on a post of ours. */
+  fromPage: string;
+  /** Who it was aimed at, where it was aimed at one person. */
+  sentTo: string;
+  service: string;
   note: string;
   screenshotPath: string | null;
 }): Promise<RecordResult> {
@@ -149,15 +159,16 @@ export async function recordRecommendation(input: {
   if (!PLATFORMS.some((p) => p.key === input.platform)) {
     return { ok: false, error: "Pick where you saw it." };
   }
+  if (!OUTREACH_KINDS.some((k) => k.key === input.kind)) {
+    return { ok: false, error: "Say what carried the link." };
+  }
 
   const supabase = await createClient();
-  const [organization, baseUrl, orgSlug] = await Promise.all([
+  const [organization, baseUrl] = await Promise.all([
     getCurrentOrganization(),
     outboundBaseUrl(),
-    // The link has to name the business or it resolves to nobody. Minted here
-    // rather than assumed: an organisation that never opened the booking
-    // settings screen has no slug, and that is not the affiliate's problem to
-    // discover in a stranger's Facebook thread.
+    // Minted now rather than at click time, so the first stranger to open the
+    // link is not the one who finds out the business never had a slug.
     bookingSlug().catch(() => null),
   ]);
 
@@ -165,25 +176,27 @@ export async function recordRecommendation(input: {
   // The column is unique, so a clash is a rejected insert and not a duplicate.
   let code = makeCode();
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const { error } = await supabase.from("recommendations").insert({
+    const { error } = await supabase.from("outreach_links").insert({
       organization_id: profile.organization_id,
       profile_id: profile.id,
       code,
+      kind: input.kind,
       platform: input.platform,
-      group_name: input.groupName.trim() || null,
-      asked_by: input.askedBy.trim().slice(0, 80) || null,
+      audience: input.audience.trim() || null,
+      from_page: input.fromPage.trim().slice(0, 120) || null,
+      sent_to: input.sentTo.trim().slice(0, 80) || null,
+      service: input.service.trim().slice(0, 120) || null,
       note: input.note.trim().slice(0, 500) || null,
       screenshot_path: input.screenshotPath,
     });
 
     if (!error) {
-      revalidatePath("/admin/recommendations");
-      const link = recommendationLink({
-        baseUrl,
-        orgSlug,
-        affiliateSlug: profile.affiliate_slug ?? null,
-        code,
-      });
+      revalidatePath("/admin/outreach");
+      // Short, and through our own route, so every open is counted. Where it
+      // lands is worked out at click time from the code, so a link already
+      // pasted into somebody else's thread keeps working when the destination
+      // changes underneath it.
+      const link = trackedLink(baseUrl, code);
       return {
         ok: true,
         code,
@@ -297,4 +310,40 @@ export async function draftCommentFromScreenshot(input: {
     console.error("comment draft failed:", err);
     return { ok: false, error: "Couldn't read that post. The wordings below still work." };
   }
+}
+
+/**
+ * What came back from the person, said by the person who asked.
+ *
+ * Nothing can see a reply on Facebook. Guessing would be worse than asking: a
+ * lead marked ignored because a scraper missed a comment is a lead nobody ever
+ * follows up. So this is one tap, next to the thing it is about.
+ *
+ * Clearing it is allowed, because the first answer is often "no reply" and the
+ * second, three days later, is "they replied".
+ */
+export async function recordResponse(input: {
+  id: string;
+  response: OutreachResponse | null;
+  note: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (input.response !== null && !RESPONSES.some((r) => r.key === input.response)) {
+    return { ok: false, error: "That isn't one of the answers." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("outreach_links")
+    .update({
+      response: input.response,
+      responded_at: input.response ? new Date().toISOString() : null,
+      response_note: input.response ? input.note.trim().slice(0, 300) || null : null,
+    })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/outreach");
+  return { ok: true };
 }

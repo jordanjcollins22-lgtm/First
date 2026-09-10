@@ -21,7 +21,7 @@
  */
 
 import type { PostKind, Urgency } from "@/lib/community-groups";
-import { PLATFORMS, type Platform } from "@/lib/recommendations";
+import { PLATFORMS, type Platform } from "@/lib/outreach-links";
 
 export interface PostReading {
   kind: PostKind;

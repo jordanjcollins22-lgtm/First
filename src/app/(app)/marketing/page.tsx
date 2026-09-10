@@ -8,7 +8,7 @@ import LeadsPage from "@/app/(app)/leads/page";
 import DoorHangersPage from "@/app/(app)/admin/door-hangers/page";
 import FlyerPage from "@/app/(app)/admin/flyer/page";
 import SocialPage from "@/app/(app)/admin/social/page";
-import RecommendationsPage from "@/app/(app)/admin/recommendations/page";
+import OutreachPage from "@/app/(app)/admin/outreach/page";
 import { AttributionPanel } from "@/components/marketing/attribution-panel";
 import { attributionReport } from "@/lib/data/attribution";
 
@@ -55,7 +55,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
           ? {
               content: (
                 <div className="space-y-8">
-                  {recommendations && <RecommendationsPage />}
+                  {recommendations && <OutreachPage />}
                   {content && <SocialPage />}
                 </div>
               ),

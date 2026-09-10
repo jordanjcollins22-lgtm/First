@@ -96,7 +96,7 @@ async function resolveByRecommendation(
   code: string
 ): Promise<BookingContext | null> {
   const { data: recommendation } = await admin
-    .from("recommendations")
+    .from("outreach_links")
     .select("organization_id, profile_id")
     .eq("code", code)
     .maybeSingle();
