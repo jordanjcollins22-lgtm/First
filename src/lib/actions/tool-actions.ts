@@ -296,6 +296,32 @@ export async function setToolOnOrder(id: string, onOrder: boolean) {
   revalidatePath("/canvas");
 }
 
+/**
+ * How many of a tool belong in one kit.
+ *
+ * Stored only where it is not one, because one of each is the normal case and
+ * a row of ones is a row of ones to keep correct. Setting it back to one
+ * removes the entry rather than writing it, so the column holds exceptions and
+ * nothing else.
+ *
+ * Read-modify-write on a JSON column, which is a race if two people edit the
+ * same tool in the same second. They are not going to.
+ */
+export async function updateToolKitQuantity(id: string, kit: number, quantity: number) {
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("tools").select("kit_quantities").eq("id", id).maybeSingle();
+
+  const next: Record<string, number> = { ...((existing?.kit_quantities ?? {}) as Record<string, number>) };
+  const n = Math.round(Number(quantity));
+  if (Number.isFinite(n) && n > 1) next[String(kit)] = Math.min(99, n);
+  else delete next[String(kit)];
+
+  const { error } = await supabase.from("tools").update({ kit_quantities: next }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/admin/tools");
+  revalidatePath("/admin/tools/kits");
+}
+
 export async function updateToolKits(id: string, kits: number[]) {
   const supabase = await createClient();
   const { error } = await supabase.from("tools").update({ kits }).eq("id", id);

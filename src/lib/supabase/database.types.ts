@@ -2063,6 +2063,7 @@ export interface Database {
           purchase_url: string | null;
           how_to_url: string | null;
           description: string | null;
+          kit_quantities: Record<string, number>;
           reorder_threshold: number | null;
           on_order: boolean;
           not_owned_reason: string | null;

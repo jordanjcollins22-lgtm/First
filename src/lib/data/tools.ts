@@ -29,7 +29,7 @@ export async function listKitTools(): Promise<KitTool[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tools")
-    .select("id, name, description, image_path, how_to_url, storage_location, quantity, kits, active")
+    .select("id, name, description, image_path, how_to_url, storage_location, quantity, kits, kit_quantities, active")
     .eq("active", true)
     .order("name");
   if (error) throw error;
@@ -43,6 +43,7 @@ export async function listKitTools(): Promise<KitTool[]> {
     storageLocation: row.storage_location ?? null,
     quantity: row.quantity ?? null,
     kits: (row.kits ?? []) as number[],
+    kitQuantities: (row.kit_quantities ?? {}) as Record<string, number>,
   }));
 }
 

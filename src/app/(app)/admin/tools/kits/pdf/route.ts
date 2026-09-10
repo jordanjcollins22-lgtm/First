@@ -12,18 +12,19 @@ import {
   MARGIN,
   PAGE_HEIGHT,
   PAGE_WIDTH,
-  PHOTO,
   QR,
   ROW_GAP,
-  ROW_HEIGHT,
   columns,
   contentDisposition,
   countLabel,
+  kitQuantity,
+  layoutFor,
   paginate,
   sheetsFor,
   whereLabel,
   type KitSheet,
   type KitTool,
+  type Layout,
 } from "@/lib/kit-sheet";
 
 /**
@@ -72,7 +73,13 @@ export async function GET(request: Request) {
 
   // Every photo on every sheet, fetched once. A tool in two kits is embedded
   // once and drawn twice.
-  const photos = await loadPhotos(pdf, sheets.flatMap((sheet) => sheet.tools));
+  // The biggest box any sheet will draw a photo in, so one fetch serves them
+  // all at a size that is never scaled up.
+  const widest = sheets.reduce((biggest, sheet) => {
+    const layout = layoutFor(sheet.tools.length);
+    return Math.max(biggest, layout.photoWidth, layout.photoHeight);
+  }, 0);
+  const photos = await loadPhotos(pdf, sheets.flatMap((sheet) => sheet.tools), widest);
   const codes = qrCodes(sheets.flatMap((sheet) => sheet.tools));
 
   const printedOn = new Date().toLocaleDateString("en-US", {
@@ -83,10 +90,15 @@ export async function GET(request: Request) {
   });
 
   for (const sheet of sheets) {
-    const pages = paginate(sheet.tools);
+    // Worked out per kit: a kit of two gets rows three times the height of a
+    // kit of fifteen, because it has the page to spare and the photograph is
+    // the part somebody actually reads.
+    const layout = layoutFor(sheet.tools.length);
+    const pages = paginate(sheet.tools, layout.rowsPerPage);
     pages.forEach((toolsOnPage, index) => {
       drawPage(pdf, {
         sheet,
+        layout,
         tools: toolsOnPage,
         page: index + 1,
         pages: pages.length,
@@ -114,6 +126,7 @@ export async function GET(request: Request) {
 
 interface PageInput {
   sheet: KitSheet;
+  layout: Layout;
   tools: KitTool[];
   page: number;
   pages: number;
@@ -132,7 +145,7 @@ function drawPage(pdf: PDFDocument, input: PageInput) {
   const ink = rgb(0.1, 0.1, 0.1);
 
   const anyHowTo = input.tools.some((tool) => tool.howToUrl);
-  const col = columns(anyHowTo);
+  const col = columns(anyHowTo, input.layout.photoWidth);
 
   // ------------------------------------------------------------- the header
   let y = PAGE_HEIGHT - MARGIN;
@@ -183,7 +196,7 @@ function drawPage(pdf: PDFDocument, input: PageInput) {
   }
 
   for (const tool of input.tools) {
-    y -= ROW_GAP + ROW_HEIGHT;
+    y -= ROW_GAP + input.layout.rowHeight;
     drawRow(page, tool, left, y, col, input);
   }
 
@@ -210,7 +223,8 @@ function drawRow(
   col: ReturnType<typeof columns>,
   input: PageInput
 ) {
-  const top = bottom + ROW_HEIGHT;
+  const { rowHeight, photoWidth, photoHeight } = input.layout;
+  const top = bottom + rowHeight;
   const grey = rgb(0.42, 0.42, 0.42);
 
   // The box, big enough to tick with a gloved hand and a biro.
@@ -227,26 +241,31 @@ function drawRow(
   // printing fault; this reads as a job somebody can go and do.
   const photo = input.photos.get(tool.id);
   const photoX = left + col.photo;
-  const photoY = top - PHOTO;
+  const photoY = top - photoHeight;
   if (photo) {
-    // Fitted inside the square rather than filled, so a long-handled tool is
+    // Fitted inside the box rather than filling it, so a long-handled tool is
     // still recognisable instead of cropped to its shaft.
-    const scale = Math.min(PHOTO / photo.width, PHOTO / photo.height);
+    const scale = Math.min(photoWidth / photo.width, photoHeight / photo.height);
     const w = photo.width * scale;
     const h = photo.height * scale;
-    page.drawImage(photo, { x: photoX + (PHOTO - w) / 2, y: photoY + (PHOTO - h) / 2, width: w, height: h });
+    page.drawImage(photo, {
+      x: photoX + (photoWidth - w) / 2,
+      y: photoY + (photoHeight - h) / 2,
+      width: w,
+      height: h,
+    });
   } else {
     page.drawRectangle({
       x: photoX,
       y: photoY,
-      width: PHOTO,
-      height: PHOTO,
+      width: photoWidth,
+      height: photoHeight,
       borderColor: rgb(0.85, 0.85, 0.85),
       borderWidth: 0.7,
     });
     page.drawText("no photo", {
-      x: photoX + 7,
-      y: photoY + PHOTO / 2 - 3,
+      x: photoX + photoWidth / 2 - 14,
+      y: photoY + photoHeight / 2 - 3,
       size: 6.5,
       font: input.plain,
       color: rgb(0.62, 0.62, 0.62),
@@ -255,7 +274,7 @@ function drawRow(
 
   // The name, and how many of it when that is not one.
   const textX = left + col.text;
-  const count = countLabel(tool.quantity);
+  const count = countLabel(kitQuantity(tool, input.sheet.kit));
   const nameWidth = col.textWidth - (count ? 34 : 0);
   const name = truncate(latin1(tool.name), nameWidth, (line) =>
     input.bold.widthOfTextAtSize(line, FONT.name)
@@ -301,10 +320,10 @@ function drawRow(
 
   const code = input.codes.get(tool.id);
   if (code) {
-    drawQr(page, code, left + col.qr, bottom + (ROW_HEIGHT - QR) / 2, QR);
+    drawQr(page, code, left + col.qr, bottom + (rowHeight - QR) / 2, QR);
     page.drawText("how to", {
       x: left + col.qr + 8,
-      y: bottom + (ROW_HEIGHT - QR) / 2 - 7,
+      y: bottom + (rowHeight - QR) / 2 - 7,
       size: 6,
       font: input.plain,
       color: rgb(0.6, 0.6, 0.6),
@@ -319,8 +338,12 @@ function drawRow(
  * take, and a PDF holds one thing. A photo that will not load leaves a marked
  * empty box rather than taking the sheet down with it.
  */
-async function loadPhotos(pdf: PDFDocument, tools: KitTool[]): Promise<Map<string, PDFImage>> {
-  const side = Math.round(PHOTO * PIXELS_PER_POINT);
+async function loadPhotos(
+  pdf: PDFDocument,
+  tools: KitTool[],
+  boxPoints: number
+): Promise<Map<string, PDFImage>> {
+  const side = Math.round(Math.max(60, boxPoints) * PIXELS_PER_POINT);
   const wanted = tools
     .filter((tool) => tool.imagePath)
     .filter((tool, i, all) => all.findIndex((other) => other.id === tool.id) === i);

@@ -27,16 +27,29 @@ export const HEADER_HEIGHT = 62;
 /** Room at the foot for the page number and the line about what to do. */
 export const FOOTER_HEIGHT = 22;
 
-/** One tool's row. Tall enough for a photograph somebody can recognise. */
-export const ROW_HEIGHT = 62;
+/**
+ * How tall a row may be, and how short.
+ *
+ * The floor is legibility: below this a photograph is a thumbnail and the
+ * point of having one is gone. The ceiling stops a two-tool kit printing two
+ * enormous pictures with half a page of white under each.
+ */
+export const MIN_ROW_HEIGHT = 62;
+export const MAX_ROW_HEIGHT = 190;
 export const ROW_GAP = 6;
 
+/** How many pages a kit should try to stay within: one sheet, both sides. */
+export const TARGET_PAGES = 2;
+
 export const CHECKBOX = 15;
-export const PHOTO = 50;
 /** Between the box, the photograph, the words, and the code. */
 export const COLUMN_GAP = 10;
 /** The square the how-to code is drawn in, when a tool has a link. */
 export const QR = 44;
+/** Photographs are boxed wider than tall: a shovel is a long thin thing. */
+export const PHOTO_ASPECT = 1.9;
+/** However tall the row, a photograph stops widening here. */
+export const MAX_PHOTO_WIDTH = 210;
 
 export const FONT = {
   kit: 17,
@@ -57,9 +70,17 @@ export interface KitTool {
   howToUrl: string | null;
   /** Where it lives when it is not in the van. */
   storageLocation: string | null;
-  /** How many of it belong in the kit. Null reads as one. */
+  /** How many we own altogether. Not how many go in a kit. */
   quantity: number | null;
   kits: number[];
+  /**
+   * How many belong in each kit, keyed by kit number.
+   *
+   * Only the exceptions. We own three flat shovels and the kit takes one, so
+   * an absent entry means one — which is the normal case and not worth
+   * writing down for every tool in every kit.
+   */
+  kitQuantities?: Record<string, number>;
 }
 
 export interface KitSheet {
@@ -67,6 +88,60 @@ export interface KitSheet {
   kit: number | null;
   title: string;
   tools: KitTool[];
+}
+
+/**
+ * How one kit's sheet is laid out, worked out from how much is in it.
+ *
+ * A fixed row height wastes the page. A kit of two tools got the same
+ * postage-stamp photograph as a kit of fifteen, on a sheet that was three
+ * quarters empty — and the photograph is the part somebody actually uses to
+ * tell one shovel from another.
+ *
+ * So the rows grow to fill whatever is there. The fewest pages that still
+ * leave a row legible, then the tallest row those pages allow, then the
+ * biggest photograph that row allows.
+ */
+export interface Layout {
+  rowsPerPage: number;
+  rowHeight: number;
+  photoWidth: number;
+  photoHeight: number;
+  pages: number;
+}
+
+/** The height on a page that rows can actually occupy. */
+export function contentHeight(): number {
+  return PAGE_HEIGHT - 2 * MARGIN - HEADER_HEIGHT - FOOTER_HEIGHT;
+}
+
+export function layoutFor(count: number): Layout {
+  const room = contentHeight();
+  const tools = Math.max(1, count);
+
+  // Try one page, then two, and only spill past that when a kit is too big
+  // for a row on two pages to still be worth looking at.
+  let pages = 1;
+  let perPage = tools;
+  while (heightFor(room, perPage) < MIN_ROW_HEIGHT && pages < TARGET_PAGES) {
+    pages += 1;
+    perPage = Math.ceil(tools / pages);
+  }
+  while (heightFor(room, perPage) < MIN_ROW_HEIGHT && perPage > 1) {
+    // Past the target: keep the rows legible and take the pages it needs.
+    perPage -= 1;
+    pages = Math.ceil(tools / perPage);
+  }
+
+  const rowHeight = Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, heightFor(room, perPage)));
+  const photoHeight = Math.max(30, rowHeight - 8);
+  const photoWidth = Math.min(MAX_PHOTO_WIDTH, photoHeight * PHOTO_ASPECT);
+
+  return { rowsPerPage: perPage, rowHeight, photoWidth, photoHeight, pages };
+}
+
+function heightFor(room: number, perPage: number): number {
+  return (room + ROW_GAP) / Math.max(1, perPage) - ROW_GAP;
 }
 
 /** Where each column starts, measured from the page's left margin. */
@@ -79,25 +154,19 @@ export interface Columns {
 }
 
 /**
- * The columns, worked out from the page rather than typed in.
+ * The columns, worked out from the page and the photograph's width.
  *
- * The text column takes whatever is left, which is what stops a longer photo
- * or a wider code silently pushing a tool's name off the edge.
+ * The text column takes whatever is left, which is what stops a bigger
+ * photograph silently pushing a tool's name off the edge of the page.
  */
-export function columns(hasAnyHowTo: boolean): Columns {
+export function columns(hasAnyHowTo: boolean, photoWidth: number): Columns {
   const checkbox = 0;
   const photo = checkbox + CHECKBOX + COLUMN_GAP;
-  const text = photo + PHOTO + COLUMN_GAP;
+  const text = photo + photoWidth + COLUMN_GAP;
   const usable = PAGE_WIDTH - 2 * MARGIN;
   const qr = usable - QR;
-  const textWidth = (hasAnyHowTo ? qr - COLUMN_GAP : usable) - text;
+  const textWidth = Math.max(90, (hasAnyHowTo ? qr - COLUMN_GAP : usable) - text);
   return { checkbox, photo, text, textWidth, qr };
-}
-
-/** How many tool rows fit on one page. */
-export function rowsPerPage(): number {
-  const room = PAGE_HEIGHT - 2 * MARGIN - HEADER_HEIGHT - FOOTER_HEIGHT;
-  return Math.max(1, Math.floor((room + ROW_GAP) / (ROW_HEIGHT + ROW_GAP)));
 }
 
 /**
@@ -107,10 +176,10 @@ export function rowsPerPage(): number {
  * worth printing — it says the kit exists and nothing has been put in it,
  * which is different from the kit not being on the pile at all.
  */
-export function paginate(tools: KitTool[], perPage = rowsPerPage()): KitTool[][] {
+export function paginate(tools: KitTool[], perPage = layoutFor(tools.length).rowsPerPage): KitTool[][] {
   if (tools.length === 0) return [[]];
   const pages: KitTool[][] = [];
-  for (let i = 0; i < tools.length; i += perPage) pages.push(tools.slice(i, i + perPage));
+  for (let i = 0; i < tools.length; i += Math.max(1, perPage)) pages.push(tools.slice(i, i + perPage));
   return pages;
 }
 
@@ -177,10 +246,26 @@ export function sheetsFor(tools: KitTool[], want: string | null): KitSheet[] {
   }));
 }
 
+/**
+ * How many of this tool belong in this kit.
+ *
+ * One unless somebody has said otherwise. This used to be the number we own,
+ * which is a different fact: three flat shovels in the shop, one in the kit,
+ * and a checklist saying "× 3" sends somebody looking for two that were never
+ * in the van.
+ */
+export function kitQuantity(tool: KitTool, kit: number | null): number {
+  // The full-inventory sheet is not a kit, so there it is what we own.
+  if (kit == null) return Math.max(1, Math.round(tool.quantity ?? 1));
+  const raw = tool.kitQuantities?.[String(kit)];
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 /** How many of it, said only when it is more than one. */
 export function countLabel(quantity: number | null): string | null {
   const n = quantity ?? 1;
-  return n > 1 ? `× ${n}` : null;
+  return n > 1 ? `\u00d7 ${n}` : null;
 }
 
 /** Where it goes back to, or an honest blank. */

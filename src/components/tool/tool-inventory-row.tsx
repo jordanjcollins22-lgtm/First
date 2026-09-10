@@ -15,6 +15,7 @@ import { ToolOwnershipSelect } from "./tool-ownership-select";
 import { ToolCategorySelect } from "./tool-category-select";
 import { ToolStorageLocationInput } from "./tool-storage-location-input";
 import { ToolDescriptionInput } from "./tool-description-input";
+import { ToolKitQuantities } from "./tool-kit-quantities";
 import { ToolVideoLinkInput } from "@/components/service-pricing/tool-video-link-input";
 import { ToolShopLocationInput } from "./tool-shop-location-input";
 import { ToolPurchaseLinkInput } from "./tool-purchase-link-input";
@@ -131,6 +132,18 @@ export function ToolInventoryRow({
                 <span className="text-xs text-muted-foreground">Photo</span>
                 <ToolImageUpload toolId={tool.id} imagePath={tool.image_path} />
               </div>
+              {/* How many go in each kit, which is not how many we own. Only
+                  shown for kits this tool is actually in. */}
+              {tool.kits.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted-foreground">How many per kit</span>
+                  <ToolKitQuantities
+                    toolId={tool.id}
+                    kits={tool.kits}
+                    quantities={tool.kit_quantities}
+                  />
+                </div>
+              )}
               {/* Wide, because it is a sentence. It is the line the kit sheet
                   prints under the name for somebody who has never held this. */}
               <div className="flex min-w-64 flex-1 flex-col gap-1.5">

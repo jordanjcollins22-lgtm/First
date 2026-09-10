@@ -6,11 +6,14 @@ import {
   countLabel,
   fileNameFor,
   kitNumbers,
+  kitQuantity,
+  layoutFor,
   MARGIN,
-  PAGE_HEIGHT,
+  MAX_ROW_HEIGHT,
+  MIN_ROW_HEIGHT,
   PAGE_WIDTH,
   paginate,
-  rowsPerPage,
+  TARGET_PAGES,
   sheetsFor,
   toolsInKit,
   toolsInNoKit,
@@ -28,6 +31,7 @@ function tool(name: string, over: Partial<KitTool> = {}): KitTool {
     storageLocation: null,
     quantity: null,
     kits: [],
+    kitQuantities: {},
     ...over,
   };
 }
@@ -126,24 +130,77 @@ describe("choosing what to print", () => {
   });
 });
 
-describe("splitting a kit over pages", () => {
-  it("fits a useful number of tools on a sheet", () => {
-    expect(rowsPerPage()).toBeGreaterThanOrEqual(8);
-    expect(rowsPerPage()).toBeLessThanOrEqual(12);
+describe("how big the rows can be", () => {
+  it("fits a small kit on one page with room to spare per tool", () => {
+    const layout = layoutFor(2);
+    expect(layout.pages).toBe(1);
+    expect(layout.rowHeight).toBeGreaterThan(MIN_ROW_HEIGHT * 2);
   });
 
+  it("gives a fifteen-tool kit two pages rather than cramming or sprawling", () => {
+    // The real Kit 1. One sheet, both sides, which is what was asked for.
+    const layout = layoutFor(15);
+    expect(layout.pages).toBe(2);
+    expect(layout.rowsPerPage).toBe(8);
+  });
+
+  it("makes the rows on a small kit much taller than on a big one", () => {
+    // A kit of two used to get the same postage stamp as a kit of fifteen, on
+    // a sheet that was three quarters empty.
+    expect(layoutFor(3).rowHeight).toBeGreaterThan(layoutFor(15).rowHeight * 2);
+  });
+
+  it("never draws a row too short to see the photograph in", () => {
+    for (const count of [1, 2, 5, 15, 16, 30, 48, 200]) {
+      expect(layoutFor(count).rowHeight, `${count} tools`).toBeGreaterThanOrEqual(MIN_ROW_HEIGHT);
+    }
+  });
+
+  it("caps the row, so two tools are not two enormous pictures", () => {
+    expect(layoutFor(1).rowHeight).toBeLessThanOrEqual(MAX_ROW_HEIGHT);
+  });
+
+  it("keeps a page's rows inside the page", () => {
+    for (const count of [1, 2, 4, 8, 15, 40]) {
+      const layout = layoutFor(count);
+      const used = layout.rowsPerPage * (layout.rowHeight + 6) - 6;
+      expect(used, `${count} tools`).toBeLessThanOrEqual(792 - 2 * MARGIN - 62 - 22 + 1e-6);
+    }
+  });
+
+  it("takes more than two pages only when a kit is too big for two", () => {
+    expect(layoutFor(15).pages).toBeLessThanOrEqual(TARGET_PAGES);
+    // Forty tools cannot be legible over two sides, so it spills rather than
+    // shrinking the photographs into uselessness.
+    expect(layoutFor(40).pages).toBeGreaterThan(TARGET_PAGES);
+  });
+
+  it("grows the photograph with the row", () => {
+    expect(layoutFor(3).photoHeight).toBeGreaterThan(layoutFor(15).photoHeight);
+    for (const count of [1, 3, 8, 15, 40]) {
+      const layout = layoutFor(count);
+      expect(layout.photoHeight).toBeLessThan(layout.rowHeight);
+      expect(layout.photoWidth).toBeGreaterThan(0);
+    }
+  });
+
+  it("makes even the tightest photograph bigger than the old fixed one", () => {
+    // Fifteen tools is the worst case and it still beats the fifty-point
+    // square that everything used to get.
+    expect(layoutFor(15).photoHeight).toBeGreaterThan(50);
+  });
+});
+
+describe("splitting a kit over pages", () => {
   it("never drops a tool off the end", () => {
     const many = Array.from({ length: 25 }, (_, i) => tool(`Tool ${i}`));
     expect(paginate(many).flat()).toHaveLength(25);
   });
 
   it("fills each page before starting the next", () => {
-    const perPage = rowsPerPage();
-    const many = Array.from({ length: perPage + 1 }, (_, i) => tool(`Tool ${i}`));
-    const pages = paginate(many);
-    expect(pages).toHaveLength(2);
-    expect(pages[0]).toHaveLength(perPage);
-    expect(pages[1]).toHaveLength(1);
+    const perPage = layoutFor(16).rowsPerPage;
+    const many = Array.from({ length: 16 }, (_, i) => tool(`Tool ${i}`));
+    expect(paginate(many, perPage)[0]).toHaveLength(perPage);
   });
 
   it("still prints a page for an empty kit", () => {
@@ -153,17 +210,45 @@ describe("splitting a kit over pages", () => {
   });
 });
 
+describe("how many of it belong in the kit", () => {
+  const shovel = tool("Flat Shovel", { quantity: 3, kits: [1, 2], kitQuantities: { "2": 2 } });
+
+  it("is one unless somebody has said otherwise", () => {
+    // We own three. The kit takes one. Printing "x 3" beside a kit holding one
+    // sends somebody looking for two that were never in the van.
+    expect(kitQuantity(shovel, 1)).toBe(1);
+  });
+
+  it("takes the number set for that kit", () => {
+    expect(kitQuantity(shovel, 2)).toBe(2);
+  });
+
+  it("counts each kit separately", () => {
+    expect(kitQuantity(shovel, 1)).not.toBe(kitQuantity(shovel, 2));
+  });
+
+  it("falls back to one for rubbish", () => {
+    expect(kitQuantity(tool("x", { kits: [1], kitQuantities: { "1": 0 } }), 1)).toBe(1);
+    expect(kitQuantity(tool("y", { kits: [1] }), 1)).toBe(1);
+  });
+
+  it("uses what we own on the full inventory, which is not a kit", () => {
+    expect(kitQuantity(shovel, null)).toBe(3);
+    expect(kitQuantity(tool("z"), null)).toBe(1);
+  });
+});
+
 describe("the columns across a row", () => {
   it("keeps everything inside the margins", () => {
     for (const hasHowTo of [true, false]) {
-      const c = columns(hasHowTo);
+      const c = columns(hasHowTo, 120);
       expect(c.checkbox).toBeGreaterThanOrEqual(0);
       expect(c.text + c.textWidth).toBeLessThanOrEqual(PAGE_WIDTH - 2 * MARGIN + 1e-9);
     }
   });
 
   it("runs left to right: box, photograph, words", () => {
-    const c = columns(true);
+    const c = columns(true, 120);
     expect(c.checkbox).toBeLessThan(c.photo);
     expect(c.photo).toBeLessThan(c.text);
     expect(c.text).toBeLessThan(c.qr);
@@ -172,11 +257,14 @@ describe("the columns across a row", () => {
   it("gives the words the space the codes are not using", () => {
     // Nothing has a how-to link yet, and until something does the names and
     // descriptions should have the whole width rather than a gap held open.
-    expect(columns(false).textWidth).toBeGreaterThan(columns(true).textWidth);
+    expect(columns(false, 120).textWidth).toBeGreaterThan(columns(true, 120).textWidth);
   });
 
-  it("leaves room on the page for a header and a footer", () => {
-    expect(rowsPerPage() * 68).toBeLessThan(PAGE_HEIGHT - 2 * MARGIN);
+  it("narrows the words when the photograph grows, rather than running off the page", () => {
+    const wide = columns(true, 210);
+    const narrow = columns(true, 60);
+    expect(wide.textWidth).toBeLessThan(narrow.textWidth);
+    expect(wide.text + wide.textWidth).toBeLessThanOrEqual(PAGE_WIDTH - 2 * MARGIN + 1e-9);
   });
 });
 

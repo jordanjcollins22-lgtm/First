@@ -380,6 +380,8 @@ export interface Tool {
   how_to_url: string | null;
   /** One line on what it is for, printed on the kit checklist. */
   description: string | null;
+  /** How many belong in each kit, keyed by kit number. Absent means one. */
+  kit_quantities: Record<string, number>;
   reorder_threshold: number | null;
   on_order: boolean;
   not_owned_reason: string | null;
