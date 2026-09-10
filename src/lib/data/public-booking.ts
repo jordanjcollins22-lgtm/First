@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { canDoEvaluations } from "@/lib/affiliate-roles";
 import type { BookedTime } from "@/lib/booking-availability";
 import type { BookedNearby } from "@/lib/booking-recommendation";
 import { embeddedOne } from "@/lib/postgrest";
@@ -13,11 +14,24 @@ export interface BookingContext {
   dedicatedEvaluatorId: string | null;
 }
 
-/** Resolves the public /book link: ?ref=<personal affiliate slug> books with (or is
- * attributed to) that person; ?org=<org slug> is the org's own general/ad link. */
+/**
+ * Resolves the public /book link.
+ *
+ * `?ref=<personal affiliate slug>` books with, or is attributed to, that
+ * person; `?org=<org slug>` is the business's own general link; and `?rec=` is
+ * the code on one posted recommendation.
+ *
+ * The last of those is a fallback rather than a route in its own right, and it
+ * exists because links get shared and then outlive whatever they named. A
+ * recommendation code already knows which business it belongs to and who
+ * posted it, so a link carrying nothing else is still answerable -- including
+ * every link that went out before the org slug was put on them, which are in
+ * strangers' Facebook threads and cannot be edited.
+ */
 export async function resolveBookingContext(params: {
   ref?: string;
   org?: string;
+  rec?: string;
 }): Promise<BookingContext | null> {
   const admin = createAdminClient();
 
@@ -28,7 +42,11 @@ export async function resolveBookingContext(params: {
       .eq("affiliate_slug", params.ref)
       .maybeSingle();
     if (error) throw error;
-    if (!profile) return null;
+    // A referrer who has left, or a slug that was regenerated, must not take
+    // the whole link down with it. The organisation on the same link is still
+    // a perfectly good answer to "whose calendar is this", and the booking
+    // simply arrives with nobody credited rather than not arriving.
+    if (!profile) return fallback(admin, params);
 
     const [{ data: roleRows, error: roleError }, { data: org, error: orgError }] = await Promise.all([
       admin.from("profile_roles").select("role_name").eq("profile_id", profile.id),
@@ -36,31 +54,87 @@ export async function resolveBookingContext(params: {
     ]);
     if (roleError) throw roleError;
     if (orgError) throw orgError;
-    if (!org) return null;
+    if (!org) return fallback(admin, params);
 
+    // Their own link books with them, whichever of the two roles they hold.
+    // An account manager handing out a link and then not being offered on it
+    // is the link doing the opposite of what they handed it out for.
     const roles = (roleRows ?? []).map((r) => r.role_name);
-    const isEvaluator = roles.some((r) => r.toLowerCase().trim() === "evaluator");
 
     return {
       organizationId: org.id,
       organizationName: org.name,
       referredByProfileId: profile.id,
-      dedicatedEvaluatorId: isEvaluator ? profile.id : null,
+      dedicatedEvaluatorId: canDoEvaluations(roles) ? profile.id : null,
     };
   }
 
-  if (params.org) {
-    const { data: org, error } = await admin
-      .from("organizations")
-      .select("id, name")
-      .eq("slug", params.org)
-      .maybeSingle();
-    if (error) throw error;
-    if (!org) return null;
-    return { organizationId: org.id, organizationName: org.name, referredByProfileId: null, dedicatedEvaluatorId: null };
-  }
+  return fallback(admin, params);
+}
 
+/** The organisation, then the recommendation code, then nothing. */
+async function fallback(
+  admin: ReturnType<typeof createAdminClient>,
+  params: { org?: string; rec?: string }
+): Promise<BookingContext | null> {
+  if (params.org) {
+    const byOrg = await resolveByOrg(admin, params.org);
+    if (byOrg) return byOrg;
+  }
+  if (params.rec) return resolveByRecommendation(admin, params.rec);
   return null;
+}
+
+/**
+ * The business behind one posted reply.
+ *
+ * Credits whoever posted it, which is the same person the code already counts
+ * the booking against, so a link with nothing but a code on it loses nothing.
+ */
+async function resolveByRecommendation(
+  admin: ReturnType<typeof createAdminClient>,
+  code: string
+): Promise<BookingContext | null> {
+  const { data: recommendation } = await admin
+    .from("recommendations")
+    .select("organization_id, profile_id")
+    .eq("code", code)
+    .maybeSingle();
+  if (!recommendation) return null;
+
+  const { data: org } = await admin
+    .from("organizations")
+    .select("id, name")
+    .eq("id", recommendation.organization_id)
+    .maybeSingle();
+  if (!org) return null;
+
+  return {
+    organizationId: org.id,
+    organizationName: org.name,
+    referredByProfileId: recommendation.profile_id,
+    dedicatedEvaluatorId: null,
+  };
+}
+
+/** The business by its public slug, with nobody credited for the referral. */
+async function resolveByOrg(
+  admin: ReturnType<typeof createAdminClient>,
+  slug: string
+): Promise<BookingContext | null> {
+  const { data: org, error } = await admin
+    .from("organizations")
+    .select("id, name")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!org) return null;
+  return {
+    organizationId: org.id,
+    organizationName: org.name,
+    referredByProfileId: null,
+    dedicatedEvaluatorId: null,
+  };
 }
 
 export interface PublicService {
@@ -105,7 +179,7 @@ export async function listOrgEvaluatorIds(organizationId: string): Promise<strin
   }
 
   return profiles
-    .filter((p) => (rolesByProfile.get(p.id) ?? []).some((r) => r.toLowerCase().trim() === "evaluator"))
+    .filter((p) => canDoEvaluations(rolesByProfile.get(p.id) ?? []))
     .map((p) => p.id);
 }
 

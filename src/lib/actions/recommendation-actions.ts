@@ -9,7 +9,7 @@ import { env, isAnthropicConfigured } from "@/lib/env";
 import { commentBrief, commentSystemPrompt, finishComment, looksUsable } from "@/lib/comment-prompt";
 import { getCurrentProfile } from "@/lib/data/team";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
-import { getCurrentOrganization } from "@/lib/data/organizations";
+import { bookingSlug, getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import {
   draftPosts,
@@ -151,7 +151,15 @@ export async function recordRecommendation(input: {
   }
 
   const supabase = await createClient();
-  const [organization, baseUrl] = await Promise.all([getCurrentOrganization(), outboundBaseUrl()]);
+  const [organization, baseUrl, orgSlug] = await Promise.all([
+    getCurrentOrganization(),
+    outboundBaseUrl(),
+    // The link has to name the business or it resolves to nobody. Minted here
+    // rather than assumed: an organisation that never opened the booking
+    // settings screen has no slug, and that is not the affiliate's problem to
+    // discover in a stranger's Facebook thread.
+    bookingSlug().catch(() => null),
+  ]);
 
   // Retried on the tiny chance of a collision, rather than failing on one.
   // The column is unique, so a clash is a rejected insert and not a duplicate.
@@ -170,7 +178,12 @@ export async function recordRecommendation(input: {
 
     if (!error) {
       revalidatePath("/admin/recommendations");
-      const link = recommendationLink({ baseUrl, affiliateSlug: profile.affiliate_slug ?? null, code });
+      const link = recommendationLink({
+        baseUrl,
+        orgSlug,
+        affiliateSlug: profile.affiliate_slug ?? null,
+        code,
+      });
       return {
         ok: true,
         code,

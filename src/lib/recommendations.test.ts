@@ -36,25 +36,52 @@ describe("the code that goes in the link", () => {
 });
 
 describe("the link itself", () => {
-  it("credits the person and identifies the reply", () => {
-    // The first already worked. The second is what lets a group be counted.
+  it("names the business, credits the person and identifies the reply", () => {
     const link = recommendationLink({
       baseUrl: "https://app.jslandscapingmd.com",
+      orgSlug: "js-landscaping-md-00000000",
       affiliateSlug: "b49d3f3c5f",
       code: "kf3mq7z",
     });
+    expect(link).toContain("org=js-landscaping-md-00000000");
     expect(link).toContain("ref=b49d3f3c5f");
     expect(link).toContain("rec=kf3mq7z");
     expect(link).toContain("/book?");
   });
 
-  it("still works for somebody with no affiliate link of their own", () => {
-    const link = recommendationLink({ baseUrl: "https://x.test", affiliateSlug: null, code: "abc2345" });
-    expect(link).toBe("https://x.test/book?rec=abc2345");
+  it("still names the business for somebody with no affiliate link of their own", () => {
+    // This is the one that broke. A link carrying only a reply code names
+    // nobody, so the booking page had nothing to resolve it against and the
+    // person posted "This booking link isn't valid" into a stranger's thread.
+    const link = recommendationLink({
+      baseUrl: "https://x.test",
+      orgSlug: "js-landscaping-md-00000000",
+      affiliateSlug: null,
+      code: "abc2345",
+    });
+    expect(link).toBe("https://x.test/book?org=js-landscaping-md-00000000&rec=abc2345");
+  });
+
+  it("keeps the business on the link as well as the person, not instead of them", () => {
+    // A slug outlives the affiliate. Both on the link means it still opens
+    // after somebody stops being one.
+    const link = recommendationLink({
+      baseUrl: "https://x.test",
+      orgSlug: "acme-1234",
+      affiliateSlug: "b49d3f3c5f",
+      code: "abc2345",
+    });
+    expect(link).toContain("org=acme-1234");
+    expect(link).toContain("ref=b49d3f3c5f");
   });
 
   it("does not double the slash when the base ends in one", () => {
-    const link = recommendationLink({ baseUrl: "https://x.test/", affiliateSlug: null, code: "abc2345" });
+    const link = recommendationLink({
+      baseUrl: "https://x.test/",
+      orgSlug: "acme-1234",
+      affiliateSlug: null,
+      code: "abc2345",
+    });
     expect(link).not.toContain("//book");
   });
 });

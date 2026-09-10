@@ -27,3 +27,44 @@ export const getCurrentOrganization = cache(async function getCurrentOrganizatio
   if (error) throw error;
   return data as unknown as Organization;
 });
+
+/**
+ * The business's public booking slug, minted if it does not exist yet.
+ *
+ * Not gated on being an admin, unlike the settings screen's version. This is
+ * the identity every public link needs, and an affiliate posting a
+ * recommendation cannot be told to go and ask somebody with more permissions
+ * to press a button first -- what they would post instead is a dead link.
+ *
+ * Minting is a no-op when the row already has one, and races are settled by
+ * the unique index rather than by checking first: whichever write lands is the
+ * slug, and the other reads it back.
+ */
+export async function bookingSlug(): Promise<string | null> {
+  const organization = await getCurrentOrganization();
+  if (organization.slug) return organization.slug;
+
+  const base = organization.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  const slug = `${base || "org"}-${organization.id.slice(0, 8)}`;
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("organizations")
+    .update({ slug })
+    .eq("id", organization.id)
+    .is("slug", null);
+  if (error && error.code !== "23505") {
+    console.error("couldn't mint a booking slug:", error);
+  }
+
+  const { data } = await admin
+    .from("organizations")
+    .select("slug")
+    .eq("id", organization.id)
+    .maybeSingle();
+  return data?.slug ?? null;
+}

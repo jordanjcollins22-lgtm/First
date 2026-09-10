@@ -63,17 +63,30 @@ export function makeCode(random: () => number = Math.random): string {
 /**
  * The link that goes in the post.
  *
- * Carries two things: whose recommendation it was, so the right person gets
- * the credit, and which reply it was, so the group can be counted. The first
- * already worked; the second is what this adds.
+ * Carries three things. Which business it is, so the booking page knows whose
+ * calendar to open; whose recommendation it was, so the right person gets the
+ * credit; and which reply it was, so the group can be counted.
+ *
+ * The first of those is not optional, and used to be missing. A link with only
+ * a reply code on it names nobody, and the booking page has nothing to resolve
+ * it against — so anybody without an affiliate link of their own was posting
+ * "This booking link isn't valid" into a stranger's Facebook thread, under the
+ * business's name, as the one thing the whole feature exists to produce.
+ *
+ * The affiliate slug goes on top of the org rather than instead of it. Both on
+ * the link means it still opens after somebody stops being an affiliate, which
+ * is the state a shared link outlives.
  */
 export function recommendationLink(input: {
   baseUrl: string;
+  /** The business's public booking slug. Without it the link resolves to nobody. */
+  orgSlug: string | null;
   affiliateSlug: string | null;
   code: string;
 }): string {
   const base = input.baseUrl.replace(/\/$/, "");
   const params = new URLSearchParams();
+  if (input.orgSlug) params.set("org", input.orgSlug);
   if (input.affiliateSlug) params.set("ref", input.affiliateSlug);
   params.set("rec", input.code);
   return `${base}/book?${params.toString()}`;

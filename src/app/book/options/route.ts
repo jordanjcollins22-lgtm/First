@@ -36,8 +36,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingOpt
 
   const ref = request.nextUrl.searchParams.get("ref") ?? undefined;
   const org = request.nextUrl.searchParams.get("org") ?? undefined;
+  // The last resort. A posted reply's code knows which business it belongs to,
+  // which is what keeps links already pasted into other people's threads
+  // working after whatever else they named has gone.
+  const rec = request.nextUrl.searchParams.get("rec") ?? undefined;
 
-  const context = await resolveBookingContext({ ref, org });
+  const context = await resolveBookingContext({ ref, org, rec });
   if (!context) {
     return answer({ status: "unknown-link" });
   }

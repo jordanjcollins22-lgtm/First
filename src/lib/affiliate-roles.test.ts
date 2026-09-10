@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canDoEvaluations,
   canOverrideGate,
   canSeeMoney,
   isAccountManager,
@@ -97,5 +98,31 @@ describe("who may override a failed gate check", () => {
     expect(canOverrideGate(["crew"])).toBe(false);
     expect(canOverrideGate(["evaluator"])).toBe(false);
     expect(canOverrideGate([])).toBe(false);
+  });
+});
+
+describe("who can be sent to do an evaluation", () => {
+  it("takes an evaluator", () => {
+    expect(canDoEvaluations(["evaluator"])).toBe(true);
+  });
+
+  it("takes an account manager, which is what was broken", () => {
+    // The public booking page offered only the evaluator role's hours. A
+    // business whose evaluator had filled in no availability showed a client a
+    // calendar with nothing on it, while an account manager sat there with
+    // five days free.
+    expect(canDoEvaluations(["account manager"])).toBe(true);
+    expect(canDoEvaluations(["Account_Manager"])).toBe(true);
+  });
+
+  it("does not send the crew, or somebody with no roles at all", () => {
+    expect(canDoEvaluations(["crew"])).toBe(false);
+    expect(canDoEvaluations([])).toBe(false);
+  });
+
+  it("is the same answer as who gets a booking link", () => {
+    for (const roles of [["evaluator"], ["account manager"], ["crew"], ["admin"], []]) {
+      expect(canDoEvaluations(roles)).toBe(qualifiesForAffiliateLink(roles));
+    }
   });
 });

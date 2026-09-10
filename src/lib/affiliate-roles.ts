@@ -30,10 +30,26 @@ export function canSeeMoney(roles: string[]): boolean {
   return roles.some((r) => MONEY_ROLES.includes(normalizeRole(r)));
 }
 
-/** Role names are free text an org defines itself — match loosely so
- * "Evaluator", "evaluator", "Account Manager", "account_manager" all count. */
-export function qualifiesForAffiliateLink(roles: string[]): boolean {
+/**
+ * Who can be sent to do an evaluation.
+ *
+ * Both roles, because both do them -- that was the ask from the start: whoever
+ * has availability gets it, an evaluator or an account manager. The public
+ * booking page used to offer only the evaluator role's hours, so a business
+ * whose evaluator had not filled in a week yet showed a client a calendar with
+ * nothing on it, while an account manager sat there with five days free.
+ *
+ * Role names are free text an org defines itself, so this matches loosely:
+ * "Evaluator", "evaluator", "Account Manager" and "account_manager" all count.
+ */
+export function canDoEvaluations(roles: string[]): boolean {
   return isEvaluator(roles) || isAccountManager(roles);
+}
+
+/** The same two, and deliberately the same answer: somebody who can be booked
+ * is somebody worth handing a link to. */
+export function qualifiesForAffiliateLink(roles: string[]): boolean {
+  return canDoEvaluations(roles);
 }
 
 /**

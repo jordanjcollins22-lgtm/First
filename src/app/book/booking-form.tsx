@@ -70,13 +70,16 @@ export function BookingForm() {
   // cleared when the link changes. Clearing would mean writing state during
   // the effect that starts the next fetch; comparing here means a stale
   // answer simply stops being the current one.
-  const link = `${ref ?? ""}|${org ?? ""}`;
+  const link = `${ref ?? ""}|${org ?? ""}|${rec ?? ""}`;
   const [fetched, setFetched] = useState<{ link: string; result: BookingOptions | "failed" } | null>(null);
 
   useEffect(() => {
     const query = new URLSearchParams();
     if (ref) query.set("ref", ref);
     if (org) query.set("org", org);
+    // Sent as well, because a link may carry nothing else and the code alone
+    // is enough to say whose booking page this is.
+    if (rec) query.set("rec", rec);
 
     fetch(`/book/options?${query.toString()}`, { cache: "no-store" })
       .then((response) => {
@@ -85,7 +88,7 @@ export function BookingForm() {
       })
       .then((result) => setFetched({ link, result }))
       .catch(() => setFetched({ link, result: "failed" }));
-  }, [link, ref, org]);
+  }, [link, ref, org, rec]);
 
   const options = fetched?.link === link ? fetched.result : null;
 
