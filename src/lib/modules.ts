@@ -130,6 +130,11 @@ export const MODULES: readonly AppModule[] = [
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "Prospects, targets, coverage and the playbooks." },
       { key: "print", label: "Print", tabs: ["door-hangers", "signs", "flyer"], blurb: "Door hangers, the neighbourhood sign, the flyer and its ad squares." },
       { key: "content", label: "Content", tabs: ["social", "recommendations"], blurb: "Before and after posts from the crew's own photos, and replies to people asking for a landscaper." },
+      // The groups the business runs, rather than the ones it answers posts
+      // in. Next to Content because it is the same job on the other side of
+      // the fence: one is replying in somebody else's group, this is owning
+      // the group and charging for the adverts.
+      { key: "groups", label: "Local groups", tabs: ["groups"], blurb: "The neighbourhood groups we run, what people asked for in them, and who paid to advertise." },
       // Money the business actually received, traced back to what brought it
       // in -- and, just as plainly, the work that cannot be traced at all.
       { key: "attribution", label: "What worked", tabs: ["project-data", "leads"], blurb: "Where the money came from, and where it honestly cannot be traced." },

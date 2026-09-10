@@ -2528,6 +2528,84 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["recommendations"]["Row"]>;
         Relationships: [];
       };
+      community_groups: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          area: string | null;
+          platform: string;
+          external_url: string | null;
+          member_count: number | null;
+          business_post_cents: number | null;
+          pass_days: number;
+          decline_message: string | null;
+          block_words: string[];
+          archived_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["community_groups"]["Row"]> & {
+          organization_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["community_groups"]["Row"]>;
+        Relationships: [];
+      };
+      group_post_passes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          group_id: string;
+          business_name: string;
+          contact_name: string | null;
+          email: string | null;
+          phone: string | null;
+          code: string;
+          amount_cents: number;
+          status: string;
+          checkout_session_id: string | null;
+          paid_at: string | null;
+          expires_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["group_post_passes"]["Row"]> & {
+          organization_id: string;
+          group_id: string;
+          business_name: string;
+          code: string;
+          amount_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["group_post_passes"]["Row"]>;
+        Relationships: [];
+      };
+      community_group_posts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          group_id: string;
+          kind: string;
+          service: string | null;
+          urgency: string | null;
+          author_name: string | null;
+          summary: string | null;
+          matched_words: string[];
+          posted_text: string | null;
+          screenshot_path: string | null;
+          handled_at: string | null;
+          handled_note: string | null;
+          recommendation_id: string | null;
+          posted_at: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["community_group_posts"]["Row"]> & {
+          organization_id: string;
+          group_id: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["community_group_posts"]["Row"]>;
+        Relationships: [];
+      };
       payments_health: {
         Row: {
           organization_id: string;

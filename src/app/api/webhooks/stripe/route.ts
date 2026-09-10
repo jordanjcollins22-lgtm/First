@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
+import { settleGroupPass } from "@/lib/actions/public-group-pass-actions";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
@@ -99,6 +100,15 @@ async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
   if (flyerBookingId) {
     await placePaidBooking(flyerBookingId).catch((err) =>
       console.error("placePaidBooking failed:", err)
+    );
+  }
+
+  // A business that paid to post in one of our groups. Same reason as the
+  // flyer spot above: the receipt tab is not where the money is confirmed.
+  const groupPassId = session.metadata?.group_pass_id ?? null;
+  if (groupPassId) {
+    await settleGroupPass(groupPassId).catch((err) =>
+      console.error("settleGroupPass failed:", err)
     );
   }
 
