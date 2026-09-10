@@ -2,19 +2,28 @@
 
 import { revalidatePath } from "next/cache";
 
+import Anthropic from "@anthropic-ai/sdk";
+
 import { createClient } from "@/lib/supabase/server";
+import { env, isAnthropicConfigured } from "@/lib/env";
+import { commentBrief, commentSystemPrompt, finishComment, looksUsable } from "@/lib/comment-prompt";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
-import { draftPosts, makeCode, recommendationLink, PLATFORMS, type Platform, type PostDraft } from "@/lib/recommendations";
+import {
+  draftPosts,
+  makeCode,
+  recommendationLink,
+  MAX_SHOT_BYTES,
+  PLATFORMS,
+  SHOT_TYPES,
+  type Platform,
+  type PostDraft,
+} from "@/lib/recommendations";
 
 export type RecordResult =
   | { ok: true; code: string; link: string; drafts: PostDraft[] }
   | { ok: false; error: string };
-
-/** How big a screenshot may be. A phone screenshot is well under this. */
-export const MAX_SHOT_BYTES = 8 * 1024 * 1024;
-export const SHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /**
  * Somewhere to put a screenshot before the record is written.
@@ -109,4 +118,93 @@ export async function recordRecommendation(input: {
   }
 
   return { ok: false, error: "Couldn't get a unique link. Try once more." };
+}
+
+export type CommentResult =
+  | { ok: true; comment: string }
+  | { ok: false; error: string };
+
+/**
+ * Read the post and write the comment.
+ *
+ * The three canned paragraphs could not do the one thing that matters: name
+ * the thing the person actually asked for. A comment about lawns under a post
+ * about a retaining wall is a comment nobody replies to. So the screenshot is
+ * read and the comment written from it, to the rules the owner wrote.
+ *
+ * The link is put in afterwards rather than asked for. A model asked for a URL
+ * will sooner or later invent one, and an invented booking link is worse than
+ * no comment at all.
+ *
+ * Falls back rather than fails: without a key, or when the model returns
+ * something thin, the caller still has the written-by-hand drafts.
+ */
+export async function draftCommentFromScreenshot(input: {
+  screenshotPath: string;
+  link: string;
+  groupName: string;
+  note: string;
+}): Promise<CommentResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isAnthropicConfigured) {
+    return { ok: false, error: "The comment writer isn't set up on this site yet." };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { data: file, error } = await supabase.storage
+      .from("recommendation-shots")
+      .download(input.screenshotPath);
+    if (error || !file) return { ok: false, error: "Couldn't open that screenshot." };
+
+    const type = file.type === "image/png" || file.type === "image/webp" ? file.type : "image/jpeg";
+    const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+
+    const organization = await getCurrentOrganization();
+    const client = new Anthropic({ apiKey: env.anthropicApiKey });
+    const response = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 1200,
+      thinking: { type: "adaptive" },
+      // Reading a screenshot and matching the service asked for is judgement,
+      // not just writing, so this is worth more than the lowest setting.
+      output_config: { effort: "medium" },
+      system: commentSystemPrompt(organization.name),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: type, data: base64 } },
+            {
+              type: "text",
+              text: commentBrief({
+                businessName: organization.name,
+                note: input.note,
+                where: input.groupName,
+              }),
+            },
+          ],
+        },
+      ],
+    });
+
+    if (response.stop_reason === "refusal") {
+      return { ok: false, error: "Couldn't write one for that post." };
+    }
+
+    const raw = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+
+    const comment = finishComment(raw, input.link);
+    if (!looksUsable(comment, input.link)) {
+      return { ok: false, error: "That came back too thin to use. The wordings below still work." };
+    }
+    return { ok: true, comment };
+  } catch (err) {
+    console.error("comment draft failed:", err);
+    return { ok: false, error: "Couldn't read that post. The wordings below still work." };
+  }
 }

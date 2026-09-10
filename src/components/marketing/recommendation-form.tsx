@@ -7,8 +7,19 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { createShotUpload, recordRecommendation, MAX_SHOT_BYTES, SHOT_TYPES } from "@/lib/actions/recommendation-actions";
-import { groupWordFor, PLATFORMS, type Platform, type PostDraft } from "@/lib/recommendations";
+import {
+  createShotUpload,
+  draftCommentFromScreenshot,
+  recordRecommendation,
+} from "@/lib/actions/recommendation-actions";
+import {
+  groupWordFor,
+  MAX_SHOT_BYTES,
+  PLATFORMS,
+  SHOT_TYPES,
+  type Platform,
+  type PostDraft,
+} from "@/lib/recommendations";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -31,6 +42,11 @@ export function RecommendationForm() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ link: string; drafts: PostDraft[] } | null>(null);
+  // Written from the screenshot, and the reason to upload one. Null while it
+  // is being written, and stays null when there was no picture to read.
+  const [comment, setComment] = useState<string | null>(null);
+  const [commentNote, setCommentNote] = useState<string | null>(null);
+  const [writing, setWriting] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function submit() {
@@ -53,6 +69,21 @@ export function RecommendationForm() {
       const outcome = await recordRecommendation({ platform, groupName, askedBy, note, screenshotPath });
       if (!outcome.ok) return setError(outcome.error);
       setResult({ link: outcome.link, drafts: outcome.drafts });
+
+      // The written-by-hand wordings are already on screen, so this can take
+      // its time. Somebody with no screenshot simply uses those.
+      if (screenshotPath) {
+        setWriting(true);
+        const written = await draftCommentFromScreenshot({
+          screenshotPath,
+          link: outcome.link,
+          groupName,
+          note,
+        });
+        setWriting(false);
+        if (written.ok) setComment(written.comment);
+        else setCommentNote(written.error);
+      }
     });
   }
 
@@ -67,6 +98,22 @@ export function RecommendationForm() {
           </p>
         </div>
 
+        {writing && (
+          <div className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Reading the post and writing a comment for it…
+          </div>
+        )}
+
+        {comment && <CopyBlock tone="Written for this post" text={comment} highlight />}
+        {commentNote && <p className="text-xs text-muted-foreground">{commentNote}</p>}
+
+        {(comment || commentNote || !writing) && (
+          <p className="text-xs font-medium text-muted-foreground">
+            {comment ? "Or one of these:" : "Ready to paste:"}
+          </p>
+        )}
+
         {result.drafts.map((draft) => (
           <CopyBlock key={draft.tone} tone={draft.tone} text={draft.text} />
         ))}
@@ -78,6 +125,8 @@ export function RecommendationForm() {
           variant="outline"
           onClick={() => {
             setResult(null);
+            setComment(null);
+            setCommentNote(null);
             setFile(null);
             setGroupName("");
             setAskedBy("");
@@ -137,7 +186,10 @@ export function RecommendationForm() {
 
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium">
-          Screenshot <span className="font-normal text-muted-foreground">Optional, and kept private</span>
+          Screenshot of the post{" "}
+          <span className="font-normal text-muted-foreground">
+            Add one and the comment gets written for this exact post. Kept private.
+          </span>
         </span>
         <div className="flex items-center gap-2">
           <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-border px-3 text-xs text-muted-foreground hover:bg-accent">
@@ -176,13 +228,13 @@ export function RecommendationForm() {
 }
 
 /** One block of text with a button that puts it on the clipboard. */
-function CopyBlock({ tone, text }: { tone: string; text: string }) {
+function CopyBlock({ tone, text, highlight }: { tone: string; text: string; highlight?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className={cn("rounded-lg border p-3", highlight ? "border-primary/50 bg-primary/5" : "border-border")}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-muted-foreground">{tone}</p>
+        <p className={cn("text-xs font-semibold", highlight ? "text-primary" : "text-muted-foreground")}>{tone}</p>
         <Button
           type="button"
           size="sm"

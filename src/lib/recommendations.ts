@@ -15,6 +15,17 @@
  * what came back.
  */
 
+/**
+ * What a screenshot may be, and how big.
+ *
+ * Here rather than beside the action that uses them. A "use server" module may
+ * only export async functions: anything else is rewritten into a reference to
+ * a server action, so a client importing this array got something with no
+ * `.join` on it and the page died on render.
+ */
+export const MAX_SHOT_BYTES = 8 * 1024 * 1024;
+export const SHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
 export type Platform = "facebook" | "nextdoor" | "instagram" | "reddit" | "other";
 
 export const PLATFORMS: { key: Platform; label: string; groupWord: string }[] = [
