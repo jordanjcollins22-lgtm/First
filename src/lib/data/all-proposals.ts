@@ -30,11 +30,12 @@ export type ProposalListProposal = Pick<
   | "scope_snapshot"
   | "generated_at"
   | "responded_at"
+  | "paid_at"
   | "client_response_note"
 >;
 
 const PROPOSAL_COLUMNS =
-  "id, job_id, token, status, total_cost, scope_snapshot, generated_at, responded_at, client_response_note";
+  "id, job_id, token, status, total_cost, scope_snapshot, generated_at, responded_at, paid_at, client_response_note";
 
 /** Everything 0131 created. `requested_via` arrived later, in 0133, so it is
  * asked for separately — a deployment part-way between the two should lose
@@ -75,6 +76,8 @@ export interface ProposalEdit {
 export interface ProposalWithJob {
   proposal: ProposalListProposal;
   job: JobWithLocation;
+  /** What has arrived against this job, counted once. In cents. */
+  collectedCents: number;
   /** How often the client opened it, already worded. Internal only. */
   viewLabel: string;
   /** Opened repeatedly while still unanswered. Worth a phone call. */
@@ -142,6 +145,10 @@ export async function listAllProposals(
     editsByProposal.set(row.proposal_id, list);
   }
 
+  // What has actually come in against each of these jobs. One read per source
+  // for the whole page rather than per row.
+  const collected = await collectedByJob(rows.map(({ job }) => job.id));
+
   // Worded here so the list and the job page can never say it differently.
   const now = new Date();
 
@@ -150,6 +157,7 @@ export async function listAllProposals(
     return {
       proposal,
       job,
+      collectedCents: collected.get(job.id) ?? 0,
       // Same wording as the pipeline card. The same fact reading two ways on
       // two screens is how somebody stops trusting either.
       viewLabel: activityLabel(summary, now),
@@ -198,3 +206,86 @@ type ProposalEditRow = {
   note: string | null;
   requested_via: string | null;
 };
+
+
+/**
+ * What has arrived against each job, in cents, counted once.
+ *
+ * Four routes and one trap. A card payment writes a row in `payments` and
+ * marks its invoice paid, so adding both counts the same money twice and a
+ * half-paid job reads as settled. Payments carry the invoice they settled, so
+ * an invoice already answered for by a payment is skipped rather than added.
+ *
+ * The card surcharge is taken back off. A $4,520 job paid by card arrives as
+ * $4,678.20, and counting the whole would read as the client overpaying.
+ *
+ * Every read is bounded by the job ids on the page, and each is allowed to
+ * fail on its own: a missing table should cost a money line, not the list of
+ * proposals.
+ */
+async function collectedByJob(jobIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (jobIds.length === 0) return out;
+
+  const supabase = await createClient();
+  const add = (jobId: string | null | undefined, cents: number) => {
+    if (!jobId || !Number.isFinite(cents) || cents <= 0) return;
+    out.set(jobId, (out.get(jobId) ?? 0) + Math.round(cents));
+  };
+
+  const safe = async <T>(query: PromiseLike<{ data: T[] | null }>): Promise<T[]> => {
+    try {
+      return (await query).data ?? [];
+    } catch {
+      return [];
+    }
+  };
+
+  const [payments, ledger, invoices, plans] = await Promise.all([
+    safe<{ job_id: string | null; amount_cents: number | null; surcharge_cents: number | null; invoice_id: string | null }>(
+      supabase.from("payments").select("job_id, amount_cents, surcharge_cents, invoice_id").in("job_id", jobIds)
+    ),
+    safe<{ job_id: string | null; amount: number | null }>(
+      supabase.from("ledger_entries").select("job_id, amount").eq("direction", "in").in("job_id", jobIds)
+    ),
+    safe<{ id: string; job_id: string | null; amount: number | null; status: string | null; paid_at: string | null }>(
+      supabase.from("invoices").select("id, job_id, amount, status, paid_at").in("job_id", jobIds)
+    ),
+    safe<{ id: string; job_id: string | null }>(
+      supabase.from("payment_plans").select("id, job_id").in("job_id", jobIds)
+    ),
+  ]);
+
+  const invoicesAlreadyPaidByAPayment = new Set(
+    payments.map((p) => p.invoice_id).filter((id): id is string => Boolean(id))
+  );
+
+  for (const payment of payments) {
+    add(payment.job_id, (payment.amount_cents ?? 0) - (payment.surcharge_cents ?? 0));
+  }
+  for (const entry of ledger) {
+    add(entry.job_id, Math.round((Number(entry.amount) || 0) * 100));
+  }
+  for (const invoice of invoices) {
+    if (!invoice.paid_at && invoice.status !== "paid") continue;
+    if (invoicesAlreadyPaidByAPayment.has(invoice.id)) continue;
+    add(invoice.job_id, Math.round((Number(invoice.amount) || 0) * 100));
+  }
+  // Instalments last, and only for jobs nothing else accounted for. A plan's
+  // instalment is normally settled through the payments table; this catches
+  // one marked paid by hand, or one whose payment never carried a job.
+  const unexplained = plans.filter((plan) => plan.job_id && !out.has(plan.job_id));
+  if (unexplained.length > 0) {
+    const jobByPlan = new Map(unexplained.map((plan) => [plan.id, plan.job_id!]));
+    const paid = await safe<{ plan_id: string; amount_cents: number | null }>(
+      supabase
+        .from("payment_plan_instalments")
+        .select("plan_id, amount_cents")
+        .not("paid_at", "is", null)
+        .in("plan_id", Array.from(jobByPlan.keys()))
+    );
+    for (const row of paid) add(jobByPlan.get(row.plan_id), row.amount_cents ?? 0);
+  }
+
+  return out;
+}

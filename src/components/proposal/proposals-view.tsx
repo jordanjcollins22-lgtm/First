@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +13,19 @@ import { ViewCount } from "@/components/proposal/view-count";
 import { TrimPanel } from "@/components/proposal/trim-panel";
 import { editHeadline, priceMoveLabel } from "@/lib/proposal-trim";
 import { responseLabel } from "@/lib/proposal-accepted";
+import { owedFirst, paymentLabel, paymentState, type PaymentFacts } from "@/lib/proposal-payment";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** What the payment state is worked out from, in cents. */
+function factsFor(item: ProposalWithJob): PaymentFacts {
+  return {
+    totalCents: item.proposal.total_cost == null ? null : Math.round(item.proposal.total_cost * 100),
+    collectedCents: item.collectedCents,
+    settledAt: item.proposal.paid_at,
+  };
 }
 
 function ProposalRow({
@@ -29,6 +40,9 @@ function ProposalRow({
   const { proposal, job, viewLabel, viewsWarm, edits } = item;
   // When they answered, not just that they did. Same wording as the job page.
   const responded = responseLabel(proposal.status, proposal.responded_at, timeZone);
+  const facts = factsFor(item);
+  const state = paymentState(facts);
+  const money = proposal.status === "accepted" ? paymentLabel(facts) : null;
   const [total, setTotal] = useState(String(Math.round(proposal.total_cost ?? 0)));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +91,19 @@ function ProposalRow({
           shown, so "when did they sign?" was answered from memory. */}
       {responded && (
         <p className="text-xs font-medium text-muted-foreground">{responded}</p>
+      )}
+
+      {/* And whether the money turned up. Nothing is said on a proposal with
+          nothing in, because "$0 in" on every unpaid row is noise. */}
+      {money && (
+        <p
+          className={cn(
+            "text-xs font-semibold",
+            state === "paid" ? "text-primary" : "text-amber-700 dark:text-amber-500"
+          )}
+        >
+          {money}
+        </p>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -213,7 +240,18 @@ export function ProposalsView({
   const needsApproval = proposals.filter((p) => p.proposal.status === "needs_approval");
   const sent = proposals.filter((p) => p.proposal.status === "sent");
   const declined = proposals.filter((p) => p.proposal.status === "declined");
-  const accepted = proposals.filter((p) => p.proposal.status === "accepted");
+
+  // Accepted and paid are different facts, and the board only had the first.
+  // A proposal signed in September sat beside one signed and settled the same
+  // afternoon, and nothing told them apart — so chasing money meant opening
+  // jobs one at a time. Paid comes out of Accepted rather than sitting
+  // alongside it: a job cannot be in both, and what is left under Accepted is
+  // exactly the list of people who owe us money.
+  const signed = proposals.filter((p) => p.proposal.status === "accepted");
+  const paid = signed.filter((p) => paymentState(factsFor(p)) === "paid");
+  const awaitingMoney = signed
+    .filter((p) => paymentState(factsFor(p)) !== "paid")
+    .sort((a, b) => owedFirst(factsFor(a), factsFor(b)));
 
   return (
     <Tabs defaultValue="needs_approval">
@@ -221,7 +259,8 @@ export function ProposalsView({
         <TabsTrigger value="needs_approval">Needs Approval ({needsApproval.length})</TabsTrigger>
         <TabsTrigger value="sent">Sent ({sent.length})</TabsTrigger>
         <TabsTrigger value="declined">Declined ({declined.length})</TabsTrigger>
-        <TabsTrigger value="accepted">Accepted ({accepted.length})</TabsTrigger>
+        <TabsTrigger value="accepted">Accepted ({awaitingMoney.length})</TabsTrigger>
+        <TabsTrigger value="paid">Paid ({paid.length})</TabsTrigger>
       </TabsList>
       <TabsContent value="needs_approval">
         <ProposalListSection items={needsApproval} showApprove emptyLabel="Nothing waiting on you." timeZone={timeZone} />
@@ -233,7 +272,22 @@ export function ProposalsView({
         <ProposalListSection items={declined} showApprove={false} emptyLabel="No declined proposals." timeZone={timeZone} />
       </TabsContent>
       <TabsContent value="accepted">
-        <ProposalListSection items={accepted} showApprove={false} emptyLabel="No accepted proposals yet." timeZone={timeZone} />
+        {/* Sold and still owing, biggest debt first, because that is the call
+            worth making next. */}
+        <ProposalListSection
+          items={awaitingMoney}
+          showApprove={false}
+          emptyLabel="Nothing sold is waiting on money."
+          timeZone={timeZone}
+        />
+      </TabsContent>
+      <TabsContent value="paid">
+        <ProposalListSection
+          items={paid}
+          showApprove={false}
+          emptyLabel="Nothing has been paid in full yet."
+          timeZone={timeZone}
+        />
       </TabsContent>
     </Tabs>
   );
