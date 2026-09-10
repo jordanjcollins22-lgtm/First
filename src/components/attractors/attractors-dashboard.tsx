@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus, Settings2, Star } from "lucide-react";
 
@@ -11,6 +11,8 @@ import { isMapboxConfigured } from "@/lib/env";
 import { FilterBar } from "./filter-bar";
 import { WaveList } from "./wave-list";
 import { ClientList } from "./client-list";
+import { MapIndexList } from "./map-index-list";
+import { centreOf, type MapEntry } from "@/lib/map-index";
 import { SatelliteMapView } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
@@ -73,7 +75,7 @@ import type { UnservedCluster } from "@/lib/eddm-clusters";
 import type { RoadsState } from "@/lib/data/roads";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
-type SidebarTab = "waves" | "clients";
+type SidebarTab = "recent" | "waves" | "clients";
 type DrawTarget = "wave" | "location-area";
 
 export function AttractorsDashboard({
@@ -169,7 +171,7 @@ export function AttractorsDashboard({
   }, [properties, jobs]);
 
   const [viewMode, setViewMode] = useState<ViewMode>(isMapboxConfigured ? "satellite" : "galaxy");
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("waves");
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("recent");
   const [rankKeywordId, setRankKeywordId] = useState<string | null>(null);
   const [managingTypes, setManagingTypes] = useState(false);
   const [managingLocations, setManagingLocations] = useState(false);
@@ -216,11 +218,68 @@ export function AttractorsDashboard({
   // active every other layer is off, so the dots left are the whole answer.
   const focused = pointHighlight !== null;
   const [flyTo, setFlyTo] = useState<LatLng | null>(null);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
   const [showEddm, setShowEddm] = useState(false);
   const [eddmZip, setEddmZip] = useState("21014");
   const [eddmRoutes, setEddmRoutes] = useState<EddmRouteFeature[]>([]);
+
+  /**
+   * The list under the Recent tab: finished work, then carrier routes.
+   *
+   * Built here rather than on the server because both halves are already in
+   * the browser — the jobs for the pins and the routes for the shapes — and
+   * asking for them again would be a second read of what is on screen.
+   */
+  const mapEntries: MapEntry[] = useMemo(() => {
+    const finished: MapEntry[] = jobs
+      .filter((job) => job.status === "completed")
+      .map((job) => ({
+        kind: "job" as const,
+        id: job.id,
+        title: job.property?.customer?.name ?? job.name,
+        subtitle: job.property?.address ?? "",
+        closedAt: job.completed_at ?? job.updated_at ?? null,
+        size: null,
+        lat: job.property?.lat ?? null,
+        lng: job.property?.lng ?? null,
+      }));
+
+    const carrier: MapEntry[] = eddmRoutes.map((feature) => {
+      const props = feature.properties;
+      const centre = centreOf((feature.geometry.coordinates[0] ?? []) as [number, number][]);
+      return {
+        kind: "route" as const,
+        id: props.id,
+        title: `${props.zip} · ${props.routeId}`,
+        subtitle: `${(props.residential ?? 0).toLocaleString()} homes · ${(props.total ?? 0).toLocaleString()} deliveries`,
+        closedAt: null,
+        size: props.total ?? props.residential ?? null,
+        lat: centre?.lat ?? null,
+        lng: centre?.lng ?? null,
+      };
+    });
+
+    return [...finished, ...carrier];
+  }, [jobs, eddmRoutes]);
+
+  /**
+   * Take the map to whatever was clicked.
+   *
+   * A route also turns the route layer on. Somebody who opened this list
+   * looking for a route wants to see it, and finding it hidden behind a toggle
+   * they did not know about is the failure this is meant to fix.
+   */
+  const openEntry = useCallback(
+    (entry: MapEntry) => {
+      setSelectedEntryId(entry.id);
+      if (entry.kind === "route") setShowEddm(true);
+      if (entry.lat != null && entry.lng != null) setFlyTo({ lat: entry.lat, lng: entry.lng });
+    },
+    [setShowEddm]
+  );
+
   const [eddmStreets, setEddmStreets] = useState<EddmStreetFeature[]>([]);
   // Routes ticked for a mailing, kept as features so a selection survives
   // loading another ZIP's routes.
@@ -563,9 +622,13 @@ export function AttractorsDashboard({
         <Card className="flex max-h-[70vh] flex-col overflow-hidden">
           <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as SidebarTab)} className="flex flex-1 flex-col overflow-hidden">
             <TabsList className="m-2 shrink-0">
+              <TabsTrigger value="recent">Recent</TabsTrigger>
               <TabsTrigger value="waves">Waves ({filteredWaves.length})</TabsTrigger>
               <TabsTrigger value="clients">Contacts ({clientCount})</TabsTrigger>
             </TabsList>
+            <TabsContent value="recent" className="mt-0 flex-1 overflow-y-auto">
+              <MapIndexList entries={mapEntries} selectedId={selectedEntryId} onSelect={openEntry} />
+            </TabsContent>
             <TabsContent value="waves" className="mt-0 flex-1 overflow-y-auto">
               <WaveList
                 waves={filteredWaves}
