@@ -14,6 +14,7 @@ import { InventoryAddForm } from "@/components/inventory/inventory-add-form";
 import { ToolInventoryRow } from "@/components/tool/tool-inventory-row";
 import { MaterialInventoryRow } from "@/components/material/material-inventory-row";
 import { InventoryViewToggle } from "@/components/inventory/inventory-view-toggle";
+import { InventoryValueSummary } from "@/components/inventory/inventory-value-summary";
 import { listBusinessLocations } from "@/lib/data/locations";
 
 export default async function InventoryPage() {
@@ -59,6 +60,19 @@ export default async function InventoryPage() {
   // category, so moving an item between the two is a one-field change.
   const equipment = tools.filter((t) => t.category !== "gear");
   const gear = tools.filter((t) => t.category === "gear");
+
+  // What the summary at the top needs, and nothing else. A rental's cost is a
+  // day rate rather than a price, which is why the totals have to be told
+  // which is which rather than adding up a column.
+  const valued = (items: typeof tools) =>
+    items.map((t) => ({
+      name: t.name,
+      cost: t.cost,
+      resaleValue: t.resale_value,
+      isRental: t.is_rental,
+      quantity: t.quantity,
+      costToOwn: t.cost_to_own,
+    }));
   const storageLocations = businessLocations.map((location) => location.name);
 
   const needsOrderingCount = (items: typeof materials) =>
@@ -86,7 +100,8 @@ export default async function InventoryPage() {
         <div>
           <h1 className="mb-1 text-2xl font-bold">Inventory</h1>
           <p className="text-muted-foreground">
-            Tools, crew gear, and materials — stock on hand, where it&apos;s stored, cost, and reorder status.
+            Tools, crew gear, and materials — what it is all worth, stock on hand, where it&apos;s stored,
+            and reorder status.
           </p>
         </div>
         <div className="flex shrink-0 items-start gap-2">
@@ -128,6 +143,8 @@ export default async function InventoryPage() {
         showMaterials={materialsAllowed}
         toolsContent={
           <>
+            <InventoryValueSummary tools={valued(equipment)} gear={valued(gear)} />
+
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Add a tool</CardTitle>

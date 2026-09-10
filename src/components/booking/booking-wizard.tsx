@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { CheckCircle2, Loader2, MapPin, Search, UserCheck, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -198,36 +198,40 @@ export function BookingWizard({
   const remembered = useMemo(() => readRemembered(savedRaw), [savedRaw]);
   const [dismissedMemory, setDismissedMemory] = useState(false);
 
-  const lat = selectedAddress?.lat ?? null;
-  const lng = selectedAddress?.lng ?? null;
-
-  const loadTimes = useCallback(async () => {
-    setTimesLoading(true);
-    try {
-      const query = new URLSearchParams();
-      if (linkRef) query.set("ref", linkRef);
-      if (linkOrg) query.set("org", linkOrg);
-      if (lat != null && lng != null) {
+  /**
+   * The ranked times for one address.
+   *
+   * Called from the two places an address actually becomes settled — picking a
+   * suggestion, and reusing a remembered one — rather than from an effect
+   * watching the coordinates. Both of those are events, and an effect that
+   * fetches on a state change it could have been told about directly is a
+   * render that has to happen before the work can start.
+   *
+   * The coordinates are arguments rather than read off state, because the
+   * handler that has them has not re-rendered yet.
+   */
+  const loadTimes = useCallback(
+    async (lat: number, lng: number) => {
+      setTimesLoading(true);
+      try {
+        const query = new URLSearchParams();
+        if (linkRef) query.set("ref", linkRef);
+        if (linkOrg) query.set("org", linkOrg);
         query.set("lat", String(lat));
         query.set("lng", String(lng));
+        const response = await fetch(`/book/times?${query.toString()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(String(response.status));
+        setTimes((await response.json()) as BookingTimes);
+      } catch {
+        // The plain list the page already has is a perfectly good fallback: the
+        // same hours, just without the "we're nearby" on any of them.
+        setTimes(null);
+      } finally {
+        setTimesLoading(false);
       }
-      const response = await fetch(`/book/times?${query.toString()}`, { cache: "no-store" });
-      if (!response.ok) throw new Error(String(response.status));
-      setTimes((await response.json()) as BookingTimes);
-    } catch {
-      // The plain list the page already has is a perfectly good fallback: the
-      // same hours, just without the "we're nearby" on any of them.
-      setTimes(null);
-    } finally {
-      setTimesLoading(false);
-    }
-  }, [linkRef, linkOrg, lat, lng]);
-
-  // Fetched when the address is settled rather than on every keystroke.
-  useEffect(() => {
-    if (lat == null || lng == null) return;
-    void loadTimes();
-  }, [lat, lng, loadTimes]);
+    },
+    [linkRef, linkOrg]
+  );
 
   function handleAddressQueryChange(value: string) {
     setAddressQuery(value);
@@ -274,6 +278,7 @@ export function BookingWizard({
     setSuggestions([]);
     setError(null);
     setStep(2);
+    void loadTimes(saved.lat, saved.lng);
   }
 
   function forgetRemembered() {
@@ -508,6 +513,7 @@ export function BookingWizard({
                     setSelectedAddress(s);
                     setAddressQuery(s.fullAddress);
                     setSuggestions([]);
+                    void loadTimes(s.lat, s.lng);
                   }}
                   className="flex min-h-12 w-full items-center gap-2 px-3 py-3 text-left text-sm hover:bg-accent"
                 >
