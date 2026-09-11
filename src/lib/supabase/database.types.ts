@@ -1644,6 +1644,10 @@ export interface Database {
           pipeline_override_at: string | null;
           pipeline_override_by: string | null;
           pipeline_override_note: string | null;
+          /** When somebody decided this job was not happening. Outranks every status. */
+          declined_at: string | null;
+          declined_by: string | null;
+          declined_reason: string | null;
           dispute_opened_at: string | null;
           dispute_resolved_at: string | null;
           dispute_kind: string | null;

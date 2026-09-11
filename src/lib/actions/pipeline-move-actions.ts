@@ -66,15 +66,29 @@ export async function moveJobOnPipeline(
       proposalStatus: proposal?.status ?? null,
     }).status;
 
+    // Declining is the one move that is a fact rather than a note about a
+    // moment. "They said no" does not stop being true when the visit is
+    // rescheduled or the quote regenerated, and stored as an override it did:
+    // the placement went stale, the board went back to reading the raw row,
+    // and the job came back as a live quote for somebody to chase.
+    //
+    // Moving it anywhere else clears the date, because that is somebody
+    // saying the decline is over.
+    const declining = stage === "sales" && status === "Declined";
+    const now = new Date().toISOString();
+
     const { error: saveError } = await supabase
       .from("jobs")
       .update({
         pipeline_override_stage: stage,
         pipeline_override_status: status,
         pipeline_override_from: from,
-        pipeline_override_at: new Date().toISOString(),
+        pipeline_override_at: now,
         pipeline_override_by: profile.id,
         pipeline_override_note: note?.trim() || null,
+        declined_at: declining ? now : null,
+        declined_by: declining ? profile.id : null,
+        declined_reason: declining ? note?.trim() || null : null,
       })
       .eq("id", jobId);
     if (saveError) return { ok: false, message: saveError.message };
@@ -101,6 +115,12 @@ export async function clearPipelineOverride(jobId: string): Promise<MoveResponse
         pipeline_override_at: null,
         pipeline_override_by: null,
         pipeline_override_note: null,
+        // Back to reading the job means back to reading it about this too.
+        // A decline the client made on their own proposal is on the proposal
+        // and comes back from there; this only clears one made by hand.
+        declined_at: null,
+        declined_by: null,
+        declined_reason: null,
       })
       .eq("id", jobId);
     if (error) return { ok: false, message: error.message };

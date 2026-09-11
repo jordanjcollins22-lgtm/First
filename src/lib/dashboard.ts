@@ -17,6 +17,13 @@
  */
 
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
+import {
+  isDeclined,
+  pipelinePosition,
+  type PipelineOverride,
+  type PipelinePosition,
+} from "@/lib/pipeline";
+import type { DisputeState } from "@/lib/dispute";
 
 export type DashboardRange = "today" | "week" | "month";
 
@@ -105,6 +112,7 @@ export type JobBucket =
   | "scheduled"
   | "unscheduled"
   | "quoting"
+  | "declined"
   | "completed"
   | "cancelled";
 
@@ -114,6 +122,12 @@ export const JOB_BUCKETS: { key: JobBucket; label: string; blurb: string; histor
   { key: "scheduled", label: "Booked in", blurb: "Sold, with days on the calendar." },
   { key: "unscheduled", label: "Sold, not booked", blurb: "Accepted with no days set. These are the ones that rot." },
   { key: "quoting", label: "Out for a decision", blurb: "Priced and sent — waiting on the client." },
+  {
+    key: "declined",
+    label: "Declined",
+    blurb: "They said no, or somebody here decided it was over. Nobody is chasing these.",
+    history: true,
+  },
   { key: "completed", label: "Finished", blurb: "Signed off.", history: true },
   { key: "cancelled", label: "Cancelled", blurb: "Called off.", history: true },
 ];
@@ -133,6 +147,31 @@ export function isTheirs(
   return job.accountManagerId === profileId || job.assignedTo === profileId;
 }
 
+/**
+ * Where the pipeline says this job sits.
+ *
+ * Shared so the dashboard, My Day and the board cannot disagree. The same
+ * function, on the same inputs, giving the same answer on every screen was
+ * the whole point of deriving the pipeline rather than storing it, and it was
+ * quietly not true: only the board ever called it.
+ */
+export function positionOf(job: DashboardJobInput, today: string): PipelinePosition {
+  return pipelinePosition(
+    {
+      status: job.status,
+      evaluationStatus: job.evaluationStatus,
+      evaluationDate: job.evaluationDate,
+      projectStartDate: job.projectStartDate,
+      projectEndDate: job.projectEndDate,
+      proposalStatus: job.proposalStatus,
+      override: job.override ?? null,
+      dispute: job.dispute ?? null,
+      declinedAt: job.declinedAt ?? null,
+    },
+    new Date(`${today}T12:00:00`)
+  );
+}
+
 export interface DashboardJobInput {
   id: string;
   jobNumber: number | null;
@@ -148,6 +187,20 @@ export interface DashboardJobInput {
   completedAt: string | null;
   cancelledAt: string | null;
   proposalStatus: string | null;
+  /**
+   * Where somebody put this job by hand, if they did.
+   *
+   * Read here and not only on the board, because the board was the only
+   * screen that honoured it. A job moved to Declined went on appearing on the
+   * dashboard as out for a decision and on My Day as somebody to ring, since
+   * both re-derived from the raw statuses. The office had said no and the app
+   * kept asking.
+   */
+  override?: PipelineOverride | null;
+  /** Open trouble. A job in dispute is frozen, not queued. */
+  dispute?: DisputeState | null;
+  /** When somebody decided it was not happening. Outranks every status. */
+  declinedAt?: string | null;
   /** Proposal total, for the booked-value line. */
   value: number | null;
   /** Who is on it — the evaluator for a visit, the crew lead for the work. */
@@ -203,9 +256,14 @@ export interface DashboardData {
  * evaluated shows as cancelled here rather than sitting in "Evaluated" as
  * though somebody still has to price it.
  */
-export function evaluationBucket(job: DashboardJobInput): EvaluationBucket | null {
+export function evaluationBucket(job: DashboardJobInput, today?: string): EvaluationBucket | null {
   if (!job.evaluationDate) return null;
   if (job.status === "cancelled" || job.evaluationStatus === "cancelled") return "cancelled";
+
+  // A visit booked for a job somebody has since declined is a drive nobody
+  // should make. It reads as cancelled rather than vanishing, so the trip
+  // that was on the calendar is still accounted for.
+  if (today && isDeclined(positionOf(job, today))) return "cancelled";
   if (job.evaluationStatus === "arrived") return "arrived";
   if (job.evaluationStatus === "on_way") return "on_way";
   if (job.evaluationStatus === "completed") return "completed";
@@ -222,6 +280,15 @@ export function evaluationBucket(job: DashboardJobInput): EvaluationBucket | nul
  */
 export function jobBucket(job: DashboardJobInput, today: string): JobBucket | null {
   if (job.status === "cancelled") return "cancelled";
+
+  // The pipeline's own answer, before any of the derivation below. Somebody
+  // who moved this job to Declined has said it is over, and re-deriving
+  // "out for a decision" from a proposal row nobody ever answered is how the
+  // app ends up chasing people who already said no.
+  const position = positionOf(job, today);
+  if (isDeclined(position)) return "declined";
+  if (position.stage === "disputes") return null;
+
   if (job.status === "completed") return "completed";
 
   const sold = job.status === "approved" || job.status === "in_progress" || job.proposalStatus === "accepted";
@@ -287,7 +354,7 @@ export function buildDashboard(
 
   for (const job of jobs) {
     const evalKey = dayKeyOf(job.evaluationDate);
-    const bucket = evaluationBucket(job);
+    const bucket = evaluationBucket(job, todayKey);
     if (bucket) {
       const outstanding = bucket === "arrived" || bucket === "on_way" || bucket === "scheduled";
       const overdue = outstanding && evalKey !== null && evalKey < w.start;
@@ -307,6 +374,11 @@ export function buildDashboard(
 
     if (jobKey === "completed") {
       const key = dayKeyOf(job.completedAt) ?? endKey;
+      if (inWindow(key, w)) work.get(jobKey)!.push(rowFor(job, key, false));
+      continue;
+    }
+    if (jobKey === "declined") {
+      const key = dayKeyOf(job.completedAt) ?? endKey ?? evalKey;
       if (inWindow(key, w)) work.get(jobKey)!.push(rowFor(job, key, false));
       continue;
     }

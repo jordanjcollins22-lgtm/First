@@ -8,6 +8,7 @@ import {
   type DashboardJobInput,
   type DashboardRange,
 } from "@/lib/dashboard";
+import type { PipelineStage } from "@/lib/pipeline";
 
 export interface DashboardOptions {
   /**
@@ -76,6 +77,24 @@ export async function loadJobInputs(options: DashboardOptions = {}): Promise<Das
       completedAt: job.completed_at,
       cancelledAt: job.cancelled_at,
       proposalStatus: proposal?.status ?? null,
+      // The pipeline's own two facts, carried so every screen reads the board
+      // the same way. Before this only the board itself did, which is how a
+      // job somebody moved to Declined stayed on My Day as a client to ring.
+      declinedAt: job.declined_at ?? null,
+      override:
+        job.pipeline_override_stage && job.pipeline_override_status && job.pipeline_override_from
+          ? {
+              stage: job.pipeline_override_stage as PipelineStage,
+              status: job.pipeline_override_status,
+              from: job.pipeline_override_from,
+            }
+          : null,
+      dispute: {
+        openedAt: job.dispute_opened_at ?? null,
+        resolvedAt: job.dispute_resolved_at ?? null,
+        kind: job.dispute_kind ?? null,
+        reason: job.dispute_reason ?? null,
+      },
       value: proposal?.total_cost ?? null,
       personName: job.assigned_to ? (nameById.get(job.assigned_to) ?? null) : null,
     };

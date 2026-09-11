@@ -68,6 +68,17 @@ export interface PipelineInput {
   projectEndDate: string | null;
   /** job_proposals.status, or null when no proposal exists yet. */
   proposalStatus: string | null;
+  /**
+   * When somebody decided this job was not happening.
+   *
+   * A fact rather than a hand placement, and read before nearly everything
+   * else because of what went wrong when it was not. A decline stored as an
+   * override expired the moment any status moved: the board quietly went back
+   * to reading the raw row, and a job the office had said no to reappeared as
+   * a live quote for somebody to chase. "They said no" does not stop being
+   * true when the visit is rescheduled.
+   */
+  declinedAt?: string | null;
   /** Set while this job is in dispute. Beats every other reading of the job:
    * a client who is suing us is not a job to get on with, whatever its
    * paperwork says. */
@@ -170,6 +181,14 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
   if (input.status === "completed") {
     return { stage: "operations", status: "Completed", actionable: false };
   }
+  // Then a decline, before any of the derivation below. It outranks a sent
+  // proposal, a booked visit and an approved status alike, because all three
+  // describe where the paperwork got to and none of them describes somebody
+  // saying no. Work that was declined and then genuinely sold is un-declined
+  // by moving it back on the board, which clears the date.
+  if (input.declinedAt) {
+    return { stage: "sales", status: "Declined", actionable: false };
+  }
   // Work whose window has passed but that nobody has signed off. This is the
   // one that disappears in practice: the crew finished, drove away, and the
   // job sits "in progress" forever because closing it was never anybody's
@@ -220,6 +239,41 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
   return { stage: "sales", status: "Needs pricing", actionable: true };
 }
 
+
+/**
+ * Whether anybody should still be chasing this job.
+ *
+ * The one question every other screen needs to ask the pipeline and, until
+ * now, could not. The board honoured a hand placement; nothing else did. So a
+ * job moved to Declined went on appearing on the dashboard as "out for a
+ * decision", on My Day as somebody to ring, and on the calendar as a visit
+ * still to drive to, because each of those re-derived from the raw statuses
+ * and never looked at the placement. The office had said no twice and the app
+ * kept asking.
+ *
+ * Three things close a job. Declined is somebody deciding it is over, whether
+ * the client clicked the button or said it on the phone. Completed is over by
+ * definition. And a dispute is frozen rather than finished: it is somebody's
+ * problem, but it is not work to pick up off a queue, and nothing automatic
+ * should go near that client.
+ */
+export function isClosedWork(position: PipelinePosition): boolean {
+  if (position.stage === "disputes") return true;
+  if (position.stage === "sales" && position.status === "Declined") return true;
+  if (position.stage === "operations" && position.status === "Completed") return true;
+  return false;
+}
+
+/**
+ * Declined, however it was declined.
+ *
+ * Kept apart from closed because the two want different treatment: finished
+ * work is a record worth showing, and a job somebody said no to is a row that
+ * should stop appearing in anybody's queue but still be countable.
+ */
+export function isDeclined(position: PipelinePosition): boolean {
+  return position.stage === "sales" && position.status === "Declined";
+}
 
 /** Every place a job can be put by hand, as one flat list for a picker. */
 export function movableTo(): { stage: PipelineStage; status: string; label: string }[] {

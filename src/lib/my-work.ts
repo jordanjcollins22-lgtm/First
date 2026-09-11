@@ -16,7 +16,15 @@
  * with the pipeline, the dashboard, or the job page.
  */
 
-import { dayKey, dayKeyOf, jobBucket, type DashboardJobInput, type JobBucket } from "@/lib/dashboard";
+import {
+  dayKey,
+  dayKeyOf,
+  jobBucket,
+  positionOf,
+  type DashboardJobInput,
+  type JobBucket,
+} from "@/lib/dashboard";
+import { isClosedWork } from "@/lib/pipeline";
 
 /** Why a job is sitting in somebody's queue rather than moving. */
 export type SubmitReason = "close_out" | "price_it" | "send_it";
@@ -102,6 +110,15 @@ export function buildMyWork(jobs: DashboardJobInput[], today: Date = new Date())
 
   for (const job of jobs) {
     if (job.status === "cancelled") continue;
+
+    // The pipeline's answer, asked before anything is put on anybody's plate.
+    // This screen used to derive its own piles from the raw statuses and never
+    // looked at the board, so a job the office had moved to Declined still
+    // read as one to price, to send, or to ring the client about. A job in
+    // dispute is frozen for the same reason: somebody's problem, but not work
+    // to pick up off a queue.
+    const position = positionOf(job, todayKey);
+    if (isClosedWork(position)) continue;
 
     const evalKey = dayKeyOf(job.evaluationDate);
     const evaluated = job.evaluationStatus === "completed";

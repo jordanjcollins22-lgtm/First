@@ -135,6 +135,12 @@ export interface Job {
   pipeline_override_at: string | null;
   pipeline_override_by: string | null;
   pipeline_override_note: string | null;
+  /** When somebody decided this job was not happening, whether the client
+   * clicked decline or said it on the phone. Survives later status changes,
+   * which a pipeline override deliberately does not. */
+  declined_at?: string | null;
+  declined_by?: string | null;
+  declined_reason?: string | null;
   /** Set while this job is in dispute — a lawyer, a refusal to pay, a client
    * who is unhappy in a way that has left the ordinary conversation. Resolved
    * records a date rather than clearing, so the history survives. */

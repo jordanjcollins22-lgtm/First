@@ -15,6 +15,9 @@ import type { Profile } from "@/types/domain";
 import { getDashboard, loadJobInputs } from "@/lib/data/dashboard";
 import { getCommissionFor } from "@/lib/data/commission";
 import { buildMyWork, type MyWork } from "@/lib/my-work";
+import { getToday } from "@/lib/data/today";
+import { TodayPanel } from "@/components/dashboard/today-panel";
+import { withOwed, type TodayView } from "@/lib/today";
 import type { DashboardData } from "@/lib/dashboard";
 import type { CommissionSummary } from "@/lib/commission";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -132,7 +135,7 @@ async function OfficeDay() {
   // round trips the page sat through end to end. Each still fails on its own:
   // a money table that is not set up costs the commission panel and nothing
   // else, which is why every one of them carries its own catch.
-  const [data, work, commission, earlyStarts, marketing, ops] = await Promise.all([
+  const [data, work, today, commission, earlyStarts, marketing, ops] = await Promise.all([
     getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
       console.error("My Day failed to load:", err);
       return null as DashboardData | null;
@@ -143,6 +146,12 @@ async function OfficeDay() {
         console.error("My work failed to load:", err);
         return null as MyWork | null;
       }),
+    // The narrow question the week-shaped piles below never answered: did we
+    // sell anything today, and did any money turn up.
+    getToday({ mine: profile.id }).catch((err) => {
+      console.error("Today failed to load:", err);
+      return null as TodayView | null;
+    }),
     getCommissionFor(profile).catch((err) => {
       console.error("Commission failed to load:", err);
       return null as CommissionSummary | null;
@@ -272,6 +281,10 @@ async function OfficeDay() {
           <MarketingTodo plays={marketing.plays} reviews={marketing.reviews} autoApproved={marketing.autoApproved} />
         </div>
       )}
+
+      {/* First, because it is the question somebody opens this page with.
+          Everything below it is about the week. */}
+      {today && <TodayPanel today={withOwed(today, work?.submissions.length ?? 0)} />}
 
       {work && (
         <>

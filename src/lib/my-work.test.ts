@@ -152,3 +152,73 @@ describe("buildMyWork — jobs being managed", () => {
     expect(buildMyWork([booked], TODAY).managed[0].value).toBe(4200);
   });
 });
+
+/**
+ * What the owner actually hit: My Day telling them to chase people who had
+ * already declined, on jobs they had moved to Declined themselves. This
+ * screen derived its own piles from the raw statuses and never asked the
+ * board, so the decision was invisible to it.
+ */
+describe("work somebody has already closed", () => {
+  it("stops asking anybody to price a declined job", () => {
+    const declined = job({
+      evaluationStatus: "completed",
+      evaluationDate: "2026-08-10T14:00:00Z",
+      proposalStatus: null,
+      declinedAt: "2026-08-12T09:00:00Z",
+    });
+    expect(buildMyWork([declined], TODAY).submissions).toEqual([]);
+  });
+
+  it("stops asking anybody to send a proposal on one", () => {
+    const declined = job({
+      evaluationStatus: "completed",
+      proposalStatus: "needs_approval",
+      declinedAt: "2026-08-12T09:00:00Z",
+    });
+    expect(buildMyWork([declined], TODAY).submissions).toEqual([]);
+  });
+
+  it("takes the visit off what is coming up", () => {
+    const declined = job({
+      evaluationDate: "2026-08-25T14:00:00Z",
+      evaluationStatus: "scheduled",
+      declinedAt: "2026-08-12T09:00:00Z",
+    });
+    expect(buildMyWork([declined], TODAY).upcoming).toEqual([]);
+  });
+
+  it("stops carrying it as live work being managed", () => {
+    const declined = job({
+      status: "approved",
+      proposalStatus: "sent",
+      declinedAt: "2026-08-12T09:00:00Z",
+    });
+    expect(buildMyWork([declined], TODAY).managed).toEqual([]);
+  });
+
+  it("leaves everything else exactly as it was", () => {
+    const live = job({
+      evaluationStatus: "completed",
+      evaluationDate: "2026-08-10T14:00:00Z",
+      proposalStatus: null,
+    });
+    expect(buildMyWork([live], TODAY).submissions).toHaveLength(1);
+  });
+
+  it("says nothing about a job frozen in a dispute", () => {
+    const stuck = job({
+      evaluationStatus: "completed",
+      proposalStatus: "needs_approval",
+      dispute: {
+        openedAt: "2026-08-01T00:00:00Z",
+        resolvedAt: null,
+        kind: "legal",
+        reason: "Solicitor's letter.",
+      },
+    });
+    const work = buildMyWork([stuck], TODAY);
+    expect(work.submissions).toEqual([]);
+    expect(work.managed).toEqual([]);
+  });
+});

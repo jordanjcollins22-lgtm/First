@@ -237,7 +237,7 @@ describe("buildDashboard", () => {
   it("returns every pile even when empty, so the shape of the day is visible", () => {
     const data = buildDashboard([], "today", TODAY);
     expect(data.evaluations).toHaveLength(5);
-    expect(data.jobs).toHaveLength(7);
+    expect(data.jobs).toHaveLength(8);
     expect(data.summary).toEqual({
       evaluationsDue: 0,
       overdue: 0,
@@ -265,5 +265,104 @@ describe("isTheirs", () => {
 
   it("does not treat an unmanaged client as everybody's", () => {
     expect(isTheirs({ accountManagerId: null, assignedTo: null }, "me")).toBe(false);
+  });
+});
+
+/**
+ * The bug this closes: the board honoured a hand placement and nothing else
+ * did, so a job moved to Declined kept appearing on the dashboard as "out for
+ * a decision" and on the calendar as a visit still to drive to. The office had
+ * said no and the app kept asking.
+ */
+describe("a job somebody moved to declined", () => {
+  const declined = { stage: "sales" as const, status: "Declined" };
+
+  it("stops reading as out for a decision", () => {
+    const moved = job({
+      proposalStatus: "sent",
+      override: { ...declined, from: "Sent" },
+    });
+    expect(jobBucket(moved, "2026-08-19")).toBe("declined");
+  });
+
+  it("stops reading as sold work waiting to be booked", () => {
+    // The worst version: approved, so it was counted as won revenue and shown
+    // as a job to go and schedule.
+    const moved = job({
+      status: "approved",
+      proposalStatus: "sent",
+      override: { ...declined, from: "Won — not scheduled" },
+    });
+    expect(jobBucket(moved, "2026-08-19")).toBe("declined");
+  });
+
+  it("stops reading as a quote that still needs approving", () => {
+    const moved = job({
+      proposalStatus: "needs_approval",
+      override: { ...declined, from: "Needs approval" },
+    });
+    expect(jobBucket(moved, "2026-08-19")).toBe("declined");
+  });
+
+  it("takes the visit off the calendar too", () => {
+    // A drive nobody should make. Shown as cancelled rather than vanishing,
+    // so the trip that was booked is still accounted for.
+    const moved = job({
+      evaluationDate: "2026-08-20T14:00:00Z",
+      evaluationStatus: "scheduled",
+      declinedAt: "2026-08-18T10:00:00Z",
+    });
+    expect(evaluationBucket(moved, "2026-08-19")).toBe("cancelled");
+  });
+
+  it("stays declined after the visit is rescheduled", () => {
+    // The failure this column exists for. Stored as an override, the decline
+    // expired the moment any status moved and the job came back as a live
+    // quote for somebody to chase.
+    const rebooked = job({
+      evaluationDate: "2026-09-02T14:00:00Z",
+      evaluationStatus: "scheduled",
+      proposalStatus: "sent",
+      declinedAt: "2026-08-18T10:00:00Z",
+    });
+    expect(jobBucket(rebooked, "2026-08-19")).toBe("declined");
+    expect(evaluationBucket(rebooked, "2026-08-19")).toBe("cancelled");
+  });
+
+  it("leaves the visit alone when nobody has declined anything", () => {
+    const live = job({ evaluationDate: "2026-08-20T14:00:00Z", evaluationStatus: "scheduled" });
+    expect(evaluationBucket(live, "2026-08-19")).toBe("scheduled");
+  });
+
+  it("goes back to the facts once the paperwork catches up", () => {
+    // An override is a statement about a situation. The client accepting
+    // afterwards ends the situation, and the placement stops applying.
+    const caughtUp = job({
+      status: "approved",
+      proposalStatus: "accepted",
+      override: { ...declined, from: "Sent" },
+    });
+    expect(jobBucket(caughtUp, "2026-08-19")).not.toBe("declined");
+  });
+
+  it("keeps a job nobody moved exactly where it was", () => {
+    expect(jobBucket(job({ proposalStatus: "sent" }), "2026-08-19")).toBe("quoting");
+  });
+});
+
+describe("a job in dispute", () => {
+  it("is frozen rather than queued", () => {
+    // Somebody's problem, but not work to pick up off a queue, and it must
+    // not pad the counts the board uses to say what needs doing today.
+    const stuck = job({
+      proposalStatus: "sent",
+      dispute: {
+        openedAt: "2026-08-01T00:00:00Z",
+        resolvedAt: null,
+        kind: "payment",
+        reason: "Refusing the final invoice.",
+      },
+    });
+    expect(jobBucket(stuck, "2026-08-19")).toBeNull();
   });
 });
