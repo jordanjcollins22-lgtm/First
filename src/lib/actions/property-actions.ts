@@ -232,3 +232,57 @@ export async function addPropertyForCustomer(
 
   revalidatePath("/attractors");
 }
+
+/**
+ * Where the property actually is, from somebody standing on it.
+ *
+ * Every address in this system is placed by geocoding what a client typed,
+ * and geocoding is wrong often enough to matter. New builds are not in the
+ * database. A long driveway puts the pin on the road. Cul-de-sacs are the
+ * worst of it: a street named Court frequently geocodes to the mouth rather
+ * than the house, so the whole close lands on one point and the satellite
+ * photo comes back showing the wrong roof.
+ *
+ * Until now there was no way to correct that. The coordinates were written
+ * once when the property was created and never again, so a bad placement was
+ * permanent and every route, every map and every satellite photo inherited
+ * it. The evaluator is the one person who can fix it, because they are
+ * standing there.
+ *
+ * The address text is deliberately left alone. What is being corrected is
+ * where the house is, not what it is called, and an evaluator's phone
+ * reformatting a street name is not an improvement anybody asked for.
+ */
+export async function setPropertyLocation(input: {
+  propertyId: string;
+  lat: number;
+  lng: number;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  const lat = Number(input.lat);
+  const lng = Number(input.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false, message: "Those numbers do not make a location." };
+  }
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return { ok: false, message: "That is outside the range coordinates come in." };
+  }
+  // What an unfixed GPS reads. Saving it would put the property in the
+  // Atlantic, and the next person to look would have no idea why.
+  if (lat === 0 && lng === 0) {
+    return { ok: false, message: "That reads as zero, zero, which is a GPS that has not fixed yet." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("properties")
+    .update({ lat, lng, updated_at: new Date().toISOString() })
+    .eq("id", input.propertyId);
+  if (error) return { ok: false, message: error.message };
+
+  // Everything that draws a map, plans a route or fetches a satellite photo
+  // reads these two numbers, so the whole job view is stale the moment they
+  // change.
+  revalidatePath("/attractors");
+  return { ok: true };
+}

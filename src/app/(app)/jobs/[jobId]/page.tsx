@@ -62,6 +62,7 @@ import { capabilities, deriveStage } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
+import { LocationPanel } from "@/components/canvas/location-panel";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -536,6 +537,18 @@ export default async function JobPage({
                   initialLng={job.property?.lng}
                   initialEvaluationStatus={job.evaluation_status}
                   evaluatorName={viewer?.full_name || viewer?.email || null}
+                />
+
+                {/* Where the house actually is, said by the one person who can
+                    know: somebody standing on it. The address was placed by
+                    geocoding what a client typed, which lands on the mouth of
+                    a court rather than the house often enough to matter, and
+                    until now nothing could correct it. */}
+                <LocationPanel
+                  propertyId={job.property_id}
+                  address={job.property?.address ?? ""}
+                  lat={job.property?.lat ?? null}
+                  lng={job.property?.lng ?? null}
                 />
 
                 {/* For what comes in afterwards. A client texting a new

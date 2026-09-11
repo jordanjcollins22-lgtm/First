@@ -6,6 +6,7 @@ import { Loader2, MapPin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { isMapboxConfigured } from "@/lib/env";
+import { formatCoordinates, parseCoordinates } from "@/lib/coordinates";
 
 interface SatelliteAddressSearchProps {
   onSelect: (suggestion: GeocodeSuggestion) => void;
@@ -25,6 +26,25 @@ export function SatelliteAddressSearch({ onSelect, disabled }: SatelliteAddressS
       setSuggestions([]);
       return;
     }
+
+    // A pasted pin goes straight through without asking the geocoder, which
+    // is the whole point of pasting one: the evaluator is doing this because
+    // looking the address up put the photo on the wrong roof. Offered as a
+    // suggestion rather than applied, so it is still one deliberate tap.
+    const coordinates = parseCoordinates(value);
+    if (coordinates.ok) {
+      setSearching(false);
+      setSuggestions([
+        {
+          id: "pasted-coordinates",
+          fullAddress: formatCoordinates(coordinates.point),
+          lat: coordinates.point.lat,
+          lng: coordinates.point.lng,
+        },
+      ]);
+      return;
+    }
+
     debounceTimerRef.current = setTimeout(async () => {
       setSearching(true);
       try {
@@ -58,7 +78,7 @@ export function SatelliteAddressSearch({ onSelect, disabled }: SatelliteAddressS
       <Input
         value={query}
         onChange={(e) => handleQueryChange(e.target.value)}
-        placeholder="Search an address for a satellite photo"
+        placeholder="Address, or paste a pin or coordinates"
         disabled={disabled}
         className="pl-9"
         autoComplete="off"
