@@ -1,5 +1,6 @@
 import { EvaluationsView } from "@/components/evaluations/evaluations-view";
 import { JobBriefings } from "@/components/evaluations/job-briefings";
+import { BookEvaluationPanel } from "@/components/evaluations/book-evaluation-panel";
 import { listWorkSessionsByJob } from "@/lib/data/work-sessions";
 import { getJobBriefings } from "@/lib/data/job-briefing";
 import { CalendarSettings, type BookingLinksData } from "@/components/calendars/calendar-settings";
@@ -93,6 +94,15 @@ export async function MyEvaluationsContent({
               : "Evaluations assigned to you — where to go, when, and your progress on each one."}
           </p>
         </>
+      )}
+      {/* Above the calendar rather than on the booking tab: the booking tab is
+          about the links clients use, and this is the office typing one in
+          while somebody is still on the phone. Folded shut, because the
+          calendar is what they came here to look at. */}
+      {section !== "booking" && (
+        <BookEvaluationPanel
+          evaluators={Object.entries(evaluatorNamesById ?? {}).map(([id, name]) => ({ id, name }))}
+        />
       )}
       {section !== "booking" && <JobBriefings briefings={briefings} />}
       {section !== "booking" && <EvaluationsView

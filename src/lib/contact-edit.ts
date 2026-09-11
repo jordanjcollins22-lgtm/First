@@ -7,11 +7,30 @@
  */
 
 import { normalizeEmail, normalizePhone } from "@/lib/dedupe";
+import { isContactType } from "@/lib/contact-types";
 
 export interface ContactInput {
   name: string;
   email: string | null;
   phone: string | null;
+  /** What they are to us. Defaults to a lead, which is what a typed-in
+   * contact almost always is: somebody who rang, not somebody who has bought. */
+  contactType?: string | null;
+  /** Where they heard about us. Free text, because the real answers never fit
+   * a list: "Ruth next door", "the sign on Route 24", "saw the truck". */
+  source?: string | null;
+  /**
+   * Their property, when there is one.
+   *
+   * The reason a typed-in contact was nearly useless before: a person with no
+   * address cannot have a property, and without a property they cannot have a
+   * job, so nothing could ever be booked for them. Somebody entering a phone
+   * call has the address in front of them, and asking for it here saves
+   * entering the same person twice.
+   */
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export type Verdict = { ok: true } | { ok: false; reason: string };
@@ -27,11 +46,34 @@ const OK: Verdict = { ok: true };
  * as a value it could match on.
  */
 export function cleanContact(input: ContactInput): ContactInput {
+  const type = (input.contactType ?? "").trim();
   return {
     name: input.name.trim(),
     email: input.email?.trim() || null,
     phone: input.phone?.trim() || null,
+    contactType: isContactType(type) ? type : null,
+    source: input.source?.trim() || null,
+    address: input.address?.trim() || null,
+    lat: Number.isFinite(input.lat) ? Number(input.lat) : null,
+    lng: Number.isFinite(input.lng) ? Number(input.lng) : null,
   };
+}
+
+/**
+ * Whether an address can become a property.
+ *
+ * A property row cannot exist without coordinates, so an address typed out and
+ * never picked from the suggestions has nowhere to go. Said out loud rather
+ * than dropped, because a contact silently saved without the address somebody
+ * just typed is the kind of thing found out three weeks later.
+ */
+export function addressIsPlaceable(input: ContactInput): Verdict {
+  const clean = cleanContact(input);
+  if (!clean.address) return OK;
+  if (clean.lat == null || clean.lng == null) {
+    return { ok: false, reason: "Pick the address from the suggestions so we can place it on the map." };
+  }
+  return OK;
 }
 
 export function validateContact(input: ContactInput): Verdict {

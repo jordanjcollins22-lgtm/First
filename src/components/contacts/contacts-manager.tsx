@@ -6,6 +6,8 @@ import { ArrowRight, Loader2, Merge, Pencil, Search, Trash2, UserPlus } from "lu
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
+import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import {
   createContact,
   deleteContact,
@@ -272,6 +274,11 @@ function ContactForm({ contact, onDone }: { contact?: ContactRow; onDone: () => 
   const [name, setName] = useState(contact?.name ?? "");
   const [email, setEmail] = useState(contact?.email ?? "");
   const [phone, setPhone] = useState(contact?.phone ?? "");
+  const [contactType, setContactType] = useState<string>("lead");
+  const [source, setSource] = useState("");
+  // Only offered when adding. Changing an existing contact is about them
+  // rather than about their land, and their properties have their own screen.
+  const [picked, setPicked] = useState<GeocodeSuggestion | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -283,7 +290,16 @@ function ContactForm({ contact, onDone }: { contact?: ContactRow; onDone: () => 
     setMessage(null);
 
     startTransition(async () => {
-      const input = { name, email: email || null, phone: phone || null };
+      const input = {
+        name,
+        email: email || null,
+        phone: phone || null,
+        contactType,
+        source: source || null,
+        address: picked?.fullAddress ?? null,
+        lat: picked?.lat ?? null,
+        lng: picked?.lng ?? null,
+      };
       const result = contact
         ? await updateContact(contact.id, input)
         : await createContact(input);
@@ -295,6 +311,8 @@ function ContactForm({ contact, onDone }: { contact?: ContactRow; onDone: () => 
         setName("");
         setEmail("");
         setPhone("");
+        setSource("");
+        setPicked(null);
       }
     });
   }
@@ -328,6 +346,59 @@ function ContactForm({ contact, onDone }: { contact?: ContactRow; onDone: () => 
           />
         </label>
       </div>
+
+      {!contact && (
+        <>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs font-medium">
+              What are they?
+              <select
+                value={contactType}
+                onChange={(e) => setContactType(e.target.value)}
+                className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+              >
+                {CONTACT_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium">
+              Where did they come from?
+              <Input
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                placeholder="Ruth next door, the sign on 24…"
+              />
+            </label>
+          </div>
+
+          {/* The field that makes a typed-in contact useful. Without an
+              address they have no property, without a property they can have
+              no job, and nothing can ever be booked for them. */}
+          <div className="flex flex-col gap-1 text-xs font-medium">
+            Property address
+            {picked ? (
+              <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5">
+                <span className="flex-1 truncate text-sm font-normal">{picked.fullAddress}</span>
+                <button
+                  type="button"
+                  onClick={() => setPicked(null)}
+                  className="text-xs font-normal text-muted-foreground underline"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <SatelliteAddressSearch onSelect={setPicked} disabled={isPending} />
+            )}
+            <span className="font-normal text-muted-foreground">
+              Optional. A supplier has no property here. Anybody you might book work for does.
+            </span>
+          </div>
+        </>
+      )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
       {message && <p className="text-xs text-emerald-700">{message}</p>}

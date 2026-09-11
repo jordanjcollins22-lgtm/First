@@ -8,6 +8,8 @@ import { lookupPropertyDetails } from "@/lib/rentcast";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
+import { getCurrentProfile } from "@/lib/data/team";
+import { describeDbError } from "@/lib/setup-errors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -285,4 +287,230 @@ export async function setPropertyLocation(input: {
   // change.
   revalidatePath("/attractors");
   return { ok: true };
+}
+
+export interface ManualEvaluationInput {
+  /** An existing contact, when the office picked one off the book. */
+  customerId?: string | null;
+  /** Or a new one, typed in. */
+  customerName?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  address: string;
+  lat: number;
+  lng: number;
+  /** Local datetime from the form, as an ISO string. */
+  startsAt: string;
+  /** How long to hold. The calendar shows it and the clash check uses it. */
+  minutes: number;
+  /** Who is going. Optional: the office books first and assigns second often. */
+  evaluatorId?: string | null;
+  notes?: string | null;
+}
+
+export type BookedEvaluation =
+  | { ok: true; jobId: string; message: string }
+  | { ok: false; message: string };
+
+/**
+ * Booking an evaluation the way the office actually takes one: on the phone.
+ *
+ * Every evaluation in this system arrived through the client booking form,
+ * which is the wrong shape for the call that actually books most of them.
+ * Somebody rings, the person answering has the address and a diary, and the
+ * only path open to them was to create a property, land on the job page, find
+ * the schedule panel, and set a date there. Three screens for one phone call,
+ * and the contact, the property and the appointment each had to be typed
+ * somewhere different.
+ *
+ * So this is one call: who, where, when, and who is going. Everything it
+ * touches goes through the same doors the rest of the app uses, so a client
+ * booked by phone is indistinguishable from one who booked themselves.
+ *
+ * The clash check is the same one the calendar enforces. An office booking is
+ * the easiest place to double-book somebody, because the person on the phone
+ * is looking at a client rather than at a diary.
+ */
+export async function bookEvaluation(input: ManualEvaluationInput): Promise<BookedEvaluation> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+
+    const address = input.address.trim();
+    if (!address) return { ok: false, message: "We need an address." };
+    if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
+      return { ok: false, message: "Pick the address from the suggestions so we can place it." };
+    }
+
+    const start = new Date(input.startsAt);
+    if (Number.isNaN(start.getTime())) return { ok: false, message: "That is not a date and time." };
+
+    const minutes = Math.max(15, Math.min(480, Math.round(Number(input.minutes) || 60)));
+    const end = new Date(start.getTime() + minutes * 60_000);
+
+    const organizationId = await getCurrentOrganizationId();
+    const supabase = await createClient();
+
+    const customerId = await customerFor(supabase, organizationId, input);
+    if (!customerId) return { ok: false, message: "We need a name, or a contact to book it under." };
+
+    const propertyId = await propertyFor(supabase, customerId, address, input.lat, input.lng);
+
+    // Checked before writing, not after. A refusal that has already created a
+    // job leaves a half-booked appointment nobody asked for.
+    if (input.evaluatorId) {
+      const clash = await evaluationClash(supabase, input.evaluatorId, start, end);
+      if (clash) return { ok: false, message: clash };
+    }
+
+    const { data: job, error } = await supabase
+      .from("jobs")
+      .insert({
+        property_id: propertyId,
+        name: `${address} — Estimate`,
+        assigned_to: input.evaluatorId || null,
+        evaluation_date: start.toISOString(),
+        evaluation_end_date: end.toISOString(),
+        evaluation_status: "scheduled",
+        client_notes: input.notes?.trim() || null,
+      })
+      .select("id")
+      .single();
+    if (error || !job) return { ok: false, message: describeDbError(error) };
+
+    // They have just stopped being a cold address on a call sheet.
+    await reconcileProspects(supabase).catch(() => null);
+
+    revalidatePath("/evaluations");
+    revalidatePath("/attractors");
+    revalidatePath("/pipeline");
+
+    return {
+      ok: true,
+      jobId: job.id,
+      message: `Booked for ${start.toLocaleString()}.`,
+    };
+  } catch (err) {
+    console.error("bookEvaluation failed:", err);
+    return { ok: false, message: "Couldn't book that." };
+  }
+}
+
+/** The contact this is for: one they picked, or one they typed. */
+async function customerFor(
+  supabase: SupabaseClient<Database>,
+  organizationId: string,
+  input: ManualEvaluationInput
+): Promise<string | null> {
+  if (input.customerId) return input.customerId;
+
+  const name = input.customerName?.trim();
+  if (!name) return null;
+
+  // The same matcher every other door uses, so a client who rang in March does
+  // not become a second person when they ring again in June.
+  const { data: existing } = await supabase.from("customers").select("id, name, email, phone");
+  const duplicate = findDuplicateCustomer(existing ?? [], {
+    name,
+    email: input.customerEmail ?? null,
+    phone: input.customerPhone ?? null,
+  });
+
+  if (duplicate) {
+    const patch = mergeableFields(
+      { email: duplicate.email ?? null, phone: duplicate.phone ?? null },
+      { email: input.customerEmail ?? null, phone: input.customerPhone ?? null }
+    );
+    if (Object.keys(patch).length > 0) {
+      await supabase.from("customers").update(patch).eq("id", duplicate.id);
+    }
+    return duplicate.id;
+  }
+
+  const { data: created, error } = await supabase
+    .from("customers")
+    .insert({
+      organization_id: organizationId,
+      name,
+      email: input.customerEmail?.trim() || null,
+      phone: input.customerPhone?.trim() || null,
+      // Somebody with an evaluation booked is a lead until the work is sold.
+      contact_type: "lead",
+      source: "Booked by phone",
+    })
+    .select("id")
+    .single();
+  if (error || !created) throw error ?? new Error("no customer");
+  return created.id;
+}
+
+/** Their property at this address, reused rather than duplicated. */
+async function propertyFor(
+  supabase: SupabaseClient<Database>,
+  customerId: string,
+  address: string,
+  lat: number,
+  lng: number
+): Promise<string> {
+  const { data: properties } = await supabase
+    .from("properties")
+    .select("id, address")
+    .eq("customer_id", customerId);
+
+  const duplicate = findDuplicateProperty(properties ?? [], address);
+  if (duplicate) return duplicate.id;
+
+  const { data: property, error } = await supabase
+    .from("properties")
+    .insert({ customer_id: customerId, address, lat, lng })
+    .select("id")
+    .single();
+  if (error || !property) throw error ?? new Error("no property");
+
+  await attachPropertyDetails(supabase, property.id, address).catch(() => null);
+  return property.id;
+}
+
+/**
+ * Whether this evaluator is already out somewhere at that time.
+ *
+ * The same rule the calendar enforces, applied here because an office booking
+ * is the easiest place to create a double booking: the person on the phone is
+ * looking at a client, not at a diary.
+ */
+async function evaluationClash(
+  supabase: SupabaseClient<Database>,
+  evaluatorId: string,
+  start: Date,
+  end: Date
+): Promise<string | null> {
+  const dayStart = new Date(start);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(start);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const { data } = await supabase
+    .from("jobs")
+    .select("id, name, evaluation_date, evaluation_end_date, assigned_to, evaluation_status")
+    .eq("assigned_to", evaluatorId)
+    .not("evaluation_date", "is", null)
+    .gte("evaluation_date", dayStart.toISOString())
+    .lte("evaluation_date", dayEnd.toISOString());
+
+  for (const row of data ?? []) {
+    if (row.evaluation_status === "cancelled") continue;
+    const theirStart = new Date(row.evaluation_date as string);
+    const theirEnd = row.evaluation_end_date
+      ? new Date(row.evaluation_end_date as string)
+      : new Date(theirStart.getTime() + 60 * 60_000);
+    // Touching is not overlapping: a visit ending at ten and the next starting
+    // at ten is a back-to-back day, not a double booking.
+    if (start < theirEnd && theirStart < end) {
+      return `They are already out at ${theirStart.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      })} that day. Pick another time or another evaluator.`;
+    }
+  }
+  return null;
 }

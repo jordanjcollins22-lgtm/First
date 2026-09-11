@@ -10,12 +10,14 @@ import { mergeableFields } from "@/lib/dedupe";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { describeDbError } from "@/lib/setup-errors";
 import {
+  addressIsPlaceable,
   canDeleteContact,
   cleanContact,
   looksLikeSamePerson,
   validateContact,
   type ContactInput,
 } from "@/lib/contact-edit";
+import { findDuplicateProperty } from "@/lib/dedupe";
 
 export type MergeResult = { ok: true; movedProperties: number } | { ok: false; message: string };
 
@@ -143,6 +145,8 @@ export async function createContact(input: ContactInput): Promise<ContactResult>
     const clean = cleanContact(input);
     const verdict = validateContact(clean);
     if (!verdict.ok) return { ok: false, message: verdict.reason };
+    const placeable = addressIsPlaceable(clean);
+    if (!placeable.ok) return { ok: false, message: placeable.reason };
 
     const organizationId = await getCurrentOrganizationId();
     const supabase = await createClient();
@@ -160,24 +164,43 @@ export async function createContact(input: ContactInput): Promise<ContactResult>
       if (Object.keys(patch).length > 0) {
         await supabase.from("customers").update(patch).eq("id", match.id);
       }
+      // An address on a person we already knew is usually the point of typing
+      // them in again: they have moved, or they have a second property.
+      const added = await attachProperty(supabase, match.id, clean);
       revalidatePath("/contacts");
       return {
         ok: true,
-        message: `${match.name} is already in the book — filled in what was missing rather than adding a second.`,
+        message: added
+          ? `${match.name} is already in the book — filled in what was missing and added the address.`
+          : `${match.name} is already in the book — filled in what was missing rather than adding a second.`,
       };
     }
 
-    const { error } = await supabase.from("customers").insert({
-      organization_id: organizationId,
-      name: clean.name,
-      email: clean.email,
-      phone: clean.phone,
-    });
-    if (error) return { ok: false, message: describeDbError(error) };
+    const { data: created, error } = await supabase
+      .from("customers")
+      .insert({
+        organization_id: organizationId,
+        name: clean.name,
+        email: clean.email,
+        phone: clean.phone,
+        // A typed-in contact is a lead until somebody says otherwise. That is
+        // what a phone call is, and defaulting to client would quietly inflate
+        // every count of how many clients this business has.
+        contact_type: clean.contactType ?? "lead",
+        source: clean.source,
+      })
+      .select("id")
+      .single();
+    if (error || !created) return { ok: false, message: describeDbError(error) };
+
+    const added = await attachProperty(supabase, created.id, clean);
 
     revalidatePath("/contacts");
     revalidatePath("/attractors");
-    return { ok: true, message: `${clean.name} added.` };
+    return {
+      ok: true,
+      message: added ? `${clean.name} added, with their address.` : `${clean.name} added.`,
+    };
   } catch (err) {
     console.error("createContact failed:", err);
     return { ok: false, message: "Couldn't add that contact." };
@@ -350,4 +373,40 @@ export async function undoContactMerge(mergeRecordId: string): Promise<ContactRe
     console.error("undoContactMerge failed:", err);
     return { ok: false, message: "Couldn't undo that merge." };
   }
+}
+
+/**
+ * Their property, when the form collected one.
+ *
+ * Quietly does nothing without an address, because most contacts are a
+ * supplier or a referral partner and have no property here at all. Returns
+ * whether one was actually added, so the message can say so rather than
+ * claiming something that did not happen.
+ *
+ * An address they already have is left alone rather than added twice. The
+ * duplicate check is the same one every other door uses, so a street typed
+ * two different ways still lands on one property.
+ */
+async function attachProperty(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  customerId: string,
+  clean: ContactInput
+): Promise<boolean> {
+  if (!clean.address || clean.lat == null || clean.lng == null) return false;
+
+  const { data: properties } = await supabase
+    .from("properties")
+    .select("id, address")
+    .eq("customer_id", customerId);
+
+  if (findDuplicateProperty(properties ?? [], clean.address)) return false;
+
+  const { error } = await supabase
+    .from("properties")
+    .insert({ customer_id: customerId, address: clean.address, lat: clean.lat, lng: clean.lng });
+  if (error) {
+    console.error("couldn't attach a property to a new contact:", error);
+    return false;
+  }
+  return true;
 }

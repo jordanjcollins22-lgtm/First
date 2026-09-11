@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addressIsPlaceable,
   canDeleteContact,
   cleanContact,
   looksLikeSamePerson,
@@ -9,7 +10,7 @@ import {
 
 describe("cleanContact", () => {
   it("trims what somebody typed", () => {
-    expect(cleanContact({ name: "  Mike Harrow ", email: " a@b.com ", phone: " 410 555 1234 " })).toEqual({
+    expect(cleanContact({ name: "  Mike Harrow ", email: " a@b.com ", phone: " 410 555 1234 " })).toMatchObject({
       name: "Mike Harrow",
       email: "a@b.com",
       phone: "410 555 1234",
@@ -19,7 +20,7 @@ describe("cleanContact", () => {
   it("turns a blank into nothing, not into an empty value", () => {
     // The duplicate finder treats a blank as "unknown" and an empty string as
     // a value it could match on, so this distinction matters.
-    expect(cleanContact({ name: "Mike", email: "   ", phone: "" })).toEqual({
+    expect(cleanContact({ name: "Mike", email: "   ", phone: "" })).toMatchObject({
       name: "Mike",
       email: null,
       phone: null,
@@ -119,5 +120,54 @@ describe("looksLikeSamePerson", () => {
         { name: "B", email: null, phone: "555" }
       )
     ).toBe(false);
+  });
+});
+
+describe("what a contact is, and where they live", () => {
+  const person = { name: "Mike Harrow", email: null, phone: null };
+
+  it("keeps a type the column will actually take", () => {
+    expect(cleanContact({ ...person, contactType: "supplier" }).contactType).toBe("supplier");
+  });
+
+  it("drops a type nobody has heard of rather than failing the insert", () => {
+    // The column has a check constraint on it, and a typo in a form should
+    // not be the thing that turns adding a contact into a database error.
+    expect(cleanContact({ ...person, contactType: "friend" }).contactType).toBeNull();
+    expect(cleanContact(person).contactType).toBeNull();
+  });
+
+  it("trims the address and keeps the coordinates that came with it", () => {
+    const clean = cleanContact({
+      ...person,
+      address: "  12 Foxfield Ct, Bel Air MD ",
+      lat: 39.512345,
+      lng: -76.345678,
+    });
+    expect(clean.address).toBe("12 Foxfield Ct, Bel Air MD");
+    expect(clean.lat).toBe(39.512345);
+  });
+
+  it("is happy with a contact who has no address at all", () => {
+    // Most of them. A supplier has no property here.
+    expect(addressIsPlaceable(person).ok).toBe(true);
+  });
+
+  it("takes an address that was picked off the map", () => {
+    const clean = { ...person, address: "12 Foxfield Ct", lat: 39.5, lng: -76.3 };
+    expect(addressIsPlaceable(clean).ok).toBe(true);
+  });
+
+  it("refuses an address typed out and never picked", () => {
+    // A property row cannot exist without coordinates, so this would be saved
+    // as a contact with the address silently dropped, and found out weeks
+    // later when somebody tried to book them.
+    const verdict = addressIsPlaceable({ ...person, address: "12 Foxfield Ct" });
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toMatch(/suggestions/i);
+  });
+
+  it("refuses an address with only half a coordinate", () => {
+    expect(addressIsPlaceable({ ...person, address: "12 Foxfield Ct", lat: 39.5 }).ok).toBe(false);
   });
 });
