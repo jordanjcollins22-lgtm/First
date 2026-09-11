@@ -32,6 +32,12 @@ export interface Organization {
   crew_size?: number | null;
   /** "percent" for the old flat markup, "per_diem" for the real overhead. */
   overhead_basis?: string | null;
+  /** How the business prints at the top of a document. */
+  business_phone?: string | null;
+  business_email?: string | null;
+  business_address?: string | null;
+  business_website?: string | null;
+  logo_path?: string | null;
   /** Whether a finished job gets a tip link at all. */
   tips_enabled?: boolean | null;
   /** What the tip page says about where the money goes. */

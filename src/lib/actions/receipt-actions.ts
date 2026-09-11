@@ -156,7 +156,11 @@ export async function receiptByToken(token: string): Promise<Receipt | null> {
   if (!payment || !payment.receipt_number) return null;
 
   const [{ data: org }, { data: customer }, { data: job }] = await Promise.all([
-    admin.from("organizations").select("name").eq("id", payment.organization_id).maybeSingle(),
+    admin
+      .from("organizations")
+      .select("name, business_phone, business_email, business_address, business_website, logo_path")
+      .eq("id", payment.organization_id)
+      .maybeSingle(),
     payment.customer_id
       ? admin.from("customers").select("name").eq("id", payment.customer_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -206,6 +210,13 @@ export async function receiptByToken(token: string): Promise<Receipt | null> {
     forWhat: (job as { name?: string } | null)?.name ?? null,
     address: property?.address ?? null,
     businessName: org?.name ?? "",
+    business: {
+      phone: org?.business_phone ?? null,
+      email: org?.business_email ?? null,
+      address: org?.business_address ?? null,
+      website: org?.business_website ?? null,
+      logoUrl: org?.logo_path ?? null,
+    },
     reference: payment.stripe_invoice_id ?? null,
     note: payment.note,
     outstandingCents,

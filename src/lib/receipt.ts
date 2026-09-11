@@ -32,6 +32,37 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   other: "Other",
 };
 
+export interface BusinessBlock {
+  phone: string | null;
+  email: string | null;
+  /** As it prints, line breaks kept. */
+  address: string | null;
+  website: string | null;
+  /** A full URL or a path under /public. Null prints the name as a wordmark. */
+  logoUrl: string | null;
+}
+
+/**
+ * The address as lines, for printing one under the other.
+ *
+ * Line breaks are lines, exactly as typed. An address typed on one line is
+ * split once, at its first comma: the street on top and "City, ST 21014"
+ * kept together underneath, because that pair is one line by every
+ * convention a client has ever seen and splitting it reads as a mistake.
+ */
+export function addressLines(block: Pick<BusinessBlock, "address">): string[] {
+  const raw = (block.address ?? "").trim();
+  if (!raw) return [];
+  if (/\r?\n/.test(raw)) {
+    return raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  }
+  const comma = raw.indexOf(",");
+  if (comma === -1) return [raw];
+  const street = raw.slice(0, comma).trim();
+  const rest = raw.slice(comma + 1).trim();
+  return [street, rest].filter(Boolean);
+}
+
 /** What the client reads. Every field is either known or left out. */
 export interface Receipt {
   number: string;
@@ -45,6 +76,11 @@ export interface Receipt {
   forWhat: string | null;
   address: string | null;
   businessName: string;
+  /**
+   * Who to ring about it. Every field optional, and the page leaves out what
+   * is blank rather than printing "Phone:" beside nothing.
+   */
+  business: BusinessBlock;
   /** Last four of a card, a check number, whatever identifies the payment. */
   reference: string | null;
   note: string | null;

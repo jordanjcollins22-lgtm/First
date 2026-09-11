@@ -34,6 +34,13 @@ export interface Database {
           crew_size: number;
           /** 'percent' or 'per_diem': how a quote charges overhead. */
           overhead_basis: string;
+          /** How the business prints at the top of a document. All optional. */
+          business_phone: string | null;
+          business_email: string | null;
+          business_address: string | null;
+          business_website: string | null;
+          /** A URL or a path under /public. Null prints the name as a wordmark. */
+          logo_path: string | null;
           /** Whether finished jobs get a tip link at all. */
           tips_enabled: boolean;
           /** What the tip page says about where the money goes. */

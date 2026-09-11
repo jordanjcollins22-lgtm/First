@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addressLines,
   balanceLine,
   canIssue,
   longDay,
@@ -23,6 +24,7 @@ function receipt(overrides: Partial<Receipt> = {}): Receipt {
     forWhat: "Front beds and mulch",
     address: "208 Crafton Rd",
     businessName: "J's Landscaping Services LLC",
+    business: { phone: null, email: null, address: null, website: null, logoUrl: null },
     reference: "Check 1042",
     note: null,
     outstandingCents: null,
@@ -152,5 +154,32 @@ describe("money and dates", () => {
 
   it("writes nothing for a date that is not one", () => {
     expect(longDay("not a date")).toBe("");
+  });
+});
+
+describe("addressLines", () => {
+  it("prints an address exactly as it was typed, line for line", () => {
+    expect(addressLines({ address: "3501 Woodbrook Court\nAbingdon, MD 21009" })).toEqual([
+      "3501 Woodbrook Court",
+      "Abingdon, MD 21009",
+    ]);
+  });
+
+  it("keeps city, state and zip together when the address was typed on one line", () => {
+    // "Bel Air, MD 21014" is one line by every convention a client has seen.
+    // Splitting it at every comma printed the state on a line of its own.
+    expect(addressLines({ address: "12 Main St, Bel Air, MD 21014" })).toEqual([
+      "12 Main St",
+      "Bel Air, MD 21014",
+    ]);
+  });
+
+  it("leaves an address with no comma as one line", () => {
+    expect(addressLines({ address: "PO Box 9" })).toEqual(["PO Box 9"]);
+  });
+
+  it("prints nothing for no address", () => {
+    expect(addressLines({ address: null })).toEqual([]);
+    expect(addressLines({ address: "  " })).toEqual([]);
   });
 });

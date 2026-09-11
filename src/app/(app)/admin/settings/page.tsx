@@ -6,7 +6,8 @@ import { listRolePermissions } from "@/lib/data/permissions";
 import { checkSchema, type MigrationStatus } from "@/lib/data/schema-check";
 import { PaymentReadiness } from "@/components/admin/payment-readiness";
 import { env, isStripeConfigured } from "@/lib/env";
-import { listOrganizations } from "@/lib/data/organizations";
+import { getCurrentOrganization, listOrganizations } from "@/lib/data/organizations";
+import { BusinessDetailsPanel } from "@/components/admin/business-details-panel";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PageTabs } from "@/components/ui/page-tabs";
 import { PermissionsMatrix } from "@/components/permissions/permissions-matrix";
@@ -49,6 +50,7 @@ export default async function SettingsPage() {
       <PageTabs
         tabs={[
           { key: "permissions", label: "Permissions", content: await PermissionsTab() },
+          { key: "business", label: "Business", content: await BusinessTab() },
           { key: "email", label: "Email", content: await EmailTab() },
           { key: "database", label: "Database", content: await DatabaseTab() },
           {
@@ -226,6 +228,38 @@ async function EmailTab() {
     <div className="max-w-2xl">
       <h2 className="mb-1 text-lg font-bold">Email</h2>
       <EmailSetupPanel setup={setup} />
+    </div>
+  );
+}
+
+/**
+ * What the business prints at the top of a document.
+ *
+ * Its own tab because it is the one thing on this page a non-technical
+ * owner comes here for: the receipt went out with a name and nothing under
+ * it, and this is where the phone number goes so that never happens again.
+ */
+async function BusinessTab() {
+  const organization = await getCurrentOrganization().catch(() => null);
+  if (!organization) {
+    return (
+      <p className="rounded-lg border border-border bg-card/60 px-3 py-3 text-sm text-muted-foreground">
+        Couldn&apos;t load the business details just now.
+      </p>
+    );
+  }
+  return (
+    <div className="max-w-2xl">
+      <h2 className="mb-1 text-lg font-bold">Business details</h2>
+      <BusinessDetailsPanel
+        initial={{
+          phone: organization.business_phone ?? "",
+          email: organization.business_email ?? "",
+          address: organization.business_address ?? "",
+          website: organization.business_website ?? "",
+          logoPath: organization.logo_path ?? "",
+        }}
+      />
     </div>
   );
 }
