@@ -49,7 +49,7 @@ All product claims come from `PRODUCT_FACTS.md`. Nothing else may be claimed.
 | Weekly reports | `reports/YYYY-MM-DD.md` |
 | Operations manual | `RUNBOOK.md` (written in step 8) |
 | App | `src/app/` (Next.js App Router), `src/lib/` |
-| Database | `supabase/migrations/` |
+| Database | `supabase/migrations/0003_winter_pass.sql`, `docs/SCHEMA.md`, smoke test `npm run db:smoke` |
 
 ## Tech stack
 
@@ -112,8 +112,8 @@ times per page.
 | Step | Status |
 | --- | --- |
 | 1. Scaffold, CLAUDE.md, DECISIONS.md, PRODUCT_FACTS.md, legal + hash lock + CI, offer-config, experiments | done |
-| 2. Supabase schema + migrations | next (check-in after) |
-| 3. Landing, plan picker, checkout, thank-you, waitlist | pending |
+| 2. Supabase schema + migrations | done (`docs/SCHEMA.md`) — check-in |
+| 3. Landing, plan picker, checkout, thank-you, waitlist | next |
 | 4. Stripe, webhooks, GoHighLevel, SMS/email | pending |
 | 5. Events, bandit, weekly cron, admin, kill switch | pending (check-in after) |
 | 6. Google Ads conversions, UTM, per-ad-group variants | pending |

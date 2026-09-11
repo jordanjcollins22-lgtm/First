@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "legal:hash": "node scripts/legal-hash.mjs --write",
     "legal:check": "node scripts/legal-hash.mjs --check",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "db:smoke": "bash scripts/db-smoke.sh"
   },
   "dependencies": {
     "@mapbox/mapbox-gl-draw": "^1.5.1",
