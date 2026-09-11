@@ -53,3 +53,55 @@ comment on column organizations.overhead_basis is
   'How a quote charges overhead: the old flat percentage, or a per diem worked out from what the bank says the business costs to keep open.';
 
 notify pgrst, 'reload schema';
+
+-- Move the decisions onto the keys the detector now produces.
+--
+-- The merchant key stopped leaving "pur", "misc", "xfer" and the bank's own
+-- payment words in the name, which is what let one landlord be two merchants.
+-- Every judgement already recorded is keyed by the old spelling, so without
+-- this a restaurant somebody pushed out six months ago walks back onto the
+-- screen and the rent loses the group it was put in.
+--
+-- Where an old key collapses onto one that already exists, the existing row
+-- wins: it is the one the screen has been showing.
+with renamed as (
+  select id,
+         organization_id,
+         merchant_key,
+         btrim(regexp_replace(
+           regexp_replace(
+             regexp_replace(merchant_key,
+               '\y(pur|misc|xfer|pmt|pmts|epayment)\y', ' ', 'g'),
+             '^\s*the\y', ' '),
+           '\s+', ' ', 'g')) as fixed
+  from recurring_decisions
+)
+delete from recurring_decisions d
+using renamed r
+where d.id = r.id
+  and r.fixed <> r.merchant_key
+  and exists (
+    select 1 from recurring_decisions other
+    where other.organization_id = r.organization_id
+      and other.merchant_key = r.fixed
+  );
+
+update recurring_decisions d
+set merchant_key = btrim(regexp_replace(
+      regexp_replace(
+        regexp_replace(d.merchant_key,
+          '\y(pur|misc|xfer|pmt|pmts|epayment)\y', ' ', 'g'),
+        '^\s*the\y', ' '),
+      '\s+', ' ', 'g'))
+where btrim(regexp_replace(
+        regexp_replace(
+          regexp_replace(d.merchant_key,
+            '\y(pur|misc|xfer|pmt|pmts|epayment)\y', ' ', 'g'),
+          '^\s*the\y', ' '),
+        '\s+', ' ', 'g')) <> d.merchant_key
+  and btrim(regexp_replace(
+        regexp_replace(
+          regexp_replace(d.merchant_key,
+            '\y(pur|misc|xfer|pmt|pmts|epayment)\y', ' ', 'g'),
+          '^\s*the\y', ' '),
+        '\s+', ' ', 'g')) <> '';
