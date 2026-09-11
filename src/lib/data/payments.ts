@@ -5,6 +5,9 @@ import type { LedgerEntry, Profile, TeamPayment } from "@/types/domain";
 import { getOverhead } from "@/lib/data/overhead";
 import { getPerDiem, type PerDiemBoard } from "@/lib/data/per-diem";
 import type { OverheadBreakdown } from "@/lib/overhead";
+import { tallyTips, type TipRecord, type TipTotals } from "@/lib/tips";
+import { quotedShape, type QuotedShape } from "@/lib/commission-forecast";
+import { DEFAULT_ACCOUNT_MANAGER_PCT } from "@/lib/commission";
 
 export interface TeamPaymentWithPerson extends TeamPayment {
   personName: string;
@@ -65,6 +68,22 @@ export interface PaymentsData {
   /** The same figure as what a day of work has to earn, which is what a quote
    * needs. Null when there is nothing to spread yet. */
   perDiem: PerDiemBoard | null;
+  /**
+   * What clients have left for the crew.
+   *
+   * Kept apart from revenue on purpose. A tip is not money the business
+   * earned on the work, and adding it to the collected figure would flatter
+   * the margin and pay commission on somebody else's thank-you.
+   */
+  tips: TipTotals;
+  /**
+   * What jobs are quoted at.
+   *
+   * Only worth showing while nothing has been collected. Commission is paid
+   * on money that arrived, and a business whose first invoice has not gone out
+   * still deserves an answer to "what does a sale cost me in commission".
+   */
+  quoted: QuotedShape;
   revenue: RevenueSummary;
   team: Profile[];
   /** Jobs a ledger entry can be filed against. Open work only — filing a cost
@@ -86,8 +105,17 @@ function sum(values: (number | null | undefined)[]): number {
 export async function getPaymentsData(): Promise<PaymentsData> {
   const supabase = await createClient();
 
-  const [team, paymentsResult, invoicesResult, ledgerResult, jobsResult, overhead, perDiem] =
-    await Promise.all([
+  const [
+    team,
+    paymentsResult,
+    invoicesResult,
+    ledgerResult,
+    jobsResult,
+    overhead,
+    perDiem,
+    tips,
+    quoted,
+  ] = await Promise.all([
     listProfiles(),
     supabase
       .from("team_payments")
@@ -119,6 +147,9 @@ export async function getPaymentsData(): Promise<PaymentsData> {
     // What that same figure comes to per day and per crew-hour, which is the
     // form a quote can use.
     getPerDiem().catch(() => null),
+    // Empty until migration 0242 runs.
+    safeTips(supabase),
+    safeQuotes(supabase),
   ]);
 
   const namesById = new Map(team.map((p) => [p.id, p.full_name || p.email]));
@@ -183,6 +214,8 @@ export async function getPaymentsData(): Promise<PaymentsData> {
     ledgerTotals,
     overhead,
     perDiem,
+    tips,
+    quoted,
     revenue: {
       collected,
       outstanding,
@@ -199,4 +232,49 @@ export async function getPaymentsData(): Promise<PaymentsData> {
     team,
     jobOptions,
   };
+}
+
+/**
+ * What clients have left for the crew.
+ *
+ * Its own read rather than part of the ledger, because a tip is not job
+ * revenue and must never be summed with it: adding it to what was collected
+ * would flatter the margin and pay an account manager commission on somebody
+ * else's thank-you.
+ */
+async function safeTips(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<TipTotals> {
+  try {
+    const { data } = await supabase.from("job_tips").select("status, amount_cents, paid_at");
+    const rows: TipRecord[] = (data ?? []).map((row) => ({
+      status: row.status as TipRecord["status"],
+      amountCents: row.amount_cents,
+      paidAt: row.paid_at,
+    }));
+    return tallyTips(rows);
+  } catch {
+    return tallyTips([]);
+  }
+}
+
+/**
+ * What the quotes say, for a business with nothing collected yet.
+ *
+ * A ceiling rather than a forecast: jobs get trimmed and discounted, and the
+ * money that arrives is always less than the money that was quoted. Shown
+ * because the alternative is showing nothing, which is the less useful lie.
+ */
+async function safeQuotes(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<QuotedShape> {
+  try {
+    const { data } = await supabase.from("job_proposals").select("total_cost");
+    return quotedShape(
+      (data ?? []).map((row) => Number(row.total_cost) || 0),
+      DEFAULT_ACCOUNT_MANAGER_PCT
+    );
+  } catch {
+    return quotedShape([], DEFAULT_ACCOUNT_MANAGER_PCT);
+  }
 }

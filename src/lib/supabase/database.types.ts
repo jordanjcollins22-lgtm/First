@@ -34,6 +34,10 @@ export interface Database {
           crew_size: number;
           /** 'percent' or 'per_diem': how a quote charges overhead. */
           overhead_basis: string;
+          /** Whether finished jobs get a tip link at all. */
+          tips_enabled: boolean;
+          /** What the tip page says about where the money goes. */
+          tips_note: string | null;
           measurement_unit: string;
           measurement_basis: string;
           /** The scheduling engine is off until a business asks for it. */
@@ -2512,6 +2516,33 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      job_tips: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          /** A client's whole access to the tip page. They have no account. */
+          token: string;
+          /** asked | unpaid | paid | declined */
+          status: string;
+          amount_cents: number | null;
+          /** What the job came to when the link was minted. */
+          job_total_cents: number | null;
+          message: string | null;
+          checkout_session_id: string | null;
+          paid_at: string | null;
+          declined_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_tips"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          token: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_tips"]["Row"]>;
+        Relationships: [];
       };
       recurring_decisions: {
         Row: {

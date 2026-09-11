@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CommissionPanel } from "@/components/payments/commission-panel";
+import { CommissionForecastPanel } from "@/components/payments/commission-forecast-panel";
+import { forecastCommission } from "@/lib/commission-forecast";
 import type { ManagerCommission } from "@/lib/data/commission";
 import { calculatePay, describePayStructure, hasCommissionComponent, hasHourlyComponent } from "@/lib/pay";
 import {
@@ -57,8 +59,19 @@ export function PaymentsDashboard({
   /** Every account manager's book. Empty when nobody holds the role. */
   commission: ManagerCommission[];
 }) {
-  const { internal, external, ledger, ledgerTotals, overhead, perDiem, revenue, team, jobOptions } =
-    data;
+  const {
+    internal,
+    external,
+    ledger,
+    ledgerTotals,
+    overhead,
+    perDiem,
+    quoted,
+    revenue,
+    team,
+    tips,
+    jobOptions,
+  } = data;
 
   return (
     <Tabs defaultValue="summary">
@@ -73,7 +86,7 @@ export function PaymentsDashboard({
       </TabsList>
 
       <TabsContent value="summary">
-        <RevenuePanel revenue={revenue} />
+        <RevenuePanel revenue={revenue} tips={tips} />
       </TabsContent>
 
       <TabsContent value="ledger">
@@ -87,6 +100,24 @@ export function PaymentsDashboard({
       {commission.length > 0 && (
         <TabsContent value="commission">
           <div className="flex flex-col gap-3">
+            {/* What a month of it costs, before the per-person books. The
+                books answer "what do I owe this person"; the question asked
+                before hiring another one is about the month. */}
+            <CommissionForecastPanel
+              quoted={quoted}
+              forecast={forecastCommission(
+                commission.flatMap((book) =>
+                  book.summary.lines.map((line) => ({
+                    jobId: line.jobId,
+                    collected: line.collected,
+                    earnedTotal: line.earnedTotal,
+                    paidOut: line.paidOut,
+                    completedAt: line.completedAt,
+                    pct: line.pct,
+                  }))
+                )
+              )}
+            />
             {commission.map((book) => (
               <CommissionPanel
                 key={book.profileId}
@@ -525,7 +556,13 @@ function InvoiceList({ title, invoices }: { title: string; invoices: PaymentsDat
 
 /* ----------------------------------------------------------------- revenue */
 
-function RevenuePanel({ revenue }: { revenue: PaymentsData["revenue"] }) {
+function RevenuePanel({
+  revenue,
+  tips,
+}: {
+  revenue: PaymentsData["revenue"];
+  tips: PaymentsData["tips"];
+}) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -553,6 +590,26 @@ function RevenuePanel({ revenue }: { revenue: PaymentsData["revenue"] }) {
           deliberately left out of this total until the money actually moves.
         </p>
       </section>
+
+      {/* Kept out of the total above on purpose. A tip is not money the
+          business earned on the work: adding it in would flatter the margin
+          and pay an account manager commission on somebody else's thank-you. */}
+      {(tips.count > 0 || tips.pending > 0 || tips.declined > 0) && (
+        <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold">Left for the crew</h2>
+            <span className="text-sm font-semibold tabular-nums">{money(tips.paid)}</span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {tips.count} tip{tips.count === 1 ? "" : "s"}
+            {tips.count > 0 && `, ${money(tips.average)} on average`}
+            {tips.declined + tips.count > 0 &&
+              `. ${Math.round(tips.rate * 100)}% of the clients who answered left something`}
+            {tips.pending > 0 && `, and ${tips.pending} never answered`}. Not counted as revenue, and
+            no commission is paid on it.
+          </p>
+        </section>
+      )}
     </div>
   );
 }

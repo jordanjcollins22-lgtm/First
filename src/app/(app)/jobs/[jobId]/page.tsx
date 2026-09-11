@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
+import { TipAskPanel } from "@/components/tips/tip-ask-panel";
+import type { TipStatus } from "@/lib/tips";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { listEvaluationEdits } from "@/lib/data/evaluation-edits";
 import { EvaluationChangesPanel } from "@/components/job/evaluation-changes-panel";
@@ -158,6 +160,7 @@ export default async function JobPage({
     jobTimeEntries,
     payPeople,
     paymentPlans,
+    jobTip,
     schedule,
     crew,
     teamProfiles,
@@ -190,6 +193,19 @@ export default async function JobPage({
     listPayPeople().catch(() => []),
     // Empty until migration 0116 runs; the panel just offers to start one.
     listPlansForJob(jobId).catch(() => []),
+    // Null until migration 0242 runs, and null on a job nobody has asked on.
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("job_tips")
+          .select("token, status, amount_cents, message")
+          .eq("job_id", jobId)
+          .maybeSingle();
+        return data;
+      } catch {
+        return null;
+      }
+    })(),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
     // Empty until migration 0083 runs; the page still loads without it.
@@ -710,6 +726,25 @@ export default async function JobPage({
                     stripeReady={isStripeConfigured}
                   />
                 )}
+                {/* Asked at the end, not the beginning. A tip prompt on work
+                    still running reads as a demand for a deposit by another
+                    name, which is why the panel says so until the job is
+                    finished rather than simply not appearing. */}
+                <TipAskPanel
+                  jobId={jobId}
+                  baseUrl={baseUrl}
+                  status={job.status}
+                  tip={
+                    jobTip
+                      ? {
+                          token: jobTip.token,
+                          status: jobTip.status as TipStatus,
+                          amountCents: jobTip.amount_cents,
+                          message: jobTip.message,
+                        }
+                      : null
+                  }
+                />
               </div>
             ),
           }]),

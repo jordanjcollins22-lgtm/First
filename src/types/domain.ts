@@ -32,6 +32,10 @@ export interface Organization {
   crew_size?: number | null;
   /** "percent" for the old flat markup, "per_diem" for the real overhead. */
   overhead_basis?: string | null;
+  /** Whether a finished job gets a tip link at all. */
+  tips_enabled?: boolean | null;
+  /** What the tip page says about where the money goes. */
+  tips_note?: string | null;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
   /** USPS EDDM Retail postage per piece, dollars. Null until somebody enters it. */

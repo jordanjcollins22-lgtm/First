@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
 import { settleGroupPass } from "@/lib/actions/public-group-pass-actions";
+import { settleTip } from "@/lib/actions/public-tip-actions";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
@@ -110,6 +111,17 @@ async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
     await settleGroupPass(groupPassId).catch((err) =>
       console.error("settleGroupPass failed:", err)
     );
+  }
+
+  // A client who left something for the crew. Same reason again: a thank-you
+  // page nobody waited around for is still a tip that arrived.
+  //
+  // Deliberately carries no job_id in its metadata, so it never lands on the
+  // job as revenue. A tip is not money the business earned on the work, and
+  // counting it there would quietly pay commission on it.
+  const jobTipId = session.metadata?.job_tip_id ?? null;
+  if (jobTipId) {
+    await settleTip(jobTipId).catch((err) => console.error("settleTip failed:", err));
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;

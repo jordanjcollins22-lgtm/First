@@ -88,6 +88,13 @@ describe("routes a customer opens", () => {
     expect(isPublic("/flyers-admin")).toBe(false);
   });
 
+  // A client handed a thank-you link at the door has no account and never
+  // will, and asking them to make one is how a thank-you becomes an obstacle.
+  it("lets a finished job's client reach the tip page", () => {
+    expect(isPublic("/tip/abc123")).toBe(true);
+    expect(needsAuthCheck("/tip/abc123")).toBe(false);
+  });
+
   it("keeps the sign-in page itself reachable", () => {
     expect(PUBLIC_PREFIXES).toContain("/login");
     expect(isPublic("/login")).toBe(true);
