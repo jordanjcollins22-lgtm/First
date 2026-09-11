@@ -5,9 +5,11 @@ import {
   describeEvaluationChange,
   describeZoneChange,
   editFor,
+  followThroughLine,
   manualZone,
   manualZoneReady,
   needsLinearAnswer,
+  removedZoneNames,
   type EditableZone,
   type ZoneEdit,
 } from "./evaluation-edit";
@@ -215,5 +217,36 @@ describe("manualZoneReady", () => {
     expect(manualZoneReady({ name: "Side hedge", serviceTypeId: "hedge" })).toBe(true);
     expect(manualZoneReady({ name: "", serviceTypeId: "hedge" })).toBe(false);
     expect(manualZoneReady({ name: "Side hedge", serviceTypeId: null })).toBe(false);
+  });
+});
+
+describe("removedZoneNames", () => {
+  it("names the removed areas as the proposal knew them, from the zones before the edit", () => {
+    const before = [zone(), zone({ id: "z2", name: "Side bed " }), zone({ id: "z3", name: "Front lawn" })];
+    expect(removedZoneNames(before, ["z2", "z3"])).toEqual(["Side bed", "Front lawn"]);
+  });
+
+  it("ignores ids that are not on the design", () => {
+    expect(removedZoneNames([zone()], ["nope"])).toEqual([]);
+  });
+});
+
+describe("followThroughLine", () => {
+  it("says the area came off the proposal, the new price, and whether they know", () => {
+    expect(followThroughLine({ kind: "trimmed", removed: 1, newTotalCents: 340_000, notified: true })).toBe(
+      "That area is off their proposal too. New total $3,400. They have been texted."
+    );
+    expect(followThroughLine({ kind: "trimmed", removed: 2, newTotalCents: 250_050, notified: false })).toBe(
+      "Those 2 areas are off their proposal too. New total $2,500.5. They have not been told yet."
+    );
+  });
+
+  it("explains why an accepted proposal was left alone", () => {
+    expect(followThroughLine({ kind: "accepted", removed: 1 })).toMatch(/already accepted/);
+  });
+
+  it("says nothing when there was no proposal to reach", () => {
+    expect(followThroughLine({ kind: "none" })).toBeNull();
+    expect(followThroughLine(null)).toBeNull();
   });
 });

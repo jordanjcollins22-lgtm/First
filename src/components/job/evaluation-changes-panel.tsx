@@ -11,9 +11,11 @@ import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { REQUEST_SOURCES, sourceLabel, type RequestSource } from "@/lib/change-source";
 import {
   editFor,
+  followThroughLine,
   manualZoneReady,
   needsLinearAnswer,
   type EditableZone,
+  type ProposalFollowThrough,
   type ZoneEdit,
 } from "@/lib/evaluation-edit";
 import {
@@ -72,6 +74,8 @@ export function EvaluationChangesPanel({
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // What the last save did to the proposal, shown until the next edit opens.
+  const [followThrough, setFollowThrough] = useState<ProposalFollowThrough | null>(null);
 
   function setEdit(id: string, patch: Partial<ZoneEdit>) {
     setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
@@ -118,6 +122,7 @@ export function EvaluationChangesPanel({
         setRemoved([]);
         setAdding([]);
         setNote("");
+        setFollowThrough(result.proposal);
       } else {
         setError(result.message);
       }
@@ -127,9 +132,28 @@ export function EvaluationChangesPanel({
   return (
     <div className="flex flex-col gap-3">
       {!open && (
-        <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)} className="self-start">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setFollowThrough(null);
+            setOpen(true);
+          }}
+          className="self-start"
+        >
           Enter a change
         </Button>
+      )}
+
+      {!open && followThroughLine(followThrough) && (
+        <p
+          className={`rounded-lg px-3 py-2 text-xs ${
+            followThrough?.kind === "trimmed" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {followThroughLine(followThrough)}
+        </p>
       )}
 
       {open && (
@@ -346,8 +370,9 @@ export function EvaluationChangesPanel({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            This updates the measurements the proposal is priced from. Rebuild the proposal after
-            saving to put the new numbers in front of the client.
+            {removed.length > 0
+              ? "An area you remove here comes off their proposal in the same save, and the price moves with it. If the proposal has been sent, they are texted the change."
+              : "New measurements change what the proposal is priced from. Rebuild the proposal after saving to put the new numbers in front of the client. Removing an area needs no rebuild: it comes off the proposal in the same save."}
           </p>
 
           {error && <p className="text-xs text-destructive">{error}</p>}

@@ -196,3 +196,60 @@ export function manualZone(input: {
 export function manualZoneReady(input: { name: string; serviceTypeId: string | null }): boolean {
   return Boolean(input.name.trim() && input.serviceTypeId);
 }
+
+// ---------------------------------------------------------------------------
+// Following a removal through to the proposal
+// ---------------------------------------------------------------------------
+
+/**
+ * What happened to the client's proposal when an evaluation edit removed an
+ * area.
+ *
+ * Removing an area from the evaluation used to be half a job: the design
+ * lost the zone, the proposal kept it, and somebody had to remember to
+ * rebuild. A client who was told "we've taken the side bed off" and then
+ * opened a proposal that still listed it is the situation this exists to
+ * prevent. So the removal is carried through to the proposal in the same
+ * save, and the panel is told exactly what it did.
+ */
+export type ProposalFollowThrough =
+  /** The areas came off the proposal too, and the price moved with them. */
+  | { kind: "trimmed"; removed: number; newTotalCents: number; notified: boolean }
+  /** The proposal is accepted, so its price is theirs and was not touched. */
+  | { kind: "accepted"; removed: number }
+  /** There is no proposal yet, so there was nothing to carry it to. */
+  | { kind: "none" }
+  /** The proposal exists but none of the removed names were on it. */
+  | { kind: "not_on_proposal"; removed: number };
+
+/**
+ * The names the proposal knows the removed areas by.
+ *
+ * Taken from the zones as they were before the edit, not after: a rename
+ * and a removal in the same save would otherwise look for a name the
+ * proposal never had.
+ */
+export function removedZoneNames(before: readonly EditableZone[], removeZoneIds: readonly string[]): string[] {
+  const removing = new Set(removeZoneIds);
+  return before.filter((zone) => removing.has(zone.id)).map((zone) => zone.name.trim()).filter(Boolean);
+}
+
+/** The one line the panel shows after saving, saying what reached the proposal. */
+export function followThroughLine(follow: ProposalFollowThrough | null | undefined): string | null {
+  if (!follow) return null;
+  switch (follow.kind) {
+    case "trimmed": {
+      const areas = follow.removed === 1 ? "That area is" : `Those ${follow.removed} areas are`;
+      const total = `$${(follow.newTotalCents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+      return `${areas} off their proposal too. New total ${total}. ${
+        follow.notified ? "They have been texted." : "They have not been told yet."
+      }`;
+    }
+    case "accepted":
+      return "Their proposal is already accepted, so it was left as it is. Write the removal up as a change request so the price they agreed to moves on the record.";
+    case "not_on_proposal":
+      return "Nothing to take off the proposal: none of those areas were on it.";
+    case "none":
+      return null;
+  }
+}

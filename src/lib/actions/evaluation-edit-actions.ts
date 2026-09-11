@@ -8,12 +8,15 @@ import {
   applyZoneEdit,
   describeEvaluationChange,
   manualZone,
+  removedZoneNames,
   type EditableZone,
+  type ProposalFollowThrough,
   type ZoneEdit,
 } from "@/lib/evaluation-edit";
+import { applyProposalTrim } from "@/lib/data/proposal-trim-apply";
 
 export type EvaluationEditResponse =
-  | { ok: true; changes: string[] }
+  | { ok: true; changes: string[]; proposal: ProposalFollowThrough }
   | { ok: false; message: string };
 
 export interface ManualZoneInput {
@@ -37,6 +40,13 @@ export interface ManualZoneInput {
  * The list of changes is recorded before the design is written. A
  * measurement that quietly differs from what was measured on the day, with
  * nothing saying who changed it, is the situation this record exists for.
+ *
+ * A removed area is carried through to the proposal in the same save. It
+ * used to stop at the design, and the proposal kept listing an area the
+ * client had been told was gone until somebody remembered to rebuild it.
+ * Measurements still need a rebuild, because a new size is a new price the
+ * rate card has to work out; a removal is only a subtraction, and the trim
+ * already knows how to do that and how to tell the client.
  */
 export async function saveEvaluationChanges(input: {
   jobId: string;
@@ -97,8 +107,59 @@ export async function saveEvaluationChanges(input: {
     if (saveError) return { ok: false, message: saveError.message };
 
     revalidateJobViews(input.jobId);
-    return { ok: true, changes };
+
+    const proposal = await followRemovalsThrough({
+      jobId: input.jobId,
+      names: removedZoneNames(before, input.removeZoneIds),
+      note: input.note,
+      requestedVia: input.requestedVia,
+      editedBy: { id: profile.id, name: profile.full_name || profile.email },
+    });
+
+    return { ok: true, changes, proposal };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Couldn't save that." };
+  }
+}
+
+/**
+ * The same removal, on the proposal.
+ *
+ * The client is told only when the proposal has actually been sent: a draft
+ * nobody has seen has nobody to tell, and an accepted one is a price they
+ * agreed to, which the trim refuses to move and this reports back rather
+ * than hides.
+ */
+async function followRemovalsThrough(input: {
+  jobId: string;
+  names: string[];
+  note?: string;
+  requestedVia?: string;
+  editedBy: { id: string; name: string };
+}): Promise<ProposalFollowThrough> {
+  if (input.names.length === 0) return { kind: "none" };
+  try {
+    const outcome = await applyProposalTrim({
+      jobId: input.jobId,
+      removeZones: input.names,
+      removeLines: [],
+      note: input.note,
+      requestedVia: input.requestedVia,
+      // Decided inside: the trim knows the status. Sent proposals are told,
+      // drafts are not, and it reports which it did.
+      notifyClient: true,
+      requireRemoval: true,
+      editedBy: input.editedBy,
+    });
+    if (outcome.ok) {
+      return { kind: "trimmed", removed: outcome.removedZones, newTotalCents: outcome.newTotalCents, notified: outcome.notified };
+    }
+    if (outcome.reason === "accepted") return { kind: "accepted", removed: input.names.length };
+    if (outcome.reason === "missing") return { kind: "none" };
+    return { kind: "not_on_proposal", removed: input.names.length };
+  } catch {
+    // The evaluation is already saved and recorded. A proposal that could
+    // not be reached is reported as untouched rather than failing the save.
+    return { kind: "not_on_proposal", removed: input.names.length };
   }
 }
