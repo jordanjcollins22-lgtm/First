@@ -1,0 +1,33 @@
+# offer-config.yaml — price floors, ceilings, and defaults.
+# ONLY THE OWNER EDITS THIS FILE. The offer engine reads it and may pick any
+# price between floor and ceiling; it can never write here.
+#
+# status: PROVISIONAL means the numbers below are placeholders chosen by the
+# builder (see DECISIONS.md D-07). Replace them and set status: OWNER_SET.
+# The admin dashboard shows a warning banner while status is PROVISIONAL.
+status: PROVISIONAL
+currency: USD
+season:
+  label: "Winter 2026–27"
+  start: "2026-11-15"
+  end: "2027-03-31"
+  monthly_plan_months: ["2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]
+
+# All prices are per season, in whole dollars.
+salt_prebook:      { floor: 449, ceiling: 749, default: 549 }
+pet_safe_addon:    { floor: 79,  ceiling: 149, default: 99 }
+schedule_hold:     { floor: 249, ceiling: 499, default: 399 }
+pay_in_full_discount_pct: { min: 5, max: 20, default: 10 }
+
+# Winter Schedule Hold capacity. Remaining slots are always read live from
+# the slot_inventory table; this is only the season's opening capacity.
+schedule_hold_slots_total: 40   # [[NUMBER OF ROUTE SLOTS]] — provisional
+
+# Referral credit per referred neighbor who purchases.
+referral_credit_usd: 50        # [[AMOUNT]] — provisional
+
+# Fixed policy bounds the offer engine must respect (not prices).
+rules:
+  customer_pays_shown_price: true       # a served variant is pinned to the session
+  variant_pin_ttl_hours: 72
+  never_fake_scarcity: true             # slot counts come only from slot_inventory

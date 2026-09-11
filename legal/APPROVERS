@@ -1,0 +1,4 @@
+# Git author emails allowed to commit changes to legal/*.md (one per line).
+# CI and the commit hooks reject any change to legal text whose author is not
+# listed here. Only a human should ever be on this list.
+jordanjcollins22@gmail.com

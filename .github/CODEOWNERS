@@ -1,0 +1,7 @@
+# Changes to legal text and its enforcement require the owner's review.
+/legal/                          @jordanjcollins22-lgtm
+/scripts/legal-hash.mjs          @jordanjcollins22-lgtm
+/scripts/legal-guard.sh          @jordanjcollins22-lgtm
+/.githooks/                      @jordanjcollins22-lgtm
+/.github/workflows/ci.yml        @jordanjcollins22-lgtm
+/offer-config.yaml               @jordanjcollins22-lgtm

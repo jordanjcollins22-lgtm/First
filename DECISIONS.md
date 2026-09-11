@@ -1,0 +1,27 @@
+# DECISIONS.md — running log of assumptions
+
+Every assumption the builder made without asking. Override any of them by
+telling Claude Code the decision ID, or by editing the referenced file. Newest
+at the bottom. Status: **open** (awaiting owner), **provisional** (built with a
+placeholder), **settled**.
+
+| ID | Date | Decision / assumption | Where | Status |
+| --- | --- | --- | --- | --- |
+| D-01 | 2026-09-11 | Build the funnel in this repo on branch `claude/nice-dirac-lffw6u`. The repo's default branch already holds an unrelated Field Estimator MVP whose routes (`/`, `/admin/service-templates`, `/properties`, `/jobs`) collide with the funnel's `/` and `/admin`. Step 1 does not touch it. Proposed resolution for step 3: move the estimator under `/estimator` and let the funnel own `/`. | `src/app/` | open |
+| D-02 | 2026-09-11 | No legal text was supplied, so all five files in `legal/` are drafted placeholders and each is marked `DRAFT — REQUIRES ATTORNEY REVIEW`. Files: terms-of-service.md, service-agreement.md, refund-policy.md, privacy-policy.md, sms-consent.md. | `legal/` | provisional |
+| D-03 | 2026-09-11 | "Committed by a human" is enforced as: the git author email must appear in `legal/APPROVERS`. Seeded with the owner's email. CI additionally requires the `LEGAL:` subject prefix and `HASHES.lock` in the same commit, and re-verifies the lock inside that commit. | `legal/APPROVERS`, `scripts/legal-guard.sh` | provisional |
+| D-04 | 2026-09-11 | The single commit that first introduces `legal/HASHES.lock` is exempt from the LEGAL: gate (there is no prior hash to protect). Every later change to `legal/*.md` is gated. `legal/README.md` is process documentation, not legal text, and is not hashed. | `scripts/legal-guard.sh`, `.githooks/` | settled |
+| D-05 | 2026-09-11 | Git hooks ship in `.githooks/` and are activated by `npm install` (the `prepare` script sets `core.hooksPath`). No husky dependency. | `package.json` | settled |
+| D-06 | 2026-09-11 | Build uses Next.js 16.3 (already in the repo), React 19, Tailwind 4, Vitest. Per `AGENTS.md`, the bundled docs in `node_modules/next/dist/docs/` are read before any app code is written (step 3). | `package.json` | settled |
+| D-07 | 2026-09-11 | Provisional prices (owner did not supply): Salt Pre-Book $549 (floor 449 / ceiling 749), Pet-Safe add-on $99 (79 / 149), Schedule Hold $399 (249 / 499), pay-in-full discount 10% (5–20). `offer-config.yaml` carries `status: PROVISIONAL`; the admin dashboard will show a warning until it is `OWNER_SET`. | `offer-config.yaml` | provisional |
+| D-08 | 2026-09-11 | Provisional serviced zips = the primary zip of each named town: 21014, 21015 (Bel Air), 21047 (Fallston), 21050 (Forest Hill), 21009 (Abingdon), 21078 (Havre de Grace), 21001 (Aberdeen), 21084 (Jarrettsville), 21028 (Churchville), 21034 (Darlington), 21085 (Joppa), 21040 (Edgewood). Other Harford zips (Street 21154, Whiteford 21160, Pylesville 21132, White Hall 21161, Belcamp 21017, Perryman 21130) are excluded until the owner confirms. | `src/config/service-area.ts` (step 3) | provisional |
+| D-09 | 2026-09-11 | Route-hold capacity provisional at 40 slots. Live count always comes from `slot_inventory`. | `offer-config.yaml` | provisional |
+| D-10 | 2026-09-11 | Referral credit provisional at $50 per referred neighbor who purchases. | `offer-config.yaml` | provisional |
+| D-11 | 2026-09-11 | Snow dispatch trigger provisional at 1 inch (ice is always a trigger). Appears in copy and in `legal/service-agreement.md` as `[[SNOW_INCHES_TRIGGER]]` until set. | `PRODUCT_FACTS.md`, `legal/service-agreement.md` | open |
+| D-12 | 2026-09-11 | Guarantee name left as `[[GUARANTEE NAME]]`. Candidate if none supplied: "The First-Storm Guarantee". Terms already drafted in `legal/refund-policy.md` §1. | `legal/refund-policy.md` | open |
+| D-13 | 2026-09-11 | Property size estimate: default to a manual dropdown (small / standard / large / estate driveway) at checkout because it keeps checkout under 90 seconds and needs no third-party API. Regrid or Google Maps can replace it later without changing the order schema. | `/checkout` (step 3) | open |
+| D-14 | 2026-09-11 | Season window provisional: Nov 15 – Mar 31; monthly plan bills Oct–Mar (6 installments). | `offer-config.yaml` | provisional |
+| D-15 | 2026-09-11 | Bandit: one independent Thompson sampler per experiment, objective = revenue per visitor (Beta posterior on conversion × Gamma posterior on order value, sampled jointly). Traffic does not shift off uniform until an arm has 200 sessions or 15 purchases. 5% exploration floor is enforced after re-weighting. | `experiments.yaml` | settled |
+| D-16 | 2026-09-11 | Optimizer is forbidden from writing to `legal/`, `offer-config.yaml`, `PRODUCT_FACTS.md`, `.githooks/`, `.github/`, and `scripts/legal-*`. Enforced in code (path denylist in the proposal applier, step 5) and by CODEOWNERS. | `.github/CODEOWNERS` | settled |
+| D-17 | 2026-09-11 | Weather source: NWS API first (free, no key, official forecasts for Harford County); OpenWeather as fallback if NWS is down. | step 4 | provisional |
+| D-18 | 2026-09-11 | The CI `build` job passes placeholder Supabase env vars so `next build` succeeds without secrets; runtime code must tolerate missing keys at build time. | `.github/workflows/ci.yml` | settled |

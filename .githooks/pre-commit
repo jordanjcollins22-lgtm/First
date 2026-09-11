@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Blocks commits that change legal text without the matching HASHES.lock update.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+staged=$(git diff --cached --name-only --diff-filter=ACDMR)
+legal_changed=$(echo "$staged" | grep -E '^legal/[^/]+\.md$' | grep -v '^legal/README.md$' || true)
+lock_changed=$(echo "$staged" | grep -x 'legal/HASHES.lock' || true)
+
+if [ -z "$legal_changed" ] && [ -z "$lock_changed" ]; then
+  exit 0
+fi
+
+# Seed exemption: the very first commit that introduces the lock file.
+if ! git cat-file -e HEAD:legal/HASHES.lock 2>/dev/null; then
+  node scripts/legal-hash.mjs --check --staged
+  exit $?
+fi
+
+if [ -n "$legal_changed" ] && [ -z "$lock_changed" ]; then
+  echo "✖ Legal text changed but legal/HASHES.lock is not staged." >&2
+  echo "  Run: npm run legal:hash && git add legal/HASHES.lock" >&2
+  exit 1
+fi
+
+author_email=$(git config user.email || true)
+if ! grep -v '^#' legal/APPROVERS | grep -qx "$author_email"; then
+  echo "✖ Author <$author_email> is not listed in legal/APPROVERS. Only a listed human may change legal text." >&2
+  exit 1
+fi
+
+node scripts/legal-hash.mjs --check --staged

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Requires a `LEGAL:` message prefix on any commit that touches legal text or the lock.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+msg_file="$1"
+
+staged=$(git diff --cached --name-only --diff-filter=ACDMR)
+touches_legal=$(echo "$staged" | grep -E '^legal/([^/]+\.md|HASHES\.lock)$' | grep -v '^legal/README.md$' || true)
+[ -z "$touches_legal" ] && exit 0
+
+subject=$(grep -v '^#' "$msg_file" | sed -n '1p')
+if [[ "$subject" != LEGAL:* ]]; then
+  echo "✖ This commit changes legal text. Its message must start with \"LEGAL:\"." >&2
+  echo "  Subject was: $subject" >&2
+  exit 1
+fi

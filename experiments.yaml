@@ -1,0 +1,116 @@
+# experiments.yaml — everything the optimizer is allowed to test.
+# Each experiment is an independent Thompson-sampling bandit. Arms are
+# assigned per session and pinned until purchase or expiry.
+#
+# The optimizer may re-weight arms and (via the weekly proposal process)
+# add copy arms within brand voice or price arms within offer-config.yaml
+# bounds. It may NOT add experiments, touch /legal/, change the guarantee,
+# or make product claims not in PRODUCT_FACTS.md.
+
+bandit:
+  objective: revenue_per_visitor      # not raw conversion rate
+  min_sessions_per_arm: 200           # whichever comes first…
+  min_purchases_per_arm: 15           # …before traffic shifts
+  exploration_floor: 0.05             # no arm ever goes below 5%
+  posterior: gamma_revenue            # conversion ~ Beta, order value ~ Gamma; product sampled
+  lookback_days: 28
+  reweight_cron: "0 6 * * 1"          # Monday 06:00 America/New_York (weekly job)
+  timezone: America/New_York
+
+guardrails:
+  purchase_drop_pct_wow_auto_revert: 30
+  checkout_error_rate_pause_pct: 2
+  notify_via: gohighlevel_sms
+
+experiments:
+  - key: headline
+    description: Hero headline + subheadline pair
+    scope: landing
+    arms:
+      - id: h1
+        headline: "Sit back and relax. Winter is handled."
+        subheadline: "Pre-book your de-icing for the season. We watch the forecast and treat your driveway before the ice does."
+      - id: h2
+        headline: "You wake up. The driveway is already safe."
+        subheadline: "Automatic de-icing for Harford County homes. No calls, no scheduling, no per-storm bills."
+      - id: h3
+        headline: "Never think about ice again."
+        subheadline: "One Winter Pass covers every ice and snow event from November through March."
+      - id: h4
+        headline: "Winter, handled before you notice it."
+        subheadline: "We monitor the forecast and apply de-icer automatically. You get a text when it's done."
+      - id: h5
+        headline: "The last winter chore you'll ever schedule."
+        subheadline: "Book once this fall. We handle every ice event until spring."
+      - id: h6
+        headline: "Safe steps. Safe paws. Nothing on your list."
+        subheadline: "Pet-safe de-icing, applied automatically, for Harford County families."
+      - id: h7
+        headline: "A driveway that's safe before you leave for work."
+        subheadline: "Applied before and after every ice event. A text when we arrive and when we're done."
+      - id: h8
+        headline: "One decision now. Zero decisions all winter."
+        subheadline: "Pre-book de-icing for the whole season. Pay once or monthly. No surprises."
+
+  - key: most_popular_card
+    description: Which plan card carries the "Most Popular" badge
+    scope: winter-pass
+    arms:
+      - id: middle
+        card: salt_plus_pet
+      - id: right
+        card: full_winter_pass
+
+  - key: price_point
+    description: Salt Pre-Book season price (must stay within offer-config.yaml floor/ceiling)
+    scope: pricing
+    bounded_by: offer-config.yaml#salt_prebook
+    arms:
+      - id: p_default
+        salt_prebook: 549
+      - id: p_high
+        salt_prebook: 649
+      - id: p_low
+        salt_prebook: 499
+
+  - key: pif_discount
+    description: Pay-in-full discount depth
+    scope: pricing
+    bounded_by: offer-config.yaml#pay_in_full_discount_pct
+    arms:
+      - id: d10
+        pct: 10
+      - id: d15
+        pct: 15
+
+  - key: pet_safe_presentation
+    description: Pet-safe as an add-on toggle on every card vs. its own tier card
+    scope: winter-pass
+    arms:
+      - id: toggle
+      - id: tier
+
+  - key: guarantee_prominence
+    description: Guarantee shown above the fold vs. in its own section only
+    scope: landing
+    arms:
+      - id: above_fold
+      - id: own_section
+
+  - key: cta_text
+    description: Primary CTA button label (repeated 4+ times per page)
+    scope: global
+    arms:
+      - id: secure
+        text: "Secure Your Winter Pass"
+      - id: reserve
+        text: "Reserve My Winter Pass"
+      - id: handle
+        text: "Handle My Winter"
+
+  - key: show_slots
+    description: Show live remaining Schedule Hold slots vs. hide the count
+    scope: global
+    arms:
+      - id: show
+      - id: hide

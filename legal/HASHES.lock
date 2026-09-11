@@ -1,0 +1,8 @@
+# legal/HASHES.lock — SHA-256 of each frozen legal document.
+# Regenerate ONLY via `npm run legal:hash` and commit with a `LEGAL:` message.
+# Format: <sha256>  <filename>
+00950ff6295a29f62dff3cc8a4d8e04867944e90f84130f909dd5a0a61c9e3ef  privacy-policy.md
+c0feea27ff2df4fee6e5b02aec8d723ac44e01970a1edf3d06941d4b7bc0e640  refund-policy.md
+0f33bbaf881bda974c3a615c61ff1ec5028d6aba1a24ed4bb76f713b1e1aa679  service-agreement.md
+1b09eaf19a4bcfdd1fe96c7cb9a9d527eb687e3a6ce22668c1bcfaaffdfbdafa  sms-consent.md
+028d3bcc782f08332730680b33d0986c1098cdbae910b44d54527c5af4bf34dc  terms-of-service.md
