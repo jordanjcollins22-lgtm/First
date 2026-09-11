@@ -21,7 +21,10 @@ import {
   PROPOSAL_TERMS,
   PROPOSAL_TERMS_TITLE,
   PROPOSAL_TERMS_TITLE_AGREED,
+  SETTLING_IN_BLURB,
+  SETTLING_IN_TITLE,
 } from "@/lib/proposal-terms";
+import { expectationsFor } from "@/lib/expectations";
 import { FocusableSiteMap } from "./focusable-site-map";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
@@ -73,6 +76,20 @@ export function ProposalView({
   function labelFor(stored: string): string {
     return displayLabel(stored, serviceNames[stored] ? { name: serviceNames[stored] } : undefined);
   }
+  /**
+   * What their own work will look like as it settles in.
+   *
+   * Derived from the scope snapshot rather than stored, so it follows the
+   * work: a client who trims the seeding off the job stops being told about
+   * germination, which a frozen paragraph would go on saying.
+   */
+  const settlingIn = expectationsFor(
+    proposal.scope_snapshot.map((zone) => ({
+      serviceLabel: labelFor(zone.serviceLabel),
+      scopeText: zone.scopeText,
+    }))
+  );
+
   const [status, setStatus] = useState<ProposalStatus>(proposal.status);
   const [respondedAt, setRespondedAt] = useState(proposal.responded_at);
   const [decliningNote, setDecliningNote] = useState("");
@@ -303,6 +320,35 @@ export function ProposalView({
           priceDerived: zone.priceDerived ?? false,
         }))}
       />
+
+      {/* Above the general terms, because it is about their garden rather
+          than about us, and a client who skips the terms should still read
+          this. The complaint it prevents is not about quality, it is about
+          time: somebody comparing a two week old lawn to a photograph of a
+          three year old one. */}
+      {settlingIn.length > 0 && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-border p-4">
+          <div>
+            <h2 className="text-lg font-semibold">{SETTLING_IN_TITLE}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{SETTLING_IN_BLURB}</p>
+          </div>
+          <ul className="flex flex-col gap-3">
+            {settlingIn.map((item) => (
+              <li key={item.heading} className="border-t border-border pt-3 first:border-0 first:pt-0">
+                <p className="text-sm font-semibold">{item.heading}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">{item.body}</p>
+                <p className="mt-1 text-xs font-medium">{item.timeframe}</p>
+                {item.theirPart && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <span className="font-medium">Your part: </span>
+                    {item.theirPart}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Between the price and the buttons deliberately. These terms exist
           because work gets added on the day, and a clause a client scrolls

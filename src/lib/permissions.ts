@@ -79,6 +79,12 @@ export const TABS: readonly TabDefinition[] = [
   { key: "labels", label: "Labels & Codes", href: "/admin/labels", parent: "tools" },
   { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
   { key: "weeds", label: "Weed Guide", href: "/admin/weeds", parent: "tools" },
+  {
+    key: "expectations",
+    label: "Setting Expectations",
+    href: "/admin/expectations",
+    parent: "evaluations",
+  },
   { key: "kits", label: "Kit Checklists", href: "/admin/tools/kits", parent: "tools" },
   { key: "reminders", label: "Client Reminders", href: "/admin/reminders", parent: "tools" },
   { key: "social", label: "Before & After Posts", href: "/admin/social" },

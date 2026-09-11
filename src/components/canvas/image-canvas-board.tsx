@@ -59,6 +59,7 @@ import type { Point, WorkZone, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
 import { updateEvaluationStatus } from "@/lib/actions/job-actions";
+import { ExpectationsCard } from "@/components/canvas/expectations-card";
 import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 
@@ -1519,6 +1520,12 @@ export function ImageCanvasBoard({
               </span>
             )}
           </div>
+
+          {/* Built from the zones actually drawn, so it is about this lawn
+              rather than about landscaping in general. Placed beside Submit
+              because that is the last moment before the evaluator drives
+              away, and everything on it is impossible to say afterwards. */}
+          {jobId && <ExpectationsCard zones={zones} />}
 
           {evalConfirm && (
             <div className="mt-2 rounded-lg border border-amber-300/70 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">

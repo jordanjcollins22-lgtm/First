@@ -153,7 +153,9 @@ export const MODULES: readonly AppModule[] = [
       { key: "team", label: "Team", tabs: ["team"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments", "subscriptions", "transactions"] },
-      { key: "field-guide", label: "Field guide", tabs: ["weeds"] },
+      // Both are what somebody reads standing on a property: which weed that
+      // is, and what to say about how long the work takes to look right.
+      { key: "field-guide", label: "Field guide", tabs: ["weeds", "expectations"] },
       { key: "messaging", label: "Client messaging", tabs: ["reminders"] },
       { key: "data", label: "Data & integrations", tabs: ["house-review", "gis-import"] },
       { key: "knowledge", label: "Knowledge graph", tabs: ["knowledge-graph"] },

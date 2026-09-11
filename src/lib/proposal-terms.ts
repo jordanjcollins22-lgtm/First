@@ -62,6 +62,24 @@ export const PROPOSAL_TERMS: ProposalTerm[] = [
       "move we will let you know as soon as we do, and you keep your place at the front of the " +
       "schedule rather than going back to the end of it.",
   },
+  {
+    heading: "Living things arrive small and fill in later",
+    body:
+      "Plants, seed and sod need time to root and grow, and the day we finish is the start of " +
+      "that rather than the end of it. What we plant is spaced for the size it will reach, so a " +
+      "new bed looks sparser on the day than it will in a couple of years, and a new lawn is " +
+      "thin before it is thick. Everything specific to your work is written out below, with how " +
+      "long each part takes and what you can do to help it along.",
+  },
+  {
+    heading: "If a storm changes the job, we will price it before we touch it",
+    body:
+      "Weather can undo work or add work: a storm takes a limb down across a fresh bed, heavy " +
+      "rain washes out new grading, a hard freeze arrives before seed has taken. If something " +
+      "like that happens we will tell you what it has done, what it takes to put right, and " +
+      "what it costs, and you decide before anybody starts. We will not do extra work and then " +
+      "send you a bill for it.",
+  },
 ];
 
 export const PROPOSAL_TERMS_TITLE = "Before you accept";
@@ -75,3 +93,12 @@ export const PROPOSAL_TERMS_TITLE_AGREED = "How changes and scheduling work";
 export const PROPOSAL_ACCEPT_NOTE =
   "Accepting confirms the work above is complete and correct, and that anything added later " +
   "will be priced and booked as its own visit.";
+
+/** The heading over the work-specific settling-in notes, which sit above the
+ * general terms because they are about their garden rather than about us. */
+export const SETTLING_IN_TITLE = "What this will look like, and when";
+
+export const SETTLING_IN_BLURB =
+  "We work with living things and with the weather, so some of this finishes after we leave. " +
+  "Here is what to expect from the work on your property, how long each part takes, and where " +
+  "your help makes the difference.";
