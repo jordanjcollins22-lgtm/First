@@ -23,7 +23,9 @@ export type OverheadGroup =
   | "premises"
   | "vehicles"
   | "insurance"
-  | "utilities"
+  | "power"
+  | "water"
+  | "phone"
   | "software"
   | "finance"
   | "other";
@@ -32,10 +34,28 @@ export const GROUP_LABEL: Record<OverheadGroup, string> = {
   premises: "Premises",
   vehicles: "Vehicles",
   insurance: "Insurance",
-  utilities: "Utilities and phone",
+  power: "Gas and electricity",
+  water: "Water and waste",
+  phone: "Phone and internet",
   software: "Software and subscriptions",
   finance: "Bank and finance",
   other: "Everything else",
+};
+
+/**
+ * What a group is worth knowing for, where it is not obvious.
+ *
+ * Utilities used to be one bucket with the phone bill in it, which made the
+ * number useless: gas and electricity move with the weather and the work, the
+ * phone bill does not, and a single figure covering both tells you nothing
+ * about either. And rent here is not only rent — the landlord bills the water
+ * with it some months — so the premises line is a bundle and should read as
+ * one rather than as a clean number.
+ */
+export const GROUP_NOTE: Partial<Record<OverheadGroup, string>> = {
+  premises: "Rent, and whatever the landlord bundles into it.",
+  power: "Moves with the weather and how much is running.",
+  water: "Sometimes billed by the landlord with the rent instead.",
 };
 
 /**
@@ -49,7 +69,9 @@ export const GROUP_ORDER: OverheadGroup[] = [
   "premises",
   "vehicles",
   "insurance",
-  "utilities",
+  "power",
+  "water",
+  "phone",
   "software",
   "finance",
   "other",
@@ -58,7 +80,11 @@ export const GROUP_ORDER: OverheadGroup[] = [
 const PREMISES = /\b(?:rent|rentals?|lease|leasing|storage|yard|property manage|realty|apartments?)\b/i;
 const VEHICLES = /\b(?:auto|vehicle|truck|fleet|fuel|gas ?station|dmv|registration|toll)\b/i;
 const INSURANCE = /\b(?:insur|property ?& ?cas|state farm|geico|progressive|liberty mutual|premium)\b/i;
-const UTILITIES = /\b(?:gas|electric|water|sewer|waste|comcast|verizon|xfinity|t-?mobile|at&t|internet|utilit)\b/i;
+// Gas and electricity arrive on one bill from one supplier, so they are one
+// group. Splitting them is not something the bank feed can do.
+const POWER = /\b(?:gas ?(?:and|&) ?electric|electric|power|bge|baltimore gas|pepco|delmarva|energy)\b/i;
+const WATER = /\b(?:water|sewer|sewage|waste|refuse|sanitation|trash)\b/i;
+const PHONE = /\b(?:comcast|verizon|xfinity|t-?mobile|at&t|sprint|internet|broadband|wireless|phone|mobile)\b/i;
 const FINANCE = /\b(?:interest|statement fee|annual fee|overdraft|service charge|late fee|bank)\b/i;
 
 /**
@@ -84,10 +110,16 @@ export function groupFor(
   if (VEHICLES.test(name)) return "vehicles";
   if (PREMISES.test(name)) return "premises";
   if (FINANCE.test(name)) return "finance";
-  if (UTILITIES.test(name)) return "utilities";
+  // Phone before power: "Verizon" is a phone bill and contains none of the
+  // energy words, but a supplier named for a region can match both.
+  if (PHONE.test(name)) return "phone";
+  if (POWER.test(name)) return "power";
+  if (WATER.test(name)) return "water";
 
   const bank = (category ?? "").toUpperCase();
-  if (bank === "RENT_AND_UTILITIES") return "utilities";
+  // The bank lumps rent, power, water and the phone into one category, so it
+  // can only ever be the fallback for a name that said nothing.
+  if (bank === "RENT_AND_UTILITIES") return "other";
   if (bank === "BANK_FEES") return "finance";
   if (bank === "TRANSPORTATION") return "vehicles";
 
@@ -104,6 +136,14 @@ export interface OverheadLine {
   monthly: number;
   /** The amount swings; the monthly figure is an average of something moving. */
   variable: boolean;
+  /**
+   * What somebody wrote about it.
+   *
+   * The place to record what a charge actually covers, which the bank cannot
+   * say: the rent line is rent plus the water some months, and a figure that
+   * does not admit that gets read as pure rent and budgeted against wrongly.
+   */
+  note: string | null;
 }
 
 export interface OverheadBreakdown {
@@ -130,6 +170,8 @@ export interface Countable extends RecurringCharge {
    * otherwise. One tap, and it stays said.
    */
   group?: OverheadGroup | null;
+  /** What somebody wrote about what this charge actually covers. */
+  note?: string | null;
 }
 
 /**
@@ -153,6 +195,7 @@ export function overheadFrom(charges: readonly Countable[]): OverheadBreakdown {
       group: groupFor(charge, charge.category, charge.group ?? null),
       monthly: charge.monthlyAmount,
       variable: charge.variableAmount,
+      note: charge.note ?? null,
     });
   }
 

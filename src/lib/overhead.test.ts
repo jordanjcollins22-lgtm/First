@@ -50,10 +50,25 @@ describe("which bucket a charge falls in", () => {
     );
   });
 
-  it("knows a utility by name and by category", () => {
-    expect(groupFor({ label: "Comcast", kind: "obligation" }, null)).toBe("utilities");
+  it("keeps the phone apart from the power, because they move for different reasons", () => {
+    // Gas and electricity swing with the weather and how much is running; the
+    // phone bill does not. One figure covering both says nothing about either.
+    expect(groupFor({ label: "Comcast", kind: "obligation" }, null)).toBe("phone");
+    expect(groupFor({ label: "Verizon Wireless", kind: "obligation" }, null)).toBe("phone");
+    expect(groupFor({ label: "BALTIMORE GAS AN BILLPAY", kind: "obligation" }, null)).toBe("power");
+  });
+
+  it("puts water and waste together, since the landlord often bills them as one", () => {
+    expect(groupFor({ label: "Solid Waste Esl", kind: "obligation" }, null)).toBe("water");
+    expect(groupFor({ label: "City Water Dept", kind: "obligation" }, null)).toBe("water");
+  });
+
+  it("will not guess from the bank's catch-all category", () => {
+    // Plaid puts rent, power, water and the phone in one bucket, so it can
+    // only ever be the fallback for a name that said nothing — and guessing
+    // wrongly here is worse than admitting it is unsorted.
     expect(groupFor({ label: "Anything At All", kind: "obligation" }, "RENT_AND_UTILITIES")).toBe(
-      "utilities"
+      "other"
     );
   });
 
@@ -143,5 +158,16 @@ describe("what an hour has to carry", () => {
 
   it("refuses to divide by no hours rather than returning infinity", () => {
     expect(overheadPerHour(4500, 0)).toBeNull();
+  });
+});
+
+describe("what a charge actually covers", () => {
+  it("carries a note through, because the bank cannot say what is bundled", () => {
+    // The rent line is rent plus the water some months. A figure that does not
+    // admit that reads as pure rent and gets budgeted against wrongly.
+    const breakdown = overheadFrom([
+      charge({ group: "premises", note: "Includes the water some months" }),
+    ]);
+    expect(breakdown.groups[0].lines[0].note).toBe("Includes the water some months");
   });
 });

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { money } from "@/lib/inventory-value";
-import type { OverheadBreakdown } from "@/lib/overhead";
+import { GROUP_NOTE, type OverheadBreakdown } from "@/lib/overhead";
 
 /**
  * What the business costs to keep open.
@@ -48,12 +48,16 @@ export function OverheadPanel({ overhead }: { overhead: OverheadBreakdown }) {
               <span className="text-sm font-medium">{group.label}</span>
               <span className="text-sm font-semibold tabular-nums">{money(group.monthly)}</span>
             </div>
+            {GROUP_NOTE[group.group] && (
+              <p className="text-[11px] text-muted-foreground">{GROUP_NOTE[group.group]}</p>
+            )}
             <ul className="mt-1 flex flex-col gap-0.5">
               {group.lines.map((line) => (
                 <li key={line.key} className="flex justify-between gap-2 text-xs text-muted-foreground">
                   <span className="truncate">
                     {line.label}
                     {line.variable && <span className="ml-1.5">(varies)</span>}
+                    {line.note && <span className="ml-1.5">— {line.note}</span>}
                   </span>
                   <span className="shrink-0 tabular-nums">{money(line.monthly)}</span>
                 </li>

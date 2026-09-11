@@ -104,7 +104,31 @@ export async function setOverheadGroup(input: {
   merchantKey: string;
   group: string | null;
 }): Promise<RecurringResult> {
-  const groups = ["premises", "vehicles", "insurance", "utilities", "software", "finance", "other"];
+  const groups = [
+    "premises",
+    "vehicles",
+    "insurance",
+    "power",
+    "water",
+    "phone",
+    "software",
+    "finance",
+    "other",
+  ];
   const group = input.group && groups.includes(input.group) ? input.group : null;
   return decide(input.merchantKey, { overhead_group: group });
+}
+
+/**
+ * What this charge actually covers.
+ *
+ * The bank cannot say, and sometimes it matters more than the amount: the rent
+ * here is rent plus the water in some months, and a figure that does not admit
+ * that reads as pure rent and gets budgeted against wrongly.
+ */
+export async function noteCharge(input: {
+  merchantKey: string;
+  note: string;
+}): Promise<RecurringResult> {
+  return decide(input.merchantKey, { note: input.note.trim().slice(0, 300) || null });
 }

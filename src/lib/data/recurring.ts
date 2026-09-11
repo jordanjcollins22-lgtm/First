@@ -153,6 +153,7 @@ export const getRecurringBoard = cache(async function getRecurringBoard(): Promi
         dismissed: Boolean(charge.decision?.dismissedAt),
         live: charge.live,
         group: charge.decision?.group ?? null,
+        note: charge.decision?.note ?? null,
       }))
     ),
     txnCount: txns.length,

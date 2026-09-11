@@ -7,7 +7,7 @@ import { AlertTriangle, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { money } from "@/lib/inventory-value";
 import { CADENCE_LABEL, KIND_LABEL, type ChargeKind } from "@/lib/recurring";
-import { GROUP_LABEL, GROUP_ORDER } from "@/lib/overhead";
+import { GROUP_LABEL, GROUP_NOTE, GROUP_ORDER } from "@/lib/overhead";
 import {
   confirmCharge,
   dismissCharge,
@@ -123,8 +123,13 @@ function Overhead({ board }: { board: RecurringBoard }) {
               <span className="text-sm font-medium">{group.label}</span>
               <span className="text-sm font-semibold tabular-nums">{money(group.monthly)}</span>
             </div>
+            {GROUP_NOTE[group.group] && (
+              <p className="text-[11px] text-muted-foreground">{GROUP_NOTE[group.group]}</p>
+            )}
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {group.lines.map((line) => `${line.label} ${money(line.monthly)}`).join(" · ")}
+              {group.lines
+                .map((line) => `${line.label} ${money(line.monthly)}${line.note ? ` (${line.note})` : ""}`)
+                .join(" · ")}
             </p>
           </li>
         ))}
