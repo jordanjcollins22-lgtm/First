@@ -642,6 +642,81 @@ export async function recordProposalView(input: {
   }
 }
 
+/** The most a single flush may carry, so a long read cannot become a flood. */
+const MAX_EVENTS_PER_FLUSH = 40;
+
+/** A section cannot have been on screen longer than an hour in one go. */
+const MAX_SECONDS = 3_600;
+
+/**
+ * What they read, and what they pressed.
+ *
+ * Sent in batches from the browser rather than one call per movement: a
+ * client scrolling a proposal generates a measurement every time a section
+ * leaves the screen, and a round trip for each of those would be both slower
+ * for them and noisier for us than the thing being measured.
+ *
+ * Silent on every failure and awaited by nothing the client can see, for the
+ * same reason the view beacon is. A quote that would not open because an
+ * analytics write failed is a far worse outcome than not knowing what they
+ * looked at.
+ */
+export async function recordProposalEvents(input: {
+  token: string;
+  preview?: boolean;
+  events: { kind: string; target: string; label?: string | null; seconds?: number; at: string }[];
+}): Promise<void> {
+  try {
+    // The internal preview is somebody on our own side reading the client's
+    // page. Counting it would put the account manager's own reading habits in
+    // the client's column.
+    if (input.preview) return;
+    if (!Array.isArray(input.events) || input.events.length === 0) return;
+
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from("job_proposals")
+      .select("id")
+      .eq("token", input.token)
+      .maybeSingle();
+    if (!proposal) return;
+
+    const list = await headers();
+    const fingerprint = [
+      list.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "",
+      list.get("user-agent") ?? "",
+    ].join("|");
+    const visitorHash = fingerprint.trim()
+      ? createHash("sha256").update(`${proposal.id}:${fingerprint}`).digest("hex").slice(0, 32)
+      : null;
+
+    const rows = input.events
+      .slice(0, MAX_EVENTS_PER_FLUSH)
+      .filter((event) => event.kind === "section" || event.kind === "click")
+      .filter((event) => typeof event.target === "string" && event.target.trim().length > 0)
+      .map((event) => ({
+        proposal_id: proposal.id,
+        kind: event.kind,
+        target: event.target.trim().slice(0, 120),
+        label: event.label?.trim().slice(0, 120) || null,
+        // Clamped rather than trusted. The number comes from a timer in
+        // somebody else's browser, and a tab left open over a weekend should
+        // not read as a client who studied the price for two days.
+        seconds:
+          event.kind === "section"
+            ? Math.min(MAX_SECONDS, Math.max(0, Math.round(Number(event.seconds) || 0)))
+            : 0,
+        at: Number.isFinite(Date.parse(event.at)) ? event.at : new Date().toISOString(),
+        visitor_hash: visitorHash,
+      }));
+
+    if (rows.length === 0) return;
+    await admin.from("proposal_events").insert(rows);
+  } catch {
+    // Deliberately silent, like the view beacon above it.
+  }
+}
+
 /**
  * Start a payment the client can finish without leaving the page.
  *

@@ -13,6 +13,8 @@ import { EvaluationChangesPanel } from "@/components/job/evaluation-changes-pane
 import type { EditableZone } from "@/lib/evaluation-edit";
 import { getProposalForJob } from "@/lib/data/proposals";
 import { viewsForJob } from "@/lib/data/proposal-views";
+import { attentionForJob } from "@/lib/data/proposal-attention";
+import { AttentionPanel } from "@/components/proposal/attention-panel";
 import { settleProposalForJob } from "@/lib/actions/proposal-settlement";
 import { JobSummary } from "@/components/job/job-summary";
 import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
@@ -39,6 +41,7 @@ import { roleKeysOf } from "@/lib/roles";
 import { ReadinessPanel } from "@/components/readiness/readiness-panel";
 import { ConfirmationsPanel } from "@/components/readiness/confirmations-panel";
 import { activityLabel, isWarm } from "@/lib/proposal-views";
+import { attentionLabel } from "@/lib/proposal-attention";
 import { getInvoiceForJob } from "@/lib/data/invoices";
 import { listDiscounts } from "@/lib/data/discounts";
 import { listJobMessages } from "@/lib/data/job-messages";
@@ -168,6 +171,7 @@ export default async function JobPage({
     ownerRow,
     viewer,
     proposalViews,
+    proposalAttention,
     organization,
   ] = await Promise.all([
     getCanvasCatalog(),
@@ -253,6 +257,10 @@ export default async function JobPage({
     // Reached through the job rather than the proposal, so it does not have
     // to wait for the proposal to come back first.
     viewsForJob(jobId).catch(() => null),
+    // What happened inside those opens. The view count says they read it; this
+    // says which part they were stuck on, which is the half somebody can pick
+    // up a phone about.
+    attentionForJob(jobId).catch(() => null),
     // Cached per request, so this costs nothing the layout has not already
     // paid. Wanted for the clock the office keeps: a timestamp rendered in
     // the server's UTC dates an evening signature to the following morning.
@@ -562,6 +570,17 @@ export default async function JobPage({
                   proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
                 }
                 respondedLabel={respondedLabel}
+              />
+            ),
+          }]),
+          ...(!seen.jobMoney || !proposalAttention ? [] : [{
+            id: "read",
+            title: "What they read",
+            hint: attentionLabel(proposalAttention.summary),
+            body: (
+              <AttentionPanel
+                summary={proposalAttention.summary}
+                sittings={proposalAttention.sittings}
               />
             ),
           }]),

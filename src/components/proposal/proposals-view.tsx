@@ -37,7 +37,7 @@ function ProposalRow({
   showApprove: boolean;
   timeZone: string | null;
 }) {
-  const { proposal, job, viewLabel, viewsWarm, edits } = item;
+  const { proposal, job, viewLabel, viewsWarm, readLabel, edits } = item;
   // When they answered, not just that they did. Same wording as the job page.
   const responded = responseLabel(proposal.status, proposal.responded_at, timeZone);
   const facts = factsFor(item);
@@ -86,6 +86,14 @@ function ProposalRow({
       {/* Whether they have actually read it. Sent and read are different
           facts, and the office only ever had the first one. */}
       <ViewCount label={viewLabel} warm={viewsWarm} />
+
+      {/* And what they were stuck on. "Opened 4 times" says they are
+          interested; "most time on the price" says what to open the call
+          with, and those are different pieces of information. Silent when
+          there is too little reading to draw anything from. */}
+      {readLabel !== "Nothing read yet" && (
+        <p className="text-xs text-muted-foreground">{readLabel}</p>
+      )}
 
       {/* And when they answered. The timestamp was always recorded and never
           shown, so "when did they sign?" was answered from memory. */}

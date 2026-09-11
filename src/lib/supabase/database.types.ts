@@ -2517,6 +2517,29 @@ export interface Database {
           },
         ];
       };
+      proposal_events: {
+        Row: {
+          id: string;
+          proposal_id: string;
+          /** 'section' (time on screen) or 'click' (a decision). */
+          kind: string;
+          target: string;
+          label: string | null;
+          /** Measured on-screen seconds. Always zero on a click. */
+          seconds: number;
+          at: string;
+          /** Salted per proposal, so nobody can be followed between two. */
+          visitor_hash: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["proposal_events"]["Row"]> & {
+          proposal_id: string;
+          kind: string;
+          target: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["proposal_events"]["Row"]>;
+        Relationships: [];
+      };
       job_tips: {
         Row: {
           id: string;

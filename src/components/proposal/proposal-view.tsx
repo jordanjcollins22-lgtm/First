@@ -25,6 +25,11 @@ import {
   SETTLING_IN_TITLE,
 } from "@/lib/proposal-terms";
 import { expectationsFor } from "@/lib/expectations";
+import {
+  AttentionProvider,
+  Watched,
+  useAttention,
+} from "@/components/proposal/attention-tracker";
 import { FocusableSiteMap } from "./focusable-site-map";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
@@ -49,7 +54,29 @@ function hasOwnBlock(zone: { scopeText: string; photoPaths: string[] } | undefin
   return (differs && Boolean(zone.scopeText?.trim())) || zone.photoPaths.length > 0;
 }
 
-export function ProposalView({
+/**
+ * The client's proposal, with the reading of it measured.
+ *
+ * The provider wraps rather than sits inside, so every part of the page can
+ * report what it was doing without each one being handed a token. Nothing
+ * inside it blocks on the measuring: a quote that would not open because an
+ * analytics write failed is a far worse outcome than not knowing what they
+ * read.
+ */
+export function ProposalView(props: {
+  data: PublicProposal;
+  token: string;
+  messages: JobMessage[];
+  preview?: boolean;
+}) {
+  return (
+    <AttentionProvider token={props.token} preview={props.preview}>
+      <ProposalBody {...props} />
+    </AttentionProvider>
+  );
+}
+
+function ProposalBody({
   data,
   token,
   messages,
@@ -60,6 +87,7 @@ export function ProposalView({
   messages: JobMessage[];
   preview?: boolean;
 }) {
+  const { click } = useAttention();
   const { proposal, propertyAddress, customerName, organizationName, serviceNames } = data;
 
   /**
@@ -158,17 +186,17 @@ export function ProposalView({
       </div>
 
       {proposal.site_image_path && proposal.site_image_transform && (
-        <div>
+        <Watched section="property-map">
           <h2 className="mb-2 text-lg font-semibold">Your property</h2>
           <FocusableSiteMap
             imagePath={proposal.site_image_path}
             transform={proposal.site_image_transform}
             zones={proposal.scope_snapshot}
           />
-        </div>
+        </Watched>
       )}
 
-      <div className="flex flex-col gap-6">
+      <Watched section="scope" className="flex flex-col gap-6">
         <h2 className="text-lg font-semibold">Scope of work</h2>
         {proposal.scope_snapshot.length === 0 ? (
           <p className="text-sm text-muted-foreground">No work areas on this proposal.</p>
@@ -212,6 +240,7 @@ export function ProposalView({
                           <button
                             type="button"
                             onClick={() => {
+                              click("ask-about-area", zone.zoneName);
                               setReference(zoneReference(zone.zoneName, labelFor(zone.serviceLabel)));
                               messageBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
                             }}
@@ -244,6 +273,10 @@ export function ProposalView({
                 <button
                   type="button"
                   onClick={() => {
+                    // The most informative thing a client can do short of
+                    // replying: it names the part of the job they are unsure
+                    // about without them having to write anything.
+                    click("ask-about-area", zone.zoneName);
                     setReference(zoneReference(zone.zoneName, labelFor(zone.serviceLabel)));
                     messageBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }}
@@ -282,9 +315,15 @@ export function ProposalView({
             );
           })
         )}
-      </div>
+      </Watched>
 
-      <div className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-6 text-center">
+      {/* The price. Nearly always the most read thing on the page, and the
+          one whose reading time is worth the most: a client sitting on this
+          for ninety seconds is deciding, and can be rung while they are. */}
+      <Watched
+        section="price"
+        className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-6 text-center"
+      >
         {proposal.discount_amount > 0 && proposal.total_cost != null ? (
           <>
             <p className="text-sm text-muted-foreground line-through">{formatTotal(proposal.total_cost)}</p>
@@ -302,11 +341,12 @@ export function ProposalView({
             <p className="text-4xl font-bold text-primary">{formatTotal(proposal.total_cost)}</p>
           </>
         )}
-      </div>
+      </Watched>
 
       {/* Before the terms and the buttons: a client with an unanswered worry
           does not read terms, they close the tab. Most of those worries have
           an answer we already give on the phone. */}
+      <Watched section="questions">
       <ObjectionsPanel
         token={token}
         readOnly={preview}
@@ -320,6 +360,7 @@ export function ProposalView({
           priceDerived: zone.priceDerived ?? false,
         }))}
       />
+      </Watched>
 
       {/* Above the general terms, because it is about their garden rather
           than about us, and a client who skips the terms should still read
@@ -327,7 +368,10 @@ export function ProposalView({
           time: somebody comparing a two week old lawn to a photograph of a
           three year old one. */}
       {settlingIn.length > 0 && (
-        <section className="flex flex-col gap-3 rounded-2xl border border-border p-4">
+        <Watched
+          section="settling-in"
+          className="flex flex-col gap-3 rounded-2xl border border-border p-4"
+        >
           <div>
             <h2 className="text-lg font-semibold">{SETTLING_IN_TITLE}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{SETTLING_IN_BLURB}</p>
@@ -347,13 +391,16 @@ export function ProposalView({
               </li>
             ))}
           </ul>
-        </section>
+        </Watched>
       )}
 
       {/* Between the price and the buttons deliberately. These terms exist
           because work gets added on the day, and a clause a client scrolls
           past after accepting protects nobody. */}
-      <section className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4">
+      <Watched
+        section="terms"
+        className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4"
+      >
         <h2 className="text-lg font-semibold">
           {status === "sent" || status === "needs_approval"
             ? PROPOSAL_TERMS_TITLE
@@ -367,7 +414,7 @@ export function ProposalView({
             </li>
           ))}
         </ul>
-      </section>
+      </Watched>
 
       <div className="flex flex-col items-center gap-3">
         {status === "needs_approval" ? (
@@ -386,7 +433,10 @@ export function ProposalView({
                   size="xl"
                   className="w-full sm:flex-1"
                   disabled={isPending}
-                  onClick={() => respond("accepted")}
+                  onClick={() => {
+                    click("accept");
+                    respond("accepted");
+                  }}
                 >
                   Accept this proposal
                 </Button>
@@ -396,7 +446,13 @@ export function ProposalView({
                   variant="outline"
                   className="w-full sm:w-auto"
                   disabled={isPending}
-                  onClick={() => setShowDeclineForm(true)}
+                  onClick={() => {
+                    // Recorded on the press rather than on the submit: a
+                    // client who opens the decline box and closes it again
+                    // has told us something, and it is not nothing.
+                    click("decline-opened");
+                    setShowDeclineForm(true);
+                  }}
                 >
                   Decline
                 </Button>
@@ -424,7 +480,10 @@ export function ProposalView({
                     variant="destructive"
                     className="flex-1"
                     disabled={isPending}
-                    onClick={() => respond("declined", decliningNote)}
+                    onClick={() => {
+                      click("decline");
+                      respond("declined", decliningNote);
+                    }}
                   >
                     Confirm decline
                   </Button>
@@ -473,6 +532,7 @@ export function ProposalView({
         )}
       </div>
 
+      <Watched section="message">
       <div ref={messageBoxRef}>
       <MessageThread
         title="Questions? Send us a message"
@@ -481,6 +541,7 @@ export function ProposalView({
           // Read-only in preview: a test message from the office would land
           // in the client's thread looking like it came from them.
           if (preview) return;
+          click("sent-message", sentReference ?? null);
           // Falls back to the proposal itself, so every message from this
           // page arrives with something to hang it on.
           await postPublicClientMessage(
@@ -500,6 +561,7 @@ export function ProposalView({
         emptyLabel="No messages yet — ask us anything."
       />
       </div>
+      </Watched>
     </div>
   );
 }

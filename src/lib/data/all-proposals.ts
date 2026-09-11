@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { isMissingColumn } from "@/lib/setup-errors";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { NO_VIEWS, viewsForAllProposals } from "@/lib/data/proposal-views";
+import { attentionForAllProposals, NO_ATTENTION } from "@/lib/data/proposal-attention";
+import { attentionLabel } from "@/lib/proposal-attention";
+import type { AttentionSummary } from "@/lib/proposal-attention";
 import { boundedPageSize } from "@/lib/pagination";
 import { activityLabel, isWarm, type ViewSummary } from "@/lib/proposal-views";
 import type { JobProposal } from "@/types/domain";
@@ -80,6 +83,8 @@ export interface ProposalWithJob {
   collectedCents: number;
   /** How often the client opened it, already worded. Internal only. */
   viewLabel: string;
+  /** What they spent the most time on, or why that cannot be said yet. */
+  readLabel: string;
   /** Opened repeatedly while still unanswered. Worth a phone call. */
   viewsWarm: boolean;
   /** What has been taken off since it went out, newest first. */
@@ -100,7 +105,7 @@ export async function listAllProposals(
   const supabase = await createClient();
   // Views alongside rather than after: it takes no ids, so waiting for the
   // proposals to come back before asking is a round trip spent doing nothing.
-  const [{ data: proposals, error }, jobs, views] = await Promise.all([
+  const [{ data: proposals, error }, jobs, views, attention] = await Promise.all([
     supabase
       .from("job_proposals")
       .select(PROPOSAL_COLUMNS)
@@ -108,6 +113,9 @@ export async function listAllProposals(
       .limit(pageSize),
     listJobsWithLocation(),
     viewsForAllProposals().catch(() => ({}) as Record<string, ViewSummary>),
+    // What happened inside those opens. Beside the views for the same reason:
+    // it takes no ids either.
+    attentionForAllProposals().catch(() => ({}) as Record<string, AttentionSummary>),
   ]);
   if (error) throw error;
 
@@ -162,6 +170,9 @@ export async function listAllProposals(
       // two screens is how somebody stops trusting either.
       viewLabel: activityLabel(summary, now),
       viewsWarm: isWarm(summary, proposal.status),
+      // What they were stuck on, when there is enough reading to say. The
+      // view label says they read it; this says which part.
+      readLabel: attentionLabel(attention[proposal.id] ?? NO_ATTENTION),
       edits: editsByProposal.get(proposal.id) ?? [],
     };
   });
