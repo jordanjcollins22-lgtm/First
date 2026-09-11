@@ -1,5 +1,8 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { overheadFrom, type OverheadBreakdown, type OverheadGroup } from "@/lib/overhead";
 import {
   detectRecurring,
   isLive,
@@ -7,6 +10,7 @@ import {
   nextDueOn,
   type ChargeKind,
   type MonthlyTotals,
+  merchantKey as merchantKeyOf,
   type RecurringCharge,
   type Txn,
 } from "@/lib/recurring";
@@ -31,6 +35,7 @@ export interface Decision {
   dismissedAt: string | null;
   cancelWanted: boolean;
   note: string | null;
+  group: OverheadGroup | null;
 }
 
 export interface ChargeRow extends RecurringCharge {
@@ -39,13 +44,15 @@ export interface ChargeRow extends RecurringCharge {
   nextDue: string;
   /** The account it lands on, as somebody would say it. */
   accountName: string | null;
+  /** What the bank filed it under, for working out which bucket it is. */
+  category: string | null;
 }
 
 export interface RecurringBoard {
   charges: ChargeRow[];
   totals: MonthlyTotals;
-  /** What the hand-typed overhead says, for comparison. */
-  typedOverhead: number;
+  /** The overhead, grouped, from what survived a person looking at it. */
+  overhead: OverheadBreakdown;
   /** Transactions read, and how far back they go. */
   txnCount: number;
   since: string | null;
@@ -53,7 +60,7 @@ export interface RecurringBoard {
 
 const LOOKBACK_DAYS = 400;
 
-export async function getRecurringBoard(): Promise<RecurringBoard> {
+export const getRecurringBoard = cache(async function getRecurringBoard(): Promise<RecurringBoard> {
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
 
@@ -61,8 +68,7 @@ export async function getRecurringBoard(): Promise<RecurringBoard> {
   since.setUTCDate(since.getUTCDate() - LOOKBACK_DAYS);
   const sinceDay = since.toISOString().slice(0, 10);
 
-  const [{ data: txnRows }, { data: accounts }, { data: decisions }, { data: overhead }] =
-    await Promise.all([
+  const [{ data: txnRows }, { data: accounts }, { data: decisions }] = await Promise.all([
       supabase
         .from("bank_transactions")
         .select("id, name, merchant, amount, posted_on, account_id, category")
@@ -74,9 +80,8 @@ export async function getRecurringBoard(): Promise<RecurringBoard> {
       supabase.from("bank_accounts").select("id, name, mask").eq("organization_id", organizationId),
       supabase
         .from("recurring_decisions")
-        .select("merchant_key, label, kind, confirmed_at, dismissed_at, cancel_wanted, note")
+        .select("merchant_key, label, kind, confirmed_at, dismissed_at, cancel_wanted, note, overhead_group")
         .eq("organization_id", organizationId),
-      supabase.from("overhead_expenses").select("amount").eq("organization_id", organizationId),
     ]);
 
   const txns: Txn[] = (txnRows ?? []).map((row) => ({
@@ -106,9 +111,18 @@ export async function getRecurringBoard(): Promise<RecurringBoard> {
         dismissedAt: row.dismissed_at,
         cancelWanted: row.cancel_wanted ?? false,
         note: row.note,
+        group: (row.overhead_group as OverheadGroup | null) ?? null,
       },
     ])
   );
+
+  // The bank's own category, kept against the merchant so the overhead can be
+  // grouped without going back to the rows.
+  const categoryOf = new Map<string, string | null>();
+  for (const txn of txns) {
+    const key = merchantKeyOf(txn.who);
+    if (!categoryOf.has(key) && txn.category) categoryOf.set(key, txn.category);
+  }
 
   const found = detectRecurring(txns);
   const charges: ChargeRow[] = found.map((charge) => {
@@ -122,6 +136,7 @@ export async function getRecurringBoard(): Promise<RecurringBoard> {
       live: isLive(charge),
       nextDue: nextDueOn(charge),
       accountName: charge.accountId ? nameOf.get(charge.accountId) ?? null : null,
+      category: categoryOf.get(charge.key) ?? null,
     };
   });
 
@@ -132,9 +147,15 @@ export async function getRecurringBoard(): Promise<RecurringBoard> {
   return {
     charges,
     totals: monthlyTotals(counted),
-    typedOverhead:
-      Math.round((overhead ?? []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0) * 100) / 100,
+    overhead: overheadFrom(
+      charges.map((charge) => ({
+        ...charge,
+        dismissed: Boolean(charge.decision?.dismissedAt),
+        live: charge.live,
+        group: charge.decision?.group ?? null,
+      }))
+    ),
     txnCount: txns.length,
     since: txns[0]?.postedOn ?? null,
   };
-}
+});

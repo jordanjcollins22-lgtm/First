@@ -16,7 +16,7 @@ import {
   recordTeamPayment,
 } from "@/lib/actions/payment-actions";
 import { LedgerPanel } from "@/components/payments/ledger-panel";
-import { OverheadList } from "@/components/overhead/overhead-list";
+import { OverheadPanel } from "@/components/overhead/overhead-breakdown";
 import type { PaymentsData } from "@/lib/data/payments";
 
 const METHODS = ["cash", "check", "transfer", "other"] as const;
@@ -105,7 +105,7 @@ export function PaymentsDashboard({
 
       {canSeeOverhead && (
         <TabsContent value="overhead">
-          <OverheadList expenses={overhead} />
+          <OverheadPanel overhead={overhead} />
         </TabsContent>
       )}
     </Tabs>

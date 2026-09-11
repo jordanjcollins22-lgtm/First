@@ -91,3 +91,20 @@ export async function describeCharge(input: {
     note: input.note.trim().slice(0, 300) || null,
   });
 }
+
+/**
+ * Which bucket this belongs in.
+ *
+ * Most charges sort themselves from the merchant name and the bank category.
+ * The biggest one does not: a landlord trading as "YSI Fieldside" says nothing
+ * about being rent, so the largest cost in the business sits in "everything
+ * else" until somebody says otherwise. One tap, and it stays said.
+ */
+export async function setOverheadGroup(input: {
+  merchantKey: string;
+  group: string | null;
+}): Promise<RecurringResult> {
+  const groups = ["premises", "vehicles", "insurance", "utilities", "software", "finance", "other"];
+  const group = input.group && groups.includes(input.group) ? input.group : null;
+  return decide(input.merchantKey, { overhead_group: group });
+}

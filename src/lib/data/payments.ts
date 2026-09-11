@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { listProfiles } from "@/lib/data/team";
 import { totalLedger, type LedgerTotals } from "@/lib/ledger";
-import type { LedgerEntry, OverheadExpense, Profile, TeamPayment } from "@/types/domain";
+import type { LedgerEntry, Profile, TeamPayment } from "@/types/domain";
+import { getOverhead } from "@/lib/data/overhead";
+import type { OverheadBreakdown } from "@/lib/overhead";
 
 export interface TeamPaymentWithPerson extends TeamPayment {
   personName: string;
@@ -36,7 +38,7 @@ export interface RevenueSummary {
   paidOut: number;
   /** Team payments recorded but not yet paid — money we owe. */
   owedToTeam: number;
-  /** Recurring overhead on the books. */
+  /** Recurring overhead, per month, worked out from the transactions. */
   overhead: number;
   /** Cash taken outside Stripe — the cash-and-check half of the business. */
   ledgerIn: number;
@@ -57,7 +59,8 @@ export interface PaymentsData {
   external: ExternalPayment[];
   ledger: LedgerEntryWithJob[];
   ledgerTotals: LedgerTotals;
-  overhead: OverheadExpense[];
+  /** Worked out from the bank, grouped. Nothing here is typed in. */
+  overhead: OverheadBreakdown;
   revenue: RevenueSummary;
   team: Profile[];
   /** Jobs a ledger entry can be filed against. Open work only — filing a cost
@@ -79,7 +82,7 @@ function sum(values: (number | null | undefined)[]): number {
 export async function getPaymentsData(): Promise<PaymentsData> {
   const supabase = await createClient();
 
-  const [team, paymentsResult, invoicesResult, overheadResult, ledgerResult, jobsResult] = await Promise.all([
+  const [team, paymentsResult, invoicesResult, ledgerResult, jobsResult, overhead] = await Promise.all([
     listProfiles(),
     supabase
       .from("team_payments")
@@ -89,7 +92,6 @@ export async function getPaymentsData(): Promise<PaymentsData> {
       .from("invoices")
       .select("id, job_id, amount, status, sent_at, paid_at, hosted_invoice_url, jobs(property_id, properties(address, customers(name)))")
       .order("created_at", { ascending: false }),
-    supabase.from("overhead_expenses").select("*").order("created_at"),
     supabase
       .from("ledger_entries")
       .select("*, jobs(name, properties(address))")
@@ -100,6 +102,15 @@ export async function getPaymentsData(): Promise<PaymentsData> {
       .not("status", "in", "(completed,cancelled)")
       .order("created_at", { ascending: false })
       .limit(200),
+    // Never typed in. Read from the same transactions the Subscriptions screen
+    // reads, through a per-request cache, so the two can never disagree about
+    // what the business costs to keep open.
+    getOverhead().catch(() => ({
+      groups: [],
+      monthly: 0,
+      yearly: 0,
+      variableShare: 0,
+    })),
   ]);
 
   const namesById = new Map(team.map((p) => [p.id, p.full_name || p.email]));
@@ -147,8 +158,6 @@ export async function getPaymentsData(): Promise<PaymentsData> {
 
   const ledgerTotals = totalLedger(ledger);
 
-  const overheadRows = (overheadResult.data ?? []) as unknown as OverheadExpense[];
-
   const jobOptions = (
     (jobsResult.data ?? []) as unknown as { id: string; name: string; properties: { address: string } | null }[]
   ).map((j) => ({ id: j.id, label: j.properties?.address ? `${j.name} — ${j.properties.address}` : j.name }));
@@ -157,24 +166,26 @@ export async function getPaymentsData(): Promise<PaymentsData> {
   const outstanding = sum(external.filter((e) => e.status === "open").map((e) => e.amount));
   const paidOut = sum(internal.filter((p) => p.status === "paid").map((p) => Number(p.amount)));
   const owedToTeam = sum(internal.filter((p) => p.status === "pending").map((p) => Number(p.amount)));
-  const overhead = sum(overheadRows.map((o) => Number(o.amount)));
+
 
   return {
     internal,
     external,
     ledger,
     ledgerTotals,
-    overhead: overheadRows,
+    overhead,
     revenue: {
       collected,
       outstanding,
       paidOut,
       owedToTeam,
-      overhead,
+      overhead: overhead.monthly,
       ledgerIn: ledgerTotals.in,
       ledgerOut: ledgerTotals.out,
       net:
-        Math.round((collected + ledgerTotals.in - paidOut - ledgerTotals.out - overhead) * 100) / 100,
+        Math.round(
+          (collected + ledgerTotals.in - paidOut - ledgerTotals.out - overhead.monthly) * 100
+        ) / 100,
     },
     team,
     jobOptions,

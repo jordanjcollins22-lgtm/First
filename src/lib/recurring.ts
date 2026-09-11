@@ -93,6 +93,14 @@ export interface RecurringCharge {
   monthlyAmount: number;
   /** How much it moves, as a share of the typical amount. */
   variation: number;
+  /**
+   * The amount swings, and it is only recurring because the rhythm is.
+   *
+   * Rent and utilities. Worth saying so beside the number, because the monthly
+   * figure is an average of something that was 131 one month and 2,790 the
+   * next, and treating that as a fixed bill is how a forecast goes wrong.
+   */
+  variableAmount: boolean;
   /** How many times it has been seen. */
   hits: number;
   firstSeen: string;
@@ -150,6 +158,15 @@ const BROWSING_CATEGORIES = new Set([
 const TRANSFER_CATEGORIES = new Set(["TRANSFER_OUT", "TRANSFER_IN", "LOAN_PAYMENTS"]);
 
 /**
+ * Bills the bank files as transfers, which they are not.
+ *
+ * A vehicle lease leaves by direct debit and gets categorised the same way as
+ * moving money between our own accounts. It is not: it is a monthly obligation
+ * and dropping it understates the overhead by the price of a truck.
+ */
+const OBLIGATION_WORDS = /\b(?:lease|mortgage|rent|insurance|premium|utilit)/i;
+
+/**
  * Money moving inside the business rather than out of it.
  *
  * A card being paid off is not a subscription and not an overhead: it is the
@@ -160,6 +177,25 @@ export function looksLikeTransfer(name: string): boolean {
   return /\b(?:e-?payment|payment thank you|autopay|zelle|transfer|trnsfr|xfer|cash app|online banking|card payment|discover|applecard|capital one|chase card|amex payment)\b/i.test(
     name
   );
+}
+
+/**
+ * Whether it lands on the same few days of the month every time.
+ *
+ * The signal that catches a bill whose amount is meaningless. A landlord takes
+ * the rent on the first whether it is 131 or 2,790; a shop visited five times
+ * is scattered across the month. Four days of spread is the allowance, which
+ * covers a weekend and a bank holiday.
+ */
+function sameDayEachMonth(ordered: readonly Txn[]): boolean {
+  const days = ordered.map((txn) => Number(txn.postedOn.slice(8, 10)));
+  const middle = median(days);
+  // Wrapped: the 1st and the 30th are a day apart on a calendar.
+  const spread = days.map((day) => {
+    const off = Math.abs(day - middle);
+    return Math.min(off, 31 - off);
+  });
+  return median(spread) <= 4;
 }
 
 /** The middle value, which one freak month cannot drag around. */
@@ -256,7 +292,13 @@ export function detectRecurring(txns: readonly Txn[], today = new Date()): Recur
     // a machine billing us rather than a person spending.
     const identical = variation < 0.005;
     if (ordered.length < (identical ? 2 : MIN_HITS)) continue;
-    if (variation > OBLIGATION_VARIATION) continue;
+
+    // The rent and the gas bill swing wildly and are the two biggest things on
+    // the list. What makes them recurring is the rhythm, not the amount: the
+    // same landlord on the first of the month, every month. Judging them on
+    // steadiness of amount threw out the largest overhead in the business.
+    const onTheClock = cadence === "monthly" && ordered.length >= 4 && sameDayEachMonth(ordered);
+    if (variation > OBLIGATION_VARIATION && !onTheClock) continue;
 
     const categories = new Set(
       ordered.map((txn) => (txn.category ?? "").toUpperCase()).filter(Boolean)
@@ -267,9 +309,11 @@ export function detectRecurring(txns: readonly Txn[], today = new Date()): Recur
     // a bill, and listing it as one is how the list loses its reader.
     if (browsing && !identical) continue;
 
+    const namesABill = ordered.some((txn) => OBLIGATION_WORDS.test(txn.who));
     const transfer =
-      Array.from(categories).some((c) => TRANSFER_CATEGORIES.has(c)) ||
-      ordered.some((txn) => looksLikeTransfer(txn.who));
+      !namesABill &&
+      (Array.from(categories).some((c) => TRANSFER_CATEGORIES.has(c)) ||
+        ordered.some((txn) => looksLikeTransfer(txn.who)));
     const kind: ChargeKind = transfer
       ? "transfer"
       : variation <= SUBSCRIPTION_VARIATION
@@ -287,6 +331,7 @@ export function detectRecurring(txns: readonly Txn[], today = new Date()): Recur
       typicalAmount: Math.round(typical * 100) / 100,
       monthlyAmount: monthlyEquivalent(typical, cadence),
       variation: Math.round(variation * 1000) / 1000,
+      variableAmount: variation > SUBSCRIPTION_VARIATION,
       hits: ordered.length,
       firstSeen: ordered[0].postedOn,
       lastSeen: ordered[ordered.length - 1].postedOn,

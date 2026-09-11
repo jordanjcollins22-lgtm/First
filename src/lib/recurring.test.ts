@@ -112,13 +112,52 @@ describe("finding what comes back", () => {
   });
 
   it("leaves a shop somebody visits often out of it", () => {
-    // The mistake that makes the whole list look wrong. Walmart eleven times
-    // at wildly different amounts is a habit, not a subscription.
+    // The mistake that makes the whole list look wrong. Walmart five times at
+    // wildly different amounts is a habit, not a subscription — and the bank
+    // says it is a shop, which is what settles it.
     const found = detectRecurring(
-      monthly("Walmart", [12, 340, 58, 700, 26], MONTHS),
+      monthly("Walmart", [12, 340, 58, 700, 26], MONTHS, "GENERAL_MERCHANDISE"),
       TODAY
     );
     expect(found).toEqual([]);
+  });
+
+  it("takes a bill whose amount swings, when the rhythm never does", () => {
+    // The rent was 131 one month and 2,790 the next, and it is the largest
+    // cost in the business. Judging it on steadiness of amount threw it out
+    // entirely; what makes it recurring is the landlord taking it on the first
+    // of every month.
+    const [found] = detectRecurring(
+      monthly(
+        "YSI Fieldside Gr MD",
+        [2297.84, 131.21, 2789.93, 2790.51, 2790.53],
+        ["2026-05-04", "2026-06-02", "2026-07-02", "2026-08-03", "2026-09-02"]
+      ),
+      TODAY
+    );
+    expect(found.kind).toBe("obligation");
+    expect(found.variableAmount).toBe(true);
+  });
+
+  it("still refuses a wild amount that lands on a different day each time", () => {
+    // Without the rhythm there is nothing left to call it recurring.
+    const found = detectRecurring(
+      monthly("Somewhere", [100, 2900, 150, 2800, 120],
+        ["2026-05-04", "2026-06-19", "2026-07-08", "2026-08-27", "2026-09-02"]),
+      TODAY
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("keeps a truck lease out of the transfers, whatever the bank filed it as", () => {
+    // A lease leaves by direct debit and gets categorised like moving money
+    // between our own accounts. Dropping it understates the overhead by the
+    // price of a truck.
+    const [found] = detectRecurring(
+      monthly("CAF DIRECT CHECK AUTO LEASE", 551.43, MONTHS, "TRANSFER_OUT"),
+      TODAY
+    );
+    expect(found.kind).toBe("subscription");
   });
 
   it("takes two charges when they are identical to the penny", () => {

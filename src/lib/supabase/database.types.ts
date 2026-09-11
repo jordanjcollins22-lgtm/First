@@ -2517,6 +2517,7 @@ export interface Database {
           confirmed_at: string | null;
           dismissed_at: string | null;
           cancel_wanted: boolean;
+          overhead_group: string | null;
           note: string | null;
           created_at: string;
           updated_at: string;

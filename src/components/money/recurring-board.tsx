@@ -7,10 +7,12 @@ import { AlertTriangle, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { money } from "@/lib/inventory-value";
 import { CADENCE_LABEL, KIND_LABEL, type ChargeKind } from "@/lib/recurring";
+import { GROUP_LABEL, GROUP_ORDER } from "@/lib/overhead";
 import {
   confirmCharge,
   dismissCharge,
   markForCancelling,
+  setOverheadGroup,
 } from "@/lib/actions/recurring-actions";
 import type { ChargeRow, RecurringBoard } from "@/lib/data/recurring";
 
@@ -32,29 +34,19 @@ export function RecurringBoardView({ board }: { board: RecurringBoard }) {
   const transfers = visible.filter((c) => c.kind === "transfer");
   const stopped = visible.filter((c) => !c.live && c.kind !== "transfer");
 
-  const gap = Math.round((board.totals.total - board.typedOverhead) * 100) / 100;
-
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border">
         <Figure label="Subscriptions" value={money(board.totals.subscriptions)} detail={`${subscriptions.length} of them`} />
         <Figure label="Obligations" value={money(board.totals.obligations)} detail={`${obligations.length} of them`} />
-        <Figure label="Every month" value={money(board.totals.total)} detail="Before anybody works" />
+        <Figure
+          label="Overhead"
+          value={money(board.overhead.monthly)}
+          detail={`${money(board.overhead.yearly)} a year`}
+        />
       </div>
 
-      {/* The comparison that makes the screen worth opening. The overhead the
-          business prices against was typed from memory; this is the bank. */}
-      {board.typedOverhead > 0 && (
-        <p className="rounded-lg border border-border p-3 text-xs text-muted-foreground">
-          The overhead figures used for pricing add up to {money(board.typedOverhead)} a month. What
-          the bank actually shows as recurring is {money(board.totals.total)}
-          {gap === 0
-            ? "."
-            : gap > 0
-              ? `, which is ${money(gap)} more than has been allowed for.`
-              : `, which is ${money(-gap)} less. Some of the typed figures may be things the bank feed cannot see, like rent paid by cheque.`}
-        </p>
-      )}
+      <Overhead board={board} />
 
       <Section
         title="Subscriptions"
@@ -95,6 +87,58 @@ export function RecurringBoardView({ board }: { board: RecurringBoard }) {
         . Nothing here is stored: a subscription cancelled last month drops off this list by itself.
       </p>
     </div>
+  );
+}
+
+/**
+ * The overhead, grouped.
+ *
+ * "Four and a half thousand a month" is a fact; "two and a half of that is the
+ * unit and five hundred is software" is a decision. The groups are in a fixed
+ * order rather than by size, because the list is read to find something to cut
+ * and the things at the top are the things you cannot.
+ */
+function Overhead({ board }: { board: RecurringBoard }) {
+  const { overhead } = board;
+  if (overhead.groups.length === 0) return null;
+
+  const unsorted = overhead.groups.find((group) => group.group === "other");
+
+  return (
+    <section className="rounded-lg border border-border">
+      <div className="border-b border-border px-3 py-2">
+        <h2 className="text-sm font-semibold">What it costs to keep the doors open</h2>
+        <p className="text-xs text-muted-foreground">
+          Worked out from the bank, not typed in. {money(overhead.monthly)} a month,{" "}
+          {money(overhead.yearly)} a year.
+          {overhead.variableShare > 0.2 &&
+            ` About ${Math.round(overhead.variableShare * 100)}% of it is an average of bills that move, so treat it as a guide rather than a fixed figure.`}
+        </p>
+      </div>
+
+      <ul className="divide-y divide-border">
+        {overhead.groups.map((group) => (
+          <li key={group.group} className="px-3 py-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-medium">{group.label}</span>
+              <span className="text-sm font-semibold tabular-nums">{money(group.monthly)}</span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {group.lines.map((line) => `${line.label} ${money(line.monthly)}`).join(" · ")}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      {/* The one thing that makes the breakdown wrong out of the box: a
+          landlord's trading name says nothing about being rent. */}
+      {unsorted && unsorted.lines.length > 0 && (
+        <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+          {unsorted.lines.length} charge{unsorted.lines.length === 1 ? " is" : "s are"} still
+          unsorted below. Put them in a group and the breakdown sharpens.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -192,6 +236,30 @@ function Row({ row }: { row: ChargeRow }) {
           >
             {row.decision?.cancelWanted ? "Keep it after all" : "Cancel this"}
           </button>
+        )}
+
+        {row.kind !== "transfer" && (
+          <select
+            value={row.decision?.group ?? ""}
+            disabled={pending}
+            onChange={(event) =>
+              act(() =>
+                setOverheadGroup({
+                  merchantKey: row.key,
+                  group: event.target.value || null,
+                })
+              )
+            }
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+            aria-label={`Which overhead group ${row.label} belongs to`}
+          >
+            <option value="">Group it…</option>
+            {GROUP_ORDER.map((group) => (
+              <option key={group} value={group}>
+                {GROUP_LABEL[group]}
+              </option>
+            ))}
+          </select>
         )}
 
         <button
