@@ -49,14 +49,24 @@ async function loadMoney(jobIds: string[]): Promise<JobMoney> {
   if (jobIds.length === 0) return empty;
 
   const supabase = await createClient();
-  const [invoices, ledger, proposals, tickets, payouts] = await Promise.all([
-    safe(supabase.from("invoices").select("job_id, amount, status, paid_at").in("job_id", jobIds)),
+  const [invoices, ledger, proposals, tickets, payouts, payments] = await Promise.all([
+    safe(supabase.from("invoices").select("id, job_id, amount, status, paid_at").in("job_id", jobIds)),
     safe(
       supabase.from("ledger_entries").select("job_id, amount, direction").eq("direction", "in").in("job_id", jobIds)
     ),
     safe(supabase.from("job_proposals").select("job_id, total_cost").in("job_id", jobIds)),
     safe(supabase.from("job_tickets").select("job_id, status").in("job_id", jobIds)),
     safe(supabase.from("commission_payouts").select("job_id, amount, paid_at").in("job_id", jobIds)),
+    // The payments table is where Stripe and the hand-recorded cheques both
+    // land, and until now nothing here read it: commission was worked out
+    // from invoices and the ledger, which were empty, while a hundred card
+    // payments sat in a table this never opened.
+    safe(
+      supabase
+        .from("payments")
+        .select("job_id, amount_cents, surcharge_cents, invoice_id")
+        .in("job_id", jobIds)
+    ),
   ]);
 
   const collected = new Map<string, number>();
@@ -65,9 +75,31 @@ async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     collected.set(jobId, (collected.get(jobId) ?? 0) + amount);
   };
 
+  // Money that arrived, fee excluded. The card fee is not money against the
+  // job, and paying commission on it would pay the manager a share of what
+  // Stripe kept.
+  const coveredInvoices = new Set<string>();
+  for (const row of payments as {
+    job_id: string | null;
+    amount_cents: number;
+    surcharge_cents: number | null;
+    invoice_id: string | null;
+  }[]) {
+    add(row.job_id, (row.amount_cents - (row.surcharge_cents ?? 0)) / 100);
+    if (row.invoice_id) coveredInvoices.add(row.invoice_id);
+  }
+
   // A paid invoice is money. A sent one is a claim, and claims do not pay
-  // commission.
-  for (const inv of invoices as { job_id: string; amount: number; status: string; paid_at: string | null }[]) {
+  // commission. An invoice whose payment is already counted above is not
+  // counted again.
+  for (const inv of invoices as {
+    id: string;
+    job_id: string;
+    amount: number;
+    status: string;
+    paid_at: string | null;
+  }[]) {
+    if (coveredInvoices.has(inv.id)) continue;
     if (inv.paid_at || inv.status === "paid") add(inv.job_id, Number(inv.amount) || 0);
   }
   for (const row of ledger as { job_id: string | null; amount: number }[]) {

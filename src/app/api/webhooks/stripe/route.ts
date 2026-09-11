@@ -2,10 +2,7 @@ import Stripe from "stripe";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
-import { settleGroupPass } from "@/lib/actions/public-group-pass-actions";
-import { settleTip } from "@/lib/actions/public-tip-actions";
-import { settleSaltOrder } from "@/lib/actions/public-salt-actions";
+import { recordCheckoutSession } from "@/lib/actions/stripe-settlement";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
@@ -56,7 +53,9 @@ export async function POST(request: NextRequest) {
     const invoice = event.data.object as Stripe.Invoice;
     await admin.from("invoices").update({ status: "uncollectible" }).eq("stripe_invoice_id", invoice.id);
   } else if (event.type === "checkout.session.completed") {
-    await recordCheckout(event.data.object as Stripe.Checkout.Session);
+    // Shared with the sync on the money page, so a session Stripe never
+    // delivered is recorded by exactly the same code when somebody looks.
+    await recordCheckoutSession(event.data.object as Stripe.Checkout.Session);
   } else if (event.type === "invoice.payment_succeeded") {
     // The instalments after the first, and every renewal of a subscription.
     await recordInvoicePayment(event.data.object as Stripe.Invoice);
@@ -69,108 +68,6 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
-}
-
-/** A one-off, a deposit, or the start of a subscription. */
-async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
-  const admin = createAdminClient();
-  const planId = session.metadata?.plan_id ?? null;
-  const instalmentId = session.metadata?.instalment_id ?? null;
-  const jobId = session.metadata?.job_id || null;
-
-  const stripeCustomerId =
-    typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
-  if (!stripeCustomerId) return;
-
-  const customerId = await contactForStripeCustomer(stripeCustomerId);
-
-  // The organisation is stamped on the session where we raised it, and read
-  // back off the plan for the older sessions that carry no metadata. A
-  // webhook has nobody signed in, so guessing one would put a payment in
-  // somebody else's books.
-  const organizationId =
-    session.metadata?.organization_id || (planId ? await orgForPlan(planId) : null);
-  if (!organizationId) return;
-
-  // A proposal paid straight from the client's own screen. Recorded here
-  // rather than on the success page, because a client who closes the tab on
-  // the Stripe receipt has still paid.
-  // A flyer spot bought from the public link. Placed here rather than on the
-  // success page: an advertiser who closes the tab on the Stripe receipt has
-  // still paid, and their tile still has to be theirs.
-  const flyerBookingId = session.metadata?.flyer_booking_id ?? null;
-  if (flyerBookingId) {
-    await placePaidBooking(flyerBookingId).catch((err) =>
-      console.error("placePaidBooking failed:", err)
-    );
-  }
-
-  // A business that paid to post in one of our groups. Same reason as the
-  // flyer spot above: the receipt tab is not where the money is confirmed.
-  const groupPassId = session.metadata?.group_pass_id ?? null;
-  if (groupPassId) {
-    await settleGroupPass(groupPassId).catch((err) =>
-      console.error("settleGroupPass failed:", err)
-    );
-  }
-
-  // A client who left something for the crew. Same reason again: a thank-you
-  // page nobody waited around for is still a tip that arrived.
-  //
-  // Deliberately carries no job_id in its metadata, so it never lands on the
-  // job as revenue. A tip is not money the business earned on the work, and
-  // counting it there would quietly pay commission on it.
-  const jobTipId = session.metadata?.job_tip_id ?? null;
-  if (jobTipId) {
-    await settleTip(jobTipId).catch((err) => console.error("settleTip failed:", err));
-  }
-
-  // A winter prepaid through the salt form. The client, the property and the
-  // job all come into existence here, which is why it must not depend on
-  // somebody staying on the receipt page long enough for it to happen.
-  const saltOrderId = session.metadata?.salt_order_id ?? null;
-  if (saltOrderId) {
-    await settleSaltOrder(saltOrderId).catch((err) =>
-      console.error("settleSaltOrder failed:", err)
-    );
-  }
-
-  const proposalId = session.metadata?.proposal_id ?? null;
-  if (proposalId) {
-    await admin
-      .from("job_proposals")
-      .update({ paid_at: new Date().toISOString() })
-      .eq("id", proposalId)
-      .is("paid_at", null);
-  }
-
-  if (session.subscription && planId) {
-    await admin
-      .from("payment_plans")
-      .update({
-        status: "active",
-        stripe_subscription_id:
-          typeof session.subscription === "string" ? session.subscription : session.subscription.id,
-      })
-      .eq("id", planId);
-  }
-
-  await recordStripePayment({
-    organizationId,
-    customerId,
-    jobId,
-    planId,
-    instalmentId,
-    amountCents: session.amount_total ?? 0,
-    // Set by the checkout, so the fee inside the total does not have to be
-    // guessed at by reversing a rounded percentage.
-    workCents: Number(session.metadata?.work_cents) || null,
-    paymentIntentId:
-      typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : session.payment_intent?.id ?? session.id,
-    invoiceId: typeof session.invoice === "string" ? session.invoice : session.invoice?.id ?? null,
-  });
 }
 
 /** A scheduled instalment, or a subscription renewal. */

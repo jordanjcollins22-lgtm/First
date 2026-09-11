@@ -534,6 +534,12 @@ export interface Database {
           received_at: string;
           note: string | null;
           recorded_by: string | null;
+          /** R-YYYY-NNNN, issued once and never reused. Null until somebody writes the receipt. */
+          receipt_number: string | null;
+          /** The whole of a client's access to their receipt page. */
+          receipt_token: string | null;
+          receipt_issued_at: string | null;
+          receipt_sent_at: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["payments"]["Row"]> & {

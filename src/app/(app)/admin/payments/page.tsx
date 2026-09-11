@@ -15,6 +15,8 @@ import { ReceivedPanel } from "@/components/payments/received-panel";
 import { TransactionImportPanel } from "@/components/payments/transaction-import-panel";
 import { RecordPaymentPanel } from "@/components/payments/record-payment-panel";
 import { PaymentsHealthBanner } from "@/components/payments/payments-health-banner";
+import { WebhookBanner } from "@/components/payments/webhook-banner";
+import { checkWebhook, syncStripeCheckouts } from "@/lib/actions/stripe-settlement";
 import { DebtPlanPanel } from "@/components/payments/debt-plan-panel";
 import { getDebtInputs } from "@/lib/data/debt-plan";
 import { planDebt } from "@/lib/debt-plan";
@@ -41,6 +43,25 @@ export default async function PaymentsPage({
   const isAdmin = Boolean(profile?.roles.includes("admin"));
   const allowed = isAdmin || profile?.roles.includes("overhead");
   if (!allowed) redirect("/my-day");
+
+  // Before the numbers are read, ask Stripe for anything it was paid that we
+  // have no row for. The webhook is how this is meant to arrive and for a
+  // stretch there was no webhook at all, so a thousand dollars sat on Stripe
+  // while this page read zero. Never allowed to fail the page: Stripe being
+  // slow is not a reason to hide the money we do know about.
+  const [synced, webhook] = await Promise.all([
+    syncStripeCheckouts().catch((err) => {
+      console.error("Stripe sync on Money page failed:", err);
+      return null;
+    }),
+    checkWebhook().catch((err) => {
+      console.error("Webhook check failed:", err);
+      return null;
+    }),
+  ]);
+  if (synced && synced.recorded > 0) {
+    console.info(`Money page recorded ${synced.recorded} payment(s) Stripe never delivered.`);
+  }
 
   let data: Awaited<ReturnType<typeof getPaymentsData>> | null = null;
   try {
@@ -97,6 +118,7 @@ export default async function PaymentsPage({
         detail={health?.detail ?? null}
         since={downSince}
       />
+      <WebhookBanner verdict={webhook} />
       <PageTabs
         tabs={[
           {

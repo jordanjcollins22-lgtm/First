@@ -95,6 +95,13 @@ describe("routes a customer opens", () => {
     expect(needsAuthCheck("/tip/abc123")).toBe(false);
   });
 
+  // A receipt is proof somebody already paid. Asking them to sign in to see
+  // it is the one thing a receipt must never do.
+  it("lets a client reach their receipt", () => {
+    expect(isPublic("/receipt/abc123")).toBe(true);
+    expect(needsAuthCheck("/receipt/abc123")).toBe(false);
+  });
+
   it("keeps the sign-in page itself reachable", () => {
     expect(PUBLIC_PREFIXES).toContain("/login");
     expect(isPublic("/login")).toBe(true);

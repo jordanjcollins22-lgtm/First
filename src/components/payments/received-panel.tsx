@@ -13,6 +13,7 @@ import {
   searchContacts,
 } from "@/lib/actions/received-payment-actions";
 import { isConfident, type SearchableContact } from "@/lib/payer-match";
+import { ReceiptControl } from "@/components/payments/receipt-control";
 
 function money(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -187,14 +188,26 @@ function GroupCard({ group, data }: { group: ReceivedGroup; data: ReceivedPaymen
         <p className="shrink-0 text-base font-bold">{money(group.totalCents)}</p>
       </div>
 
-      <ul className="mt-2 space-y-0.5 border-l-2 border-border pl-2">
+      <ul className="mt-2 space-y-1 border-l-2 border-border pl-2">
         {group.payments.map((p) => (
-          <li key={p.id} className="flex justify-between gap-2 text-xs text-muted-foreground">
-            <span className="truncate">
-              {day(p.receivedAt)} · {p.method}
-              {p.note ? ` · ${p.note}` : ""}
-            </span>
-            <span className="shrink-0 tabular-nums">{money(p.amountCents)}</span>
+          <li key={p.id} className="text-xs text-muted-foreground">
+            <div className="flex justify-between gap-2">
+              <span className="truncate">
+                {day(p.receivedAt)} · {p.method}
+                {p.note ? ` · ${p.note}` : ""}
+              </span>
+              <span className="shrink-0 tabular-nums">{money(p.amountCents)}</span>
+            </div>
+            {/* The receipt, beside the money it is for. Written once, then a
+                link to hand over and a way to say it went. */}
+            <div className="mt-0.5">
+              <ReceiptControl
+                paymentId={p.id}
+                number={p.receiptNumber}
+                token={p.receiptToken}
+                sentAt={p.receiptSentAt}
+              />
+            </div>
           </li>
         ))}
       </ul>

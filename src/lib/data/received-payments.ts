@@ -28,6 +28,10 @@ export interface ReceivedPayment {
   payerName: string | null;
   payerEmail: string | null;
   payerPhone: string | null;
+  /** Null until somebody writes the receipt. */
+  receiptNumber: string | null;
+  receiptToken: string | null;
+  receiptSentAt: string | null;
 }
 
 /** A group, resolved for display: names rather than ids. */
@@ -79,6 +83,9 @@ interface PaymentQueryRow {
   payer_name: string | null;
   payer_email: string | null;
   payer_phone: string | null;
+  receipt_number: string | null;
+  receipt_token: string | null;
+  receipt_sent_at: string | null;
   customers: { name: string } | null;
   jobs: { name: string } | null;
 }
@@ -97,7 +104,7 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
   const { data: paymentRows } = await supabase
     .from("payments")
     .select(
-      "id, customer_id, job_id, amount_cents, method, received_at, note, stripe_invoice_id, source_invoice_ref, payer_name, payer_email, payer_phone, customers(name), jobs(name)"
+      "id, customer_id, job_id, amount_cents, method, received_at, note, stripe_invoice_id, source_invoice_ref, payer_name, payer_email, payer_phone, receipt_number, receipt_token, receipt_sent_at, customers(name), jobs(name)"
     )
     .eq("organization_id", organizationId)
     .order("received_at", { ascending: false });
@@ -120,6 +127,9 @@ export async function getReceivedPayments(): Promise<ReceivedPaymentsData> {
     payerName: r.payer_name,
     payerEmail: r.payer_email,
     payerPhone: r.payer_phone,
+    receiptNumber: r.receipt_number ?? null,
+    receiptToken: r.receipt_token ?? null,
+    receiptSentAt: r.receipt_sent_at ?? null,
   }));
 
   const forGrouping: PaymentRow[] = payments.map((p) => ({

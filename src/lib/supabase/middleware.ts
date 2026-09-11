@@ -27,7 +27,7 @@ import type { Database } from "./database.types";
 // /my is a client's own corner. It signs them in itself with an emailed code
 // and shows one customer's work, so the staff sign-in wall in front of it
 // would bounce exactly the people it is for.
-export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt"] as const;
+export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

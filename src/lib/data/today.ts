@@ -47,19 +47,27 @@ export async function getToday(
   const byId = new Map(jobs.map((job) => [job.id, job]));
   const supabase = await createClient();
 
-  const [proposals, invoices, ledger] = await Promise.all([
+  const [proposals, invoices, ledger, payments] = await Promise.all([
     safe(
       supabase
         .from("job_proposals")
         .select("job_id, status, total_cost, responded_at")
         .in("job_id", jobIds)
     ),
-    safe(supabase.from("invoices").select("job_id, amount, paid_at, status").in("job_id", jobIds)),
+    safe(supabase.from("invoices").select("id, job_id, amount, paid_at, status").in("job_id", jobIds)),
     safe(
       supabase
         .from("ledger_entries")
         .select("job_id, amount, direction, occurred_on, party, note")
         .eq("direction", "in")
+        .in("job_id", jobIds)
+    ),
+    // Where Stripe and hand-recorded cheques both land. Read first, so a
+    // card payment shows as money in on the day it arrived.
+    safe(
+      supabase
+        .from("payments")
+        .select("job_id, amount_cents, surcharge_cents, method, received_at, invoice_id, payer_name")
         .in("job_id", jobIds)
     ),
   ]);
@@ -85,12 +93,37 @@ export async function getToday(
   }
 
   const money: MoneyToday[] = [];
+  const coveredInvoices = new Set<string>();
+  for (const row of payments as {
+    job_id: string | null;
+    amount_cents: number;
+    surcharge_cents: number | null;
+    method: string;
+    received_at: string;
+    invoice_id: string | null;
+    payer_name: string | null;
+  }[]) {
+    if (row.invoice_id) coveredInvoices.add(row.invoice_id);
+    if (!isOnDay(row.received_at, dayKey)) continue;
+    const job = row.job_id ? byId.get(row.job_id) : null;
+    money.push({
+      label: job ? job.property.customer.name : row.payer_name || "Payment",
+      // Fee excluded: what the job was paid, not what the card was charged.
+      amount: (row.amount_cents - (row.surcharge_cents ?? 0)) / 100,
+      via: row.method === "card" ? "Card" : row.method === "check" ? "Check" : row.method === "cash" ? "Cash" : "Payment",
+      at: row.received_at,
+    });
+  }
+
   for (const row of invoices as {
     job_id: string;
     amount: number;
     paid_at: string | null;
     status: string;
+    id?: string;
   }[]) {
+    // Already counted above through its payment row.
+    if (row.id && coveredInvoices.has(row.id)) continue;
     // A paid date beats a paid status: a status says it is settled, a date
     // says when, and "today" is the whole question being asked.
     if (!isOnDay(row.paid_at, dayKey)) continue;
