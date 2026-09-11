@@ -36,6 +36,16 @@ export interface Organization {
   tips_enabled?: boolean | null;
   /** What the tip page says about where the money goes. */
   tips_note?: string | null;
+  /** Whether the prepaid ice melt form is taking orders. */
+  salt_enabled?: boolean | null;
+  salt_bag_cost_cents?: number | null;
+  salt_pet_bag_cost_cents?: number | null;
+  salt_bag_pounds?: number | null;
+  salt_sidewalk_pounds?: number | null;
+  salt_driveway_pounds?: number | null;
+  salt_sidewalk_minutes?: number | null;
+  salt_driveway_minutes?: number | null;
+  salt_pet_surcharge_cents?: number | null;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
   /** USPS EDDM Retail postage per piece, dollars. Null until somebody enters it. */

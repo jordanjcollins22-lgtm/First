@@ -153,6 +153,10 @@ export const MODULES: readonly AppModule[] = [
       { key: "team", label: "Team", tabs: ["team"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments", "subscriptions", "transactions"] },
+      // Its own subtab rather than folded into the schedule: a prepaid winter
+      // is a list of people owed something and a pile of salt to buy, and
+      // neither is a thing the calendar answers.
+      { key: "salt", label: "Salt route", tabs: ["salt"] },
       // Both are what somebody reads standing on a property: which weed that
       // is, and what to say about how long the work takes to look right.
       { key: "field-guide", label: "Field guide", tabs: ["weeds", "expectations"] },

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
 import { settleGroupPass } from "@/lib/actions/public-group-pass-actions";
 import { settleTip } from "@/lib/actions/public-tip-actions";
+import { settleSaltOrder } from "@/lib/actions/public-salt-actions";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
@@ -122,6 +123,16 @@ async function recordCheckout(session: Stripe.Checkout.Session): Promise<void> {
   const jobTipId = session.metadata?.job_tip_id ?? null;
   if (jobTipId) {
     await settleTip(jobTipId).catch((err) => console.error("settleTip failed:", err));
+  }
+
+  // A winter prepaid through the salt form. The client, the property and the
+  // job all come into existence here, which is why it must not depend on
+  // somebody staying on the receipt page long enough for it to happen.
+  const saltOrderId = session.metadata?.salt_order_id ?? null;
+  if (saltOrderId) {
+    await settleSaltOrder(saltOrderId).catch((err) =>
+      console.error("settleSaltOrder failed:", err)
+    );
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;

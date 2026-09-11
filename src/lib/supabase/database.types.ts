@@ -38,6 +38,16 @@ export interface Database {
           tips_enabled: boolean;
           /** What the tip page says about where the money goes. */
           tips_note: string | null;
+          /** Whether the prepaid ice melt form is taking orders. */
+          salt_enabled: boolean;
+          salt_bag_cost_cents: number;
+          salt_pet_bag_cost_cents: number;
+          salt_bag_pounds: number;
+          salt_sidewalk_pounds: number;
+          salt_driveway_pounds: number;
+          salt_sidewalk_minutes: number;
+          salt_driveway_minutes: number;
+          salt_pet_surcharge_cents: number;
           measurement_unit: string;
           measurement_basis: string;
           /** The scheduling engine is off until a business asks for it. */
@@ -2516,6 +2526,49 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      salt_orders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          email: string;
+          address: string;
+          phone: string | null;
+          /** Null when the address could not be placed. The order still stands. */
+          lat: number | null;
+          lng: number | null;
+          /** 'sidewalks' | 'driveway' | 'both' */
+          surface: string;
+          pet_friendly: boolean;
+          treatments: number;
+          /** Delivered. What is left is what the buying list is built from. */
+          treatments_used: number;
+          per_treatment_cents: number;
+          amount_cents: number;
+          /** 'unpaid' | 'paid' | 'cancelled' */
+          status: string;
+          checkout_session_id: string | null;
+          paid_at: string | null;
+          customer_id: string | null;
+          property_id: string | null;
+          job_id: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["salt_orders"]["Row"]> & {
+          organization_id: string;
+          name: string;
+          email: string;
+          address: string;
+          surface: string;
+          treatments: number;
+          per_treatment_cents: number;
+          amount_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["salt_orders"]["Row"]>;
+        Relationships: [];
       };
       proposal_events: {
         Row: {
