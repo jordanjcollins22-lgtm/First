@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildToday, isOnDay, localDayKey, withOwed, type TodayInput } from "@/lib/today";
+import { buildToday, isOnDay, localDayKey, sellersOf, withOwed, type TodayInput } from "@/lib/today";
 
 function input(overrides: Partial<TodayInput> = {}): TodayInput {
   return { sold: [], money: [], visits: [], onSite: [], owed: 0, ...overrides };
@@ -163,5 +163,34 @@ describe("withOwed", () => {
       input({ money: [{ label: "Invoice 9", amount: 500, via: "Card", at: "2026-09-11T10:00:00Z" }] })
     );
     expect(withOwed(day, 4).headline).toBe("$500 in today.");
+  });
+});
+
+describe("sellersOf", () => {
+  const jordan = { soldById: "p1", soldBy: "Jordan Collins" };
+  const yvonne = { soldById: "p2", soldBy: "Yvonne Lee" };
+
+  it("rolls the day's sales up by who made them, biggest first", () => {
+    const rows = sellersOf([
+      { ...SALE, ...jordan },
+      { ...SALE, jobId: "j2", value: 800, ...yvonne },
+      { ...SALE, jobId: "j3", value: 2_200, ...yvonne },
+    ]);
+    expect(rows.map((r) => [r.name, r.count, r.value])).toEqual([
+      ["Jordan Collins", 1, 3_400],
+      ["Yvonne Lee", 2, 3_000],
+    ]);
+  });
+
+  it("keeps a sale nobody is on, rather than losing it from the total", () => {
+    const rows = sellersOf([{ ...SALE, soldById: null, soldBy: null }, { ...SALE, jobId: "j2", ...jordan }]);
+    expect(rows.find((r) => r.profileId === null)?.name).toBe("Unassigned");
+    expect(rows.reduce((sum, r) => sum + r.value, 0)).toBe(6_800);
+  });
+
+  it("is on the view, so the panel shows the whole team", () => {
+    const view = buildToday(input({ sold: [{ ...SALE, ...jordan }, { ...SALE, jobId: "j2", ...yvonne }] }));
+    expect(view.bySeller).toHaveLength(2);
+    expect(view.soldValue).toBe(6_800);
   });
 });

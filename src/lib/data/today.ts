@@ -17,8 +17,11 @@ import {
  * evening signature dated to the following morning is the kind of thing that
  * makes somebody stop trusting the screen.
  *
- * Scoped to their own book the same way the rest of My Day is, so an account
- * manager sees their sales and an owner sees the lot.
+ * Sales and money are the whole team's, whoever is looking: a sale is a
+ * company fact, each line says who made it, and the owner asked to see
+ * everybody's rather than their own. Visits and crews are still scoped to
+ * the person, because those are "what is on me" and a list of other
+ * people's appointments is noise on a phone at six in the evening.
  */
 export async function getToday(
   options: { mine?: string | null } = {},
@@ -27,7 +30,9 @@ export async function getToday(
   const dayKey = localDayKey(now);
 
   const all = await listJobsWithLocation().catch(() => []);
-  const jobs = options.mine
+  // Sales and money: everybody's. Visits and crews: theirs.
+  const jobs = all;
+  const own = options.mine
     ? all.filter((job) =>
         isTheirs(
           {
@@ -47,7 +52,15 @@ export async function getToday(
   const byId = new Map(jobs.map((job) => [job.id, job]));
   const supabase = await createClient();
 
-  const [proposals, invoices, ledger, payments] = await Promise.all([
+  // Whoever is on the client gets the sale, the same rule commission uses,
+  // so the name on the line is the name on the payout.
+  const sellerIds = new Set<string>();
+  for (const job of jobs) {
+    const id = job.property.customer.account_manager_id ?? job.assigned_to;
+    if (id) sellerIds.add(id);
+  }
+
+  const [proposals, invoices, ledger, payments, people] = await Promise.all([
     safe(
       supabase
         .from("job_proposals")
@@ -70,7 +83,16 @@ export async function getToday(
         .select("job_id, amount_cents, surcharge_cents, method, received_at, invoice_id, payer_name")
         .in("job_id", jobIds)
     ),
+    sellerIds.size > 0
+      ? safe(supabase.from("profiles").select("id, full_name, first_name, email").in("id", [...sellerIds]))
+      : Promise.resolve([] as { id: string; full_name: string | null; first_name: string | null; email: string | null }[]),
   ]);
+
+  const nameOf = new Map(
+    (people as { id: string; full_name: string | null; first_name: string | null; email: string | null }[]).map(
+      (row) => [row.id, row.full_name || row.first_name || row.email || "Somebody"]
+    )
+  );
 
   const sold: SoldToday[] = [];
   for (const row of proposals as {
@@ -83,12 +105,15 @@ export async function getToday(
     if (!isOnDay(row.responded_at, dayKey)) continue;
     const job = byId.get(row.job_id);
     if (!job) continue;
+    const soldById = job.property.customer.account_manager_id ?? job.assigned_to ?? null;
     sold.push({
       jobId: job.id,
       customerName: job.property.customer.name,
       address: job.property.address,
       value: row.total_cost,
       at: row.responded_at!,
+      soldById,
+      soldBy: soldById ? (nameOf.get(soldById) ?? null) : null,
     });
   }
 
@@ -154,7 +179,7 @@ export async function getToday(
     });
   }
 
-  const visits = jobs
+  const visits = own
     .filter(
       (job) =>
         job.evaluation_date &&
@@ -171,7 +196,7 @@ export async function getToday(
       status: job.evaluation_status,
     }));
 
-  const onSite = jobs
+  const onSite = own
     .filter((job) => {
       if (job.status !== "in_progress") return false;
       const start = job.project_start_date?.slice(0, 10) ?? null;

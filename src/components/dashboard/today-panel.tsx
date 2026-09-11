@@ -37,7 +37,7 @@ export function TodayPanel({ today }: { today: TodayView }) {
           icon={<Handshake className="h-4 w-4" />}
           label="Sold today"
           value={money(today.soldValue)}
-          detail={`${today.sold.length} job${today.sold.length === 1 ? "" : "s"}`}
+          detail={soldDetail(today)}
         />
         <Tile
           icon={<Banknote className="h-4 w-4" />}
@@ -59,6 +59,22 @@ export function TodayPanel({ today }: { today: TodayView }) {
         />
       </div>
 
+      {/* Everybody's sales, with the seller on each line. One seller is
+          named once, on the line; more than one gets the tally as well, so
+          the owner can see who sold what without adding it up. */}
+      {today.bySeller.length > 1 && (
+        <Lines title="Sold today, by person">
+          {today.bySeller.map((row) => (
+            <Line
+              key={row.profileId ?? "unassigned"}
+              left={row.name}
+              middle={`${row.count} job${row.count === 1 ? "" : "s"}`}
+              right={money(row.value)}
+            />
+          ))}
+        </Lines>
+      )}
+
       {today.sold.length > 0 && (
         <Lines title="Sold today">
           {today.sold.map((row) => (
@@ -66,7 +82,7 @@ export function TodayPanel({ today }: { today: TodayView }) {
               key={`${row.jobId}-${row.at}`}
               href={`/jobs/${row.jobId}`}
               left={row.customerName}
-              middle={row.address}
+              middle={row.soldBy ? `${row.address} · ${row.soldBy}` : row.address}
               right={row.value == null ? "No total" : money(row.value)}
             />
           ))}
@@ -162,6 +178,15 @@ function Line({
     </div>
   );
   return <li>{href ? <Link href={href} className="block hover:bg-accent/50">{body}</Link> : body}</li>;
+}
+
+/** "3 jobs, whole team" when more than one person sold; the seller's name
+ * when only one did, so the tile alone says whose day it was. */
+function soldDetail(today: TodayView): string {
+  const jobs = `${today.sold.length} job${today.sold.length === 1 ? "" : "s"}`;
+  if (today.sold.length === 0) return jobs;
+  if (today.bySeller.length === 1) return `${jobs} · ${today.bySeller[0].name}`;
+  return `${jobs} · whole team`;
 }
 
 function money(value: number): string {

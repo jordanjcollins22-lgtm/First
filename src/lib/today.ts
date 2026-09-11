@@ -21,6 +21,18 @@ export interface SoldToday {
   /** What they accepted, in dollars. Null on a proposal with no total. */
   value: number | null;
   at: string;
+  /** Who gets the credit: the client's account manager, else whoever the job
+   * is assigned to. Null when nobody is on it yet. */
+  soldById?: string | null;
+  soldBy?: string | null;
+}
+
+/** One person's share of the day's sales. */
+export interface SellerToday {
+  profileId: string | null;
+  name: string;
+  count: number;
+  value: number;
 }
 
 export interface MoneyToday {
@@ -46,6 +58,12 @@ export interface TodayInput {
 export interface TodayView {
   sold: SoldToday[];
   soldValue: number;
+  /**
+   * The day's sales by who made them, biggest first. The whole team is on
+   * here, not just the person looking: a sale is a company fact, and the
+   * owner asked to see everybody's, not their own.
+   */
+  bySeller: SellerToday[];
   money: MoneyToday[];
   moneyIn: number;
   visits: TodayInput["visits"];
@@ -79,6 +97,7 @@ export function buildToday(input: TodayInput): TodayView {
   return {
     sold: [...input.sold].sort((a, b) => b.at.localeCompare(a.at)),
     soldValue,
+    bySeller: sellersOf(input.sold),
     money: [...input.money].sort((a, b) => b.at.localeCompare(a.at)),
     moneyIn,
     visits: [...input.visits].sort((a, b) => a.at.localeCompare(b.at)),
@@ -122,6 +141,30 @@ function headlineFor({
   }
   if (input.onSite.length > 0) return "Crew is out, nothing sold today.";
   return "Nothing sold today.";
+}
+
+/**
+ * Sales rolled up by seller, biggest total first, ties by count.
+ *
+ * A sale with nobody on it is still a sale and still counts toward the day;
+ * it is shown under "Unassigned" rather than dropped, because a total that
+ * does not add up to the tiles above it is a total nobody trusts.
+ */
+export function sellersOf(sold: SoldToday[]): SellerToday[] {
+  const byId = new Map<string, SellerToday>();
+  for (const sale of sold) {
+    const key = sale.soldById ?? "";
+    const row = byId.get(key) ?? {
+      profileId: sale.soldById ?? null,
+      name: sale.soldBy || "Unassigned",
+      count: 0,
+      value: 0,
+    };
+    row.count += 1;
+    row.value = round(row.value + (sale.value ?? 0));
+    byId.set(key, row);
+  }
+  return [...byId.values()].sort((a, b) => b.value - a.value || b.count - a.count || a.name.localeCompare(b.name));
 }
 
 function money(value: number): string {
