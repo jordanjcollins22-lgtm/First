@@ -504,12 +504,22 @@ export default async function JobPage({
         {/* What the crew will actually be looking at on site. Worth a tap from
             here rather than only from inside the drawing tool — checking the
             sheet before sending somebody out is the point of it existing. */}
-        <Link
-          href={`/jobs/${jobId}/work-order`}
-          className="shrink-0 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
-        >
-          View crew sheet
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link
+            href={`/jobs/${jobId}/work-order`}
+            className="rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
+          >
+            View crew sheet
+          </Link>
+          {/* The whole story on paper, for a callback or an unhappy client:
+              what was agreed, what was not, what was said, what was paid. */}
+          <Link
+            href={`/jobs/${jobId}/record`}
+            className="rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
+          >
+            Job record
+          </Link>
+        </div>
       </div>
 
       <JobSummary items={outstanding} />
