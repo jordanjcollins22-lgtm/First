@@ -85,6 +85,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "recommendations", label: "Link Tracking", href: "/admin/outreach" },
   { key: "groups", label: "Local Groups", href: "/admin/groups" },
   { key: "fleet", label: "Fleet", href: "/admin/fleet" },
+  { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", parent: "payments" },
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
   { key: "signs", label: "Neighborhood Sign", href: "/admin/marketing/poster" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },

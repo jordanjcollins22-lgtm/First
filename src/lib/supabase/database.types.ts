@@ -2506,6 +2506,27 @@ export interface Database {
           },
         ];
       };
+      recurring_decisions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          merchant_key: string;
+          label: string | null;
+          kind: string | null;
+          confirmed_at: string | null;
+          dismissed_at: string | null;
+          cancel_wanted: boolean;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["recurring_decisions"]["Row"]> & {
+          organization_id: string;
+          merchant_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["recurring_decisions"]["Row"]>;
+        Relationships: [];
+      };
       fleet_assets: {
         Row: {
           id: string;
