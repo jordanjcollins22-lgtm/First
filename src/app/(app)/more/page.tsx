@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getAllowedTabs } from "@/lib/data/access";
 import { moduleFor, subtabsFor } from "@/lib/modules";
-import { TABS } from "@/lib/permissions";
+import { TABS, type TabDefinition } from "@/lib/permissions";
 
 /**
  * The company and admin tools, grouped by what they are for.
@@ -20,16 +20,24 @@ import { TABS } from "@/lib/permissions";
 
 const BY_KEY = new Map(TABS.map((tab) => [tab.key, tab]));
 
-/** What each group actually opens, for the viewer, in the order it is useful. */
-const PAGES: Record<string, string[]> = {
-  inventory: ["tools", "materials", "labels", "inventory-setup"],
-  team: ["team"],
-  services: ["services"],
-  finance: ["payments"],
-  "field-guide": ["weeds"],
-  data: ["house-review", "gis-import"],
-  knowledge: ["knowledge-graph"],
-};
+/**
+ * What a group opens is the permission keys it is already made of.
+ *
+ * This used to be a second, hand-written list beside the modules, and it went
+ * stale exactly the way a second list of anything does: three pages were added
+ * to the app and never added here, so Fleet, Subscriptions, Transactions and
+ * Client messaging had no link anywhere and a group whose pages all resolved
+ * to nothing disappeared from the screen entirely. Somebody with every
+ * permission granted still could not reach them.
+ *
+ * Derived now, so it cannot drift. A subtab names the tabs that open it; those
+ * are the pages.
+ */
+function pagesFor(subtab: { tabs: string[] }, allowed: string[]): TabDefinition[] {
+  return subtab.tabs
+    .map((key) => BY_KEY.get(key))
+    .filter((tab): tab is TabDefinition => tab != null && allowed.includes(tab.key));
+}
 
 export default async function MorePage() {
   const profile = await getCurrentProfile();
@@ -37,6 +45,7 @@ export default async function MorePage() {
   const groups = subtabsFor("more", allowed);
   const question = moduleFor("more")?.question ?? "";
   const isAdmin = profile?.roles.includes("admin") ?? false;
+  const listed = new Set<string>();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
@@ -50,9 +59,14 @@ export default async function MorePage() {
       ) : (
         <div className="space-y-5">
           {groups.map((group) => {
-            const pages = (PAGES[group.key] ?? [])
-              .map((key) => BY_KEY.get(key))
-              .filter((tab): tab is NonNullable<typeof tab> => tab != null && allowed.includes(tab.key));
+            // A page belongs to the first group that opens it. Services lists
+            // Team as well, so that somebody granted only Team can still reach
+            // it, and without this it would appear twice.
+            const pages = pagesFor(group, allowed).filter((page) => {
+              if (listed.has(page.key)) return false;
+              listed.add(page.key);
+              return true;
+            });
             if (pages.length === 0) return null;
             return (
               <section key={group.key}>

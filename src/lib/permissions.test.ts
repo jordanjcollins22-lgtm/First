@@ -80,11 +80,41 @@ describe("tabsAllowedForRoles", () => {
     }
   });
 
-  it("stops giving admins a page once somebody else has been granted it", () => {
-    // A tab with any grant is configured, so admins follow the matrix too.
+  it("does not take a page off an admin because somebody else was granted it", () => {
+    // The trap that made "I enabled permissions and lost my tabs" the expected
+    // outcome. Granting the crew a page used to mark it configured, and an
+    // admin who had never ticked their own box silently lost it.
     const configured = [{ role_name: "crew", tab_key: "conversations" }];
     expect(tabsAllowedForRoles(["crew"], configured).has("conversations")).toBe(true);
-    expect(tabsAllowedForRoles(["admin"], configured).has("conversations")).toBe(false);
+    expect(tabsAllowedForRoles(["admin"], configured).has("conversations")).toBe(true);
+  });
+
+  it("lets an admin turn a page off for themselves, said out loud", () => {
+    // Unticking your own box still works — it is a row saying no rather than
+    // the absence of a row, which for an admin means nobody has decided.
+    const denied = [{ role_name: "admin", tab_key: "payments", granted: false }];
+    expect(tabsAllowedForRoles(["admin"], denied).has("payments")).toBe(false);
+    expect(tabsAllowedForRoles(["admin"], denied).has("tools")).toBe(true);
+  });
+
+  it("does not let a denial for an admin leak into another role", () => {
+    const rows = [
+      { role_name: "admin", tab_key: "payments", granted: false },
+      { role_name: "overhead", tab_key: "payments", granted: true },
+    ];
+    expect(tabsAllowedForRoles(["overhead"], rows).has("payments")).toBe(true);
+  });
+
+  it("treats a row with nothing said about it as a grant, like every old row", () => {
+    const rows = [{ role_name: "crew", tab_key: "evaluations" }];
+    expect(tabsAllowedForRoles(["crew"], rows).has("evaluations")).toBe(true);
+  });
+
+  it("gives an admin every page when nobody has decided anything", () => {
+    const allowed = tabsAllowedForRoles(["admin"], []);
+    for (const tab of TABS) {
+      expect(allowed.has(tab.key), `${tab.key} was hidden from an admin`).toBe(true);
+    }
   });
 
   it("reports which tabs are still awaiting a decision", () => {

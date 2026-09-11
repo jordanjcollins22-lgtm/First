@@ -2016,6 +2016,7 @@ export interface Database {
         Row: {
           role_name: string;
           tab_key: string;
+          granted: boolean;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]> & {

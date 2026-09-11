@@ -177,18 +177,27 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
  */
 export function tabsAllowedForRoles(
   roles: string[],
-  permissions: { role_name: string; tab_key: string }[]
+  permissions: { role_name: string; tab_key: string; granted?: boolean | null }[]
 ): Set<string> {
   const allowed = new Set<string>();
-  const configured = new Set(permissions.map((p) => p.tab_key));
+  const deniedToAdmin = new Set<string>();
 
-  for (const p of permissions) {
-    if (roles.includes(p.role_name)) allowed.add(p.tab_key);
+  for (const permission of permissions) {
+    const granted = permission.granted ?? true;
+    if (permission.role_name === "admin" && !granted) deniedToAdmin.add(permission.tab_key);
+    if (!granted) continue;
+    if (roles.includes(permission.role_name)) allowed.add(permission.tab_key);
   }
 
+  // An admin sees everything they have not explicitly turned off for
+  // themselves. It used to be everything nobody had ticked for anybody, which
+  // meant granting a page to the crew silently took it off the admin's own
+  // menu -- the trap that made "I enabled permissions and lost my tabs" the
+  // expected outcome rather than a surprise. Unticking your own box still
+  // works, because a deny is now a row rather than an absence.
   if (roles.includes("admin")) {
     for (const tab of TABS) {
-      if (!configured.has(tab.key)) allowed.add(tab.key);
+      if (!deniedToAdmin.has(tab.key)) allowed.add(tab.key);
     }
   }
 

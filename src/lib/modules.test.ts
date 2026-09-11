@@ -161,3 +161,38 @@ describe("old addresses", () => {
     }
   });
 });
+
+describe("everything in More can actually be clicked", () => {
+  it("gives every group at least one page to open", () => {
+    // The More page used to keep a second, hand-written list of what each
+    // group contained, beside the modules. It went stale exactly the way a
+    // second list of anything does: Fleet, Subscriptions, Transactions and
+    // Client messaging had no link anywhere, and a group whose pages all
+    // resolved to nothing vanished from the screen. Somebody with every
+    // permission granted still could not reach them.
+    const everything = TABS.map((tab) => tab.key);
+    for (const subtab of subtabsFor("more", everything)) {
+      expect(
+        subtab.tabs.length,
+        `the ${subtab.label} group opens nothing, so it will not render`
+      ).toBeGreaterThan(0);
+      for (const key of subtab.tabs) {
+        expect(
+          everything.includes(key),
+          `${subtab.label} opens "${key}", which is not a registered tab`
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("puts every module's subtab behind tabs that exist", () => {
+    const keys = new Set(TABS.map((tab) => tab.key));
+    for (const mod of MODULES) {
+      for (const subtab of mod.subtabs) {
+        for (const key of subtab.tabs) {
+          expect(keys.has(key), `${mod.label} → ${subtab.label} names "${key}"`).toBe(true);
+        }
+      }
+    }
+  });
+});

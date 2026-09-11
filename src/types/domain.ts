@@ -360,6 +360,14 @@ export interface CustomRole {
 export interface RolePermission {
   role_name: string;
   tab_key: string;
+  /**
+   * True grants the page, false denies it.
+   *
+   * Only meaningful for admin. Every other role is denied by having no row at
+   * all; an admin is granted by having no row, so saying no needs somewhere to
+   * be written down.
+   */
+  granted?: boolean | null;
 }
 
 /** Tools are equipment used to do the work; gear is what the crew wears,
