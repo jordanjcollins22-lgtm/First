@@ -132,3 +132,41 @@ export async function noteCharge(input: {
 }): Promise<RecurringResult> {
   return decide(input.merchantKey, { note: input.note.trim().slice(0, 300) || null });
 }
+
+/**
+ * Count it anyway.
+ *
+ * Some real costs never look regular. A vehicle lease billed twice in six
+ * months at two different amounts is not a rhythm any detector should trust,
+ * and it is still a lease -- so there has to be a way to say "this one counts"
+ * about something nothing found. The monthly figure for one of these is what
+ * actually left divided by the months it covers, which is the only honest
+ * answer for spending with no pattern.
+ */
+export async function includeCharge(input: {
+  merchantKey: string;
+  included: boolean;
+}): Promise<RecurringResult> {
+  return decide(input.merchantKey, {
+    included_at: input.included ? new Date().toISOString() : null,
+    ...(input.included ? { dismissed_at: null } : {}),
+  });
+}
+
+/**
+ * Which amount this charge is worth from here.
+ *
+ * The median by default, so one odd month does not move it. That is right for
+ * a bill that wobbles and wrong for one that stepped up: the rent ran at 2,298
+ * and went to 2,791, and the median of the two is a figure the business has
+ * never paid and never will. Which of the two is happening cannot be read off
+ * the numbers, so it is a choice somebody makes with the history in front of
+ * them.
+ */
+export async function setAmountBasis(input: {
+  merchantKey: string;
+  basis: string | null;
+}): Promise<RecurringResult> {
+  const basis = input.basis === "latest" || input.basis === "median" ? input.basis : null;
+  return decide(input.merchantKey, { amount_basis: basis });
+}

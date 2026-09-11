@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { money } from "@/lib/inventory-value";
@@ -11,10 +11,13 @@ import { GROUP_LABEL, GROUP_NOTE, GROUP_ORDER } from "@/lib/overhead";
 import {
   confirmCharge,
   dismissCharge,
+  includeCharge,
   markForCancelling,
+  setAmountBasis,
   setOverheadGroup,
 } from "@/lib/actions/recurring-actions";
 import type { ChargeRow, RecurringBoard } from "@/lib/data/recurring";
+import type { MerchantSpend, SpendReview } from "@/lib/spend-review";
 
 /**
  * What leaves the bank every month whether anybody works or not.
@@ -46,7 +49,11 @@ export function RecurringBoardView({ board }: { board: RecurringBoard }) {
         />
       </div>
 
+      <Reconciliation review={board.review} />
+
       <Overhead board={board} />
+
+      <NotCounted uncounted={board.review.uncounted} months={board.review.months} />
 
       <Section
         title="Subscriptions"
@@ -147,6 +154,159 @@ function Overhead({ board }: { board: RecurringBoard }) {
   );
 }
 
+/**
+ * Every dollar that left, and which of them the overhead knows about.
+ *
+ * Forty thousand a month leaves these accounts and four and a half of it is
+ * overhead. A screen showing only the four and a half invites the reading that
+ * the rest does not exist, and the first question anybody sensible asks of an
+ * overhead figure is "out of what".
+ *
+ * Most of the remainder is materials, crew and cards being settled, which is
+ * correct. The part worth looking at is what is left after those, because that
+ * is where a real monthly cost hides.
+ */
+function Reconciliation({ review }: { review: SpendReview }) {
+  if (review.months <= 0) return null;
+  const checkedShare =
+    review.chargeCount > 0 ? Math.round((review.checkedCount / review.chargeCount) * 100) : 0;
+
+  return (
+    <section className="rounded-lg border border-border">
+      <div className="border-b border-border px-3 py-2">
+        <h2 className="text-sm font-semibold">Where the money actually goes</h2>
+        <p className="text-xs text-muted-foreground">
+          {money(review.outPerMonth)} a month leaves these accounts, averaged over{" "}
+          {review.months} months. This is what the overhead is a part of.
+        </p>
+      </div>
+
+      <ul className="divide-y divide-border">
+        <Split
+          label="Overhead"
+          value={review.overheadPerMonth}
+          note="Rent, insurance, software, the phone. What goes out whether anybody works or not."
+        />
+        <Split
+          label="Everything else"
+          value={review.uncountedPerMonth}
+          note="Materials, crew and one-offs. Job costs, not overhead — but worth a look for anything that belongs above."
+        />
+        <Split
+          label="Cards and transfers"
+          value={review.transfersPerMonth}
+          note="The same money twice: spent once, and again when the card was settled. Deliberately not counted."
+        />
+        {review.dismissedPerMonth > 0 && (
+          <Split
+            label="Pushed out by hand"
+            value={review.dismissedPerMonth}
+            note="Marked not an overhead by somebody."
+          />
+        )}
+      </ul>
+
+      <div className="border-t border-border px-3 py-2">
+        <p className="text-xs text-muted-foreground">
+          {review.checkedCount} of {review.chargeCount} charges checked off, covering{" "}
+          {money(review.checkedAmount)} of the {money(review.overheadPerMonth)}. Open a charge to see
+          the transactions behind it.
+        </p>
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${checkedShare}%` }} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Split({ label, value, note }: { label: string; value: number; note: string }) {
+  return (
+    <li className="px-3 py-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-semibold tabular-nums">{money(value)}/mo</span>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{note}</p>
+    </li>
+  );
+}
+
+/**
+ * The biggest things no recurring charge speaks for.
+ *
+ * Almost all of it is materials and crew and should stay where it is. The
+ * reason it is on screen is the exception: a vehicle lease billed twice in six
+ * months at two different amounts is real, monthly, and will never look
+ * regular enough to be found. One tap puts it in the overhead at what it
+ * actually averages.
+ */
+function NotCounted({ uncounted, months }: { uncounted: MerchantSpend[]; months: number }) {
+  const [open, setOpen] = useState(false);
+  if (uncounted.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-border">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <span className="text-sm font-semibold">Not in the overhead</span>
+        <span className="ml-auto text-xs text-muted-foreground">{uncounted.length} to look at</span>
+      </button>
+
+      {open && (
+        <>
+          <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+            The biggest spending nothing recurring accounts for. Most of it is materials and crew
+            and belongs exactly where it is. Anything here that is really a monthly cost can be
+            counted, and it will go in at what it averages over the {months} months of data.
+          </p>
+          <ul className="divide-y divide-border">
+            {uncounted.map((merchant) => (
+              <UncountedRow key={merchant.key} merchant={merchant} />
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+function UncountedRow({ merchant }: { merchant: MerchantSpend }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 p-3">
+      <span className="text-sm font-medium">{merchant.label}</span>
+      <span className="text-xs text-muted-foreground">
+        {merchant.hits} charge{merchant.hits === 1 ? "" : "s"}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        last {new Date(`${merchant.lastSeen}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+      </span>
+      <span className="ml-auto text-sm font-semibold tabular-nums">{money(merchant.total)}</span>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            await includeCharge({ merchantKey: merchant.key, included: true });
+            router.refresh();
+          })
+        }
+        className="inline-flex min-h-8 w-full items-center justify-center gap-1 rounded-md border border-border px-2.5 text-xs hover:bg-accent sm:w-auto"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Count it as overhead ({money(merchant.monthly)}/mo)
+      </button>
+    </li>
+  );
+}
+
 function Figure({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="px-3 py-3.5">
@@ -177,8 +337,11 @@ function Section({ title, blurb, rows }: { title: string; blurb: string; rows: C
 function Row({ row }: { row: ChargeRow }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
   const dismissed = Boolean(row.decision?.dismissedAt);
   const confirmed = Boolean(row.decision?.confirmedAt);
+  const basis = row.decision?.amountBasis ?? "median";
+  const latest = row.history[0]?.amount ?? null;
 
   function act(run: () => Promise<unknown>) {
     start(async () => {
@@ -190,7 +353,19 @@ function Row({ row }: { row: ChargeRow }) {
   return (
     <li className={cn("p-3", dismissed && "opacity-50")}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-sm font-medium">{row.label}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="-ml-1 inline-flex items-center gap-1 text-sm font-medium"
+          aria-expanded={open}
+        >
+          {open ? (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+          )}
+          {row.label}
+        </button>
         <span className="text-xs text-muted-foreground">{CADENCE_LABEL[row.cadence]}</span>
         {row.dayOfMonth != null && (
           <span className="text-xs text-muted-foreground">around the {ordinal(row.dayOfMonth)}</span>
@@ -209,11 +384,60 @@ function Row({ row }: { row: ChargeRow }) {
         {row.confidence < 0.6 && ". Worth checking, the pattern is not a strong one"}
       </p>
 
+      {row.forced && (
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Counted because somebody said so, not because a rhythm was found. The monthly figure is
+          what actually left, spread over the months it covers.
+        </p>
+      )}
+
       {row.decision?.cancelWanted && (
         <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-500">
           <AlertTriangle className="h-3 w-3" />
           Marked to cancel
         </p>
+      )}
+
+      {/* The transactions behind the figure. The point of being able to open a
+          row at all: a median of a rent that stepped from 2,298 to 2,791 is a
+          number the business has never paid, and that is invisible until the
+          charges are listed underneath it. */}
+      {open && (
+        <div className="mt-2 rounded-md border border-border">
+          {latest != null && row.history.length > 1 && row.kind !== "transfer" && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-2.5 py-2">
+              <span className="text-xs text-muted-foreground">Price it from</span>
+              <BasisButton
+                label={`the middle of them, ${money(row.medianAmount)}`}
+                active={basis === "median"}
+                disabled={pending}
+                onClick={() => act(() => setAmountBasis({ merchantKey: row.key, basis: "median" }))}
+              />
+              <BasisButton
+                label={`the last one, ${money(latest)}`}
+                active={basis === "latest"}
+                disabled={pending}
+                onClick={() => act(() => setAmountBasis({ merchantKey: row.key, basis: "latest" }))}
+              />
+            </div>
+          )}
+
+          <ul className="max-h-64 divide-y divide-border overflow-y-auto">
+            {row.history.map((hit) => (
+              <li key={hit.id} className="flex items-baseline justify-between gap-2 px-2.5 py-1.5">
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {new Date(`${hit.postedOn}T12:00:00Z`).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "2-digit",
+                  })}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">{hit.who}</span>
+                <span className="shrink-0 text-xs font-medium tabular-nums">{money(hit.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -278,6 +502,32 @@ function Row({ row }: { row: ChargeRow }) {
         </button>
       </div>
     </li>
+  );
+}
+
+function BasisButton({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "min-h-8 rounded-md border px-2.5 text-xs",
+        active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"
+      )}
+    >
+      {label}
+    </button>
   );
 }
 

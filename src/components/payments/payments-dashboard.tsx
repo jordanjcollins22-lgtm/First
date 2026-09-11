@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/payment-actions";
 import { LedgerPanel } from "@/components/payments/ledger-panel";
 import { OverheadPanel } from "@/components/overhead/overhead-breakdown";
+import { PerDiemPanel } from "@/components/overhead/per-diem-panel";
 import type { PaymentsData } from "@/lib/data/payments";
 
 const METHODS = ["cash", "check", "transfer", "other"] as const;
@@ -56,7 +57,8 @@ export function PaymentsDashboard({
   /** Every account manager's book. Empty when nobody holds the role. */
   commission: ManagerCommission[];
 }) {
-  const { internal, external, ledger, ledgerTotals, overhead, revenue, team, jobOptions } = data;
+  const { internal, external, ledger, ledgerTotals, overhead, perDiem, revenue, team, jobOptions } =
+    data;
 
   return (
     <Tabs defaultValue="summary">
@@ -67,6 +69,7 @@ export function PaymentsDashboard({
         {commission.length > 0 && <TabsTrigger value="commission">Commission</TabsTrigger>}
         <TabsTrigger value="external">Invoices</TabsTrigger>
         {canSeeOverhead && <TabsTrigger value="overhead">Overhead</TabsTrigger>}
+        {canSeeOverhead && perDiem && <TabsTrigger value="per-diem">Per diem</TabsTrigger>}
       </TabsList>
 
       <TabsContent value="summary">
@@ -106,6 +109,16 @@ export function PaymentsDashboard({
       {canSeeOverhead && (
         <TabsContent value="overhead">
           <OverheadPanel overhead={overhead} />
+        </TabsContent>
+      )}
+
+      {/* What that overhead has to earn back in a day, which is the form a
+          quote can use. Kept beside it rather than buried in settings: the two
+          are the same number and somebody arguing with one is arguing with
+          both. */}
+      {canSeeOverhead && perDiem && (
+        <TabsContent value="per-diem">
+          <PerDiemPanel board={perDiem} />
         </TabsContent>
       )}
     </Tabs>

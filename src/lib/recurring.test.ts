@@ -47,6 +47,37 @@ describe("merchant names the bank mangled", () => {
   it("gives something back for a name made only of digits", () => {
     expect(merchantKey("48472830")).toBe("unknown");
   });
+
+  // The rent. Three months read "RECURRING" and the fourth read "POS PUR", so
+  // the biggest cost in the business was two charges, one of them too thin to
+  // detect at all.
+  it("keeps one landlord together however the terminal described it", () => {
+    expect(merchantKey("29221 POS PUR 08/01 13:52 YSI Fieldside Gr MD 00000007 0292~6513")).toBe(
+      merchantKey("41378 RECURRING 09/01 17:19 YSI Fieldside Gr MD 00001000 0413~6513")
+    );
+  });
+
+  // A reference code that mixes letters and digits. Stripping the digits first
+  // left "ymm g" and "cn w g" behind, and one bill became two merchants that
+  // each looked like a one-off.
+  it("throws away a reference made of letters and digits", () => {
+    expect(merchantKey("James Run Apartm WEB PMTS 7YMM6G")).toBe(
+      merchantKey("James Run Apartm WEB PMTS CN6W2G")
+    );
+  });
+
+  it("does not treat a digit in a real name as a reference", () => {
+    expect(merchantKey("7-Eleven")).toBe("eleven");
+    expect(merchantKey("7-Eleven")).not.toBe("unknown");
+  });
+
+  it("reads a leading article as formatting rather than a name", () => {
+    expect(merchantKey("The Home Depot")).toBe(merchantKey("Home Depot"));
+  });
+
+  it("still keeps a merchant whose name starts with a word containing 'the'", () => {
+    expect(merchantKey("Therapy Partners")).toBe("therapy partners");
+  });
 });
 
 describe("money moving inside the business", () => {

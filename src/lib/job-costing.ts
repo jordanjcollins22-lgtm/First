@@ -39,6 +39,24 @@ export interface Markup {
    * without doing arithmetic first.
    */
   overheadPercent: number;
+  /**
+   * What one crew-hour owes the overhead, in cents. Used instead of the
+   * percentage when it is set.
+   *
+   * The percentage is a guess that was never checked against anything, and it
+   * charges the same ten percent whether a job takes an afternoon or a
+   * fortnight -- which is backwards. Overhead is a cost of time passing: two
+   * weeks of work ties up two weeks of rent, insurance and software whatever
+   * its materials cost. Worse, being a percentage of cost, it collects most on
+   * the jobs with expensive materials and least on the long labour-heavy ones,
+   * which are exactly the jobs that tie the business up.
+   *
+   * So where the real monthly overhead is known -- it comes off the bank -- it
+   * is spread across the crew-hours the business expects to bill, and a job
+   * carries what it actually uses. Null falls back to the percentage, which is
+   * what a business with no bank feed still has.
+   */
+  overheadPerCrewHourCents?: number | null;
 }
 
 export interface ZoneCostInput {
@@ -80,7 +98,16 @@ export function priceZone(input: ZoneCostInput, markup: Markup): ZoneCost {
   const directCostCents = materialsCents + labourCents;
 
   const multiplied = directCostCents * markup.multiplier;
-  const withOverhead = multiplied * (1 + markup.overheadPercent / 100);
+
+  // A per diem is charged in the same place the percentage was -- on top of
+  // the marked-up figure -- so the two are swappable and a price built either
+  // way breaks down the same. What changes is what it is charged on: hours
+  // rather than dollars.
+  const perCrewHour = markup.overheadPerCrewHourCents;
+  const withOverhead =
+    perCrewHour != null && perCrewHour > 0
+      ? multiplied + Math.max(0, input.crewHours) * perCrewHour
+      : multiplied * (1 + markup.overheadPercent / 100);
 
   // Rounded once, at the end. Rounding each step compounds the error into
   // something that shows up as a dollar or two on a large job.
@@ -134,6 +161,12 @@ export function priceJob(zones: ZoneCost[]): ZoneCost {
  * asked when somebody looks at a price and wonders whether it is right.
  */
 export function effectiveMultiplier(markup: Markup): number {
+  // On a per diem there is no single multiplier: what a job carries depends on
+  // how long it takes, which is the whole point. The margin multiplier is the
+  // honest answer to "what are we marking up by".
+  if (markup.overheadPerCrewHourCents != null && markup.overheadPerCrewHourCents > 0) {
+    return markup.multiplier;
+  }
   return markup.multiplier * (1 + markup.overheadPercent / 100);
 }
 

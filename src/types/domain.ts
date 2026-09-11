@@ -23,6 +23,15 @@ export interface Organization {
   price_multiplier: number;
   /** Overhead, charged on the multiplied figure rather than the raw cost. */
   overhead_percent: number;
+  /** Days a month the crew is on a paying job. Not working days: rain,
+   * quoting, breakdowns and loading are real and are not on an invoice. */
+  billable_days_per_month?: number | null;
+  /** Hours on site in one of those days. */
+  crew_hours_per_day?: number | null;
+  /** How many people go out. Only converts between crew-hours and days. */
+  crew_size?: number | null;
+  /** "percent" for the old flat markup, "per_diem" for the real overhead. */
+  overhead_basis?: string | null;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
   /** USPS EDDM Retail postage per piece, dollars. Null until somebody enters it. */

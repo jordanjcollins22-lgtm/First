@@ -9,6 +9,7 @@ import { listBusinessLocations } from "./locations";
 import { getCurrentOrganization } from "./organizations";
 import { listProfiles } from "./team";
 import { blendedCrewRateCents, type Markup } from "@/lib/job-costing";
+import { overheadPerCrewHourCents } from "@/lib/data/per-diem";
 import type {
   MeasurementBasis,
   Material,
@@ -58,6 +59,7 @@ export const getCanvasCatalog = cache(async function getCanvasCatalog(): Promise
     serviceMaterialsRes,
     businessLocations,
     profiles,
+    perCrewHourCents,
   ] = await Promise.all([
     listTools(),
     listMaterials(),
@@ -70,6 +72,10 @@ export const getCanvasCatalog = cache(async function getCanvasCatalog(): Promise
     // Labour is most of the cost of most jobs, so the rate cannot come from a
     // manual figure while the Team page shows a blended one off real pay.
     listProfiles().catch(() => []),
+    // What an hour of work owes the overhead, from what the bank says the
+    // business costs to keep open. Null when there is nothing to spread, or
+    // when the business has chosen the flat percentage instead.
+    overheadPerCrewHourCents().catch(() => null),
   ]);
 
   if (serviceToolsRes.error) throw serviceToolsRes.error;
@@ -91,6 +97,7 @@ export const getCanvasCatalog = cache(async function getCanvasCatalog(): Promise
     markup: {
       multiplier: organization.price_multiplier ?? 1,
       overheadPercent: organization.overhead_percent ?? 0,
+      overheadPerCrewHourCents: perCrewHourCents,
     },
     measurementUnit: organization.measurement_unit || "sq ft",
     measurementBasis:

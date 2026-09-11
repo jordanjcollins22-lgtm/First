@@ -177,3 +177,70 @@ describe("blendedCrewRateCents", () => {
     expect(rate).toBe(2_133);
   });
 });
+
+/**
+ * The same markup, charging overhead by the hour instead of by the dollar.
+ *
+ * $15.83 a crew-hour is the real figure: about $4,560 a month of rent,
+ * insurance, software and phone, spread across eighteen billable days of a
+ * two-person crew.
+ */
+const PER_DIEM: Markup = { multiplier: 2, overheadPercent: 10, overheadPerCrewHourCents: 1_583 };
+
+describe("charging overhead by the hour", () => {
+  it("charges a job for the hours it ties the business up", () => {
+    const cost = priceZone(
+      { materialsCents: 10_000, crewHours: 3, crewCostPerHourCents: 5_000 },
+      PER_DIEM
+    );
+    // $250 of cost, doubled to $500, plus three hours at $15.83.
+    expect(cost.priceCents).toBe(50_000 + 3 * 1_583);
+  });
+
+  it("still breaks into parts that add back up to the price", () => {
+    const cost = priceZone(
+      { materialsCents: 7_333, crewHours: 2.5, crewCostPerHourCents: 4_250 },
+      PER_DIEM
+    );
+    expect(cost.directCostCents + cost.marginCents + cost.overheadCents).toBe(cost.priceCents);
+  });
+
+  it("collects more than the percentage on a long job with cheap materials", () => {
+    // Two people for four days: 64 crew-hours, and eighty dollars of mulch.
+    const job = { materialsCents: 8_000, crewHours: 64, crewCostPerHourCents: 2_500 };
+    expect(priceZone(job, PER_DIEM).priceCents).toBeGreaterThan(priceZone(job, HOUSE).priceCents);
+  });
+
+  it("collects less than the percentage on an afternoon of expensive materials", () => {
+    // Half a day, and four grand of pavers. The percentage charges the overhead
+    // on the pavers, which do not tie anybody up.
+    const job = { materialsCents: 400_000, crewHours: 8, crewCostPerHourCents: 2_500 };
+    expect(priceZone(job, PER_DIEM).priceCents).toBeLessThan(priceZone(job, HOUSE).priceCents);
+  });
+
+  it("charges nothing extra for a zone that takes no time", () => {
+    const cost = priceZone(
+      { materialsCents: 10_000, crewHours: 0, crewCostPerHourCents: 5_000 },
+      PER_DIEM
+    );
+    expect(cost.overheadCents).toBe(0);
+    expect(cost.priceCents).toBe(20_000);
+  });
+
+  it("falls back to the percentage when there is no per diem to use", () => {
+    const job = { materialsCents: 10_000, crewHours: 3, crewCostPerHourCents: 5_000 };
+    expect(priceZone(job, { ...HOUSE, overheadPerCrewHourCents: null }).priceCents).toBe(
+      priceZone(job, HOUSE).priceCents
+    );
+    expect(priceZone(job, { ...HOUSE, overheadPerCrewHourCents: 0 }).priceCents).toBe(
+      priceZone(job, HOUSE).priceCents
+    );
+  });
+
+  it("does not pretend there is one multiplier when there is not", () => {
+    // On a per diem what a job carries depends on how long it takes, so "2.2x"
+    // is not a thing that can be said. The margin multiplier is what is true.
+    expect(effectiveMultiplier(PER_DIEM)).toBe(2);
+    expect(effectiveMultiplier(HOUSE)).toBeCloseTo(2.2, 5);
+  });
+});

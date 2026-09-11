@@ -119,6 +119,14 @@ export interface RecurringCharge {
  * Banks append reference numbers, store numbers, dates and their own codes, so
  * the same subscription arrives under six spellings and never looks recurring.
  * Stripping those is the difference between finding a pattern and not.
+ *
+ * Getting it wrong is not a small error either way. The rent arrived four
+ * times in six months and three of them read "RECURRING" while the fourth read
+ * "POS PUR" -- so the largest cost in the business split into two charges, one
+ * of which was too thin to detect. The apartment arrived twice under a
+ * reference code that mixed letters and digits, which the digit-stripping
+ * missed, and never looked recurring at all. Both were real money that the
+ * overhead simply did not know about.
  */
 export function merchantKey(name: string): string {
   return (
@@ -127,8 +135,19 @@ export function merchantKey(name: string): string {
       // Reference and card numbers, which are the usual culprits.
       .replace(/\b[a-z]*\d{4,}[a-z]*\b/g, " ")
       .replace(/\bx{2,}\d*\b/g, " ")
+      // Anything mixing letters and digits in one word is a reference the bank
+      // made up: "7YMM6G", "ST-B5X0T8D1U9E7", "A2266". Has to happen while the
+      // digits are still there -- strip them first and "7YMM6G" survives as
+      // "ymm g", which is how one bill became two merchants.
+      .replace(/\b(?=[a-z]*\d)(?=\d*[a-z])[a-z\d]+\b/g, " ")
       .replace(/[^a-z ]+/g, " ")
-      .replace(/\b(?:payment|paymentrec|bill ?pay|billpay|autopay|recurring|purchase|pos|ach|des|id|indn|ppd|web|tel)\b/g, " ")
+      .replace(
+        /\b(?:payment|paymentrec|bill ?pay|billpay|autopay|recurring|purchase|pur|pos|xfer|misc|ach|des|id|indn|ppd|web|tel|pmt|pmts|epayment)\b/g,
+        " "
+      )
+      // A leading article is not part of a name: "The Home Depot" and "Home
+      // Depot" are one shop and were two.
+      .replace(/^\s*the\b/, " ")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 60) || "unknown"
@@ -228,6 +247,37 @@ function cadenceFor(gaps: number[]): Cadence | null {
 /** Any amount, as what it costs per month. */
 export function monthlyEquivalent(amount: number, cadence: Cadence): number {
   return Math.round(((amount * PER_YEAR[cadence]) / 12) * 100) / 100;
+}
+
+/**
+ * Which amount a charge is worth.
+ *
+ * The median by default, so one odd month does not move it. That is right for
+ * a bill that wobbles around a level and wrong for one that stepped up: the
+ * rent here ran at 2,298 and then went to 2,791, and the median of the two
+ * levels is a figure the business has never actually paid and never will.
+ *
+ * Which of the two it is cannot be worked out from the numbers -- a step up
+ * and a run of expensive months look identical until the next one arrives --
+ * so it is a choice somebody makes while looking at the history.
+ */
+export type AmountBasis = "median" | "latest";
+
+/**
+ * The charge restated on its most recent amount.
+ *
+ * Everything else about it stands: the rhythm, the confidence and the history
+ * are all still true. Only what it is expected to cost from here changes.
+ */
+export function onLatestAmount(charge: RecurringCharge, latest: number): RecurringCharge {
+  if (!Number.isFinite(latest) || latest <= 0) return charge;
+  return {
+    ...charge,
+    typicalAmount: Math.round(latest * 100) / 100,
+    monthlyAmount: monthlyEquivalent(latest, charge.cadence),
+    // It no longer varies around an average -- it is the last known price.
+    variableAmount: false,
+  };
 }
 
 /**

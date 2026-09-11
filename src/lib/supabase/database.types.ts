@@ -28,6 +28,12 @@ export interface Database {
           crew_cost_per_hour: number | null;
           price_multiplier: number;
           overhead_percent: number;
+          /** Days a month the crew is on a paying job, not working days. */
+          billable_days_per_month: number;
+          crew_hours_per_day: number;
+          crew_size: number;
+          /** 'percent' or 'per_diem': how a quote charges overhead. */
+          overhead_basis: string;
           measurement_unit: string;
           measurement_basis: string;
           /** The scheduling engine is off until a business asks for it. */
@@ -2519,6 +2525,10 @@ export interface Database {
           cancel_wanted: boolean;
           overhead_group: string | null;
           note: string | null;
+          /** Counts even though no rhythm was found: a real cost billed irregularly. */
+          included_at: string | null;
+          /** 'median' or 'latest'. Null prices it from the median of every charge. */
+          amount_basis: string | null;
           created_at: string;
           updated_at: string;
         };

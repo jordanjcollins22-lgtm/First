@@ -3,6 +3,7 @@ import { listProfiles } from "@/lib/data/team";
 import { totalLedger, type LedgerTotals } from "@/lib/ledger";
 import type { LedgerEntry, Profile, TeamPayment } from "@/types/domain";
 import { getOverhead } from "@/lib/data/overhead";
+import { getPerDiem, type PerDiemBoard } from "@/lib/data/per-diem";
 import type { OverheadBreakdown } from "@/lib/overhead";
 
 export interface TeamPaymentWithPerson extends TeamPayment {
@@ -61,6 +62,9 @@ export interface PaymentsData {
   ledgerTotals: LedgerTotals;
   /** Worked out from the bank, grouped. Nothing here is typed in. */
   overhead: OverheadBreakdown;
+  /** The same figure as what a day of work has to earn, which is what a quote
+   * needs. Null when there is nothing to spread yet. */
+  perDiem: PerDiemBoard | null;
   revenue: RevenueSummary;
   team: Profile[];
   /** Jobs a ledger entry can be filed against. Open work only — filing a cost
@@ -82,7 +86,8 @@ function sum(values: (number | null | undefined)[]): number {
 export async function getPaymentsData(): Promise<PaymentsData> {
   const supabase = await createClient();
 
-  const [team, paymentsResult, invoicesResult, ledgerResult, jobsResult, overhead] = await Promise.all([
+  const [team, paymentsResult, invoicesResult, ledgerResult, jobsResult, overhead, perDiem] =
+    await Promise.all([
     listProfiles(),
     supabase
       .from("team_payments")
@@ -111,6 +116,9 @@ export async function getPaymentsData(): Promise<PaymentsData> {
       yearly: 0,
       variableShare: 0,
     })),
+    // What that same figure comes to per day and per crew-hour, which is the
+    // form a quote can use.
+    getPerDiem().catch(() => null),
   ]);
 
   const namesById = new Map(team.map((p) => [p.id, p.full_name || p.email]));
@@ -174,6 +182,7 @@ export async function getPaymentsData(): Promise<PaymentsData> {
     ledger,
     ledgerTotals,
     overhead,
+    perDiem,
     revenue: {
       collected,
       outstanding,
