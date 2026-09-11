@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkComment,
   commentBrief,
   commentSystemPrompt,
   finishComment,
@@ -122,5 +123,117 @@ describe("whether it is worth showing somebody", () => {
 
   it("rejects something with no link in it", () => {
     expect(looksUsable("I operate J's Landscaping and we would be glad to help you out here.", LINK)).toBe(false);
+  });
+});
+
+/**
+ * A real comment that went out. The business does not do tree work and is not
+ * licensed for it, and the comment said both. It was written because "match
+ * the exact service requested in the post" was the only instruction the brief
+ * gave about services, so the model agreed with the post.
+ */
+const WENT_OUT =
+  "I operate J's Landscaping Services LLC. We've been featured in the news, have amazing reviews, " +
+  "and we handle tree and mulberry removal, and we're fully licensed and insured. " +
+  "Happy to take a look!";
+
+describe("checkComment", () => {
+  it("catches the comment that actually went out", () => {
+    const check = checkComment(WENT_OUT);
+    expect(check.ok).toBe(false);
+    expect(check.problems).toHaveLength(2);
+  });
+
+  it("names tree work as the trade being claimed", () => {
+    expect(checkComment("We handle tree removal.").problems[0]).toMatch(/tree work/i);
+  });
+
+  it("catches the licence claim on its own", () => {
+    const check = checkComment("I operate a landscaping company and we're fully licensed and insured.");
+    expect(check.ok).toBe(false);
+    expect(check.problems[0]).toMatch(/licensed or insured/i);
+  });
+
+  it("allows a restricted trade framed as somebody else's work", () => {
+    // The useful answer to a neighbour who asked, and a true one.
+    expect(
+      checkComment("We can help coordinate tree removal through our trusted contractor network.").ok
+    ).toBe(true);
+  });
+
+  it("allows saying a partner is licensed", () => {
+    expect(
+      checkComment("For that part we bring in a partner who is licensed and insured for it.").ok
+    ).toBe(true);
+  });
+
+  it("does not let a coordination line elsewhere excuse a claim at the top", () => {
+    const mixed =
+      "We handle tree removal. Beds and mulch too. We can coordinate other work through our network.";
+    expect(checkComment(mixed).ok).toBe(false);
+  });
+
+  it("catches stump grinding, which is the same trade by another name", () => {
+    expect(checkComment("We do stump grinding as well.").ok).toBe(false);
+  });
+
+  it("catches the other licensed trades a post might ask for", () => {
+    expect(checkComment("We do the electrical for the lighting.").ok).toBe(false);
+    expect(checkComment("We handle plumbing for irrigation.").ok).toBe(false);
+    expect(checkComment("We do roofing too.").ok).toBe(false);
+  });
+
+  it("leaves an ordinary landscaping comment alone", () => {
+    const fine =
+      "I operate J's Landscaping Services LLC. We've been featured in the news and have amazing " +
+      "reviews. Bed work and mulch is most of what we do, and that hedge line is very doable. " +
+      "Happy to take a look!";
+    expect(checkComment(fine).ok).toBe(true);
+    expect(checkComment(fine).problems).toEqual([]);
+  });
+
+  it("says so about an empty comment rather than passing it", () => {
+    expect(checkComment("   ").ok).toBe(false);
+  });
+
+  it("reports one problem per thing to fix, not one per mention", () => {
+    const twice = "We handle tree removal. We also do tree trimming.";
+    expect(checkComment(twice).problems).toHaveLength(1);
+  });
+});
+
+describe("looksUsable", () => {
+  it("refuses a comment that claims a trade we do not do", () => {
+    // The last gate before somebody copies it into Facebook.
+    expect(looksUsable(`${WENT_OUT}\n\n${LINK}`, LINK)).toBe(false);
+  });
+});
+
+describe("the brief", () => {
+  it("tells the model what our own crew actually does", () => {
+    const brief = commentBrief({
+      businessName: "J's",
+      note: "",
+      where: "Bel Air Neighbors",
+      ownServices: ["Landscape Bed", "Lawn Care"],
+      partnerServices: ["Fence"],
+    });
+    expect(brief).toMatch(/Landscape Bed, Lawn Care/);
+    expect(brief).toMatch(/coordinate these through a partner: Fence/i);
+  });
+
+  it("tells the model to claim nothing when nobody told it the services", () => {
+    // Silence about the service list used to mean the model agreed with the
+    // post. It should mean the opposite.
+    const prompt = commentSystemPrompt("J's");
+    expect(prompt).toMatch(/do not claim any specific service at all/i);
+  });
+
+  it("forbids the licence claim outright", () => {
+    expect(commentSystemPrompt("J's")).toMatch(/Never call J's licensed/i);
+  });
+
+  it("names tree work in the prompt, not only in the guard", () => {
+    expect(commentSystemPrompt("J's")).toMatch(/tree removal/i);
   });
 });

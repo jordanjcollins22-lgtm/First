@@ -284,3 +284,32 @@ describe("no dashes anywhere a client would see one", () => {
     expect(contextBlock(context(), NOW)).not.toMatch(/[—–]/);
   });
 });
+
+describe("claims a draft must never make", () => {
+  it("drops a draft saying we do tree work", () => {
+    // The same gate the public comments go through. A message to one client
+    // claiming a licence this business does not hold is the same untrue thing
+    // as a comment doing it, with a smaller audience.
+    const drafts = [
+      "Happy to get you booked in. Which day next week suits you?",
+      "We handle tree removal too, so we can take that out while we are there.",
+    ];
+    expect(safeSuggestions(drafts, "")).toHaveLength(1);
+  });
+
+  it("drops a draft calling us licensed and insured", () => {
+    const drafts = ["We are fully licensed and insured, so you are covered either way."];
+    expect(safeSuggestions(drafts, "")).toEqual([]);
+  });
+
+  it("keeps a draft that offers to coordinate it", () => {
+    const drafts = [
+      "We can help coordinate tree removal through a partner. Which day suits you for the rest?",
+    ];
+    expect(safeSuggestions(drafts, "")).toHaveLength(1);
+  });
+
+  it("still drops a draft quoting a price nobody gave it", () => {
+    expect(safeSuggestions(["That will be $400 all in."], "")).toEqual([]);
+  });
+});

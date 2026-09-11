@@ -6,7 +6,13 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { createClient } from "@/lib/supabase/server";
 import { env, isAnthropicConfigured } from "@/lib/env";
-import { commentBrief, commentSystemPrompt, finishComment, looksUsable } from "@/lib/comment-prompt";
+import {
+  checkComment,
+  commentBrief,
+  commentSystemPrompt,
+  finishComment,
+  looksUsable,
+} from "@/lib/comment-prompt";
 import { getCurrentProfile } from "@/lib/data/team";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
 import { bookingSlug, getCurrentOrganization } from "@/lib/data/organizations";
@@ -267,6 +273,34 @@ export async function draftCommentFromScreenshot(input: {
     const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
 
     const organization = await getCurrentOrganization();
+
+    // What this business actually does, from its own service list. Without it
+    // the model had nothing to check itself against and simply agreed with
+    // the post: a neighbour asking about tree removal got a comment saying
+    // "we handle tree and mulberry removal" from a business that does not do
+    // tree work and is not licensed for it.
+    const { data: serviceRows } = await supabase
+      .from("services")
+      .select("name, status, performed_by")
+      .eq("organization_id", organization.id);
+
+    const live = (serviceRows ?? []).filter((row) => row.status !== "archived");
+
+    // Only an active service counts as something we do. A pending one is work
+    // somebody asked about and nobody has priced or set up, and saying "we do
+    // that" about it is the same class of claim as saying it about tree work.
+    const ownServices = live
+      .filter((row) => row.performed_by !== "partner" && row.status === "active")
+      .map((row) => row.name)
+      .filter(Boolean);
+
+    // Partner work does not have to be active to be offered, because what is
+    // being offered is a phone call rather than a crew.
+    const partnerServices = live
+      .filter((row) => row.performed_by === "partner")
+      .map((row) => row.name)
+      .filter(Boolean);
+
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
       model: "claude-opus-5",
@@ -275,7 +309,10 @@ export async function draftCommentFromScreenshot(input: {
       // Reading a screenshot and matching the service asked for is judgement,
       // not just writing, so this is worth more than the lowest setting.
       output_config: { effort: "medium" },
-      system: commentSystemPrompt(organization.name),
+      system: commentSystemPrompt(organization.name, {
+        own: ownServices,
+        partner: partnerServices,
+      }),
       messages: [
         {
           role: "user",
@@ -288,6 +325,8 @@ export async function draftCommentFromScreenshot(input: {
                 note: input.note,
                 where: input.groupName,
                 ageDays: input.ageDays,
+                ownServices,
+                partnerServices,
               }),
             },
           ],
@@ -305,6 +344,19 @@ export async function draftCommentFromScreenshot(input: {
       .join("\n");
 
     const comment = finishComment(raw, input.link);
+
+    // Checked before anybody can copy it. A comment goes out under the
+    // business's name in front of a few thousand neighbours, and a claim to
+    // hold a licence it does not hold is not something to leave to a prompt.
+    const check = checkComment(comment.replace(input.link, ""));
+    if (!check.ok) {
+      console.error("comment draft refused:", check.problems, comment);
+      return {
+        ok: false,
+        error: `Wouldn't send that one. ${check.problems.join(" ")} Try again, or use a wording below.`,
+      };
+    }
+
     if (!looksUsable(comment, input.link)) {
       return { ok: false, error: "That came back too thin to use. The wordings below still work." };
     }

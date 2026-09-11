@@ -16,6 +16,8 @@
  * what a draft is allowed to say. The model call lives in the action.
  */
 
+import { checkComment } from "@/lib/comment-prompt";
+
 export const MAX_SUGGESTIONS = 3;
 
 /** Long enough to say something real, short enough to read on a lock screen. */
@@ -139,6 +141,11 @@ export function systemPrompt(): string {
     "- Do not apologise for chasing, do not say you are following up on a follow-up, and do not mention this being automated.",
     "- Say one thing and ask one question. A message with two questions gets one answer.",
     "- Match the customer's register. If they write in short lines, write in short lines.",
+    // The same rule the comment writer has, for the same reason: a drafted
+    // message goes out under the business's name, and a claim to do licensed
+    // work it does not do is not something to leave to a prompt alone.
+    "- Never say this business does tree work, stump grinding, electrical, plumbing, gas or roofing. Those are licensed trades it does not hold. Anything like that, say we can coordinate it through a trusted partner.",
+    "- Never call this business licensed, certified, bonded or insured. You may say that about a partner we hire.",
     "- Never use a dash to join two thoughts. Use a comma, or start a new sentence. A message full of dashes reads as though a machine wrote it, which is the one thing it must not do.",
     "",
     `Give exactly ${MAX_SUGGESTIONS} different drafts, each taking a different angle. Put each on its own line with no numbering, no quotes and no commentary. Nothing else in your reply.`,
@@ -219,8 +226,14 @@ export function moneyMentioned(text: string): string[] {
  */
 export function safeSuggestions(suggestions: string[], factsText: string): string[] {
   const known = new Set(moneyMentioned(factsText));
-  return suggestions.filter((suggestion) =>
-    moneyMentioned(suggestion).every((amount) => known.has(amount))
+  return suggestions.filter(
+    (suggestion) =>
+      moneyMentioned(suggestion).every((amount) => known.has(amount)) &&
+      // And the same gate the public comments go through. A message to one
+      // client claiming a licence this business does not hold is the same
+      // untrue thing as a comment doing it, with a smaller audience and the
+      // same consequences.
+      checkComment(suggestion).ok
   );
 }
 
