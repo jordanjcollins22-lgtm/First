@@ -12,6 +12,9 @@ for f in supabase/migrations/*.sql; do
   base=$(basename "$f")
   if [[ " $SKIP " == *" $base "* ]]; then echo "skipping $base (needs Supabase storage schema)"; continue; fi
   echo "applying $base"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | grep -v 'NOTICE' || { echo "FAILED: $base"; exit 1; }
+  if ! out=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1); then
+    echo "$out"; echo "FAILED: $base"; exit 1
+  fi
+  echo "$out" | grep -v 'NOTICE' || true
 done
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/db-smoke.sql
