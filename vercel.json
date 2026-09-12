@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/appointment-reminders",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/social-posts",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/ops-tick",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/client-reminders",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}

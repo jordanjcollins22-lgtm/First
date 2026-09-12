@@ -1,0 +1,234 @@
+/**
+ * The list of pages the Permissions screen governs.
+ *
+ * This is the single source of truth: adding an entry here puts the page in
+ * the nav *and* gives it a column on the permissions matrix, so a new page can
+ * never quietly ship ungoverned. `src/lib/permissions.test.ts` walks the app
+ * directory and fails if a route exists that is neither registered here nor
+ * listed as exempt below — that's what makes it automatic rather than
+ * something someone has to remember.
+ */
+
+export interface TabDefinition {
+  key: string;
+  /**
+   * What this page is called, everywhere.
+   *
+   * The permissions matrix, the sidebar and the page's own heading all read
+   * this, so they cannot drift. Labels used to carry a parenthetical saying
+   * where a page lived, like "Proposals (Pipeline tab)", which meant the
+   * permission and the page it governed were called different things and
+   * somebody ticking a box had to work out which page they had just opened.
+   */
+  label: string;
+  href: string;
+  /**
+   * The tab whose page this one is reached through, when it is a tab on
+   * another page rather than a destination of its own.
+   *
+   * Ticking a permission is meant to grant access. It did not, quite: a role
+   * given Contacts but not Project Data had no way to reach Contacts at all,
+   * because the only door to it was a page they could not open. So a tab with
+   * a parent the viewer cannot see gets its own place in the sidebar.
+   */
+  parent?: string;
+}
+
+export const TABS: readonly TabDefinition[] = [
+  { key: "dashboard", label: "Dashboard", href: "/dashboard" },
+  { key: "new-property", label: "New Estimate", href: "/" },
+  { key: "project-data", label: "Project Data", href: "/attractors" },
+  { key: "evaluations", label: "Calendar", href: "/evaluations" },
+  { key: "tools", label: "Inventory", href: "/admin/tools" },
+  { key: "materials", label: "Materials", href: "/admin/materials", parent: "tools" },
+  { key: "services", label: "Services", href: "/admin/team", parent: "team" },
+  { key: "team", label: "Team & Services", href: "/admin/team" },
+
+  // Added after the matrix existed.
+  { key: "proposals", label: "Proposals", href: "/proposals" },
+  // Its own permission because it has its own page now. Invoices used to be a
+  // tab on Money, which meant seeing a bill required seeing payroll.
+  { key: "invoices", label: "Invoices", href: "/proposals", parent: "proposals" },
+  { key: "contacts", label: "Contacts", href: "/contacts", parent: "project-data" },
+  { key: "house-review", label: "Address Review", href: "/admin/houses", parent: "project-data" },
+  { key: "gis-import", label: "County Import", href: "/admin/gis-import", parent: "project-data" },
+  { key: "pipeline", label: "Pipeline", href: "/pipeline" },
+  { key: "leads", label: "Lead Generation", href: "/leads" },
+  { key: "conversations", label: "Conversations", href: "/conversations" },
+  { key: "notifications", label: "Alerts", href: "/notifications" },
+  { key: "weather", label: "Weather", href: "/weather", parent: "evaluations" },
+  { key: "knowledge-graph", label: "Knowledge Graph", href: "/knowledge-graph" },
+
+  // Money and admin tooling — closed until somebody says otherwise.
+  { key: "payments", label: "Money", href: "/admin/payments" },
+  { key: "journeys", label: "Journeys", href: "/admin/journeys", parent: "dashboard" },
+
+  // Detail and sub-pages. Each still has its own guard; the checkbox layers
+  // on top.
+  { key: "job-detail", label: "Job Detail", href: "/jobs/[jobId]" },
+  { key: "client-detail", label: "Contact Detail", href: "/clients/[customerId]" },
+  { key: "conversation-thread", label: "Conversation Thread", href: "/conversations/[channelId]" },
+  {
+    key: "conversation-job",
+    label: "Client Conversation",
+    href: "/conversations/job/[jobId]",
+    parent: "conversations",
+  },
+  { key: "conversation-call", label: "Video Call", href: "/conversations/[channelId]/call" },
+  { key: "inventory-setup", label: "Inventory Setup", href: "/admin/inventory-setup", parent: "tools" },
+  { key: "labels", label: "Labels & Codes", href: "/admin/labels", parent: "tools" },
+  { key: "flyer", label: "Flyer Ad Spots", href: "/admin/flyer" },
+  { key: "weeds", label: "Weed Guide", href: "/admin/weeds", parent: "tools" },
+  {
+    key: "expectations",
+    label: "Setting Expectations",
+    href: "/admin/expectations",
+    parent: "evaluations",
+  },
+  { key: "kits", label: "Kit Checklists", href: "/admin/tools/kits", parent: "tools" },
+  { key: "reminders", label: "Client Reminders", href: "/admin/reminders", parent: "tools" },
+  { key: "social", label: "Before & After Posts", href: "/admin/social" },
+  { key: "recommendations", label: "Link Tracking", href: "/admin/outreach" },
+  { key: "groups", label: "Local Groups", href: "/admin/groups" },
+  { key: "fleet", label: "Fleet", href: "/admin/fleet" },
+  { key: "salt", label: "Salt Route", href: "/admin/salt" },
+  { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", parent: "payments" },
+  { key: "transactions", label: "Transactions", href: "/admin/transactions", parent: "payments" },
+  { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
+  { key: "signs", label: "Neighborhood Sign", href: "/admin/marketing/poster" },
+  { key: "organizations", label: "Organizations", href: "/admin/organizations" },
+];
+
+export type TabKey = string;
+
+/**
+ * Routes that exist but aren't governed tabs, with the reason. The test reads
+ * this, so anything added here is a decision on the record rather than a gap.
+ */
+export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/login": "Sign-in page — nobody is signed in yet, so there are no roles to check.",
+  "/progress/[token]":
+    "Opened by a property manager, management company or family member from a link. No account, and " +
+    "no pricing on the page — the token is the whole of their access.",
+  "/admin/permissions": "Redirects to Settings, where it is a tab.",
+  "/admin/settings":
+    "Permissions, database setup and organizations in one place. Gated on the admin role directly " +
+    "rather than on a tab — the tab list lives in the database these tabs exist to repair, and a " +
+    "page that could be locked away by the thing it fixes is a trap.",
+  "/admin/database": "Redirects to Settings, where it is a tab.",
+  "/today": "Redirects to My Day, which shows a crew member their own stops.",
+  "/routes/[playId]":
+    "One door-hanger round, walked door by door on a phone. Reached from My Day by whoever the round " +
+    "was given to, and guarded on that — a tick somebody forgot to grant is the difference between a " +
+    "round getting walked and somebody standing on a kerb looking at a refusal.",
+  "/my-day":
+    "Whoever is signed in, looking at their own work — stops for a crew member, clients and jobs " +
+    "for anybody else. It shows one person their own day and nobody else's, so there is nothing to " +
+    "withhold, and a tick could leave somebody with no screen to open.",
+  "/eddm/mailings/[mailingId]/order":
+    "The printed order package for one EDDM mailing, at its own URL so it can be opened in a tab and " +
+    "printed. Guarded by requireAnyTab on Project Data, which is the only place a mailing can be made.",
+  "/jobs/[jobId]/directions":
+    "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page — " +
+    "it shows a property address, which anybody who can open the job can already see.",
+  "/admin/weeds/sheet":
+    "The printed weed guide, at its own URL so it can be opened in a tab and printed. The crew's " +
+    "reference is guarded by the Weed Guide tab like the page it is reached from — it is the same " +
+    "sixty-three plants, laid out for paper. The client's sheet needs only a signed-in person: it is " +
+    "plant photographs, plant names and a code that books us, and it names no client, no job and no " +
+    "price. It is reached from the crew's own screen on a job, because handing it over is done at a " +
+    "door and not at a desk.",
+  "/admin/marketing/poster/pdf":
+    "The sign itself, as cutouts on letter sheets. Guarded by the Neighborhood Sign tab, like the page it " +
+    "is reached from.",
+  "/admin/tools/kits/pdf":
+    "The kit checklist as a file, drawn page by page rather than printed by a browser. Guarded by the " +
+    "Inventory tab, like the page it is reached from. It names tools, photographs and bins, and no money.",
+  "/admin/weeds/sheet/pdf":
+    "The same two sheets as a file, drawn page by page rather than printed by a browser. Gated exactly " +
+    "as the page is: the crew's reference behind the Weed Guide tab, the client's handout open to " +
+    "anybody signed in. It exists because printing HTML leaves the margins to whichever browser is " +
+    "holding it, and on a phone that meant the top of every page after the first was cut off.",
+  "/jobs/[jobId]/work-order":
+    "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
+    "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +
+    "and whoever can open the job can see that.",
+  "/jobs/[jobId]/record":
+    "The job record: every proposal, message, change and payment on one job, on paper, for the day " +
+    "a client is upset or a callback is booked. Guarded by requireJobAccess like the job page — it " +
+    "is the same job's facts laid out for printing, and whoever can open the job can already read " +
+    "every one of them there.",
+  "/i/[code]":
+    "What a sticker opens. Whoever is holding the thing is standing in front of it, so gating the " +
+    "scan behind a tick is how somebody ends up unable to sign a saw back in. It still needs a " +
+    "signed-in person to record a movement, and it shows one item and nothing else.",
+  "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
+  "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
+  "/sales":
+    "One of the six modules. It holds no feature of its own — every subtab renders the page that " +
+    "already existed, at the permission it already had, and a subtab the viewer cannot open is not " +
+    "rendered. A tick here would be a second lock on doors that are already locked.",
+  "/schedule": "One of the six modules. Same reason as /sales: it renders the Calendar and Weather at their own permissions.",
+  "/jobs":
+    "One of the six modules, and the list of sold work. Guarded by the Job Detail tab directly — " +
+    "whoever can open a job can see the list of jobs.",
+  "/marketing": "One of the six modules. Same reason as /sales: the map, the leads, the print tools and the posts, each at its own permission.",
+  "/more":
+    "The drawer holding every tool that is not one of the eight. It lists only pages the viewer " +
+    "already has permission for and links to nothing else, so a tick of its own would withhold " +
+    "nothing and could leave somebody with no way to reach a page they were granted.",
+};
+
+/**
+ * Which tabs a person can see.
+ *
+ * Nothing is open to the team until an admin ticks it. A page with no grants
+ * at all is visible to admins only — that keeps a page reachable by whoever
+ * has to make the call about it, without ever handing it to the whole team on
+ * its own.
+ */
+export function tabsAllowedForRoles(
+  roles: string[],
+  permissions: { role_name: string; tab_key: string; granted?: boolean | null }[]
+): Set<string> {
+  const allowed = new Set<string>();
+  const deniedToAdmin = new Set<string>();
+
+  for (const permission of permissions) {
+    const granted = permission.granted ?? true;
+    if (permission.role_name === "admin" && !granted) deniedToAdmin.add(permission.tab_key);
+    if (!granted) continue;
+    if (roles.includes(permission.role_name)) allowed.add(permission.tab_key);
+  }
+
+  // An admin sees everything they have not explicitly turned off for
+  // themselves. It used to be everything nobody had ticked for anybody, which
+  // meant granting a page to the crew silently took it off the admin's own
+  // menu -- the trap that made "I enabled permissions and lost my tabs" the
+  // expected outcome rather than a surprise. Unticking your own box still
+  // works, because a deny is now a row rather than an absence.
+  if (roles.includes("admin")) {
+    for (const tab of TABS) {
+      if (!deniedToAdmin.has(tab.key)) allowed.add(tab.key);
+    }
+  }
+
+  return allowed;
+}
+
+/** Tabs nobody has been granted or denied yet — the matrix flags these. */
+export function unconfiguredTabKeys(permissions: { tab_key: string }[]): Set<string> {
+  const configured = new Set(permissions.map((p) => p.tab_key));
+  return new Set(TABS.filter((t) => !configured.has(t.key)).map((t) => t.key));
+}
+
+const BY_KEY = new Map(TABS.map((t) => [t.key, t]));
+
+/** What a page is called. One answer, used by the matrix, the nav and the page. */
+export function tabLabel(key: string): string {
+  return BY_KEY.get(key)?.label ?? key;
+}
+
+export function tabFor(key: string): TabDefinition | undefined {
+  return BY_KEY.get(key);
+}
