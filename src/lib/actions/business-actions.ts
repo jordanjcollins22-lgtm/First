@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
+import { MAX_NOTICE_HOURS, parseNoticeHours } from "@/lib/booking-notice";
 
 /**
  * What the business puts at the top of a document.
@@ -13,6 +14,34 @@ import { getCurrentProfile } from "@/lib/data/team";
  * half of them within a year.
  */
 export type BusinessResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * How much warning a booked evaluation needs.
+ *
+ * Same-day is off by default: a day that fills up from the booking page is
+ * a day nobody planned. The hours are on top of that, for a business that
+ * wants a couple of days to route the week.
+ */
+export async function setBookingNotice(input: { noticeHours: string; sameDay: boolean }): Promise<BusinessResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, message: "Sign in first." };
+  if (!profile.roles.includes("admin") && !profile.roles.includes("owner")) {
+    return { ok: false, message: "Only an owner or admin can change booking rules." };
+  }
+  const hours = parseNoticeHours(input.noticeHours);
+  if (hours == null) return { ok: false, message: `Hours of notice must be between 0 and ${MAX_NOTICE_HOURS}.` };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ booking_notice_hours: hours, booking_same_day: input.sameDay, updated_at: new Date().toISOString() })
+    .eq("id", profile.organization_id);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/book");
+  return { ok: true };
+}
 
 export async function setBusinessDetails(input: {
   phone: string;

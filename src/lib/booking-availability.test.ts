@@ -137,3 +137,25 @@ describe("computeAvailableSlots — other calendars", () => {
     expect(someoneElse && slotsWith(someoneElse).some((s) => s.date === "2026-08-19")).toBe(true);
   });
 });
+
+describe("the first bookable day", () => {
+  it("skips every slot before it, whole days at a time", () => {
+    // Same window on Tuesday and Wednesday; the rule says nothing before Wednesday.
+    const twoDays: WeeklyAvailability[] = [
+      weekly[0],
+      { ...weekly[0], id: "w2", day_of_week: new Date("2026-09-02T12:00:00").getDay() } as unknown as WeeklyAvailability,
+    ];
+    const out = computeAvailableSlots({
+      evaluatorIds: [EVALUATOR],
+      weeklyAvailability: twoDays,
+      daysOff: [] as DayOff[],
+      bookedTimes: [],
+      from: FROM,
+      daysAhead: 2,
+      minLeadMinutes: 0,
+      firstDate: "2026-09-02",
+    });
+    expect(out.every((s) => s.date === "2026-09-02")).toBe(true);
+    expect(out.length).toBeGreaterThan(0);
+  });
+});

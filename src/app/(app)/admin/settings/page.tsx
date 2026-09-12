@@ -8,6 +8,7 @@ import { PaymentReadiness } from "@/components/admin/payment-readiness";
 import { env, isStripeConfigured } from "@/lib/env";
 import { getCurrentOrganization, listOrganizations } from "@/lib/data/organizations";
 import { BusinessDetailsPanel } from "@/components/admin/business-details-panel";
+import { BookingNoticePanel } from "@/components/admin/booking-notice-panel";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PageTabs } from "@/components/ui/page-tabs";
 import { PermissionsMatrix } from "@/components/permissions/permissions-matrix";
@@ -258,6 +259,14 @@ async function BusinessTab() {
           address: organization.business_address ?? "",
           website: organization.business_website ?? "",
           logoPath: organization.logo_path ?? "",
+        }}
+      />
+      <h2 className="mb-1 mt-6 text-lg font-bold">Booking notice</h2>
+      <BookingNoticePanel
+        initial={{
+          noticeHours: organization.booking_notice_hours ?? 0,
+          sameDay: organization.booking_same_day ?? false,
+          timeZone: organization.reminder_time_zone ?? "America/New_York",
         }}
       />
     </div>

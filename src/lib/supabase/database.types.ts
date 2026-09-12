@@ -23,6 +23,8 @@ export interface Database {
           reminder_time_zone: string;
           reminder_quiet_start: number;
           reminder_quiet_end: number;
+          booking_notice_hours: number;
+          booking_same_day: boolean;
           name: string;
           slug: string | null;
           crew_cost_per_hour: number | null;

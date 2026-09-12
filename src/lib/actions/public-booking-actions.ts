@@ -3,6 +3,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import { freeOf } from "@/lib/busy";
+import { tooSoon } from "@/lib/booking-notice";
+import { getBookingNotice } from "@/lib/data/public-booking";
 import { SLOT_MINUTES } from "@/lib/booking-availability";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
@@ -85,6 +87,12 @@ export async function submitPublicBooking(
   const evaluationDateTime = new Date(`${input.date}T${input.time}:00`);
   if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
   const iso = evaluationDateTime.toISOString();
+
+  // The notice rule, checked at submit as well as when the times were drawn.
+  // A page left open overnight offers a slot that was tomorrow and is today.
+  const notice = await getBookingNotice(input.organizationId);
+  const soon = tooSoon(notice, new Date(), { date: input.date, at: evaluationDateTime });
+  if (soon) throw new Error(soon);
 
   // Re-checked at submit, not merely when the slots were drawn: a booking page
   // can sit open on somebody's phone for an hour, and two people can be on it

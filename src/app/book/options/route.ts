@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { computeAvailableSlots } from "@/lib/booking-availability";
+import { describeNotice, firstBookableDate, minLeadMinutes } from "@/lib/booking-notice";
 import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import {
+  getBookingNotice,
   listAvailabilityData,
   listOrgEvaluatorIds,
   listPublicServices,
@@ -54,21 +56,27 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingOpt
     return answer({ status: "closed" });
   }
 
-  const [services, availability, busy] = await Promise.all([
+  const [services, availability, busy, notice] = await Promise.all([
     listPublicServices(context.organizationId),
     listAvailabilityData(evaluatorIds),
     // Every other calendar these people are on. Without this a client could be
     // offered ten o'clock with somebody who has been on an install since eight.
     getBusyBlocksAsAdmin().catch(() => []),
+    getBookingNotice(context.organizationId),
   ]);
 
+  const now = new Date();
   const slots = computeAvailableSlots({
     evaluatorIds,
     weeklyAvailability: availability.weeklyAvailability,
     daysOff: availability.daysOff,
     bookedTimes: availability.bookedTimes,
     busy,
-    from: new Date(),
+    from: now,
+    // The business's notice rule: no same-day visits unless allowed, and
+    // never inside its hours of notice.
+    firstDate: firstBookableDate(notice, now),
+    minLeadMinutes: minLeadMinutes(notice),
   });
 
   return answer({
@@ -78,5 +86,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingOpt
     referredByProfileId: context.referredByProfileId,
     services,
     slots,
+    noticeText: describeNotice(notice),
   });
 }

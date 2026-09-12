@@ -28,4 +28,6 @@ export type BookingOptions =
       referredByProfileId: string | null;
       services: PublicService[];
       slots: AvailableSlotGroup[];
+      /** The notice rule in the client's words, or empty when there is none to state. */
+      noticeText: string;
     };

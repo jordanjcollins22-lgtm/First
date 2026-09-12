@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { computeAvailableSlots } from "@/lib/booking-availability";
+import { firstBookableDate, minLeadMinutes } from "@/lib/booking-notice";
 import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
-import { listAvailabilityData, listOrgEvaluatorIds, resolveBookingContext } from "@/lib/data/public-booking";
+import { getBookingNotice, listAvailabilityData, listOrgEvaluatorIds, resolveBookingContext } from "@/lib/data/public-booking";
 import { rankSlots, recommendSlots, type RankedSlot } from "@/lib/booking-recommendation";
 import { isSupabaseConfigured } from "@/lib/env";
 
@@ -67,18 +68,24 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingTim
     : await listOrgEvaluatorIds(context.organizationId);
   if (evaluatorIds.length === 0) return empty;
 
-  const [availability, busy] = await Promise.all([
+  const [availability, busy, notice] = await Promise.all([
     listAvailabilityData(evaluatorIds),
     getBusyBlocksAsAdmin().catch(() => []),
+    getBookingNotice(context.organizationId),
   ]);
 
+  const now = new Date();
   const slots = computeAvailableSlots({
     evaluatorIds,
     weeklyAvailability: availability.weeklyAvailability,
     daysOff: availability.daysOff,
     bookedTimes: availability.bookedTimes,
     busy,
-    from: new Date(),
+    from: now,
+    // The business's notice rule: no same-day visits unless allowed, and
+    // never inside its hours of notice.
+    firstDate: firstBookableDate(notice, now),
+    minLeadMinutes: minLeadMinutes(notice),
   });
 
   const where = {

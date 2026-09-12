@@ -38,6 +38,10 @@ export interface Organization {
   business_address?: string | null;
   business_website?: string | null;
   logo_path?: string | null;
+  /** Fewest hours between a booking and the visit. */
+  booking_notice_hours?: number | null;
+  /** Whether the booking page may offer a visit later today. */
+  booking_same_day?: boolean | null;
   /** Whether a finished job gets a tip link at all. */
   tips_enabled?: boolean | null;
   /** What the tip page says about where the money goes. */

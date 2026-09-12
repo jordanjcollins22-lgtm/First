@@ -57,6 +57,7 @@ export function computeAvailableSlots({
   daysAhead = 14,
   slotMinutes = SLOT_MINUTES,
   minLeadMinutes = 60,
+  firstDate,
 }: {
   evaluatorIds: string[];
   weeklyAvailability: WeeklyAvailability[];
@@ -76,6 +77,13 @@ export function computeAvailableSlots({
   daysAhead?: number;
   slotMinutes?: number;
   minLeadMinutes?: number;
+  /**
+   * The first calendar day (YYYY-MM-DD) a slot may fall on. Days before it
+   * are skipped whole. This is how "no same-day bookings" reaches the slot
+   * search: the day is decided on the business's clock by the caller, and
+   * the search only has to honour it.
+   */
+  firstDate?: string;
 }): AvailableSlotGroup[] {
   const availabilityByEvaluator = new Map<string, WeeklyAvailability[]>();
   for (const a of weeklyAvailability) {
@@ -115,6 +123,7 @@ export function computeAvailableSlots({
   for (let offset = 0; offset < daysAhead; offset++) {
     const day = new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset);
     const dateKey = toDateKey(day);
+    if (firstDate && dateKey < firstDate) continue;
     const dow = day.getDay();
 
     for (const evaluatorId of evaluatorIds) {

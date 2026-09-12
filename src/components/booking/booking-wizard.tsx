@@ -133,6 +133,7 @@ export function BookingWizard({
   referredByProfileId,
   services,
   slots,
+  noticeText = "",
   linkRef,
   linkOrg,
   referralCode,
@@ -142,6 +143,8 @@ export function BookingWizard({
   referredByProfileId: string | null;
   services: PublicService[];
   slots: AvailableSlotGroup[];
+  /** "The earliest visit is tomorrow." Said before they look for today. */
+  noticeText?: string;
   /** The ?ref= and ?org= off the booking link, so the times endpoint resolves the same business. */
   linkRef: string | null;
   linkOrg: string | null;
@@ -646,6 +649,7 @@ export function BookingWizard({
               {times && times.recommended.some((t) => t.says?.includes("close"))
                 ? "These work best for us, so they're the ones we can promise."
                 : "The soonest we can get to you."}
+              {noticeText && ` ${noticeText}`}
             </p>
           </div>
 

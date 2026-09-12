@@ -138,6 +138,7 @@ export function BookingForm() {
       referredByProfileId={options.referredByProfileId}
       services={options.services}
       slots={options.slots}
+      noticeText={options.noticeText ?? ""}
       linkRef={ref}
       linkOrg={org}
       referralCode={rec}

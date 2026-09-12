@@ -1,3 +1,4 @@
+import { DEFAULT_NOTICE, type BookingNotice } from "@/lib/booking-notice";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canDoEvaluations } from "@/lib/affiliate-roles";
 import type { BookedTime } from "@/lib/booking-availability";
@@ -184,6 +185,27 @@ export async function listOrgEvaluatorIds(organizationId: string): Promise<strin
   return profiles
     .filter((p) => canDoEvaluations(rolesByProfile.get(p.id) ?? [], p.does_evaluations))
     .map((p) => p.id);
+}
+
+/**
+ * How much warning this business wants before a visit.
+ *
+ * Read on the service role like everything else the booking page needs:
+ * the caller is a stranger with a link, and the rule is the business's.
+ */
+export async function getBookingNotice(organizationId: string): Promise<BookingNotice> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("organizations")
+    .select("booking_notice_hours, booking_same_day, reminder_time_zone")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (!data) return DEFAULT_NOTICE;
+  return {
+    noticeHours: Number(data.booking_notice_hours ?? 0) || 0,
+    sameDay: Boolean(data.booking_same_day),
+    timeZone: data.reminder_time_zone || DEFAULT_NOTICE.timeZone,
+  };
 }
 
 export interface AvailabilityData {
