@@ -193,6 +193,8 @@ export interface DnsRecord {
   /** What the provider says about this one record, when it says anything. */
   status?: string | null;
   priority?: number | null;
+  /** What the public internet said when we last looked it up ourselves. */
+  lookup?: { state: "found" | "missing" | "different" | "error"; detail: string; at: string } | null;
 }
 
 export type DomainStatus = "pending" | "verified" | "failed";
@@ -211,9 +213,9 @@ export function describeStatus(status: DomainStatus, records: DnsRecord[]): stri
   }
   const outstanding = records.filter((r) => r.status && r.status !== "verified").length;
   if (outstanding > 0) {
-    return `Waiting on ${outstanding} DNS record${outstanding === 1 ? "" : "s"}. They can take up to a few hours to show up.`;
+    return `Waiting on ${outstanding} DNS record${outstanding === 1 ? "" : "s"}. Look them up below to see which have reached the internet.`;
   }
-  return "Waiting on DNS. Add the records below at your domain host, then check again.";
+  return "Waiting on DNS. Add the records below at your domain host, then look them up.";
 }
 
 /** Whether it is worth offering a "check again" button yet. */

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertCircle, Check, Copy, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
+import { AlertCircle, Check, Copy, Globe, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { EmailSetup, SendingDomain } from "@/lib/data/email-setup";
-import { canRecheck, describeStatus, type MailStream } from "@/lib/sending-domains";
+import { canRecheck, describeStatus, type DnsRecord, type MailStream } from "@/lib/sending-domains";
+import { LOOKUP_LABEL, summariseLookups } from "@/lib/dns-check";
 import {
   addSender,
   addSendingDomain,
+  lookupSendingDomainDns,
   makeSenderDefault,
   recheckSendingDomain,
   removeSender,
@@ -146,22 +148,64 @@ function DomainCard({ domain }: { domain: SendingDomain }) {
       {!verified && domain.records.length > 0 && (
         <div className="rounded-lg border border-border bg-background p-2">
           <p className="mb-1.5 text-xs font-semibold">Add these at your domain host</p>
+          {/* Which of them have actually reached the internet. The provider
+              says pending for all of them until its checker comes round; this
+              is the answer to "did my paste take", one record at a time. */}
+          {summariseLookups(domain.records) && (
+            <p className="mb-2 text-xs text-muted-foreground">{summariseLookups(domain.records)}</p>
+          )}
           <ul className="flex flex-col gap-2">
             {domain.records.map((record, i) => (
-              <li key={i} className="rounded-md border border-border p-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {record.type}
-                  {record.priority != null ? ` · priority ${record.priority}` : ""}
-                </p>
+              <li key={i} className={`rounded-md border p-2 ${recordFrame(record)}`}>
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {record.type}
+                    {record.priority != null ? ` · priority ${record.priority}` : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {record.lookup && <Chip tone={record.lookup.state}>Internet: {LOOKUP_LABEL[record.lookup.state]}</Chip>}
+                    {record.status && (
+                      <Chip tone={record.status === "verified" ? "found" : "neutral"}>
+                        Provider: {record.status === "verified" ? "verified" : "pending"}
+                      </Chip>
+                    )}
+                  </div>
+                </div>
+                {record.lookup && record.lookup.state !== "found" && (
+                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{record.lookup.detail}</p>
+                )}
                 <CopyRow label="Name" value={record.name} />
                 <CopyRow label="Value" value={record.value} />
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {lastLookup(domain.records)
+              ? `Last looked up ${lastLookup(domain.records)}.`
+              : "Not looked up yet. Once the records are in at your host, press Look up DNS."}
+          </p>
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        {!verified && domain.records.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 gap-1.5"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              start(async () => {
+                const result = await lookupSendingDomainDns(domain.id);
+                if (!result.ok) setError(result.message);
+              });
+            }}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            {pending ? "Looking…" : "Look up DNS"}
+          </Button>
+        )}
         {canRecheck(domain.status) && (
           <Button
             type="button"
@@ -203,6 +247,39 @@ function DomainCard({ domain }: { domain: SendingDomain }) {
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}
     </div>
   );
+}
+
+/** A border that says at a glance whether this record is in place. */
+function recordFrame(record: DnsRecord): string {
+  switch (record.lookup?.state) {
+    case "found":
+      return "border-emerald-300 dark:border-emerald-700";
+    case "different":
+      return "border-red-300 dark:border-red-800";
+    case "missing":
+      return "border-amber-300 dark:border-amber-700";
+    default:
+      return "border-border";
+  }
+}
+
+function lastLookup(records: DnsRecord[]): string | null {
+  const at = records.map((r) => r.lookup?.at).filter((v): v is string => Boolean(v)).sort().pop();
+  if (!at) return null;
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function Chip({ tone, children }: { tone: "found" | "missing" | "different" | "error" | "neutral"; children: React.ReactNode }) {
+  const classes: Record<typeof tone, string> = {
+    found: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
+    missing: "bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200",
+    different: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",
+    error: "bg-muted text-muted-foreground",
+    neutral: "bg-muted text-muted-foreground",
+  };
+  return <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${classes[tone]}`}>{children}</span>;
 }
 
 function CopyRow({ label, value }: { label: string; value: string }) {

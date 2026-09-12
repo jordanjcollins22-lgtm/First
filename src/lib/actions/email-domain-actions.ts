@@ -18,6 +18,8 @@ import {
   getProviderDomain,
   verifyProviderDomain,
 } from "@/lib/email/resend";
+import { lookupRecords } from "@/lib/data/dns-lookup";
+import type { DnsRecord } from "@/lib/sending-domains";
 
 /** Results rather than throws — a thrown Server Action loses its message in
  * production and surfaces as an unexplained crash. */
@@ -115,7 +117,7 @@ export async function recheckSendingDomain(domainId: string): Promise<EmailResul
 
     const { data: domain } = await supabase
       .from("email_domains")
-      .select("id, provider_domain_id")
+      .select("id, hostname, provider_domain_id")
       .eq("id", domainId)
       .eq("organization_id", organizationId)
       .maybeSingle();
@@ -130,14 +132,58 @@ export async function recheckSendingDomain(domainId: string): Promise<EmailResul
     const fresh = await getProviderDomain(domain.provider_domain_id);
     if (!fresh.ok) return { ok: false, message: fresh.message };
 
+    // The provider's answer and the internet's, side by side. The provider
+    // says pending until its own checker comes round; the lookup says which
+    // records are actually there, which is what decides whether to wait or
+    // go back to the domain host.
+    const records = await lookupRecords(fresh.data.records, domain.hostname).catch(() => fresh.data.records);
+
     const { error } = await supabase
       .from("email_domains")
       .update({
         status: fresh.data.status,
-        dns_records: fresh.data.records,
+        dns_records: records,
         last_checked_at: new Date().toISOString(),
       })
       .eq("id", domain.id);
+    if (error) return { ok: false, message: describe(error) };
+
+    revalidatePath("/admin/settings");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: describe(err) };
+  }
+}
+
+/**
+ * Look every record up on the public internet, without asking the provider.
+ *
+ * The question this answers is the one the provider cannot: which of the
+ * records I pasted at my host are actually out there yet. Each one comes
+ * back found, not there yet, or there with the wrong value, and the answer
+ * is kept on the record so the page shows it until the next look.
+ */
+export async function lookupSendingDomainDns(domainId: string): Promise<EmailResult> {
+  try {
+    const denied = await assertAdmin();
+    if (denied) return { ok: false, message: denied };
+
+    const supabase = await createClient();
+    const organizationId = await getCurrentOrganizationId();
+
+    const { data: domain } = await supabase
+      .from("email_domains")
+      .select("id, hostname, dns_records")
+      .eq("id", domainId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (!domain) return { ok: false, message: "Couldn't find that domain." };
+
+    const records = (domain.dns_records ?? []) as unknown as DnsRecord[];
+    if (records.length === 0) return { ok: false, message: "There are no records to look up yet." };
+
+    const looked = await lookupRecords(records, domain.hostname);
+    const { error } = await supabase.from("email_domains").update({ dns_records: looked }).eq("id", domain.id);
     if (error) return { ok: false, message: describe(error) };
 
     revalidatePath("/admin/settings");
