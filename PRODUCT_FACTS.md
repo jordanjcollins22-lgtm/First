@@ -8,10 +8,11 @@ to confirm; copy must not lean on them until confirmed.
 
 ## Company
 
-- Name: `[[COMPANY NAME]]` (unconfirmed)
+- Name: **JS Landscaping** (from the logo; DECISIONS D-27)
 - Licensed and insured in Maryland.
 - Local: serves Harford County, Maryland only.
 - Contact: `[[PHONE]]` · `[[EMAIL]]` (unconfirmed)
+- Logo: `public/brand/js-landscaping-logo.png`. Brand colors and type: DECISIONS D-28.
 
 ## Service area
 
