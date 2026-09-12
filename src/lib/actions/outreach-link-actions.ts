@@ -17,6 +17,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
 import { bookingSlug, getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
+import { MAX_POSTED_CHARS, checkPosted, postedSummary } from "@/lib/posted-comment";
 import {
   draftPosts,
   makeCode,
@@ -431,4 +432,50 @@ export async function saveComment(input: {
 
   revalidatePath("/admin/outreach");
   return { ok: true };
+}
+
+export type PostedResult =
+  | { ok: true; summary: string; hasLink: boolean; problems: string[] }
+  | { ok: false; error: string };
+
+/**
+ * What was actually posted, pasted back by the person who posted it.
+ *
+ * The draft stays where it was. This is the other half: the comment as it
+ * went up, edited or rewritten or as written, so the opens counted against
+ * the link belong to words somebody can read later. Recorded even when the
+ * check finds something to fix, because it is already in front of the
+ * neighbours and the record is what makes it fixable; the problems come back
+ * so the person can go and change the live comment.
+ */
+export async function recordPostedComment(input: {
+  id: string;
+  text: string;
+}): Promise<PostedResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+
+  const posted = input.text.trim().slice(0, MAX_POSTED_CHARS);
+  if (!posted) return { ok: false, error: "Paste what you posted first." };
+
+  const supabase = await createClient();
+  const { data: row, error: readError } = await supabase
+    .from("outreach_links")
+    .select("id, code, comment")
+    .eq("id", input.id)
+    .maybeSingle();
+  if (readError) return { ok: false, error: readError.message };
+  if (!row) return { ok: false, error: "Couldn't find that post." };
+
+  const link = trackedLink(await outboundBaseUrl(), row.code);
+  const check = checkPosted({ draft: row.comment, posted, link });
+
+  const { error } = await supabase
+    .from("outreach_links")
+    .update({ posted_comment: posted, posted_comment_at: new Date().toISOString() })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/outreach");
+  return { ok: true, summary: postedSummary(check), hasLink: check.hasLink, problems: check.problems };
 }

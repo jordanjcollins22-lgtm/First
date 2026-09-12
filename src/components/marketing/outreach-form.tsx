@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   createShotUpload,
   draftCommentFromScreenshot,
+  recordPostedComment,
   readRecommendationScreenshot,
   recordOutreach,
   saveComment,
@@ -283,6 +284,11 @@ export function OutreachForm() {
 
         <CopyBlock tone="Just the link" text={result.link} />
 
+        {/* The other half of the record. The link counts opens on its own;
+            this is the words those opens belong to, said by the one person
+            who knows what was actually pasted. */}
+        <WhatWentUp id={result.id} written={comment} drafts={result.drafts} />
+
         <Button
           type="button"
           variant="outline"
@@ -443,6 +449,102 @@ export function OutreachForm() {
         {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
         {pending ? "Getting your link…" : reading ? "Reading the post…" : "Get my link and wording"}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * "What did you actually post?"
+ *
+ * One tap when it went up as written; a paste box when it did not. Both
+ * record it against the link, so the board can show which wording the opens
+ * came from, and the same claims check the drafts go through runs over the
+ * paste and says what to go and fix on the live comment.
+ */
+function WhatWentUp({
+  id,
+  written,
+  drafts,
+}: {
+  id: string;
+  written: string | null;
+  drafts: { tone: string; text: string }[];
+}) {
+  const [mode, setMode] = useState<"ask" | "paste" | "done">("ask");
+  const [text, setText] = useState("");
+  const [summary, setSummary] = useState<string | null>(null);
+  const [flagged, setFlagged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  function record(posted: string) {
+    setError(null);
+    start(async () => {
+      const outcome = await recordPostedComment({ id, text: posted });
+      if (!outcome.ok) return setError(outcome.error);
+      setSummary(outcome.summary);
+      setFlagged(!outcome.hasLink || outcome.problems.length > 0);
+      setMode("done");
+    });
+  }
+
+  if (mode === "done") {
+    return (
+      <div className={cn("rounded-lg border p-3 text-sm", flagged ? "border-amber-500/50 bg-amber-50 dark:bg-amber-950/30" : "border-primary/40 bg-primary/5")}>
+        <p className="font-semibold">Recorded what went up.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{summary}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-border p-3">
+      <p className="text-sm font-semibold">What did you actually post?</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        So the opens are counted against the right words. One tap if you pasted it as is.
+      </p>
+
+      {mode === "ask" && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {written && (
+            <Button type="button" size="sm" disabled={pending} onClick={() => record(written)}>
+              Posted it as written
+            </Button>
+          )}
+          {drafts.map((draft) => (
+            <Button key={draft.tone} type="button" size="sm" variant="outline" disabled={pending} onClick={() => record(draft.text)}>
+              Used &ldquo;{draft.tone}&rdquo;
+            </Button>
+          ))}
+          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => setMode("paste")}>
+            I edited it or used my own
+          </Button>
+        </div>
+      )}
+
+      {mode === "paste" && (
+        <div className="mt-2 flex flex-col gap-2">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={5}
+            placeholder="Paste the comment exactly as it went up, link and all."
+            className="text-sm"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button type="button" size="sm" disabled={pending || !text.trim()} onClick={() => record(text)}>
+              {pending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Save what I posted
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setMode("ask")}>
+              Back
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
     </div>
   );
 }

@@ -2738,6 +2738,8 @@ export interface Database {
           response: string | null;
           response_note: string | null;
           comment: string | null;
+          posted_comment: string | null;
+          posted_comment_at: string | null;
           posted_at: string;
           created_at: string;
         };

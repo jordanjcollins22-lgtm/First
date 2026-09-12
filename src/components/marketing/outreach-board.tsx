@@ -18,6 +18,7 @@ import {
 import { recordResponse } from "@/lib/actions/outreach-link-actions";
 import { CopyButton } from "@/components/groups/copy-button";
 import type { OutreachBoard, OutreachListRow } from "@/lib/data/outreach-links";
+import { postedVersion, VERSION_LABEL } from "@/lib/posted-comment";
 
 /**
  * What came of every link handed out.
@@ -237,8 +238,20 @@ function LinkRow({ row }: { row: OutreachListRow }) {
           came back for when a paste failed or the phone locked. */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <CopyButton text={row.link} label="Copy link" />
-        {row.comment && <CopyButton text={row.comment} label="Copy comment" />}
-        {row.comment && <ShowComment comment={row.comment} />}
+        {/* What actually went up beats what was written for it. The draft is
+            still there for a second post in the same group. */}
+        {(row.postedComment ?? row.comment) && (
+          <CopyButton text={row.postedComment ?? row.comment ?? ""} label="Copy comment" />
+        )}
+        {(row.postedComment ?? row.comment) && <ShowComment comment={row.postedComment ?? row.comment ?? ""} />}
+        {row.postedComment && (
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            {VERSION_LABEL[postedVersion(row.comment, row.postedComment)]}
+          </span>
+        )}
+        {!row.postedComment && row.comment && (
+          <span className="text-[11px] text-muted-foreground">Not yet confirmed what went up</span>
+        )}
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
