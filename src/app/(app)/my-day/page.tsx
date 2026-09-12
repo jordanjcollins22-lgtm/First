@@ -16,6 +16,10 @@ import { getDashboard, loadJobInputs } from "@/lib/data/dashboard";
 import { getCommissionFor } from "@/lib/data/commission";
 import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
+import { getCallList } from "@/lib/data/call-list";
+import { CallListPanel } from "@/components/sales/call-list";
+import type { CallList } from "@/lib/call-list";
+import { isAccountManager } from "@/lib/affiliate-roles";
 import { TodayPanel } from "@/components/dashboard/today-panel";
 import { withOwed, type TodayView } from "@/lib/today";
 import type { DashboardData } from "@/lib/dashboard";
@@ -135,7 +139,7 @@ async function OfficeDay() {
   // round trips the page sat through end to end. Each still fails on its own:
   // a money table that is not set up costs the commission panel and nothing
   // else, which is why every one of them carries its own catch.
-  const [data, work, today, commission, earlyStarts, marketing, ops] = await Promise.all([
+  const [data, work, today, commission, earlyStarts, marketing, ops, calls] = await Promise.all([
     getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
       console.error("My Day failed to load:", err);
       return null as DashboardData | null;
@@ -174,6 +178,14 @@ async function OfficeDay() {
       console.error("The pulse failed to load:", err);
       return null as OpsState | null;
     }),
+    // The most valuable list in the business: proposals sent and not
+    // answered, and proposals answered no. Only for the people who ring them.
+    isAccountManager(profile.roles) || isOwnerLevel(profile.roles) || profile.roles.includes("admin")
+      ? getCallList(profile).catch((err) => {
+          console.error("Call list failed to load:", err);
+          return null as CallList | null;
+        })
+      : Promise.resolve(null as CallList | null),
   ]);
 
   if (!data) {
@@ -201,6 +213,12 @@ async function OfficeDay() {
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <EarlyStartQueue requests={earlyStarts} />
+
+      {/* Above everything else for an account manager: the money on the
+          table, and who to ring about it. */}
+      {calls && (calls.now.length > 0 || calls.later.length > 0) && (
+        <CallListPanel list={calls} callerFirstName={(profile.first_name || profile.full_name || "").split(" ")[0] || "us"} />
+      )}
 
       {/* The cheapest lead in the business, and it only happens if somebody
           remembers it exists. Put where everybody starts their day rather

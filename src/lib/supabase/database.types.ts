@@ -2639,6 +2639,29 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["job_tips"]["Row"]>;
         Relationships: [];
       };
+      proposal_calls: {
+        Row: {
+          id: string;
+          organization_id: string;
+          proposal_id: string;
+          job_id: string;
+          customer_id: string | null;
+          profile_id: string | null;
+          /** no_answer | call_back | thinking | too_expensive | wants_changes | next_season | went_elsewhere | said_yes | do_not_call */
+          outcome: string;
+          note: string | null;
+          callback_on: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["proposal_calls"]["Row"]> & {
+          organization_id: string;
+          proposal_id: string;
+          job_id: string;
+          outcome: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["proposal_calls"]["Row"]>;
+        Relationships: [];
+      };
       recurring_decisions: {
         Row: {
           id: string;
