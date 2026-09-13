@@ -3,7 +3,8 @@ import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getPipeline, type PipelineCard } from "@/lib/data/pipeline";
-import { STAGES, STAGE_STATUSES } from "@/lib/pipeline";
+import { isClosedWork, STAGES, STAGE_STATUSES } from "@/lib/pipeline";
+import { shortWhen } from "@/lib/time-zone";
 import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MoveJob } from "@/components/pipeline/move-job";
@@ -51,6 +52,8 @@ async function PipelineTab() {
     .filter((c) => c.stage !== "operations" && c.value)
     .reduce((sum, c) => sum + (c.value ?? 0), 0);
   const needsAction = cards.filter((c) => c.actionable).length;
+  // Cancelled visits sit on the board to be seen, not counted as live.
+  const live = cards.filter((c) => !isClosedWork(c)).length;
 
   return (
     <div>
@@ -60,7 +63,7 @@ async function PipelineTab() {
       </p>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile label="Live jobs" value={String(cards.length)} />
+        <Tile label="Live jobs" value={String(live)} />
         <Tile label="Needs action" value={String(needsAction)} hint="Waiting on us, not the client" />
         <Tile label="Quoted, not yet won" value={money(totalValue)} />
       </div>
@@ -141,8 +144,16 @@ async function PipelineTab() {
                                     )}
                                   </div>
                                   <p className="truncate text-xs text-muted-foreground">{card.address}</p>
+                                  {/* A visit has a time and it is the thing the card is
+                                      for; work dates are days. Both on the business clock,
+                                      since this renders on the server. */}
                                   {card.date && (
-                                    <p className="text-[11px] text-muted-foreground">{formatDate(card.date)}</p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {card.stage === "evaluation" ? shortWhen(card.date) : formatDate(card.date)}
+                                    </p>
+                                  )}
+                                  {card.note && (
+                                    <p className="truncate text-[11px] italic text-muted-foreground">{card.note}</p>
                                   )}
                                   {/* Whether they are actually reading it, on
                                       the cards where that is still an open

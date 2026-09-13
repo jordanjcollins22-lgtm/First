@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   derivedPosition,
+  isClosedWork,
   isOnPipeline,
   movableTo,
   overrideIsStale,
@@ -89,6 +90,17 @@ describe("pipelinePosition", () => {
 });
 
 describe("isOnPipeline", () => {
+  it("keeps a cancelled evaluation on the board, under Cancelled, and never chases it", () => {
+    const cancelled = job({ status: "cancelled", evaluationDate: "2026-09-14T12:00:00Z", evaluationStatus: "cancelled" });
+    expect(isOnPipeline(cancelled)).toBe(true);
+    expect(pipelinePosition(cancelled)).toEqual({ stage: "evaluation", status: "Cancelled", actionable: false });
+    expect(isClosedWork(pipelinePosition(cancelled))).toBe(true);
+    expect(STAGE_STATUSES.evaluation.at(-1)).toBe("Cancelled");
+    expect(movableTo().some((m) => m.stage === "evaluation" && m.status === "Cancelled")).toBe(true);
+    // A cancelled visit on a job that is still going stays in Cancelled rather than reading as Scheduled.
+    expect(pipelinePosition(job({ evaluationDate: "x", evaluationStatus: "cancelled" })).status).toBe("Cancelled");
+  });
+
   it("drops cancelled jobs off the board", () => {
     expect(isOnPipeline(job({ status: "cancelled" }))).toBe(false);
     expect(isOnPipeline(job())).toBe(true);

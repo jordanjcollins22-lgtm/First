@@ -32,7 +32,10 @@ export const STAGES: { key: PipelineStage; label: string; blurb: string }[] = [
 
 /** The statuses a job can hold within each stage, in order of progress. */
 export const STAGE_STATUSES: Record<PipelineStage, string[]> = {
-  evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated"],
+  // Cancelled sits at the end of the column rather than off the board: a
+  // visit that fell through is a lead that still exists, and the office
+  // wants to see how many there were and ring them back.
+  evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated", "Cancelled"],
   sales: ["Needs pricing", "Needs approval", "Sent", "Declined"],
   operations: ["Won — not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
   // The kind of trouble rather than a ladder of progress: a dispute does not
@@ -108,9 +111,16 @@ const EVALUATION_LABELS: Record<string, string> = {
  * Cancelled jobs are off the board entirely — they aren't a stage, they're an
  * absence of one, and leaving them in a column makes the board a to-do list
  * nobody trusts.
+ *
+ * The exception is a job whose evaluation was called off. Cancelling the
+ * visit cancels a job that had nothing else on it, and those are the ones
+ * the office asked to keep seeing: a visit that fell through is a lead
+ * that still exists. They sit under Cancelled in the Evaluation column,
+ * never actionable, so the board shows them without chasing them.
  */
 export function isOnPipeline(input: PipelineInput): boolean {
-  return input.status !== "cancelled";
+  if (input.status !== "cancelled") return true;
+  return input.evaluationStatus === "cancelled" && Boolean(input.evaluationDate);
 }
 
 function dateKey(d: Date): string {
@@ -215,6 +225,13 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
     };
   }
 
+  // A visit that was called off. Read before the live visit below, because
+  // the date is still on the row: it is kept so the calendar history shows
+  // the day somebody lost, and without this it would read as a booking.
+  if (input.evaluationDate && input.evaluationStatus === "cancelled") {
+    return { stage: "evaluation", status: "Cancelled", actionable: false };
+  }
+
   // Evaluation: booked to look at it, and that hasn't finished yet.
   const evaluationDone = input.evaluationStatus === "completed";
   if (input.evaluationDate && !evaluationDone) {
@@ -259,6 +276,7 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
  */
 export function isClosedWork(position: PipelinePosition): boolean {
   if (position.stage === "disputes") return true;
+  if (position.stage === "evaluation" && position.status === "Cancelled") return true;
   if (position.stage === "sales" && position.status === "Declined") return true;
   if (position.stage === "operations" && position.status === "Completed") return true;
   return false;

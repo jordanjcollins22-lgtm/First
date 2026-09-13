@@ -16,6 +16,8 @@ export interface PipelineCard {
   /** Shown on the card so it's obvious what's driving the position. */
   value: number | null;
   date: string | null;
+  /** Why a cancelled visit was called off, when somebody said. */
+  note: string | null;
   assignedTo: string | null;
   /**
    * Whether the client has been reading the quote, on the cards where that
@@ -118,6 +120,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
           position.stage === "evaluation"
             ? job.evaluation_date
             : (job.project_start_date ?? job.project_end_date),
+        note: position.stage === "evaluation" && position.status === "Cancelled" ? (job.cancellation_reason ?? null) : null,
         assignedTo: job.assigned_to,
         activity: watching ? activityLabel(summary, now) : null,
         activityHot: watching && isHot(summary, proposal?.status ?? ""),
