@@ -15,6 +15,10 @@ import type { Profile, ProposalZoneSnapshot } from "@/types/domain";
  * An account manager sees their own clients and every client nobody has
  * claimed yet, because an unclaimed proposal is one nobody is ringing.
  * Recording a call claims it. An owner or admin sees the lot.
+ *
+ * Only proposals that are out and unanswered. Anything declined, by the
+ * client on the page or by the office on the pipeline, is off the list and
+ * out of the money on the table.
  */
 export async function getCallList(profile: Profile, today: Date = new Date()): Promise<CallList> {
   const supabase = await createClient();
@@ -26,7 +30,10 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
       "id, job_id, status, total_cost, approved_at, responded_at, client_response_note, scope_snapshot, job:jobs(id, status, declined_at, cancelled_at, property:properties(address, customer:customers(id, name, phone, account_manager_id, do_not_contact)))"
     )
     .eq("organization_id", organizationId)
-    .in("status", ["sent", "declined"])
+    // Sent and unanswered only. A declined proposal is over, whether the
+    // client clicked no or somebody here marked the job declined, and a
+    // closed job on a call list is how people get rung after saying no.
+    .eq("status", "sent")
     .order("approved_at", { ascending: false })
     .limit(200);
 
@@ -49,7 +56,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
         customer: { id: string; name: string; phone: string | null; account_manager_id: string | null; do_not_contact: boolean } | null;
       } | null;
     } | null;
-  }[]).filter((p) => p.job && p.job.status !== "cancelled" && !p.job.cancelled_at);
+  }[]).filter((p) => p.job && p.job.status !== "cancelled" && !p.job.cancelled_at && !p.job.declined_at);
 
   const seesAll = isOwnerLevel(profile.roles) || profile.roles.includes("admin");
   const mine = proposals.filter((p) => {

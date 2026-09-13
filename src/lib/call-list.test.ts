@@ -47,25 +47,15 @@ describe("ranking", () => {
     expect(list.now[1].reason).toMatch(/never opened it/);
   });
 
-  it("puts a fresh decline nobody has rung ahead of one already called about", () => {
-    const fresh = item({ proposalId: "d1", status: "declined", respondedAt: "2026-09-11T10:00:00Z", totalCents: 345_000, responseNote: "It's a little more than we wanted to spend" });
-    const rung = item({
-      proposalId: "d2",
-      status: "declined",
-      respondedAt: "2026-09-09T10:00:00Z",
-      totalCents: 345_000,
-      calls: [{ at: "2026-09-10T10:00:00Z", outcome: "thinking", note: null, byName: "Jace", callbackOn: null }],
-    });
-    const list = buildCallList([rung, fresh], TODAY);
-    expect(list.now.map((r) => r.proposalId)).toEqual(["d1", "d2"]);
-    expect(scoreCall(fresh, TODAY).reason).toMatch(/it was the price/);
-  });
-
-  it("drops a decline that has gone cold, and one that went elsewhere", () => {
+  it("leaves declined proposals off the list and out of the money, however fresh the no", () => {
+    const fresh = item({ proposalId: "d1", status: "declined", respondedAt: "2026-09-11T10:00:00Z", totalCents: 345_000 });
     const cold = item({ proposalId: "old", status: "declined", respondedAt: "2026-07-01T10:00:00Z" });
     const gone = item({ proposalId: "gone", calls: [{ at: "2026-09-11T10:00:00Z", outcome: "went_elsewhere", note: "Went with a neighbour's guy", byName: "Jace", callbackOn: null }] });
-    const list = buildCallList([cold, gone, item()], TODAY);
+    const list = buildCallList([fresh, cold, gone, item()], TODAY);
     expect(list.now.map((r) => r.proposalId)).toEqual(["p1"]);
+    expect(list.later).toHaveLength(0);
+    expect(list.openCents).toBe(2_215_000);
+    expect(scoreCall(fresh, TODAY).reason).toMatch(/it was the price|said no/);
   });
 });
 

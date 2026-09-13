@@ -29,7 +29,7 @@ export function CallListPanel({ list, callerFirstName }: { list: CallList; calle
         <p className="text-sm text-muted-foreground">{callListHeadline(list)}</p>
       </div>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Proposals sent and not answered, and proposals answered no. Biggest and warmest first. Tap one, ring them, tap what they said.
+        Proposals sent and not answered. Biggest and warmest first. Tap one, ring them, tap what they said. Declined proposals are not here.
       </p>
 
       {list.now.length > 0 && (

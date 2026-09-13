@@ -365,11 +365,9 @@ export function buildCallList(items: CallItem[], today: Date = new Date()): Call
   for (const item of items) {
     const last = item.calls[0] ?? null;
     if (last && closesTheCall(last.outcome)) continue;
-    // A decline that has gone cold is history, not a call.
-    if (item.status === "declined") {
-      const sinceNo = daysBetween(item.respondedAt, today);
-      if (sinceNo != null && sinceNo > DECLINED_WINDOW_DAYS && !last?.callbackOn) continue;
-    }
+    // A decline is over. It is not on the list and it is not money on the
+    // table, however recently they said no.
+    if (item.status === "declined") continue;
     const due = dueOn(item);
     const { score, reason } = scoreCall(item, today);
     ranked.push({
