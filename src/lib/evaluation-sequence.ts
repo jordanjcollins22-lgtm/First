@@ -79,7 +79,7 @@ export const SAMPLE_VARS: Record<string, string> = {
   address: "1613 Bimini Drive, Bel Air",
   evaluator: "Jordan",
   business: "JS Landscaping MD",
-  phone: "(443) 900-8084",
+  phone: "(443) 819-1521",
   website: "jslandscapingmd.com",
 };
 
