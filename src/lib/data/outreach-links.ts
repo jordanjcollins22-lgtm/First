@@ -48,8 +48,25 @@ export interface OutreachListRow extends OutreachRow {
   personName: string;
 }
 
+/** One booking that arrived carrying a link's code, with the person behind it. */
+export interface OutreachBooking {
+  jobId: string;
+  code: string;
+  customerId: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string;
+  bookedAt: string;
+  evaluationDate: string | null;
+  evaluationStatus: string;
+  jobStatus: string;
+}
+
 export interface OutreachBoard {
   rows: OutreachListRow[];
+  /** Who booked, by the code they came through. */
+  bookingsByCode: Record<string, OutreachBooking[]>;
   groups: GroupTally[];
   people: (PersonTally & { name: string })[];
   kinds: KindTally[];
@@ -79,6 +96,7 @@ export async function getOutreachBoard(): Promise<OutreachBoard> {
   if (raw.length === 0) {
     return {
       rows: [],
+      bookingsByCode: {},
       groups: [],
       people: [],
       kinds: [],
@@ -89,13 +107,50 @@ export async function getOutreachBoard(): Promise<OutreachBoard> {
 
   const codes = raw.map((row) => row.code);
   const [{ data: booked }, { data: profiles }] = await Promise.all([
-    supabase.from("jobs").select("referral_code").in("referral_code", codes),
+    supabase
+      .from("jobs")
+      .select(
+        "id, referral_code, status, evaluation_status, evaluation_date, created_at, property:properties(address, customer:customers(id, name, phone, email))"
+      )
+      .in("referral_code", codes)
+      .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name, email").eq("organization_id", organizationId),
   ]);
 
   const bookedCodes = new Set(
     (booked ?? []).map((job) => job.referral_code).filter((code): code is string => Boolean(code))
   );
+
+  // The people, by code. Contact details are here because the person reading
+  // this board is the one who will ring them; the leads screen is the same
+  // trust level.
+  const bookingsByCode: Record<string, OutreachBooking[]> = {};
+  for (const job of (booked ?? []) as unknown as {
+    id: string;
+    referral_code: string | null;
+    status: string;
+    evaluation_status: string;
+    evaluation_date: string | null;
+    created_at: string;
+    property: { address: string; customer: { id: string; name: string; phone: string | null; email: string | null } | null } | null;
+  }[]) {
+    if (!job.referral_code || !job.property?.customer) continue;
+    const list = bookingsByCode[job.referral_code] ?? [];
+    list.push({
+      jobId: job.id,
+      code: job.referral_code,
+      customerId: job.property.customer.id,
+      name: job.property.customer.name,
+      phone: job.property.customer.phone,
+      email: job.property.customer.email,
+      address: job.property.address,
+      bookedAt: job.created_at,
+      evaluationDate: job.evaluation_date,
+      evaluationStatus: job.evaluation_status,
+      jobStatus: job.status,
+    });
+    bookingsByCode[job.referral_code] = list;
+  }
   const nameOf = new Map(
     (profiles ?? []).map((p) => [p.id, (p.full_name ?? "").trim() || (p.email ?? "").split("@")[0] || "Somebody"])
   );
@@ -128,6 +183,7 @@ export async function getOutreachBoard(): Promise<OutreachBoard> {
 
   return {
     rows,
+    bookingsByCode,
     groups: tallyByGroup(rows, bookedCodes),
     people: tallyByPerson(rows, bookedCodes).map((person) => ({
       ...person,

@@ -303,8 +303,20 @@ export function clickRate(funnel: Funnel, floor = 5): number | null {
 }
 
 export interface GroupTally extends Funnel {
+  /** The same key groupKey() gives a row, so a room can be opened to its rows. */
+  key: string;
   platform: Platform;
   audience: string;
+}
+
+/** The room a row belongs to, and how it is written. Case does not split a room. */
+export function groupOf(row: Pick<OutreachRow, "platform" | "audience">): { key: string; audience: string } {
+  const audience = (row.audience ?? "").trim() || `${platformLabel(row.platform)} — nothing named`;
+  return { key: `${row.platform}::${audience.toLowerCase()}`, audience };
+}
+
+export function groupKey(row: Pick<OutreachRow, "platform" | "audience">): string {
+  return groupOf(row).key;
 }
 
 /**
@@ -326,9 +338,8 @@ export function tallyByGroup(
   const tallies = new Map<string, GroupTally>();
 
   for (const row of rows) {
-    const audience = (row.audience ?? "").trim() || `${platformLabel(row.platform)} — nothing named`;
-    const key = `${row.platform}::${audience.toLowerCase()}`;
-    const found = tallies.get(key) ?? { ...EMPTY, platform: row.platform, audience };
+    const { key, audience } = groupOf(row);
+    const found = tallies.get(key) ?? { ...EMPTY, key, platform: row.platform, audience };
     tallies.set(key, { ...found, ...add(found, row, booked) });
   }
 

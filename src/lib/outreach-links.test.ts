@@ -7,6 +7,7 @@ import {
   clickRate,
   goesToOnePerson,
   kindLabel,
+  groupKey,
   tallyByGroup,
   tallyByKind,
   tallyByPage,
@@ -168,6 +169,12 @@ describe("which rooms are worth being in", () => {
       []
     );
     expect(tallies.map((t) => t.audience)).toEqual(["Bel Air Community", "Fallston Chat"]);
+  });
+
+  it("gives a room the same key its rows carry, so the room can be opened", () => {
+    const rows = [row({ code: "a", audience: "Bel Air Community" }), row({ code: "b", audience: "bel air community" })];
+    const [tally] = tallyByGroup(rows, []);
+    expect(rows.map(groupKey)).toEqual([tally.key, tally.key]);
   });
 
   it("treats the same room typed two ways as one room", () => {
