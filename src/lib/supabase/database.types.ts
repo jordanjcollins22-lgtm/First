@@ -69,6 +69,7 @@ export interface Database {
           eddm_print_cost_per_piece: number;
           marketing_since: string;
           roads_updated_at: string | null;
+          public_base_url: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> & {
           name: string;
@@ -1988,6 +1989,25 @@ export interface Database {
           kind: string;
         };
         Update: Partial<Database["public"]["Tables"]["reminder_rules"]["Row"]>;
+        Relationships: [];
+      };
+      evaluation_intakes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          token: string;
+          answers: Json;
+          submitted_at: string | null;
+          submitted_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["evaluation_intakes"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["evaluation_intakes"]["Row"]>;
         Relationships: [];
       };
       evaluation_sequence_steps: {

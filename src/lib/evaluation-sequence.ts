@@ -47,6 +47,8 @@ export const PLACEHOLDERS: { key: string; means: string }[] = [
   { key: "business", means: "The business name" },
   { key: "phone", means: "The business phone" },
   { key: "website", means: "The business website" },
+  { key: "prep_link", means: "The link to the pre-evaluation form" },
+  { key: "prep_line", means: "A nudge with the form link, or a thank you once it is filled in" },
 ];
 
 const KNOWN = new Set(PLACEHOLDERS.map((p) => p.key));
@@ -81,6 +83,8 @@ export const SAMPLE_VARS: Record<string, string> = {
   business: "JS Landscaping MD",
   phone: "(443) 819-1521",
   website: "jslandscapingmd.com",
+  prep_link: "https://app.jslandscapingmd.com/prep/3f9c2a7e1b4d8e0f6a2c9b1d",
+  prep_line: "If you have not had a chance to fill in the short form yet, it is here:\n\nhttps://app.jslandscapingmd.com/prep/3f9c2a7e1b4d8e0f6a2c9b1d\n\nIt takes about five minutes. If you do not get to it, we will go through it together in the first five to ten minutes of the visit.",
 };
 
 /** One line on the state of the sequence, for the top of the panel. */

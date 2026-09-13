@@ -66,6 +66,9 @@ import { LocationPanel } from "@/components/canvas/location-panel";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
+import { IntakeSummary } from "@/components/intake/intake-summary";
+import { getIntakeForJob } from "@/lib/data/evaluation-intake";
+import { intakeHeadline } from "@/lib/evaluation-intake";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
 import { InvoiceSection } from "@/components/job/invoice-section";
@@ -334,7 +337,9 @@ export default async function JobPage({
   const requestedServiceNames = requestedServiceIds.map(
     (id) => catalog.servicePricing.find((s) => s.service_type_id === id)?.name ?? id
   );
-  const hasClientRequest = requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
+  // What they told us before the visit. Null when this job has no evaluation.
+  const intake = job.evaluation_date ? await getIntakeForJob(jobId).catch(() => null) : null;
+  const hasClientRequest = Boolean(intake) || requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
 
   const zones = design ? ((design.zones as unknown as WorkZone[]).filter((z) => z.service)) : [];
   // What the job costs us and what it prices at, from the same function the
@@ -849,9 +854,17 @@ export default async function JobPage({
                 {
                   id: "request",
                   title: "What the client asked for",
-                  hint: requestedServiceNames.join(", ") || null,
+                  hint: intake ? intakeHeadline(intake.submittedAt ? intake.answers : null, intake.submittedAt) : requestedServiceNames.join(", ") || null,
                   body: (
-                    <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex flex-col gap-3 text-sm">
+                      {intake && (
+                        <IntakeSummary
+                          answers={intake.answers}
+                          submittedAt={intake.submittedAt}
+                          submittedBy={intake.submittedBy}
+                          token={intake.token}
+                        />
+                      )}
                       {requestedServiceNames.length > 0 && (
                         <p>
                           <span className="text-muted-foreground">Services: </span>

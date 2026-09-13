@@ -162,6 +162,7 @@ export function BookingWizard({
     time: string;
     address: string;
     digital: boolean;
+    prepToken: string | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -348,6 +349,7 @@ export function BookingWizard({
           address: selectedAddress.fullAddress,
           // What the server decided, not what the browser guessed.
           digital: result.mode === "digital",
+          prepToken: result.prepToken ?? null,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
@@ -375,6 +377,22 @@ export function BookingWizard({
             <li>You get a written proposal with a fixed price. No obligation.</li>
           </ul>
         </div>
+        {booked.prepToken && (
+          <div className="w-full rounded-xl border border-primary/40 bg-primary/5 p-4 text-left text-sm">
+            <p className="font-medium">While it is fresh: tell us what you are looking for</p>
+            <p className="mt-1 text-muted-foreground">
+              Five minutes on what you want done, the looks you like and anything that would give you pause. It
+              lets us come with ideas. If you skip it, we go through it together in the first 5 to 10 minutes of
+              the visit.
+            </p>
+            <a
+              href={`/prep/${booked.prepToken}`}
+              className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
+            >
+              Fill it in now
+            </a>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
           Need to change it? Reply to the confirmation and we&apos;ll move it.
         </p>

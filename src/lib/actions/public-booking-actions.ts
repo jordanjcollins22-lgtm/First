@@ -46,7 +46,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 export async function submitPublicBooking(
   input: SubmitPublicBookingInput
-): Promise<{ jobId: string; mode: EvaluationMode }> {
+): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
   const email = input.email.trim().toLowerCase();
@@ -241,7 +241,11 @@ export async function submitPublicBooking(
   // no organization, so the signup trigger gives it no staff access at all.
   await ensureClientAccount({ customerId, email }).catch(() => null);
 
-  return { jobId: job.id, mode: mode.mode };
+  // The pre-evaluation form is made by a trigger the moment the job has a
+  // date, so the client can be handed the link on the very next screen.
+  const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", job.id).maybeSingle();
+
+  return { jobId: job.id, mode: mode.mode, prepToken: intake?.token ?? null };
 }
 
 /**
