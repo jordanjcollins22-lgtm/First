@@ -1990,6 +1990,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["reminder_rules"]["Row"]>;
         Relationships: [];
       };
+      evaluation_sequence_steps: {
+        Row: {
+          organization_id: string;
+          step: string;
+          enabled: boolean;
+          subject: string;
+          body: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["evaluation_sequence_steps"]["Row"]> & {
+          organization_id: string;
+          step: string;
+          subject: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["evaluation_sequence_steps"]["Row"]>;
+        Relationships: [];
+      };
       notification_log: {
         Row: {
           id: string;
@@ -3843,6 +3862,22 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      /** The evaluation email sequence as this business sends it: its wording where changed, the default otherwise. */
+      evaluation_sequence_effective: {
+        Args: Record<string, never>;
+        Returns: {
+          step: string;
+          ordinal: number;
+          label: string;
+          timing: string;
+          enabled: boolean;
+          subject: string;
+          body: string;
+          custom: boolean;
+          updated_at: string | null;
+        }[];
+      };
+
       /** The post-import integrity questions, answered in one trip. */
       gis_integrity_report: {
         Args: { org: string };

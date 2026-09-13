@@ -5,6 +5,8 @@ import { requireTab } from "@/lib/data/access";
 import { getReminderSettings } from "@/lib/data/reminder-settings";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ReminderSettingsPanel } from "@/components/messaging/reminder-settings-panel";
+import { EvaluationSequencePanel } from "@/components/messaging/evaluation-sequence-panel";
+import { getEvaluationSequence } from "@/lib/data/evaluation-sequence";
 
 /**
  * What clients hear from us without anybody typing it.
@@ -19,7 +21,10 @@ export default async function RemindersPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("reminders", "/admin/tools");
 
-  const settings = await getReminderSettings().catch(() => null);
+  const [settings, sequence] = await Promise.all([
+    getReminderSettings().catch(() => null),
+    getEvaluationSequence().catch(() => null),
+  ]);
   if (!settings) redirect("/admin/tools");
 
   return (
@@ -32,6 +37,7 @@ export default async function RemindersPage() {
           in an email, is taken off straight away and stays off.
         </p>
       </header>
+      {sequence && <EvaluationSequencePanel view={sequence} />}
       <ReminderSettingsPanel settings={settings} />
     </div>
   );
