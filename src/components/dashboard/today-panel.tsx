@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { timeOnly } from "@/lib/time-zone";
 import { Banknote, CalendarClock, HardHat, Handshake } from "lucide-react";
 
 import type { TodayView } from "@/lib/today";
@@ -197,8 +198,7 @@ function money(value: number): string {
   });
 }
 
+/** On the business clock: this renders on the server, whose clock is UTC. */
 function at(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return timeOnly(iso);
 }

@@ -159,3 +159,49 @@ describe("the first bookable day", () => {
     expect(out.length).toBeGreaterThan(0);
   });
 });
+
+describe("on the business's clock", () => {
+  // Monday 14 Sep 2026, 08:00 to 10:00, in Maryland.
+  const monday: WeeklyAvailability[] = [
+    { id: "w2", profile_id: EVALUATOR, day_of_week: 1, start_time: "08:00:00", end_time: "10:00:00" } as unknown as WeeklyAvailability,
+  ];
+
+  function zoned(from: Date) {
+    return computeAvailableSlots({
+      evaluatorIds: [EVALUATOR],
+      weeklyAvailability: monday,
+      daysOff: [] as DayOff[],
+      bookedTimes: [],
+      from,
+      daysAhead: 2,
+      minLeadMinutes: 0,
+      timeZone: "America/New_York",
+    });
+  }
+
+  it("labels a slot with the wall clock and blocks it with the instant", () => {
+    // Sunday evening in Maryland is already Monday in UTC. The first day is still Sunday there.
+    const out = zoned(new Date("2026-09-14T01:00:00Z"));
+    expect(out.map((s) => `${s.date} ${s.time}`)).toEqual(["2026-09-14 08:00", "2026-09-14 09:00"]);
+
+    // The 8am slot means 12:00 UTC in September, so a booking at that instant takes it.
+    const withBooking = computeAvailableSlots({
+      evaluatorIds: [EVALUATOR],
+      weeklyAvailability: monday,
+      daysOff: [] as DayOff[],
+      bookedTimes: [{ evaluatorId: EVALUATOR, iso: "2026-09-14T12:00:00Z", endIso: "2026-09-14T13:00:00Z" }],
+      from: new Date("2026-09-14T01:00:00Z"),
+      daysAhead: 2,
+      minLeadMinutes: 0,
+      timeZone: "America/New_York",
+    });
+    expect(withBooking.map((s) => s.time)).toEqual(["09:00"]);
+  });
+
+  it("does not offer a slot that has already gone by on that clock", () => {
+    // 8:30am Monday in Maryland: the 8am slot is behind us, the 9am is not.
+    const out = zoned(new Date("2026-09-14T12:30:00Z"));
+    expect(out.map((s) => s.time)).toEqual(["09:00"]);
+  });
+});
+

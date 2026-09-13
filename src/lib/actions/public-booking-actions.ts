@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import { freeOf } from "@/lib/busy";
 import { tooSoon } from "@/lib/booking-notice";
+import { zonedToUtc } from "@/lib/time-zone";
 import { getBookingNotice } from "@/lib/data/public-booking";
 import { SLOT_MINUTES } from "@/lib/booking-availability";
 import { lookupPropertyDetails } from "@/lib/rentcast";
@@ -84,13 +85,17 @@ export async function submitPublicBooking(
   if (orgError) throw orgError;
   if (!org) throw new Error("This booking link isn't valid anymore.");
 
-  const evaluationDateTime = new Date(`${input.date}T${input.time}:00`);
-  if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
-  const iso = evaluationDateTime.toISOString();
-
   // The notice rule, checked at submit as well as when the times were drawn.
   // A page left open overnight offers a slot that was tomorrow and is today.
   const notice = await getBookingNotice(input.organizationId);
+
+  // "Monday at 8" is a wall clock on the business's zone. Written as the
+  // instant it means there, so every screen in every zone reads it back as
+  // Monday at 8. This used to be parsed on the server's own clock, which
+  // is UTC, and showed as four in the morning on every phone in Maryland.
+  const evaluationDateTime = zonedToUtc(input.date, input.time, notice.timeZone);
+  if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
+  const iso = evaluationDateTime.toISOString();
   const soon = tooSoon(notice, new Date(), { date: input.date, at: evaluationDateTime });
   if (soon) throw new Error(soon);
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { timeOnly } from "@/lib/time-zone";
 
 import { JOB_BUCKETS } from "@/lib/dashboard";
 import { SUBMIT_BLURBS, SUBMIT_LABELS, type ManagedJob, type SubmissionDue, type SubmitReason, type UpcomingEvaluation } from "@/lib/my-work";
@@ -15,8 +16,9 @@ function dayLabel(key: string): string {
   });
 }
 
+/** On the business clock: this renders on the server, whose clock is UTC. */
 function time(at: string): string {
-  return new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return timeOnly(at);
 }
 
 const EVAL_STATUS_LABELS: Record<string, string> = {

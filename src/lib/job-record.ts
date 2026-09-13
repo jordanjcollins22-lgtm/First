@@ -1,4 +1,5 @@
 import { PROPOSAL_TERMS, type ProposalTerm } from "@/lib/proposal-terms";
+import { BUSINESS_TIME_ZONE, timeOnly } from "@/lib/time-zone";
 import { expectationsFor, type Expectation } from "@/lib/expectations";
 import { groupByService } from "@/lib/service-grouping";
 
@@ -749,10 +750,11 @@ export function shortDay(iso: string): string {
 export function longWhen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
+  // The business clock: the record is built on the server, whose clock is UTC.
   return (
-    date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) +
+    new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(date) +
     " at " +
-    date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    timeOnly(date)
   );
 }
 
@@ -761,9 +763,9 @@ export function whenLine(iso: string): string {
   if (Number.isNaN(date.getTime())) return iso;
   if (iso.length === 10 || /T12:00:00$/.test(iso) || /T08:00:00$/.test(iso)) return shortDay(iso);
   return (
-    date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+    new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "short", day: "numeric", year: "numeric" }).format(date) +
     ", " +
-    date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    timeOnly(date)
   );
 }
 

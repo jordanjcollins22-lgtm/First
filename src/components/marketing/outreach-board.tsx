@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Pencil } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 import {
   bookingRate,
   clickRate,
@@ -531,9 +532,9 @@ function BookedPerson({ booking, via }: { booking: OutreachBooking; via: Outreac
   );
 }
 
-/** The visit, as the booking page wrote it: a wall-clock time carried in the UTC field. */
+/** The visit on the business clock. */
 function formatVisit(iso: string): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+  return new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 }
 
 /**

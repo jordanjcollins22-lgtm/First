@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parseAsBusinessTime } from "@/lib/time-zone";
 import { firstAcceptable } from "@/lib/geocode-guard";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { isSupabaseAdminConfigured } from "@/lib/env";
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
   }
   const { lat, lng, fullAddress } = checked.match;
 
-  const evaluationDate = startTimeRaw && !isNaN(Date.parse(startTimeRaw)) ? new Date(startTimeRaw).toISOString() : null;
+  // A start time with no offset on it is the business's wall clock, not UTC.
+  const parsedStart = startTimeRaw ? parseAsBusinessTime(startTimeRaw) : null;
+  const evaluationDate = parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart.toISOString() : null;
 
   const supabase = createAdminClient();
 

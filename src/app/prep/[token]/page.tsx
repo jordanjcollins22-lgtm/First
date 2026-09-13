@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { dayOnly, timeOnly } from "@/lib/time-zone";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { getIntakeByToken } from "@/lib/data/evaluation-intake";
@@ -58,10 +59,7 @@ export default async function PrepPage({
   );
 }
 
-/** The visit, read as the wall-clock time the booking page wrote. */
+/** The visit on the business clock, which is the client's clock too. */
 function sayWhen(iso: string): string {
-  const at = new Date(iso);
-  const day = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).format(at);
-  const time = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" }).format(at).toLowerCase();
-  return `${day} at ${time}`;
+  return `${dayOnly(iso)} at ${timeOnly(iso).toLowerCase()}`;
 }

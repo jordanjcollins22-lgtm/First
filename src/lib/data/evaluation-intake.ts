@@ -18,7 +18,7 @@ export interface PublicIntake extends Intake {
   businessPhone: string | null;
   clientFirstName: string | null;
   address: string | null;
-  /** The visit, as the booking page wrote it: a wall-clock time carried in the UTC field. */
+  /** The visit, as an instant. */
   evaluationAt: string | null;
   cancelled: boolean;
 }

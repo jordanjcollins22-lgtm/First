@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { shortWhen } from "@/lib/time-zone";
 import { CalendarDays, ExternalLink, Video } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
@@ -68,13 +69,7 @@ export default async function MyPage() {
               <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
                 {project.digital ? <Video className="h-4 w-4" /> : <CalendarDays className="h-4 w-4" />}
                 {project.digital ? "Video walkthrough" : "We come to you"} on{" "}
-                {new Date(project.evaluationAt).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
+                {shortWhen(project.evaluationAt)}
               </p>
             )}
 

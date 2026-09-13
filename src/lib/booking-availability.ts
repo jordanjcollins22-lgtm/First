@@ -1,4 +1,5 @@
 import { evaluationWindow, windowsOverlap, type Window } from "@/lib/scheduling";
+import { dateKeyIn, wallClockIn, zonedToUtc } from "@/lib/time-zone";
 import type { BusyBlock } from "@/lib/busy";
 import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
@@ -32,6 +33,16 @@ function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function toUtcDateKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM-DD" as a Date at UTC midnight, so date arithmetic never meets a clock change. */
+function parseDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 function addMinutes(d: Date, minutes: number): Date {
   return new Date(d.getTime() + minutes * 60000);
 }
@@ -58,6 +69,7 @@ export function computeAvailableSlots({
   slotMinutes = SLOT_MINUTES,
   minLeadMinutes = 60,
   firstDate,
+  timeZone,
 }: {
   evaluatorIds: string[];
   weeklyAvailability: WeeklyAvailability[];
@@ -84,6 +96,15 @@ export function computeAvailableSlots({
    * the search only has to honour it.
    */
   firstDate?: string;
+  /**
+   * The clock the evaluators' hours are written in.
+   *
+   * "Monday 08:00 to 17:00" is a wall clock in the business's zone, and the
+   * server working this out runs on UTC. With a zone, every slot is the
+   * real instant that wall-clock time means there. Without one the server's
+   * own clock is used, which is only right when the two happen to agree.
+   */
+  timeZone?: string;
 }): AvailableSlotGroup[] {
   const availabilityByEvaluator = new Map<string, WeeklyAvailability[]>();
   for (const a of weeklyAvailability) {
@@ -120,11 +141,18 @@ export function computeAvailableSlots({
   const earliestAllowed = addMinutes(from, minLeadMinutes);
   const groups = new Map<string, AvailableSlotGroup>();
 
+  // The first calendar day on the business's clock, then one day at a time.
+  // Days are walked as dates rather than as 24-hour steps so a clock change
+  // in the middle of the fortnight does not shift every slot after it.
+  const firstDay = timeZone ? parseDateKey(dateKeyIn(from, timeZone)) : new Date(from.getFullYear(), from.getMonth(), from.getDate());
+
   for (let offset = 0; offset < daysAhead; offset++) {
-    const day = new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset);
-    const dateKey = toDateKey(day);
+    const day = timeZone
+      ? new Date(Date.UTC(firstDay.getUTCFullYear(), firstDay.getUTCMonth(), firstDay.getUTCDate() + offset))
+      : new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + offset);
+    const dateKey = timeZone ? toUtcDateKey(day) : toDateKey(day);
     if (firstDate && dateKey < firstDate) continue;
-    const dow = day.getDay();
+    const dow = timeZone ? wallClockIn(zonedToUtc(dateKey, "12:00", timeZone), timeZone).weekday : day.getDay();
 
     for (const evaluatorId of evaluatorIds) {
       const windows = (availabilityByEvaluator.get(evaluatorId) ?? []).filter((a) => a.day_of_week === dow);
@@ -148,15 +176,16 @@ export function computeAvailableSlots({
           const overlapsTimeOff = partialOffRanges.some((r) => slotStart < r.end && slotEnd > r.start);
           if (overlapsTimeOff) continue;
 
-          const slotDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
-          const slotDateTime = addMinutes(slotDate, slotStart);
+          const timeLabel = `${String(Math.floor(slotStart / 60)).padStart(2, "0")}:${String(slotStart % 60).padStart(2, "0")}`;
+          const slotDateTime = timeZone
+            ? zonedToUtc(dateKey, timeLabel, timeZone)
+            : addMinutes(new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0), slotStart);
           if (slotDateTime < earliestAllowed) continue;
 
           const slotWindow = { start: slotDateTime, end: addMinutes(slotDateTime, slotMinutes) };
           const isBooked = (booked ?? []).some((b) => windowsOverlap(b, slotWindow));
           if (isBooked) continue;
 
-          const timeLabel = `${String(Math.floor(slotStart / 60)).padStart(2, "0")}:${String(slotStart % 60).padStart(2, "0")}`;
           const key = `${dateKey}T${timeLabel}`;
           const existing = groups.get(key);
           if (existing) {

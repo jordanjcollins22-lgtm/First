@@ -86,6 +86,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingTim
     // never inside its hours of notice.
     firstDate: firstBookableDate(notice, now),
     minLeadMinutes: minLeadMinutes(notice),
+    // The evaluators' hours are on the business's clock, not the server's.
+    timeZone: notice.timeZone,
   });
 
   const where = {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 
 import {
   BUCKET_LABEL,
@@ -12,7 +13,8 @@ function when(value: string | null): string {
   if (!value) return "No date";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "No date";
-  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  // The business's day, not the server's: an evening visit is still that day.
+  return new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, weekday: "short", month: "short", day: "numeric" }).format(date);
 }
 
 /**
