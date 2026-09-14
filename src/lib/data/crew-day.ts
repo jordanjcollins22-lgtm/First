@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { dateKeyIn } from "@/lib/time-zone";
 import { getCurrentProfile } from "@/lib/data/team";
 import type { CrewEvent, CrewEventKind, Stop } from "@/lib/crew-day";
 import { nextUp, type EarlyStartRequest, type UpcomingVisit } from "@/lib/early-start";
@@ -14,10 +15,14 @@ export interface CrewDayData {
   earlyStart: EarlyStartRequest | null;
 }
 
-/** Today where the crew is, not where the server is. */
+/**
+ * Today where the crew is, not where the server is.
+ *
+ * The server runs on UTC, where eight in the evening in Maryland is already
+ * tomorrow. The business clock decides what day it is.
+ */
 export function localDayKey(now: Date = new Date()): string {
-  const offset = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+  return dateKeyIn(now);
 }
 
 /**

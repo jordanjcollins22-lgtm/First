@@ -9,6 +9,9 @@ import { getLoadout } from "@/lib/data/loadout";
 import { leaveBlockedBy } from "@/lib/loadout";
 import { readDay } from "@/lib/crew-day";
 import { LoadoutPanel } from "@/components/crew/loadout-panel";
+import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
+import { getCrewsToday } from "@/lib/data/crews-today";
+import { dateKeyIn } from "@/lib/time-zone";
 import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
 import { pendingEarlyStarts } from "@/lib/data/early-start";
@@ -143,7 +146,7 @@ async function OfficeDay() {
   // round trips the page sat through end to end. Each still fails on its own:
   // a money table that is not set up costs the commission panel and nothing
   // else, which is why every one of them carries its own catch.
-  const [data, work, today, commission, earlyStarts, marketing, ops, calls] = await Promise.all([
+  const [data, work, today, commission, earlyStarts, marketing, ops, calls, crewsToday] = await Promise.all([
     getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
       console.error("My Day failed to load:", err);
       return null as DashboardData | null;
@@ -190,6 +193,11 @@ async function OfficeDay() {
           return null as CallList | null;
         })
       : Promise.resolve(null as CallList | null),
+    // Today's jobs, crews and load-outs, on the business clock.
+    getCrewsToday(dateKeyIn(new Date())).catch((err) => {
+      console.error("Crews today failed to load:", err);
+      return null;
+    }),
   ]);
 
   if (!data) {
@@ -217,6 +225,16 @@ async function OfficeDay() {
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <EarlyStartQueue requests={earlyStarts} />
+
+      {/* What is being done today, by whom, with what on the truck. The
+          same load-out the crew tick on their phones, so a wrong list is
+          caught here before it is discovered at the first stop. */}
+      {crewsToday && (
+        <CrewsTodayPanel
+          today={crewsToday}
+          showTicks={isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead")}
+        />
+      )}
 
       {/* Above everything else for an account manager: the money on the
           table, and who to ring about it. */}
