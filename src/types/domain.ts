@@ -894,6 +894,10 @@ export interface JobWorkSession {
   pause_reason: string | null;
   /** Set when the visit exists to work a ticket. */
   ticket_id: string | null;
+  /** What to load for this visit: kit numbers, loose tool ids, material names. */
+  kits: number[];
+  tool_ids: string[];
+  materials: string[];
   created_by: string | null;
   created_at: string;
   updated_at: string;

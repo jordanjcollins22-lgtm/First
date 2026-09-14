@@ -73,7 +73,10 @@ async function assignmentClash(
   const window = { start: new Date(`${startsOn}T00:00:00`), end: new Date(`${endsOn}T23:59:59`) };
   if (Number.isNaN(window.start.getTime()) || Number.isNaN(window.end.getTime())) return null;
 
-  const blocks = await getBusyBlocks().catch(() => []);
+  // Other work days are not a clash. One person works several jobs in a
+  // day and the stops are ordered; only an evaluation they are running or
+  // time off keeps them off a crew.
+  const blocks = (await getBusyBlocks().catch(() => [])).filter((b) => b.source !== "work_visit");
   const clash = conflictFor(blocks, profileId, window, jobId);
   if (!clash) return null;
 

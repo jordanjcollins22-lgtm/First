@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, CalendarPlus, Loader2, Pause, Play, Plus, Ticket, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Loader2, Package, Pause, Play, Plus, Ticket, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,8 @@ import {
   setWorkSessionStatus,
   updateTicketCause,
 } from "@/lib/actions/work-session-actions";
+import { setSessionBring } from "@/lib/actions/loadout-actions";
+import { bringSummary, type LoadoutTool } from "@/lib/loadout";
 import {
   SESSION_STATUS_LABELS,
   TICKET_CAUSE_LABELS,
@@ -58,9 +60,12 @@ export function VisitsPanel({
   canLogWork,
   canSeePay,
   allowTickets,
+  tools = [],
 }: {
   jobId: string;
   sessions: JobWorkSession[];
+  /** The active tools, so a visit can say which kits and loose tools to load. */
+  tools?: LoadoutTool[];
   /** Hours logged against this job, so each visit can show its own. */
   timeEntries: TimeEntry[];
   people: Person[];
@@ -115,6 +120,7 @@ export function VisitsPanel({
         people={people}
         canLogWork={canLogWork}
         canSeePay={canSeePay}
+        tools={tools}
         onResult={report}
       />
 
@@ -141,12 +147,14 @@ function SessionList({
   canLogWork,
   canSeePay,
   tickets,
+  tools,
   onResult,
 }: {
   jobId: string;
   sessions: JobWorkSession[];
   timeEntries: TimeEntry[];
   people: Person[];
+  tools: LoadoutTool[];
   canLogWork: boolean;
   canSeePay: boolean;
   tickets: JobTicket[];
@@ -181,6 +189,7 @@ function SessionList({
               canSeePay={canSeePay}
               key={session.id}
               session={session}
+              tools={tools}
               ticket={tickets.find((t) => t.id === session.ticket_id) ?? null}
               onResult={onResult}
             />
@@ -285,9 +294,11 @@ function SessionRow({
   people,
   canLogWork,
   canSeePay,
+  tools,
   onResult,
 }: {
   session: JobWorkSession;
+  tools: LoadoutTool[];
   ticket: JobTicket | null;
   timeEntries: TimeEntry[];
   people: Person[];
@@ -332,6 +343,10 @@ function SessionRow({
       </div>
 
       {session.purpose && <p className="text-xs text-muted-foreground">{session.purpose}</p>}
+
+      {session.status !== "cancelled" && session.status !== "done" && (
+        <BringEditor session={session} tools={tools} onResult={onResult} />
+      )}
 
       {ticket && (
         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-amber-800">
@@ -430,6 +445,133 @@ function SessionRow({
         canSeePay={canSeePay}
       />
     </li>
+  );
+}
+
+/**
+ * What to load for this visit.
+ *
+ * Kits by number, loose tools by name, materials as words. The crew's day
+ * screen adds every visit's list up into one shop load-out, so this is
+ * where the dolly gets onto the truck.
+ */
+function BringEditor({
+  session,
+  tools,
+  onResult,
+}: {
+  session: JobWorkSession;
+  tools: LoadoutTool[];
+  onResult: (r: { ok: boolean; message?: string }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [kits, setKits] = useState<number[]>(session.kits ?? []);
+  const [toolIds, setToolIds] = useState<string[]>(session.tool_ids ?? []);
+  const [materials, setMaterials] = useState((session.materials ?? []).join(", "));
+  const [isPending, startTransition] = useTransition();
+
+  const summary = bringSummary(
+    { kits: session.kits ?? [], toolIds: session.tool_ids ?? [], materials: session.materials ?? [] },
+    tools
+  );
+  const allKits = [...new Set([...tools.flatMap((t) => t.kits), ...kits])].sort((a, b) => a - b);
+  // Loose tools: the ones not in any kit. A tool in a kit comes with the kit.
+  const looseTools = tools.filter((t) => t.kits.length === 0 || toolIds.includes(t.id));
+
+  function toggle<T>(list: T[], value: T): T[] {
+    return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="mt-1 flex items-start gap-1 text-left text-xs text-muted-foreground hover:text-foreground"
+      >
+        <Package className="mt-0.5 h-3 w-3 shrink-0" />
+        <span>{summary ? `Bring: ${summary}` : "Say what to bring"}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-muted/20 p-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Bring</p>
+      {allKits.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {allKits.map((kit) => (
+            <Chip key={kit} on={kits.includes(kit)} onClick={() => setKits(toggle(kits, kit))} disabled={isPending}>
+              Kit {kit}
+            </Chip>
+          ))}
+        </div>
+      )}
+      {looseTools.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {looseTools.map((t) => (
+            <Chip key={t.id} on={toolIds.includes(t.id)} onClick={() => setToolIds(toggle(toolIds, t.id))} disabled={isPending}>
+              {t.name}
+            </Chip>
+          ))}
+        </div>
+      )}
+      <label className="mt-2 flex flex-col gap-1 text-xs font-medium">
+        Materials, comma separated
+        <Input value={materials} onChange={(e) => setMaterials(e.target.value)} placeholder="Grass seed, straw" />
+      </label>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="min-h-9"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await setSessionBring(session.id, {
+                kits,
+                toolIds,
+                materials: materials.split(",").map((m) => m.trim()).filter(Boolean),
+              });
+              onResult(result);
+              if (result.ok) setEditing(false);
+            })
+          }
+        >
+          {isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          Save
+        </Button>
+        <Button type="button" size="sm" variant="outline" className="min-h-9" disabled={isPending} onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Chip({
+  on,
+  onClick,
+  disabled,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      disabled={disabled}
+      className={`min-h-8 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+        on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-accent"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

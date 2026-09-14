@@ -5,6 +5,10 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
+import { getLoadout } from "@/lib/data/loadout";
+import { leaveBlockedBy } from "@/lib/loadout";
+import { readDay } from "@/lib/crew-day";
+import { LoadoutPanel } from "@/components/crew/loadout-panel";
 import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
 import { pendingEarlyStarts } from "@/lib/data/early-start";
@@ -380,8 +384,20 @@ async function CrewDay({ profile }: { profile: Profile }) {
   // somebody's recollection.
   const open = await myOpenEntry(profile.id).catch(() => null);
 
+  // The shop list: everything every stop needs, added up, ticked before the
+  // truck leaves. It sits above the board until they have left the shop and
+  // folds up after, because by then it is either on the truck or it is not.
+  const loadout = await getLoadout(profile.id, day.day).catch(() => null);
+  const phase = readDay(day.events, day.stops).phase;
+  const loading = phase === "before_shop" || phase === "at_shop";
+
   return (
     <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
+      {loadout && loading && (
+        <div className="mb-4">
+          <LoadoutPanel day={day.day} loadout={loadout} />
+        </div>
+      )}
       <ClockControl
         open={open}
         stops={day.stops.map((stop) => ({
@@ -394,7 +410,13 @@ async function CrewDay({ profile }: { profile: Profile }) {
         stops={day.stops}
         events={day.events}
         personName={profile.full_name || profile.email}
+        leaveBlockedBy={loadout ? leaveBlockedBy(loadout) : null}
       />
+      {loadout && !loading && phase !== "day_over" && (
+        <div className="mt-4">
+          <LoadoutPanel day={day.day} loadout={loadout} compact />
+        </div>
+      )}
       {/* Below the board, not above it: this is what to do with the hours
           left over once the board says the day is done. */}
       <div className="mt-4">

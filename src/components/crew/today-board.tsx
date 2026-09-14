@@ -24,10 +24,13 @@ export function TodayBoard({
   stops,
   events,
   personName,
+  leaveBlockedBy = null,
 }: {
   stops: Stop[];
   events: CrewEvent[];
   personName: string;
+  /** Why the truck cannot leave the shop yet: the load-out is not all ticked. */
+  leaveBlockedBy?: string | null;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -70,13 +73,16 @@ export function TodayBoard({
         {day.action && (
           <Button
             type="button"
-            disabled={isPending}
+            disabled={isPending || (day.action.kind === "left_shop" && Boolean(leaveBlockedBy))}
             onClick={() => press(day.action!.kind, day.action!.jobId)}
             className="mt-3 h-14 w-full text-base font-semibold"
           >
             {isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <IconFor kind={day.action.kind} />}
             {day.action.label}
           </Button>
+        )}
+        {day.action?.kind === "left_shop" && leaveBlockedBy && (
+          <p className="mt-2 text-sm font-medium text-amber-900">{leaveBlockedBy} Tick the load-out above first.</p>
         )}
 
         {error && <p className="mt-2 text-sm font-medium text-destructive">{error}</p>}

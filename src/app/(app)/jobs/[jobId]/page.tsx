@@ -170,6 +170,7 @@ export default async function JobPage({
     paymentPlans,
     jobTip,
     schedule,
+    bringTools,
     crew,
     teamProfiles,
     observerRows,
@@ -217,6 +218,19 @@ export default async function JobPage({
     })(),
     // Empty until migration 0080 runs, so the page still loads without it.
     getJobSchedule(jobId).catch(() => ({ sessions: [], tickets: [], walkthroughs: [] })),
+    // Empty when the tools table is missing; the visit just cannot name kits.
+    supabase
+      .from("tools")
+      .select("id, name, kits")
+      .eq("active", true)
+      .order("name")
+      .then(({ data }) =>
+        ((data ?? []) as { id: string; name: string; kits: number[] | null }[]).map((t) => ({
+          id: t.id,
+          name: t.name,
+          kits: t.kits ?? [],
+        }))
+      ),
     // Empty until migration 0083 runs; the page still loads without it.
     // Distinguishes "no crew yet" from "the table doesn't exist", so the panel
     // can tell somebody to run the migration instead of looking merely empty.
@@ -713,6 +727,7 @@ export default async function JobPage({
                 canSeePay={Boolean(viewer?.roles.includes("admin"))}
                 tickets={schedule.tickets}
                 allowTickets={can.tickets.available}
+                tools={bringTools}
               />
             ),
           },

@@ -30,9 +30,10 @@ function refresh(jobId: string) {
 /**
  * Whether anybody on this job's crew is already spoken for on those days.
  *
- * Reads every calendar, not just the visits one — somebody with an evaluation
+ * Reads the evaluation and time-off calendars — somebody with an evaluation
  * booked on Thursday morning cannot also be on a patio in Bel Air all
  * Thursday, and the two used to be booked in complete ignorance of each other.
+ * Other work days are not a clash: one person does three jobs in a day.
  *
  * The job's own bookings are ignored, so moving a visit does not trip over the
  * visit being moved.
@@ -56,7 +57,10 @@ async function crewClash(
   // before the crew is picked, and refusing that would be wrong.
   if (people.size === 0) return null;
 
-  const blocks = await getBusyBlocks().catch(() => []);
+  // Other work days are not a clash. One person works several jobs in a
+  // day and the stops are ordered; only an evaluation they are running or
+  // time off keeps them off a crew.
+  const blocks = (await getBusyBlocks().catch(() => [])).filter((b) => b.source !== "work_visit");
   for (const profileId of people) {
     const clash = conflictFor(blocks, profileId, window, jobId);
     if (!clash) continue;

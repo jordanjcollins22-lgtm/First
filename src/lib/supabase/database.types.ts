@@ -3242,6 +3242,9 @@ export interface Database {
           pause_reason: string | null;
           ticket_id: string | null;
           stop_order: number | null;
+          kits: number[];
+          tool_ids: string[];
+          materials: string[];
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -3376,6 +3379,26 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      loadout_checks: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          day: string;
+          item_kind: string;
+          item_key: string;
+          checked_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["loadout_checks"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          day: string;
+          item_kind: string;
+          item_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loadout_checks"]["Row"]>;
+        Relationships: [];
       };
       crew_day_events: {
         Row: {

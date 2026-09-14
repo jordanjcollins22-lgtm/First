@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getCrewDay } from "@/lib/data/crew-day";
+import { getLoadout } from "@/lib/data/loadout";
+import { leaveBlockedBy } from "@/lib/loadout";
 import { canRecord, type CrewEventKind } from "@/lib/crew-day";
 
 export type CrewDayResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -33,6 +35,13 @@ export async function recordCrewEvent(
 
     const verdict = canRecord(day.events, day.stops, kind, jobId);
     if (!verdict.ok) return { ok: false, message: verdict.reason };
+
+    // Nobody leaves the shop with the load-out half ticked. The screen
+    // greys the button; this is for the tap that got through anyway.
+    if (kind === "left_shop") {
+      const blocked = leaveBlockedBy(await getLoadout(profile.id, day.day));
+      if (blocked) return { ok: false, message: `${blocked} Tick the load-out first.` };
+    }
 
     const organizationId = await getCurrentOrganizationId();
     const supabase = await createClient();
