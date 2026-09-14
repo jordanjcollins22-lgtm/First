@@ -46,14 +46,12 @@ async function crewClash(
   const window = { start: new Date(`${startsOn}T00:00:00`), end: new Date(`${endsOn}T23:59:59`) };
   if (Number.isNaN(window.start.getTime()) || Number.isNaN(window.end.getTime())) return null;
 
-  const [{ data: crew }, { data: job }] = await Promise.all([
-    supabase.from("job_crew").select("profile_id").eq("job_id", jobId),
-    supabase.from("jobs").select("assigned_to").eq("id", jobId).maybeSingle(),
-  ]);
+  const { data: crew } = await supabase.from("job_crew").select("profile_id").eq("job_id", jobId);
 
+  // The crew, and only the crew. The person the job is assigned to is
+  // whoever manages it, and a manager does not go on site: they can be
+  // assigned to every job they look after without being busy on any of them.
   const people = new Set((crew ?? []).map((c) => (c as { profile_id: string }).profile_id));
-  const lead = (job as { assigned_to: string | null } | null)?.assigned_to;
-  if (lead) people.add(lead);
   // Nobody on it yet means nobody to double-book. Jobs are routinely booked
   // before the crew is picked, and refusing that would be wrong.
   if (people.size === 0) return null;

@@ -78,8 +78,9 @@ export async function loadBusyBlocks(client: Client): Promise<BusyBlock[]> {
     sessionRows as unknown as { id: string; job_id: string; starts_on: string; ends_on: string; status: string }[]
   ).map((s) => {
     const job = jobs.get(s.job_id);
+    // The crew on the day, not the person managing the job: a manager is
+    // assigned to every job they look after and is on site for none of them.
     const people = new Set(crewByJob.get(s.job_id) ?? []);
-    if (job?.assigned_to) people.add(job.assigned_to);
     return {
       jobId: s.job_id,
       profileIds: [...people],
