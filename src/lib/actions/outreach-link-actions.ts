@@ -10,6 +10,8 @@ import {
   checkComment,
   commentBrief,
   commentSystemPrompt,
+  replyBrief,
+  replySystemPrompt,
   finishComment,
   looksUsable,
 } from "@/lib/comment-prompt";
@@ -343,6 +345,11 @@ export async function draftCommentFromScreenshot(input: {
   note: string;
   /** How old the post is, from the reading. Decides the opener. */
   ageDays: number | null;
+  /**
+   * What carried the link. A direct message gets a reply to one person's
+   * message rather than a comment introducing the business to a room.
+   */
+  kind?: OutreachKind;
 }): Promise<CommentResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -389,6 +396,7 @@ export async function draftCommentFromScreenshot(input: {
       .map((row) => row.name)
       .filter(Boolean);
 
+    const isMessage = input.kind === "dm";
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
       model: "claude-opus-5",
@@ -397,14 +405,9 @@ export async function draftCommentFromScreenshot(input: {
       // Reading a screenshot and matching the service asked for is judgement,
       // not just writing, so this is worth more than the lowest setting.
       output_config: { effort: "medium" },
-      system: commentSystemPrompt(
-        organization.name,
-        {
-          own: ownServices,
-          partner: partnerServices,
-        },
-        profile.roles
-      ),
+      system: isMessage
+        ? replySystemPrompt(organization.name, { own: ownServices, partner: partnerServices }, profile.roles)
+        : commentSystemPrompt(organization.name, { own: ownServices, partner: partnerServices }, profile.roles),
       messages: [
         {
           role: "user",
@@ -412,14 +415,16 @@ export async function draftCommentFromScreenshot(input: {
             { type: "image", source: { type: "base64", media_type: type, data: base64 } },
             {
               type: "text",
-              text: commentBrief({
-                businessName: organization.name,
-                note: input.note,
-                where: input.groupName,
-                ageDays: input.ageDays,
-                ownServices,
-                partnerServices,
-              }),
+              text: isMessage
+                ? replyBrief({ note: input.note, ownServices, partnerServices })
+                : commentBrief({
+                    businessName: organization.name,
+                    note: input.note,
+                    where: input.groupName,
+                    ageDays: input.ageDays,
+                    ownServices,
+                    partnerServices,
+                  }),
             },
           ],
         },

@@ -255,6 +255,7 @@ export function OutreachForm() {
           groupName,
           note,
           ageDays,
+          kind,
         });
         setWriting(false);
         if (written.ok) {
@@ -283,11 +284,13 @@ export function OutreachForm() {
         {writing && (
           <div className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Reading the post and writing a comment for it…
+            {kind === "dm" ? "Reading the message and writing a reply…" : "Reading the post and writing a comment for it…"}
           </div>
         )}
 
-        {comment && <CopyBlock tone="Written for this post" text={comment} highlight />}
+        {comment && (
+          <CopyBlock tone={kind === "dm" ? "Reply written for this message" : "Written for this post"} text={comment} highlight />
+        )}
         {commentNote && <p className="text-xs text-muted-foreground">{commentNote}</p>}
 
         {(comment || commentNote || !writing) && (

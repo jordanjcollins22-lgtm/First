@@ -5,6 +5,8 @@ import {
   commentBrief,
   commentSystemPrompt,
   commenterIntro,
+  replyBrief,
+  replySystemPrompt,
   finishComment,
   LINK_MARKER,
   looksUsable,
@@ -260,5 +262,34 @@ describe("commenterIntro", () => {
 
   it("lets the owner win when somebody holds several roles", () => {
     expect(commenterIntro(["crew", "admin"], "JS")).toBe("I operate JS");
+  });
+});
+
+describe("the brief for a direct message", () => {
+  const prompt = replySystemPrompt("J's", { own: ["Mulching"] }, ["account manager"]);
+
+  it("replies to a person rather than introducing the business to a room", () => {
+    expect(prompt).toMatch(/replies to direct messages/i);
+    expect(prompt).toContain("thanks for reaching out");
+    expect(prompt).not.toMatch(/featured in the news/i);
+  });
+
+  it("asks for the address and why, and hands over the link", () => {
+    expect(prompt).toMatch(/exact address/i);
+    expect(prompt).toMatch(/discounted rate/i);
+    expect(prompt).toContain(LINK_MARKER);
+    expect(prompt).not.toContain("http");
+  });
+
+  it("keeps the same claims rules and the writer's own role", () => {
+    expect(prompt).toContain("Our own crew does exactly these and nothing else: Mulching.");
+    expect(prompt).toMatch(/never call j's licensed/i);
+    expect(prompt).toContain("I manage jobs at J's");
+    expect(prompt).toMatch(/no em dashes/i);
+  });
+
+  it("passes on what we know", () => {
+    expect(replyBrief({ note: "wants a patio", ownServices: ["Mulching"] })).toContain("wants a patio");
+    expect(replyBrief({ note: " " })).not.toContain("What we know");
   });
 });

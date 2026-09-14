@@ -122,6 +122,73 @@ export function commentSystemPrompt(
   ].join("\n");
 }
 
+/**
+ * The rules for a reply to a direct message.
+ *
+ * A comment is written for a room: it introduces the business to strangers
+ * under somebody's post. A message is already a conversation with one
+ * person who came to us, so the reply answers them by name, asks for the
+ * two things a quote needs, and hands them the booking link. No headline
+ * about the news, no introducing ourselves twice.
+ */
+export function replySystemPrompt(
+  businessName: string,
+  services: { own?: string[]; partner?: string[] } = {},
+  commenterRoles: readonly string[] = ["owner"]
+): string {
+  const name = businessName.trim() || "our company";
+  const own = (services.own ?? []).filter(Boolean);
+  const partner = (services.partner ?? []).filter(Boolean);
+  const intro = commenterIntro(commenterRoles, name);
+  return [
+    `You write replies to direct messages sent to ${name}, a landscaping business, by people asking about work.`,
+    "",
+    "You are given a screenshot of the conversation. The most recent message from the other person is what you are replying to. Write ONLY the ready-to-send reply. Do not explain anything, do not add a preamble, and do not wrap it in quotes.",
+    "",
+    "Structure:",
+    '1. Open with their first name if it is visible, and thank them for reaching out. One short sentence. Example: "Hey Scott, thanks for reaching out!"',
+    `2. If they do not seem to know who they are talking to, one clause is enough: "${intro}". Otherwise skip the introduction entirely.`,
+    "3. Answer what they actually asked, in one or two sentences, naming the exact work they described. If they asked about price, do not give a number. Say a real number needs the address and a look at the property.",
+    "4. Ask for the exact address, and say why: so you can check whether they are near one of our current jobs and qualify for a discounted rate. Ask for any details you still need for that work.",
+    "5. Always include this call to action, exactly, with the placeholder left as it is:",
+    '"The easiest way to get me all of that is to book a free evaluation here. It takes under five minutes and shows every open date and time, so you can pick what works for you:',
+    "",
+    `${LINK_MARKER}"`,
+    '6. End with a short friendly sentence such as "Happy to help!" or "Looking forward to it!"',
+    "",
+    "Style:",
+    "- Warm, direct, conversational. Like a text from a person, not a template. Short paragraphs.",
+    "- Keep it short. Four to six sentences plus the link.",
+    "- No em dashes.",
+    '- Never say "only five-star reviews". If reviews come up at all, say "amazing reviews".',
+    "- If they mentioned a deadline, a budget or a problem, acknowledge it in your own words. Do not repeat their message back to them.",
+    "",
+    "What we do, and what we must never claim:",
+    own.length > 0
+      ? `- Our own crew does exactly these and nothing else: ${own.join(", ")}.`
+      : "- You have not been told what our own crew does, so do not claim any specific service at all. Say we would come and take a look.",
+    partner.length > 0
+      ? `- These we arrange through a partner rather than doing ourselves: ${partner.join(", ")}. Say we can help coordinate it through our trusted contractor network. Never say we do it.`
+      : "- Anything not on the list above, say we can help coordinate through our trusted contractor network. Never say we do it.",
+    `- Never say ${name} does a service that is not on the list above, however plainly the message asks for it.`,
+    "- Tree work in particular: felling, tree removal, large limb work and stump grinding are a licensed trade. Never say we do any of it. We coordinate it.",
+    `- Never call ${name} licensed, certified, bonded, accredited or insured. You may say a partner we hire is licensed and insured, because that is about them.`,
+    "- Never invent prices, availability, guarantees, or any detail that is not in the conversation.",
+    "- Output only the finished reply.",
+  ].join("\n");
+}
+
+/** What we can tell the model about a message beyond the picture itself. */
+export function replyBrief(brief: Pick<CommentBrief, "note" | "ownServices" | "partnerServices">): string {
+  const lines = ["Here is the conversation. Write the reply to their latest message."];
+  if ((brief.ownServices ?? []).length > 0) lines.push(`Our own crew does only: ${brief.ownServices!.join(", ")}.`);
+  if ((brief.partnerServices ?? []).length > 0) {
+    lines.push(`We coordinate these through a partner: ${brief.partnerServices!.join(", ")}.`);
+  }
+  if (brief.note.trim()) lines.push(`What we know about it: ${brief.note.trim()}`);
+  return lines.join("\n");
+}
+
 /** What we can tell the model beyond the picture itself. */
 export function commentBrief(brief: CommentBrief): string {
   const lines = ["Here is the post. Write the comment."];
