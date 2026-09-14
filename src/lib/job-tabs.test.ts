@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { JOB_TABS, sectionsForTab, tabOfSection, unplacedSections } from "./job-tabs";
+import { JOB_TABS, sectionsForTab, sectionVisibleAtStage, tabOfSection, tabVisibleAtStage, unplacedSections } from "./job-tabs";
 
 // The panels the job page renders today. If one is added or renamed, the
 // last test here fails rather than the panel quietly vanishing from the page.
@@ -57,3 +57,31 @@ describe("what a heading shows", () => {
     expect(sectionsForTab(LIVE_SECTIONS, "field")).toEqual([]);
   });
 });
+
+describe("what a job shows at each stage", () => {
+  it("shows a booked evaluation only what an evaluation needs", () => {
+    const visible = JOB_TABS.map((tab) => tab.key).filter((key) => tabVisibleAtStage("evaluation", key));
+    expect(visible).toEqual(["overview", "field", "site", "scope", "plan", "photos", "messages"]);
+    // The schedule panel stays, because that is where the visit is moved or cancelled.
+    expect(sectionVisibleAtStage("evaluation", "schedule")).toBe(true);
+    for (const id of ["proposal", "read", "visits", "crew", "payment", "invoice", "walkthrough", "review", "marketing"]) {
+      expect(sectionVisibleAtStage("evaluation", id), id).toBe(false);
+    }
+  });
+
+  it("opens pricing once the evaluation is in, and the rest once it is sold and underway", () => {
+    expect(sectionVisibleAtStage("pricing", "proposal")).toBe(true);
+    expect(tabVisibleAtStage("pricing", "billing")).toBe(false);
+    expect(tabVisibleAtStage("scheduled", "billing")).toBe(true);
+    expect(tabVisibleAtStage("scheduled", "closeout")).toBe(false);
+    expect(tabVisibleAtStage("working", "closeout")).toBe(true);
+    expect(JOB_TABS.every((tab) => tabVisibleAtStage("done", tab.key))).toBe(true);
+  });
+
+  it("places every live panel at some stage, so none can be added and lost", () => {
+    for (const { id } of LIVE_SECTIONS) {
+      expect(sectionVisibleAtStage("done", id), id).toBe(true);
+    }
+  });
+});
+

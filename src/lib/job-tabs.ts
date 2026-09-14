@@ -10,6 +10,8 @@
  * says only which heading each one lives under.
  */
 
+import type { JobStage } from "@/lib/job-stage";
+
 export type JobTabKey =
   | "overview"
   | "field"
@@ -74,3 +76,46 @@ export function sectionsForTab<T extends { id: string }>(sections: readonly T[],
 export function unplacedSections<T extends { id: string }>(sections: readonly T[]): string[] {
   return sections.filter((section) => !TAB_OF.has(section.id)).map((section) => section.id);
 }
+
+/**
+ * What the page shows at each stage, and nothing else.
+ *
+ * A booked evaluation used to open onto every heading the job will ever
+ * have, with the ones it could not use yet shown as locked rows. That is
+ * fifteen things on a phone for a visit that has one job: go and look at
+ * it. So a heading or a panel that cannot be used yet is not shown at all.
+ * The stage strip at the top still says what comes after.
+ *
+ * Nothing past the evaluation is available until the evaluation is
+ * submitted. Nothing past the sale is available until it is sold. Work
+ * and closeout open once the crew are on it.
+ */
+const SECTIONS_AT_STAGE: Record<JobStage, readonly string[]> = {
+  evaluation: ["map", "request", "schedule", "photos", "messages"],
+  cancelled: ["map", "request", "schedule", "photos", "messages"],
+  pricing: ["map", "request", "proposal", "read", "schedule", "photos", "messages"],
+  scheduled: ["map", "request", "proposal", "read", "schedule", "visits", "crew", "photos", "payment", "invoice", "messages"],
+  working: ["map", "request", "proposal", "read", "schedule", "visits", "crew", "photos", "review", "marketing", "payment", "invoice", "messages", "walkthrough"],
+  done: ["map", "request", "proposal", "read", "schedule", "visits", "crew", "photos", "review", "marketing", "payment", "invoice", "messages", "walkthrough"],
+};
+
+/** The headings with no panels of their own that still depend on the stage. */
+const OWN_TABS_AT_STAGE: Record<JobStage, readonly JobTabKey[]> = {
+  evaluation: ["overview", "field"],
+  cancelled: ["overview", "field"],
+  pricing: ["overview", "field", "issues"],
+  scheduled: ["overview", "field", "issues"],
+  working: ["overview", "field", "issues", "closeout"],
+  done: ["overview", "field", "issues", "closeout"],
+};
+
+export function sectionVisibleAtStage(stage: JobStage, id: string): boolean {
+  return SECTIONS_AT_STAGE[stage].includes(id);
+}
+
+export function tabVisibleAtStage(stage: JobStage, key: JobTabKey): boolean {
+  if (OWN_TABS_AT_STAGE[stage].includes(key)) return true;
+  const own = JOB_TABS.find((tab) => tab.key === key)?.sections ?? [];
+  return own.some((id) => sectionVisibleAtStage(stage, id));
+}
+
