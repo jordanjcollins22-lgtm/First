@@ -156,7 +156,7 @@ function StopCallout({ stop, phase }: { stop: Stop; phase: string }) {
           className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium"
         >
           <MapPin className="h-4 w-4" />
-          The job
+          Site map
         </Link>
       </div>
     </div>
@@ -204,7 +204,15 @@ function StopRow({
       </div>
 
       {/* Always tappable, even when it isn't the current stop — "show me which
-          house that was" is a fair question about any of them. */}
+          house that was" and "what am I doing there" are fair questions about
+          any of them. The job opens as the crew sheet: site map, scope, photos. */}
+      <Link
+        href={`/jobs/${stop.jobId}`}
+        aria-label={`Site map and sheet for ${stop.address}`}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border"
+      >
+        <MapPin className="h-4 w-4" />
+      </Link>
       <Link
         href={directionsUrl(stop)}
         aria-label={`Directions to ${stop.address}`}
