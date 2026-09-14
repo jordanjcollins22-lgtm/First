@@ -1,6 +1,7 @@
 import { CalendarDays } from "lucide-react";
 
 import type { JobWithLocation } from "@/lib/data/jobs";
+import { dateKeyIn } from "@/lib/time-zone";
 
 /** A job is "on the crew's calendar" when it has project dates — the window
  * between starting and expecting to finish. Anything already completed or
@@ -36,7 +37,7 @@ export function JobSchedulePanel({ jobs }: { jobs: JobWithLocation[] }) {
 
   if (scheduled.length === 0) return null;
 
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = dateKeyIn(new Date());
 
   return (
     <section className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">

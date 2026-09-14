@@ -1,13 +1,14 @@
 import Link from "next/link";
 
 import { activityHeadline, type ActivityItem } from "@/lib/activity";
+import { timeOnly, weekdayDate } from "@/lib/time-zone";
 
 function time(at: string): string {
-  return new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return timeOnly(at);
 }
 
 function day(at: string): string {
-  return new Date(at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return weekdayDate(at);
 }
 
 /**

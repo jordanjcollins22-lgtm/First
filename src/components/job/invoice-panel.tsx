@@ -2,6 +2,7 @@ import { Check, ExternalLink } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { Invoice } from "@/types/domain";
+import { dateShort } from "@/lib/time-zone";
 
 const STATUS_LABEL: Record<string, string> = {
   open: "Sent — awaiting payment",
@@ -18,7 +19,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return dateShort(iso);
 }
 
 /** Read-only summary of the Stripe invoice sent automatically once the

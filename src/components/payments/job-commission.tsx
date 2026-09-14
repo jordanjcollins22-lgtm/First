@@ -1,5 +1,6 @@
 import { STATE_LABELS } from "@/lib/commission";
 import type { JobCommission } from "@/lib/data/commission";
+import { dateShort } from "@/lib/time-zone";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -60,7 +61,7 @@ export function JobCommissionPanel({ commission }: { commission: JobCommission }
           {payouts.map((payout) => (
             <li key={payout.id} className="flex items-baseline justify-between gap-2 text-[11px]">
               <span className="text-muted-foreground">
-                Paid {new Date(payout.paidAt).toLocaleDateString()}
+                Paid {dateShort(payout.paidAt)}
                 {payout.reference ? ` · ${payout.reference}` : ""}
               </span>
               <span className="shrink-0 tabular-nums">{money(payout.amount)}</span>

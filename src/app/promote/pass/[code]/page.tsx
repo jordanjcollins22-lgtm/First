@@ -1,5 +1,6 @@
 import { passByCode } from "@/lib/actions/public-group-pass-actions";
 import { isSupabaseConfigured } from "@/lib/env";
+import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 
 /**
  * The business's own pass.
@@ -22,7 +23,7 @@ export default async function GroupPassPage({
 
   const paid = pass.status === "paid" || pass.status === "used";
   const expires = pass.expiresAt
-    ? new Date(pass.expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric" })
+    ? new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "long", day: "numeric" }).format(new Date(pass.expiresAt))
     : null;
 
   return (

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { intakeHeadline, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { intakePath } from "@/lib/data/evaluation-intake";
+import { dateShort } from "@/lib/time-zone";
 
 /**
  * What the client told us before the visit, for whoever is walking it.
@@ -43,7 +44,7 @@ export function IntakeSummary({
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-xs text-muted-foreground">
         {submittedBy === "together" ? "Gathered at the door" : "Sent ahead by the client"} on{" "}
-        {new Date(submittedAt).toLocaleDateString()}.{" "}
+        {dateShort(submittedAt)}.{" "}
         <Link href={intakePath(token, true)} className="text-primary underline underline-offset-2">
           Change an answer
         </Link>

@@ -1,7 +1,8 @@
 import type { AuditEvent, CrewAssignment } from "@/lib/data/exceptions";
+import { monthDayTime } from "@/lib/time-zone";
 
 function when(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return monthDayTime(iso);
 }
 
 /**

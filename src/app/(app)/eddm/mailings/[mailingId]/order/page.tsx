@@ -5,6 +5,7 @@ import { getEddmMailing } from "@/lib/data/eddm";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { bundlesFor, EDDM_MAX_PER_ZIP_PER_DAY, EDDM_MIN_PER_ZIP, piecesFor } from "@/lib/eddm-mailing";
 import { PrintButton } from "@/components/eddm/print-button";
+import { dateShort } from "@/lib/time-zone";
 
 /**
  * The order package for one EDDM mailing: everything USPS asks for, on paper.
@@ -33,7 +34,7 @@ export default async function EddmOrderPage({ params }: { params: Promise<{ mail
           : null
     )
     .filter((p): p is string => Boolean(p));
-  const today = new Date().toLocaleDateString();
+  const today = dateShort(new Date());
   const totalBundles = mailing.routes.reduce((sum, r) => sum + bundlesFor(piecesFor(r, mailing.audience)).length, 0);
 
   return (

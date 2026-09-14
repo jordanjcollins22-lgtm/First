@@ -1,6 +1,7 @@
 import { Eye, MousePointerClick } from "lucide-react";
 
 import { describeSeconds, type AttentionSummary, type Sitting } from "@/lib/proposal-attention";
+import { monthDayTime } from "@/lib/time-zone";
 
 /**
  * What the client read, and when.
@@ -148,12 +149,7 @@ const ACTION_LABEL: Record<string, string> = {
 
 /** A real clock time, because "2 hours ago" cannot answer "when did they look". */
 function when(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  // On the business clock. The server runs on UTC, and "6:41 PM" for a
+  // page opened at 2:41 in Bel Air is the wrong answer to "when did they look".
+  return monthDayTime(iso);
 }

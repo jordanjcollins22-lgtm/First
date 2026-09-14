@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ShieldAlert, X } from "lucide-react";
 
 import { GATE_LABEL, readinessLine, type GateKey, type GateResult } from "@/lib/readiness";
 import { OverrideControl } from "@/components/readiness/override-control";
+import { monthDayTime } from "@/lib/time-zone";
 
 /**
  * Why a job is not ready, in the words of the checks themselves.
@@ -68,12 +69,7 @@ export function ReadinessPanel({
                     <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
                     <span>
                       Still failing. Let past by <strong>{check.override.byName ?? "a manager"}</strong> on{" "}
-                      {new Date(check.override.at).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {monthDayTime(check.override.at)}
                       : {check.override.reason}
                     </span>
                   </p>
