@@ -16,6 +16,11 @@ export interface SendInput {
    * invoice — mail somebody asked for. Marketing is everything sent to a list.
    */
   stream: MailStream;
+  /**
+   * The id of the message this one continues. Sent as In-Reply-To and
+   * References so the client's mail app shows the sequence as one thread.
+   */
+  inReplyTo?: string | null;
 }
 
 /**
@@ -76,6 +81,7 @@ export async function sendEmail(input: SendInput): Promise<SendResult> {
     subject: input.subject,
     html: input.html,
     text: input.text,
+    headers: input.inReplyTo ? { "In-Reply-To": asMessageId(input.inReplyTo), References: asMessageId(input.inReplyTo) } : undefined,
     // Replies go to a mailbox somebody reads. The sending subdomain exists to
     // protect reputation, not to be somewhere anybody looks.
     replyTo: sender.reply_to,
@@ -85,4 +91,9 @@ export async function sendEmail(input: SendInput): Promise<SendResult> {
     log.error("email.failed", undefined, { organizationId: input.organizationId, stream: input.stream, to: to.map(maskEmail), message: result.message });
   }
   return result.ok ? { ok: true, id: result.data.id } : result;
+}
+
+/** A bare id becomes a Message-ID; one already in angle brackets is left alone. */
+function asMessageId(id: string): string {
+  return id.startsWith("<") ? id : `<${id}>`;
 }

@@ -152,6 +152,8 @@ export interface SendEmailInput {
   html: string;
   text?: string;
   replyTo?: string | null;
+  /** Extra headers, for threading a sequence under its first message. */
+  headers?: Record<string, string>;
 }
 
 /** Send one message. Returns the provider's id for it. */
@@ -165,6 +167,7 @@ export async function sendProviderEmail(input: SendEmailInput): Promise<ResendRe
       html: input.html,
       text: input.text,
       reply_to: input.replyTo ?? undefined,
+      headers: input.headers,
     },
   });
 }

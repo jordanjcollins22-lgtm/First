@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
-import { isGmailConfigured, sendGmail } from "@/lib/email/gmail";
+import { outboundReady, sendOutbound } from "@/lib/email/outbound";
 import { personOpenTime, sellingTeam } from "@/lib/data/open-time";
 import { blockLabel, describePlay, minutesLabel, playFor, verdictLabel } from "@/lib/open-time";
 import { dateKeyIn } from "@/lib/time-zone";
@@ -20,14 +20,17 @@ export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   const refused = authorizeCron(request, "team-reminders");
   if (refused) return refused;
-  if (!isGmailConfigured) return NextResponse.json({ ok: false, skipped: "Gmail sending is not set up." });
-
   const admin = createAdminClient();
   const day = dateKeyIn(new Date());
   const { data: orgs } = await admin.from("organizations").select("id, name, public_base_url");
   const counts = { sent: 0, skipped: 0, failed: 0 };
 
   for (const org of orgs ?? []) {
+    const can = await outboundReady(org.id);
+    if (!can.ready) {
+      log.warn("team.reminder.not_ready", { organizationId: org.id, why: can.why });
+      continue;
+    }
     const team = await sellingTeam(admin, org.id);
     for (const person of team) {
       if (!person.email) continue;
@@ -64,7 +67,8 @@ export async function GET(request: NextRequest) {
       );
       lines.push("", `Start here: ${base}/admin/outreach`, "", org.name);
 
-      const sent = await sendGmail({
+      const sent = await sendOutbound({
+        organizationId: org.id,
         to: person.email,
         toName: person.name,
         subject: me.score.openMinutes > 0 ? `Today: ${minutesLabel(me.score.openMinutes)} open to book the next jobs` : "Today: booked solid",
@@ -72,7 +76,7 @@ export async function GET(request: NextRequest) {
         fromName: org.name,
       });
       if (sent.ok) {
-        await admin.from("team_reminder_log").insert({ organization_id: org.id, profile_id: person.id, day, kind: "open_time", detail: sent.messageId });
+        await admin.from("team_reminder_log").insert({ organization_id: org.id, profile_id: person.id, day, kind: "open_time", detail: `${sent.via}:${sent.id}` });
         counts.sent += 1;
         log.info("team.reminder.sent", { profileId: person.id, to: maskEmail(person.email), day });
       } else {
