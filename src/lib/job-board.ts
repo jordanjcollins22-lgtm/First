@@ -30,6 +30,8 @@ export interface BoardJob {
   /** Start of the work, or the evaluation that is still standing in for it. */
   startsOn: string | null;
   completedAt: string | null;
+  /** Somebody said this is not going ahead, whatever the status still says. */
+  declined?: boolean;
 }
 
 /**
@@ -38,7 +40,12 @@ export interface BoardJob {
  * Read off the status rather than stored, so a job cannot be in two views or
  * in none because somebody forgot to move it.
  */
-export function viewOf(status: string): JobView | null {
+export function viewOf(status: string, declined = false): JobView | null {
+  // A declined job is not upcoming work, however it was declined and
+  // whatever status it was left with. One sat in Upcoming for four days
+  // after being marked declined on the board, because only the status was
+  // read here.
+  if (declined && status !== "completed") return null;
   switch (status) {
     case "approved":
       return "upcoming";
@@ -54,14 +61,14 @@ export function viewOf(status: string): JobView | null {
 }
 
 export function jobsInView(jobs: readonly BoardJob[], view: JobView): BoardJob[] {
-  return jobs.filter((job) => viewOf(job.status) === view);
+  return jobs.filter((job) => viewOf(job.status, job.declined) === view);
 }
 
 /** How many are in each view, for the tab labels. */
 export function viewCounts(jobs: readonly BoardJob[]): Record<JobView, number> {
   const counts: Record<JobView, number> = { upcoming: 0, active: 0, completed: 0 };
   for (const job of jobs) {
-    const view = viewOf(job.status);
+    const view = viewOf(job.status, job.declined);
     if (view) counts[view] += 1;
   }
   return counts;

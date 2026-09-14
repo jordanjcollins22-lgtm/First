@@ -96,6 +96,9 @@ export async function moveJobOnPipeline(
         declined_by: declining ? profile.id : null,
         declined_reason: declining ? note?.trim() || null : null,
         ...(finishing ? { status: "completed", completed_at: now, completed_by: profile.id } : {}),
+        // A declined job cannot stay "approved": the jobs list and the
+        // schedule read that word and go on treating it as work to do.
+        ...(declining && job.status === "approved" ? { status: "quoted" } : {}),
       })
       .eq("id", jobId);
     if (saveError) return { ok: false, message: saveError.message };

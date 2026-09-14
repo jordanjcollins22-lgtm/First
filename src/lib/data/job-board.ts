@@ -9,6 +9,7 @@ interface Row {
   project_start_date: string | null;
   evaluation_date: string | null;
   completed_at: string | null;
+  declined_at?: string | null;
   properties: { address: string | null; customers: { name: string | null } | null } | null;
   profiles: { full_name: string | null; email: string | null } | null;
 }
@@ -27,7 +28,7 @@ export async function listBoardJobs(): Promise<BoardJob[]> {
   const { data, error } = await supabase
     .from("jobs")
     .select(
-      "id, job_number, name, status, project_start_date, evaluation_date, completed_at, " +
+      "id, job_number, name, status, project_start_date, evaluation_date, completed_at, declined_at, " +
         "properties!inner(address, customers(name)), profiles!jobs_assigned_to_fkey(full_name, email)"
     )
     .in("status", ["approved", "in_progress", "completed"])
@@ -43,6 +44,7 @@ export async function listBoardJobs(): Promise<BoardJob[]> {
     customerName: row.properties?.customers?.name ?? null,
     assignedToName: row.profiles?.full_name || row.profiles?.email || null,
     startsOn: row.project_start_date ?? row.evaluation_date ?? null,
+    declined: Boolean(row.declined_at),
     completedAt: row.completed_at,
   }));
 }

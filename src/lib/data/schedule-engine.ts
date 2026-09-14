@@ -85,6 +85,7 @@ export async function scheduleSuggestions(): Promise<EngineOutput> {
           "job_proposals(client_chosen_day, status)"
       )
       .eq("status", "approved")
+      .is("declined_at", null)
       .limit(200)
       .then((r) => r.data ?? []),
     supabase

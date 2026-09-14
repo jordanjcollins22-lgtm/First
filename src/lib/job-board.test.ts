@@ -18,6 +18,9 @@ const job = (over: Partial<BoardJob>): BoardJob => ({
 describe("which view a job is in", () => {
   it("calls sold work upcoming, work in hand active, and finished work completed", () => {
     expect(viewOf("approved")).toBe("upcoming");
+    // Declined on the board while the status still said approved: not upcoming.
+    expect(viewOf("approved", true)).toBeNull();
+    expect(viewOf("completed", true)).toBe("completed");
     expect(viewOf("in_progress")).toBe("active");
     expect(viewOf("completed")).toBe("completed");
   });
