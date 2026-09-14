@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { JOB_TABS, sectionsForTab, sectionVisibleAtStage, tabOfSection, tabVisibleAtStage, unplacedSections } from "./job-tabs";
+import { canonicalTab, JOB_TABS, sectionsForTab, sectionVisibleAtStage, tabOfSection, tabVisibleAtStage, unplacedSections } from "./job-tabs";
 
 // The panels the job page renders today. If one is added or renamed, the
 // last test here fails rather than the panel quietly vanishing from the page.
@@ -21,10 +21,15 @@ const LIVE_SECTIONS = [
 ].map((id) => ({ id }));
 
 describe("the job's headings", () => {
-  it("is the ten the brief asks for", () => {
-    expect(JOB_TABS).toHaveLength(10);
-    expect(JOB_TABS[0].key).toBe("overview");
-    expect(JOB_TABS[1].key).toBe("field");
+  it("is six headings, with the work itself under one of them", () => {
+    expect(JOB_TABS.map((tab) => tab.key)).toEqual(["overview", "job", "photos", "messages", "billing", "closeout"]);
+  });
+
+  it("sends the old heading names to where their panels went", () => {
+    for (const old of ["field", "site", "scope", "plan", "issues"]) expect(canonicalTab(old)).toBe("job");
+    expect(canonicalTab("photos")).toBe("photos");
+    expect(canonicalTab("nonsense")).toBeUndefined();
+    expect(canonicalTab(undefined)).toBeUndefined();
   });
 
   it("never puts a panel under two headings", () => {
@@ -37,7 +42,7 @@ describe("the job's headings", () => {
   });
 
   it("knows which heading a panel is under", () => {
-    expect(tabOfSection("map")).toBe("site");
+    expect(tabOfSection("map")).toBe("job");
     expect(tabOfSection("invoice")).toBe("billing");
     expect(tabOfSection("nonsense")).toBeNull();
   });
@@ -45,7 +50,7 @@ describe("the job's headings", () => {
 
 describe("what a heading shows", () => {
   it("lists its panels in the order the heading gives, not the page's", () => {
-    expect(sectionsForTab(LIVE_SECTIONS, "plan").map((s) => s.id)).toEqual(["schedule", "crew", "visits"]);
+    expect(sectionsForTab(LIVE_SECTIONS, "job").map((s) => s.id)).toEqual(["map", "request", "proposal", "schedule", "visits", "crew"]);
   });
 
   it("leaves out a panel the page did not render, rather than showing a hole", () => {
@@ -54,14 +59,13 @@ describe("what a heading shows", () => {
 
   it("is empty for the headings that are their own screen", () => {
     expect(sectionsForTab(LIVE_SECTIONS, "overview")).toEqual([]);
-    expect(sectionsForTab(LIVE_SECTIONS, "field")).toEqual([]);
   });
 });
 
 describe("what a job shows at each stage", () => {
   it("shows a booked evaluation only what an evaluation needs", () => {
     const visible = JOB_TABS.map((tab) => tab.key).filter((key) => tabVisibleAtStage("evaluation", key));
-    expect(visible).toEqual(["overview", "field", "site", "scope", "plan", "photos", "messages"]);
+    expect(visible).toEqual(["overview", "job", "photos", "messages"]);
     // The schedule panel stays, because that is where the visit is moved or cancelled.
     expect(sectionVisibleAtStage("evaluation", "schedule")).toBe(true);
     for (const id of ["proposal", "read", "visits", "crew", "payment", "invoice", "walkthrough", "review", "marketing"]) {

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { isSupabaseConfigured } from "@/lib/env";
+import { env, isFacebookConfigured, isSupabaseConfigured } from "@/lib/env";
 import { checkTabAccess } from "@/lib/data/access";
 import {
   listJobsMissingBeforeAfter,
@@ -22,5 +22,9 @@ export default async function SocialPage() {
     listJobsMissingBeforeAfter().catch(() => []),
   ]);
 
-  return <SocialStudio candidates={candidates} posts={posts} missing={missing} />;
+  const publishesTo = [
+    ...(isFacebookConfigured ? ["Facebook"] : []),
+    ...(env.socialWebhookUrl ? ["the posting hand-off"] : []),
+  ];
+  return <SocialStudio candidates={candidates} posts={posts} missing={missing} publishesTo={publishesTo} />;
 }

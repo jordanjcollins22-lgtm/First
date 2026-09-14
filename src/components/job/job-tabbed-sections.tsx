@@ -1,6 +1,6 @@
 "use client";
 
-import { JOB_TABS, sectionsForTab, sectionVisibleAtStage, tabVisibleAtStage, type JobTabKey } from "@/lib/job-tabs";
+import { issuesVisibleAtStage, JOB_TABS, sectionsForTab, sectionVisibleAtStage, tabVisibleAtStage, type JobTabKey } from "@/lib/job-tabs";
 import type { JobStage } from "@/lib/job-stage";
 import { JobSections, type JobSection } from "@/components/job/job-sections";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
@@ -38,30 +38,37 @@ export function JobTabbedSections({
   /** Where the job is. Without it, everything the viewer may see is shown. */
   stage?: JobStage;
 }) {
-  const own: Partial<Record<JobTabKey, React.ReactNode>> = {
+  // The field screen sits at the top of Job and the issues list under its
+  // panels: what is happening on site first, the paperwork, then what went
+  // wrong with it.
+  const above: Partial<Record<JobTabKey, React.ReactNode>> = {
     overview,
-    field,
-    issues,
+    job: field,
     ...(closeout ? { closeout } : {}),
+  };
+  const below: Partial<Record<JobTabKey, React.ReactNode>> = {
+    job: !stage || issuesVisibleAtStage(stage) ? issues : null,
   };
 
   const tabs: PageTab[] = JOB_TABS.flatMap((tab): PageTab[] => {
     if (stage && !tabVisibleAtStage(stage, tab.key)) return [];
     const mine = sectionsForTab(sections, tab.key).filter((s) => !stage || sectionVisibleAtStage(stage, s.id));
-    const extra = own[tab.key];
-    if (mine.length === 0 && extra == null) return [];
+    const top = above[tab.key];
+    const bottom = below[tab.key];
+    if (mine.length === 0 && top == null && bottom == null) return [];
     return [{
       key: tab.key,
       label: tab.label,
       content: (
         <div className="space-y-4">
-          {extra}
+          {top}
           {mine.length > 0 && (
             <JobSections
               sections={mine}
               defaultOpen={mine.some((s) => s.id === defaultOpen) ? defaultOpen : mine.length === 1 ? mine[0].id : null}
             />
           )}
+          {bottom}
         </div>
       ),
     }];

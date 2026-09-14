@@ -66,6 +66,7 @@ import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/p
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { BackLink } from "@/components/ui/back-link";
+import { canonicalTab } from "@/lib/job-tabs";
 import { IntakeSummary } from "@/components/intake/intake-summary";
 import { getIntakeForJob } from "@/lib/data/evaluation-intake";
 import { intakeHeadline } from "@/lib/evaluation-intake";
@@ -529,7 +530,7 @@ export default async function JobPage({
       <JobSummary items={outstanding} />
 
       <JobTabbedSections
-        initialTab={view}
+        initialTab={canonicalTab(view)}
         stage={stage}
         defaultOpen={sectionToOpen(outstanding)}
         overview={await OverviewTab(jobId, viewer?.roles ?? [], viewer)}

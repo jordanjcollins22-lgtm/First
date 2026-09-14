@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { env, isSupabaseAdminConfigured } from "@/lib/env";
+import { env, isFacebookConfigured, isSupabaseAdminConfigured } from "@/lib/env";
+import { publishPhotoToPage } from "@/lib/social/facebook";
+import { log } from "@/lib/log";
 import { authorizeCron } from "@/lib/cron-auth";
 
 /**
@@ -44,12 +46,13 @@ export async function GET(request: NextRequest) {
   if (!due || due.length === 0) return NextResponse.json({ due: 0, sent: 0 });
 
   const webhook = env.socialWebhookUrl;
-  if (!webhook) {
+  if (!webhook && !isFacebookConfigured) {
     // Nothing to send to. Say so plainly rather than marking them posted.
+    log.warn("cron.social_posts.nowhere", { due: due.length });
     return NextResponse.json({
       due: due.length,
       sent: 0,
-      waiting: "Set SOCIAL_WEBHOOK_URL to publish automatically.",
+      waiting: "Set FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN, or SOCIAL_WEBHOOK_URL, to publish automatically.",
     });
   }
 
@@ -62,31 +65,63 @@ export async function GET(request: NextRequest) {
       : null;
     if (!imageUrl) continue;
 
-    try {
-      const response = await fetch(webhook, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: post.id, imageUrl, caption: post.caption ?? "" }),
-      });
-      if (!response.ok) continue;
+    // Claimed before it goes anywhere, so two runs at once cannot both post
+    // it. The claim is the channel column, because the status column only
+    // knows scheduled and posted.
+    const { data: claimed } = await admin
+      .from("social_posts")
+      .update({ channel: "posting", updated_at: new Date().toISOString() })
+      .eq("id", post.id)
+      .eq("status", "scheduled")
+      .or("channel.is.null,channel.neq.posting")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) continue;
 
-      await admin
-        .from("social_posts")
-        .update({
-          status: "posted",
-          posted_at: new Date().toISOString(),
-          channel: "webhook",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", post.id)
-        // Only if it is still scheduled, so two runs at once cannot both send it.
-        .eq("status", "scheduled");
+    const channels: string[] = [];
 
-      sent++;
-    } catch (err) {
-      console.error("social post handoff failed:", err);
+    // Facebook first, straight to the Page. Nextdoor has no way in from
+    // here, so those stay copy-and-paste from the studio.
+    if (isFacebookConfigured) {
+      const result = await publishPhotoToPage({ imageUrl, caption: post.caption ?? "" });
+      if (result.ok) channels.push("facebook");
     }
+
+    // Then the hand-off, for anything wired up behind it: Zapier, Make, Buffer.
+    if (webhook) {
+      try {
+        const response = await fetch(webhook, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: post.id, imageUrl, caption: post.caption ?? "" }),
+        });
+        if (response.ok) channels.push("webhook");
+        else log.warn("social_post.handoff.refused", { postId: post.id, status: response.status });
+      } catch (err) {
+        log.error("social_post.handoff.failed", err, { postId: post.id });
+      }
+    }
+
+    if (channels.length === 0) {
+      // Nothing took it. Unclaimed, to try again next run.
+      await admin.from("social_posts").update({ channel: null, updated_at: new Date().toISOString() }).eq("id", post.id);
+      log.warn("social_post.unpublished", { postId: post.id });
+      continue;
+    }
+
+    await admin
+      .from("social_posts")
+      .update({
+        status: "posted",
+        posted_at: new Date().toISOString(),
+        channel: channels.join("+"),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", post.id);
+    log.info("social_post.published", { postId: post.id, channels });
+    sent++;
   }
 
+  log.info("cron.social_posts", { due: due.length, sent });
   return NextResponse.json({ due: due.length, sent });
 }

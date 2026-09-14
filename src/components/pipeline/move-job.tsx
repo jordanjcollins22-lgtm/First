@@ -4,7 +4,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Move } from "lucide-react";
 
-import { clearPipelineOverride, moveJobOnPipeline } from "@/lib/actions/pipeline-move-actions";
+import { clearPipelineOverride, closeJob, moveJobOnPipeline, type CloseHow } from "@/lib/actions/pipeline-move-actions";
 import { movableTo, type PipelineStage } from "@/lib/pipeline";
 import { openDispute, resolveDispute } from "@/lib/actions/dispute-actions";
 import { DISPUTE_KINDS, kindLabel, type DisputeKind } from "@/lib/dispute";
@@ -53,6 +53,20 @@ export function MoveJob({
   // exists so the board says what is wrong without anybody opening anything.
   const [raising, setRaising] = useState<DisputeKind | null>(null);
   const [reason, setReason] = useState("");
+  // Taking it off the board is two steps too: how, then a line on why.
+  const [closing, setClosing] = useState<CloseHow | null>(null);
+  const [why, setWhy] = useState("");
+
+  function close() {
+    if (!closing) return;
+    const how = closing;
+    setClosing(null);
+    send(CLOSE_ECHO[how], async () => {
+      const result = await closeJob(jobId, how, why);
+      if (result.ok) setWhy("");
+      return result;
+    });
+  }
 
   function raise() {
     if (!raising) return;
@@ -151,6 +165,38 @@ export function MoveJob({
     );
   }
 
+  if (closing) {
+    return (
+      <div className="mt-1.5 flex flex-col gap-2 rounded-lg border border-border bg-background p-2">
+        <p className="text-[11px] font-semibold">{CLOSE_TITLE[closing]}</p>
+        <textarea
+          value={why}
+          onChange={(e) => setWhy(e.target.value)}
+          rows={2}
+          autoFocus
+          placeholder={CLOSE_HINT[closing]}
+          className="w-full rounded-md border border-input bg-card/80 px-2 py-1.5 text-xs"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          It comes off the board, My Day, the call list and the proposals list together.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded bg-primary px-2 py-1.5 text-xs font-semibold text-primary-foreground"
+          >
+            {CLOSE_BUTTON[closing]}
+          </button>
+          <button type="button" onClick={() => setClosing(null)} className="px-1.5 py-1.5 text-xs text-muted-foreground">
+            Back
+          </button>
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="mt-1.5 flex flex-col gap-1 rounded-lg border border-border bg-background p-2">
       {disputed ? (
@@ -169,9 +215,26 @@ export function MoveJob({
         </>
       ) : (
         <>
-          <p className="text-[11px] font-semibold text-muted-foreground">Move this to</p>
+          {/* First, because it is the common reason to open this: a job
+              that should not be here any more. */}
+          <p className="text-[11px] font-semibold text-muted-foreground">Take it off the board</p>
+          {(Object.keys(CLOSE_TITLE) as CloseHow[]).map((how) => (
+            <button
+              key={how}
+              type="button"
+              onClick={() => setClosing(how)}
+              className="rounded px-1.5 py-2 text-left text-xs hover:bg-accent/50"
+            >
+              <span className="font-semibold">{CLOSE_LABEL[how]}</span>{" "}
+              <span className="text-muted-foreground">{CLOSE_BLURB[how]}</span>
+            </button>
+          ))}
+
+          <p className="mt-1 border-t border-border pt-1.5 text-[11px] font-semibold text-muted-foreground">Move this to</p>
           {movableTo()
             .filter((place) => place.stage !== "disputes")
+            .filter((place) => !(place.stage === "sales" && place.status === "Declined"))
+            .filter((place) => !(place.stage === "operations" && place.status === "Completed"))
             .map((place) => (
               <button
                 key={place.label}
@@ -225,3 +288,40 @@ export function MoveJob({
     </div>
   );
 }
+
+const CLOSE_LABEL: Record<CloseHow, string> = {
+  declined: "They said no",
+  finished: "Work is finished",
+  cancelled: "Not happening",
+};
+
+const CLOSE_BLURB: Record<CloseHow, string> = {
+  declined: "or went quiet for good. Counts as declined.",
+  finished: "and it never got signed off here. Counts as completed.",
+  cancelled: "cancelled by us or by them. Comes off everything.",
+};
+
+const CLOSE_TITLE: Record<CloseHow, string> = {
+  declined: "Why did it not go ahead?",
+  finished: "Anything to note about the finish?",
+  cancelled: "Why is it cancelled?",
+};
+
+const CLOSE_HINT: Record<CloseHow, string> = {
+  declined: "Went with another company, or never answered",
+  finished: "Done in August, paid in cash",
+  cancelled: "Client moved house",
+};
+
+const CLOSE_BUTTON: Record<CloseHow, string> = {
+  declined: "Mark it declined",
+  finished: "Mark it finished",
+  cancelled: "Cancel the job",
+};
+
+const CLOSE_ECHO: Record<CloseHow, string> = {
+  declined: "Marking it declined",
+  finished: "Marking it finished",
+  cancelled: "Cancelling it",
+};
+

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
+import { cancelJob } from "@/lib/actions/job-actions";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import {
   STAGE_STATUSES,
@@ -75,6 +76,11 @@ export async function moveJobOnPipeline(
     // Moving it anywhere else clears the date, because that is somebody
     // saying the decline is over.
     const declining = stage === "sales" && status === "Declined";
+    // Finishing is a fact too. Moved to Completed as a note only, the job
+    // kept its old status underneath and every other screen went on
+    // treating it as live work: My Day kept it, the proposals list kept
+    // it, the count of open jobs kept it. So the move sets the status.
+    const finishing = stage === "operations" && status === "Completed";
     const now = new Date().toISOString();
 
     const { error: saveError } = await supabase
@@ -89,6 +95,7 @@ export async function moveJobOnPipeline(
         declined_at: declining ? now : null,
         declined_by: declining ? profile.id : null,
         declined_reason: declining ? note?.trim() || null : null,
+        ...(finishing ? { status: "completed", completed_at: now, completed_by: profile.id } : {}),
       })
       .eq("id", jobId);
     if (saveError) return { ok: false, message: saveError.message };
@@ -131,3 +138,23 @@ export async function clearPipelineOverride(jobId: string): Promise<MoveResponse
     return { ok: false, message: err instanceof Error ? err.message : "Couldn't reset that." };
   }
 }
+
+export type CloseHow = "declined" | "finished" | "cancelled";
+
+/**
+ * Take a job off the board, for good, everywhere.
+ *
+ * Three ways a job stops being live work, and each is written as the fact
+ * it is rather than as a placement: they said no (declined), the work is
+ * done (completed), or it is not happening (cancelled). Every screen that
+ * lists live work reads those facts, so the job leaves My Day, the call
+ * list, the proposals list and the calendar in the same moment it leaves
+ * the board.
+ */
+export async function closeJob(jobId: string, how: CloseHow, note?: string): Promise<MoveResponse> {
+  if (how === "declined") return moveJobOnPipeline(jobId, "sales", "Declined", note);
+  if (how === "finished") return moveJobOnPipeline(jobId, "operations", "Completed", note);
+  const result = await cancelJob(jobId, note?.trim() || null);
+  return result.ok ? { ok: true, status: "Cancelled" } : { ok: false, message: result.message };
+}
+

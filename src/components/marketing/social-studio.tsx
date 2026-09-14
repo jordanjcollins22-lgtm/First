@@ -42,10 +42,13 @@ export function SocialStudio({
   candidates,
   posts,
   missing,
+  publishesTo = [],
 }: {
   candidates: PostCandidate[];
   posts: SocialPost[];
   missing: JobMissingPhotos[];
+  /** Where a scheduled post goes on its own when its time comes. Empty means nowhere yet. */
+  publishesTo?: string[];
 }) {
   const [making, setMaking] = useState<PostCandidate | null>(null);
   const router = useRouter();
@@ -59,6 +62,12 @@ export function SocialStudio({
       <p className="text-sm text-muted-foreground">
         Made from the photos the crew already takes. Approve one and it gets a time on its own,
         spaced out from everything already booked.
+      </p>
+
+      <p className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        {publishesTo.length > 0
+          ? `When its time comes, a scheduled post goes to ${publishesTo.join(" and ")} on its own. Nextdoor has no way in, so use Copy caption and Open image there, then Mark posted.`
+          : "Nothing publishes on its own yet. Scheduled posts wait here: use Copy caption and Open image, post them by hand, then Mark posted. Add the Facebook Page keys to have Facebook done automatically."}
       </p>
 
       <div className="mt-4 grid grid-cols-4 gap-2">

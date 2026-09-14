@@ -12,17 +12,28 @@
 
 import type { JobStage } from "@/lib/job-stage";
 
-export type JobTabKey =
-  | "overview"
-  | "field"
-  | "site"
-  | "scope"
-  | "plan"
-  | "issues"
-  | "photos"
-  | "messages"
-  | "billing"
-  | "closeout";
+export type JobTabKey = "overview" | "job" | "photos" | "messages" | "billing" | "closeout";
+
+/**
+ * Headings that used to exist, and where their contents live now.
+ *
+ * Links across the app still say ?view=scope or ?view=site. They should
+ * land on the heading that has what they were pointing at, not on the
+ * first tab because the name went away.
+ */
+const FORMER_TABS: Record<string, JobTabKey> = {
+  field: "job",
+  site: "job",
+  scope: "job",
+  plan: "job",
+  issues: "job",
+};
+
+export function canonicalTab(key: string | null | undefined): JobTabKey | undefined {
+  if (!key) return undefined;
+  if (JOB_TABS.some((tab) => tab.key === key)) return key as JobTabKey;
+  return FORMER_TABS[key];
+}
 
 export interface JobTab {
   key: JobTabKey;
@@ -32,17 +43,18 @@ export interface JobTab {
 }
 
 /**
- * Overview and Field hold no accordion sections: Overview is the summary the
- * page already draws above everything, and Field is its own flat screen built
- * for a phone in a garden rather than a list of panels to open.
+ * Six headings, down from ten.
+ *
+ * Overview is the summary the page draws above everything. Job is the
+ * work itself: the field screen at the top, then the site map, what the
+ * client asked for, the proposal, the schedule, the crew, and the issues
+ * and changes under it. Field, Site plan, Scope, Plan and Issues were five
+ * headings for one thing, and the person on site was flicking between
+ * them with a phone in one hand.
  */
 export const JOB_TABS: readonly JobTab[] = [
   { key: "overview", label: "Overview", sections: [] },
-  { key: "field", label: "Field", sections: [] },
-  { key: "site", label: "Site plan", sections: ["map"] },
-  { key: "scope", label: "Scope", sections: ["proposal", "request"] },
-  { key: "plan", label: "Plan", sections: ["schedule", "crew", "visits"] },
-  { key: "issues", label: "Issues & changes", sections: [] },
+  { key: "job", label: "Job", sections: ["map", "request", "proposal", "read", "schedule", "visits", "crew"] },
   { key: "photos", label: "Photos", sections: ["photos", "review", "marketing"] },
   { key: "messages", label: "Messages", sections: ["messages"] },
   { key: "billing", label: "Billing", sections: ["payment", "invoice"] },
@@ -101,13 +113,18 @@ const SECTIONS_AT_STAGE: Record<JobStage, readonly string[]> = {
 
 /** The headings with no panels of their own that still depend on the stage. */
 const OWN_TABS_AT_STAGE: Record<JobStage, readonly JobTabKey[]> = {
-  evaluation: ["overview", "field"],
-  cancelled: ["overview", "field"],
-  pricing: ["overview", "field", "issues"],
-  scheduled: ["overview", "field", "issues"],
-  working: ["overview", "field", "issues", "closeout"],
-  done: ["overview", "field", "issues", "closeout"],
+  evaluation: ["overview", "job"],
+  cancelled: ["overview", "job"],
+  pricing: ["overview", "job"],
+  scheduled: ["overview", "job"],
+  working: ["overview", "job", "closeout"],
+  done: ["overview", "job", "closeout"],
 };
+
+/** Whether the issues and changes list belongs under Job at this stage. */
+export function issuesVisibleAtStage(stage: JobStage): boolean {
+  return stage !== "evaluation" && stage !== "cancelled";
+}
 
 export function sectionVisibleAtStage(stage: JobStage, id: string): boolean {
   return SECTIONS_AT_STAGE[stage].includes(id);

@@ -124,7 +124,14 @@ export async function listAllProposals(
   for (const raw of proposals ?? []) {
     const proposal = raw as unknown as ProposalListProposal;
     const job = jobById.get(proposal.job_id);
-    if (job) rows.push({ proposal, job });
+    if (!job) continue;
+    // The job's facts win over the proposal's own status. A job taken off
+    // the board as declined shows here as declined, whatever the proposal
+    // row still says; a cancelled job's proposal is not a proposal. This
+    // list and the pipeline were disagreeing about the same jobs.
+    if (job.status === "cancelled") continue;
+    const status = job.declined_at && proposal.status !== "accepted" ? "declined" : proposal.status;
+    rows.push({ proposal: { ...proposal, status }, job });
   }
 
   // Trims are asked for by id, which does mean waiting for the proposals.

@@ -61,6 +61,11 @@ export const env = {
   // rather than here — those change, and a redeploy to add an address is a
   // reason nobody adds the address.
   resendApiKey: process.env.RESEND_API_KEY ?? "",
+  // Publishes approved before-and-after posts straight to the business's
+  // Facebook Page. A Page access token from Meta's Graph API, with the
+  // pages_manage_posts permission, and the numeric id of the Page.
+  facebookPageId: process.env.FACEBOOK_PAGE_ID ?? "",
+  facebookPageAccessToken: process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? "",
 };
 
 export function assertSupabaseConfigured() {
@@ -102,3 +107,6 @@ export const isLivekitConfigured = Boolean(env.livekitApiKey && env.livekitApiSe
 export const isResendConfigured = Boolean(env.resendApiKey);
 /** Transcribes voice memos. Without it a memo still records and plays, just untranscribed. */
 export const isTranscriptionConfigured = Boolean(env.openaiApiKey);
+/** Posting to the Facebook Page on its own. Without it, posts wait to be copied by hand. */
+export const isFacebookConfigured = Boolean(env.facebookPageId && env.facebookPageAccessToken);
+
