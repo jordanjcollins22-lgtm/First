@@ -408,7 +408,7 @@ export function BookingWizard({
   // Whether somebody is driving to this one. Worked out in the browser purely
   // so the client can be told before they commit; what gets written down is
   // decided again on the server, from the same coordinates.
-  const mode = selectedAddress ? modeForAddress(selectedAddress.lat, selectedAddress.lng) : null;
+  const mode = selectedAddress ? modeForAddress(selectedAddress.lat, selectedAddress.lng, selectedAddress.fullAddress) : null;
 
   // The ranked list once the server has answered, the plain one until then.
   const allTimes: AvailableSlotGroup[] = times

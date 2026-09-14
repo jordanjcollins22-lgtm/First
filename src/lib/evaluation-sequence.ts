@@ -49,6 +49,11 @@ export const PLACEHOLDERS: { key: string; means: string }[] = [
   { key: "website", means: "The business website" },
   { key: "prep_link", means: "The link to the pre-evaluation form" },
   { key: "prep_line", means: "A nudge with the form link, or a thank you once it is filled in" },
+  { key: "how_it_works", means: "How the visit or the video walkthrough works, one paragraph, by the kind of evaluation" },
+  { key: "coming", means: "\"We are coming out to ... on ... at ...\" or the video call equivalent" },
+  { key: "tomorrow", means: "\"... is coming out to ... tomorrow at ...\" or the video call equivalent" },
+  { key: "today", means: "\"See you today at ... at ...\" or the video call equivalent" },
+  { key: "before_we", means: "\"Before we come out\" or \"Before your video walkthrough\", for a subject line" },
 ];
 
 const KNOWN = new Set(PLACEHOLDERS.map((p) => p.key));
@@ -84,6 +89,12 @@ export const SAMPLE_VARS: Record<string, string> = {
   phone: "(443) 819-1521",
   website: "jslandscapingmd.com",
   prep_link: "https://app.jslandscapingmd.com/prep/3f9c2a7e1b4d8e0f6a2c9b1d",
+  how_it_works:
+    "Here is how the visit works. We walk the property with you, listen to what you want changed and what is bugging you, and take measurements and photos. It usually takes 30 to 45 minutes. You do not need to prepare anything, but it helps a lot if the person making the decision can be there.",
+  coming: "We are coming out to 1613 Bimini Drive, Bel Air on Thursday at 9:00 am.",
+  tomorrow: "Jordan is coming out to 1613 Bimini Drive, Bel Air tomorrow at 9:00 am.",
+  today: "See you today at 9:00 am at 1613 Bimini Drive, Bel Air.",
+  before_we: "Before we come out",
   prep_line: "If you have not had a chance to fill in the short form yet, it is here:\n\nhttps://app.jslandscapingmd.com/prep/3f9c2a7e1b4d8e0f6a2c9b1d\n\nIt takes about five minutes. If you do not get to it, we will go through it together in the first five to ten minutes of the visit.",
 };
 

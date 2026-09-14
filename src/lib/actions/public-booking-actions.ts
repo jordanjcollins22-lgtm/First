@@ -202,7 +202,7 @@ export async function submitPublicBooking(
   // evaluation they are getting before they pick a time, but what is written
   // down is worked out from the coordinates on the server, where nobody can
   // edit it into a free visit three states away.
-  const mode = modeForAddress(input.lat, input.lng);
+  const mode = modeForAddress(input.lat, input.lng, address);
 
   // Only a code we actually issued. Anybody can put ?rec=whatever in a URL,
   // and a made-up code stored on a job would show up as a booking credited to

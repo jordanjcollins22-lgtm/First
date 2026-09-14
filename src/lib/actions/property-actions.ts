@@ -1,5 +1,7 @@
 "use server";
 
+import { modeForAddress } from "@/lib/evaluation-mode";
+
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -372,6 +374,7 @@ export async function bookEvaluation(input: ManualEvaluationInput): Promise<Book
         evaluation_date: start.toISOString(),
         evaluation_end_date: end.toISOString(),
         evaluation_status: "scheduled",
+        evaluation_mode: modeForAddress(input.lat ?? null, input.lng ?? null, address).mode,
         client_notes: input.notes?.trim() || null,
       })
       .select("id")

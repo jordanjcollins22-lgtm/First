@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseAsBusinessTime } from "@/lib/time-zone";
 import { log } from "@/lib/log";
+import { modeForAddress } from "@/lib/evaluation-mode";
 import { firstAcceptable } from "@/lib/geocode-guard";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { isSupabaseAdminConfigured } from "@/lib/env";
@@ -140,6 +141,9 @@ export async function POST(request: NextRequest) {
       name: `${fullAddress} — Evaluation`,
       status: "estimating",
       evaluation_date: evaluationDate,
+      // Outside Harford County is a video walkthrough, whichever door the
+      // booking came in through.
+      evaluation_mode: modeForAddress(lat, lng, fullAddress).mode,
     })
     .select()
     .single();
