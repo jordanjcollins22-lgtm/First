@@ -3402,6 +3402,16 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["crew_positions"]["Row"]>;
         Relationships: [];
       };
+      ghl_sync_state: {
+        Row: {
+          organization_id: string;
+          last_pulled_at: string | null;
+          last_result: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["ghl_sync_state"]["Row"]> & { organization_id: string };
+        Update: Partial<Database["public"]["Tables"]["ghl_sync_state"]["Row"]>;
+        Relationships: [];
+      };
       loadout_checks: {
         Row: {
           id: string;

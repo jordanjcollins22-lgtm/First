@@ -13,6 +13,7 @@ import { LocationBeacon } from "@/components/crew/location-beacon";
 import { AutoRefresh } from "@/components/crew/auto-refresh";
 import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
 import { getCrewsToday } from "@/lib/data/crews-today";
+import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { dateKeyIn } from "@/lib/time-zone";
 import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
@@ -139,6 +140,10 @@ async function OfficeDay() {
       </div>
     );
   }
+
+  // Bookings made in GoHighLevel, brought in first so today's list is
+  // today's list. Throttled inside; most opens cost nothing.
+  await pullGhlCalendarIfStale(profile.organization_id).catch(() => null);
 
   // Six reads, together rather than one after another.
   //

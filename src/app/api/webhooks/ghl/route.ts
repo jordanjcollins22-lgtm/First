@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseAsBusinessTime } from "@/lib/time-zone";
 import { log } from "@/lib/log";
-import { modeForAddress } from "@/lib/evaluation-mode";
+import { createBookingFromGhl } from "@/lib/ghl/inbound";
 import { firstAcceptable } from "@/lib/geocode-guard";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { isSupabaseAdminConfigured } from "@/lib/env";
@@ -104,13 +104,14 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  const { lat, lng, fullAddress } = checked.match;
 
   // A start time with no offset on it is the business's wall clock, not UTC.
   const parsedStart = startTimeRaw ? parseAsBusinessTime(startTimeRaw) : null;
   const evaluationDate = parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart.toISOString() : null;
 
   const supabase = createAdminClient();
+  const { data: orgRow } = await supabase.from("organizations").select("id").order("created_at").limit(1).maybeSingle();
+  const ORGANIZATION_ID = orgRow?.id ?? "";
 
   // Our own booking coming back round. An evaluation booked in the app is
   // put on the GoHighLevel calendar, and GoHighLevel then tells us about
@@ -143,46 +144,24 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  let customerId: string | null = null;
-  if (email) {
-    const { data: existing } = await supabase.from("customers").select("id").eq("email", email).maybeSingle();
-    customerId = existing?.id ?? null;
+  const made = await createBookingFromGhl({
+    organizationId: ORGANIZATION_ID,
+    name,
+    email,
+    phone,
+    address,
+    startsAt: evaluationDate ?? new Date().toISOString(),
+    endsAt: null,
+    appointmentId,
+    contactId: (contact.id as string) || null,
+  });
+  if (!made.ok) {
+    log.error("ghl.booking.failed", new Error(made.error), { appointmentId });
+    return NextResponse.json({ error: made.error }, { status: 400 });
   }
-  if (!customerId) {
-    const { data: customer, error: customerError } = await supabase
-      .from("customers")
-      .insert({ name, email, phone })
-      .select()
-      .single();
-    if (customerError) return NextResponse.json({ error: customerError.message }, { status: 500 });
-    customerId = customer.id;
-  }
-
-  const { data: property, error: propertyError } = await supabase
-    .from("properties")
-    .insert({ customer_id: customerId, address: fullAddress, lat, lng })
-    .select()
-    .single();
-  if (propertyError) return NextResponse.json({ error: propertyError.message }, { status: 500 });
-
-  const { data: job, error: jobError } = await supabase
-    .from("jobs")
-    .insert({
-      property_id: property.id,
-      name: `${fullAddress} — Evaluation`,
-      status: "estimating",
-      evaluation_date: evaluationDate,
-      // Outside Harford County is a video walkthrough, whichever door the
-      // booking came in through.
-      evaluation_mode: modeForAddress(lat, lng, fullAddress).mode,
-      ghl_appointment_id: appointmentId,
-    })
-    .select()
-    .single();
-  if (jobError) {
-    log.error("ghl.booking.failed", jobError, { customerId, propertyId: property.id });
-    return NextResponse.json({ error: jobError.message }, { status: 500 });
-  }
+  const job = { id: made.jobId };
+  const customerId = made.customerId;
+  const property = { id: made.propertyId };
 
   log.info("ghl.booking.created", { jobId: job.id, customerId, propertyId: property.id, at: evaluationDate });
   return NextResponse.json({ ok: true, customerId, propertyId: property.id, jobId: job.id });

@@ -1,4 +1,6 @@
 import { isSupabaseConfigured } from "@/lib/env";
+import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { requireTab } from "@/lib/data/access";
 import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { MyEvaluationsContent } from "@/components/evaluations/my-evaluations-content";
@@ -33,6 +35,9 @@ export async function CalendarTab({ section = "all" }: { section?: "all" | "cale
   }
 
   await requireTab("evaluations", "/my-day");
+  // Bookings made in GoHighLevel, brought in before the calendar is drawn.
+  // Throttled to every few minutes inside; most opens cost nothing.
+  await pullGhlCalendarIfStale(await getCurrentOrganizationId()).catch(() => null);
 
   const schedule = await getMyScheduleData();
   if (!schedule) {

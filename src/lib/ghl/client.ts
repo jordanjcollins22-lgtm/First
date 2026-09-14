@@ -92,3 +92,63 @@ export async function updateAppointment(
     ...(patch.startTime ? { ignoreFreeSlotValidation: true, ignoreDateRange: true } : {}),
   });
 }
+
+export interface GhlCalendarEvent {
+  id: string;
+  contactId: string | null;
+  startTime: string;
+  endTime: string | null;
+  appointmentStatus: string;
+  title: string | null;
+  address: string | null;
+}
+
+/** Every appointment on the evaluation calendar between two instants. */
+export async function listAppointments(startsAfter: Date, endsBefore: Date): Promise<GhlCalendarEvent[]> {
+  const query = new URLSearchParams({
+    locationId: env.ghlLocationId,
+    calendarId: env.ghlCalendarId,
+    startTime: String(startsAfter.getTime()),
+    endTime: String(endsBefore.getTime()),
+  });
+  const result = await call<{ events?: Record<string, unknown>[] }>("GET", `/calendars/events?${query.toString()}`);
+  return (result.events ?? []).map((e) => ({
+    id: String(e.id ?? ""),
+    contactId: (e.contactId as string) ?? null,
+    startTime: String(e.startTime ?? ""),
+    endTime: (e.endTime as string) ?? null,
+    appointmentStatus: String(e.appointmentStatus ?? e.status ?? ""),
+    title: (e.title as string) ?? null,
+    address: (e.address as string) ?? null,
+  })).filter((e) => e.id && e.startTime);
+}
+
+export interface GhlContact {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+}
+
+export async function getContact(id: string): Promise<GhlContact | null> {
+  try {
+    const result = await call<{ contact?: Record<string, unknown> }>("GET", `/contacts/${encodeURIComponent(id)}`);
+    const c = result.contact;
+    if (!c) return null;
+    const parts = [c.address1, c.city, c.state, c.postalCode].filter((v) => typeof v === "string" && v.trim()) as string[];
+    return {
+      id: String(c.id ?? id),
+      firstName: (c.firstName as string) ?? null,
+      lastName: (c.lastName as string) ?? null,
+      name: (c.name as string) ?? (c.contactName as string) ?? null,
+      email: (c.email as string) ?? null,
+      phone: (c.phone as string) ?? null,
+      address: parts.length > 0 ? parts.join(", ") : null,
+    };
+  } catch {
+    return null;
+  }
+}
