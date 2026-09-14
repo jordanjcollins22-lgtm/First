@@ -75,6 +75,11 @@ export const env = {
   ghlApiKey: process.env.GHL_API_KEY ?? "",
   ghlLocationId: process.env.GHL_LOCATION_ID ?? "",
   ghlCalendarId: process.env.GHL_CALENDAR_ID ?? "",
+  // Sends the evaluation emails from the business's own Gmail, so replies
+  // land in the inbox the office already reads. The address, and a Google
+  // app password for it (two-step verification has to be on).
+  gmailUser: process.env.GMAIL_USER ?? "",
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? "",
 };
 
 export function assertSupabaseConfigured() {

@@ -4035,6 +4035,38 @@ export interface Database {
         }[];
       };
 
+      /** Every evaluation email due right now, worded and addressed. */
+      evaluation_sequence_due: {
+        Args: { p_now?: string };
+        Returns: {
+          organization_id: string;
+          job_id: string;
+          customer_id: string;
+          step: string;
+          dedupe_key: string;
+          to_email: string;
+          to_name: string | null;
+          subject: string;
+          body: string;
+          reply_thread_id: string | null;
+          fire_at: string;
+          evaluation_at: string;
+          local_when: string;
+        }[];
+      };
+      evaluation_sequence_claim: {
+        Args: { p_organization_id: string; p_customer_id: string; p_job_id: string; p_step: string; p_dedupe_key: string; p_body: string };
+        Returns: boolean;
+      };
+      evaluation_sequence_sent: {
+        Args: { p_dedupe_key: string; p_message_id: string; p_thread_id: string | null };
+        Returns: undefined;
+      };
+      evaluation_sequence_failed: {
+        Args: { p_dedupe_key: string; p_detail: string };
+        Returns: undefined;
+      };
+
       /** The post-import integrity questions, answered in one trip. */
       gis_integrity_report: {
         Args: { org: string };
