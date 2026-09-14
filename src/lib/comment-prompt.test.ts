@@ -4,6 +4,7 @@ import {
   checkComment,
   commentBrief,
   commentSystemPrompt,
+  commenterIntro,
   finishComment,
   LINK_MARKER,
   looksUsable,
@@ -23,6 +24,15 @@ describe("the brief given to the model", () => {
     expect(prompt).toContain("help coordinate");
     expect(prompt).toMatch(/no em dashes/i);
     expect(prompt).toMatch(/only the finished comment/i);
+  });
+
+  it("introduces whoever is writing, not always the owner", () => {
+    expect(commentSystemPrompt("J's", {}, ["admin"])).toContain('open with: "I operate J\'s."');
+    expect(commentSystemPrompt("J's", {}, ["account manager"])).toContain('open with: "I manage jobs at J\'s."');
+    expect(commentSystemPrompt("J's", {}, ["crew"])).toContain(
+      "open with: \"I'm a project technician at J's and I work on the jobs.\""
+    );
+    expect(commentSystemPrompt("J's", {}, ["crew"])).not.toContain("I operate J's");
   });
 
   it("forbids the claim the owner asked never to make", () => {
@@ -235,5 +245,20 @@ describe("the brief", () => {
 
   it("names tree work in the prompt, not only in the guard", () => {
     expect(commentSystemPrompt("J's")).toMatch(/tree removal/i);
+  });
+});
+
+describe("commenterIntro", () => {
+  it("says what each person does", () => {
+    expect(commenterIntro(["owner"], "JS")).toBe("I operate JS");
+    expect(commenterIntro(["account manager"], "JS")).toBe("I manage jobs at JS");
+    expect(commenterIntro(["project lead"], "JS")).toBe("I lead the crews at JS");
+    expect(commenterIntro(["evaluator"], "JS")).toBe("I do the evaluations for JS");
+    expect(commenterIntro(["crew"], "JS")).toBe("I'm a project technician at JS and I work on the jobs");
+    expect(commenterIntro([], "JS")).toBe("I work with JS");
+  });
+
+  it("lets the owner win when somebody holds several roles", () => {
+    expect(commenterIntro(["crew", "admin"], "JS")).toBe("I operate JS");
   });
 });

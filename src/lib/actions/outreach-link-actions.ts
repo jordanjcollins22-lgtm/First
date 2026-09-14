@@ -310,10 +310,14 @@ export async function draftCommentFromScreenshot(input: {
       // Reading a screenshot and matching the service asked for is judgement,
       // not just writing, so this is worth more than the lowest setting.
       output_config: { effort: "medium" },
-      system: commentSystemPrompt(organization.name, {
-        own: ownServices,
-        partner: partnerServices,
-      }),
+      system: commentSystemPrompt(
+        organization.name,
+        {
+          own: ownServices,
+          partner: partnerServices,
+        },
+        profile.roles
+      ),
       messages: [
         {
           role: "user",

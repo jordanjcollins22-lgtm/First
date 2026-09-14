@@ -1,3 +1,5 @@
+import { hasRole, isOwnerLevel } from "@/lib/roles";
+
 /**
  * Writing the comment that goes under somebody's post.
  *
@@ -55,11 +57,31 @@ export interface CommentBrief {
  * copied word for word and ten identical comments in one group is worse than
  * no comments at all.
  */
+/**
+ * How the person writing the comment introduces themselves.
+ *
+ * Not everybody is the owner. A comment that says "I operate JS
+ * Landscaping" under Jace's name is a lie the neighbours can check, and
+ * one under Shalon's is a stranger one. Each person says what they do.
+ */
+export function commenterIntro(roles: readonly string[], businessName: string): string {
+  const name = businessName.trim() || "our company";
+  if (isOwnerLevel(roles)) return `I operate ${name}`;
+  if (hasRole(roles, "account-manager")) return `I manage jobs at ${name}`;
+  if (hasRole(roles, "project-lead")) return `I lead the crews at ${name}`;
+  if (hasRole(roles, "evaluator")) return `I do the evaluations for ${name}`;
+  if (hasRole(roles, "project-technician")) return `I'm a project technician at ${name} and I work on the jobs`;
+  return `I work with ${name}`;
+}
+
 export function commentSystemPrompt(
   businessName: string,
-  services: { own?: string[]; partner?: string[] } = {}
+  services: { own?: string[]; partner?: string[] } = {},
+  /** Who is writing, so the opener is true of them. Owner when not given. */
+  commenterRoles: readonly string[] = ["owner"]
 ): string {
   const name = businessName.trim() || "our company";
+  const intro = commenterIntro(commenterRoles, name);
   const own = (services.own ?? []).filter(Boolean);
   const partner = (services.partner ?? []).filter(Boolean);
   return [
@@ -68,7 +90,8 @@ export function commentSystemPrompt(
     "You are given a screenshot of a post. Write ONLY the ready-to-paste comment. Do not explain anything, do not add a preamble, and do not wrap it in quotes.",
     "",
     "Structure:",
-    `1. If the post looks a few days old, or they may already have found someone, open with: "If you haven't gotten this taken care of yet, I operate ${name}." Otherwise open with: "I operate ${name}."`,
+    `1. If the post looks a few days old, or they may already have found someone, open with: "If you haven't gotten this taken care of yet, ${intro}." Otherwise open with: "${intro}."`,
+    `   That is who is writing. Do not call yourself the owner, or say you run or operate the business, unless the opener above says so.`,
     '2. Then say: "We\'ve been featured in the news, have amazing reviews..." and naturally mention the exact services the person is asking for.',
     "3. Add one or two short sentences showing you understand their specific project and how you can help. Tailor this to the post. Do not sound generic.",
     "4. Always include this call to action, exactly, with the placeholder left as it is:",
