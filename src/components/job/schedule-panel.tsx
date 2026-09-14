@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { HolidayNotice, HolidayRangeNotice } from "@/components/job/holiday-notice";
 import {
   cancelEstimate,
+  putEvaluationOnGhl,
   cancelJob,
   reopenJob,
   scheduleEstimate,
@@ -76,8 +77,14 @@ export function SchedulePanel({
   projectEndDate,
   sessionCount,
   cancellationReason,
+  ghlAppointmentId = null,
+  ghlReady = false,
 }: {
   jobId: string;
+  /** The GoHighLevel appointment this visit is mirrored to, when it is. */
+  ghlAppointmentId?: string | null;
+  /** Whether this site can talk to GoHighLevel at all. */
+  ghlReady?: boolean;
   status: JobStatus;
   evaluationStatus: EvaluationStatus;
   evaluationDate: string | null;
@@ -242,6 +249,25 @@ export function SchedulePanel({
                 Cancel this estimate
               </button>
             ))}
+
+          {/* The GoHighLevel mirror. A visit booked before the calendars were
+              joined can be put on by hand; one already there says so. */}
+          {ghlReady && evaluationDate && evaluationStatus !== "cancelled" && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {ghlAppointmentId ? (
+                "On the GoHighLevel calendar."
+              ) : (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => run(() => putEvaluationOnGhl(jobId))}
+                  className="text-primary underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  Put on the GoHighLevel calendar
+                </button>
+              )}
+            </p>
+          )}
         </div>
 
         {/* ------------------------------------------------------ work dates */}

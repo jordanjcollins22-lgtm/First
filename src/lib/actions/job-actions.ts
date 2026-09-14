@@ -490,3 +490,17 @@ export async function setJobWorkDates(
     return { ok: false, message: "Couldn't change those dates." };
   }
 }
+
+/**
+ * Puts an evaluation on the GoHighLevel calendar by hand.
+ *
+ * For a visit booked before the calendars were joined, or one the mirror
+ * missed while GoHighLevel was down. Safe to press twice: a visit already
+ * on the calendar is updated, not duplicated.
+ */
+export async function putEvaluationOnGhl(jobId: string): Promise<JobActionResult> {
+  const result = await syncEvaluationToGhl(jobId);
+  if (!result.ok) return { ok: false, message: result.error };
+  refresh(jobId);
+  return { ok: true, message: result.appointmentId ? "On the GoHighLevel calendar." : "Nothing to put on the calendar." };
+}

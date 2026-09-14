@@ -85,6 +85,7 @@ import { WorkOrderView } from "@/components/job/work-order-view";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { formatJobNumber } from "@/lib/job-number";
 import { isFieldOnly } from "@/lib/affiliate-roles";
+import { isGhlConfigured } from "@/lib/ghl/client";
 import { costJob, costZone, zoneCrewHours, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
 import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import { resolveBaseUrl } from "@/lib/app-url";
@@ -143,6 +144,7 @@ export default async function JobPage({
     photos_approved_by: string | null;
     client_notes: string | null;
     budget_range: string | null;
+    ghl_appointment_id: string | null;
     property: {
       address: string;
       lat: number;
@@ -642,6 +644,8 @@ export default async function JobPage({
                 projectEndDate={job.project_end_date}
                 sessionCount={liveSessions}
                 cancellationReason={job.cancellation_reason}
+                ghlAppointmentId={job.ghl_appointment_id ?? null}
+                ghlReady={isGhlConfigured}
               />
             ),
           },

@@ -36,12 +36,16 @@ async function loadJob(jobId: string): Promise<Row | null> {
   return (data as unknown as Row) ?? null;
 }
 
+export type GhlSyncResult = { ok: true; appointmentId: string | null } | { ok: false; error: string };
+
 /** Puts the evaluation on the calendar, or moves it if it is already there. */
-export async function syncEvaluationToGhl(jobId: string): Promise<void> {
-  if (!isGhlConfigured) return;
+export async function syncEvaluationToGhl(jobId: string): Promise<GhlSyncResult> {
+  if (!isGhlConfigured) return { ok: false, error: "GoHighLevel is not set up on this site." };
   try {
     const job = await loadJob(jobId);
-    if (!job || !job.evaluation_date || !job.property?.customer) return;
+    if (!job) return { ok: false, error: "Couldn't find that job." };
+    if (!job.evaluation_date) return { ok: false, error: "There is no evaluation time to put on the calendar." };
+    if (!job.property?.customer) return { ok: false, error: "The job has no client to put on the calendar." };
     const customer = job.property.customer;
     const admin = createAdminClient();
 
@@ -55,9 +59,9 @@ export async function syncEvaluationToGhl(jobId: string): Promise<void> {
         appointmentStatus: job.evaluation_status === "cancelled" ? "cancelled" : "confirmed",
       });
       log.info("ghl.appointment.updated", { jobId, appointmentId: job.ghl_appointment_id });
-      return;
+      return { ok: true, appointmentId: job.ghl_appointment_id };
     }
-    if (job.evaluation_status === "cancelled") return;
+    if (job.evaluation_status === "cancelled") return { ok: true, appointmentId: null };
 
     let contactId = customer.ghl_contact_id;
     if (!contactId) {
@@ -78,8 +82,11 @@ export async function syncEvaluationToGhl(jobId: string): Promise<void> {
     });
     await admin.from("jobs").update({ ghl_appointment_id: appointmentId }).eq("id", jobId);
     log.info("ghl.appointment.created", { jobId, appointmentId });
+    return { ok: true, appointmentId };
   } catch (err) {
-    log.warn("ghl.sync.failed", { jobId, error: err instanceof Error ? err.message : String(err) });
+    const error = err instanceof Error ? err.message : String(err);
+    log.warn("ghl.sync.failed", { jobId, error });
+    return { ok: false, error };
   }
 }
 
