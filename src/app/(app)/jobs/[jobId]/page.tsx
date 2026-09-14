@@ -626,6 +626,7 @@ export default async function JobPage({
               <AttentionPanel
                 summary={proposalAttention.summary}
                 sittings={proposalAttention.sittings}
+                questions={proposalAttention.questions}
               />
             ),
           }]),

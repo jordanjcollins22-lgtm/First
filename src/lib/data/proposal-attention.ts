@@ -7,6 +7,8 @@ import {
   type AttentionSummary,
   type Sitting,
 } from "@/lib/proposal-attention";
+import { objectionById } from "@/lib/objections";
+import { outcomeOf, type ObjectionTap } from "@/lib/call-list";
 
 /**
  * What the client read inside one proposal, and what they pressed.
@@ -22,16 +24,62 @@ import {
  * that is worth having and is not worth a five hundred.
  */
 
+export interface TappedQuestion {
+  at: string;
+  /** The question as the client saw it. */
+  label: string;
+  /** What came of it, in words: took the payment plan, said it helped, and so on. */
+  outcome: string;
+  /** Anything they typed, verbatim. */
+  note: string | null;
+}
+
 export interface ProposalAttention {
   summary: AttentionSummary;
   /** Every visit, newest first, with when it started and what it was about. */
   sittings: Sitting[];
+  /**
+   * The questions they tapped at the foot of the proposal, in order.
+   *
+   * Reading the questions section is one thing; tapping "How did you come
+   * up with this price?" is another, and the panel must say which happened.
+   */
+  questions: TappedQuestion[];
 }
 
 const EMPTY: ProposalAttention = {
   summary: { read: [], clicks: [], totalSeconds: 0, focus: null, thin: true },
   sittings: [],
+  questions: [],
 };
+
+async function questionsFor(filter: { proposalId?: string; jobId?: string }): Promise<TappedQuestion[]> {
+  const supabase = await createClient();
+  let query = supabase
+    .from("proposal_objections")
+    .select("objection_id, note, resolution, resolved, raised_at, job_proposals!inner(job_id)")
+    .order("raised_at", { ascending: true });
+  if (filter.proposalId) query = query.eq("proposal_id", filter.proposalId);
+  if (filter.jobId) query = query.eq("job_proposals.job_id", filter.jobId);
+  const { data, error } = await query;
+  if (error) return [];
+  type Row = { objection_id: string; note: string | null; resolution: string | null; resolved: boolean | null; raised_at: string };
+  return ((data ?? []) as unknown as Row[]).map((row) => {
+    const tap: ObjectionTap = {
+      id: row.objection_id,
+      at: row.raised_at,
+      resolution: row.resolution as ObjectionTap["resolution"],
+      resolved: row.resolved,
+      note: row.note,
+    };
+    return {
+      at: row.raised_at,
+      label: row.objection_id === "other" ? "Something else" : (objectionById(row.objection_id)?.label ?? row.objection_id.replace(/_/g, " ")),
+      outcome: row.objection_id === "other" ? (row.note ? "Wrote their own question." : "Opened the box and wrote nothing.") : outcomeOf(tap),
+      note: row.note,
+    };
+  });
+}
 
 /** How far back to read. A quote nobody answered in a year is not being read. */
 const LIMIT = 2_000;
@@ -59,7 +107,7 @@ export async function attentionForProposal(proposalId: string): Promise<Proposal
     visitorHash: row.visitor_hash,
   }));
 
-  return { summary: summariseAttention(events), sittings: sittingsFrom(events) };
+  return { summary: summariseAttention(events), sittings: sittingsFrom(events), questions: await questionsFor({ proposalId }) };
 }
 
 /**
@@ -93,7 +141,7 @@ export async function attentionForJob(jobId: string): Promise<ProposalAttention>
     visitorHash: row.visitor_hash,
   }));
 
-  return { summary: summariseAttention(events), sittings: sittingsFrom(events) };
+  return { summary: summariseAttention(events), sittings: sittingsFrom(events), questions: await questionsFor({ jobId }) };
 }
 
 /**

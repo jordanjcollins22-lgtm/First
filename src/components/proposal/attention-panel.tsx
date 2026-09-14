@@ -1,6 +1,7 @@
-import { Eye, MousePointerClick } from "lucide-react";
+import { Eye, HelpCircle, MousePointerClick } from "lucide-react";
 
 import { describeSeconds, type AttentionSummary, type Sitting } from "@/lib/proposal-attention";
+import type { TappedQuestion } from "@/lib/data/proposal-attention";
 import { monthDayTime } from "@/lib/time-zone";
 
 /**
@@ -24,11 +25,15 @@ import { monthDayTime } from "@/lib/time-zone";
 export function AttentionPanel({
   summary,
   sittings,
+  questions = [],
 }: {
   summary: AttentionSummary;
   sittings: Sitting[];
+  /** The stock questions they tapped, with what came of each. */
+  questions?: TappedQuestion[];
 }) {
-  if (summary.read.length === 0 && summary.clicks.length === 0) {
+  const readQuestions = summary.read.find((line) => line.target === "questions");
+  if (summary.read.length === 0 && summary.clicks.length === 0 && questions.length === 0) {
     return (
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <h3 className="font-semibold">What they read</h3>
@@ -105,6 +110,36 @@ export function AttentionPanel({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Reading the questions and tapping one are different things, and
+          the office needs to know which. A tap is listed with its time and
+          what came of it; time on the section with no tap is said outright. */}
+      {(questions.length > 0 || readQuestions) && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium">
+            <HelpCircle className="h-3.5 w-3.5" />
+            Common questions
+          </p>
+          {questions.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Spent {describeSeconds(readQuestions!.seconds)} on the questions but tapped none of them.
+            </p>
+          ) : (
+            <ul className="mt-1 flex flex-col gap-1.5">
+              {questions.map((q) => (
+                <li key={`${q.at}-${q.label}`} className="text-xs">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-medium tabular-nums">{when(q.at)}</span>
+                    <span className="font-medium">Tapped “{q.label}”</span>
+                  </div>
+                  <p className="text-muted-foreground">{q.outcome}</p>
+                  {q.note && <p className="mt-0.5 rounded-md border border-border bg-background/70 px-2 py-1 italic">“{q.note}”</p>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
