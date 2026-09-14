@@ -66,6 +66,9 @@ export const env = {
   // pages_manage_posts permission, and the numeric id of the Page.
   facebookPageId: process.env.FACEBOOK_PAGE_ID ?? "",
   facebookPageAccessToken: process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? "",
+  // Signs the bounce and complaint notices the email provider posts back.
+  // From the webhook's page in the Resend dashboard.
+  resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET ?? "",
 };
 
 export function assertSupabaseConfigured() {

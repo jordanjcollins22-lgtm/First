@@ -1991,6 +1991,88 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["reminder_rules"]["Row"]>;
         Relationships: [];
       };
+      email_campaigns: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          status: string;
+          offer_cents: number;
+          code_expires_on: string;
+          service_label: string;
+          pricing: Json;
+          ramp: Json;
+          paused_reason: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["email_campaigns"]["Row"]> & {
+          organization_id: string;
+          name: string;
+          code_expires_on: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_campaigns"]["Row"]>;
+        Relationships: [];
+      };
+      email_campaign_variants: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          organization_id: string;
+          key: string;
+          name: string;
+          subject: string;
+          body: string;
+          needs_price: boolean;
+          enabled: boolean;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["email_campaign_variants"]["Row"]> & {
+          campaign_id: string;
+          organization_id: string;
+          key: string;
+          name: string;
+          subject: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_campaign_variants"]["Row"]>;
+        Relationships: [];
+      };
+      email_campaign_recipients: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          organization_id: string;
+          customer_id: string | null;
+          property_id: string | null;
+          email: string;
+          name: string | null;
+          code: string;
+          variant_id: string | null;
+          status: string;
+          skip_reason: string | null;
+          provider_id: string | null;
+          lawn_sqft: number | null;
+          price_cents: number | null;
+          sent_at: string | null;
+          opened_at: string | null;
+          clicked_at: string | null;
+          booked_at: string | null;
+          booked_job_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["email_campaign_recipients"]["Row"]> & {
+          campaign_id: string;
+          organization_id: string;
+          email: string;
+          code: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_campaign_recipients"]["Row"]>;
+        Relationships: [];
+      };
       evaluation_intakes: {
         Row: {
           id: string;

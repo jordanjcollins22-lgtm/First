@@ -42,6 +42,8 @@ export interface Organization {
   booking_notice_hours?: number | null;
   /** Whether the booking page may offer a visit later today. */
   booking_same_day?: boolean | null;
+  /** Where the client-facing pages live, for links built in emails. */
+  public_base_url?: string | null;
   /** Whether a finished job gets a tip link at all. */
   tips_enabled?: boolean | null;
   /** What the tip page says about where the money goes. */
