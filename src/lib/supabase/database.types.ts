@@ -3412,6 +3412,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["ghl_sync_state"]["Row"]>;
         Relationships: [];
       };
+      team_reminder_log: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          day: string;
+          kind: string;
+          sent_at: string;
+          detail: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_reminder_log"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          day: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_reminder_log"]["Row"]>;
+        Relationships: [];
+      };
       loadout_checks: {
         Row: {
           id: string;

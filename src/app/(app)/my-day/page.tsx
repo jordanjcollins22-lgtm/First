@@ -14,6 +14,9 @@ import { AutoRefresh } from "@/components/crew/auto-refresh";
 import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
 import { getCrewsToday } from "@/lib/data/crews-today";
 import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
+import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/open-time";
+import { OpenTimePanel, TeamOpenTimePanel } from "@/components/team/open-time-panel";
+import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn } from "@/lib/time-zone";
 import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
@@ -153,7 +156,7 @@ async function OfficeDay() {
   // round trips the page sat through end to end. Each still fails on its own:
   // a money table that is not set up costs the commission panel and nothing
   // else, which is why every one of them carries its own catch.
-  const [data, work, today, commission, earlyStarts, marketing, ops, calls, crewsToday] = await Promise.all([
+  const [data, work, today, commission, earlyStarts, marketing, ops, calls, crewsToday, openTime] = await Promise.all([
     getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
       console.error("My Day failed to load:", err);
       return null as DashboardData | null;
@@ -205,6 +208,11 @@ async function OfficeDay() {
       console.error("Crews today failed to load:", err);
       return null;
     }),
+    // The hours between evaluations, and what is being done with them.
+    loadOpenTime(profile).catch((err) => {
+      console.error("Open time failed to load:", err);
+      return { mine: null as PersonOpenTime | null, team: [] as PersonOpenTime[] };
+    }),
   ]);
 
   if (!data) {
@@ -232,6 +240,11 @@ async function OfficeDay() {
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <EarlyStartQueue requests={earlyStarts} />
+
+      {/* The hours between evaluations are where the next jobs come from.
+          Each seller sees their own; the office sees everyone's. */}
+      {openTime.mine && <OpenTimePanel me={openTime.mine} />}
+      {openTime.team.length > 0 && <TeamOpenTimePanel team={openTime.team} />}
 
       {/* What is being done today, by whom, with what on the truck. The
           same load-out the crew tick on their phones, so a wrong list is
@@ -544,4 +557,22 @@ function TabLoading() {
       <div className="h-24 animate-pulse rounded-xl border border-border/60 bg-card/40" />
     </div>
   );
+}
+
+/**
+ * Whose open time to show.
+ *
+ * A seller sees their own day. Owners and admins see the whole selling
+ * team, themselves included when they sell.
+ */
+async function loadOpenTime(profile: Profile): Promise<{ mine: PersonOpenTime | null; team: PersonOpenTime[] }> {
+  const supabase = await createClient();
+  const day = dateKeyIn(new Date());
+  const team = await sellingTeam(supabase, profile.organization_id);
+  const office = isOwnerLevel(profile.roles) || profile.roles.includes("admin");
+  const me = team.find((p) => p.id === profile.id) ?? null;
+  const mine = me ? await personOpenTime(supabase, me, day) : null;
+  if (!office) return { mine, team: [] };
+  const rest = await Promise.all(team.filter((p) => p.id !== profile.id).map((p) => personOpenTime(supabase, p, day)));
+  return { mine, team: [...(mine ? [mine] : []), ...rest] };
 }
