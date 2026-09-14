@@ -151,6 +151,7 @@ function CallCard({ call, callerFirstName, later = false }: { call: RankedCall; 
             {call.recommendations.map((rec, index) => (
               <div key={index} className="rounded-md border border-border px-3 py-2">
                 <p className="text-sm font-medium">{rec.title}</p>
+                {rec.context && <p className="text-xs text-muted-foreground">{rec.context}</p>}
                 {rec.say && (
                   <p className="mt-0.5 text-sm text-muted-foreground">“{rec.say.replace(/\{you\}/g, callerFirstName)}”</p>
                 )}

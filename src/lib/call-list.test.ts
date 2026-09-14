@@ -30,6 +30,7 @@ function item(overrides: Partial<CallItem> = {}): CallItem {
     lastOpenAt: "2026-09-12T08:00:00Z",
     focus: null,
     objectionIds: [],
+    objections: [],
     services: ["Landscape bed"],
     accountManagerId: null,
     calls: [],
@@ -100,6 +101,34 @@ describe("recommendations", () => {
     const recs = recommend(item({ objectionIds: ["price_high", "timing"] }));
     expect(recs.some((r) => r.title.includes("How did you come up with this price?"))).toBe(true);
     expect(recs.length).toBeLessThanOrEqual(3);
+  });
+
+  it("says it was a tap, when, and what came of it", () => {
+    const recs = recommend(
+      item({
+        objectionIds: ["price_high"],
+        objections: [
+          { id: "price_high", at: "2026-09-13T12:14:56Z", resolution: "payment_plan", resolved: true, note: null },
+        ],
+      })
+    );
+    const rec = recs.find((r) => r.title.includes("How did you come up with this price?"))!;
+    expect(rec.title).toMatch(/^They tapped/);
+    expect(rec.context).toMatch(/^Tapped .*Took the payment plan option and said it helped\.$/);
+  });
+
+  it("shows what they typed, verbatim and first", () => {
+    const recs = recommend(
+      item({
+        objectionIds: ["other", "price_high"],
+        objections: [
+          { id: "other", at: "2026-09-13T12:20:00Z", resolution: null, resolved: false, note: "Can you do it before the 20th?" },
+          { id: "price_high", at: "2026-09-13T12:14:56Z", resolution: null, resolved: null, note: null },
+        ],
+      })
+    );
+    expect(recs[0].title).toBe("They wrote, on their proposal");
+    expect(recs[0].say).toBe("Can you do it before the 20th?");
   });
 
   it("chases a proposal nobody has opened with the link", () => {

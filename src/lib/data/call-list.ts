@@ -6,7 +6,7 @@ import { isAccountManager } from "@/lib/affiliate-roles";
 import { isOwnerLevel } from "@/lib/roles";
 import type { ViewSummary } from "@/lib/proposal-views";
 import type { AttentionSummary } from "@/lib/proposal-attention";
-import { buildCallList, isCallOutcome, type CallItem, type CallList, type PreviousCall } from "@/lib/call-list";
+import { buildCallList, isCallOutcome, type CallItem, type CallList, type PreviousCall, type ObjectionTap } from "@/lib/call-list";
 import type { Profile, ProposalZoneSnapshot } from "@/types/domain";
 
 /**
@@ -75,7 +75,11 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
       .select("proposal_id, outcome, note, callback_on, created_at, profile:profiles(full_name, email)")
       .in("proposal_id", ids)
       .order("created_at", { ascending: false }),
-    supabase.from("proposal_objections").select("proposal_id, objection_id, raised_at").in("proposal_id", ids),
+    supabase
+      .from("proposal_objections")
+      .select("proposal_id, objection_id, raised_at, resolution, resolved, note")
+      .in("proposal_id", ids)
+      .order("raised_at", { ascending: false }),
     viewsForAllProposals().catch(() => ({}) as Record<string, ViewSummary>),
     attentionForAllProposals().catch(() => ({}) as Record<string, AttentionSummary>),
   ]);
@@ -102,10 +106,21 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
   }
 
   const objectionsByProposal = new Map<string, string[]>();
-  for (const row of (objectionRows ?? []) as { proposal_id: string; objection_id: string }[]) {
+  const tapsByProposal = new Map<string, ObjectionTap[]>();
+  for (const row of (objectionRows ?? []) as {
+    proposal_id: string;
+    objection_id: string;
+    raised_at: string;
+    resolution: ObjectionTap["resolution"];
+    resolved: boolean | null;
+    note: string | null;
+  }[]) {
     const list = objectionsByProposal.get(row.proposal_id) ?? [];
     if (!list.includes(row.objection_id)) list.push(row.objection_id);
     objectionsByProposal.set(row.proposal_id, list);
+    const taps = tapsByProposal.get(row.proposal_id) ?? [];
+    taps.push({ id: row.objection_id, at: row.raised_at, resolution: row.resolution, resolved: row.resolved, note: row.note });
+    tapsByProposal.set(row.proposal_id, taps);
   }
 
   const items: CallItem[] = mine.map((p) => {
@@ -128,6 +143,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
       lastOpenAt: view?.lastAt ?? null,
       focus: focus && !focus.thin ? (focus.focus?.label ?? null) : null,
       objectionIds: objectionsByProposal.get(p.id) ?? [],
+      objections: tapsByProposal.get(p.id) ?? [],
       services: [...new Set((p.scope_snapshot ?? []).map((z) => z.serviceLabel).filter(Boolean))],
       accountManagerId: customer.account_manager_id,
       calls: callsByProposal.get(p.id) ?? [],

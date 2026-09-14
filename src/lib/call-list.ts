@@ -1,4 +1,5 @@
 import { objectionById } from "@/lib/objections";
+import { shortWhen } from "@/lib/time-zone";
 
 /**
  * The account manager's call list.
@@ -90,15 +91,31 @@ export interface CallItem {
   focus: string | null;
   /** Questions they tapped on the proposal page, by id. */
   objectionIds: string[];
+  /**
+   * The taps themselves: when, what we offered, whether they said it
+   * helped, and anything they typed. A tap is not a message, and the
+   * list has to say which it was showing.
+   */
+  objections: ObjectionTap[];
   /** The services on the proposal, for the script. */
   services: string[];
   accountManagerId: string | null;
   calls: PreviousCall[];
 }
 
+export interface ObjectionTap {
+  id: string;
+  at: string;
+  resolution: "explain" | "payment_plan" | "reduce_scope" | "talk" | null;
+  resolved: boolean | null;
+  note: string | null;
+}
+
 export interface Recommendation {
   /** What to do. */
   title: string;
+  /** What actually happened, in a line: when they tapped, what came of it. */
+  context?: string | null;
   /** What to say, in the account manager's voice. */
   say: string | null;
   /** A screen to open, when one helps. */
@@ -249,7 +266,18 @@ export function recommend(item: CallItem): Recommendation[] {
   const trimHref = `/jobs/${item.jobId}?view=scope`;
   const messagesHref = `/jobs/${item.jobId}?view=messages`;
 
-  // What the last call already established comes first.
+  // Anything they typed in their own words comes first and verbatim. It is
+  // the only real message on the page, and a canned answer must not bury it.
+  for (const tap of item.objections.filter((t) => t.note)) {
+    out.push({
+      title: "They wrote, on their proposal",
+      context: whenTapped(tap.at),
+      say: tap.note,
+      action: { label: "Their proposal", href: `/jobs/${item.jobId}` },
+    });
+  }
+
+  // What the last call already established comes next.
   if (last?.outcome === "too_expensive" || soundsLikePrice(item.responseNote) || soundsLikePrice(last?.note)) {
     out.push({
       title: "Offer to trim it to the parts that matter",
@@ -279,13 +307,17 @@ export function recommend(item: CallItem): Recommendation[] {
     });
   }
 
-  // What they tapped on the page, answered in the words on the page.
-  for (const id of item.objectionIds.slice(0, 2)) {
-    const objection = objectionById(id);
+  // What they tapped on the page, answered in the words on the page. Said
+  // as a tap, with the time and what came of it, so nobody rings a client
+  // to answer a question the page already settled.
+  const taps = latestTaps(item);
+  for (const tap of taps.slice(0, 2)) {
+    const objection = objectionById(tap.id);
     if (!objection) continue;
     const resolution = objection.resolutions[0];
     out.push({
-      title: `They asked: “${objection.label}”`,
+      title: `They tapped “${objection.label}” on their proposal`,
+      context: `${whenTapped(tap.at)}. ${outcomeOf(tap)}`,
       say: objection.answer,
       action:
         resolution === "reduce_scope"
@@ -294,6 +326,13 @@ export function recommend(item: CallItem): Recommendation[] {
             ? { label: "Their proposal", href: `/jobs/${item.jobId}` }
             : null,
     });
+  }
+  if (taps.length === 0) {
+    for (const id of item.objectionIds.slice(0, 2)) {
+      const objection = objectionById(id);
+      if (!objection) continue;
+      out.push({ title: `They tapped “${objection.label}” on their proposal`, say: objection.answer, action: null });
+    }
   }
 
   if (item.status === "sent" && item.opens === 0) {
@@ -402,4 +441,35 @@ export function callListHeadline(list: CallList): string {
   const total = `$${Math.round(list.openCents / 100).toLocaleString("en-US")}`;
   if (list.now.length === 0) return `Nothing due today. ${list.later.length} to ring later, ${total} on the table.`;
   return `${list.now.length} to ring today, ${total} on the table.`;
+}
+
+/** One line per question, newest tap of each, newest first. */
+function latestTaps(item: CallItem): ObjectionTap[] {
+  const byId = new Map<string, ObjectionTap>();
+  for (const tap of item.objections) {
+    if (tap.id === "other") continue;
+    const seen = byId.get(tap.id);
+    if (!seen || tap.at > seen.at) byId.set(tap.id, tap);
+  }
+  return [...byId.values()].sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+function whenTapped(at: string): string {
+  return `Tapped ${shortWhen(at)}`;
+}
+
+/** What came of the tap, in words. */
+export function outcomeOf(tap: ObjectionTap): string {
+  const offered =
+    tap.resolution === "payment_plan"
+      ? "Took the payment plan option"
+      : tap.resolution === "reduce_scope"
+        ? "Asked to trim the work"
+        : tap.resolution === "talk"
+          ? "Asked for a call"
+          : tap.resolution === "explain"
+            ? "Read the answer"
+            : "Read the answer";
+  const helped = tap.resolved === true ? "said it helped" : tap.resolved === false ? "said it did not help" : "did not say if it helped";
+  return `${offered} and ${helped}.`;
 }
