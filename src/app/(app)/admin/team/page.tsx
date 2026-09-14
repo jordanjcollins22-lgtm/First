@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { listProfiles, listRoles, getCurrentProfile } from "@/lib/data/team";
+import { listProfiles, listRoles, getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { listServicePricing } from "@/lib/data/service-pricing";
 import { listMaterials } from "@/lib/data/materials";
 import { listTools } from "@/lib/data/tools";
@@ -26,6 +26,7 @@ import { PhoneInput } from "@/components/team/phone-input";
 import { EditTeamMember } from "@/components/team/edit-team-member";
 import { MeasurementUnitSetting } from "@/components/service-pricing/measurement-unit-setting";
 import { startImpersonation } from "@/lib/actions/impersonation-actions";
+import { ViewAsPicker } from "@/components/team/view-as-picker";
 import { CalibrationPanel } from "@/components/growth/calibration-panel";
 import { calibrationReport } from "@/lib/data/calibration";
 import { canSell, isOwnerLevel } from "@/lib/roles";
@@ -50,9 +51,15 @@ export default async function TeamServicesPage() {
   let profiles: Profile[] = [];
   let roles: CustomRole[] = [];
   let currentProfile: Profile | null = null;
+  let realProfile: Profile | null = null;
   let migrationMissing = false;
   try {
-    [profiles, roles, currentProfile] = await Promise.all([listProfiles(), listRoles(), getCurrentProfile()]);
+    [profiles, roles, currentProfile, realProfile] = await Promise.all([
+      listProfiles(),
+      listRoles(),
+      getCurrentProfile(),
+      getRealProfile(),
+    ]);
   } catch {
     migrationMissing = true;
   }
@@ -72,6 +79,9 @@ export default async function TeamServicesPage() {
   }
 
   const isAdmin = currentProfile?.roles.includes("admin") ?? false;
+  // The account really signed in, not the one being viewed as. View-as is
+  // that person's feature, and it should still be here while they use it.
+  const realIsAdmin = realProfile?.roles.includes("admin") ?? false;
   const emailByProfileId = new Map(profiles.map((p) => [p.id, p.email]));
 
   // Grouped by role, in the roles table's own order. Someone holding several
@@ -82,7 +92,7 @@ export default async function TeamServicesPage() {
   const unassigned = profiles.filter((p) => p.roles.length === 0);
   if (unassigned.length > 0) groups.push({ role: "No role yet", members: unassigned });
 
-  const teamColumnCount = 2 + (isAdmin ? 3 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
+  const teamColumnCount = 2 + (isAdmin ? 2 : 0) + (isAdmin && isSupabaseAdminConfigured ? 1 : 0);
 
   let services: Awaited<ReturnType<typeof listServicePricing>> = [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
@@ -136,6 +146,21 @@ export default async function TeamServicesPage() {
         showServices={servicesAllowed}
         teamContent={
           <>
+            {realIsAdmin && (
+              <Card className="mb-6" id="view-as">
+                <CardHeader>
+                  <CardTitle>View as</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    See the app exactly as someone on the team sees it. A banner stays at the top until you
+                    return to your own account.
+                  </p>
+                  <ViewAsPicker profiles={profiles} selfId={realProfile?.id ?? null} />
+                </CardContent>
+              </Card>
+            )}
+
             {!isAdmin && (
               <p className="mb-6 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
                 If this should be an admin account, run this in Supabase&apos;s SQL Editor (swap in your
@@ -187,7 +212,6 @@ export default async function TeamServicesPage() {
                       {isAdmin && <th className="p-2 font-medium">Pay</th>}
                       {isAdmin && <th className="p-2 font-medium">Phone</th>}
                       {isAdmin && isSupabaseAdminConfigured && <th className="p-2 font-medium">Password</th>}
-                      {isAdmin && <th className="p-2 font-medium">Account</th>}
                     </tr>
                   </thead>
                   {groups.map((group) => (
@@ -216,6 +240,16 @@ export default async function TeamServicesPage() {
                             </p>
                           )}
                           {isAdmin && <EditTeamMember profile={profile} />}
+                          {realIsAdmin && profile.id !== realProfile?.id && (
+                            <form action={startImpersonation.bind(null, profile.id)} className="mt-1">
+                              <button
+                                type="submit"
+                                className="min-h-8 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                              >
+                                View as
+                              </button>
+                            </form>
+                          )}
                         </td>
                         <td className="p-2">
                           {isAdmin ? (
@@ -267,17 +301,6 @@ export default async function TeamServicesPage() {
                         {isAdmin && isSupabaseAdminConfigured && (
                           <td className="p-2">
                             <ResetPasswordControl profileId={profile.id} />
-                          </td>
-                        )}
-                        {isAdmin && (
-                          <td className="p-2">
-                            {profile.id !== currentProfile?.id && (
-                              <form action={startImpersonation.bind(null, profile.id)}>
-                                <button type="submit" className="text-xs text-primary underline-offset-2 hover:underline">
-                                  View as
-                                </button>
-                              </form>
-                            )}
                           </td>
                         )}
                       </tr>

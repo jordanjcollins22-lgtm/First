@@ -52,7 +52,12 @@ export function SiteNav({
         ...navModules(allowedTabs).map((mod) => ({ href: mod.href, label: mod.label })),
         // Gated on the admin role itself, never on the table it edits —
         // otherwise one stray uncheck would take away the way back in.
-        ...(roles.includes("admin") ? [{ href: "/admin/settings", label: "Settings" }] : []),
+        ...(roles.includes("admin")
+          ? [
+              { href: "/admin/view-as", label: "View as" },
+              { href: "/admin/settings", label: "Settings" },
+            ]
+          : []),
       ];
 
   useEffect(() => {

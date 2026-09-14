@@ -117,6 +117,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "rather than on a tab — the tab list lives in the database these tabs exist to repair, and a " +
     "page that could be locked away by the thing it fixes is a trap.",
   "/admin/database": "Redirects to Settings, where it is a tab.",
+  "/admin/view-as":
+    "See the app as another team member. Gated on the account actually signed in being an admin, " +
+    "not on a tab, so an admin already viewing as somebody can switch to the next person.",
   "/today": "Redirects to My Day, which shows a crew member their own stops.",
   "/routes/[playId]":
     "One door-hanger round, walked door by door on a phone. Reached from My Day by whoever the round " +
