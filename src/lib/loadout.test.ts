@@ -72,7 +72,7 @@ describe("buildLoadout", () => {
 
   it("names a tool that has since been removed rather than crashing", () => {
     const out = buildLoadout([{ ...toni, toolIds: ["gone"] }], tools, containers, []);
-    expect(out.items[1].label).toMatch(/no longer/);
+    expect(out.items[1].label).toMatch(/deleted/);
   });
 });
 

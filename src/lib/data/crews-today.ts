@@ -75,7 +75,9 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
         .from("job_crew")
         .select("job_id, profile_id, is_lead, profiles!job_crew_profile_id_fkey(full_name, email)")
         .in("job_id", jobIds),
-      supabase.from("tools").select("id, name, kits").eq("active", true),
+      // Every tool, not only the active ones: a visit that names a tool
+      // somebody has since retired should still say which tool it meant.
+      supabase.from("tools").select("id, name, kits, active"),
       supabase.from("kit_containers").select("name, kits").is("archived_at", null),
       supabase.from("loadout_checks").select("profile_id, item_kind, item_key").eq("day", day),
       supabase.from("crew_day_events").select("profile_id, kind, job_id, at").eq("day", day).order("at", { ascending: true }),
@@ -89,10 +91,13 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
   };
   const crew = (crewRows ?? []) as unknown as CrewRow[];
 
-  const tools: LoadoutTool[] = ((toolRows ?? []) as { id: string; name: string; kits: number[] | null }[]).map((t) => ({
+  const tools: LoadoutTool[] = (
+    (toolRows ?? []) as { id: string; name: string; kits: number[] | null; active: boolean }[]
+  ).map((t) => ({
     id: t.id,
-    name: t.name,
-    kits: t.kits ?? [],
+    name: t.active ? t.name : `${t.name} (marked inactive in inventory)`,
+    // A retired tool is out of its kits; the visit that names it still gets it.
+    kits: t.active ? (t.kits ?? []) : [],
   }));
   const containers = ((containerRows ?? []) as { name: string; kits: number[] | null }[]).map((c) => ({
     name: c.name,

@@ -113,7 +113,7 @@ export function buildLoadout(
         checked: ticked.has(`kit:${kit}`),
       })),
     ...[...toolStops.keys()]
-      .map((id) => ({ id, name: toolName.get(id) ?? "A tool no longer on the list" }))
+      .map((id) => ({ id, name: toolName.get(id) ?? "A tool deleted from inventory" }))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(({ id, name }) => ({
         kind: "tool" as const,
