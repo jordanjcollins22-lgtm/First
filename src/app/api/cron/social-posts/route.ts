@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
+import { authorizeCron } from "@/lib/cron-auth";
 
 /**
  * Sends the posts whose time has come.
@@ -27,13 +28,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   }
 
-  const secret = env.cronSecret;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const refused = authorizeCron(request, "social-posts");
+  if (refused) return refused;
 
   const admin = createAdminClient();
 

@@ -4,12 +4,12 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-import { env } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 import { LAYER_COLORS } from "@/lib/calendar-events";
 import type { CalendarEvent } from "@/lib/calendar-events";
 
-if (env.mapboxToken) {
-  mapboxgl.accessToken = env.mapboxToken;
+if (publicEnv.mapboxToken) {
+  mapboxgl.accessToken = publicEnv.mapboxToken;
 }
 
 /**
@@ -26,7 +26,7 @@ export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; day
   const markersRef = useRef<mapboxgl.Marker[]>([]);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current || !env.mapboxToken) return;
+    if (!containerRef.current || mapRef.current || !publicEnv.mapboxToken) return;
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/streets-v12",
@@ -79,7 +79,7 @@ export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; day
     }
   }, [events]);
 
-  if (!env.mapboxToken) return null;
+  if (!publicEnv.mapboxToken) return null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/60 bg-card/70 shadow-lg shadow-black/5 backdrop-blur-xl">

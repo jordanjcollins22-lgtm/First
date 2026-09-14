@@ -5,6 +5,7 @@ import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import { freeOf } from "@/lib/busy";
 import { tooSoon } from "@/lib/booking-notice";
 import { zonedToUtc } from "@/lib/time-zone";
+import { log } from "@/lib/log";
 import { getBookingNotice } from "@/lib/data/public-booking";
 import { SLOT_MINUTES } from "@/lib/booking-availability";
 import { lookupPropertyDetails } from "@/lib/rentcast";
@@ -249,6 +250,19 @@ export async function submitPublicBooking(
   // The pre-evaluation form is made by a trigger the moment the job has a
   // date, so the client can be handed the link on the very next screen.
   const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", job.id).maybeSingle();
+
+  log.info("booking.created", {
+    jobId: job.id,
+    customerId,
+    evaluatorId,
+    at: iso,
+    date: input.date,
+    time: input.time,
+    mode: mode.mode,
+    referralCode,
+    services: requestedServiceIds.length,
+    prepForm: Boolean(intake?.token),
+  });
 
   return { jobId: job.id, mode: mode.mode, prepToken: intake?.token ?? null };
 }

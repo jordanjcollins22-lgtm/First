@@ -5,7 +5,7 @@ import { Loader2, MapPin, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-import { isMapboxConfigured } from "@/lib/env";
+import { isMapboxConfigured } from "@/lib/public-env";
 import { formatCoordinates, parseCoordinates } from "@/lib/coordinates";
 
 interface SatelliteAddressSearchProps {

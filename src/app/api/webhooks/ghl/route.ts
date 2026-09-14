@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseAsBusinessTime } from "@/lib/time-zone";
+import { log } from "@/lib/log";
 import { firstAcceptable } from "@/lib/geocode-guard";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { isSupabaseAdminConfigured } from "@/lib/env";
@@ -33,7 +34,14 @@ export async function POST(request: NextRequest) {
 
   const expectedSecret = process.env.GHL_WEBHOOK_SECRET;
   if (expectedSecret && request.headers.get("x-webhook-secret") !== expectedSecret) {
+    log.warn("ghl.webhook.rejected", { reason: "bad shared secret" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!expectedSecret) {
+    // Still accepted, because bookings come through here today, but said
+    // every time: this endpoint creates clients and jobs for anybody who
+    // posts to it until GHL_WEBHOOK_SECRET is set on both sides.
+    log.warn("ghl.webhook.unverified", { fix: "Set GHL_WEBHOOK_SECRET and send it as x-webhook-secret from GoHighLevel." });
   }
 
   let body: Record<string, unknown>;
@@ -135,7 +143,11 @@ export async function POST(request: NextRequest) {
     })
     .select()
     .single();
-  if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 });
+  if (jobError) {
+    log.error("ghl.booking.failed", jobError, { customerId, propertyId: property.id });
+    return NextResponse.json({ error: jobError.message }, { status: 500 });
+  }
 
+  log.info("ghl.booking.created", { jobId: job.id, customerId, propertyId: property.id, at: evaluationDate });
   return NextResponse.json({ ok: true, customerId, propertyId: property.id, jobId: job.id });
 }

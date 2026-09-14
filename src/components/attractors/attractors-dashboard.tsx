@@ -7,7 +7,7 @@ import { Plus, Settings2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isMapboxConfigured } from "@/lib/env";
+import { isMapboxConfigured } from "@/lib/public-env";
 import { FilterBar } from "./filter-bar";
 import { WaveList } from "./wave-list";
 import { ClientList } from "./client-list";

@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { describeError, log } from "@/lib/log";
 import { recordCheckoutSession } from "@/lib/actions/stripe-settlement";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
@@ -34,9 +35,11 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, env.stripeWebhookSecret);
-  } catch {
+  } catch (err) {
+    log.warn("stripe.webhook.rejected", { reason: "invalid signature", error: describeError(err) });
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
+  log.info("stripe.webhook.received", { type: event.type, eventId: event.id });
 
   const admin = createAdminClient();
 

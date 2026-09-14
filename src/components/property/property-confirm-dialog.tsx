@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { env } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 
 interface PropertyConfirmDialogProps {
@@ -31,7 +31,7 @@ export function PropertyConfirmDialog({
   onConfirm,
   isPending,
 }: PropertyConfirmDialogProps) {
-  const imageUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+ff3b30(${suggestion.lng},${suggestion.lat})/${suggestion.lng},${suggestion.lat},19,0/480x320@2x?access_token=${env.mapboxToken}`;
+  const imageUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+ff3b30(${suggestion.lng},${suggestion.lat})/${suggestion.lng},${suggestion.lat},19,0/480x320@2x?access_token=${publicEnv.mapboxToken}`;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isPending && onOpenChange(next)}>

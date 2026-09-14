@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { log, maskEmail } from "@/lib/log";
 import { sendProviderEmail } from "@/lib/email/resend";
 import type { MailStream } from "@/lib/sending-domains";
 
@@ -80,5 +81,8 @@ export async function sendEmail(input: SendInput): Promise<SendResult> {
     replyTo: sender.reply_to,
   });
 
+  if (!result.ok) {
+    log.error("email.failed", undefined, { organizationId: input.organizationId, stream: input.stream, to: to.map(maskEmail), message: result.message });
+  }
   return result.ok ? { ok: true, id: result.data.id } : result;
 }

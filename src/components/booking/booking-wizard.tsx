@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { env, isMapboxConfigured } from "@/lib/env";
+import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
 import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { submitPublicBooking } from "@/lib/actions/public-booking-actions";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
@@ -402,7 +402,7 @@ export function BookingWizard({
 
   const imageUrl =
     selectedAddress && isMapboxConfigured
-      ? `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x?access_token=${env.mapboxToken}`
+      ? `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x?access_token=${publicEnv.mapboxToken}`
       : null;
 
   // Whether somebody is driving to this one. Worked out in the browser purely

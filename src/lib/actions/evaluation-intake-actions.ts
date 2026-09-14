@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cleanAnswers } from "@/lib/evaluation-intake";
+import { answeredCount, cleanAnswers } from "@/lib/evaluation-intake";
+import { log } from "@/lib/log";
 
 type Result = { ok: true; submittedAt: string } | { ok: false; error: string };
 
@@ -41,6 +42,7 @@ export async function submitEvaluationIntake(input: {
   if (error) return { ok: false, error: "Could not save that. Try again in a moment." };
   if (!data) return { ok: false, error: "That link has expired or was never ours." };
 
+  log.info("intake.submitted", { jobId: data.job_id, together: input.together, answered: answeredCount(answers) });
   revalidatePath(`/jobs/${data.job_id}`);
   return { ok: true, submittedAt };
 }

@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { env, isSupabaseAdminConfigured } from "@/lib/env";
+import { isSupabaseAdminConfigured } from "@/lib/env";
+import { authorizeCron } from "@/lib/cron-auth";
+import { log } from "@/lib/log";
 import {
   dueNow,
   mergeRules,
@@ -43,10 +45,8 @@ export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) {
     return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   }
-  const secret = env.cronSecret;
-  if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const refused = authorizeCron(request, "client-reminders");
+  if (refused) return refused;
 
   const admin = createAdminClient();
   const now = new Date();
@@ -144,6 +144,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  log.info("cron.client_reminders", { sent, skipped, held, orgs: orgs.length });
   return NextResponse.json({ sent, skipped, held });
 }
 

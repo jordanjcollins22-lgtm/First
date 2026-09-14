@@ -1,4 +1,5 @@
 import Twilio from "twilio";
+import { log, maskPhone } from "@/lib/log";
 
 import { env, isTwilioConfigured } from "@/lib/env";
 import { getJobCustomerContact } from "@/lib/job-customer";
@@ -24,7 +25,13 @@ export function last10Digits(phone: string): string {
 export async function sendSms(to: string, body: string): Promise<void> {
   if (!isTwilioConfigured) return;
   const client = Twilio(env.twilioAccountSid, env.twilioAuthToken);
-  await client.messages.create({ to, from: env.twilioPhoneNumber, body });
+  try {
+    const sent = await client.messages.create({ to, from: env.twilioPhoneNumber, body });
+    log.info("sms.sent", { to: maskPhone(to), sid: sent.sid, length: body.length });
+  } catch (err) {
+    log.error("sms.failed", err, { to: maskPhone(to) });
+    throw err;
+  }
 }
 
 /** Best-effort: looks up the job's customer phone and texts them. Silently

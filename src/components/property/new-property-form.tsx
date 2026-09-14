@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { PropertyConfirmDialog } from "@/components/property/property-confirm-dialog";
 import { createPropertyAndJob } from "@/lib/actions/property-actions";
 import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-import { isMapboxConfigured } from "@/lib/env";
+import { isMapboxConfigured } from "@/lib/public-env";
 
 export function NewPropertyForm() {
   const [customerName, setCustomerName] = useState("");

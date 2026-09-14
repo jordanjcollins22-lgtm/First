@@ -5,7 +5,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Loader2 } from "lucide-react";
 
-import { env } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 import { markersInView } from "@/lib/actions/coverage-actions";
 import {
   MARKER_ZOOM_THRESHOLD,
@@ -17,8 +17,8 @@ import {
 } from "@/lib/coverage-map";
 import type { CoverageMarker } from "@/lib/data/coverage";
 
-if (env.mapboxToken) {
-  mapboxgl.accessToken = env.mapboxToken;
+if (publicEnv.mapboxToken) {
+  mapboxgl.accessToken = publicEnv.mapboxToken;
 }
 
 /** Harford County, roughly, for the first frame. */
@@ -64,7 +64,7 @@ export function CoverageMapView({ summary }: { summary: CoverageSummary }) {
   }, []);
 
   useEffect(() => {
-    if (!containerRef.current || !env.mapboxToken || mapRef.current) return;
+    if (!containerRef.current || !publicEnv.mapboxToken || mapRef.current) return;
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -120,7 +120,7 @@ export function CoverageMapView({ summary }: { summary: CoverageSummary }) {
     });
   }, [markers]);
 
-  if (!env.mapboxToken) {
+  if (!publicEnv.mapboxToken) {
     return (
       <p className="rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
         The coverage map needs a Mapbox token. The counts below still work without one.

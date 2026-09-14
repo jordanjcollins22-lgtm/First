@@ -8,7 +8,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { ArrowLeft, ExternalLink, Loader2, Navigation, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { env } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 import { getDrivingRoute } from "@/lib/actions/directions-actions";
 import {
   arrivalTime,
@@ -20,8 +20,8 @@ import {
 } from "@/lib/directions";
 import { arrivalClock, navigate, spokenDistance, spokenDuration } from "@/lib/navigation";
 
-if (env.mapboxToken) {
-  mapboxgl.accessToken = env.mapboxToken;
+if (publicEnv.mapboxToken) {
+  mapboxgl.accessToken = publicEnv.mapboxToken;
 }
 
 export interface DirectionsDestination {
@@ -149,7 +149,7 @@ export function DirectionsView({
   // a new route replaces the old one wholesale, and there is nothing to
   // preserve between two different journeys.
   useEffect(() => {
-    if (!route || !containerRef.current || !env.mapboxToken) return;
+    if (!route || !containerRef.current || !publicEnv.mapboxToken) return;
 
     const map = new mapboxgl.Map({
       container: containerRef.current,

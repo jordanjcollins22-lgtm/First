@@ -5,12 +5,12 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { CloudRain, Pause, Play } from "lucide-react";
 
-import { env } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 import { weatherEmoji } from "@/lib/weather";
 import type { LocationForecast } from "@/lib/weather";
 
-if (env.mapboxToken) {
-  mapboxgl.accessToken = env.mapboxToken;
+if (publicEnv.mapboxToken) {
+  mapboxgl.accessToken = publicEnv.mapboxToken;
 }
 
 const RADAR_SOURCE = "rainviewer-radar";
@@ -52,7 +52,7 @@ export function WeatherMap({ locations }: { locations: LocationForecast[] }) {
 
   // Map setup. Locations never change while this is mounted, so this runs once.
   useEffect(() => {
-    if (!containerRef.current || mapRef.current || !env.mapboxToken) return;
+    if (!containerRef.current || mapRef.current || !publicEnv.mapboxToken) return;
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -174,7 +174,7 @@ export function WeatherMap({ locations }: { locations: LocationForecast[] }) {
     return () => clearInterval(timer);
   }, [playing, frames.length]);
 
-  if (!env.mapboxToken) {
+  if (!publicEnv.mapboxToken) {
     return (
       <div className="rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
         Add NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN to show the map.

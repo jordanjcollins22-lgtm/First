@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { log, maskEmail, maskPhone } from "@/lib/log";
 import { isResendConfigured, isTwilioConfigured } from "@/lib/env";
 import { sendSms, toE164 } from "@/lib/sms";
 import { sendEmail } from "@/lib/email/send";
@@ -177,6 +178,7 @@ export async function sendClientMessage(
   };
 
   if (!verdict.send) {
+    log.warn("client_message.skipped", { kind: message.kind, channel: message.channel, customerId: message.customerId, reason: verdict.reason });
     await record("skipped", { skipReason: verdict.reason, detail: verdict.detail });
     return { sent: false, reason: verdict.reason, detail: verdict.detail };
   }
@@ -209,6 +211,7 @@ export async function sendClientMessage(
       const number = toE164(contact.phone ?? "");
       if (!number) throw new Error("Unreadable phone number.");
       await sendSms(number, message.body);
+      log.info("client_message.sent", { kind: message.kind, channel: "sms", customerId: message.customerId, to: maskPhone(number) });
       return { sent: true, providerId: null };
     }
 
@@ -222,9 +225,11 @@ export async function sendClientMessage(
     });
     if (!result.ok) throw new Error(result.message);
     await record("sent", { providerId: result.id });
+    log.info("client_message.sent", { kind: message.kind, channel: "email", customerId: message.customerId, to: maskEmail(contact.email), providerId: result.id });
     return { sent: true, providerId: result.id };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "The provider refused it.";
+    log.error("client_message.failed", error, { kind: message.kind, channel: message.channel, customerId: message.customerId, dedupeKey: message.dedupeKey });
     await record("failed", { detail });
     return { sent: false, reason: "failed", detail };
   }

@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { env, isSupabaseAdminConfigured } from "@/lib/env";
+import { isSupabaseAdminConfigured } from "@/lib/env";
+import { authorizeCron } from "@/lib/cron-auth";
 import { targetsFromRow } from "@/lib/data/ops";
 import { assessOps, planForDatabase, type OpsPulse } from "@/lib/ops";
 import { syncOrganization } from "@/lib/plaid";
@@ -23,11 +24,8 @@ export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) {
     return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   }
-  const secret = env.cronSecret;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const refused = authorizeCron(request, "ops-tick");
+  if (refused) return refused;
 
   const admin = createAdminClient();
   const { data: orgs, error } = await admin.from("organizations").select("id, name");

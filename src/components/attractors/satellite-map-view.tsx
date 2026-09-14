@@ -6,7 +6,7 @@ import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 
-import { env } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 import { geometryPoints, geometryToPolygon, waveToPolygon } from "@/lib/attractor-geometry";
 import { colorForAttractorType, colorForJobStatus, LOCATION_COLOR } from "./attractor-colors";
 import type { AttractorWave, BusinessLocation, LatLng, LocationArea } from "@/types/domain";
@@ -35,8 +35,8 @@ import { orderAlongLine } from "@/lib/route-order";
 import { MODE_HINT as ROUND_MODE_HINT, toggleOrder, type RouteEdit } from "@/lib/route-edit";
 import { houseCoverage } from "@/lib/actions/house-coverage-actions";
 
-if (env.mapboxToken) {
-  mapboxgl.accessToken = env.mapboxToken;
+if (publicEnv.mapboxToken) {
+  mapboxgl.accessToken = publicEnv.mapboxToken;
 }
 
 interface SatelliteMapViewProps {

@@ -5,7 +5,9 @@ import { notifyTeamMember } from "@/lib/notifications";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { growProspects } from "@/lib/data/prospect-growth";
 import { NIGHTLY_BUDGET } from "@/lib/prospecting";
-import { env, isSupabaseAdminConfigured } from "@/lib/env";
+import { isSupabaseAdminConfigured } from "@/lib/env";
+import { authorizeCron } from "@/lib/cron-auth";
+import { log } from "@/lib/log";
 
 /**
  * Texts each person an "evaluation coming up" reminder, however many hours
@@ -26,14 +28,8 @@ export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) {
     return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   }
-  // Vercel Cron sends this automatically; anything else must supply it.
-  const secret = env.cronSecret;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const refused = authorizeCron(request, "appointment-reminders");
+  if (refused) return refused;
 
   const admin = createAdminClient();
 
@@ -130,5 +126,6 @@ export async function GET(request: NextRequest) {
     if (report) grown[org.id] = report.added;
   }
 
+  log.info("cron.appointment_reminders", { sent, reconciled, grown });
   return NextResponse.json({ sent, reconciled, grown });
 }
