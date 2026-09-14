@@ -9,6 +9,7 @@ import "../globals.css";
  * the (app) group inherits nothing from it.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Your credit",
   description: "Book with your credit applied.",
   robots: { index: false, follow: false },

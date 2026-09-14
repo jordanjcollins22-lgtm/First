@@ -13,6 +13,7 @@ import "../globals.css";
  * the (app) group inherits nothing from it.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Weed guide",
   description: "What this weed is, and what it looks like.",
 };

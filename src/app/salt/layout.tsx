@@ -11,6 +11,7 @@ import "../globals.css";
  * client.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Salt my walks",
   description: "Prepaid ice melt for the winter",
 };

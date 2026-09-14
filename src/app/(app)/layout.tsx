@@ -14,8 +14,10 @@ import { themeScript } from "@/lib/theme";
 import "../globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "JS Landscaping",
   description: "Property estimating & job-execution app",
+  openGraph: { siteName: "JS Landscaping MD", type: "website" },
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "JS Landscaping" },
   icons: {

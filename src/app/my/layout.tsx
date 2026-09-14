@@ -9,6 +9,7 @@ import "../globals.css";
  * not as a matter of taste but because half the links would refuse them.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Your projects",
   description: "Your quotes, visits and work with us",
 };

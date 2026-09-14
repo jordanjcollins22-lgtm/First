@@ -15,6 +15,7 @@ import "../globals.css";
  * stylesheet import.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Advertise on our flyer",
   description: "Put your advert in front of local homes.",
 };

@@ -14,6 +14,7 @@ import "../globals.css";
  * segment, so the link a client already has still works.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Your proposal",
   description: "Your property proposal",
 };

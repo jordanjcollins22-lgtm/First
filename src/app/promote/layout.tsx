@@ -10,6 +10,7 @@ import "../globals.css";
  * nothing from it.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Post your business in the group",
   description: "Reach the neighbours in a local group.",
 };

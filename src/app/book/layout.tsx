@@ -5,6 +5,7 @@ import "../globals.css";
 // embedded on clients' own websites via an iframe, so it must never carry
 // the internal app's header/nav along with it.
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Schedule an evaluation",
   description: "Book a property evaluation",
 };

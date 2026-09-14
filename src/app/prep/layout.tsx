@@ -10,6 +10,7 @@ import "../globals.css";
  * layout outside the (app) group inherits nothing from it.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "Before your evaluation",
   description: "A few questions so we come ready.",
   robots: { index: false, follow: false },
