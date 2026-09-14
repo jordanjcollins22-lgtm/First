@@ -9,6 +9,8 @@ import { getLoadout } from "@/lib/data/loadout";
 import { leaveBlockedBy } from "@/lib/loadout";
 import { readDay } from "@/lib/crew-day";
 import { LoadoutPanel } from "@/components/crew/loadout-panel";
+import { LocationBeacon } from "@/components/crew/location-beacon";
+import { AutoRefresh } from "@/components/crew/auto-refresh";
 import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
 import { getCrewsToday } from "@/lib/data/crews-today";
 import { dateKeyIn } from "@/lib/time-zone";
@@ -229,6 +231,7 @@ async function OfficeDay() {
       {/* What is being done today, by whom, with what on the truck. The
           same load-out the crew tick on their phones, so a wrong list is
           caught here before it is discovered at the first stop. */}
+      {crewsToday && crewsToday.stops.length > 0 && <AutoRefresh seconds={60} />}
       {crewsToday && (
         <CrewsTodayPanel
           today={crewsToday}
@@ -411,6 +414,9 @@ async function CrewDay({ profile }: { profile: Profile }) {
 
   return (
     <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
+      {/* Tells the office where this phone is from the shop until the day
+          is over, while the app is open. */}
+      <LocationBeacon active={phase !== "before_shop" && phase !== "day_over"} />
       {loadout && loading && (
         <div className="mb-4">
           <LoadoutPanel day={day.day} loadout={loadout} />

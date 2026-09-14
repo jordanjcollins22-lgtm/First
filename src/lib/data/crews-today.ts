@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildLoadout, type Loadout, type LoadoutCheck, type LoadoutSession, type LoadoutTool } from "@/lib/loadout";
 import { readDay, type CrewEvent, type CrewEventKind, type Stop } from "@/lib/crew-day";
+import { metresBetween } from "@/lib/navigation";
 
 export interface CrewToday {
   profileId: string;
@@ -11,6 +12,10 @@ export interface CrewToday {
   phase: string;
   stops: Stop[];
   loadout: Loadout;
+  /** Where the phone last said they were, while the app was open. */
+  position: { lat: number; lng: number; at: string; accuracyM: number | null } | null;
+  /** The house they are heading to or standing at, and how far off it is. */
+  heading: { jobId: string; customerName: string; address: string; metres: number | null } | null;
 }
 
 export interface CrewsToday {
@@ -69,8 +74,14 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
   const jobIds = [...new Set(rows.map((r) => r.job_id))];
   if (jobIds.length === 0) return { day, stops: [], crews: [], unstaffed: [] };
 
-  const [{ data: crewRows }, { data: toolRows }, { data: containerRows }, { data: checkRows }, { data: eventRows }] =
-    await Promise.all([
+  const [
+    { data: crewRows },
+    { data: toolRows },
+    { data: containerRows },
+    { data: checkRows },
+    { data: eventRows },
+    { data: positionRows },
+  ] = await Promise.all([
       supabase
         .from("job_crew")
         .select("job_id, profile_id, is_lead, profiles!job_crew_profile_id_fkey(full_name, email)")
@@ -81,6 +92,7 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
       supabase.from("kit_containers").select("name, kits").is("archived_at", null),
       supabase.from("loadout_checks").select("profile_id, item_kind, item_key").eq("day", day),
       supabase.from("crew_day_events").select("profile_id, kind, job_id, at").eq("day", day).order("at", { ascending: true }),
+      supabase.from("crew_positions").select("profile_id, at, lat, lng, accuracy_m"),
     ]);
 
   type CrewRow = {
@@ -116,6 +128,12 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
     list.push({ kind: e.kind as CrewEventKind, jobId: e.job_id, at: e.at });
     eventsBy.set(e.profile_id, list);
   }
+
+  const positions = new Map(
+    ((positionRows ?? []) as { profile_id: string; at: string; lat: number; lng: number; accuracy_m: number | null }[]).map(
+      (p) => [p.profile_id, p]
+    )
+  );
 
   const stopOf = (r: Row): Stop => ({
     jobId: r.job_id,
@@ -153,6 +171,20 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
       const mine = rows.filter((r) => p.jobs.has(r.job_id));
       const stops = mine.map(stopOf);
       const state = readDay(eventsBy.get(profileId) ?? [], stops);
+      const pos = positions.get(profileId);
+      const position = pos ? { lat: pos.lat, lng: pos.lng, at: pos.at, accuracyM: pos.accuracy_m } : null;
+      const target = state.currentStop ?? state.nextStop;
+      const heading = target
+        ? {
+            jobId: target.jobId,
+            customerName: target.customerName,
+            address: target.address,
+            metres:
+              position && target.lat != null && target.lng != null
+                ? metresBetween(position, { lat: target.lat, lng: target.lng })
+                : null,
+          }
+        : null;
       return {
         profileId,
         name: p.name,
@@ -161,6 +193,8 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
         phase: state.phase,
         stops,
         loadout: buildLoadout(mine.map(loadoutSessionOf), tools, containers, checksBy.get(profileId) ?? []),
+        position,
+        heading,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

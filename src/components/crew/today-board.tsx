@@ -2,11 +2,14 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, ChevronRight, Loader2, MapPin, Navigation, RotateCcw, Truck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { recordCrewEvent, undoLastCrewEvent } from "@/lib/actions/crew-day-actions";
 import { directionsUrl, readDay, type CrewEvent, type Stop } from "@/lib/crew-day";
+import { departureLine } from "@/lib/spoken-directions";
+import { speak, voiceWanted } from "@/lib/speech";
 
 /**
  * The crew's whole screen.
@@ -34,6 +37,7 @@ export function TodayBoard({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   const day = readDay(events, stops);
   const done = new Set(day.stopsDone);
@@ -45,10 +49,18 @@ export function TodayBoard({
    */
   function press(kind: CrewEvent["kind"], jobId: string | null) {
     setError(null);
+    // "On my way" says where to, out loud, and opens the directions. Said
+    // here, on the tap, because a phone will only speak on a tap.
+    const heading = kind === "travelling" && jobId ? (stops.find((s) => s.jobId === jobId) ?? null) : null;
+    if (heading && voiceWanted()) speak(departureLine(heading));
     startTransition(async () => {
       const position = await currentPosition();
       const result = await recordCrewEvent(kind, jobId, position);
-      if (!result.ok) setError(result.message);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      if (heading) router.push(directionsUrl(heading));
     });
   }
 

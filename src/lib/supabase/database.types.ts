@@ -3380,6 +3380,25 @@ export interface Database {
           },
         ];
       };
+      crew_positions: {
+        Row: {
+          profile_id: string;
+          organization_id: string;
+          at: string;
+          lat: number;
+          lng: number;
+          accuracy_m: number | null;
+          heading: number | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["crew_positions"]["Row"]> & {
+          profile_id: string;
+          organization_id: string;
+          lat: number;
+          lng: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["crew_positions"]["Row"]>;
+        Relationships: [];
+      };
       loadout_checks: {
         Row: {
           id: string;

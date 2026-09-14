@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { Check, Package, Truck, Users } from "lucide-react";
+import { Check, MapPin, Package, Truck, Users } from "lucide-react";
+
+import { CrewMap } from "@/components/crew/crew-map";
+import { spokenDistance } from "@/lib/navigation";
+import { timeAgo } from "@/lib/proposal-views";
 
 import type { CrewsToday } from "@/lib/data/crews-today";
 
@@ -13,6 +17,23 @@ import type { CrewsToday } from "@/lib/data/crews-today";
  */
 export function CrewsTodayPanel({ today, showTicks }: { today: CrewsToday; showTicks: boolean }) {
   if (today.stops.length === 0) return null;
+  const now = new Date();
+
+  const dots = today.crews
+    .filter((c) => c.position)
+    .map((c) => {
+      const to = c.heading ? today.stops.find((s) => s.jobId === c.heading!.jobId) : null;
+      return {
+        name: c.name,
+        lat: c.position!.lat,
+        lng: c.position!.lng,
+        toLat: c.phase === "travelling" || c.phase === "between_stops" ? (to?.lat ?? null) : null,
+        toLng: c.phase === "travelling" || c.phase === "between_stops" ? (to?.lng ?? null) : null,
+      };
+    });
+  const pins = today.stops
+    .map((s, i) => ({ index: i + 1, customerName: s.customerName, lat: s.lat, lng: s.lng }))
+    .filter((p): p is { index: number; customerName: string; lat: number; lng: number } => p.lat != null && p.lng != null);
 
   return (
     <section className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
@@ -40,6 +61,12 @@ export function CrewsTodayPanel({ today, showTicks }: { today: CrewsToday; showT
         ))}
       </ol>
 
+      {pins.length > 0 && (
+        <div className="mt-3">
+          <CrewMap crews={dots} stops={pins} />
+        </div>
+      )}
+
       {today.crews.length > 0 && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {today.crews.map((person) => {
@@ -57,6 +84,30 @@ export function CrewsTodayPanel({ today, showTicks }: { today: CrewsToday; showT
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">{person.headline}</p>
+                <p className="mt-0.5 flex items-start gap-1 text-xs">
+                  <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                  {person.position ? (
+                    <span>
+                      Seen {timeAgo(person.position.at, now)}
+                      {person.heading?.metres != null && (
+                        <>
+                          , {spokenDistance(person.heading.metres)} from {person.heading.customerName}
+                        </>
+                      )}
+                      {" · "}
+                      <a
+                        href={`https://www.google.com/maps?q=${person.position.lat},${person.position.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        map
+                      </a>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">No location yet. It reports while their app is open.</span>
+                  )}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {person.stops.map((s) => s.customerName).join(" → ")}
                 </p>

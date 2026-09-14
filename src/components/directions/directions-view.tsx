@@ -5,7 +5,7 @@ import Link from "next/link";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-import { ArrowLeft, ExternalLink, Loader2, Navigation, RotateCcw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, Navigation, RotateCcw, Volume2, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { publicEnv } from "@/lib/public-env";
@@ -19,6 +19,8 @@ import {
   type Route,
 } from "@/lib/directions";
 import { arrivalClock, navigate, spokenDistance, spokenDuration } from "@/lib/navigation";
+import { FRESH_MEMORY, nextAnnouncement, routeSummary, type SpeechMemory } from "@/lib/spoken-directions";
+import { canSpeak, hushSpeech, rememberVoice, speak, voiceWanted } from "@/lib/speech";
 
 if (publicEnv.mapboxToken) {
   mapboxgl.accessToken = publicEnv.mapboxToken;
@@ -35,11 +37,10 @@ export interface DirectionsDestination {
 /**
  * The way to the next stop, inside the app.
  *
- * The route line and the turn list, from wherever the phone says it is. Not
- * live voice navigation — no re-routing, no lane guidance — because a worse
- * copy of Google Maps helps nobody. The handover to a real navigation app sits
- * at the bottom for anybody who wants that, and says so plainly rather than
- * hiding behind an icon.
+ * The route line and the turn list, from wherever the phone says it is, and
+ * the turns read aloud as they come up. No re-routing and no lane guidance;
+ * the handover to a real navigation app sits at the bottom for anybody who
+ * wants those.
  *
  * Location is asked for once, on a tap, rather than on load. A permission
  * prompt that appears before somebody has said what they want is the prompt
@@ -127,6 +128,57 @@ export function DirectionsView({
           route: { ...route, steps: route.steps },
         })
       : null;
+
+  /**
+   * Read aloud.
+   *
+   * On by default and remembered per phone. The voice keeps its own short
+   * memory of what it has said so a turn is announced as it comes into
+   * view and again on top of it, and not every second in between.
+   */
+  // Read lazily so the server render, which has no speech, matches the
+  // client's first paint before the remembered choice applies.
+  const [voice, setVoice] = useState(() => (typeof window === "undefined" ? false : canSpeak() && voiceWanted()));
+  const speech = useRef<SpeechMemory>(FRESH_MEMORY);
+  const summarised = useRef<string | null>(null);
+  useEffect(() => () => hushSpeech(), []);
+
+  useEffect(() => {
+    if (!voice || !route) return;
+    const key = `${route.distance}:${route.duration}`;
+    if (summarised.current === key) return;
+    summarised.current = key;
+    speech.current = FRESH_MEMORY;
+    speak(
+      routeSummary({
+        customerName: destination.customerName,
+        address: destination.address,
+        metres: route.distance,
+        seconds: route.duration,
+      })
+    );
+  }, [voice, route, destination.customerName, destination.address]);
+
+  useEffect(() => {
+    if (!voice || !nav) return;
+    const next = nextAnnouncement(speech.current, nav, destination.customerName);
+    speech.current = next.memory;
+    if (next.say) speak(next.say);
+  }, [voice, nav, destination.customerName]);
+
+  function toggleVoice() {
+    const on = !voice;
+    setVoice(on);
+    rememberVoice(on);
+    if (!on) hushSpeech();
+    else if (nav) {
+      // A tap is what lets a phone speak at all, so say something now.
+      speech.current = FRESH_MEMORY;
+      const next = nextAnnouncement(speech.current, nav, destination.customerName);
+      speech.current = next.memory;
+      speak(next.say ?? nav.instruction);
+    }
+  }
 
   /**
    * Start on arrival.
@@ -308,10 +360,25 @@ export function DirectionsView({
                 {formatDistance(route.distance)} · there by {arrivalTime(route.duration)}
               </p>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={load} disabled={loading}>
-              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              Refresh
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              {canSpeak() && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={voice ? "default" : "outline"}
+                  onClick={toggleVoice}
+                  aria-pressed={voice}
+                  aria-label={voice ? "Turn the voice off" : "Read directions aloud"}
+                >
+                  {voice ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                  {voice ? "Voice on" : "Voice off"}
+                </Button>
+              )}
+              <Button type="button" size="sm" variant="outline" onClick={load} disabled={loading}>
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                Refresh
+              </Button>
+            </div>
           </div>
 
           <div ref={containerRef} className="h-64 w-full overflow-hidden rounded-xl border border-white/60" />
@@ -339,8 +406,7 @@ export function DirectionsView({
         </>
       )}
 
-      {/* Said plainly rather than hidden behind an icon: this screen draws the
-          way, it does not talk you through it. */}
+      {/* The handover for anybody who wants lane guidance and re-routing. */}
       <a
         href={externalNavUrl(destination)}
         target="_blank"
@@ -348,7 +414,7 @@ export function DirectionsView({
         className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border bg-background/60 text-sm font-medium"
       >
         <ExternalLink className="h-4 w-4" />
-        Open in Maps for spoken turn-by-turn
+        Open in Maps instead
       </a>
     </div>
   );
