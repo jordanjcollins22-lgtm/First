@@ -1,5 +1,7 @@
 "use server";
 
+import { cancelEvaluationInGhl, syncEvaluationToGhl } from "@/lib/ghl/sync";
+
 import { revalidatePath } from "next/cache";
 
 import { marketingContext, recordMarketingEvent } from "@/lib/data/marketing-events";
@@ -318,6 +320,11 @@ export async function scheduleEstimate(
     const { error } = await supabase.from("jobs").update(patch).eq("id", jobId);
     if (error) return { ok: false, message: error.message };
 
+    // The GoHighLevel calendar follows: moved with the visit, or marked
+    // cancelled when the visit is taken off the calendar.
+    if (date) await syncEvaluationToGhl(jobId);
+    else await cancelEvaluationInGhl(jobId);
+
     refresh(jobId);
     return { ok: true, message: date ? "Estimate scheduled." : "Estimate taken off the calendar." };
   } catch (err) {
@@ -353,6 +360,8 @@ export async function cancelEstimate(jobId: string, reason: string | null): Prom
 
     const { error } = await supabase.from("jobs").update(patch).eq("id", jobId);
     if (error) return { ok: false, message: error.message };
+
+    await cancelEvaluationInGhl(jobId);
 
     refresh(jobId);
     return {

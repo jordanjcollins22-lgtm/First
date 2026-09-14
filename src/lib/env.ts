@@ -69,6 +69,12 @@ export const env = {
   // Signs the bounce and complaint notices the email provider posts back.
   // From the webhook's page in the Resend dashboard.
   resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET ?? "",
+  // Mirrors evaluations booked here onto the GoHighLevel calendar. A
+  // private integration token from the sub-account's settings, that
+  // sub-account's id, and the id of the calendar evaluations go on.
+  ghlApiKey: process.env.GHL_API_KEY ?? "",
+  ghlLocationId: process.env.GHL_LOCATION_ID ?? "",
+  ghlCalendarId: process.env.GHL_CALENDAR_ID ?? "",
 };
 
 export function assertSupabaseConfigured() {

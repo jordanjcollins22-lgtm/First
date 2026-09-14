@@ -1,6 +1,7 @@
 "use server";
 
 import { modeForAddress } from "@/lib/evaluation-mode";
+import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -383,6 +384,9 @@ export async function bookEvaluation(input: ManualEvaluationInput): Promise<Book
 
     // They have just stopped being a cold address on a call sheet.
     await reconcileProspects(supabase).catch(() => null);
+
+    // And onto the GoHighLevel calendar, so the office sees one calendar.
+    await syncEvaluationToGhl(job.id);
 
     revalidatePath("/evaluations");
     revalidatePath("/attractors");

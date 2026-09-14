@@ -93,6 +93,7 @@ export interface Database {
           source: string | null;
           import_batch: string | null;
           external_id: string | null;
+          ghl_contact_id: string | null;
           do_not_contact: boolean;
           tags: string[] | null;
           import_address: string | null;
@@ -1642,6 +1643,7 @@ export interface Database {
           evaluation_date: string | null;
           evaluation_end_date: string | null;
           evaluation_mode: string;
+          ghl_appointment_id: string | null;
           referral_code: string | null;
           evaluation_status: string;
           project_start_date: string | null;

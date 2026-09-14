@@ -112,6 +112,37 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient();
 
+  // Our own booking coming back round. An evaluation booked in the app is
+  // put on the GoHighLevel calendar, and GoHighLevel then tells us about
+  // it as if it were new. Known by the appointment id we were given, or by
+  // the same client at the same time when the id is not in the payload.
+  const appointmentId =
+    (appointment.id as string) || (body.appointment_id as string) || (body.appointmentId as string) || (calendar.id as string) || null;
+  if (appointmentId) {
+    const { data: known } = await supabase.from("jobs").select("id").eq("ghl_appointment_id", appointmentId).maybeSingle();
+    if (known) {
+      log.info("ghl.webhook.echo", { jobId: known.id, appointmentId });
+      return NextResponse.json({ ok: true, jobId: known.id, echoed: true });
+    }
+  }
+  if (evaluationDate && (email || phone)) {
+    const { data: same } = await supabase
+      .from("jobs")
+      .select("id, properties!inner(customers!inner(email, phone))")
+      .eq("evaluation_date", evaluationDate)
+      .limit(5);
+    const echo = ((same ?? []) as unknown as { id: string; properties: { customers: { email: string | null; phone: string | null } } }[]).find(
+      (j) =>
+        (email && j.properties.customers.email && j.properties.customers.email.toLowerCase() === email.toLowerCase()) ||
+        (phone && j.properties.customers.phone && j.properties.customers.phone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))
+    );
+    if (echo) {
+      if (appointmentId) await supabase.from("jobs").update({ ghl_appointment_id: appointmentId }).eq("id", echo.id);
+      log.info("ghl.webhook.echo", { jobId: echo.id, appointmentId });
+      return NextResponse.json({ ok: true, jobId: echo.id, echoed: true });
+    }
+  }
+
   let customerId: string | null = null;
   if (email) {
     const { data: existing } = await supabase.from("customers").select("id").eq("email", email).maybeSingle();
@@ -144,6 +175,7 @@ export async function POST(request: NextRequest) {
       // Outside Harford County is a video walkthrough, whichever door the
       // booking came in through.
       evaluation_mode: modeForAddress(lat, lng, fullAddress).mode,
+      ghl_appointment_id: appointmentId,
     })
     .select()
     .single();

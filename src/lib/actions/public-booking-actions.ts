@@ -13,6 +13,7 @@ import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
+import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
 import { ensureClientAccount } from "@/lib/data/client-accounts";
 
@@ -241,6 +242,10 @@ export async function submitPublicBooking(
   // They've just become a client — take them off the cold-prospect list now
   // rather than at the next nightly sweep.
   await reconcileProspects(admin).catch(() => null);
+
+  // Onto the GoHighLevel calendar too, so the office sees one calendar.
+  // Never fails the booking: it logs and moves on if GoHighLevel is down.
+  await syncEvaluationToGhl(job.id);
 
   // And give them a way back in. No password: they ask for a code when they
   // want to see their quote again, instead of hunting for our email. Carries
