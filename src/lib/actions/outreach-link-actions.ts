@@ -17,6 +17,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
 import { bookingSlug, getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
+import { hashBytes, looksLikeHash } from "@/lib/screenshot-hash";
+import { shortWhen } from "@/lib/time-zone";
 import { MAX_POSTED_CHARS, checkPosted, postedSummary } from "@/lib/posted-comment";
 import {
   draftPosts,
@@ -69,6 +71,80 @@ export async function createShotUpload(input: {
     return { ok: false, error: "Couldn't upload that just now. Try again in a moment." };
   }
   return { ok: true, path: data.path, token: data.token };
+}
+
+export type SeenShot = { when: string; groupName: string | null; byName: string | null; code: string };
+export type SeenResult = { ok: true; seen: SeenShot | null } | { ok: false; error: string };
+
+/**
+ * Give every old screenshot its fingerprint, once.
+ *
+ * Records from before the fingerprint existed are hashed on the first
+ * check that finds any of them unhashed, a handful at a time, so the
+ * duplicate check covers the whole pile rather than only what came after.
+ */
+async function hashOldScreenshots(organizationId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("outreach_links")
+    .select("id, screenshot_path")
+    .eq("organization_id", organizationId)
+    .is("screenshot_hash", null)
+    .not("screenshot_path", "is", null)
+    .limit(40);
+  for (const row of (rows ?? []) as { id: string; screenshot_path: string }[]) {
+    const { data: file } = await supabase.storage.from("recommendation-shots").download(row.screenshot_path);
+    // A missing file gets a marker rather than staying null forever, so the
+    // next check does not download the same absence again.
+    const hash = file ? await hashBytes(await file.arrayBuffer()) : "missing";
+    await supabase.from("outreach_links").update({ screenshot_hash: hash }).eq("id", row.id);
+  }
+}
+
+/** Whether this exact picture has been recorded before, and by whom. */
+async function seenBefore(organizationId: string, hash: string): Promise<SeenShot | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("outreach_links")
+    .select("code, created_at, audience, profiles(full_name, email)")
+    .eq("organization_id", organizationId)
+    .eq("screenshot_hash", hash)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const row = data as unknown as {
+    code: string;
+    created_at: string;
+    audience: string | null;
+    profiles: { full_name: string | null; email: string } | null;
+  } | null;
+  if (!row) return null;
+  return {
+    when: shortWhen(row.created_at),
+    groupName: row.audience,
+    byName: row.profiles?.full_name || row.profiles?.email || null,
+    code: row.code,
+  };
+}
+
+/**
+ * Has this picture been used already?
+ *
+ * Asked before the upload, from the fingerprint the phone works out, so a
+ * screenshot that is already on the board never goes up a second time.
+ */
+export async function checkScreenshotSeen(input: { hash: string }): Promise<SeenResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!looksLikeHash(input.hash)) return { ok: false, error: "That picture could not be checked." };
+  try {
+    await hashOldScreenshots(profile.organization_id);
+    return { ok: true, seen: await seenBefore(profile.organization_id, input.hash) };
+  } catch (err) {
+    console.error("screenshot check failed:", err);
+    // Failing open: a check that cannot run must not stop a real lead.
+    return { ok: true, seen: null };
+  }
 }
 
 export type ReadResult =
@@ -160,9 +236,19 @@ export async function recordOutreach(input: {
   service: string;
   note: string;
   screenshotPath: string | null;
+  /** The picture's fingerprint, so the same one cannot be recorded twice. */
+  screenshotHash?: string | null;
 }): Promise<RecordResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+
+  // Checked again here, not only on the phone: two people uploading the
+  // same post at the same moment both passed the first check.
+  const hash = input.screenshotHash && looksLikeHash(input.screenshotHash) ? input.screenshotHash : null;
+  if (hash) {
+    const seen = await seenBefore(profile.organization_id, hash).catch(() => null);
+    if (seen) return { ok: false, error: describeSeen(seen) };
+  }
   if (!PLATFORMS.some((p) => p.key === input.platform)) {
     return { ok: false, error: "Pick where you saw it." };
   }
@@ -195,6 +281,7 @@ export async function recordOutreach(input: {
       service: input.service.trim().slice(0, 120) || null,
       note: input.note.trim().slice(0, 500) || null,
       screenshot_path: input.screenshotPath,
+      screenshot_hash: hash,
     }).select("id").single();
 
     if (!error && data) {
@@ -482,4 +569,11 @@ export async function recordPostedComment(input: {
 
   revalidatePath("/admin/outreach");
   return { ok: true, summary: postedSummary(check), hasLink: check.hasLink, problems: check.problems };
+}
+
+/** The refusal, with enough in it to find the first one. */
+function describeSeen(seen: SeenShot): string {
+  const who = seen.byName ? ` by ${seen.byName}` : "";
+  const where = seen.groupName ? ` for ${seen.groupName}` : "";
+  return `This screenshot was already used${where}${who} on ${seen.when}. It already has a link and a comment on the board.`;
 }

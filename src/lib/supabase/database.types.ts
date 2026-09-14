@@ -2876,6 +2876,7 @@ export interface Database {
           sent_to: string | null;
           service: string | null;
           screenshot_path: string | null;
+          screenshot_hash: string | null;
           note: string | null;
           click_count: number;
           first_click_at: string | null;

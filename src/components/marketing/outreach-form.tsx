@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   createShotUpload,
+  checkScreenshotSeen,
   draftCommentFromScreenshot,
   recordPostedComment,
   readRecommendationScreenshot,
@@ -27,6 +28,7 @@ import {
   type PostDraft,
 } from "@/lib/outreach-links";
 import { createClient } from "@/lib/supabase/client";
+import { hashBytes } from "@/lib/screenshot-hash";
 
 /**
  * Recording a reply to somebody asking for a landscaper, and getting the words back.
@@ -58,6 +60,7 @@ export function OutreachForm() {
   // Uploaded once, the moment a picture is chosen, and reused when the record
   // is written. Uploading twice would mean two copies of the same evidence.
   const [shotPath, setShotPath] = useState<string | null>(null);
+  const [shotHash, setShotHash] = useState<string | null>(null);
   // How old the post is, off the screenshot. Nothing shows it; it decides
   // which opener the comment gets.
   const [ageDays, setAgeDays] = useState<number | null>(null);
@@ -113,6 +116,20 @@ export function OutreachForm() {
     setReading(true);
     void (async () => {
       try {
+        // The same picture twice is the same post twice, and two links under
+        // one neighbour's question is what a group notices. Refused before
+        // the upload, from the picture's own fingerprint.
+        const hash = await hashBytes(await chosen.arrayBuffer()).catch(() => null);
+        setShotHash(hash);
+        if (hash) {
+          const check = await checkScreenshotSeen({ hash });
+          if (check.ok && check.seen) {
+            setError(describeSeenShot(check.seen));
+            setFile(null);
+            return;
+          }
+        }
+
         const slot = await createShotUpload({ fileType: chosen.type, fileSize: chosen.size });
         if (!slot.ok) {
           setError(slot.error);
@@ -223,6 +240,7 @@ export function OutreachForm() {
         service: "",
         note,
         screenshotPath,
+        screenshotHash: shotHash,
       });
       if (!outcome.ok) return setError(outcome.error);
       setResult({ id: outcome.id, link: outcome.link, drafts: outcome.drafts });
@@ -586,4 +604,10 @@ function CopyBlock({ tone, text, highlight }: { tone: string; text: string; high
 function listOf(words: string[]): string {
   if (words.length <= 1) return words[0] ?? "";
   return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+function describeSeenShot(seen: { when: string; groupName: string | null; byName: string | null }): string {
+  const who = seen.byName ? ` by ${seen.byName}` : "";
+  const where = seen.groupName ? ` for ${seen.groupName}` : "";
+  return `This screenshot was already used${where}${who} on ${seen.when}. It already has a link and a comment on the board.`;
 }
