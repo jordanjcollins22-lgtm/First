@@ -14,6 +14,8 @@ import {
   tallyByPerson,
   totals,
   trackedLink,
+  isConverted,
+  outreachCommission,
   type OutreachRow,
 } from "@/lib/outreach-links";
 
@@ -246,5 +248,25 @@ describe("what works", () => {
     );
     expect(tallies).toHaveLength(1);
     expect(tallies[0].page).toBe("JS Landscaping MD");
+  });
+});
+
+describe("what a booking earned the poster", () => {
+  it("earns nothing until the client has paid", () => {
+    expect(outreachCommission({ converted: false, pct: 5, collected: 0, paidOut: 0 }).state).toBe("not_converted");
+    expect(outreachCommission({ converted: true, pct: 5, collected: 0, paidOut: 0 })).toMatchObject({ state: "converted_unpaid", earned: 0 });
+  });
+
+  it("takes the rate off what came in, and tracks what went out", () => {
+    const c = outreachCommission({ converted: true, pct: 5, collected: 650, paidOut: 0 });
+    expect(c).toMatchObject({ earned: 32.5, owed: 32.5, state: "earning" });
+    expect(outreachCommission({ converted: true, pct: 5, collected: 650, paidOut: 32.5 }).state).toBe("paid_out");
+    expect(outreachCommission({ converted: true, pct: 5, collected: 650, paidOut: 20 })).toMatchObject({ owed: 12.5, state: "part_paid" });
+  });
+
+  it("calls a signed or finished job converted, and a paid one whatever its status", () => {
+    expect(isConverted("estimating", 0)).toBe(false);
+    expect(isConverted("approved", 0)).toBe(true);
+    expect(isConverted("estimating", 100)).toBe(true);
   });
 });

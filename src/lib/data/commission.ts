@@ -18,7 +18,7 @@ async function safe<T>(query: PromiseLike<{ data: T[] | null }>): Promise<T[]> {
   }
 }
 
-interface JobMoney {
+export interface JobMoney {
   collected: Map<string, number>;
   contract: Map<string, number | null>;
   openTickets: Map<string, number>;
@@ -38,7 +38,7 @@ interface JobMoney {
  * Fetched for every job at once rather than per manager, so adding a fifth
  * account manager does not add four more round trips.
  */
-async function loadMoney(jobIds: string[]): Promise<JobMoney> {
+export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
   const empty: JobMoney = {
     collected: new Map(),
     contract: new Map(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { createContext, useContext, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Pencil } from "lucide-react";
@@ -21,6 +21,7 @@ import {
   type OutreachResponse,
 } from "@/lib/outreach-links";
 import { recordResponse } from "@/lib/actions/outreach-link-actions";
+import { recordCommissionPaid } from "@/lib/actions/commission-actions";
 import { updateCustomerContact } from "@/lib/actions/customer-actions";
 import { CopyButton } from "@/components/groups/copy-button";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,9 @@ import { postedVersion, VERSION_LABEL } from "@/lib/posted-comment";
  * booked from it; a comment opens to the people who booked from that one
  * comment, with their contact details there to ring and there to correct.
  */
+/** Whether the person reading may mark a commission paid: the owner's board only. */
+const CanPayContext = createContext(false);
+
 export function OutreachBoardView({ board, scope = "everyone" }: { board: OutreachBoard; scope?: "everyone" | "mine" }) {
   const [tab, setTab] = useState<"rooms" | "recent" | "people" | "how">("rooms");
   const [openRoom, setOpenRoom] = useState<string | null>(null);
@@ -55,6 +59,7 @@ export function OutreachBoardView({ board, scope = "everyone" }: { board: Outrea
   const room = openRoom ? board.groups.find((g) => g.key === openRoom) ?? null : null;
 
   return (
+    <CanPayContext.Provider value={scope === "everyone"}>
     <div className="flex flex-col gap-4">
       <FunnelBar funnel={board.total} />
 
@@ -132,6 +137,7 @@ export function OutreachBoardView({ board, scope = "everyone" }: { board: Outrea
 
       {tab === "recent" && <LinkList rows={board.rows} bookingsByCode={board.bookingsByCode} />}
     </div>
+    </CanPayContext.Provider>
   );
 }
 
@@ -528,6 +534,7 @@ function BookedPerson({ booking, via }: { booking: OutreachBooking; via: Outreac
               Open the job
             </Link>
           </p>
+          <ConversionLine booking={booking} />
         </>
       )}
     </li>
@@ -564,5 +571,75 @@ function ShowComment({ comment }: { comment: string }) {
         </p>
       )}
     </>
+  );
+}
+
+function money(n: number): string {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+/**
+ * Whether the booking became a job, and what that earned whoever posted.
+ *
+ * Three facts in one line: converted or not; the commission, as a share of
+ * what the client has paid so far; and whether it has been handed over. The
+ * owner gets a button on the last one, because the owner is who hands it
+ * over.
+ */
+function ConversionLine({ booking }: { booking: OutreachBooking }) {
+  const canPay = useContext(CanPayContext);
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const c = booking.commission;
+
+  function markPaid() {
+    setError(null);
+    start(async () => {
+      const result = await recordCommissionPaid({ profileId: booking.posterId, lines: [{ jobId: booking.jobId, amount: c.owed }] });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  if (!c.converted) {
+    return (
+      <p className="mt-1 rounded-md bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
+        Not converted yet{booking.jobStatus === "cancelled" ? " (cancelled)" : booking.jobStatus === "quoted" ? " (proposal out)" : ""}.
+      </p>
+    );
+  }
+
+  const paidLine =
+    c.state === "paid_out"
+      ? `Paid out${booking.lastPaidAt ? ` ${new Date(booking.lastPaidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}`
+      : c.state === "part_paid"
+        ? `${money(c.paidOut)} paid out, ${money(c.owed)} still owed`
+        : c.state === "earning"
+          ? "Not paid out yet"
+          : "Nothing to pay out until the client pays";
+
+  return (
+    <div className="mt-1 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2 py-1 text-xs">
+      <p className="flex flex-wrap gap-x-2 gap-y-0.5">
+        <span className="font-semibold text-emerald-800">Converted</span>
+        <span>
+          {money(booking.collected)} collected{booking.contractValue != null ? ` of ${money(booking.contractValue)}` : ""}
+        </span>
+        <span>
+          {c.pct}% commission: <span className="font-semibold">{money(c.earned)}</span>
+        </span>
+        <span className={c.state === "paid_out" ? "text-emerald-800" : "text-amber-800"}>{paidLine}</span>
+        {canPay && c.owed > 0 && (
+          <button type="button" onClick={markPaid} disabled={pending} className="text-primary underline underline-offset-2 disabled:opacity-50">
+            {pending ? "Recording" : `Mark ${money(c.owed)} paid out`}
+          </button>
+        )}
+      </p>
+      {error && <p className="text-destructive">{error}</p>}
+    </div>
   );
 }

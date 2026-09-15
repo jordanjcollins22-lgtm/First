@@ -436,3 +436,46 @@ export function totals(rows: readonly OutreachRow[], bookedCodes: Iterable<strin
   const booked = new Set(bookedCodes);
   return rows.reduce((funnel, row) => add(funnel, row, booked), EMPTY);
 }
+
+/**
+ * What a booking from a link is worth to the person who posted it.
+ *
+ * A share of what the client has actually paid, the same rule as every
+ * other commission here: a booking is a hope, a signed proposal a claim,
+ * and only money in is money. So a converted job with nothing collected yet
+ * has earned nothing yet, and says so, rather than promising a number that
+ * may never arrive.
+ */
+export type ConversionState = "not_converted" | "converted_unpaid" | "earning" | "paid_out" | "part_paid";
+
+export interface OutreachCommission {
+  converted: boolean;
+  /** The rate, as a percentage. */
+  pct: number;
+  /** What the rate says has been earned so far. */
+  earned: number;
+  /** What has been handed over. */
+  paidOut: number;
+  /** Still owed. */
+  owed: number;
+  state: ConversionState;
+}
+
+export function outreachCommission(input: { converted: boolean; pct: number | null; collected: number; paidOut: number }): OutreachCommission {
+  const pct = input.pct ?? 0;
+  const earned = Math.round(input.collected * pct) / 100;
+  const paidOut = Math.round(input.paidOut * 100) / 100;
+  const owed = Math.max(0, Math.round((earned - paidOut) * 100) / 100);
+  let state: ConversionState;
+  if (!input.converted) state = "not_converted";
+  else if (earned <= 0) state = "converted_unpaid";
+  else if (paidOut <= 0) state = "earning";
+  else if (owed > 0) state = "part_paid";
+  else state = "paid_out";
+  return { converted: input.converted, pct, earned, paidOut, owed, state };
+}
+
+/** Whether a booking became a job: signed, being done, or done. */
+export function isConverted(jobStatus: string, collected: number): boolean {
+  return collected > 0 || ["approved", "in_progress", "completed"].includes(jobStatus);
+}

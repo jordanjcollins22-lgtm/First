@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
+import { loadMoney } from "@/lib/data/commission";
 import {
   tallyByGroup,
   tallyByKind,
@@ -17,6 +18,9 @@ import {
   type PageTally,
   type PersonTally,
   type Platform,
+  isConverted,
+  outreachCommission,
+  type OutreachCommission,
 } from "@/lib/outreach-links";
 
 /**
@@ -61,6 +65,12 @@ export interface OutreachBooking {
   evaluationDate: string | null;
   evaluationStatus: string;
   jobStatus: string;
+  /** Who posted the link this came through, and what it has earned them. */
+  posterId: string;
+  collected: number;
+  contractValue: number | null;
+  commission: OutreachCommission;
+  lastPaidAt: string | null;
 }
 
 export interface OutreachBoard {
@@ -119,8 +129,28 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
       )
       .in("referral_code", codes)
       .order("created_at", { ascending: false }),
-    supabase.from("profiles").select("id, full_name, email").eq("organization_id", organizationId),
+    supabase.from("profiles").select("id, full_name, email, commission_pct").eq("organization_id", organizationId),
   ]);
+
+  // What each booking became, and what it earned whoever posted the link:
+  // a share of what the client has paid, minus what has been handed over.
+  const bookedJobIds = (booked ?? []).map((job) => job.id);
+  const posterByCode = new Map(raw.map((row) => [row.code, row.profile_id]));
+  const pctOf = new Map((profiles ?? []).map((p) => [p.id, p.commission_pct == null ? null : Number(p.commission_pct)]));
+  const [money, { data: payoutRows }] = await Promise.all([
+    loadMoney(bookedJobIds),
+    bookedJobIds.length > 0
+      ? supabase.from("commission_payouts").select("job_id, profile_id, amount, paid_at").in("job_id", bookedJobIds)
+      : Promise.resolve({ data: [] as { job_id: string; profile_id: string; amount: number; paid_at: string }[] }),
+  ]);
+  const paidOutByJobAndPoster = new Map<string, { amount: number; last: string | null }>();
+  for (const row of payoutRows ?? []) {
+    const key = `${row.job_id}:${row.profile_id}`;
+    const seen = paidOutByJobAndPoster.get(key) ?? { amount: 0, last: null };
+    seen.amount += Number(row.amount) || 0;
+    if (!seen.last || row.paid_at > seen.last) seen.last = row.paid_at;
+    paidOutByJobAndPoster.set(key, seen);
+  }
 
   const bookedCodes = new Set(
     (booked ?? []).map((job) => job.referral_code).filter((code): code is string => Boolean(code))
@@ -141,6 +171,9 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
   }[]) {
     if (!job.referral_code || !job.property?.customer) continue;
     const list = bookingsByCode[job.referral_code] ?? [];
+    const posterId = posterByCode.get(job.referral_code) ?? "";
+    const collected = money.collected.get(job.id) ?? 0;
+    const paid = paidOutByJobAndPoster.get(`${job.id}:${posterId}`) ?? { amount: 0, last: null };
     list.push({
       jobId: job.id,
       code: job.referral_code,
@@ -153,6 +186,16 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
       evaluationDate: job.evaluation_date,
       evaluationStatus: job.evaluation_status,
       jobStatus: job.status,
+      posterId,
+      collected,
+      contractValue: money.contract.get(job.id) ?? null,
+      commission: outreachCommission({
+        converted: isConverted(job.status, collected),
+        pct: pctOf.get(posterId) ?? null,
+        collected,
+        paidOut: paid.amount,
+      }),
+      lastPaidAt: paid.last,
     });
     bookingsByCode[job.referral_code] = list;
   }
