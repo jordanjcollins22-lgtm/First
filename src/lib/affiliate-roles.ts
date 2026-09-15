@@ -64,7 +64,7 @@ export function qualifiesForAffiliateLink(roles: string[]): boolean {
  * Anybody holding one of these needs the full app. Everybody else is in a
  * truck, and the full app is noise to them.
  */
-const OFFICE_ROLES = ["admin", "owner", "overhead", "evaluator", "account manager", "manager"];
+const OFFICE_ROLES = ["admin", "owner", "overhead", "office", "evaluator", "account manager", "manager"];
 
 export function isOfficeRole(role: string): boolean {
   return OFFICE_ROLES.includes(normalizeRole(role));

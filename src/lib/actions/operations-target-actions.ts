@@ -13,7 +13,7 @@ import type { OperationsTarget, OperationsTargetStatus } from "@/lib/data/operat
 
 export type TargetResult<T = undefined> = { ok: true; value: T } | { ok: false; message: string };
 
-const OFFICE_ROLES = new Set(["admin", "owner", "overhead", "account manager"]);
+const OFFICE_ROLES = new Set(["admin", "owner", "overhead", "office", "account manager"]);
 
 async function officeProfile() {
   const profile = await getCurrentProfile();

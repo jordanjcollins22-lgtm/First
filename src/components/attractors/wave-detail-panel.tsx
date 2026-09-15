@@ -26,8 +26,11 @@ export function WaveDetailPanel({
   variants,
   onClose,
   onDeleted,
+  showRevenue = true,
 }: {
   wave: AttractorWave;
+  /** What the wave brought in is the owner's to see. */
+  showRevenue?: boolean;
   types: AttractorType[];
   variants: AttractorVariant[];
   onClose: () => void;
@@ -175,6 +178,7 @@ export function WaveDetailPanel({
             className="h-9 text-sm"
           />
         </div>
+        {showRevenue && (
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Revenue</Label>
           <Input
@@ -188,6 +192,7 @@ export function WaveDetailPanel({
             className="h-9 text-sm"
           />
         </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

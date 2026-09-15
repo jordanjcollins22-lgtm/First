@@ -112,6 +112,7 @@ export function AttractorsDashboard({
   zones,
   courtRanking,
   initialTargets,
+  canSeeMoney = true,
   marketing,
   approvals,
   initialZoneId,
@@ -149,6 +150,8 @@ export function AttractorsDashboard({
   zones: ZoneRow[];
   courtRanking: CourtRanking;
   initialTargets: OperationsTarget[];
+  /** Whether what areas and waves earned is shown to this person. */
+  canSeeMoney?: boolean;
   /** The marketing to do, made from evaluations and clients, with what has been decided so far. */
   marketing: MarketingState;
   /** Which zones are approved for the map, and how much the app still asks. */
@@ -698,7 +701,7 @@ export function AttractorsDashboard({
         </Card>
       )}
 
-      <DensityPanel mode={densityMode} onModeChange={setDensityMode} cells={rankedCells} />
+      <DensityPanel mode={densityMode} onModeChange={setDensityMode} cells={rankedCells} showMoney={canSeeMoney} />
 
       <Card>
         <CardContent className="pt-6">
@@ -1038,6 +1041,7 @@ export function AttractorsDashboard({
                 <WaveDetailPanel
                   key={selectedWave.id}
                   wave={selectedWave}
+                  showRevenue={canSeeMoney}
                   types={types}
                   variants={variants}
                   onClose={() => setSelectedWaveId(null)}

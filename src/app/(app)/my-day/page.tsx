@@ -262,7 +262,7 @@ async function OfficeDay() {
       {crewsToday && (
         <CrewsTodayPanel
           today={crewsToday}
-          showTicks={isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead")}
+          showTicks={isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead") || profile.roles.includes("office")}
         />
       )}
 

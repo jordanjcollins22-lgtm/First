@@ -15,6 +15,7 @@ import { getDensityPoints } from "@/lib/data/density";
 import { listKeywords, listLatestScans, listPreviousScanPoints } from "@/lib/data/rank-grid";
 import { listProfiles } from "@/lib/data/team";
 import { checkTabAccess } from "@/lib/data/access";
+import { canSeeCompanyMoney } from "@/lib/roles";
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { AttractorsDashboard } from "@/components/attractors/attractors-dashboard";
@@ -122,6 +123,7 @@ export default async function AttractorsPage({
     listRankedCourts(60).catch(() => ({ courts: [], total: 0, builtAt: null })),
     listOperationsTargets().catch(() => []),
   ]);
+  const canSeeMoney = canSeeCompanyMoney(profile?.roles ?? []);
   const approvals = await zoneApprovalState().catch(() => ({ zones: [], reviews: [], streak: 0, level: "ask_all" as const, autoApproved: 0 }));
 
   return (
@@ -163,7 +165,10 @@ export default async function AttractorsPage({
         approvals={approvals}
         initialZoneId={zone ?? null}
         houseKinds={houseKinds}
-        densityPoints={densityPoints}
+        // Money on the map -- what each area has paid, what a wave brought in --
+        // is the owner's to read. Everyone else gets the map without it.
+        canSeeMoney={canSeeMoney}
+        densityPoints={canSeeMoney ? densityPoints : densityPoints.map((p) => ({ ...p, collected: 0 }))}
         profiles={profiles}
         currentProfileId={profile?.id ?? null}
       />

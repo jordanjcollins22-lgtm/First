@@ -21,10 +21,13 @@ function money(n: number): string {
 export function DensityPanel({
   mode,
   onModeChange,
+  showMoney = true,
   cells,
 }: {
   mode: DensityMode | null;
   onModeChange: (mode: DensityMode | null) => void;
+  /** Whether the paid-work view and the money per address are offered. */
+  showMoney?: boolean;
   cells: DensityCell[];
 }) {
   return (
@@ -41,7 +44,7 @@ export function DensityPanel({
         >
           Off
         </button>
-        {DENSITY_MODES.map((m) => (
+        {DENSITY_MODES.filter((m) => showMoney || m.value !== "paid").map((m) => (
           <button
             key={m.value}
             type="button"
@@ -60,7 +63,7 @@ export function DensityPanel({
       {mode === null ? (
         <p className="text-xs text-muted-foreground">
           Pick one to shade the map and list the top areas. Addresses tells you where a street is worth
-          walking; paid work tells you which one to walk first.
+          walking{showMoney ? "; paid work tells you which one to walk first" : ""}.
         </p>
       ) : (
         <>
@@ -95,7 +98,7 @@ export function DensityPanel({
                     ) : (
                       <>
                         {cell.count} address{cell.count === 1 ? "" : "es"}
-                        {cell.collected > 0 && ` · ${money(valuePerAddress(cell))}/ea`}
+                        {showMoney && cell.collected > 0 && ` · ${money(valuePerAddress(cell))}/ea`}
                       </>
                     )}
                   </span>
