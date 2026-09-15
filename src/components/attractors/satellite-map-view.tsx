@@ -978,7 +978,10 @@ export function SatelliteMapView({
       // round: a door on it or off it, a place in the walking order, a point
       // on the line. So the map's other answers -- house cards, zone cards,
       // picking a job -- stand down until the edit is saved or cancelled.
-      const editingRound = () => routeEditRef.current !== null;
+      // While a round is being edited or a shape is being drawn, a click is
+      // a point on the shape, never a question about what is under it: no
+      // popup of any kind opens until the drawing is finished.
+      const editingRound = () => routeEditRef.current !== null || drawRef.current !== null;
 
       map.on("click", WAVES_FILL_LAYER, (e) => {
         if (editingRound()) return;
@@ -1085,7 +1088,7 @@ export function SatelliteMapView({
       // Anywhere else on the map: the house under the click, if there is one.
       map.on("click", (e) => {
         if (editingRound()) return;
-        const layers = [HOUSES_LAYER, ALL_ADDRESSES_LAYER, ALL_ADDRESSES_CLUSTER_LAYER, JOBS_LAYER, LEADS_LAYER, UNSERVED_LAYER, UNSERVED_GROUPS_LAYER, ZONES_FILL_LAYER, EDDM_FILL_LAYER, WAVES_FILL_LAYER, LOCATIONS_LAYER, AREAS_FILL_LAYER].filter((l) => map.getLayer(l));
+        const layers = [HOUSES_LAYER, ALL_ADDRESSES_LAYER, ALL_ADDRESSES_CLUSTER_LAYER, JOBS_LAYER, LEADS_LAYER, UNSERVED_LAYER, UNSERVED_GROUPS_LAYER, ZONES_FILL_LAYER, EDDM_FILL_LAYER, WAVES_FILL_LAYER, LOCATIONS_LAYER, AREAS_FILL_LAYER, COURTS_FILL_LAYER, OPS_FILL_LAYER].filter((l) => map.getLayer(l));
         if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
         openHouseCardAt(map, [e.lngLat.lng, e.lngLat.lat]);
       });
@@ -1175,8 +1178,9 @@ export function SatelliteMapView({
 
       map.on("click", EDDM_FILL_LAYER, async (e) => {
         if (editingRound()) return;
-        // A dot on top of a route is about the dot.
-        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER] }).length > 0) return;
+        // A dot on top of a route is about the dot; a court or a target
+        // drawn over a route is about the court.
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, COURTS_FILL_LAYER, OPS_FILL_LAYER] }).length > 0) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as {
