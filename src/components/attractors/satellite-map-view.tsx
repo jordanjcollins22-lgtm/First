@@ -1014,6 +1014,8 @@ export function SatelliteMapView({
 
       map.on("click", WAVES_FILL_LAYER, (e) => {
         if (editingRound()) return;
+        // A court or a target drawn over a wave is about the court.
+        if (map.queryRenderedFeatures(e.point, { layers: [COURTS_FILL_LAYER, OPS_FILL_LAYER].filter((l) => map.getLayer(l)) }).length > 0) return;
         const id = e.features?.[0]?.properties?.id;
         if (id) onSelectWaveRef.current(id);
       });
@@ -1684,6 +1686,20 @@ export function SatelliteMapView({
     }
     onOutlineEditDoneRef.current?.(points);
   }
+
+  // While the courts are up, the waves step back: a marketing area filled
+  // in over a court hides the outline somebody is trying to read, and the
+  // waves are a different question from where operations goes next.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    if (map.getLayer(WAVES_FILL_LAYER)) {
+      map.setPaintProperty(WAVES_FILL_LAYER, "fill-opacity", showCourts ? 0 : ["case", ["==", ["get", "selected"], true], 0.5, 0.25]);
+    }
+    if (map.getLayer(WAVES_LINE_LAYER)) {
+      map.setPaintProperty(WAVES_LINE_LAYER, "line-opacity", showCourts ? 0.35 : 1);
+    }
+  }, [showCourts, mapLoaded]);
 
   // The courts, fetched once when operations asks to see them.
   const courtsRef = useRef<GeoJSON.FeatureCollection | null>(null);
