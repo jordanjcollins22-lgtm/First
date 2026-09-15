@@ -3431,6 +3431,7 @@ export interface Database {
           built_at: string;
           custom_outline: Json | null;
           custom_outline_at: string | null;
+          inside_house_count: number | null;
         };
         Insert: Partial<Database["public"]["Tables"]["court_targets"]["Row"]> & {
           organization_id: string;
@@ -4198,6 +4199,7 @@ export interface Database {
       summary_get: { Args: { org: string; the_key: string; max_age?: string }; Returns: Json };
       court_targets_build: { Args: { org: string }; Returns: number };
       houses_in_ring_count: { Args: { org: string; ring: Json }; Returns: number };
+      court_inside_count: { Args: { the_court: string }; Returns: number | null };
       summary_refresh: { Args: { org: string; the_key: string }; Returns: Json };
       summaries_refresh: { Args: { org: string; keys?: string[] | null }; Returns: Json };
       marketing_play_set: { Args: { the_play: string; new_status: string; by: string | null; designs?: number }; Returns: Json };

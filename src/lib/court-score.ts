@@ -191,6 +191,8 @@ export interface CourtDetail {
   spreadM: number | null;
   shopKm: number | null;
   edited: boolean;
+  /** Homes inside the ring as drawn, which is not the same as on the street. */
+  insideHouses: number | null;
   parts: ScorePart[];
   points: { lat: number; lng: number }[];
 }

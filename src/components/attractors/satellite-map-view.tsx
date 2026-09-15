@@ -161,6 +161,8 @@ interface SatelliteMapViewProps {
   outlineEdit?: OutlineEdit | null;
   /** A court clicked on the map: it goes to the side panel, not a popup. */
   onSelectCourt?: (court: CourtDetail) => void;
+  /** Fresh counts of homes inside courts' rings, by court id, after a recount. */
+  courtCounts?: Record<string, number>;
   /** A saved target clicked on the map. */
   onSelectTarget?: (id: string) => void;
   /** "Edit outline" pressed on a court's or a target's popup. */
@@ -455,6 +457,7 @@ export function SatelliteMapView({
   onPickCourt,
   onSelectCourt,
   onSelectTarget,
+  courtCounts,
   outlineEdit = null,
   onEditOutline,
   onOutlineEditDone,
@@ -476,6 +479,8 @@ export function SatelliteMapView({
   const onEditOutlineRef = useRef(onEditOutline);
   const onSelectCourtRef = useRef(onSelectCourt);
   const onSelectTargetRef = useRef(onSelectTarget);
+  /** Recounts made this session, read at click time over the feature's own number. */
+  const courtCountsRef = useRef<Record<string, number>>(courtCounts ?? {});
   const onOutlineEditDoneRef = useRef(onOutlineEditDone);
   /** The draw control holding the outline being reshaped, while one is. */
   const editDrawRef = useRef<{ draw: MapboxDraw; featureId: string } | null>(null);
@@ -501,6 +506,7 @@ export function SatelliteMapView({
     onEditOutlineRef.current = onEditOutline;
     onSelectCourtRef.current = onSelectCourt;
     onSelectTargetRef.current = onSelectTarget;
+    courtCountsRef.current = courtCounts ?? {};
     onOutlineEditDoneRef.current = onOutlineEditDone;
     showAllAddressesRef.current = showAllAddresses;
     routeEditRef.current = routeEdit;
@@ -1207,6 +1213,7 @@ export function SatelliteMapView({
           spreadM: num(raw.spreadM),
           shopKm: num(raw.shopKm),
           edited: raw.edited === true || raw.edited === "true",
+          insideHouses: courtCountsRef.current[String(raw.id)] ?? num(raw.insideHouses),
           parts,
           points,
         });

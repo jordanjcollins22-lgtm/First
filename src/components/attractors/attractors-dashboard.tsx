@@ -67,7 +67,14 @@ import { OperationsTargetsPanel } from "./operations-targets-panel";
 import { CourtDetailPanel, TargetDetailPanel } from "./court-detail-panel";
 import type { CourtDetail, RankedCourt } from "@/lib/court-score";
 import type { CourtRanking, OperationsTarget } from "@/lib/data/operations-targets";
-import { deleteOperationsTarget, saveCourtOutline, saveOperationsTargetOutline, setOperationsTargetStatus } from "@/lib/actions/operations-target-actions";
+import {
+  deleteOperationsTarget,
+  refreshCourtHouseCount,
+  refreshOperationsTargetHouseCount,
+  saveCourtOutline,
+  saveOperationsTargetOutline,
+  setOperationsTargetStatus,
+} from "@/lib/actions/operations-target-actions";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
@@ -235,6 +242,28 @@ export function AttractorsDashboard({
   // The court or target clicked on the map, shown in the side panel.
   const [selectedCourt, setSelectedCourt] = useState<CourtDetail | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  /** Homes inside each court's ring, as last counted this session. */
+  const [courtCounts, setCourtCounts] = useState<Record<string, number>>({});
+
+  function noteCourtCount(id: string, count: number | null) {
+    if (count == null) return;
+    setCourtCounts((prev) => ({ ...prev, [id]: count }));
+    setSelectedCourt((prev) => (prev && prev.id === id ? { ...prev, insideHouses: count } : prev));
+  }
+
+  async function recountCourt(id: string) {
+    const result = await refreshCourtHouseCount(id);
+    if (!result.ok) return { ok: false as const, message: result.message };
+    noteCourtCount(id, result.value.houseCount);
+    return { ok: true as const, count: result.value.houseCount };
+  }
+
+  async function recountTarget(id: string) {
+    const result = await refreshOperationsTargetHouseCount(id);
+    if (!result.ok) return { ok: false as const, message: result.message };
+    setOpsTargets((prev) => prev.map((t) => (t.id === id ? { ...t, houseCount: result.value.houseCount } : t)));
+    return { ok: true as const, count: result.value.houseCount };
+  }
   const [outlineNote, setOutlineNote] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
@@ -568,7 +597,12 @@ export function AttractorsDashboard({
     if (!edit || !points) return;
     if (edit.kind === "court") {
       const result = await saveCourtOutline(edit.id, points);
-      setOutlineNote(result.ok ? `${edit.name}: new outline saved.` : result.message);
+      if (result.ok) noteCourtCount(edit.id, result.value.houseCount);
+      setOutlineNote(
+        result.ok
+          ? `${edit.name}: new outline saved${result.value.houseCount != null ? `, ${result.value.houseCount} homes inside` : ""}.`
+          : result.message
+      );
       return;
     }
     const result = await saveOperationsTargetOutline(edit.id, points);
@@ -801,6 +835,7 @@ export function AttractorsDashboard({
                 }}
                 onSelectCourt={selectCourt}
                 onSelectTarget={selectTarget}
+                courtCounts={courtCounts}
                 outlineEdit={outlineEdit}
                 onEditOutline={startOutlineEdit}
                 onOutlineEditDone={(points) => void finishOutlineEdit(points)}
@@ -1023,6 +1058,7 @@ export function AttractorsDashboard({
                     setSelectedCourt(null);
                     startOutlineEdit({ kind: "court", id: court.id, name: court.title, points: court.points });
                   }}
+                  onRefreshCount={() => recountCourt(selectedCourt.id)}
                   onClose={() => setSelectedCourt(null)}
                 />
               )}
@@ -1049,6 +1085,7 @@ export function AttractorsDashboard({
                       }
                     });
                   }}
+                  onRefreshCount={() => recountTarget(selectedTarget.id)}
                   onClose={() => setSelectedTargetId(null)}
                 />
               )}

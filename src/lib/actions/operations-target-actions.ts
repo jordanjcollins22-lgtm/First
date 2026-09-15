@@ -108,7 +108,7 @@ export async function saveOperationsTarget(input: {
  * Stored beside the build's own ring, never over it, so a rebuild refreshes
  * the counts and leaves the drawn shape alone.
  */
-export async function saveCourtOutline(courtId: string, points: LatLng[]): Promise<TargetResult> {
+export async function saveCourtOutline(courtId: string, points: LatLng[]): Promise<TargetResult<{ houseCount: number | null }>> {
   try {
     const profile = await officeProfile();
     if (!profile) return { ok: false, message: "Only the office can reshape a court." };
@@ -123,10 +123,52 @@ export async function saveCourtOutline(courtId: string, points: LatLng[]): Promi
       .eq("id", courtId)
       .eq("organization_id", profile.organization_id);
     if (error) return { ok: false, message: describeDbError(error) };
-    return { ok: true, value: undefined };
+    // The ring changed, so the homes inside it did.
+    const { data: count } = await admin.rpc("court_inside_count", { the_court: courtId });
+    return { ok: true, value: { houseCount: typeof count === "number" ? count : null } };
   } catch (e) {
     log.error("court_outline_save", { error: String(e) });
     return { ok: false, message: "The court's outline could not be saved." };
+  }
+}
+
+/** Count the homes inside a court's ring again, as it is drawn now. */
+export async function refreshCourtHouseCount(courtId: string): Promise<TargetResult<{ houseCount: number | null }>> {
+  try {
+    const profile = await officeProfile();
+    if (!profile) return { ok: false, message: "Only the office can recount." };
+    const admin = createAdminClient();
+    const { data: court } = await admin.from("court_targets").select("id").eq("id", courtId).eq("organization_id", profile.organization_id).maybeSingle();
+    if (!court) return { ok: false, message: "That court is not on file." };
+    const { data: count, error } = await admin.rpc("court_inside_count", { the_court: courtId });
+    if (error) return { ok: false, message: describeDbError(error) };
+    return { ok: true, value: { houseCount: typeof count === "number" ? count : null } };
+  } catch (e) {
+    log.error("court_count_refresh", { error: String(e) });
+    return { ok: false, message: "The homes could not be counted." };
+  }
+}
+
+/** Count the homes inside a saved target's ring again. */
+export async function refreshOperationsTargetHouseCount(id: string): Promise<TargetResult<{ houseCount: number | null }>> {
+  try {
+    const profile = await officeProfile();
+    if (!profile) return { ok: false, message: "Only the office can recount." };
+    const supabase = await createClient();
+    const { data: target } = await supabase.from("operations_targets").select("id, outline").eq("id", id).maybeSingle();
+    if (!target) return { ok: false, message: "That target is not on file." };
+    const points = cleanPoints(target.outline);
+    if (!points) return { ok: false, message: "The target has no outline to count." };
+    const ring = points.map((p) => [p.lng, p.lat]) as unknown as Json;
+    const { data: count, error } = await supabase.rpc("houses_in_ring_count", { org: profile.organization_id, ring });
+    if (error) return { ok: false, message: describeDbError(error) };
+    const houseCount = typeof count === "number" ? count : null;
+    await supabase.from("operations_targets").update({ house_count: houseCount, updated_at: new Date().toISOString() }).eq("id", id);
+    revalidatePath("/attractors");
+    return { ok: true, value: { houseCount } };
+  } catch (e) {
+    log.error("target_count_refresh", { error: String(e) });
+    return { ok: false, message: "The homes could not be counted." };
   }
 }
 

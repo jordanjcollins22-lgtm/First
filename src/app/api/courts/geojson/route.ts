@@ -20,16 +20,17 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("court_targets")
-    .select(`${COURT_COLUMNS}, outline, custom_outline`)
+    .select(`${COURT_COLUMNS}, outline, custom_outline, inside_house_count`)
     .eq("organization_id", profile.organization_id)
     .limit(5000);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  type Row = Parameters<typeof courtFromRow>[0] & { outline: number[][]; custom_outline: number[][] | null };
+  type Row = Parameters<typeof courtFromRow>[0] & { outline: number[][]; custom_outline: number[][] | null; inside_house_count: number | null };
   const rows = (data ?? []) as unknown as Row[];
   // A ring somebody drew beats the one the build guessed.
   const outlines = new Map(rows.map((r) => [r.id, r.custom_outline ?? r.outline]));
   const edited = new Set(rows.filter((r) => r.custom_outline).map((r) => r.id));
+  const inside = new Map(rows.map((r) => [r.id, r.inside_house_count]));
   const ranked = rankCourts(rows.map(courtFromRow)).filter((c) => !c.skip).slice(0, top);
 
   const features = ranked.map((c) => ({
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
       value: c.assessedMedian,
       reasons: topReasons(c.parts).join(" · "),
       edited: edited.has(c.id),
+      insideHouses: inside.get(c.id) ?? null,
       touched: c.touched,
       jobsDone: c.jobsDone,
       ownerPct: c.ownershipKnown > 0 ? Math.round((100 * c.ownerOccupied) / c.ownershipKnown) : null,

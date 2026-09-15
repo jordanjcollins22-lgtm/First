@@ -1,6 +1,7 @@
 "use client";
 
-import { X, Crosshair, Pencil, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { X, Crosshair, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { VERDICT_COLOR, VERDICT_LABEL, type CourtDetail } from "@/lib/court-score";
@@ -21,17 +22,20 @@ export function CourtDetailPanel({
   targeted,
   onSaveAsTarget,
   onEditOutline,
+  onRefreshCount,
   onClose,
 }: {
   court: CourtDetail;
   targeted: boolean;
   onSaveAsTarget: () => void;
   onEditOutline: () => void;
+  /** Count the homes inside the ring again; resolves to the count or an error. */
+  onRefreshCount: () => Promise<{ ok: true; count: number | null } | { ok: false; message: string }>;
   onClose: () => void;
 }) {
   const known = court.detached + court.townhouse + court.condo;
   const rows: [string, string][] = [
-    ["Homes on the court", String(court.houses)],
+    ["Homes on the street", String(court.houses)],
     ["Assessed value", court.value != null ? `~$${Math.round(court.value / 1000)}k median` : "unknown"],
     ["Owner-occupied", court.ownerPct != null ? `${court.ownerPct}%` : "unknown"],
     [
@@ -66,6 +70,10 @@ export function CourtDetailPanel({
       </div>
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-muted-foreground">Homes inside outline</dt>
+        <dd className="font-medium">
+          <CountWithRefresh count={court.insideHouses} onRefresh={onRefreshCount} />
+        </dd>
         {rows.map(([k, v]) => (
           <div key={k} className="contents">
             <dt className="text-muted-foreground">{k}</dt>
@@ -112,6 +120,50 @@ export function CourtDetailPanel({
   );
 }
 
+/**
+ * A count and the button that counts again.
+ *
+ * The number shown is the last one counted; the ring may have moved since.
+ * One press asks the database to count the doors inside the ring as it is
+ * now, and says so while it does.
+ */
+function CountWithRefresh({
+  count,
+  onRefresh,
+}: {
+  count: number | null;
+  onRefresh: () => Promise<{ ok: true; count: number | null } | { ok: false; message: string }>;
+}) {
+  const [busy, start] = useTransition();
+  const [shown, setShown] = useState<number | null>(count);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span>{shown != null ? shown : "not counted yet"}</span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setError(null);
+          start(async () => {
+            const result = await onRefresh();
+            if (result.ok) {
+              setShown(result.count);
+
+            } else setError(result.message);
+          });
+        }}
+        className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+        title="Count the homes inside the outline again"
+      >
+        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+        Refresh count
+      </button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
+  );
+}
+
 const STATUS_LINE: Record<string, string> = { planned: "Planned", active: "Working it", done: "Done" };
 
 /** A saved target, with its few facts and the things to do to it. */
@@ -120,10 +172,12 @@ export function TargetDetailPanel({
   onReshape,
   onStatus,
   onRemove,
+  onRefreshCount,
   onClose,
 }: {
   target: OperationsTarget;
   onReshape: () => void;
+  onRefreshCount: () => Promise<{ ok: true; count: number | null } | { ok: false; message: string }>;
   onStatus: (status: OperationsTarget["status"]) => void;
   onRemove: () => void;
   onClose: () => void;
@@ -141,7 +195,9 @@ export function TargetDetailPanel({
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted-foreground">Homes inside</dt>
-        <dd className="font-medium">{target.houseCount ?? "unknown"}</dd>
+        <dd className="font-medium">
+          <CountWithRefresh key={target.houseCount ?? "none"} count={target.houseCount} onRefresh={onRefreshCount} />
+        </dd>
         <dt className="text-muted-foreground">Status</dt>
         <dd>
           <select value={target.status} onChange={(e) => onStatus(e.target.value as OperationsTarget["status"])} className="h-7 rounded border border-border bg-background px-1 text-sm">
