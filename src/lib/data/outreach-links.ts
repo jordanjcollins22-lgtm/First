@@ -76,21 +76,26 @@ export interface OutreachBoard {
 
 const PAGE = 200;
 
-export async function getOutreachBoard(): Promise<OutreachBoard> {
+/**
+ * @param onlyProfileId When set, only this person's links: what they handed
+ * out and what came of it, and nobody else's. The owner reads the whole
+ * board; everybody else reads their own.
+ */
+export async function getOutreachBoard(options: { onlyProfileId?: string } = {}): Promise<OutreachBoard> {
   const supabase = await createClient();
   const [organizationId, baseUrl] = await Promise.all([
     getCurrentOrganizationId(),
     outboundBaseUrl(),
   ]);
 
-  const { data } = await supabase
+  let query = supabase
     .from("outreach_links")
     .select(
       "id, code, kind, platform, audience, from_page, sent_to, note, service, screenshot_path, profile_id, posted_at, click_count, first_click_at, last_click_at, responded_at, response, comment, posted_comment, posted_comment_at"
     )
-    .eq("organization_id", organizationId)
-    .order("posted_at", { ascending: false })
-    .limit(PAGE);
+    .eq("organization_id", organizationId);
+  if (options.onlyProfileId) query = query.eq("profile_id", options.onlyProfileId);
+  const { data } = await query.order("posted_at", { ascending: false }).limit(PAGE);
 
   const raw = data ?? [];
   if (raw.length === 0) {

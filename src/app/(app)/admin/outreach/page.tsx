@@ -2,6 +2,8 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getOutreachBoard } from "@/lib/data/outreach-links";
+import { getCurrentProfile } from "@/lib/data/team";
+import { isOwnerLevel } from "@/lib/roles";
 import { OutreachForm } from "@/components/marketing/outreach-form";
 import { OutreachBoardView } from "@/components/marketing/outreach-board";
 
@@ -24,7 +26,12 @@ export default async function OutreachPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("recommendations", "/marketing");
 
-  const board = await getOutreachBoard().catch((err) => {
+  // The owner reads everybody's links and who converted what. Everybody
+  // else reads their own: what they handed out, what came back, nothing of
+  // anyone else's.
+  const profile = await getCurrentProfile();
+  const owner = isOwnerLevel(profile?.roles ?? []);
+  const board = await getOutreachBoard(owner ? {} : { onlyProfileId: profile?.id ?? "nobody" }).catch((err) => {
     console.error("Link Tracking failed to load:", err);
     return null;
   });
@@ -37,6 +44,7 @@ export default async function OutreachPage() {
           Every post, comment and message gets its own link. Screenshot what you are answering and the
           rest fills itself in. From then on the link counts its own opens, and anything that comes of
           it lands against you, against that room, and against the way it was sent.
+          {!owner && " This board is yours: your links and what came of them."}
         </p>
       </header>
 
@@ -46,7 +54,7 @@ export default async function OutreachPage() {
       </section>
 
       {board && board.total.posts > 0 ? (
-        <OutreachBoardView board={board} />
+        <OutreachBoardView board={board} scope={owner ? "everyone" : "mine"} />
       ) : (
         <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
           Nothing tracked yet. The next time you answer somebody in a group, record it here first and

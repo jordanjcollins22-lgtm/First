@@ -39,14 +39,16 @@ import { postedVersion, VERSION_LABEL } from "@/lib/posted-comment";
  * booked from it; a comment opens to the people who booked from that one
  * comment, with their contact details there to ring and there to correct.
  */
-export function OutreachBoardView({ board }: { board: OutreachBoard }) {
+export function OutreachBoardView({ board, scope = "everyone" }: { board: OutreachBoard; scope?: "everyone" | "mine" }) {
   const [tab, setTab] = useState<"rooms" | "recent" | "people" | "how">("rooms");
   const [openRoom, setOpenRoom] = useState<string | null>(null);
 
+  // Who posted what, and who converted, is the owner's table. A person
+  // reading their own board has one row on it, which says nothing.
   const tabs = [
     { key: "rooms" as const, label: "Rooms" },
-    { key: "recent" as const, label: "Every link" },
-    { key: "people" as const, label: "Who posted" },
+    { key: "recent" as const, label: scope === "mine" ? "My links" : "Every link" },
+    ...(scope === "everyone" ? [{ key: "people" as const, label: "Who posted" }] : []),
     { key: "how" as const, label: "What works" },
   ];
 
@@ -93,11 +95,11 @@ export function OutreachBoardView({ board }: { board: OutreachBoard }) {
 
       {tab === "people" && (
         <Table
-          caption="Who handed links out, and what came back."
+          caption="Who handed links out, and what came back: comments and messages answered, and how many booked."
           rows={board.people.map((person) => ({
             key: person.profileId,
             name: person.name,
-            detail: null,
+            detail: `${person.comments} comment${person.comments === 1 ? "" : "s"} · ${person.dms} DM${person.dms === 1 ? "" : "s"}`,
             funnel: person,
           }))}
         />

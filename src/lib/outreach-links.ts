@@ -350,6 +350,10 @@ export function tallyByGroup(
 
 export interface PersonTally extends Funnel {
   profileId: string;
+  /** Replies under other people's posts. */
+  comments: number;
+  /** Private messages answered. */
+  dms: number;
 }
 
 /** Who handed out the most, and what came of it. */
@@ -360,8 +364,13 @@ export function tallyByPerson(
   const booked = new Set(bookedCodes);
   const tallies = new Map<string, PersonTally>();
   for (const row of rows) {
-    const found = tallies.get(row.profileId) ?? { ...EMPTY, profileId: row.profileId };
-    tallies.set(row.profileId, { ...found, ...add(found, row, booked) });
+    const found = tallies.get(row.profileId) ?? { ...EMPTY, profileId: row.profileId, comments: 0, dms: 0 };
+    tallies.set(row.profileId, {
+      ...found,
+      ...add(found, row, booked),
+      comments: found.comments + (row.kind === "comment" ? 1 : 0),
+      dms: found.dms + (row.kind === "dm" ? 1 : 0),
+    });
   }
   return Array.from(tallies.values()).sort(
     (a, b) => b.bookings - a.bookings || b.clicked - a.clicked || b.posts - a.posts
