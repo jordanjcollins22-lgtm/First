@@ -448,6 +448,9 @@ export function SatelliteMapView({
   const selectedEddmRef = useRef<Set<string>>(new Set());
   const onSelectJobRef = useRef(onSelectJob);
   const onPickCourtRef = useRef(onPickCourt);
+  // Whether the county's dots are showing, read inside the click handler
+  // registered once on load.
+  const showAllAddressesRef = useRef(showAllAddresses);
   // The round being edited is read from a ref inside the map's own handlers,
   // which are registered once on load. Without this they would close over the
   // first render's props, and every tap after the first would be ignored.
@@ -464,6 +467,7 @@ export function SatelliteMapView({
     onSelectWaveRef.current = onSelectWave;
     onSelectJobRef.current = onSelectJob;
     onPickCourtRef.current = onPickCourt;
+    showAllAddressesRef.current = showAllAddresses;
     routeEditRef.current = routeEdit;
   });
 
@@ -1085,9 +1089,14 @@ export function SatelliteMapView({
           });
         });
       });
-      // Anywhere else on the map: the house under the click, if there is one.
+      // Anywhere else on the map: the house under the click, if there is
+      // one -- but only while the county's dots are showing. With the dots
+      // off, somebody clicking bare ground is placing a shape or looking at
+      // an outline, and a house card for whatever is nearest just gets in
+      // the way.
       map.on("click", (e) => {
         if (editingRound()) return;
+        if (!showAllAddressesRef.current) return;
         const layers = [HOUSES_LAYER, ALL_ADDRESSES_LAYER, ALL_ADDRESSES_CLUSTER_LAYER, JOBS_LAYER, LEADS_LAYER, UNSERVED_LAYER, UNSERVED_GROUPS_LAYER, ZONES_FILL_LAYER, EDDM_FILL_LAYER, WAVES_FILL_LAYER, LOCATIONS_LAYER, AREAS_FILL_LAYER, COURTS_FILL_LAYER, OPS_FILL_LAYER].filter((l) => map.getLayer(l));
         if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
         openHouseCardAt(map, [e.lngLat.lng, e.lngLat.lat]);
