@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,12 +8,12 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ password?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ password?: string; code?: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  // The password door stays, unlinked, for the day the code email does not
-  // arrive: /login?password=1. Everyone else signs in with a code.
-  const { password } = await searchParams;
-  const withPassword = password === "1";
+  // Password by default for now: the code email depends on mail that is not
+  // sending yet. The code door stays at /login?code=1 for the day it is.
+  const { code } = await searchParams;
+  const withCode = code === "1";
 
   const supabase = await createClient();
   const {
@@ -25,12 +26,23 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div>
         <h1 className="text-2xl font-bold">Sign in</h1>
         <p className="text-muted-foreground">
-          {withPassword ? "JS Landscaping" : "JS Landscaping. No password: we email you a code."}
+          {withCode ? "JS Landscaping. No password: we email you a code." : "JS Landscaping"}
         </p>
       </div>
       <Card>
-        <CardContent className="pt-6">{withPassword ? <LoginForm /> : <CodeLoginForm />}</CardContent>
+        <CardContent className="pt-6">{withCode ? <CodeLoginForm /> : <LoginForm />}</CardContent>
       </Card>
+      <p className="text-center text-xs text-muted-foreground">
+        {withCode ? (
+          <Link href="/login" className="underline">
+            Sign in with a password instead
+          </Link>
+        ) : (
+          <Link href="/login?code=1" className="underline">
+            Email me a code instead
+          </Link>
+        )}
+      </p>
     </div>
   );
 }
