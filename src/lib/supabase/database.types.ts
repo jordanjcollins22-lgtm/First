@@ -2908,6 +2908,7 @@ export interface Database {
           link_id: string;
           clicked_at: string;
           source: string | null;
+          agent: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["outreach_clicks"]["Row"]> & {
           organization_id: string;

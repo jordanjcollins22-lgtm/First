@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { bookingDestination } from "@/lib/outreach-links";
+import { classifyAgent, countsAsOpen } from "@/lib/click-agent";
 
 /**
  * Every handed-out link comes through here.
@@ -69,9 +70,16 @@ export async function GET(
     // up or fail it: somebody standing on a pavement waiting on our bookkeeping
     // is the wrong trade, and a click we failed to record is worth less than a
     // customer who gave up.
-    await recordClick(admin, link, request).catch((err) =>
-      console.error("couldn't record a click:", err)
-    );
+    //
+    // Only a person counts. The crawlers that fetch a link the moment it is
+    // posted are sent on their way without a mark, or every comment would
+    // look read by ten people before anybody had seen it.
+    const agent = request.headers.get("user-agent");
+    if (countsAsOpen(request.method, agent)) {
+      await recordClick(admin, link, request, classifyAgent(agent)).catch((err) =>
+        console.error("couldn't record a click:", err)
+      );
+    }
 
     return NextResponse.redirect(destination, 302);
   } catch (err) {
@@ -83,7 +91,8 @@ export async function GET(
 async function recordClick(
   admin: ReturnType<typeof createAdminClient>,
   link: { id: string; organization_id: string; click_count: number },
-  request: NextRequest
+  request: NextRequest,
+  agent: string
 ): Promise<void> {
   const now = new Date().toISOString();
   const source = hostOf(request.headers.get("referer"));
@@ -94,6 +103,7 @@ async function recordClick(
       link_id: link.id,
       clicked_at: now,
       source,
+      agent,
     }),
     admin
       .from("outreach_links")
