@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { looksLikeEmail, cleanCode, sentMessage } from "@/lib/client-portal";
+import { deliverLoginCode } from "@/lib/login-code";
 
 export type AuthResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -23,15 +24,10 @@ export async function sendClientCode(email: string): Promise<AuthResult> {
   const address = email.trim().toLowerCase();
   if (!looksLikeEmail(address)) return { ok: false, error: "That doesn't look like an email address." };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email: address,
-    options: { shouldCreateUser: false },
-  });
-
-  // Logged, not shown. A failure here is usually "no such user", which is
-  // exactly the thing this must not disclose.
-  if (error) console.warn(`client code not sent to ${address}: ${error.message}`);
+  // A failure to find the address is logged, not shown: that is exactly the
+  // thing this must not disclose. A rate limit is shown, because it is not.
+  const delivered = await deliverLoginCode(address, "JS Landscaping");
+  if (!delivered.ok) return { ok: false, error: delivered.error };
 
   return { ok: true, message: sentMessage(address) };
 }

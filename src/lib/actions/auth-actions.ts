@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cleanCode, looksLikeEmail } from "@/lib/client-portal";
-import { log, maskEmail } from "@/lib/log";
+import { deliverLoginCode } from "@/lib/login-code";
 
 export type CodeResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -45,9 +45,8 @@ export async function sendLoginCode(email: string): Promise<CodeResult> {
   const address = email.trim().toLowerCase();
   if (!looksLikeEmail(address)) return { ok: false, error: "That doesn't look like an email address." };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({ email: address, options: { shouldCreateUser: false } });
-  if (error) log.warn("login.code.not_sent", { to: maskEmail(address), error: error.message });
+  const delivered = await deliverLoginCode(address, "JS Landscaping");
+  if (!delivered.ok) return { ok: false, error: delivered.error };
 
   return { ok: true, message: `If ${address} has an account, a six-digit code is on its way. It lasts about an hour.` };
 }
