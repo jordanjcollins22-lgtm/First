@@ -12,9 +12,11 @@ import {
   type PaymentOption,
 } from "@/lib/acceptance-path";
 import {
+  chooseOfflinePayment,
   choosePaymentPath,
   startProposalPayment,
 } from "@/lib/actions/public-proposal-actions";
+import type { OfflineMethod } from "@/lib/collect-payment";
 import { PREVIEW_BLOCKED, schedulePath } from "@/lib/proposal-flow";
 import { PayInPlace } from "@/components/proposal/pay-in-place";
 
@@ -57,6 +59,29 @@ export function PayView({
   // them, because a list of choices above a card form is a chance to change
   // your mind while holding your phone to your face.
   const [paying, setPaying] = useState<{ clientSecret: string; amount: number } | null>(null);
+  // Cash or check: the choice, then the confirmation before moving on.
+  const [offline, setOffline] = useState<"closed" | "choosing" | "done">("closed");
+  const [offlineMessage, setOfflineMessage] = useState<string | null>(null);
+
+  function chooseOffline(method: OfflineMethod) {
+    if (preview) {
+      setError(PREVIEW_BLOCKED);
+      return;
+    }
+    setError(null);
+    setBusyId(method);
+    start(async () => {
+      const result = await chooseOfflinePayment({ token, method });
+      setBusyId(null);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setOfflineMessage(result.message);
+      setOffline("done");
+      setTimeout(() => router.push(result.next), 2500);
+    });
+  }
 
   const options = optionsAfterAccept(context);
 
@@ -177,6 +202,38 @@ export function PayView({
           </div>
         );
       })}
+
+      {/* The other way to pay, for the client who would rather not pay a
+          card fee. Off to the side until asked for: the card button is the
+          one most people want, and a choice presented as equal gets taken
+          by people who did not mean to. */}
+      {offline === "done" && offlineMessage ? (
+        <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 text-center text-sm">{offlineMessage}</div>
+      ) : offline === "choosing" ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4">
+          <div>
+            <p className="font-semibold">Pay by cash or check</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              No card fee. Your account manager will arrange a time to collect {money(context.totalCents)}.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" size="lg" variant="outline" disabled={pending} onClick={() => chooseOffline("check")}>
+              {busyId === "check" ? "Just a moment…" : "Check"}
+            </Button>
+            <Button type="button" size="lg" variant="outline" disabled={pending} onClick={() => chooseOffline("cash")}>
+              {busyId === "cash" ? "Just a moment…" : "Cash"}
+            </Button>
+          </div>
+          <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setOffline("closed")}>
+            Never mind, I&apos;ll pay by card
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="text-center text-sm text-primary underline" onClick={() => setOffline("choosing")}>
+          Rather pay by cash or check?
+        </button>
+      )}
 
         </>
       )}

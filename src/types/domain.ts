@@ -785,6 +785,11 @@ export interface Invoice {
   paid_at: string | null;
   created_at: string;
   updated_at: string;
+  /** The client asked to pay this way rather than by card. */
+  pay_by: "cash" | "check" | null;
+  pay_by_requested_at: string | null;
+  collected_by: string | null;
+  collected_note: string | null;
 }
 
 /** A payment to a team member. Amount is what was actually agreed, which may

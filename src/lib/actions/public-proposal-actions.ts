@@ -11,6 +11,9 @@ import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import { getJobCustomerContact } from "@/lib/job-customer";
+import { sendOutbound } from "@/lib/email/outbound";
+import { env } from "@/lib/env";
+import { collectEmail, isOfflineMethod, offlineConfirmation, offlineThreadNote, type OfflineMethod } from "@/lib/collect-payment";
 import { notifyJobTeam } from "@/lib/notifications";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
@@ -308,6 +311,157 @@ export async function requestScopeChange(input: {
  * twice. A phone that resent the request would otherwise raise a second
  * invoice or a second payment plan against the same job.
  */
+/**
+ * The client would rather pay by cash or check.
+ *
+ * Nothing is charged. The choice is recorded on the proposal like any other,
+ * the invoice from signing is marked as waiting to be collected, and the
+ * account manager is emailed at once with whose money, how much and where.
+ * The client goes on to pick their day, the same as somebody who paid.
+ */
+export async function chooseOfflinePayment(input: {
+  token: string;
+  method: OfflineMethod;
+  preview?: boolean;
+}): Promise<PublicResult<{ message: string; next: string }>> {
+  try {
+    if (input.preview) return previewResult();
+    if (!isOfflineMethod(input.method)) return { ok: false, message: "Cash or check." };
+
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from("job_proposals")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path")
+      .eq("token", input.token)
+      .maybeSingle();
+    if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
+    if (proposal.status !== "accepted") return { ok: false, message: "Accept the proposal first." };
+    if (proposal.payment_path) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
+
+    const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+    const amountCents = Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents);
+    if (amountCents <= 0) return { ok: false, message: "There is nothing to pay on this one." };
+
+    const { data: claimed } = await admin
+      .from("job_proposals")
+      .update({ payment_path: "cash_check", payment_path_at: new Date().toISOString() })
+      .eq("id", proposal.id)
+      .is("payment_path", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
+
+    // The bill exists from signing; if it somehow does not, raise it so
+    // there is one thing to mark paid when the money arrives.
+    let open = await openInvoiceFor(proposal.job_id).catch(() => null);
+    if (!open) {
+      await createAndSendInvoice(proposal.job_id, proposal.id, amountCents / 100).catch((err) =>
+        console.error("could not raise the invoice for an offline payment:", err)
+      );
+      open = await openInvoiceFor(proposal.job_id).catch(() => null);
+    }
+    if (open) {
+      await admin
+        .from("invoices")
+        .update({ pay_by: input.method, pay_by_requested_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", open.id);
+    }
+
+    await admin.from("job_messages").insert({
+      job_id: proposal.job_id,
+      organization_id: proposal.organization_id,
+      channel: "internal",
+      author_type: "client",
+      author_name: "Client",
+      body: offlineThreadNote(input.method, amountCents),
+    });
+
+    const manager = await emailCollector({
+      organizationId: proposal.organization_id,
+      jobId: proposal.job_id,
+      amountCents,
+      method: input.method,
+    }).catch((err) => {
+      console.error("could not email the account manager about a cash/check payment:", err);
+      return null;
+    });
+
+    notifyJobTeam(
+      proposal.job_id,
+      "proposal_responses",
+      `A client accepted and wants to pay by ${input.method}. Arrange to collect it.`,
+      { dedupeKey: `${proposal.id}:path` }
+    ).catch(() => {});
+
+    revalidateJobViews(proposal.job_id);
+    return {
+      ok: true,
+      message: offlineConfirmation(input.method, amountCents, manager),
+      next: schedulePath(input.token),
+    };
+  } catch (err) {
+    console.error("chooseOfflinePayment failed:", err);
+    return { ok: false, message: "Couldn't record that. Please try again." };
+  }
+}
+
+/**
+ * Emails whoever collects: the client's account manager, or every account
+ * manager when the client has none, or the owners when there are none of
+ * those either. Returns the first name to tell the client, if one person.
+ */
+async function emailCollector(input: { organizationId: string; jobId: string; amountCents: number; method: OfflineMethod }): Promise<string | null> {
+  const admin = createAdminClient();
+  const [{ data: job }, contact, { data: org }] = await Promise.all([
+    admin.from("jobs").select("property_id, properties(address, customers(name, phone, account_manager_id))").eq("id", input.jobId).maybeSingle(),
+    getJobCustomerContact(input.jobId),
+    admin.from("organizations").select("name").eq("id", input.organizationId).maybeSingle(),
+  ]);
+  const property = (job as { properties?: { address: string | null; customers?: { name: string; phone: string | null; account_manager_id: string | null } | null } | null } | null)?.properties ?? null;
+  const managerId = property?.customers?.account_manager_id ?? null;
+
+  let recipients: { id: string; email: string; first_name: string | null; full_name: string | null }[] = [];
+  if (managerId) {
+    const { data } = await admin.from("profiles").select("id, email, first_name, full_name").eq("id", managerId).maybeSingle();
+    if (data?.email) recipients = [data];
+  }
+  for (const role of [["account manager"], ["owner", "admin"]]) {
+    if (recipients.length > 0) break;
+    const { data: roles } = await admin.from("profile_roles").select("profile_id").in("role_name", role);
+    const ids = [...new Set((roles ?? []).map((r) => r.profile_id))];
+    if (ids.length === 0) continue;
+    const { data } = await admin.from("profiles").select("id, email, first_name, full_name").in("id", ids).eq("organization_id", input.organizationId);
+    recipients = (data ?? []).filter((p) => p.email);
+  }
+  if (recipients.length === 0) return null;
+
+  const base = env.appUrl.replace(/\/$/, "");
+  await Promise.all(
+    recipients.map((p) => {
+      const firstName = p.first_name || (p.full_name ?? "").split(" ")[0] || null;
+      const mail = collectEmail({
+        clientName: contact?.customerName ?? property?.customers?.name ?? "A client",
+        amountCents: input.amountCents,
+        method: input.method,
+        address: property?.address ?? null,
+        phone: contact?.phone ?? property?.customers?.phone ?? null,
+        jobUrl: `${base}/jobs/${input.jobId}?tab=invoice`,
+        managerFirstName: firstName,
+      });
+      return sendOutbound({
+        organizationId: input.organizationId,
+        to: p.email,
+        toName: p.full_name,
+        subject: mail.subject,
+        text: mail.text,
+        fromName: org?.name ?? "JS Landscaping",
+      });
+    })
+  );
+  const only = recipients.length === 1 ? recipients[0] : null;
+  return only ? only.first_name || (only.full_name ?? "").split(" ")[0] || null : null;
+}
+
 export async function choosePaymentPath(input: {
   token: string;
   pathId: string;

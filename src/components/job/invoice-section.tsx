@@ -6,6 +6,7 @@ import { FileText, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { InvoicePanel } from "@/components/job/invoice-panel";
+import { CollectPaymentPanel } from "@/components/job/collect-payment-panel";
 import { raiseInvoiceForJob } from "@/lib/actions/job-invoice-actions";
 import type { Invoice } from "@/types/domain";
 
@@ -45,6 +46,7 @@ export function InvoiceSection({
     return (
       <div className="flex flex-col gap-3">
         <InvoicePanel invoice={invoice} />
+        <CollectPaymentPanel invoice={invoice} />
         {acceptedLabel && <AcceptedLine label={acceptedLabel} />}
       </div>
     );

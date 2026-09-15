@@ -31,6 +31,8 @@ import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { CallListPanel } from "@/components/sales/call-list";
+import { CollectPanel } from "@/components/sales/collect-panel";
+import { listPaymentsToCollect, type PaymentToCollect } from "@/lib/data/collections";
 import type { CallList } from "@/lib/call-list";
 import { isAccountManager } from "@/lib/affiliate-roles";
 import { TodayPanel } from "@/components/dashboard/today-panel";
@@ -156,7 +158,7 @@ async function OfficeDay() {
   // round trips the page sat through end to end. Each still fails on its own:
   // a money table that is not set up costs the commission panel and nothing
   // else, which is why every one of them carries its own catch.
-  const [data, work, today, commission, earlyStarts, marketing, ops, calls, crewsToday, openTime] = await Promise.all([
+  const [data, work, today, commission, earlyStarts, marketing, ops, calls, toCollect, crewsToday, openTime] = await Promise.all([
     getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
       console.error("My Day failed to load:", err);
       return null as DashboardData | null;
@@ -203,6 +205,13 @@ async function OfficeDay() {
           return null as CallList | null;
         })
       : Promise.resolve(null as CallList | null),
+    // Cash and checks clients have asked us to come and collect.
+    isAccountManager(profile.roles) || isOwnerLevel(profile.roles) || profile.roles.includes("admin")
+      ? listPaymentsToCollect(profile).catch((err) => {
+          console.error("Payments to collect failed to load:", err);
+          return [] as PaymentToCollect[];
+        })
+      : Promise.resolve([] as PaymentToCollect[]),
     // Today's jobs, crews and load-outs, on the business clock.
     getCrewsToday(dateKeyIn(new Date())).catch((err) => {
       console.error("Crews today failed to load:", err);
@@ -259,6 +268,8 @@ async function OfficeDay() {
 
       {/* Above everything else for an account manager: the money on the
           table, and who to ring about it. */}
+      {toCollect.length > 0 && <CollectPanel lines={toCollect} />}
+
       {calls && (calls.now.length > 0 || calls.later.length > 0) && (
         <CallListPanel list={calls} callerFirstName={(profile.first_name || profile.full_name || "").split(" ")[0] || "us"} />
       )}

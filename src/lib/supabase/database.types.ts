@@ -3145,6 +3145,10 @@ export interface Database {
           paid_at: string | null;
           created_at: string;
           updated_at: string;
+          pay_by: string | null;
+          pay_by_requested_at: string | null;
+          collected_by: string | null;
+          collected_note: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["invoices"]["Row"]> & {
           organization_id: string;

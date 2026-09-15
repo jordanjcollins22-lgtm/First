@@ -75,6 +75,9 @@ export async function POST(request: NextRequest) {
 
 /** A scheduled instalment, or a subscription renewal. */
 async function recordInvoicePayment(invoice: Stripe.Invoice): Promise<void> {
+  // Cash or a check marked as paid outside Stripe was recorded by the
+  // person who took it; a second row here would count it twice.
+  if ((invoice as { paid_out_of_band?: boolean }).paid_out_of_band) return;
   const admin = createAdminClient();
 
   const stripeCustomerId =
