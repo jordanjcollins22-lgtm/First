@@ -1,0 +1,91 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { computeAvailableSlots } from "@/lib/booking-availability";
+import { describeNotice, firstBookableDate, minLeadMinutes } from "@/lib/booking-notice";
+import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
+import {
+  getBookingNotice,
+  listAvailabilityData,
+  listOrgEvaluatorIds,
+  listPublicServices,
+  resolveBookingContext,
+} from "@/lib/data/public-booking";
+import { isSupabaseConfigured } from "@/lib/env";
+
+import type { BookingOptions } from "../booking-options";
+
+/**
+ * The dynamic half of the public booking page.
+ *
+ * /book itself is now a prerendered shell: the same bytes for everybody, out
+ * of the edge cache, with no database behind it. This is what that shell asks
+ * for once it is on screen — who the link belongs to, what that business
+ * offers, and which hours are still free.
+ *
+ * It is deliberately not cached. Open times are the one thing on this page
+ * that must not be stale: a client picking an hour that was taken two minutes
+ * ago gets sent back to the calendar by the server-side re-check in
+ * submitPublicBooking, which is a worse first impression than the second this
+ * query costs. Everything that *can* be stale was moved into the shell.
+ */
+export async function GET(request: NextRequest): Promise<NextResponse<BookingOptions>> {
+  const answer = (body: BookingOptions) =>
+    NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
+
+  if (!isSupabaseConfigured) {
+    return answer({ status: "unavailable" });
+  }
+
+  const ref = request.nextUrl.searchParams.get("ref") ?? undefined;
+  const org = request.nextUrl.searchParams.get("org") ?? undefined;
+  // The last resort. A posted reply's code knows which business it belongs to,
+  // which is what keeps links already pasted into other people's threads
+  // working after whatever else they named has gone.
+  const rec = request.nextUrl.searchParams.get("rec") ?? undefined;
+
+  const context = await resolveBookingContext({ ref, org, rec });
+  if (!context) {
+    return answer({ status: "unknown-link" });
+  }
+
+  const evaluatorIds = context.dedicatedEvaluatorId
+    ? [context.dedicatedEvaluatorId]
+    : await listOrgEvaluatorIds(context.organizationId);
+
+  if (evaluatorIds.length === 0) {
+    return answer({ status: "closed" });
+  }
+
+  const [services, availability, busy, notice] = await Promise.all([
+    listPublicServices(context.organizationId),
+    listAvailabilityData(evaluatorIds),
+    // Every other calendar these people are on. Without this a client could be
+    // offered ten o'clock with somebody who has been on an install since eight.
+    getBusyBlocksAsAdmin().catch(() => []),
+    getBookingNotice(context.organizationId),
+  ]);
+
+  const now = new Date();
+  const slots = computeAvailableSlots({
+    evaluatorIds,
+    weeklyAvailability: availability.weeklyAvailability,
+    daysOff: availability.daysOff,
+    bookedTimes: availability.bookedTimes,
+    busy,
+    from: now,
+    // The business's notice rule: no same-day visits unless allowed, and
+    // never inside its hours of notice.
+    firstDate: firstBookableDate(notice, now),
+    minLeadMinutes: minLeadMinutes(notice),
+  });
+
+  return answer({
+    status: "ok",
+    organizationId: context.organizationId,
+    organizationName: context.organizationName,
+    referredByProfileId: context.referredByProfileId,
+    services,
+    slots,
+    noticeText: describeNotice(notice),
+  });
+}
