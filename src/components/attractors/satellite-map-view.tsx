@@ -29,7 +29,7 @@ import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL } from "@/lib/house-relat
 import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
 import type { OperationsTarget } from "@/lib/data/operations-targets";
-import { VERDICT_COLOR } from "@/lib/court-score";
+import { VERDICT_COLOR, type CourtDetail } from "@/lib/court-score";
 import { renderHouseCard, renderHouseCardLoading, type HouseFacts } from "@/lib/house-facts";
 import { matchesHighlight, type PointHighlight } from "@/lib/house-highlight";
 import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, MODE_WHY, modeOf, walkRunsOf, type WalkLine, type ZoneProperties } from "@/lib/zones";
@@ -159,6 +159,10 @@ interface SatelliteMapViewProps {
    * a click; Save hands the new corners back, Cancel hands back nothing.
    */
   outlineEdit?: OutlineEdit | null;
+  /** A court clicked on the map: it goes to the side panel, not a popup. */
+  onSelectCourt?: (court: CourtDetail) => void;
+  /** A saved target clicked on the map. */
+  onSelectTarget?: (id: string) => void;
   /** "Edit outline" pressed on a court's or a target's popup. */
   onEditOutline?: (edit: OutlineEdit) => void;
   onOutlineEditDone?: (points: LatLng[] | null) => void;
@@ -449,6 +453,8 @@ export function SatelliteMapView({
   showCourts = false,
   opsTargets = [],
   onPickCourt,
+  onSelectCourt,
+  onSelectTarget,
   outlineEdit = null,
   onEditOutline,
   onOutlineEditDone,
@@ -468,6 +474,8 @@ export function SatelliteMapView({
   const onSelectJobRef = useRef(onSelectJob);
   const onPickCourtRef = useRef(onPickCourt);
   const onEditOutlineRef = useRef(onEditOutline);
+  const onSelectCourtRef = useRef(onSelectCourt);
+  const onSelectTargetRef = useRef(onSelectTarget);
   const onOutlineEditDoneRef = useRef(onOutlineEditDone);
   /** The draw control holding the outline being reshaped, while one is. */
   const editDrawRef = useRef<{ draw: MapboxDraw; featureId: string } | null>(null);
@@ -491,6 +499,8 @@ export function SatelliteMapView({
     onSelectJobRef.current = onSelectJob;
     onPickCourtRef.current = onPickCourt;
     onEditOutlineRef.current = onEditOutline;
+    onSelectCourtRef.current = onSelectCourt;
+    onSelectTargetRef.current = onSelectTarget;
     onOutlineEditDoneRef.current = onOutlineEditDone;
     showAllAddressesRef.current = showAllAddresses;
     routeEditRef.current = routeEdit;
@@ -1089,8 +1099,9 @@ export function SatelliteMapView({
 
       map.on("click", ZONES_FILL_LAYER, (e) => {
         if (editingRound()) return;
-        // Dots and routes on top of a zone are about themselves.
-        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, UNSERVED_LAYER] }).length > 0) return;
+        // Dots and routes on top of a zone are about themselves; so is a
+        // court or a target drawn over it.
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, UNSERVED_LAYER, COURTS_FILL_LAYER, OPS_FILL_LAYER].filter((l) => map.getLayer(l)) }).length > 0) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const raw = feature.properties as Record<string, unknown>;
@@ -1172,30 +1183,32 @@ export function SatelliteMapView({
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER] }).length > 0) return;
         const feature = e.features?.[0];
         if (!feature) return;
-        const props = feature.properties as { id: string; rank: number; score: number; verdict: string; title: string; houses: number; clients: number; value: number | null; reasons: string };
+        const raw = feature.properties as Record<string, unknown>;
         const ring = (feature.geometry as GeoJSON.Polygon).coordinates[0] ?? [];
         const points: LatLng[] = ring.slice(0, -1).map(([lng, lat]) => ({ lat, lng }));
-        const colour = VERDICT_COLOR[props.verdict as keyof typeof VERDICT_COLOR] ?? VERDICT_COLOR.weak;
-        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "300px" })
-          .setLngLat(e.lngLat)
-          .setHTML(
-            `<div style="font:500 13px system-ui"><div>#${props.rank} ${escapeHtml(props.title)}</div>` +
-              `<div style="color:${colour};font-weight:600">${props.score} of 100</div>` +
-              `<div style="color:#666;font-weight:400">${props.houses} homes${props.value != null ? ` · assessed ~$${Math.round(Number(props.value) / 1000)}k` : ""}${props.clients > 0 ? ` · ${props.clients} client${props.clients === 1 ? "" : "s"} here` : ""}</div>` +
-              `<div style="color:#666;font-weight:400;margin-top:2px">${escapeHtml(props.reasons ?? "")}</div>` +
-              `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
-              `<button type="button" data-act="target" style="padding:4px 8px;border-radius:6px;background:#1d4ed8;color:#fff;font:500 12px system-ui">Save as target</button>` +
-              `<button type="button" data-act="edit" style="padding:4px 8px;border-radius:6px;border:1px solid #1d4ed8;background:#fff;color:#1d4ed8;font:500 12px system-ui">Edit outline</button>` +
-              `</div></div>`
-          )
-          .addTo(map);
-        popup.getElement()?.querySelector("button[data-act=target]")?.addEventListener("click", () => {
-          onPickCourtRef.current?.({ id: props.id, title: props.title, points });
-          popup.remove();
-        });
-        popup.getElement()?.querySelector("button[data-act=edit]")?.addEventListener("click", () => {
-          onEditOutlineRef.current?.({ kind: "court", id: props.id, name: props.title, points });
-          popup.remove();
+        const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
+        const parts = typeof raw.parts === "string" ? (JSON.parse(raw.parts) as CourtDetail["parts"]) : ((raw.parts as CourtDetail["parts"]) ?? []);
+        const verdict = String(raw.verdict);
+        onSelectCourtRef.current?.({
+          id: String(raw.id),
+          title: String(raw.title),
+          rank: Number(raw.rank),
+          score: Number(raw.score),
+          verdict: verdict === "prime" || verdict === "strong" || verdict === "fair" ? verdict : "weak",
+          houses: Number(raw.houses) || 0,
+          clients: Number(raw.clients) || 0,
+          touched: Number(raw.touched) || 0,
+          jobsDone: Number(raw.jobsDone) || 0,
+          value: num(raw.value),
+          ownerPct: num(raw.ownerPct),
+          detached: Number(raw.detached) || 0,
+          townhouse: Number(raw.townhouse) || 0,
+          condo: Number(raw.condo) || 0,
+          spreadM: num(raw.spreadM),
+          shopKm: num(raw.shopKm),
+          edited: raw.edited === true || raw.edited === "true",
+          parts,
+          points,
         });
       });
       map.on("mouseenter", COURTS_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
@@ -1204,26 +1217,11 @@ export function SatelliteMapView({
       map.on("click", OPS_FILL_LAYER, (e) => {
         if (editingRound()) return;
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, COURTS_FILL_LAYER] }).length > 0) return;
-        const feature = e.features?.[0];
-        const props = feature?.properties as { id: string; name: string; line: string; notes: string | null } | undefined;
-        if (!feature || !props) return;
-        const ring = (feature.geometry as GeoJSON.Polygon).coordinates[0] ?? [];
-        const points: LatLng[] = ring.slice(0, -1).map(([lng, lat]) => ({ lat, lng }));
-        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "280px" })
-          .setLngLat(e.lngLat)
-          .setHTML(
-            `<div style="font:500 13px system-ui"><div>${escapeHtml(props.name)}</div>` +
-              `<div style="color:#666;font-weight:400">${escapeHtml(props.line)}</div>` +
-              (props.notes ? `<div style="color:#666;font-weight:400">${escapeHtml(props.notes)}</div>` : "") +
-              `<div style="display:flex;gap:6px;margin-top:6px"><button type="button" data-act="edit" style="padding:4px 8px;border-radius:6px;border:1px solid #1d4ed8;background:#fff;color:#1d4ed8;font:500 12px system-ui">Edit outline</button></div>` +
-              `</div>`
-          )
-          .addTo(map);
-        popup.getElement()?.querySelector("button[data-act=edit]")?.addEventListener("click", () => {
-          onEditOutlineRef.current?.({ kind: "target", id: props.id, name: props.name, points });
-          popup.remove();
-        });
+        const id = e.features?.[0]?.properties?.id;
+        if (id) onSelectTargetRef.current?.(String(id));
       });
+      map.on("mouseenter", OPS_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", OPS_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
 
       map.on("click", EDDM_FILL_LAYER, async (e) => {
         if (editingRound()) return;

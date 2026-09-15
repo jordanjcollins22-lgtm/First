@@ -172,6 +172,29 @@ export function rankCourts(courts: CourtStats[]): RankedCourt[] {
     .map((c, i) => ({ ...c, rank: i + 1 }));
 }
 
+/** One court as the map hands it to the side panel. */
+export interface CourtDetail {
+  id: string;
+  title: string;
+  rank: number;
+  score: number;
+  verdict: CourtVerdict;
+  houses: number;
+  clients: number;
+  touched: number;
+  jobsDone: number;
+  value: number | null;
+  ownerPct: number | null;
+  detached: number;
+  townhouse: number;
+  condo: number;
+  spreadM: number | null;
+  shopKm: number | null;
+  edited: boolean;
+  parts: ScorePart[];
+  points: { lat: number; lng: number }[];
+}
+
 /** "Brook Hill Ct, Bel Air" from the county's shouting. */
 export function courtTitle(c: Pick<CourtStats, "street" | "locality">): string {
   const street = titleCase(c.street);

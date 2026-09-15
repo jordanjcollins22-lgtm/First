@@ -64,9 +64,10 @@ import type { ZoneApprovalState } from "@/lib/data/zone-approval";
 import { ZoneApprovalPanel } from "./zone-approval-panel";
 import { OwnershipPanel } from "./ownership-panel";
 import { OperationsTargetsPanel } from "./operations-targets-panel";
-import type { RankedCourt } from "@/lib/court-score";
+import { CourtDetailPanel, TargetDetailPanel } from "./court-detail-panel";
+import type { CourtDetail, RankedCourt } from "@/lib/court-score";
 import type { CourtRanking, OperationsTarget } from "@/lib/data/operations-targets";
-import { saveCourtOutline, saveOperationsTargetOutline } from "@/lib/actions/operations-target-actions";
+import { deleteOperationsTarget, saveCourtOutline, saveOperationsTargetOutline, setOperationsTargetStatus } from "@/lib/actions/operations-target-actions";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
@@ -231,6 +232,9 @@ export function AttractorsDashboard({
   const [opsTargets, setOpsTargets] = useState<OperationsTarget[]>(initialTargets);
   const [pendingCourt, setPendingCourt] = useState<{ court: { id: string; title: string }; points: LatLng[] } | null>(null);
   const [outlineEdit, setOutlineEdit] = useState<OutlineEdit | null>(null);
+  // The court or target clicked on the map, shown in the side panel.
+  const [selectedCourt, setSelectedCourt] = useState<CourtDetail | null>(null);
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [outlineNote, setOutlineNote] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
@@ -444,6 +448,9 @@ export function AttractorsDashboard({
 
   const selectedWave = waves.find((w) => w.id === selectedWaveId) ?? null;
   const selectedJob = jobs.find((j) => j.id === selectedJobId) ?? null;
+  const selectedTarget = opsTargets.find((t) => t.id === selectedTargetId) ?? null;
+  /** Something is open in the side panel, so the standing cards step aside. */
+  const detailOpen = creating || Boolean(selectedWave) || Boolean(selectedJob) || Boolean(selectedCourt) || Boolean(selectedTarget);
   // First property on file for the selected client — enough to fly the map there.
   const selectedClientProperty = properties.find((p) => p.customer_id === selectedClientId) ?? null;
 
@@ -460,6 +467,26 @@ export function AttractorsDashboard({
     setSelectedWaveId(id);
     setSelectedJobId(null);
     setSelectedClientId(null);
+    setSelectedCourt(null);
+    setSelectedTargetId(null);
+    setCreating(false);
+  }
+
+  function selectCourt(court: CourtDetail | null) {
+    setSelectedCourt(court);
+    setSelectedTargetId(null);
+    setSelectedWaveId(null);
+    setSelectedJobId(null);
+    setSelectedClientId(null);
+    setCreating(false);
+  }
+
+  function selectTarget(id: string | null) {
+    setSelectedTargetId(id);
+    setSelectedCourt(null);
+    setSelectedWaveId(null);
+    setSelectedJobId(null);
+    setSelectedClientId(null);
     setCreating(false);
   }
 
@@ -467,6 +494,8 @@ export function AttractorsDashboard({
     setSelectedJobId(id);
     setSelectedWaveId(null);
     setSelectedClientId(null);
+    setSelectedCourt(null);
+    setSelectedTargetId(null);
     setCreating(false);
   }
 
@@ -770,6 +799,8 @@ export function AttractorsDashboard({
                   setDrawMode(null);
                   setPendingCourt({ court: { id: pick.id, title: pick.title }, points: pick.points });
                 }}
+                onSelectCourt={selectCourt}
+                onSelectTarget={selectTarget}
                 outlineEdit={outlineEdit}
                 onEditOutline={startOutlineEdit}
                 onOutlineEditDone={(points) => void finishOutlineEdit(points)}
@@ -808,7 +839,7 @@ export function AttractorsDashboard({
           )}
         </Card>
 
-        {!creating && !selectedWave && !selectedJob && (
+        {!detailOpen && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               <MarketingTodo
@@ -836,7 +867,7 @@ export function AttractorsDashboard({
           </Card>
         )}
 
-        {!creating && !selectedWave && !selectedJob && (
+        {!detailOpen && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               <OperationsTargetsPanel
@@ -866,7 +897,7 @@ export function AttractorsDashboard({
           </Card>
         )}
 
-        {!creating && !selectedWave && !selectedJob && (
+        {!detailOpen && (
           <Card>
             <CardContent className="pt-6">
               <OwnershipPanel
@@ -889,7 +920,7 @@ export function AttractorsDashboard({
           </Card>
         )}
 
-        {!creating && !selectedWave && !selectedJob && approvals.zones.length > 0 && (
+        {!detailOpen && approvals.zones.length > 0 && (
           <Card>
             <CardContent className="pt-6">
               <ZoneApprovalPanel
@@ -903,7 +934,7 @@ export function AttractorsDashboard({
           </Card>
         )}
 
-        {!creating && !selectedWave && !selectedJob && (
+        {!detailOpen && (
           <Card>
             <CardContent className="pt-6">
               <EddmBuildPanel
@@ -929,7 +960,7 @@ export function AttractorsDashboard({
           </Card>
         )}
 
-        {(mailingSelection.size > 0 || (showEddm && eddmRoutes.length > 0)) && !creating && !selectedWave && !selectedJob && (
+        {(mailingSelection.size > 0 || (showEddm && eddmRoutes.length > 0)) && !detailOpen && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               <EddmMailingPanel
@@ -944,7 +975,7 @@ export function AttractorsDashboard({
           </Card>
         )}
 
-        {(creating || selectedWave || selectedJob) && (
+        {detailOpen && (
           <Card className="max-h-[70vh] overflow-y-auto">
             <CardContent className="pt-6">
               {creating && (
@@ -976,6 +1007,49 @@ export function AttractorsDashboard({
                   variants={variants}
                   onClose={() => setSelectedWaveId(null)}
                   onDeleted={() => setSelectedWaveId(null)}
+                />
+              )}
+              {selectedCourt && (
+                <CourtDetailPanel
+                  key={selectedCourt.id}
+                  court={selectedCourt}
+                  targeted={opsTargets.some((t) => t.courtId === selectedCourt.id)}
+                  onSaveAsTarget={() => {
+                    setPendingCourt({ court: { id: selectedCourt.id, title: selectedCourt.title }, points: selectedCourt.points });
+                    setSelectedCourt(null);
+                  }}
+                  onEditOutline={() => {
+                    const court = selectedCourt;
+                    setSelectedCourt(null);
+                    startOutlineEdit({ kind: "court", id: court.id, name: court.title, points: court.points });
+                  }}
+                  onClose={() => setSelectedCourt(null)}
+                />
+              )}
+              {selectedTarget && (
+                <TargetDetailPanel
+                  key={selectedTarget.id}
+                  target={selectedTarget}
+                  onReshape={() => {
+                    const target = selectedTarget;
+                    setSelectedTargetId(null);
+                    reshapeTarget(target);
+                  }}
+                  onStatus={(status) => {
+                    void setOperationsTargetStatus(selectedTarget.id, status).then((r) => {
+                      if (r.ok) setOpsTargets((prev) => prev.map((t) => (t.id === selectedTarget.id ? { ...t, status } : t)));
+                    });
+                  }}
+                  onRemove={() => {
+                    if (!window.confirm(`Remove the target "${selectedTarget.name}"?`)) return;
+                    void deleteOperationsTarget(selectedTarget.id).then((r) => {
+                      if (r.ok) {
+                        setOpsTargets((prev) => prev.filter((t) => t.id !== selectedTarget.id));
+                        setSelectedTargetId(null);
+                      }
+                    });
+                  }}
+                  onClose={() => setSelectedTargetId(null)}
                 />
               )}
               {selectedJob && (
