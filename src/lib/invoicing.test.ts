@@ -55,12 +55,11 @@ vi.mock("@/lib/job-customer", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () =>
-            table === "jobs" ? { data: { name: "Trellis Lane" } } : { data: null },
-        }),
-      }),
+      select: () => {
+        const answer = async () => (table === "jobs" ? { data: { name: "Trellis Lane" } } : { data: null });
+        const chain = { maybeSingle: answer, eq: () => chain, neq: () => chain };
+        return chain;
+      },
       insert: async (row: Record<string, unknown>) => {
         inserted.push({ table, row });
         return { error: null };

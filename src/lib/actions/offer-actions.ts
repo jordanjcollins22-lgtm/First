@@ -1,5 +1,7 @@
 "use server";
 
+import { createAndSendInvoice } from "@/lib/invoicing";
+
 import { randomBytes } from "crypto";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -92,7 +94,7 @@ export async function bookOffer(input: { code: string; timing: string; notes: st
     return { ok: false, error: "Could not book that just now. Reply to the email and we will do it by hand." };
   }
 
-  const { error: proposalError } = await admin.from("job_proposals").insert({
+  const { data: proposalRow, error: proposalError } = await admin.from("job_proposals").insert({
     job_id: job.id,
     organization_id: row.campaign.organization_id,
     token: randomBytes(16).toString("hex"),
@@ -119,10 +121,18 @@ export async function bookOffer(input: { code: string; timing: string; notes: st
     generated_at: now,
     approved_at: now,
     responded_at: now,
-  });
+  }).select("id").single();
   if (proposalError) {
     log.error("offer.proposal_failed", proposalError, { recipientId: row.id, jobId: job.id });
   }
+  // The bill exists from the moment the booking does. Not due today: the
+  // offer is booked ahead, and the invoice waits with the job.
+  if (proposalRow?.id) {
+    await createAndSendInvoice(job.id, proposalRow.id, totalCents / 100).catch((err) => {
+      log.error("offer.invoice_failed", err, { jobId: job.id });
+    });
+  }
+
 
   await admin
     .from("email_campaign_recipients")

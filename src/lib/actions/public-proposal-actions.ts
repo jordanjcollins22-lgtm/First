@@ -6,7 +6,7 @@ import { revalidateJobViews } from "@/lib/revalidate-job";
 import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createAndSendInvoice } from "@/lib/invoicing";
+import { createAndSendInvoice, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
@@ -27,6 +27,9 @@ import type { ProposalZoneSnapshot } from "@/types/domain";
  * nothing else touches that transition today, so this is the one real
  * conversion action.
  */
+/** The client already has an invoice to pay; no checkout needs starting. */
+class AlreadyInvoiced extends Error {}
+
 export async function respondToProposal(token: string, response: "accepted" | "declined", note: string) {
   if (response !== "accepted" && response !== "declined") throw new Error("Invalid response.");
 
@@ -64,10 +67,15 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     const { error: jobError } = await admin.from("jobs").update({ status: "approved" }).eq("id", proposal.job_id);
     if (jobError) throw jobError;
 
-    // No invoice here any more. Accepting used to fire one for the whole
-    // amount immediately, which took the choice about how to pay away from
-    // the client before they were asked. The next screen asks; whichever way
-    // they answer raises the right paperwork.
+    // The invoice exists from the moment they sign. It does not have to be
+    // paid now: the next screen still offers a card form and a payment
+    // plan, and a plan voids this and bills its own way. But a client who
+    // signs at half past eight and closes the phone has a bill with a pay
+    // link in their thread, not a promise waiting on a second decision.
+    const owed = Math.max(0, (proposal.total_cost ?? 0) - (proposal.discount_amount ?? 0));
+    await createAndSendInvoice(proposal.job_id, proposal.id, owed).catch((err) => {
+      console.error("invoice at signing failed:", err);
+    });
   }
 
   // Every screen, not just this job and the list. The pipeline reads the
@@ -359,6 +367,9 @@ export async function choosePaymentPath(input: {
     let instalmentId: string | null = null;
 
     if (option.id !== "full") {
+      // The invoice raised at signing is for the whole amount; the plan
+      // bills in parts from here, so that one goes.
+      await voidOpenInvoice(proposal.job_id).catch((err) => console.error("could not void the signing invoice:", err));
       const built = await buildClientPlan({
         organizationId: proposal.organization_id,
         jobId: proposal.job_id,
@@ -379,7 +390,17 @@ export async function choosePaymentPath(input: {
     // somebody who has already decided gets paid; a link in an inbox
     // tomorrow is a second decision, and plenty of those never got made.
     let checkoutUrl: string | undefined;
+
+    // Paying in full pays the invoice that already exists. Its hosted page
+    // takes a card or Apple Pay just as checkout would, and a second
+    // charge alongside an open invoice is how a client pays twice.
+    if (option.id === "full") {
+      const open = await openInvoiceFor(proposal.job_id).catch(() => null);
+      if (open?.hostedUrl) checkoutUrl = open.hostedUrl;
+    }
+
     try {
+      if (checkoutUrl) throw new AlreadyInvoiced();
       const started = await startProposalCheckout({
         token: input.token,
         jobId: proposal.job_id,
@@ -398,6 +419,9 @@ export async function choosePaymentPath(input: {
           .eq("id", proposal.id);
       }
     } catch (err) {
+      if (err instanceof AlreadyInvoiced) {
+        // Nothing to start: the invoice from signing is the payment page.
+      } else {
       // Fall through to the invoice. The choice is already recorded, and a
       // payment we could not start is not a reason to lose it.
       //
@@ -410,6 +434,7 @@ export async function choosePaymentPath(input: {
       // costs every payment after it, so the office hears at the first one
       // rather than at the daily check tomorrow.
       reportStripeFailure(proposal.organization_id, err).catch(() => {});
+      }
     }
 
     if (!checkoutUrl && option.id === "full") {

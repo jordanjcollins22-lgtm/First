@@ -18,21 +18,32 @@ function getStripeClient(): Stripe {
  * acceptance, so callers should swallow errors the same way
  * notifyCustomerBySms does.
  */
-export async function createAndSendInvoice(jobId: string, proposalId: string, amount: number): Promise<void> {
-  if (!isStripeConfigured) return;
-  if (!(amount > 0)) return;
+export async function createAndSendInvoice(
+  jobId: string,
+  proposalId: string,
+  amount: number
+): Promise<{ hostedUrl: string | null } | null> {
+  if (!isStripeConfigured) return null;
+  if (!(amount > 0)) return null;
 
   const admin = createAdminClient();
 
-  // Guards against double-sending on a duplicate/retried accept.
-  const { data: existing } = await admin.from("invoices").select("id").eq("job_id", jobId).maybeSingle();
-  if (existing) return;
+  // Guards against double-sending on a duplicate/retried accept. A voided
+  // invoice does not count: the client switched to a plan, and if they
+  // switch back they need a live one.
+  const { data: existing } = await admin
+    .from("invoices")
+    .select("id, hosted_invoice_url")
+    .eq("job_id", jobId)
+    .neq("status", "void")
+    .maybeSingle();
+  if (existing) return { hostedUrl: existing.hosted_invoice_url };
 
   const contact = await getJobCustomerContact(jobId);
-  if (!contact) return;
+  if (!contact) return null;
 
   const { data: job } = await admin.from("jobs").select("name").eq("id", jobId).maybeSingle();
-  if (!job) return;
+  if (!job) return null;
 
   const stripe = getStripeClient();
 
@@ -101,7 +112,7 @@ export async function createAndSendInvoice(jobId: string, proposalId: string, am
   if (error) throw error;
 
   const link = stripeInvoice.hosted_invoice_url;
-  if (!link) return;
+  if (!link) return { hostedUrl: null };
 
   const message = `Your invoice for ${job.name || "your project"} is ready: ${link}`;
   await admin.from("job_messages").insert({
@@ -117,4 +128,35 @@ export async function createAndSendInvoice(jobId: string, proposalId: string, am
     const e164 = toE164(contact.phone);
     if (e164) await sendSms(e164, message).catch(() => {});
   }
+  return { hostedUrl: link };
+}
+
+/** The live invoice on a job, if there is one to pay. */
+export async function openInvoiceFor(jobId: string): Promise<{ id: string; hostedUrl: string | null; stripeInvoiceId: string | null } | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("invoices")
+    .select("id, hosted_invoice_url, stripe_invoice_id, status")
+    .eq("job_id", jobId)
+    .eq("status", "open")
+    .maybeSingle();
+  if (!data) return null;
+  return { id: data.id, hostedUrl: data.hosted_invoice_url, stripeInvoiceId: data.stripe_invoice_id };
+}
+
+/**
+ * Voids the job's open invoice.
+ *
+ * For a client who signed, got an invoice for the whole amount, and then
+ * chose a payment plan: the plan bills them from here on, and a second
+ * bill for the full amount sitting in their inbox is the surest way to a
+ * confused phone call or a double payment.
+ */
+export async function voidOpenInvoice(jobId: string): Promise<void> {
+  const open = await openInvoiceFor(jobId);
+  if (!open) return;
+  if (isStripeConfigured && open.stripeInvoiceId) {
+    await getStripeClient().invoices.voidInvoice(open.stripeInvoiceId).catch(() => {});
+  }
+  await createAdminClient().from("invoices").update({ status: "void" }).eq("id", open.id);
 }

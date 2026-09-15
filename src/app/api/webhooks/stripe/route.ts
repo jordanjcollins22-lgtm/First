@@ -91,7 +91,30 @@ async function recordInvoicePayment(invoice: Stripe.Invoice): Promise<void> {
     .maybeSingle();
 
   const planId = instalment?.plan_id ?? null;
-  const organizationId = planId ? await orgForPlan(planId) : null;
+
+  // Not an instalment: the invoice raised when the proposal was signed.
+  // Paying it is a payment on the job like any other.
+  if (!planId) {
+    const { data: jobInvoice } = await admin
+      .from("invoices")
+      .select("id, job_id, organization_id")
+      .eq("stripe_invoice_id", invoice.id)
+      .maybeSingle();
+    if (!jobInvoice) return;
+    await recordStripePayment({
+      organizationId: jobInvoice.organization_id,
+      customerId,
+      jobId: jobInvoice.job_id,
+      planId: null,
+      instalmentId: null,
+      amountCents: invoice.amount_paid ?? 0,
+      paymentIntentId: invoice.id ?? null,
+      invoiceId: invoice.id ?? null,
+    });
+    return;
+  }
+
+  const organizationId = await orgForPlan(planId);
   if (!organizationId) return;
 
   const { data: plan } = await admin
