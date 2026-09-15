@@ -3402,6 +3402,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["crew_positions"]["Row"]>;
         Relationships: [];
       };
+      court_targets: {
+        Row: {
+          id: string;
+          organization_id: string;
+          street: string;
+          zip: string;
+          locality: string | null;
+          house_count: number;
+          lat: number;
+          lng: number;
+          outline: Json;
+          spread_m: number | null;
+          assessed_median: number | null;
+          owner_occupied: number;
+          ownership_known: number;
+          detached: number;
+          townhouse: number;
+          condo: number;
+          clients: number;
+          touched: number;
+          jobs_done: number;
+          shop_km: number | null;
+          built_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["court_targets"]["Row"]> & {
+          organization_id: string;
+          street: string;
+          zip: string;
+          house_count: number;
+          lat: number;
+          lng: number;
+          outline: Json;
+        };
+        Update: Partial<Database["public"]["Tables"]["court_targets"]["Row"]>;
+        Relationships: [];
+      };
+      operations_targets: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          outline: Json;
+          court_id: string | null;
+          status: string;
+          notes: string | null;
+          house_count: number | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["operations_targets"]["Row"]> & {
+          organization_id: string;
+          name: string;
+          outline: Json;
+        };
+        Update: Partial<Database["public"]["Tables"]["operations_targets"]["Row"]>;
+        Relationships: [];
+      };
       ghl_sync_state: {
         Row: {
           organization_id: string;
@@ -4132,6 +4190,8 @@ export interface Database {
       ops_ramp: { Args: { org: string; the_mode: string; budget: number; plan: Json; by?: string | null; note?: string | null }; Returns: Json };
       ops_actions_list: { Args: { org: string; n?: number }; Returns: Json };
       summary_get: { Args: { org: string; the_key: string; max_age?: string }; Returns: Json };
+      court_targets_build: { Args: { org: string }; Returns: number };
+      houses_in_ring_count: { Args: { org: string; ring: Json }; Returns: number };
       summary_refresh: { Args: { org: string; the_key: string }; Returns: Json };
       summaries_refresh: { Args: { org: string; keys?: string[] | null }; Returns: Json };
       marketing_play_set: { Args: { the_play: string; new_status: string; by: string | null; designs?: number }; Returns: Json };

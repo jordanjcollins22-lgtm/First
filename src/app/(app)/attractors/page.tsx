@@ -8,6 +8,7 @@ import { eddmRouteSummary, latestEddmBuild, listUnservedClusters } from "@/lib/d
 import { roadsState } from "@/lib/data/roads";
 import { EMPTY_OWNERSHIP, kindSummary, latestSdatImport, ownershipSummary, relationshipOwnershipMatrix } from "@/lib/data/ownership";
 import { listZones } from "@/lib/data/zones";
+import { listOperationsTargets, listRankedCourts } from "@/lib/data/operations-targets";
 import { marketingState } from "@/lib/data/marketing";
 import { zoneApprovalState } from "@/lib/data/zone-approval";
 import { getDensityPoints } from "@/lib/data/density";
@@ -116,6 +117,11 @@ export default async function AttractorsPage({
   const marketing = await marketingState({ sync: false }).catch(() => ({ plays: [], reviews: [], defaults: [], autoApproved: 0 }));
   // Which zones a person has approved for the map, and the app's own pass
   // over the rest once it has earned the trust.
+  // Operations: the courts worth owning and the outlines already drawn.
+  const [courtRanking, initialTargets] = await Promise.all([
+    listRankedCourts(60).catch(() => ({ courts: [], total: 0, builtAt: null })),
+    listOperationsTargets().catch(() => []),
+  ]);
   const approvals = await zoneApprovalState().catch(() => ({ zones: [], reviews: [], streak: 0, level: "ask_all" as const, autoApproved: 0 }));
 
   return (
@@ -151,6 +157,8 @@ export default async function AttractorsPage({
         ownership={ownership}
         ownershipMatrix={ownershipMatrix}
         zones={zones}
+        courtRanking={courtRanking}
+        initialTargets={initialTargets}
         marketing={marketing}
         approvals={approvals}
         initialZoneId={zone ?? null}

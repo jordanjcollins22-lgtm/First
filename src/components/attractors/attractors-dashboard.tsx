@@ -63,6 +63,9 @@ import type { RouteEdit } from "@/lib/route-edit";
 import type { ZoneApprovalState } from "@/lib/data/zone-approval";
 import { ZoneApprovalPanel } from "./zone-approval-panel";
 import { OwnershipPanel } from "./ownership-panel";
+import { OperationsTargetsPanel } from "./operations-targets-panel";
+import type { RankedCourt } from "@/lib/court-score";
+import type { CourtRanking, OperationsTarget } from "@/lib/data/operations-targets";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
@@ -76,7 +79,7 @@ import type { RoadsState } from "@/lib/data/roads";
 
 type ViewMode = "satellite" | "galaxy" | "calendar";
 type SidebarTab = "recent" | "waves" | "clients";
-type DrawTarget = "wave" | "location-area";
+type DrawTarget = "wave" | "location-area" | "ops-target";
 
 export function AttractorsDashboard({
   types,
@@ -98,6 +101,8 @@ export function AttractorsDashboard({
   ownershipMatrix,
   houseKinds,
   zones,
+  courtRanking,
+  initialTargets,
   marketing,
   approvals,
   initialZoneId,
@@ -133,6 +138,8 @@ export function AttractorsDashboard({
   houseKinds: Partial<Record<HouseKind, number>>;
   /** The door-hanger zones, built from the USPS routes as a partition of the county. */
   zones: ZoneRow[];
+  courtRanking: CourtRanking;
+  initialTargets: OperationsTarget[];
   /** The marketing to do, made from evaluations and clients, with what has been decided so far. */
   marketing: MarketingState;
   /** Which zones are approved for the map, and how much the app still asks. */
@@ -218,6 +225,10 @@ export function AttractorsDashboard({
   // active every other layer is off, so the dots left are the whole answer.
   const focused = pointHighlight !== null;
   const [flyTo, setFlyTo] = useState<LatLng | null>(null);
+  // Operations: the courts to own, and the outlines drawn round them.
+  const [showCourts, setShowCourts] = useState(false);
+  const [opsTargets, setOpsTargets] = useState<OperationsTarget[]>(initialTargets);
+  const [pendingCourt, setPendingCourt] = useState<{ court: { id: string; title: string }; points: LatLng[] } | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
@@ -488,6 +499,32 @@ export function AttractorsDashboard({
     setDrawTarget("location-area");
   }
 
+  function requestTargetDraw() {
+    setViewMode("satellite");
+    setPendingCourt(null);
+    setDrawnPoints(null);
+    setDrawMode("polygon");
+    setDrawTarget("ops-target");
+    mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  /** A court from the list: the map on it, outlined with the rest. */
+  function focusCourt(court: RankedCourt) {
+    setViewMode("satellite");
+    setShowCourts(true);
+    setFlyTo({ lat: court.lat, lng: court.lng });
+    mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function focusTarget(target: OperationsTarget) {
+    if (target.outline.length === 0) return;
+    setViewMode("satellite");
+    const lat = target.outline.reduce((sum, p) => sum + p.lat, 0) / target.outline.length;
+    const lng = target.outline.reduce((sum, p) => sum + p.lng, 0) / target.outline.length;
+    setFlyTo({ lat, lng });
+    mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -691,6 +728,13 @@ export function AttractorsDashboard({
                   setDrawnPoints(points);
                   setDrawMode(null);
                 }}
+                showCourts={showCourts}
+                opsTargets={opsTargets}
+                onPickCourt={(pick) => {
+                  setDrawnPoints(null);
+                  setDrawMode(null);
+                  setPendingCourt({ court: { id: pick.id, title: pick.title }, points: pick.points });
+                }}
               />
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
@@ -749,6 +793,34 @@ export function AttractorsDashboard({
                   setFocusZone({ id, at: Date.now() });
                 }}
                 onFlyTo={(target) => setFlyTo({ ...target })}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {!creating && !selectedWave && !selectedJob && (
+          <Card className="max-h-[70vh] overflow-y-auto">
+            <CardContent className="pt-6">
+              <OperationsTargetsPanel
+                courts={courtRanking.courts}
+                totalCourts={courtRanking.total}
+                builtAt={courtRanking.builtAt}
+                targets={opsTargets}
+                showCourts={showCourts}
+                onToggleShowCourts={() => setShowCourts((v) => !v)}
+                onFocusCourt={focusCourt}
+                onFocusTarget={focusTarget}
+                onRequestDraw={requestTargetDraw}
+                drawnPoints={drawTarget === "ops-target" ? drawnPoints : null}
+                onDrawnConsumed={() => {
+                  if (drawTarget === "ops-target") {
+                    setDrawnPoints(null);
+                    setDrawTarget(null);
+                  }
+                }}
+                pendingCourt={pendingCourt}
+                onClearPendingCourt={() => setPendingCourt(null)}
+                onTargetsChanged={setOpsTargets}
               />
             </CardContent>
           </Card>

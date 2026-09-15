@@ -28,6 +28,8 @@ import {
 import { RELATIONSHIP_STAGES, STAGE_COLOR, STAGE_LABEL } from "@/lib/house-relationship";
 import type { EddmRouteFeature, EddmStreetFeature } from "@/lib/eddm";
 import type { UnservedCluster } from "@/lib/eddm-clusters";
+import type { OperationsTarget } from "@/lib/data/operations-targets";
+import { VERDICT_COLOR } from "@/lib/court-score";
 import { renderHouseCard, renderHouseCardLoading, type HouseFacts } from "@/lib/house-facts";
 import { matchesHighlight, type PointHighlight } from "@/lib/house-highlight";
 import { crewFor, formatMinutes, MODE_COLOR, MODE_LABEL, MODE_WHY, modeOf, walkRunsOf, type WalkLine, type ZoneProperties } from "@/lib/zones";
@@ -145,6 +147,12 @@ interface SatelliteMapViewProps {
   flyToTarget: LatLng | null;
   drawMode: "polygon" | "route" | null;
   onGeometryDrawn: (points: LatLng[]) => void;
+  /** The best courts, outlined and ranked, while operations is choosing. */
+  showCourts?: boolean;
+  /** The outlines the office has drawn round groups of homes to work as one. */
+  opsTargets?: OperationsTarget[];
+  /** "Save as target" pressed on a court's popup: its id, name, and ring. */
+  onPickCourt?: (pick: { id: string; title: string; points: LatLng[] }) => void;
 }
 
 const WAVES_SOURCE = "attractor-waves";
@@ -204,6 +212,16 @@ const AREAS_LINE_LAYER = "location-areas-line";
 const LOCATIONS_SOURCE = "business-locations";
 const LOCATIONS_LAYER = "business-locations-circle";
 const LOCATIONS_LABEL_LAYER = "business-locations-label";
+const COURTS_SOURCE = "court-targets";
+const COURTS_FILL_LAYER = "court-targets-fill";
+const COURTS_LINE_LAYER = "court-targets-line";
+const COURTS_LABEL_LAYER = "court-targets-label";
+const OPS_SOURCE = "operations-targets";
+const OPS_FILL_LAYER = "operations-targets-fill";
+const OPS_LINE_LAYER = "operations-targets-line";
+const OPS_LABEL_LAYER = "operations-targets-label";
+/** Saved targets by status: planned, being worked, done. */
+const OPS_COLOR: Record<string, string> = { planned: "#2563eb", active: "#c2410c", done: "#475569" };
 
 /** Names and addresses go into a popup as HTML, so anything that could be
  * read as markup is neutralised first. */
@@ -412,6 +430,9 @@ export function SatelliteMapView({
   flyToTarget,
   drawMode,
   onGeometryDrawn,
+  showCourts = false,
+  opsTargets = [],
+  onPickCourt,
 }: SatelliteMapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -426,6 +447,7 @@ export function SatelliteMapView({
   const onToggleMailingRouteRef = useRef(onToggleMailingRoute);
   const selectedEddmRef = useRef<Set<string>>(new Set());
   const onSelectJobRef = useRef(onSelectJob);
+  const onPickCourtRef = useRef(onPickCourt);
   // The round being edited is read from a ref inside the map's own handlers,
   // which are registered once on load. Without this they would close over the
   // first render's props, and every tap after the first would be ignored.
@@ -441,6 +463,7 @@ export function SatelliteMapView({
     onGeometryDrawnRef.current = onGeometryDrawn;
     onSelectWaveRef.current = onSelectWave;
     onSelectJobRef.current = onSelectJob;
+    onPickCourtRef.current = onPickCourt;
     routeEditRef.current = routeEdit;
   });
 
@@ -656,6 +679,67 @@ export function SatelliteMapView({
           "symbol-placement": "point",
         },
         paint: { "text-color": "#ffffff", "text-halo-color": "#1f2937", "text-halo-width": 1.2 },
+      });
+      // The courts operations could own, ranked, and the targets it has drawn.
+      map.addSource(COURTS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      const verdictColor: mapboxgl.ExpressionSpecification = [
+        "match",
+        ["get", "verdict"],
+        "prime",
+        VERDICT_COLOR.prime,
+        "strong",
+        VERDICT_COLOR.strong,
+        "fair",
+        VERDICT_COLOR.fair,
+        VERDICT_COLOR.weak,
+      ];
+      map.addLayer({
+        id: COURTS_FILL_LAYER,
+        type: "fill",
+        source: COURTS_SOURCE,
+        paint: { "fill-color": verdictColor, "fill-opacity": ["interpolate", ["linear"], ["get", "score"], 30, 0.12, 100, 0.35] },
+      });
+      map.addLayer({
+        id: COURTS_LINE_LAYER,
+        type: "line",
+        source: COURTS_SOURCE,
+        paint: { "line-color": verdictColor, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 15, 2.5], "line-opacity": 0.95 },
+      });
+      map.addLayer({
+        id: COURTS_LABEL_LAYER,
+        type: "symbol",
+        source: COURTS_SOURCE,
+        minzoom: 12,
+        layout: {
+          "text-field": ["concat", "#", ["to-string", ["get", "rank"]], " ", ["get", "title"], "\n", ["to-string", ["get", "score"]], " · ", ["to-string", ["get", "houses"]], " homes"],
+          "text-size": 11,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+          "symbol-placement": "point",
+        },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#14532d", "text-halo-width": 1.2 },
+      });
+      map.addSource(OPS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      const opsColor: mapboxgl.ExpressionSpecification = ["match", ["get", "status"], "active", OPS_COLOR.active, "done", OPS_COLOR.done, OPS_COLOR.planned];
+      map.addLayer({ id: OPS_FILL_LAYER, type: "fill", source: OPS_SOURCE, paint: { "fill-color": opsColor, "fill-opacity": 0.15 } });
+      map.addLayer({
+        id: OPS_LINE_LAYER,
+        type: "line",
+        source: OPS_SOURCE,
+        paint: { "line-color": opsColor, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 15, 4], "line-dasharray": [2, 1] },
+      });
+      map.addLayer({
+        id: OPS_LABEL_LAYER,
+        type: "symbol",
+        source: OPS_SOURCE,
+        minzoom: 11,
+        layout: {
+          "text-field": ["concat", ["get", "name"], "\n", ["get", "line"]],
+          "text-size": 12,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+          "symbol-placement": "point",
+          "text-offset": [0, -1.2],
+        },
+        paint: { "text-color": "#ffffff", "text-halo-color": "#1e3a8a", "text-halo-width": 1.4 },
       });
       // One zone's walk, when asked for: the line, every door numbered, the car.
       map.addSource(WALK_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -1043,6 +1127,51 @@ export function SatelliteMapView({
       });
       map.on("mouseenter", UNSERVED_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", UNSERVED_LAYER, () => (map.getCanvas().style.cursor = ""));
+
+      map.on("click", COURTS_FILL_LAYER, (e) => {
+        if (editingRound()) return;
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER] }).length > 0) return;
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const props = feature.properties as { id: string; rank: number; score: number; verdict: string; title: string; houses: number; clients: number; value: number | null; reasons: string };
+        const ring = (feature.geometry as GeoJSON.Polygon).coordinates[0] ?? [];
+        const points: LatLng[] = ring.slice(0, -1).map(([lng, lat]) => ({ lat, lng }));
+        const colour = VERDICT_COLOR[props.verdict as keyof typeof VERDICT_COLOR] ?? VERDICT_COLOR.weak;
+        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "300px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>#${props.rank} ${escapeHtml(props.title)}</div>` +
+              `<div style="color:${colour};font-weight:600">${props.score} of 100</div>` +
+              `<div style="color:#666;font-weight:400">${props.houses} homes${props.value != null ? ` · assessed ~$${Math.round(Number(props.value) / 1000)}k` : ""}${props.clients > 0 ? ` · ${props.clients} client${props.clients === 1 ? "" : "s"} here` : ""}</div>` +
+              `<div style="color:#666;font-weight:400;margin-top:2px">${escapeHtml(props.reasons ?? "")}</div>` +
+              `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
+              `<button type="button" data-act="target" style="padding:4px 8px;border-radius:6px;background:#1d4ed8;color:#fff;font:500 12px system-ui">Save as target</button>` +
+              `</div></div>`
+          )
+          .addTo(map);
+        popup.getElement()?.querySelector("button[data-act=target]")?.addEventListener("click", () => {
+          onPickCourtRef.current?.({ id: props.id, title: props.title, points });
+          popup.remove();
+        });
+      });
+      map.on("mouseenter", COURTS_FILL_LAYER, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", COURTS_FILL_LAYER, () => (map.getCanvas().style.cursor = ""));
+
+      map.on("click", OPS_FILL_LAYER, (e) => {
+        if (editingRound()) return;
+        if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, COURTS_FILL_LAYER] }).length > 0) return;
+        const props = e.features?.[0]?.properties as { name: string; line: string; notes: string | null } | undefined;
+        if (!props) return;
+        new mapboxgl.Popup({ offset: 6, maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font:500 13px system-ui"><div>${escapeHtml(props.name)}</div>` +
+              `<div style="color:#666;font-weight:400">${escapeHtml(props.line)}</div>` +
+              (props.notes ? `<div style="color:#666;font-weight:400">${escapeHtml(props.notes)}</div>` : "") +
+              `</div>`
+          )
+          .addTo(map);
+      });
 
       map.on("click", EDDM_FILL_LAYER, async (e) => {
         if (editingRound()) return;
@@ -1435,6 +1564,66 @@ export function SatelliteMapView({
       cancelled = true;
     };
   }, [showZones, mapLoaded]);
+
+  // The courts, fetched once when operations asks to see them.
+  const courtsRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(COURTS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+    if (!showCourts) {
+      source.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      if (!courtsRef.current) {
+        try {
+          const res = await fetch("/api/courts/geojson?top=400", { cache: "no-store" });
+          if (!res.ok) throw new Error(`${res.status}`);
+          courtsRef.current = (await res.json()) as GeoJSON.FeatureCollection;
+        } catch {
+          return;
+        }
+      }
+      if (cancelled) return;
+      source?.setData(courtsRef.current);
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [showCourts, mapLoaded]);
+
+  // The office's own outlines: always drawn, because they are decisions.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const source = map.getSource(OPS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+    const STATUS_LINE: Record<string, string> = { planned: "Planned", active: "Working it", done: "Done" };
+    source.setData({
+      type: "FeatureCollection",
+      features: opsTargets
+        .filter((t) => t.outline.length >= 3)
+        .map((t) => {
+          const ring = t.outline.map((p) => [p.lng, p.lat]);
+          ring.push(ring[0]);
+          return {
+            type: "Feature" as const,
+            geometry: { type: "Polygon" as const, coordinates: [ring] },
+            properties: {
+              id: t.id,
+              name: t.name,
+              status: t.status,
+              notes: t.notes,
+              line: `${STATUS_LINE[t.status] ?? t.status}${t.houseCount != null ? ` · ${t.houseCount} homes` : ""}`,
+            },
+          };
+        }),
+    });
+  }, [opsTargets, mapLoaded]);
 
   // The county's zones are there when asked; by default the map shows only
   // the ones with something of ours in them.
