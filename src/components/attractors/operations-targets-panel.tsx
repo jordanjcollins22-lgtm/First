@@ -32,6 +32,8 @@ export function OperationsTargetsPanel({
   onToggleShowCourts,
   onFocusCourt,
   onFocusTarget,
+  onReshapeTarget,
+  outlineNote,
   onRequestDraw,
   drawnPoints,
   onDrawnConsumed,
@@ -47,6 +49,10 @@ export function OperationsTargetsPanel({
   onToggleShowCourts: () => void;
   onFocusCourt: (court: RankedCourt) => void;
   onFocusTarget: (target: OperationsTarget) => void;
+  /** Drag a saved target's corners into a new shape. */
+  onReshapeTarget: (target: OperationsTarget) => void;
+  /** What came of the last outline edit, if anything. */
+  outlineNote: string | null;
   onRequestDraw: () => void;
   /** The ring just drawn on the map, waiting for a name. */
   drawnPoints: LatLng[] | null;
@@ -177,7 +183,7 @@ export function OperationsTargetsPanel({
         </div>
       )}
 
-      {message && <p className="text-xs text-muted-foreground">{message}</p>}
+      {(message || outlineNote) && <p className="text-xs text-muted-foreground">{message ?? outlineNote}</p>}
 
       {targets.length > 0 && (
         <div>
@@ -196,6 +202,9 @@ export function OperationsTargetsPanel({
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
                   {t.houseCount != null && <span>{t.houseCount} homes inside</span>}
+                  <button type="button" className="text-primary hover:underline" onClick={() => onReshapeTarget(t)}>
+                    Reshape
+                  </button>
                   <select
                     value={t.status}
                     onChange={(e) => setStatus(t, e.target.value as OperationsTargetStatus)}

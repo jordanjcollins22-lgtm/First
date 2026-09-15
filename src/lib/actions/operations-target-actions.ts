@@ -102,6 +102,58 @@ export async function saveOperationsTarget(input: {
   }
 }
 
+/**
+ * Keep the shape somebody dragged a court's outline into.
+ *
+ * Stored beside the build's own ring, never over it, so a rebuild refreshes
+ * the counts and leaves the drawn shape alone.
+ */
+export async function saveCourtOutline(courtId: string, points: LatLng[]): Promise<TargetResult> {
+  try {
+    const profile = await officeProfile();
+    if (!profile) return { ok: false, message: "Only the office can reshape a court." };
+    const clean = cleanPoints(points);
+    if (!clean) return { ok: false, message: "An outline needs at least three corners." };
+    const ring = clean.map((p) => [p.lng, p.lat]);
+    ring.push(ring[0]);
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("court_targets")
+      .update({ custom_outline: ring as unknown as Json, custom_outline_at: new Date().toISOString() })
+      .eq("id", courtId)
+      .eq("organization_id", profile.organization_id);
+    if (error) return { ok: false, message: describeDbError(error) };
+    return { ok: true, value: undefined };
+  } catch (e) {
+    log.error("court_outline_save", { error: String(e) });
+    return { ok: false, message: "The court's outline could not be saved." };
+  }
+}
+
+/** A saved target dragged into a new shape: keep it, and recount its homes. */
+export async function saveOperationsTargetOutline(id: string, points: LatLng[]): Promise<TargetResult<{ houseCount: number | null }>> {
+  try {
+    const profile = await officeProfile();
+    if (!profile) return { ok: false, message: "Only the office can reshape a target." };
+    const clean = cleanPoints(points);
+    if (!clean) return { ok: false, message: "An outline needs at least three corners." };
+    const supabase = await createClient();
+    const ring = clean.map((p) => [p.lng, p.lat]) as unknown as Json;
+    const { data: count } = await supabase.rpc("houses_in_ring_count", { org: profile.organization_id, ring });
+    const houseCount = typeof count === "number" ? count : null;
+    const { error } = await supabase
+      .from("operations_targets")
+      .update({ outline: clean as unknown as Json, house_count: houseCount, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) return { ok: false, message: describeDbError(error) };
+    revalidatePath("/attractors");
+    return { ok: true, value: { houseCount } };
+  } catch (e) {
+    log.error("operations_target_outline", { error: String(e) });
+    return { ok: false, message: "The target's outline could not be saved." };
+  }
+}
+
 export async function setOperationsTargetStatus(id: string, status: OperationsTargetStatus): Promise<TargetResult> {
   try {
     const profile = await officeProfile();

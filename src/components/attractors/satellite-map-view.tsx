@@ -153,6 +153,22 @@ interface SatelliteMapViewProps {
   opsTargets?: OperationsTarget[];
   /** "Save as target" pressed on a court's popup: its id, name, and ring. */
   onPickCourt?: (pick: { id: string; title: string; points: LatLng[] }) => void;
+  /**
+   * An outline being dragged into shape: a court's ring or a saved target's.
+   * While set, the map shows that ring with handles and nothing else answers
+   * a click; Save hands the new corners back, Cancel hands back nothing.
+   */
+  outlineEdit?: OutlineEdit | null;
+  /** "Edit outline" pressed on a court's or a target's popup. */
+  onEditOutline?: (edit: OutlineEdit) => void;
+  onOutlineEditDone?: (points: LatLng[] | null) => void;
+}
+
+export interface OutlineEdit {
+  kind: "court" | "target";
+  id: string;
+  name: string;
+  points: LatLng[];
 }
 
 const WAVES_SOURCE = "attractor-waves";
@@ -433,6 +449,9 @@ export function SatelliteMapView({
   showCourts = false,
   opsTargets = [],
   onPickCourt,
+  outlineEdit = null,
+  onEditOutline,
+  onOutlineEditDone,
 }: SatelliteMapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -448,6 +467,10 @@ export function SatelliteMapView({
   const selectedEddmRef = useRef<Set<string>>(new Set());
   const onSelectJobRef = useRef(onSelectJob);
   const onPickCourtRef = useRef(onPickCourt);
+  const onEditOutlineRef = useRef(onEditOutline);
+  const onOutlineEditDoneRef = useRef(onOutlineEditDone);
+  /** The draw control holding the outline being reshaped, while one is. */
+  const editDrawRef = useRef<{ draw: MapboxDraw; featureId: string } | null>(null);
   // Whether the county's dots are showing, read inside the click handler
   // registered once on load.
   const showAllAddressesRef = useRef(showAllAddresses);
@@ -467,6 +490,8 @@ export function SatelliteMapView({
     onSelectWaveRef.current = onSelectWave;
     onSelectJobRef.current = onSelectJob;
     onPickCourtRef.current = onPickCourt;
+    onEditOutlineRef.current = onEditOutline;
+    onOutlineEditDoneRef.current = onOutlineEditDone;
     showAllAddressesRef.current = showAllAddresses;
     routeEditRef.current = routeEdit;
   });
@@ -985,7 +1010,7 @@ export function SatelliteMapView({
       // While a round is being edited or a shape is being drawn, a click is
       // a point on the shape, never a question about what is under it: no
       // popup of any kind opens until the drawing is finished.
-      const editingRound = () => routeEditRef.current !== null || drawRef.current !== null;
+      const editingRound = () => routeEditRef.current !== null || drawRef.current !== null || editDrawRef.current !== null;
 
       map.on("click", WAVES_FILL_LAYER, (e) => {
         if (editingRound()) return;
@@ -1158,11 +1183,16 @@ export function SatelliteMapView({
               `<div style="color:#666;font-weight:400;margin-top:2px">${escapeHtml(props.reasons ?? "")}</div>` +
               `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
               `<button type="button" data-act="target" style="padding:4px 8px;border-radius:6px;background:#1d4ed8;color:#fff;font:500 12px system-ui">Save as target</button>` +
+              `<button type="button" data-act="edit" style="padding:4px 8px;border-radius:6px;border:1px solid #1d4ed8;background:#fff;color:#1d4ed8;font:500 12px system-ui">Edit outline</button>` +
               `</div></div>`
           )
           .addTo(map);
         popup.getElement()?.querySelector("button[data-act=target]")?.addEventListener("click", () => {
           onPickCourtRef.current?.({ id: props.id, title: props.title, points });
+          popup.remove();
+        });
+        popup.getElement()?.querySelector("button[data-act=edit]")?.addEventListener("click", () => {
+          onEditOutlineRef.current?.({ kind: "court", id: props.id, name: props.title, points });
           popup.remove();
         });
       });
@@ -1172,17 +1202,25 @@ export function SatelliteMapView({
       map.on("click", OPS_FILL_LAYER, (e) => {
         if (editingRound()) return;
         if (map.queryRenderedFeatures(e.point, { layers: [HOUSES_LAYER, ALL_ADDRESSES_LAYER, JOBS_LAYER, COURTS_FILL_LAYER] }).length > 0) return;
-        const props = e.features?.[0]?.properties as { name: string; line: string; notes: string | null } | undefined;
-        if (!props) return;
-        new mapboxgl.Popup({ offset: 6, maxWidth: "280px" })
+        const feature = e.features?.[0];
+        const props = feature?.properties as { id: string; name: string; line: string; notes: string | null } | undefined;
+        if (!feature || !props) return;
+        const ring = (feature.geometry as GeoJSON.Polygon).coordinates[0] ?? [];
+        const points: LatLng[] = ring.slice(0, -1).map(([lng, lat]) => ({ lat, lng }));
+        const popup = new mapboxgl.Popup({ offset: 6, maxWidth: "280px" })
           .setLngLat(e.lngLat)
           .setHTML(
             `<div style="font:500 13px system-ui"><div>${escapeHtml(props.name)}</div>` +
               `<div style="color:#666;font-weight:400">${escapeHtml(props.line)}</div>` +
               (props.notes ? `<div style="color:#666;font-weight:400">${escapeHtml(props.notes)}</div>` : "") +
+              `<div style="display:flex;gap:6px;margin-top:6px"><button type="button" data-act="edit" style="padding:4px 8px;border-radius:6px;border:1px solid #1d4ed8;background:#fff;color:#1d4ed8;font:500 12px system-ui">Edit outline</button></div>` +
               `</div>`
           )
           .addTo(map);
+        popup.getElement()?.querySelector("button[data-act=edit]")?.addEventListener("click", () => {
+          onEditOutlineRef.current?.({ kind: "target", id: props.id, name: props.name, points });
+          popup.remove();
+        });
       });
 
       map.on("click", EDDM_FILL_LAYER, async (e) => {
@@ -1578,6 +1616,75 @@ export function SatelliteMapView({
     };
   }, [showZones, mapLoaded]);
 
+  // An outline being reshaped: its ring goes into a draw control with
+  // handles on every corner, and the layer it came from hides that one
+  // feature so there are not two rings on the screen.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    const courtFilter: mapboxgl.FilterSpecification | null =
+      outlineEdit?.kind === "court" ? ["!=", ["get", "id"], outlineEdit.id] : null;
+    const targetFilter: mapboxgl.FilterSpecification | null =
+      outlineEdit?.kind === "target" ? ["!=", ["get", "id"], outlineEdit.id] : null;
+    for (const layer of [COURTS_FILL_LAYER, COURTS_LINE_LAYER, COURTS_LABEL_LAYER]) if (map.getLayer(layer)) map.setFilter(layer, courtFilter);
+    for (const layer of [OPS_FILL_LAYER, OPS_LINE_LAYER, OPS_LABEL_LAYER]) if (map.getLayer(layer)) map.setFilter(layer, targetFilter);
+    if (!outlineEdit || outlineEdit.points.length < 3) return;
+
+    const draw = new MapboxDraw({ displayControlsDefault: false });
+    map.addControl(draw);
+    const ring = outlineEdit.points.map((p) => [p.lng, p.lat]);
+    ring.push(ring[0]);
+    const [featureId] = draw.add({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } });
+    draw.changeMode("direct_select", { featureId });
+    editDrawRef.current = { draw, featureId };
+    // Leaving the feature by clicking bare map drops back to plain select;
+    // put the handles straight back so the corners stay draggable.
+    const keepSelected = (e: { features: GeoJSON.Feature[] }) => {
+      if (e.features.length === 0 && editDrawRef.current) draw.changeMode("direct_select", { featureId });
+    };
+    map.on("draw.selectionchange", keepSelected);
+    const bounds = outlineEdit.points.reduce((b, p) => b.extend([p.lng, p.lat]), new mapboxgl.LngLatBounds([ring[0][0], ring[0][1]], [ring[0][0], ring[0][1]]));
+    map.fitBounds(bounds, { padding: 80, maxZoom: 18, duration: 600 });
+    return () => {
+      map.off("draw.selectionchange", keepSelected);
+      if (editDrawRef.current?.draw === draw) editDrawRef.current = null;
+      try {
+        map.removeControl(draw);
+      } catch {
+        // The map may already be gone.
+      }
+    };
+  }, [outlineEdit, mapLoaded]);
+
+  function finishOutlineEdit(save: boolean) {
+    const edit = editDrawRef.current;
+    if (!edit || !outlineEdit) return;
+    if (!save) {
+      onOutlineEditDoneRef.current?.(null);
+      return;
+    }
+    const feature = edit.draw.get(edit.featureId);
+    const coords = feature?.geometry.type === "Polygon" ? feature.geometry.coordinates[0].slice(0, -1) : [];
+    const points: LatLng[] = coords.map(([lng, lat]) => ({ lat, lng }));
+    if (points.length < 3) {
+      onOutlineEditDoneRef.current?.(null);
+      return;
+    }
+    // Show the new ring at once; the dashboard saves it behind.
+    if (outlineEdit.kind === "court" && courtsRef.current) {
+      const closed = [...points.map((p) => [p.lng, p.lat]), [points[0].lng, points[0].lat]];
+      courtsRef.current = {
+        ...courtsRef.current,
+        features: courtsRef.current.features.map((f) =>
+          f.properties?.id === outlineEdit.id ? { ...f, geometry: { type: "Polygon", coordinates: [closed] }, properties: { ...f.properties, edited: true } } : f
+        ),
+      };
+      const source = mapRef.current?.getSource(COURTS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+      source?.setData(courtsRef.current);
+    }
+    onOutlineEditDoneRef.current?.(points);
+  }
+
   // The courts, fetched once when operations asks to see them.
   const courtsRef = useRef<GeoJSON.FeatureCollection | null>(null);
   useEffect(() => {
@@ -1913,6 +2020,17 @@ export function SatelliteMapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {outlineEdit && (
+        <div className="absolute left-1/2 top-3 z-10 flex max-w-[92%] -translate-x-1/2 items-center gap-2 rounded-full bg-black/80 px-3 py-1.5 text-xs text-white shadow-lg">
+          <span className="truncate">Drag the corners of {outlineEdit.name}. Click an edge to add a corner.</span>
+          <button type="button" onClick={() => finishOutlineEdit(true)} className="rounded-full bg-blue-600 px-2.5 py-0.5 font-medium">
+            Save shape
+          </button>
+          <button type="button" onClick={() => finishOutlineEdit(false)} className="rounded-full border border-white/50 px-2.5 py-0.5">
+            Cancel
+          </button>
+        </div>
+      )}
       {routeEdit && routeEdit.houses.length > 0 && (
         <div className="pointer-events-none absolute left-1/2 top-3 z-10 max-w-[90%] -translate-x-1/2 rounded-full bg-black/75 px-3 py-1.5 text-center text-xs text-white shadow-lg">
           {ROUND_MODE_HINT[routeEdit.mode]}

@@ -20,14 +20,16 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("court_targets")
-    .select(`${COURT_COLUMNS}, outline`)
+    .select(`${COURT_COLUMNS}, outline, custom_outline`)
     .eq("organization_id", profile.organization_id)
     .limit(5000);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  type Row = Parameters<typeof courtFromRow>[0] & { outline: number[][] };
+  type Row = Parameters<typeof courtFromRow>[0] & { outline: number[][]; custom_outline: number[][] | null };
   const rows = (data ?? []) as unknown as Row[];
-  const outlines = new Map(rows.map((r) => [r.id, r.outline]));
+  // A ring somebody drew beats the one the build guessed.
+  const outlines = new Map(rows.map((r) => [r.id, r.custom_outline ?? r.outline]));
+  const edited = new Set(rows.filter((r) => r.custom_outline).map((r) => r.id));
   const ranked = rankCourts(rows.map(courtFromRow)).filter((c) => !c.skip).slice(0, top);
 
   const features = ranked.map((c) => ({
@@ -43,6 +45,7 @@ export async function GET(request: NextRequest) {
       clients: c.clients,
       value: c.assessedMedian,
       reasons: topReasons(c.parts).join(" · "),
+      edited: edited.has(c.id),
       lat: c.lat,
       lng: c.lng,
     },

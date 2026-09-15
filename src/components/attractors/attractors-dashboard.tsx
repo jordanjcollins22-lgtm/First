@@ -13,7 +13,7 @@ import { WaveList } from "./wave-list";
 import { ClientList } from "./client-list";
 import { MapIndexList } from "./map-index-list";
 import { centreOf, type MapEntry } from "@/lib/map-index";
-import { SatelliteMapView } from "./satellite-map-view";
+import { SatelliteMapView, type OutlineEdit } from "./satellite-map-view";
 import { GalaxyView } from "./galaxy-view";
 import { CalendarView } from "./calendar-view";
 import { isClientSide } from "@/lib/contact-types";
@@ -66,6 +66,7 @@ import { OwnershipPanel } from "./ownership-panel";
 import { OperationsTargetsPanel } from "./operations-targets-panel";
 import type { RankedCourt } from "@/lib/court-score";
 import type { CourtRanking, OperationsTarget } from "@/lib/data/operations-targets";
+import { saveCourtOutline, saveOperationsTargetOutline } from "@/lib/actions/operations-target-actions";
 import type { SdatStatus } from "@/lib/actions/sdat-actions";
 import type { OwnershipSummary } from "@/lib/data/ownership";
 import type { PointColorMode } from "@/lib/house-geojson";
@@ -229,6 +230,8 @@ export function AttractorsDashboard({
   const [showCourts, setShowCourts] = useState(false);
   const [opsTargets, setOpsTargets] = useState<OperationsTarget[]>(initialTargets);
   const [pendingCourt, setPendingCourt] = useState<{ court: { id: string; title: string }; points: LatLng[] } | null>(null);
+  const [outlineEdit, setOutlineEdit] = useState<OutlineEdit | null>(null);
+  const [outlineNote, setOutlineNote] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   // USPS carrier routes for one ZIP at a time. Loaded on request, kept for
   // the page; the toggle only hides them.
@@ -516,6 +519,38 @@ export function AttractorsDashboard({
     mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  function startOutlineEdit(edit: OutlineEdit) {
+    setViewMode("satellite");
+    setDrawMode(null);
+    setDrawnPoints(null);
+    setPendingCourt(null);
+    setOutlineNote(null);
+    setOutlineEdit(edit);
+    mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function reshapeTarget(target: OperationsTarget) {
+    startOutlineEdit({ kind: "target", id: target.id, name: target.name, points: target.outline });
+  }
+
+  async function finishOutlineEdit(points: LatLng[] | null) {
+    const edit = outlineEdit;
+    setOutlineEdit(null);
+    if (!edit || !points) return;
+    if (edit.kind === "court") {
+      const result = await saveCourtOutline(edit.id, points);
+      setOutlineNote(result.ok ? `${edit.name}: new outline saved.` : result.message);
+      return;
+    }
+    const result = await saveOperationsTargetOutline(edit.id, points);
+    if (!result.ok) {
+      setOutlineNote(result.message);
+      return;
+    }
+    setOpsTargets((prev) => prev.map((t) => (t.id === edit.id ? { ...t, outline: points, houseCount: result.value.houseCount } : t)));
+    setOutlineNote(`${edit.name}: new outline saved.`);
+  }
+
   function focusTarget(target: OperationsTarget) {
     if (target.outline.length === 0) return;
     setViewMode("satellite");
@@ -735,6 +770,9 @@ export function AttractorsDashboard({
                   setDrawMode(null);
                   setPendingCourt({ court: { id: pick.id, title: pick.title }, points: pick.points });
                 }}
+                outlineEdit={outlineEdit}
+                onEditOutline={startOutlineEdit}
+                onOutlineEditDone={(points) => void finishOutlineEdit(points)}
               />
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
@@ -810,6 +848,8 @@ export function AttractorsDashboard({
                 onToggleShowCourts={() => setShowCourts((v) => !v)}
                 onFocusCourt={focusCourt}
                 onFocusTarget={focusTarget}
+                onReshapeTarget={reshapeTarget}
+                outlineNote={outlineNote}
                 onRequestDraw={requestTargetDraw}
                 drawnPoints={drawTarget === "ops-target" ? drawnPoints : null}
                 onDrawnConsumed={() => {

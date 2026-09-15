@@ -3425,6 +3425,8 @@ export interface Database {
           jobs_done: number;
           shop_km: number | null;
           built_at: string;
+          custom_outline: Json | null;
+          custom_outline_at: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["court_targets"]["Row"]> & {
           organization_id: string;
