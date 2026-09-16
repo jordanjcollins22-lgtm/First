@@ -6,7 +6,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
-import { serviceLabelFor } from "@/lib/zone-scope";
+import { scopesForZones, serviceLabelFor } from "@/lib/zone-scope";
 import { listScopeRecommendations, recommendationFromRow } from "@/lib/data/scope-reviews";
 import {
   dictatedWording,
@@ -28,34 +28,48 @@ import type { ProposalZoneSnapshot } from "@/types/domain";
 
 export type ReviewResult<T = undefined> = { ok: true; value: T } | { ok: false; message: string };
 
-const SELECT = "id, job_id, zone_index, zone_name, round, evaluator_note, recommended_text, status, decline_reason, decided_at, created_at";
+const SELECT = "id, job_id, zone_index, zone_name, round, evaluator_note, service_label, recommended_text, status, decline_reason, decided_at, created_at";
 
-/** The zones with a service on them, in proposal order, with the evaluator's note and a brief for the model. */
-async function zonesWithNotes(jobId: string): Promise<{ zones: ZoneWithNote[]; briefs: Map<number, ZoneBrief> }> {
+/**
+ * The zones with a service on them, in proposal order: the evaluator's note,
+ * the service, a brief for the model, and the service's standard wording
+ * for when there is nothing else to write from.
+ */
+async function zonesWithNotes(jobId: string): Promise<{ zones: ZoneWithNote[]; briefs: Map<number, ZoneBrief>; standard: Map<number, string> }> {
   const [design, catalog] = await Promise.all([getCanvasDesignForJob(jobId), getCanvasCatalog()]);
-  if (!design) return { zones: [], briefs: new Map() };
+  if (!design) return { zones: [], briefs: new Map(), standard: new Map() };
   const withService = (design.zones as unknown as WorkZone[]).filter((z) => z.service);
   const pricingBy = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
   const zones: ZoneWithNote[] = [];
   const briefs = new Map<number, ZoneBrief>();
+  const templates = scopesForZones(
+    withService.map((zone) => {
+      const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
+      const pricing = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
+      return {
+        serviceId: zone.service?.typeId ?? null,
+        def,
+        pricing: pricing ? { name: pricing.name, scopeTemplate: pricing.scope_template } : undefined,
+        values: zone.service?.values ?? {},
+        notes: undefined,
+      };
+    })
+  );
+  const standard = new Map<number, string>();
   withService.forEach((zone, index) => {
     const note = (zone.service?.notes ?? "").trim();
-    zones.push({ zoneIndex: index, zoneName: zone.name, note });
     const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
     const pricing = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
+    const serviceLabel = serviceLabelFor(def, pricing ? { name: pricing.name, scopeTemplate: pricing.scope_template } : undefined);
+    zones.push({ zoneIndex: index, zoneName: zone.name, note, serviceLabel });
     const values = (zone.service?.values ?? {}) as Record<string, unknown>;
     const answers = Object.entries(values)
       .filter(([, v]) => v != null && String(v).trim() !== "")
       .map(([k, v]) => ({ label: k.replace(/[_-]+/g, " "), value: Array.isArray(v) ? v.join(", ") : String(v) }));
-    briefs.set(index, {
-      zoneName: zone.name,
-      serviceLabel: serviceLabelFor(def, pricing ? { name: pricing.name, scopeTemplate: pricing.scope_template } : undefined),
-      notes: note,
-      checklistAnswers: answers,
-      materials: [],
-    });
+    briefs.set(index, { zoneName: zone.name, serviceLabel, notes: note, checklistAnswers: answers, materials: [] });
+    standard.set(index, templates[index] ?? "");
   });
-  return { zones, briefs };
+  return { zones, briefs, standard };
 }
 
 /**
@@ -68,9 +82,9 @@ export async function loadScopeReviews(jobId: string): Promise<ReviewResult<{ re
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
-    const [{ zones, briefs }, recs] = await Promise.all([zonesWithNotes(jobId), listScopeRecommendations(jobId)]);
+    const [{ zones, briefs, standard }, recs] = await Promise.all([zonesWithNotes(jobId), listScopeRecommendations(jobId)]);
     let reviews = reviewsFor(zones, recs);
-    const missing = zonesNeedingDraft(reviews).filter((r) => r.current == null || r.noteChanged);
+    const missing = zonesNeedingDraft(reviews).filter((r) => r.current == null || r.changed || r.current.status === "superseded");
     if (missing.length > 0) {
       const organizationId = await getCurrentOrganizationId();
       const supabase = await createClient();
@@ -78,10 +92,15 @@ export async function loadScopeReviews(jobId: string): Promise<ReviewResult<{ re
       for (const zone of missing) {
         const brief = briefs.get(zone.zoneIndex);
         if (!brief) continue;
-        const text = await draftScopeLine(brief).catch((err) => {
-          log.warn("scope.review.draft_failed", { job: jobId, zone: zone.zoneName, error: String(err) });
-          return null;
-        });
+        // Nothing recorded to write from: the service's own standard wording
+        // is the recommendation, and the office still says yes or no to it.
+        const thin = !brief.notes.trim() && !brief.checklistAnswers.some((a) => a.value.trim());
+        const text = thin
+          ? standard.get(zone.zoneIndex) || `${zone.serviceLabel} in this area.`
+          : await draftScopeLine(brief).catch((err) => {
+              log.warn("scope.review.draft_failed", { job: jobId, zone: zone.zoneName, error: String(err) });
+              return null;
+            });
         if (!text) continue;
         // Two screens opening the review at once both write a first draft;
         // the unique round keeps one, and the loser reads the winner's.
@@ -95,6 +114,7 @@ export async function loadScopeReviews(jobId: string): Promise<ReviewResult<{ re
             zone_name: zone.zoneName,
             round,
             evaluator_note: zone.note,
+            service_label: zone.serviceLabel,
             recommended_text: text,
           })
           .select(SELECT)
@@ -194,6 +214,7 @@ export async function declineScopeRecommendation(id: string, reason: string): Pr
             zone_name: rec.zone_name,
             round: nextRound(recs, rec.zone_index),
             evaluator_note: rec.evaluator_note,
+            service_label: rec.service_label ?? brief?.serviceLabel ?? null,
             recommended_text: text,
           })
           .select(SELECT)

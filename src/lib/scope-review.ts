@@ -17,6 +17,8 @@ export interface ScopeRecommendation {
   zoneName: string;
   round: number;
   evaluatorNote: string;
+  /** The service the zone had when this was written. */
+  serviceLabel: string | null;
   recommendedText: string;
   status: RecommendationStatus;
   declineReason: string | null;
@@ -28,45 +30,67 @@ export interface ScopeRecommendation {
 export interface ZoneReview {
   zoneIndex: number;
   zoneName: string;
-  /** The evaluator's note as it is on the design now. */
+  /** The evaluator's note as it is on the design now. Empty when they wrote none. */
   note: string;
+  /** The service on the zone now. */
+  serviceLabel: string;
   current: ScopeRecommendation | null;
   history: ScopeRecommendation[];
-  /** Whether an approved recommendation stands for the note as written now. */
+  /** Whether an approved recommendation stands for the zone as it is now. */
   settled: boolean;
-  /** The note changed since the last recommendation was written. */
-  noteChanged: boolean;
+  /** The zone moved on since the last round was written: a new note, or a new service. */
+  changed: boolean;
+  /** What moved, in words, or null. */
+  changedWhy: string | null;
 }
 
 export interface ZoneWithNote {
   zoneIndex: number;
   zoneName: string;
   note: string;
+  serviceLabel: string;
 }
 
-/** The latest round per zone, and whether the zone is settled. */
+/**
+ * The latest round per zone, and whether the zone is settled.
+ *
+ * Every zone with a service is reviewed, note or no note: a zone with no
+ * note gets the service's standard wording as its recommendation, and the
+ * office still says yes or no to it. A round written for a different note
+ * or a different service than the zone has now is stale, whatever its
+ * status, because the words were about something else.
+ */
 export function reviewsFor(zones: ZoneWithNote[], recs: ScopeRecommendation[]): ZoneReview[] {
-  return zones
-    .filter((z) => z.note.trim())
-    .map((z) => {
-      const rounds = recs.filter((r) => r.zoneIndex === z.zoneIndex).sort((a, b) => b.round - a.round);
-      const current = rounds[0] ?? null;
-      const noteChanged = current != null && current.evaluatorNote.trim() !== z.note.trim();
-      return {
-        zoneIndex: z.zoneIndex,
-        zoneName: z.zoneName,
-        note: z.note,
-        current,
-        history: rounds.slice(1),
-        settled: current != null && current.status === "approved" && !noteChanged,
-        noteChanged,
-      };
-    });
+  return zones.map((z) => {
+    const rounds = recs
+      .filter((r) => r.zoneIndex === z.zoneIndex || (r.zoneIndex !== z.zoneIndex && r.zoneName === z.zoneName && !zones.some((o) => o.zoneIndex === r.zoneIndex)))
+      .sort((a, b) => b.round - a.round);
+    const current = rounds[0] ?? null;
+    const noteMoved = current != null && current.evaluatorNote.trim() !== z.note.trim();
+    const serviceMoved = current != null && current.serviceLabel != null && current.serviceLabel !== z.serviceLabel;
+    const changed = noteMoved || serviceMoved;
+    const changedWhy = serviceMoved
+      ? `the service changed to ${z.serviceLabel}`
+      : noteMoved
+        ? "the evaluator's note changed"
+        : null;
+    return {
+      zoneIndex: z.zoneIndex,
+      zoneName: z.zoneName,
+      note: z.note,
+      serviceLabel: z.serviceLabel,
+      current,
+      history: rounds.slice(1),
+      settled: current != null && current.status === "approved" && !changed,
+      changed,
+      changedWhy,
+    };
+  });
 }
 
-/** Zones that still need a recommendation written: none yet, or the note moved on. */
+/** Zones that still need a recommendation written: none yet, the zone moved on, or the last was declined. */
 export function zonesNeedingDraft(reviews: ZoneReview[]): ZoneReview[] {
-  return reviews.filter((r) => r.current == null || r.noteChanged || r.current.status === "declined");
+  return reviews.filter((r) => r.current == null || r.changed || r.current.status === "declined" || r.current.status === "superseded");
 }
 
 /** What is stopping the proposal being approved, in words, or null. */

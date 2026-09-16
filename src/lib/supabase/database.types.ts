@@ -3477,6 +3477,7 @@ export interface Database {
           zone_name: string;
           round: number;
           evaluator_note: string;
+          service_label: string | null;
           recommended_text: string;
           status: string;
           decline_reason: string | null;

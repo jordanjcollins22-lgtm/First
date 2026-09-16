@@ -8,6 +8,7 @@ export function recommendationFromRow(r: {
   zone_name: string;
   round: number;
   evaluator_note: string;
+  service_label: string | null;
   recommended_text: string;
   status: string;
   decline_reason: string | null;
@@ -21,6 +22,7 @@ export function recommendationFromRow(r: {
     zoneName: r.zone_name,
     round: r.round,
     evaluatorNote: r.evaluator_note,
+    serviceLabel: r.service_label,
     recommendedText: r.recommended_text,
     status: r.status as ScopeRecommendation["status"],
     declineReason: r.decline_reason,
@@ -34,7 +36,7 @@ export async function listScopeRecommendations(jobId: string): Promise<ScopeReco
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("scope_recommendations")
-    .select("id, job_id, zone_index, zone_name, round, evaluator_note, recommended_text, status, decline_reason, decided_at, created_at")
+    .select("id, job_id, zone_index, zone_name, round, evaluator_note, service_label, recommended_text, status, decline_reason, decided_at, created_at")
     .eq("job_id", jobId)
     .order("created_at", { ascending: true });
   if (error) throw error;

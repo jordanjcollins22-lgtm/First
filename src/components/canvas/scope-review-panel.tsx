@@ -18,6 +18,8 @@ import type { ZoneReview } from "@/lib/scope-review";
  * written from; the declined one stays on the record underneath.
  */
 export function ScopeReviewPanel({ jobId, onSettled }: { jobId: string; onSettled: (allSettled: boolean) => void }) {
+  // Keyed by the proposal's generation time where it is rendered, so a
+  // rebuilt proposal opens a fresh review rather than the old one's state.
   const [reviews, setReviews] = useState<ZoneReview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,15 +127,17 @@ function ZoneReviewCard({ review, onChanged }: { review: ZoneReview; onChanged: 
       </div>
 
       <div className="mt-2 rounded bg-muted/40 px-2 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evaluator&apos;s note, as written</p>
-        <p className="whitespace-pre-wrap text-sm">{review.note}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {review.serviceLabel} · Evaluator&apos;s note, as written
+        </p>
+        <p className="whitespace-pre-wrap text-sm">{review.note || <span className="text-muted-foreground">No note. The service&apos;s standard wording is recommended.</span>}</p>
       </div>
 
       {current ? (
         <div className="mt-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Recommended scope of work{current.round > 1 ? `, round ${current.round}` : ""}
-            {review.noteChanged && <span className="ml-1 normal-case text-amber-800">(the note changed since; a fresh one is being written)</span>}
+            {review.changed && <span className="ml-1 normal-case text-amber-800">({review.changedWhy} since; a fresh one is being written)</span>}
           </p>
           <p className="whitespace-pre-wrap text-sm">{current.recommendedText}</p>
         </div>

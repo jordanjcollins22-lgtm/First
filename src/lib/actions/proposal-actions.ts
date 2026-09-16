@@ -267,11 +267,21 @@ export async function approveProposal(jobId: string) {
   // Every zone the evaluator wrote on has to have an approved recommendation
   // standing for it. A proposal sent with a zone still under review sends
   // the template wording for that zone, which is not what anybody meant.
-  const design = await getCanvasDesignForJob(jobId);
+  const [design, catalog] = await Promise.all([getCanvasDesignForJob(jobId), getCanvasCatalog()]);
   if (design) {
+    const pricingBy = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
     const zones = (design.zones as unknown as WorkZone[])
       .filter((z) => z.service)
-      .map((z, zoneIndex) => ({ zoneIndex, zoneName: z.name, note: (z.service?.notes ?? "").trim() }));
+      .map((z, zoneIndex) => {
+        const def = z.service ? serviceTypeById(z.service.typeId) : undefined;
+        const pricing = z.service ? pricingBy.get(z.service.typeId) : undefined;
+        return {
+          zoneIndex,
+          zoneName: z.name,
+          note: (z.service?.notes ?? "").trim(),
+          serviceLabel: serviceLabelFor(def, pricing ? { name: pricing.name, scopeTemplate: pricing.scope_template } : undefined),
+        };
+      });
     const blocker = reviewBlocker(reviewsFor(zones, await listScopeRecommendations(jobId).catch(() => [])));
     if (blocker) throw new Error(blocker);
   }

@@ -10,6 +10,7 @@ function rec(over: Partial<ScopeRecommendation>): ScopeRecommendation {
     zoneName: "Front bed",
     round: 1,
     evaluatorNote: "dog dug up mulch, wants it redone",
+    serviceLabel: "Landscape Bed",
     recommendedText: "Rake out and replace the mulch across the front bed.",
     status: "pending",
     declineReason: null,
@@ -20,14 +21,20 @@ function rec(over: Partial<ScopeRecommendation>): ScopeRecommendation {
 }
 
 const zones = [
-  { zoneIndex: 0, zoneName: "Front bed", note: "dog dug up mulch, wants it redone" },
-  { zoneIndex: 1, zoneName: "Back lawn", note: "" },
-  { zoneIndex: 2, zoneName: "Side", note: "trim anything drooping" },
+  { zoneIndex: 0, zoneName: "Front bed", note: "dog dug up mulch, wants it redone", serviceLabel: "Landscape Bed" },
+  { zoneIndex: 1, zoneName: "Back lawn", note: "", serviceLabel: "Lawn Care" },
+  { zoneIndex: 2, zoneName: "Side", note: "trim anything drooping", serviceLabel: "Trimming" },
 ];
 
 describe("reviewsFor", () => {
-  it("only reviews zones the evaluator wrote on", () => {
-    expect(reviewsFor(zones, []).map((r) => r.zoneName)).toEqual(["Front bed", "Side"]);
+  it("reviews every zone with a service, note or no note", () => {
+    expect(reviewsFor(zones, []).map((r) => r.zoneName)).toEqual(["Front bed", "Back lawn", "Side"]);
+  });
+
+  it("goes stale when the zone's service changes, whatever the note says", () => {
+    const [front] = reviewsFor(zones, [rec({ status: "approved", serviceLabel: "Leaf / Seasonal Cleanup" })]);
+    expect(front.settled).toBe(false);
+    expect(front.changedWhy).toBe("the service changed to Landscape Bed");
   });
 
   it("is settled once the latest round is approved for the note as written", () => {
@@ -39,7 +46,7 @@ describe("reviewsFor", () => {
   it("unsettles when the evaluator's note changes after approval", () => {
     const reviews = reviewsFor(zones, [rec({ status: "approved", evaluatorNote: "an older note" })]);
     expect(reviews[0].settled).toBe(false);
-    expect(reviews[0].noteChanged).toBe(true);
+    expect(reviews[0].changed).toBe(true);
   });
 
   it("keeps the earlier rounds as history, newest current", () => {
@@ -52,13 +59,22 @@ describe("reviewsFor", () => {
 describe("what still needs writing and what blocks approval", () => {
   it("wants a draft where there is none, where the note moved, or after a decline", () => {
     const reviews = reviewsFor(zones, [rec({ zoneIndex: 0, status: "declined" })]);
-    expect(zonesNeedingDraft(reviews).map((r) => r.zoneName)).toEqual(["Front bed", "Side"]);
+    expect(zonesNeedingDraft(reviews).map((r) => r.zoneName)).toEqual(["Front bed", "Back lawn", "Side"]);
   });
 
   it("names the zones holding the proposal up", () => {
-    expect(reviewBlocker(reviewsFor(zones, [rec({ status: "approved" })]))).toBe("Approve or decline the recommended scope for Side first.");
-    expect(reviewBlocker(reviewsFor(zones, []))).toBe("Approve or decline the recommended scope for Front bed and Side first.");
-    expect(reviewBlocker(reviewsFor(zones, [rec({ zoneIndex: 0, status: "approved" }), rec({ zoneIndex: 2, zoneName: "Side", evaluatorNote: "trim anything drooping", status: "approved" })]))).toBeNull();
+    const lawn = rec({ zoneIndex: 1, zoneName: "Back lawn", evaluatorNote: "", serviceLabel: "Lawn Care", status: "approved" });
+    expect(reviewBlocker(reviewsFor(zones, [rec({ status: "approved" }), lawn]))).toBe("Approve or decline the recommended scope for Side first.");
+    expect(reviewBlocker(reviewsFor(zones, []))).toBe("Approve or decline the recommended scope for Front bed, Back lawn and Side first.");
+    expect(
+      reviewBlocker(
+        reviewsFor(zones, [
+          rec({ zoneIndex: 0, status: "approved" }),
+          lawn,
+          rec({ zoneIndex: 2, zoneName: "Side", evaluatorNote: "trim anything drooping", serviceLabel: "Trimming", status: "approved" }),
+        ])
+      )
+    ).toBeNull();
   });
 
   it("numbers the next round", () => {

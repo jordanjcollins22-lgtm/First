@@ -563,7 +563,7 @@ export function ProposalPanel({
 
           {proposal.status === "needs_approval" && !editing && (
             <>
-              <ScopeReviewPanel jobId={jobId} onSettled={setReviewSettled} />
+              <ScopeReviewPanel key={proposal.generated_at ?? proposal.id} jobId={jobId} onSettled={setReviewSettled} />
               <Button
                 type="button"
                 className="self-start"
