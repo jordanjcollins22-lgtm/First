@@ -8,7 +8,16 @@ import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { serviceLabelFor } from "@/lib/zone-scope";
 import { listScopeRecommendations, recommendationFromRow } from "@/lib/data/scope-reviews";
-import { nextRound, reviewsFor, zonesNeedingDraft, type ScopeRecommendation, type ZoneReview, type ZoneWithNote } from "@/lib/scope-review";
+import {
+  dictatedWording,
+  keepWordingAsTyped,
+  nextRound,
+  reviewsFor,
+  zonesNeedingDraft,
+  type ScopeRecommendation,
+  type ZoneReview,
+  type ZoneWithNote,
+} from "@/lib/scope-review";
 import { draftScopeLine } from "@/lib/scope-draft";
 import type { ZoneBrief } from "@/lib/scope-suggestion";
 import { revalidateJobViews } from "@/lib/revalidate-job";
@@ -74,20 +83,27 @@ export async function loadScopeReviews(jobId: string): Promise<ReviewResult<{ re
           return null;
         });
         if (!text) continue;
-        const { data } = await supabase
+        // Two screens opening the review at once both write a first draft;
+        // the unique round keeps one, and the loser reads the winner's.
+        const round = nextRound(recs, zone.zoneIndex);
+        const { data, error: insertError } = await supabase
           .from("scope_recommendations")
           .insert({
             organization_id: organizationId,
             job_id: jobId,
             zone_index: zone.zoneIndex,
             zone_name: zone.zoneName,
-            round: nextRound(recs, zone.zoneIndex),
+            round,
             evaluator_note: zone.note,
             recommended_text: text,
           })
           .select(SELECT)
           .single();
         if (data) written.push(recommendationFromRow(data));
+        else if (insertError?.code === "23505") {
+          const { data: theirs } = await supabase.from("scope_recommendations").select(SELECT).eq("job_id", jobId).eq("zone_index", zone.zoneIndex).eq("round", round).maybeSingle();
+          if (theirs) written.push(recommendationFromRow(theirs));
+        }
       }
       if (written.length > 0) reviews = reviewsFor(zones, [...recs, ...written]);
     }
@@ -157,11 +173,17 @@ export async function declineScopeRecommendation(id: string, reason: string): Pr
     const [{ briefs }, recs, organizationId] = await Promise.all([zonesWithNotes(rec.job_id), listScopeRecommendations(rec.job_id), getCurrentOrganizationId()]);
     const brief = briefs.get(rec.zone_index);
     let next: ScopeRecommendation | null = null;
-    if (brief) {
-      const text = await draftScopeLine({ ...brief, notes: rec.evaluator_note }, { previous: rec.recommended_text, reason: why }).catch((err) => {
-        log.warn("scope.review.revise_failed", { job: rec.job_id, zone: rec.zone_name, error: String(err) });
-        return null;
-      });
+    // The office said exactly what to write: that is the next round, word
+    // for word, and the model is not asked. Anything else is feedback the
+    // model rewrites from, with the office's instruction outranking the note.
+    const dictated = dictatedWording(why);
+    if (dictated || brief) {
+      const text = dictated
+        ? keepWordingAsTyped(dictated)
+        : await draftScopeLine({ ...(brief as ZoneBrief), notes: rec.evaluator_note }, { previous: rec.recommended_text, reason: why }).catch((err) => {
+            log.warn("scope.review.revise_failed", { job: rec.job_id, zone: rec.zone_name, error: String(err) });
+            return null;
+          });
       if (text) {
         const { data } = await supabase
           .from("scope_recommendations")

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { nextRound, reviewBlocker, reviewsFor, zonesNeedingDraft, type ScopeRecommendation } from "./scope-review";
+import { dictatedWording, keepWordingAsTyped, nextRound, reviewBlocker, reviewsFor, zonesNeedingDraft, type ScopeRecommendation } from "./scope-review";
 
 function rec(over: Partial<ScopeRecommendation>): ScopeRecommendation {
   return {
@@ -64,5 +64,30 @@ describe("what still needs writing and what blocks approval", () => {
   it("numbers the next round", () => {
     expect(nextRound([rec({ round: 1 }), rec({ round: 2 })], 0)).toBe(3);
     expect(nextRound([], 4)).toBe(1);
+  });
+});
+
+describe("dictatedWording", () => {
+  it("takes the words after a cue, exactly as typed", () => {
+    const reason =
+      "This is how i would like it to be written, Trim and maintain the three large hedges located along the left side of the property. Hedges will be trimmed every two weeks to maintain a neat, controlled appearance.";
+    expect(dictatedWording(reason)).toBe(
+      "Trim and maintain the three large hedges located along the left side of the property. Hedges will be trimmed every two weeks to maintain a neat, controlled appearance."
+    );
+    expect(dictatedWording('Write it like this: "We will trim the hedges every two weeks."')).toBe("We will trim the hedges every two weeks.");
+  });
+
+  it("treats a full scope with no cue as the wording", () => {
+    expect(dictatedWording("Trim the three hedges along the left side every two weeks while the client is deployed. The client will do the first cut before leaving.")).not.toBeNull();
+  });
+
+  it("leaves a remark to the rewriter", () => {
+    expect(dictatedWording("too vague, mention every two weeks")).toBeNull();
+    expect(dictatedWording("Client plans to complete the initial hedge trimming prior to deployment.")).toBeNull();
+    expect(dictatedWording("Don't promise the edging. Keep it to the hedges.")).toBeNull();
+  });
+
+  it("keeps typed wording as typed, bar the dashes", () => {
+    expect(keepWordingAsTyped("Trim the hedges — every two weeks.")).toBe("Trim the hedges, every two weeks.");
   });
 });

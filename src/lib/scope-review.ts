@@ -81,3 +81,42 @@ export function reviewBlocker(reviews: ZoneReview[]): string | null {
 export function nextRound(recs: ScopeRecommendation[], zoneIndex: number): number {
   return recs.filter((r) => r.zoneIndex === zoneIndex).reduce((max, r) => Math.max(max, r.round), 0) + 1;
 }
+
+/**
+ * When the reason for declining is the wording itself.
+ *
+ * "This is how I would like it to be written: ..." is not feedback for a
+ * rewrite, it is the rewrite. The office outranks the model, so the words
+ * after the cue go on as the next round exactly as typed, and the model is
+ * not asked. A reason with no cue but written as a full scope, several
+ * sentences of the work itself, is treated the same way.
+ */
+const DICTATION_CUE =
+  /^\s*(?:(?:this|here) is (?:how|what) (?:i(?:'d| would)? (?:like|want) it|it should)(?: to)?(?: be)?(?: written| read| say)?|(?:please )?(?:write|word|say|use|make) (?:it|this)(?: like this| exactly| as follows)?|it should (?:read|say)|use (?:this|the following)(?: wording| instead)?|exact wording|wording)\s*[:,\-]?\s*/i;
+
+export function dictatedWording(reason: string): string | null {
+  const text = reason.trim();
+  if (!text) return null;
+  const cued = DICTATION_CUE.exec(text);
+  if (cued) {
+    const rest = text.slice(cued[0].length).trim().replace(/^["'\u201c\u201d]+|["'\u201c\u201d]+$/g, "").trim();
+    return rest.length >= 12 ? rest : null;
+  }
+  // No cue, but this reads as the scope itself rather than a note about it:
+  // more than one sentence and long enough to be the thing, not a remark.
+  const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [];
+  const words = text.split(/\s+/).length;
+  const complaint = /^(?:too|not|don'?t|doesn'?t|needs?|should(?:n'?t)?|remove|drop|mention|add|less|more|shorter|longer|wrong)\b/i.test(text);
+  if (sentences.length >= 2 && words >= 20 && !complaint) return text;
+  return null;
+}
+
+/** The house style on wording somebody typed: dashes only, nothing else touched. */
+export function keepWordingAsTyped(text: string): string {
+  return text
+    .replace(/\s*[\u2014\u2013\u2015]\s*/g, ", ")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s+,/g, ",")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}

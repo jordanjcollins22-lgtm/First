@@ -2,7 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { env, isAnthropicConfigured } from "@/lib/env";
-import { briefFor, cleanScopeText, revisionBriefFor, revisionSystemPrompt, systemPrompt, type ZoneBrief } from "@/lib/scope-suggestion";
+import { briefFor, cleanScopeText, cleanTidyText, revisionBriefFor, revisionSystemPrompt, systemPrompt, type ZoneBrief } from "@/lib/scope-suggestion";
 
 /**
  * One scope line from what the evaluator recorded, or a rewrite of one.
@@ -25,6 +25,11 @@ export async function draftScopeLine(zone: ZoneBrief, revision?: { previous: str
   });
   if (response.stop_reason === "refusal") return null;
   const raw = response.content.find((block) => block.type === "text")?.text ?? "";
-  const text = cleanScopeText(raw);
+  // A first draft has every number stripped, because the model was never
+  // given one. A rewrite may carry a number the office typed into the
+  // reason, "every two weeks", and dropping the sentence that obeyed the
+  // office is the thing that got this feature declined. So a rewrite keeps
+  // its sentences and gets only the dash and wrapper clean-up.
+  const text = revision ? cleanTidyText(raw).replace(/\s*\n+\s*/g, " ").trim() : cleanScopeText(raw);
   return text || null;
 }

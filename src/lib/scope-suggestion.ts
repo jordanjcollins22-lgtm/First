@@ -203,7 +203,7 @@ export function revisionSystemPrompt(): string {
   return [
     systemPrompt(),
     "",
-    "This is a rewrite. You are given the previous line and the reason it was declined. Fix what the reason names and keep what it does not. Do not add work the evaluator's notes do not support, even if the reason seems to ask for it; say less rather than invent.",
+    "This is a rewrite. You are given the previous line and the reason the office declined it. The office outranks the evaluator's notes: do exactly what the reason says, even where the notes are silent on it. If the reason names work, include that work. If the reason gives words, use those words. Keep whatever the reason does not object to. The one thing you still never do is invent work that neither the notes nor the reason mention.",
   ].join("\n");
 }
 
