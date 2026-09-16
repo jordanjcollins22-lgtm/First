@@ -15,8 +15,15 @@ export function isOfflineMethod(value: unknown): value is OfflineMethod {
   return value === "cash" || value === "check";
 }
 
-export function offlineMethodLabel(method: OfflineMethod): string {
-  return method === "cash" ? "cash" : "check";
+/** Every way money arrives without a card: what the client can choose, plus what the office records. */
+export type CollectMethod = OfflineMethod | "zelle" | "transfer";
+
+export function isCollectMethod(value: unknown): value is CollectMethod {
+  return value === "cash" || value === "check" || value === "zelle" || value === "transfer";
+}
+
+export function offlineMethodLabel(method: CollectMethod): string {
+  return method === "cash" ? "cash" : method === "check" ? "check" : method === "zelle" ? "Zelle" : "bank transfer";
 }
 
 export function money(cents: number): string {
@@ -68,6 +75,7 @@ export function awaitingLine(method: OfflineMethod, requestedAt: string | null, 
 }
 
 /** The note on the job's thread once it is in hand. */
-export function collectedThreadNote(method: OfflineMethod, amountCents: number, collectorName: string): string {
-  return `${money(amountCents)} received by ${offlineMethodLabel(method)}. Picked up by ${collectorName}.`;
+export function collectedThreadNote(method: CollectMethod, amountCents: number, collectorName: string): string {
+  const inHand = method === "cash" || method === "check";
+  return `${money(amountCents)} received by ${offlineMethodLabel(method)}. ${inHand ? "Picked up" : "Recorded"} by ${collectorName}.`;
 }

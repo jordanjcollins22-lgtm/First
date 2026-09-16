@@ -7,7 +7,7 @@ import { Banknote, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { markPaymentCollected } from "@/lib/actions/collect-payment-actions";
-import { awaitingLine, type OfflineMethod } from "@/lib/collect-payment";
+import { awaitingLine, type CollectMethod } from "@/lib/collect-payment";
 import { dateShort } from "@/lib/time-zone";
 import type { Invoice } from "@/types/domain";
 
@@ -21,7 +21,7 @@ import type { Invoice } from "@/types/domain";
 export function CollectPaymentPanel({ invoice }: { invoice: Invoice }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [method, setMethod] = useState<OfflineMethod>(invoice.pay_by ?? "check");
+  const [method, setMethod] = useState<CollectMethod>(invoice.pay_by ?? "check");
   const [amount, setAmount] = useState(String(Math.round(invoice.amount)));
   const [receivedAt, setReceivedAt] = useState("");
   const [note, setNote] = useState("");
@@ -64,14 +64,16 @@ export function CollectPaymentPanel({ invoice }: { invoice: Invoice }) {
           className={awaiting ? "mt-2" : "h-7 px-2 text-xs text-muted-foreground"}
           onClick={() => setOpen(true)}
         >
-          {awaiting ? `Mark ${invoice.pay_by} picked up` : "Record cash or check received"}
+          {awaiting ? `Mark ${invoice.pay_by} picked up` : "Record cash, check or Zelle received"}
         </Button>
       ) : (
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
-            <select value={method} onChange={(e) => setMethod(e.target.value as OfflineMethod)} className="h-8 rounded-md border border-border bg-background px-2 text-sm">
+            <select value={method} onChange={(e) => setMethod(e.target.value as CollectMethod)} className="h-8 rounded-md border border-border bg-background px-2 text-sm">
               <option value="check">Check</option>
               <option value="cash">Cash</option>
+              <option value="zelle">Zelle</option>
+              <option value="transfer">Bank transfer</option>
             </select>
             <div className="flex items-center gap-1">
               <span className="text-sm">$</span>
@@ -83,7 +85,7 @@ export function CollectPaymentPanel({ invoice }: { invoice: Invoice }) {
           <div className="flex gap-2">
             <Button type="button" size="sm" disabled={pending || !(Number(amount) > 0)} onClick={submit}>
               {pending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-              Picked up, mark paid
+              {method === "cash" || method === "check" ? "Picked up, mark paid" : "Received, mark paid"}
             </Button>
             <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => setOpen(false)}>
               Cancel

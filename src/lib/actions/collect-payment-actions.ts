@@ -9,7 +9,7 @@ import { stripeClient } from "@/lib/stripe-customer";
 import { isStripeConfigured } from "@/lib/env";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { describeDbError } from "@/lib/setup-errors";
-import { collectedThreadNote, isOfflineMethod, type OfflineMethod } from "@/lib/collect-payment";
+import { collectedThreadNote, isCollectMethod, type CollectMethod } from "@/lib/collect-payment";
 import { log } from "@/lib/log";
 
 export type CollectResult = { ok: true; message: string } | { ok: false; message: string };
@@ -25,7 +25,7 @@ export type CollectResult = { ok: true; message: string } | { ok: false; message
  */
 export async function markPaymentCollected(input: {
   invoiceId: string;
-  method: OfflineMethod;
+  method: CollectMethod;
   amountCents: number;
   /** The day the money changed hands, YYYY-MM-DD, if not today. */
   receivedAt?: string;
@@ -34,7 +34,7 @@ export async function markPaymentCollected(input: {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
-    if (!isOfflineMethod(input.method)) return { ok: false, message: "Cash or check." };
+    if (!isCollectMethod(input.method)) return { ok: false, message: "Cash, check, Zelle or bank transfer." };
     if (!(input.amountCents > 0)) return { ok: false, message: "How much was it?" };
 
     const supabase = await createClient();
@@ -50,10 +50,12 @@ export async function markPaymentCollected(input: {
     const contact = await getJobCustomerContact(invoice.job_id);
     if (!contact) return { ok: false, message: "The job has no client on it." };
 
+    // The payments table's invoice link points at client invoices, a
+    // different table; the job invoice is tied through its Stripe id.
     const recorded = await recordManualPayment({
       jobId: invoice.job_id,
       customerId: contact.customerId,
-      invoiceId: invoice.id,
+      stripeInvoiceId: invoice.stripe_invoice_id,
       amountCents: input.amountCents,
       method: input.method,
       receivedAt: input.receivedAt,
@@ -68,7 +70,7 @@ export async function markPaymentCollected(input: {
       .update({
         status: "paid",
         paid_at: new Date().toISOString(),
-        pay_by: input.method,
+        pay_by: input.method === "cash" || input.method === "check" ? input.method : null,
         collected_by: profile.id,
         collected_note: input.note?.trim() || null,
         updated_at: new Date().toISOString(),

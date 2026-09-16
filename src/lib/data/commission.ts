@@ -50,7 +50,7 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
 
   const supabase = await createClient();
   const [invoices, ledger, proposals, tickets, payouts, payments] = await Promise.all([
-    safe(supabase.from("invoices").select("id, job_id, amount, status, paid_at").in("job_id", jobIds)),
+    safe(supabase.from("invoices").select("id, job_id, amount, status, paid_at, stripe_invoice_id").in("job_id", jobIds)),
     safe(
       supabase.from("ledger_entries").select("job_id, amount, direction").eq("direction", "in").in("job_id", jobIds)
     ),
@@ -64,7 +64,7 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     safe(
       supabase
         .from("payments")
-        .select("job_id, amount_cents, surcharge_cents, invoice_id")
+        .select("job_id, amount_cents, surcharge_cents, invoice_id, stripe_invoice_id")
         .in("job_id", jobIds)
     ),
   ]);
@@ -84,9 +84,11 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     amount_cents: number;
     surcharge_cents: number | null;
     invoice_id: string | null;
+    stripe_invoice_id: string | null;
   }[]) {
     add(row.job_id, (row.amount_cents - (row.surcharge_cents ?? 0)) / 100);
     if (row.invoice_id) coveredInvoices.add(row.invoice_id);
+    if (row.stripe_invoice_id) coveredInvoices.add(row.stripe_invoice_id);
   }
 
   // A paid invoice is money. A sent one is a claim, and claims do not pay
@@ -98,8 +100,9 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     amount: number;
     status: string;
     paid_at: string | null;
+    stripe_invoice_id: string | null;
   }[]) {
-    if (coveredInvoices.has(inv.id)) continue;
+    if (coveredInvoices.has(inv.id) || (inv.stripe_invoice_id && coveredInvoices.has(inv.stripe_invoice_id))) continue;
     if (inv.paid_at || inv.status === "paid") add(inv.job_id, Number(inv.amount) || 0);
   }
   for (const row of ledger as { job_id: string | null; amount: number }[]) {

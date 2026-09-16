@@ -263,6 +263,10 @@ export async function recordManualPayment(input: {
   /** The bill this settles, where it is known. What lets the invoice work
    * out that it has been paid instead of waiting to be told. */
   invoiceId?: string | null;
+  /** The Stripe invoice this settles, for the job invoices raised at
+   * signing: they live in a different table from client invoices, and this
+   * is how the collected total knows not to count the same money twice. */
+  stripeInvoiceId?: string | null;
   amountCents: number;
   /** Anything the export or the office says. Folded to what the column
    * takes, so "Debit Card" does not fail the check constraint. */
@@ -292,6 +296,7 @@ export async function recordManualPayment(input: {
       plan_id: input.planId ?? null,
       instalment_id: input.instalmentId ?? null,
       invoice_id: input.invoiceId ?? null,
+      stripe_invoice_id: input.stripeInvoiceId ?? null,
       amount_cents: input.amountCents,
       method: paymentMethod(input.method),
       // Omitted rather than nulled when no date was given, so the column's
