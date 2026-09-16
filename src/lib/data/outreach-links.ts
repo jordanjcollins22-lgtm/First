@@ -93,7 +93,10 @@ const PAGE = 200;
 /**
  * @param onlyProfileId When set, only this person's links: what they handed
  * out and what came of it, and nobody else's. The owner reads the whole
- * board; everybody else reads their own.
+ * board; everybody else reads their own. The leaderboard is everyone's
+ * either way: the standings are worked out over the whole board before it
+ * is narrowed, so a person can see where they stand without seeing what
+ * anybody else wrote.
  */
 export async function getOutreachBoard(options: { onlyProfileId?: string } = {}): Promise<OutreachBoard> {
   const supabase = await createClient();
@@ -102,14 +105,14 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
     outboundBaseUrl(),
   ]);
 
-  let query = supabase
+  const { data } = await supabase
     .from("outreach_links")
     .select(
       "id, code, kind, platform, audience, from_page, sent_to, note, service, screenshot_path, profile_id, posted_at, click_count, first_click_at, last_click_at, responded_at, response, comment, posted_comment, posted_comment_at"
     )
-    .eq("organization_id", organizationId);
-  if (options.onlyProfileId) query = query.eq("profile_id", options.onlyProfileId);
-  const { data } = await query.order("posted_at", { ascending: false }).limit(PAGE);
+    .eq("organization_id", organizationId)
+    .order("posted_at", { ascending: false })
+    .limit(PAGE);
 
   const raw = data ?? [];
   if (raw.length === 0) {
@@ -208,7 +211,7 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
     (profiles ?? []).map((p) => [p.id, (p.full_name ?? "").trim() || (p.email ?? "").split("@")[0] || "Somebody"])
   );
 
-  const rows: OutreachListRow[] = raw.map((row) => ({
+  const allRows: OutreachListRow[] = raw.map((row) => ({
     id: row.id,
     code: row.code,
     kind: (row.kind as OutreachKind) ?? "comment",
@@ -234,7 +237,7 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
     personName: nameOf.get(row.profile_id) ?? "Somebody",
   }));
 
-  const people = tallyByPerson(rows, bookedCodes).map((person) => ({
+  const people = tallyByPerson(allRows, bookedCodes).map((person) => ({
     ...person,
     name: nameOf.get(person.profileId) ?? "Somebody",
   }));
@@ -252,9 +255,17 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
     })
   );
 
+  // Narrowed after the standings: one person's board is their own links
+  // and their own bookings, under a leaderboard that is everyone's.
+  const rows = options.onlyProfileId ? allRows.filter((row) => row.profileId === options.onlyProfileId) : allRows;
+  const ownCodes = new Set(rows.map((row) => row.code));
+  const visibleBookings = options.onlyProfileId
+    ? Object.fromEntries(Object.entries(bookingsByCode).filter(([code]) => ownCodes.has(code)))
+    : bookingsByCode;
+
   return {
     rows,
-    bookingsByCode,
+    bookingsByCode: visibleBookings,
     groups: tallyByGroup(rows, bookedCodes),
     people,
     standings,

@@ -54,7 +54,7 @@ export function OutreachBoardView({ board, scope = "everyone" }: { board: Outrea
   const tabs = [
     { key: "rooms" as const, label: "Rooms" },
     { key: "recent" as const, label: scope === "mine" ? "My links" : "Every link" },
-    ...(scope === "everyone" ? [{ key: "people" as const, label: "Leaderboard" }] : []),
+    { key: "people" as const, label: "Leaderboard" },
     { key: "how" as const, label: "What works" },
   ];
 
@@ -102,7 +102,15 @@ export function OutreachBoardView({ board, scope = "everyone" }: { board: Outrea
 
       {tab === "people" && (
         <>
-          <Leaderboard standings={board.standings} selected={openPerson} onSelect={(id) => setOpenPerson(openPerson === id ? null : id)} />
+          <Leaderboard
+            standings={board.standings}
+            showMoney={scope === "everyone"}
+            // Everybody sees the ranking; only the owner opens another person's
+            // comments. Your own row opens for you.
+            canOpen={(id) => scope === "everyone" || board.rows.some((row) => row.profileId === id)}
+            selected={openPerson}
+            onSelect={(id) => setOpenPerson(openPerson === id ? null : id)}
+          />
           {openPerson && (
             <PersonDetail
               standing={board.standings.find((p) => p.profileId === openPerson) ?? null}
@@ -260,10 +268,15 @@ function Table({
  */
 function Leaderboard({
   standings,
+  showMoney,
+  canOpen,
   selected,
   onSelect,
 }: {
   standings: PersonStanding[];
+  /** Collected and commission columns: the owner's, not the room's. */
+  showMoney: boolean;
+  canOpen: (profileId: string) => boolean;
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -273,10 +286,10 @@ function Leaderboard({
   return (
     <section className="rounded-lg border border-border">
       <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
-        Ranked by jobs closed, then money collected, then bookings, then opens. Tap a name for every comment and message they answered.
+        Ranked by jobs closed, then bookings, then opens.{showMoney ? " Tap a name for every comment and message they answered." : " Tap your own name for your comments and messages."}
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
+        <table className={cn("w-full border-collapse text-sm", showMoney ? "min-w-[720px]" : "min-w-[560px]")}>
           <thead>
             <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="p-2 font-medium">#</th>
@@ -287,24 +300,25 @@ function Leaderboard({
               <th className="p-2 text-right font-medium">Answered</th>
               <th className="p-2 text-right font-medium">Booked</th>
               <th className="p-2 text-right font-medium">Closed</th>
-              <th className="p-2 text-right font-medium">Collected</th>
-              <th className="p-2 text-right font-medium">Commission</th>
+              {showMoney && <th className="p-2 text-right font-medium">Collected</th>}
+              {showMoney && <th className="p-2 text-right font-medium">Commission</th>}
             </tr>
           </thead>
           <tbody>
             {standings.map((p) => {
               const isOpen = selected === p.profileId;
+              const opens = canOpen(p.profileId);
               const owed = Math.max(0, p.commissionEarned - p.commissionPaid);
               return (
                 <tr
                   key={p.profileId}
-                  onClick={() => onSelect(p.profileId)}
-                  className={cn("cursor-pointer border-b border-border last:border-0 hover:bg-accent/40", isOpen && "bg-primary/5")}
+                  onClick={opens ? () => onSelect(p.profileId) : undefined}
+                  className={cn("border-b border-border last:border-0", opens && "cursor-pointer hover:bg-accent/40", isOpen && "bg-primary/5")}
                 >
                   <td className="p-2 font-semibold tabular-nums text-muted-foreground">{p.rank}</td>
                   <td className="p-2">
                     <span className="inline-flex items-center gap-1 font-medium">
-                      {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                      {opens && (isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />)}
                       {p.name}
                     </span>
                   </td>
@@ -317,8 +331,8 @@ function Leaderboard({
                   <td className="p-2 text-right tabular-nums">{p.replied}</td>
                   <td className="p-2 text-right tabular-nums">{p.bookings}</td>
                   <td className={cn("p-2 text-right font-semibold tabular-nums", p.closed > 0 && "text-emerald-700")}>{p.closed}</td>
-                  <td className="p-2 text-right tabular-nums">{p.collected > 0 ? money(p.collected) : "—"}</td>
-                  <td className="p-2 text-right tabular-nums">
+                  {showMoney && <td className="p-2 text-right tabular-nums">{p.collected > 0 ? money(p.collected) : "—"}</td>}
+                  {showMoney && <td className="p-2 text-right tabular-nums">
                     {p.commissionEarned > 0 ? (
                       <>
                         {money(p.commissionEarned)}
@@ -329,7 +343,7 @@ function Leaderboard({
                     ) : (
                       "—"
                     )}
-                  </td>
+                  </td>}
                 </tr>
               );
             })}
