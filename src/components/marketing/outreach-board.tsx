@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useTransition } from "react";
+import { createContext, Fragment, useContext, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Pencil } from "lucide-react";
@@ -28,6 +28,19 @@ import { Button } from "@/components/ui/button";
 import type { OutreachBoard, OutreachBooking, OutreachListRow } from "@/lib/data/outreach-links";
 import type { PersonStanding } from "@/lib/outreach-links";
 import { postedVersion, VERSION_LABEL } from "@/lib/posted-comment";
+import { AFFILIATE_STAGE_LABEL, AFFILIATE_STAGE_ORDER, type AffiliateStage } from "@/lib/affiliate-pipeline";
+import { groupByStage } from "@/lib/pipeline-stages";
+import { dateShort } from "@/lib/time-zone";
+import { StageGroups, type StageTone } from "@/components/leaderboards/stage-groups";
+
+const AFFILIATE_STAGE_TONE: Record<AffiliateStage, StageTone> = {
+  posted: "waiting",
+  opened: "active",
+  answered: "active",
+  booked: "won",
+  closed: "won",
+  declined: "lost",
+};
 
 /**
  * What came of every link handed out.
@@ -272,6 +285,7 @@ export function AffiliateLeaderboard({
   canOpen,
   selected,
   onSelect,
+  inlinePipeline = false,
 }: {
   standings: PersonStanding[];
   /** Collected and commission columns: the owner's, not the room's. */
@@ -279,6 +293,12 @@ export function AffiliateLeaderboard({
   canOpen: (profileId: string) => boolean;
   selected: string | null;
   onSelect: (id: string) => void;
+  /**
+   * Open a row into the person's pipeline right under it: every link they
+   * handed out, grouped by how far it got. The marketing page opens a fuller
+   * panel below the table instead, with the comments and the people to ring.
+   */
+  inlinePipeline?: boolean;
 }) {
   if (standings.length === 0) {
     return <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Nobody has posted yet.</p>;
@@ -310,8 +330,8 @@ export function AffiliateLeaderboard({
               const opens = canOpen(p.profileId);
               const owed = Math.max(0, p.commissionEarned - p.commissionPaid);
               return (
+                <Fragment key={p.profileId}>
                 <tr
-                  key={p.profileId}
                   onClick={opens ? () => onSelect(p.profileId) : undefined}
                   className={cn("border-b border-border last:border-0", opens && "cursor-pointer hover:bg-accent/40", isOpen && "bg-primary/5")}
                 >
@@ -345,12 +365,64 @@ export function AffiliateLeaderboard({
                     )}
                   </td>}
                 </tr>
+                {inlinePipeline && isOpen && (
+                  <tr className="border-b border-border bg-muted/20">
+                    <td colSpan={showMoney ? 10 : 8} className="p-2">
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pipeline: every link they handed out, by where it got to</p>
+                      <AffiliatePipeline standing={p} showMoney={showMoney} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
     </section>
+  );
+}
+
+/**
+ * One person's links as a funnel: still unopened, opened, answered, booked,
+ * closed, and the ones that said no. Each line says where the link went,
+ * when, how often it was opened and who booked from it.
+ */
+function AffiliatePipeline({ standing, showMoney }: { standing: PersonStanding; showMoney: boolean }) {
+  return (
+    <StageGroups
+      emptyText="Nothing handed out yet."
+      groups={groupByStage(standing.pipeline, (line) => line.stage, AFFILIATE_STAGE_ORDER).map((group) => ({
+        key: group.stage,
+        label: AFFILIATE_STAGE_LABEL[group.stage],
+        tone: AFFILIATE_STAGE_TONE[group.stage],
+        lines: group.lines.map((line) => (
+          <li key={line.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-background/70 px-2 py-1 text-xs">
+            <span className="font-medium">{line.kindLabel}</span>
+            <span className="text-muted-foreground">{line.where}</span>
+            <span className="text-muted-foreground">{dateShort(line.postedAt)}</span>
+            <span className={cn(line.opens > 0 ? "text-foreground" : "text-muted-foreground")}>
+              {line.opens === 0 ? "not opened" : `opened ${line.opens} time${line.opens === 1 ? "" : "s"}`}
+            </span>
+            {line.response && line.response !== "replied" && <span className="text-muted-foreground">{responseLabel(line.response)}</span>}
+            {line.bookings.map((b) => (
+              <span key={b.jobId} className="inline-flex flex-wrap items-center gap-x-1">
+                <Link href={`/jobs/${b.jobId}`} className={cn("font-medium hover:underline", b.converted && "text-emerald-700")}>
+                  {b.name}
+                </Link>
+                <span className="text-muted-foreground">{b.converted ? "closed" : "booked"}</span>
+                {showMoney && b.collected > 0 && <span className="text-emerald-700">{money(b.collected)} paid</span>}
+                {showMoney && b.commissionEarned > 0 && (
+                  <span className="text-muted-foreground">
+                    {money(b.commissionEarned)} commission{b.commissionPaidOut >= b.commissionEarned ? ", paid out" : b.commissionPaidOut > 0 ? ", part paid" : ""}
+                  </span>
+                )}
+              </span>
+            ))}
+          </li>
+        )),
+      }))}
+    />
   );
 }
 

@@ -27,6 +27,8 @@
 export const MAX_SHOT_BYTES = 8 * 1024 * 1024;
 export const SHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
+import type { AffiliateLine } from "@/lib/affiliate-pipeline";
+
 export type Platform = "facebook" | "nextdoor" | "instagram" | "reddit" | "other";
 
 export const PLATFORMS: { key: Platform; label: string; groupWord: string }[] = [
@@ -490,6 +492,9 @@ export interface PersonStanding extends PersonTally {
   commissionEarned: number;
   commissionPaid: number;
   rank: number;
+  /** Every link they handed out and where it got to, newest first. Empty
+   * when the reader is not allowed to see this person's links. */
+  pipeline: AffiliateLine[];
 }
 
 /**

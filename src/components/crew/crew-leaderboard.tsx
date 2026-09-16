@@ -7,16 +7,35 @@ import { ChevronDown, ChevronUp, HardHat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dateShort } from "@/lib/time-zone";
 
-const STATUS_LABEL: Record<string, string> = {
-  approved: "Scheduled",
+import { groupByStage } from "@/lib/pipeline-stages";
+import { StageGroups, type StageTone } from "@/components/leaderboards/stage-groups";
+import type { CrewJobLine, CrewStanding } from "@/lib/crew-leaderboard";
+import type { CrewBoards } from "@/lib/data/crew-leaderboard";
+
+/** Where a job is for the crew on it: waiting for them, under way, done, or gone. */
+type CrewStage = "scheduled" | "in_progress" | "completed" | "unsold" | "cancelled";
+const STAGE_ORDER: readonly CrewStage[] = ["scheduled", "in_progress", "completed", "unsold", "cancelled"];
+const STAGE_LABEL: Record<CrewStage, string> = {
+  scheduled: "Scheduled",
   in_progress: "In progress",
   completed: "Completed",
+  unsold: "Not sold yet",
   cancelled: "Cancelled",
-  estimating: "Not sold yet",
-  quoted: "Not sold yet",
 };
-import type { CrewStanding } from "@/lib/crew-leaderboard";
-import type { CrewBoards } from "@/lib/data/crew-leaderboard";
+const STAGE_TONE: Record<CrewStage, StageTone> = {
+  scheduled: "waiting",
+  in_progress: "active",
+  completed: "won",
+  unsold: "muted",
+  cancelled: "muted",
+};
+function crewStage(line: CrewJobLine): CrewStage {
+  if (line.status === "completed") return "completed";
+  if (line.status === "in_progress") return "in_progress";
+  if (line.status === "cancelled") return "cancelled";
+  if (line.status === "approved") return "scheduled";
+  return "unsold";
+}
 
 /**
  * Who gets the work done, and done right, best first.
@@ -112,35 +131,33 @@ export function CrewLeaderboard({ boards, meId, compact = false, canOpenAll = fa
                 {open === s.profileId && (
                   <tr className="border-b border-border bg-muted/20">
                     <td colSpan={9} className="p-2">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Every job they were on, and how it went</p>
-                      <ul className="flex flex-col gap-1">
-                        {s.pipeline.map((line) => (
-                          <li key={line.jobId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-background/70 px-2 py-1 text-xs">
-                            <span
-                              className={cn(
-                                "rounded px-1.5 py-0.5 font-medium",
-                                line.status === "completed" ? "bg-emerald-100 text-emerald-800" : line.status === "in_progress" ? "bg-sky-100 text-sky-800" : "bg-muted text-muted-foreground"
-                              )}
-                            >
-                              {STATUS_LABEL[line.status] ?? line.status}
-                            </span>
-                            <Link href={`/jobs/${line.jobId}`} className="font-medium hover:underline">
-                              {line.clientName}
-                            </Link>
-                            {line.address && <span className="text-muted-foreground">{line.address}</span>}
-                            {line.lead && <span className="text-muted-foreground">led</span>}
-                            {line.lastDay && <span className="text-muted-foreground">{dateShort(line.lastDay)}</span>}
-                            <span className="text-muted-foreground">
-                              {line.daysWorked} of {line.daysScheduled} day{line.daysScheduled === 1 ? "" : "s"}
-                            </span>
-                            {line.onTime === true && <span className="text-emerald-700">on time</span>}
-                            {line.onTime === false && <span className="text-amber-800">late</span>}
-                            {line.mistakes > 0 && <span className="font-medium text-destructive">{line.mistakes} mistake{line.mistakes === 1 ? "" : "s"}</span>}
-                            {line.callbacks > 0 && <span className="text-amber-800">{line.callbacks} callback{line.callbacks === 1 ? "" : "s"}</span>}
-                            {line.complaints > 0 && <span className="text-amber-800">{line.complaints} complaint{line.complaints === 1 ? "" : "s"}</span>}
-                          </li>
-                        ))}
-                      </ul>
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Every job they were on, by where it is</p>
+                      <StageGroups
+                        emptyText="No jobs in this window."
+                        groups={groupByStage(s.pipeline, crewStage, STAGE_ORDER).map((group) => ({
+                          key: group.stage,
+                          label: STAGE_LABEL[group.stage],
+                          tone: STAGE_TONE[group.stage],
+                          lines: group.lines.map((line) => (
+                            <li key={line.jobId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-background/70 px-2 py-1 text-xs">
+                              <Link href={`/jobs/${line.jobId}`} className="font-medium hover:underline">
+                                {line.clientName}
+                              </Link>
+                              {line.address && <span className="text-muted-foreground">{line.address}</span>}
+                              {line.lead && <span className="text-muted-foreground">led</span>}
+                              {line.lastDay && <span className="text-muted-foreground">{dateShort(line.lastDay)}</span>}
+                              <span className="text-muted-foreground">
+                                {line.daysWorked} of {line.daysScheduled} day{line.daysScheduled === 1 ? "" : "s"}
+                              </span>
+                              {line.onTime === true && <span className="text-emerald-700">on time</span>}
+                              {line.onTime === false && <span className="text-amber-800">late</span>}
+                              {line.mistakes > 0 && <span className="font-medium text-destructive">{line.mistakes} mistake{line.mistakes === 1 ? "" : "s"}</span>}
+                              {line.callbacks > 0 && <span className="text-amber-800">{line.callbacks} callback{line.callbacks === 1 ? "" : "s"}</span>}
+                              {line.complaints > 0 && <span className="text-amber-800">{line.complaints} complaint{line.complaints === 1 ? "" : "s"}</span>}
+                            </li>
+                          )),
+                        }))}
+                      />
                     </td>
                   </tr>
                 )}

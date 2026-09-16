@@ -31,6 +31,7 @@ export function LeaderboardsView({
   meId: string | null;
 }) {
   const [tab, setTab] = useState<"affiliates" | "evaluators" | "crew">("affiliates");
+  const [openAffiliate, setOpenAffiliate] = useState<string | null>(null);
   const tabs = [
     { key: "affiliates" as const, label: "Affiliates" },
     { key: "evaluators" as const, label: "Evaluators" },
@@ -54,7 +55,16 @@ export function LeaderboardsView({
         ))}
       </div>
       {tab === "affiliates" && (
-        <AffiliateLeaderboard standings={affiliates} showMoney={showMoney} canOpen={() => false} selected={null} onSelect={() => {}} />
+        <AffiliateLeaderboard
+          standings={affiliates}
+          showMoney={showMoney}
+          // The owner opens anyone's links; everybody else opens their own.
+          // Anybody else's row carries no links for them anyway.
+          canOpen={(id) => (showMoney || id === meId) && (affiliates.find((p) => p.profileId === id)?.pipeline.length ?? 0) > 0}
+          selected={openAffiliate}
+          onSelect={(id) => setOpenAffiliate(openAffiliate === id ? null : id)}
+          inlinePipeline
+        />
       )}
       {tab === "evaluators" && <EvaluationLeaderboard boards={evaluations} showMoney={showMoney} meId={meId} />}
       {tab === "crew" && <CrewLeaderboard boards={crew} meId={meId} canOpenAll={showMoney} />}

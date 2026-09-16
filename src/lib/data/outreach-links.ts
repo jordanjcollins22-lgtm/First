@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { loadMoney } from "@/lib/data/commission";
+import { affiliatePipeline, type AffiliateBookingLine } from "@/lib/affiliate-pipeline";
 import {
   tallyByGroup,
   tallyByKind,
@@ -242,15 +243,37 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
     name: nameOf.get(person.profileId) ?? "Somebody",
   }));
   const allBookings = Object.values(bookingsByCode).flat();
+  // The people who booked, with names and money but no phone or email: the
+  // breakdown is for seeing where a link got to, not for ringing anybody.
+  const bookingLinesByCode: Record<string, AffiliateBookingLine[]> = {};
+  for (const [code, list] of Object.entries(bookingsByCode)) {
+    bookingLinesByCode[code] = list.map((b) => ({
+      jobId: b.jobId,
+      name: b.name,
+      converted: b.commission.converted,
+      collected: b.collected,
+      commissionEarned: b.commission.earned,
+      commissionPaidOut: b.commission.paidOut,
+    }));
+  }
   const standings = rankPeople(
     people.map((person) => {
       const theirs = allBookings.filter((b) => b.posterId === person.profileId);
+      // A person reading their own board keeps their own breakdown and
+      // nobody else's; the owner keeps everybody's.
+      const mayOpen = !options.onlyProfileId || options.onlyProfileId === person.profileId;
       return {
         ...person,
         closed: theirs.filter((b) => b.commission.converted).length,
         collected: theirs.reduce((sum, b) => sum + b.collected, 0),
         commissionEarned: theirs.reduce((sum, b) => sum + b.commission.earned, 0),
         commissionPaid: theirs.reduce((sum, b) => sum + b.commission.paidOut, 0),
+        pipeline: mayOpen
+          ? affiliatePipeline(
+              allRows.filter((row) => row.profileId === person.profileId),
+              bookingLinesByCode
+            )
+          : [],
       };
     })
   );

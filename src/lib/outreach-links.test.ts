@@ -273,7 +273,7 @@ describe("what a booking earned the poster", () => {
 });
 
 describe("the leaderboard", () => {
-  const base = { posts: 0, clicked: 0, clicks: 0, replied: 0, bookings: 0, comments: 0, dms: 0, closed: 0, collected: 0, commissionEarned: 0, commissionPaid: 0 };
+  const base = { posts: 0, clicked: 0, clicks: 0, replied: 0, bookings: 0, comments: 0, dms: 0, closed: 0, collected: 0, commissionEarned: 0, commissionPaid: 0, pipeline: [] };
   it("puts whoever closed first, then whoever booked, then whoever got opened", () => {
     const ranked = rankPeople([
       { ...base, profileId: "a", name: "Ann", posts: 40, clicked: 30 },

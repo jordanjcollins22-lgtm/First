@@ -8,15 +8,20 @@ import { cn } from "@/lib/utils";
 import { EVALUATOR_STAGE_LABEL, type EvaluatorStage, type EvaluatorStanding } from "@/lib/evaluation-leaderboard";
 import { dateShort } from "@/lib/time-zone";
 
-const STAGE_STYLE: Record<EvaluatorStage, string> = {
-  booked: "bg-sky-100 text-sky-800",
-  cancelled: "bg-muted text-muted-foreground",
-  visited: "bg-amber-100 text-amber-800",
-  proposal: "bg-violet-100 text-violet-800",
-  closed: "bg-emerald-100 text-emerald-800",
-  declined: "bg-rose-100 text-rose-800",
-};
+import { groupByStage } from "@/lib/pipeline-stages";
+import { StageGroups, type StageTone } from "@/components/leaderboards/stage-groups";
 import type { EvaluationBoards } from "@/lib/data/evaluation-leaderboard";
+
+/** The order a visit moves through, then the two ways out of it. */
+const STAGE_ORDER: readonly EvaluatorStage[] = ["booked", "visited", "proposal", "closed", "declined", "cancelled"];
+const STAGE_TONE: Record<EvaluatorStage, StageTone> = {
+  booked: "waiting",
+  visited: "active",
+  proposal: "active",
+  closed: "won",
+  declined: "lost",
+  cancelled: "muted",
+};
 
 function money(n: number): string {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -117,22 +122,27 @@ export function EvaluationLeaderboard({ boards, showMoney, meId }: { boards: Eva
                 {open === s.profileId && (
                   <tr className="border-b border-border bg-muted/20">
                     <td colSpan={showMoney ? 9 : 7} className="p-2">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pipeline: every visit and where it got to</p>
-                      <ul className="flex flex-col gap-1">
-                        {s.pipeline.map((line) => (
-                          <li key={line.jobId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-background/70 px-2 py-1 text-xs">
-                            <span className={cn("rounded px-1.5 py-0.5 font-medium", STAGE_STYLE[line.stage])}>{EVALUATOR_STAGE_LABEL[line.stage]}</span>
-                            <Link href={`/jobs/${line.jobId}`} className="font-medium hover:underline">
-                              {line.clientName}
-                            </Link>
-                            {line.address && <span className="text-muted-foreground">{line.address}</span>}
-                            {line.visitDate && <span className="text-muted-foreground">visit {dateShort(line.visitDate)}</span>}
-                            {line.daysToProposal != null && <span className="text-muted-foreground">proposal after {line.daysToProposal} day{line.daysToProposal === 1 ? "" : "s"}</span>}
-                            {showMoney && line.proposalTotal != null && line.proposalTotal > 0 && <span>{money(line.proposalTotal)}</span>}
-                            {showMoney && line.collected > 0 && <span className="text-emerald-700">{money(line.collected)} paid</span>}
-                          </li>
-                        ))}
-                      </ul>
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pipeline: every visit, by where it got to</p>
+                      <StageGroups
+                        emptyText="No visits in this window."
+                        groups={groupByStage(s.pipeline, (line) => line.stage, STAGE_ORDER).map((group) => ({
+                          key: group.stage,
+                          label: EVALUATOR_STAGE_LABEL[group.stage],
+                          tone: STAGE_TONE[group.stage],
+                          lines: group.lines.map((line) => (
+                            <li key={line.jobId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-background/70 px-2 py-1 text-xs">
+                              <Link href={`/jobs/${line.jobId}`} className="font-medium hover:underline">
+                                {line.clientName}
+                              </Link>
+                              {line.address && <span className="text-muted-foreground">{line.address}</span>}
+                              {line.visitDate && <span className="text-muted-foreground">visit {dateShort(line.visitDate)}</span>}
+                              {line.daysToProposal != null && <span className="text-muted-foreground">proposal after {line.daysToProposal} day{line.daysToProposal === 1 ? "" : "s"}</span>}
+                              {showMoney && line.proposalTotal != null && line.proposalTotal > 0 && <span>{money(line.proposalTotal)}</span>}
+                              {showMoney && line.collected > 0 && <span className="text-emerald-700">{money(line.collected)} paid</span>}
+                            </li>
+                          )),
+                        }))}
+                      />
                     </td>
                   </tr>
                 )}
