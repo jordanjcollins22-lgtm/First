@@ -60,6 +60,8 @@ export interface LedgerTotals {
   in: number;
   out: number;
   net: number;
+  /** Money out that is on the books but has not left yet: bills still to pay. */
+  owed: number;
   byCategory: { category: LedgerCategory; label: string; direction: LedgerDirection; total: number }[];
 }
 
@@ -73,15 +75,19 @@ function round(n: number): number {
  * Categories with nothing in them are left out entirely — a breakdown listing
  * six zeroes buries the two lines that matter.
  */
-export function totalLedger(entries: Pick<LedgerEntry, "direction" | "category" | "amount">[]): LedgerTotals {
+export function totalLedger(entries: (Pick<LedgerEntry, "direction" | "category" | "amount"> & { paid_on?: string | null })[]): LedgerTotals {
   let moneyIn = 0;
   let moneyOut = 0;
+  let owed = 0;
   const totals = new Map<LedgerCategory, number>();
 
   for (const entry of entries) {
     const amount = Number(entry.amount) || 0;
     if (entry.direction === "in") moneyIn += amount;
     else moneyOut += amount;
+    // Counted in "out" as well: the cost is real the day the work is done,
+    // whether or not the cheque has been written. Owed is the part still due.
+    if (entry.direction === "out" && isOwed(entry)) owed += amount;
     totals.set(entry.category, (totals.get(entry.category) ?? 0) + amount);
   }
 
@@ -94,5 +100,11 @@ export function totalLedger(entries: Pick<LedgerEntry, "direction" | "category" 
     }))
     .sort((a, b) => b.total - a.total);
 
-  return { in: round(moneyIn), out: round(moneyOut), net: round(moneyIn - moneyOut), byCategory };
+  return { in: round(moneyIn), out: round(moneyOut), net: round(moneyIn - moneyOut), owed: round(owed), byCategory };
+}
+
+/** A bill on the books that has not been paid. Rows from before the column
+ * existed carry no paid date and are treated as paid, because they were. */
+export function isOwed(entry: { paid_on?: string | null }): boolean {
+  return entry.paid_on === null;
 }

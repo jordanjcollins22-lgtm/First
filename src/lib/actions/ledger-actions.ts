@@ -29,6 +29,8 @@ export interface LedgerEntryInput {
   party: string | null;
   jobId: string | null;
   note: string | null;
+  /** False for a bill that is owed and not yet paid. Defaults to paid. */
+  paid?: boolean;
 }
 
 /**
@@ -67,12 +69,16 @@ export async function recordLedgerEntry(input: LedgerEntryInput): Promise<Ledger
       party: input.party?.trim() || null,
       job_id: input.jobId || null,
       note: input.note?.trim() || null,
+      // Only money out can be owed. Money in that has not arrived is not a
+      // ledger entry, it is an invoice.
+      paid_on: input.direction === "out" && input.paid === false ? null : input.occurredOn,
       created_by: profile.id,
     });
     if (error) return { ok: false, message: describeDbError(error) };
 
     revalidatePath("/admin/payments");
     if (input.jobId) revalidatePath(`/jobs/${input.jobId}`);
+    if (input.direction === "out" && input.paid === false) return { ok: true, message: "Recorded as owed. Mark it paid when the money goes out." };
     return { ok: true, message: input.direction === "in" ? "Money in recorded." : "Money out recorded." };
   } catch (err) {
     console.error("recordLedgerEntry failed:", err);
@@ -82,6 +88,26 @@ export async function recordLedgerEntry(input: LedgerEntryInput): Promise<Ledger
 
 /** Removes a mistaken entry. There's no soft delete — a wrong number on the
  * books is worse than a missing one, and the entry can just be re-added. */
+/** The bill was paid: the day the money went out, and how. */
+export async function markLedgerPaid(input: { id: string; paidOn: string; method?: string | null }): Promise<LedgerResult> {
+  try {
+    if (!(await requireMoneyRole())) return { ok: false, message: "You don't have access to the books." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.paidOn)) return { ok: false, message: "Pick the date it was paid." };
+
+    const supabase = await createClient();
+    const patch: { paid_on: string; method?: string } = { paid_on: input.paidOn };
+    if (input.method) patch.method = input.method;
+    const { error } = await supabase.from("ledger_entries").update(patch).eq("id", input.id);
+    if (error) return { ok: false, message: describeDbError(error) };
+
+    revalidatePath("/admin/payments");
+    return { ok: true, message: "Marked paid." };
+  } catch (err) {
+    console.error("markLedgerPaid failed:", err);
+    return { ok: false, message: "Couldn't mark that paid." };
+  }
+}
+
 export async function deleteLedgerEntry(id: string): Promise<LedgerResult> {
   try {
     if (!(await requireMoneyRole())) return { ok: false, message: "You don't have access to the books." };

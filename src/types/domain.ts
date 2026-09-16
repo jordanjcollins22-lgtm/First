@@ -841,6 +841,8 @@ export interface LedgerEntry {
   party: string | null;
   job_id: string | null;
   note: string | null;
+  /** When the money actually moved. Null is a bill still to pay. */
+  paid_on: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

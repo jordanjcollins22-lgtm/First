@@ -3865,6 +3865,7 @@ export interface Database {
           party: string | null;
           job_id: string | null;
           note: string | null;
+          paid_on: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;

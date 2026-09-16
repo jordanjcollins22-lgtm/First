@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { categoriesFor, categoryLabel, isValidPairing, totalLedger } from "@/lib/ledger";
+import { categoriesFor, categoryLabel, isOwed, isValidPairing, totalLedger } from "@/lib/ledger";
 import type { LedgerCategory, LedgerDirection } from "@/types/domain";
 
 function entry(direction: LedgerDirection, category: LedgerCategory, amount: number) {
@@ -91,6 +91,25 @@ describe("totalLedger", () => {
   });
 
   it("totals an empty ledger to zero rather than failing", () => {
-    expect(totalLedger([])).toEqual({ in: 0, out: 0, net: 0, byCategory: [] });
+    expect(totalLedger([])).toEqual({ in: 0, out: 0, net: 0, owed: 0, byCategory: [] });
+  });
+});
+
+describe("owed", () => {
+  it("counts an unpaid bill in money out and again as still to pay", () => {
+    const totals = totalLedger([
+      { ...entry("in", "job_payment", 650), paid_on: "2026-09-15" },
+      { ...entry("out", "subcontractor", 310), paid_on: null },
+      { ...entry("out", "fuel", 40), paid_on: "2026-09-16" },
+    ]);
+    expect(totals.out).toBe(350);
+    expect(totals.owed).toBe(310);
+    expect(totals.net).toBe(300);
+  });
+
+  it("treats a row with no paid date column as paid", () => {
+    expect(isOwed({})).toBe(false);
+    expect(isOwed({ paid_on: undefined })).toBe(false);
+    expect(isOwed({ paid_on: null })).toBe(true);
   });
 });

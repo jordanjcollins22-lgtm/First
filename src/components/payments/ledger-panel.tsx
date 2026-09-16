@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, Loader2, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { categoriesFor, categoryLabel, PAYMENT_METHODS } from "@/lib/ledger";
-import { deleteLedgerEntry, recordLedgerEntry } from "@/lib/actions/ledger-actions";
+import { categoriesFor, categoryLabel, isOwed, PAYMENT_METHODS } from "@/lib/ledger";
+import { deleteLedgerEntry, markLedgerPaid, recordLedgerEntry } from "@/lib/actions/ledger-actions";
 import type { PaymentsData } from "@/lib/data/payments";
 import type { LedgerCategory, LedgerDirection } from "@/types/domain";
 
@@ -38,10 +38,11 @@ export function LedgerPanel({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className={`grid gap-2 sm:gap-3 ${totals.owed > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         <Tile label="In" value={money(totals.in)} tone="in" />
         <Tile label="Out" value={money(totals.out)} tone="out" />
         <Tile label="Net" value={money(totals.net)} tone={totals.net < 0 ? "out" : "neutral"} />
+        {totals.owed > 0 && <Tile label="Still to pay" value={money(totals.owed)} tone="out" />}
       </div>
 
       <EntryForm jobOptions={jobOptions} />
@@ -91,6 +92,7 @@ function EntryForm({ jobOptions }: { jobOptions: PaymentsData["jobOptions"] }) {
   const [party, setParty] = useState("");
   const [jobId, setJobId] = useState("");
   const [note, setNote] = useState("");
+  const [paid, setPaid] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -123,11 +125,13 @@ function EntryForm({ jobOptions }: { jobOptions: PaymentsData["jobOptions"] }) {
         party: party || null,
         jobId: jobId || null,
         note: note || null,
+        paid: direction === "out" ? paid : true,
       });
       if (!result.ok) return setError(result.message);
       setAmount("");
       setParty("");
       setNote("");
+      setPaid(true);
       setMessage(result.message ?? "Recorded.");
     });
   }
@@ -235,6 +239,13 @@ function EntryForm({ jobOptions }: { jobOptions: PaymentsData["jobOptions"] }) {
         <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What it was for" />
       </label>
 
+      {direction === "out" && (
+        <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
+          <input type="checkbox" checked={!paid} onChange={(e) => setPaid(!e.target.checked)} className="h-4 w-4" />
+          Not paid yet. Put it on the books as owed.
+        </label>
+      )}
+
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       {message && <p className="mt-2 text-xs text-emerald-700">{message}</p>}
 
@@ -269,13 +280,15 @@ function EntryList({ entries }: { entries: PaymentsData["ledger"] }) {
 
 function EntryRow({ entry }: { entry: PaymentsData["ledger"][number] }) {
   const [removed, setRemoved] = useState(false);
+  const [paidOn, setPaidOn] = useState<string | null>(entry.paid_on);
   const [isPending, startTransition] = useTransition();
 
   if (removed) return null;
   const isIn = entry.direction === "in";
+  const owed = !isIn && isOwed({ paid_on: paidOn });
 
   return (
-    <li className="rounded-lg border border-border p-2.5">
+    <li className={`rounded-lg border p-2.5 ${owed ? "border-amber-400 bg-amber-50/60" : "border-border"}`}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
           {isIn ? (
@@ -293,6 +306,8 @@ function EntryRow({ entry }: { entry: PaymentsData["ledger"][number] }) {
 
       <p className="mt-0.5 text-[11px] text-muted-foreground">
         {[categoryLabel(entry.category), entry.occurred_on, entry.method].filter(Boolean).join(" · ")}
+        {owed && <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">Not paid yet</span>}
+        {!isIn && !owed && paidOn && paidOn !== entry.occurred_on && <span className="ml-1.5">paid {paidOn}</span>}
       </p>
 
       {entry.job_id && (
@@ -303,20 +318,39 @@ function EntryRow({ entry }: { entry: PaymentsData["ledger"][number] }) {
 
       {entry.note && <p className="mt-0.5 text-xs text-muted-foreground">{entry.note}</p>}
 
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={() =>
-          startTransition(async () => {
-            const result = await deleteLedgerEntry(entry.id);
-            if (result.ok) setRemoved(true);
-          })
-        }
-        className="mt-1 flex min-h-8 items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-        Remove
-      </button>
+      <div className="mt-1 flex flex-wrap items-center gap-3">
+        {owed && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                const day = today();
+                const result = await markLedgerPaid({ id: entry.id, paidOn: day });
+                if (result.ok) setPaidOn(day);
+              })
+            }
+            className="flex min-h-8 items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Mark paid today
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await deleteLedgerEntry(entry.id);
+              if (result.ok) setRemoved(true);
+            })
+          }
+          className="flex min-h-8 items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove
+        </button>
+      </div>
     </li>
   );
 }
