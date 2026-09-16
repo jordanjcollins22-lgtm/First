@@ -67,6 +67,7 @@ export const MODULES: readonly AppModule[] = [
       // worse than no door.
       { key: "growth", label: "Growth", tabs: ["dashboard"], blurb: "Five numbers, the one thing in the way, and one button." },
       { key: "business", label: "Business", tabs: ["dashboard"], blurb: "The pulse, the targets and the money." },
+      { key: "leaderboards", label: "Leaderboards", tabs: [], blurb: "Affiliates, evaluators and crew, best first." },
       { key: "alerts", label: "Alerts", tabs: [] },
     ],
   },

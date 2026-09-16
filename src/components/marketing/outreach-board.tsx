@@ -102,7 +102,7 @@ export function OutreachBoardView({ board, scope = "everyone" }: { board: Outrea
 
       {tab === "people" && (
         <>
-          <Leaderboard
+          <AffiliateLeaderboard
             standings={board.standings}
             showMoney={scope === "everyone"}
             // Everybody sees the ranking; only the owner opens another person's
@@ -266,7 +266,7 @@ function Table({
  * person with plenty of opens and no bookings can be told to change the
  * words, and a person with no opens can be told to change the room.
  */
-function Leaderboard({
+export function AffiliateLeaderboard({
   standings,
   showMoney,
   canOpen,

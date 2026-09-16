@@ -71,16 +71,15 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           />
         ),
         completed: <JobBoardList jobs={jobsInView(jobs, "completed")} view="completed" />,
-        crew:
-          tab === "crew" ? (
-            <CrewLeaderboard
-              boards={await getCrewBoards().catch((err) => {
-                console.error("Crew leaderboard failed to load:", err);
-                return { recent: [], allTime: [] };
-              })}
-              meId={viewer?.id ?? null}
-            />
-          ) : null,
+        crew: (
+          <CrewLeaderboard
+            boards={await getCrewBoards().catch((err) => {
+              console.error("Crew leaderboard failed to load:", err);
+              return { recent: [], allTime: [] };
+            })}
+            meId={viewer?.id ?? null}
+          />
+        ),
       }}
     />
   );

@@ -14,6 +14,9 @@ import { AutoRefresh } from "@/components/crew/auto-refresh";
 import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
 import { CrewLeaderboard } from "@/components/crew/crew-leaderboard";
 import { getCrewBoards } from "@/lib/data/crew-leaderboard";
+import { LeaderboardsView } from "@/components/leaderboards/leaderboards-view";
+import { getEvaluationBoards } from "@/lib/data/evaluation-leaderboard";
+import { canSeeCompanyMoney } from "@/lib/roles";
 import { getCrewsToday } from "@/lib/data/crews-today";
 import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/open-time";
@@ -128,6 +131,17 @@ export default async function MyDayPage() {
                 <GrowthTab />
               </Suspense>
             ) : null,
+          },
+          // Everybody's standing, on everybody's screen: the person who
+          // wants to know where they rank is the person on the board.
+          {
+            key: "leaderboards",
+            label: "Leaderboards",
+            content: (
+              <Suspense fallback={<TabLoading />}>
+                <LeaderboardsTab />
+              </Suspense>
+            ),
           },
           // Personal settings on the personal screen. They were a nav entry
           // of their own for something nobody opens twice a year.
@@ -546,6 +560,29 @@ async function CrewDay({ profile }: { profile: Profile }) {
           <CrewLeaderboard boards={boards} meId={profile.id} compact />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Affiliates, evaluators and crew, best first. The money columns are the owner's. */
+async function LeaderboardsTab() {
+  const viewer = await getCurrentProfile();
+  if (!viewer) return null;
+  const owner = isOwnerLevel(viewer.roles);
+  const [outreach, evaluations, crew] = await Promise.all([
+    getOutreachBoard(owner ? {} : { onlyProfileId: viewer.id }).catch(() => null),
+    getEvaluationBoards().catch(() => ({ recent: [], allTime: [] })),
+    getCrewBoards().catch(() => ({ recent: [], allTime: [] })),
+  ]);
+  return (
+    <div className="mx-auto max-w-4xl">
+      <LeaderboardsView
+        affiliates={outreach?.standings ?? []}
+        evaluations={evaluations}
+        crew={crew}
+        showMoney={canSeeCompanyMoney(viewer.roles)}
+        meId={viewer.id}
+      />
     </div>
   );
 }
