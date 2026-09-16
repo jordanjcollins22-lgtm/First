@@ -144,3 +144,53 @@ export function keepWordingAsTyped(text: string): string {
     .replace(/[ \t]+/g, " ")
     .trim();
 }
+
+/**
+ * Zones judged together.
+ *
+ * Six lawn areas with the same service and the same words are one decision,
+ * not six. Zones are grouped when their current recommendation is the same
+ * service and the same wording; a zone with its own note usually has its
+ * own wording and stands alone. A group is approved as one; any zone in it
+ * can be declined on its own, which breaks it out with its own round.
+ */
+export interface ReviewGroup {
+  key: string;
+  serviceLabel: string;
+  /** The wording every zone in the group shares. Null while one is being written. */
+  text: string | null;
+  zones: ZoneReview[];
+  /** Every zone in the group has an approved round for what it is now. */
+  settled: boolean;
+  /** Something in the group still needs a yes or no. */
+  open: boolean;
+}
+
+export function groupReviews(reviews: ZoneReview[]): ReviewGroup[] {
+  const groups = new Map<string, ReviewGroup>();
+  for (const review of reviews) {
+    const text = review.current && !review.changed ? review.current.recommendedText.trim() : null;
+    // Only a pending or approved wording groups; a zone with nothing written
+    // yet, or a declined one waiting for its next round, stands alone.
+    const groupable = text != null && review.current != null && (review.current.status === "pending" || review.current.status === "approved");
+    const key = groupable ? `${review.serviceLabel}\u0000${text}` : `zone:${review.zoneIndex}`;
+    const group = groups.get(key) ?? { key, serviceLabel: review.serviceLabel, text: groupable ? text : null, zones: [], settled: true, open: false };
+    group.zones.push(review);
+    group.settled = group.settled && review.settled;
+    group.open = group.open || !review.settled;
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((a, b) => a.zones[0].zoneIndex - b.zones[0].zoneIndex);
+}
+
+/** The group to show next: the first that still needs a decision. */
+export function nextOpenGroup(groups: ReviewGroup[]): ReviewGroup | null {
+  return groups.find((g) => g.open) ?? null;
+}
+
+/** "Zone 3" or "Zones 8, 9 and 10". */
+export function zoneListLabel(zones: { zoneName: string }[]): string {
+  const names = zones.map((z) => z.zoneName);
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}

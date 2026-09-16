@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { dictatedWording, keepWordingAsTyped, nextRound, reviewBlocker, reviewsFor, zonesNeedingDraft, type ScopeRecommendation } from "./scope-review";
+import {
+  dictatedWording,
+  groupReviews,
+  keepWordingAsTyped,
+  nextOpenGroup,
+  nextRound,
+  reviewBlocker,
+  reviewsFor,
+  zoneListLabel,
+  zonesNeedingDraft,
+  type ScopeRecommendation,
+} from "./scope-review";
 
 function rec(over: Partial<ScopeRecommendation>): ScopeRecommendation {
   return {
@@ -105,5 +116,44 @@ describe("dictatedWording", () => {
 
   it("keeps typed wording as typed, bar the dashes", () => {
     expect(keepWordingAsTyped("Trim the hedges — every two weeks.")).toBe("Trim the hedges, every two weeks.");
+  });
+});
+
+describe("grouping zones that say the same thing", () => {
+  const lawns = [
+    { zoneIndex: 0, zoneName: "Zone 1", note: "", serviceLabel: "Lawn Care" },
+    { zoneIndex: 1, zoneName: "Zone 2", note: "", serviceLabel: "Lawn Care" },
+    { zoneIndex: 2, zoneName: "Zone 3", note: "dog spots", serviceLabel: "Lawn Care" },
+    { zoneIndex: 3, zoneName: "Zone 4", note: "", serviceLabel: "Trimming" },
+  ];
+  const same = "Mow, edge and blow off every visit.";
+
+  it("puts identical service and wording together, and the rest on their own", () => {
+    const groups = groupReviews(
+      reviewsFor(lawns, [
+        rec({ zoneIndex: 0, zoneName: "Zone 1", evaluatorNote: "", serviceLabel: "Lawn Care", recommendedText: same }),
+        rec({ zoneIndex: 1, zoneName: "Zone 2", evaluatorNote: "", serviceLabel: "Lawn Care", recommendedText: same }),
+        rec({ zoneIndex: 2, zoneName: "Zone 3", evaluatorNote: "dog spots", serviceLabel: "Lawn Care", recommendedText: "Mow, and treat the dog spots." }),
+        rec({ zoneIndex: 3, zoneName: "Zone 4", evaluatorNote: "", serviceLabel: "Trimming", recommendedText: same }),
+      ])
+    );
+    expect(groups.map((g) => g.zones.map((z) => z.zoneName))).toEqual([["Zone 1", "Zone 2"], ["Zone 3"], ["Zone 4"]]);
+    expect(groups[0].text).toBe(same);
+  });
+
+  it("shows the first open group next, and none once all are settled", () => {
+    const groups = groupReviews(
+      reviewsFor(lawns.slice(0, 2), [
+        rec({ zoneIndex: 0, zoneName: "Zone 1", evaluatorNote: "", serviceLabel: "Lawn Care", recommendedText: same, status: "approved" }),
+        rec({ zoneIndex: 1, zoneName: "Zone 2", evaluatorNote: "", serviceLabel: "Lawn Care", recommendedText: same, status: "approved" }),
+      ])
+    );
+    expect(nextOpenGroup(groups)).toBeNull();
+    expect(nextOpenGroup(groupReviews(reviewsFor(lawns.slice(0, 2), [])))?.zones[0].zoneName).toBe("Zone 1");
+  });
+
+  it("names zones the way a person would", () => {
+    expect(zoneListLabel([{ zoneName: "Zone 3" }])).toBe("Zone 3");
+    expect(zoneListLabel([{ zoneName: "Zone 8" }, { zoneName: "Zone 9" }, { zoneName: "Zone 10" }])).toBe("Zone 8, Zone 9 and Zone 10");
   });
 });
