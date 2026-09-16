@@ -16,6 +16,7 @@ import {
   trackedLink,
   isConverted,
   outreachCommission,
+  rankPeople,
   type OutreachRow,
 } from "@/lib/outreach-links";
 
@@ -268,5 +269,17 @@ describe("what a booking earned the poster", () => {
     expect(isConverted("estimating", 0)).toBe(false);
     expect(isConverted("approved", 0)).toBe(true);
     expect(isConverted("estimating", 100)).toBe(true);
+  });
+});
+
+describe("the leaderboard", () => {
+  const base = { posts: 0, clicked: 0, clicks: 0, replied: 0, bookings: 0, comments: 0, dms: 0, closed: 0, collected: 0, commissionEarned: 0, commissionPaid: 0 };
+  it("puts whoever closed first, then whoever booked, then whoever got opened", () => {
+    const ranked = rankPeople([
+      { ...base, profileId: "a", name: "Ann", posts: 40, clicked: 30 },
+      { ...base, profileId: "b", name: "Bo", posts: 4, bookings: 2, closed: 1, collected: 650 },
+      { ...base, profileId: "c", name: "Cy", posts: 10, bookings: 3 },
+    ]);
+    expect(ranked.map((p) => `${p.rank} ${p.name}`)).toEqual(["1 Bo", "2 Cy", "3 Ann"]);
   });
 });

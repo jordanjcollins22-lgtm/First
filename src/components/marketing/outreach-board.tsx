@@ -26,6 +26,7 @@ import { updateCustomerContact } from "@/lib/actions/customer-actions";
 import { CopyButton } from "@/components/groups/copy-button";
 import { Button } from "@/components/ui/button";
 import type { OutreachBoard, OutreachBooking, OutreachListRow } from "@/lib/data/outreach-links";
+import type { PersonStanding } from "@/lib/outreach-links";
 import { postedVersion, VERSION_LABEL } from "@/lib/posted-comment";
 
 /**
@@ -46,13 +47,14 @@ const CanPayContext = createContext(false);
 export function OutreachBoardView({ board, scope = "everyone" }: { board: OutreachBoard; scope?: "everyone" | "mine" }) {
   const [tab, setTab] = useState<"rooms" | "recent" | "people" | "how">("rooms");
   const [openRoom, setOpenRoom] = useState<string | null>(null);
+  const [openPerson, setOpenPerson] = useState<string | null>(null);
 
   // Who posted what, and who converted, is the owner's table. A person
   // reading their own board has one row on it, which says nothing.
   const tabs = [
     { key: "rooms" as const, label: "Rooms" },
     { key: "recent" as const, label: scope === "mine" ? "My links" : "Every link" },
-    ...(scope === "everyone" ? [{ key: "people" as const, label: "Who posted" }] : []),
+    ...(scope === "everyone" ? [{ key: "people" as const, label: "Leaderboard" }] : []),
     { key: "how" as const, label: "What works" },
   ];
 
@@ -99,15 +101,16 @@ export function OutreachBoardView({ board, scope = "everyone" }: { board: Outrea
       )}
 
       {tab === "people" && (
-        <Table
-          caption="Who handed links out, and what came back: comments and messages answered, and how many booked."
-          rows={board.people.map((person) => ({
-            key: person.profileId,
-            name: person.name,
-            detail: `${person.comments} comment${person.comments === 1 ? "" : "s"} · ${person.dms} DM${person.dms === 1 ? "" : "s"}`,
-            funnel: person,
-          }))}
-        />
+        <>
+          <Leaderboard standings={board.standings} selected={openPerson} onSelect={(id) => setOpenPerson(openPerson === id ? null : id)} />
+          {openPerson && (
+            <PersonDetail
+              standing={board.standings.find((p) => p.profileId === openPerson) ?? null}
+              board={board}
+              onClose={() => setOpenPerson(null)}
+            />
+          )}
+        </>
       )}
 
       {tab === "how" && (
@@ -242,6 +245,132 @@ function Table({
             })}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Everyone who posted, best first.
+ *
+ * Closed is the column that matters and the one the rank is built on: a
+ * booking that became a paid job. The rest is how they got there, so a
+ * person with plenty of opens and no bookings can be told to change the
+ * words, and a person with no opens can be told to change the room.
+ */
+function Leaderboard({
+  standings,
+  selected,
+  onSelect,
+}: {
+  standings: PersonStanding[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  if (standings.length === 0) {
+    return <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Nobody has posted yet.</p>;
+  }
+  return (
+    <section className="rounded-lg border border-border">
+      <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+        Ranked by jobs closed, then money collected, then bookings, then opens. Tap a name for every comment and message they answered.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <th className="p-2 font-medium">#</th>
+              <th className="p-2 font-medium">Who</th>
+              <th className="p-2 text-right font-medium">Comments</th>
+              <th className="p-2 text-right font-medium">DMs</th>
+              <th className="p-2 text-right font-medium">Opened</th>
+              <th className="p-2 text-right font-medium">Answered</th>
+              <th className="p-2 text-right font-medium">Booked</th>
+              <th className="p-2 text-right font-medium">Closed</th>
+              <th className="p-2 text-right font-medium">Collected</th>
+              <th className="p-2 text-right font-medium">Commission</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((p) => {
+              const isOpen = selected === p.profileId;
+              const owed = Math.max(0, p.commissionEarned - p.commissionPaid);
+              return (
+                <tr
+                  key={p.profileId}
+                  onClick={() => onSelect(p.profileId)}
+                  className={cn("cursor-pointer border-b border-border last:border-0 hover:bg-accent/40", isOpen && "bg-primary/5")}
+                >
+                  <td className="p-2 font-semibold tabular-nums text-muted-foreground">{p.rank}</td>
+                  <td className="p-2">
+                    <span className="inline-flex items-center gap-1 font-medium">
+                      {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                      {p.name}
+                    </span>
+                  </td>
+                  <td className="p-2 text-right tabular-nums">{p.comments}</td>
+                  <td className="p-2 text-right tabular-nums">{p.dms}</td>
+                  <td className="p-2 text-right tabular-nums">
+                    {p.clicked}
+                    {clickRate(p) != null && <span className="ml-1 text-xs text-muted-foreground">{Math.round((clickRate(p) as number) * 100)}%</span>}
+                  </td>
+                  <td className="p-2 text-right tabular-nums">{p.replied}</td>
+                  <td className="p-2 text-right tabular-nums">{p.bookings}</td>
+                  <td className={cn("p-2 text-right font-semibold tabular-nums", p.closed > 0 && "text-emerald-700")}>{p.closed}</td>
+                  <td className="p-2 text-right tabular-nums">{p.collected > 0 ? money(p.collected) : "—"}</td>
+                  <td className="p-2 text-right tabular-nums">
+                    {p.commissionEarned > 0 ? (
+                      <>
+                        {money(p.commissionEarned)}
+                        <span className={cn("ml-1 text-xs", owed > 0 ? "text-amber-800" : "text-muted-foreground")}>
+                          {owed > 0 ? `${money(owed)} owed` : "paid"}
+                        </span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** One person, opened: every comment and message they answered, and who booked from them. */
+function PersonDetail({ standing, board, onClose }: { standing: PersonStanding | null; board: OutreachBoard; onClose: () => void }) {
+  if (!standing) return null;
+  const rows = board.rows.filter((row) => row.profileId === standing.profileId);
+  const bookings = rows.flatMap((row) => board.bookingsByCode[row.code] ?? []);
+  return (
+    <section className="rounded-lg border border-primary/40 bg-card/60 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold">
+            #{standing.rank} {standing.name}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {standing.comments} comment{standing.comments === 1 ? "" : "s"} · {standing.dms} DM{standing.dms === 1 ? "" : "s"} · {bookings.length} booked · {standing.closed} closed
+          </p>
+        </div>
+        <button type="button" onClick={onClose} className="text-xs text-muted-foreground underline">
+          Close
+        </button>
+      </div>
+      <div className="mt-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who booked from them</p>
+        <div className="mt-1.5">
+          <BookedPeople bookings={bookings} rows={rows} />
+        </div>
+      </div>
+      <div className="mt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Everything they answered</p>
+        <div className="mt-1.5">
+          {rows.length === 0 ? <p className="text-sm text-muted-foreground">Nothing yet.</p> : <LinkList rows={rows} bookingsByCode={board.bookingsByCode} />}
+        </div>
       </div>
     </section>
   );

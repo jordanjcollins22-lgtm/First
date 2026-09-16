@@ -20,7 +20,9 @@ import {
   type Platform,
   isConverted,
   outreachCommission,
+  rankPeople,
   type OutreachCommission,
+  type PersonStanding,
 } from "@/lib/outreach-links";
 
 /**
@@ -79,6 +81,8 @@ export interface OutreachBoard {
   bookingsByCode: Record<string, OutreachBooking[]>;
   groups: GroupTally[];
   people: (PersonTally & { name: string })[];
+  /** Everyone who posted, best first, with what closed and what it earned. */
+  standings: PersonStanding[];
   kinds: KindTally[];
   pages: PageTally[];
   total: Funnel;
@@ -114,6 +118,7 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
       bookingsByCode: {},
       groups: [],
       people: [],
+      standings: [],
       kinds: [],
       pages: [],
       total: { posts: 0, clicked: 0, clicks: 0, replied: 0, bookings: 0 },
@@ -229,14 +234,30 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
     personName: nameOf.get(row.profile_id) ?? "Somebody",
   }));
 
+  const people = tallyByPerson(rows, bookedCodes).map((person) => ({
+    ...person,
+    name: nameOf.get(person.profileId) ?? "Somebody",
+  }));
+  const allBookings = Object.values(bookingsByCode).flat();
+  const standings = rankPeople(
+    people.map((person) => {
+      const theirs = allBookings.filter((b) => b.posterId === person.profileId);
+      return {
+        ...person,
+        closed: theirs.filter((b) => b.commission.converted).length,
+        collected: theirs.reduce((sum, b) => sum + b.collected, 0),
+        commissionEarned: theirs.reduce((sum, b) => sum + b.commission.earned, 0),
+        commissionPaid: theirs.reduce((sum, b) => sum + b.commission.paidOut, 0),
+      };
+    })
+  );
+
   return {
     rows,
     bookingsByCode,
     groups: tallyByGroup(rows, bookedCodes),
-    people: tallyByPerson(rows, bookedCodes).map((person) => ({
-      ...person,
-      name: nameOf.get(person.profileId) ?? "Somebody",
-    })),
+    people,
+    standings,
     kinds: tallyByKind(rows, bookedCodes),
     pages: tallyByPage(rows, bookedCodes),
     total: totals(rows, bookedCodes),

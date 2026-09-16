@@ -479,3 +479,34 @@ export function outreachCommission(input: { converted: boolean; pct: number | nu
 export function isConverted(jobStatus: string, collected: number): boolean {
   return collected > 0 || ["approved", "in_progress", "completed"].includes(jobStatus);
 }
+
+/** One person on the leaderboard: the funnel, what closed, and what it earned. */
+export interface PersonStanding extends PersonTally {
+  name: string;
+  /** Bookings that became jobs. */
+  closed: number;
+  /** Money the clients on those jobs have paid. */
+  collected: number;
+  commissionEarned: number;
+  commissionPaid: number;
+  rank: number;
+}
+
+/**
+ * Best first. Closing a job beats booking one, which beats getting a link
+ * opened, which beats posting. Ties go to whoever posted more, because the
+ * person still posting is the one still in the game.
+ */
+export function rankPeople(people: Omit<PersonStanding, "rank">[]): PersonStanding[] {
+  return [...people]
+    .sort(
+      (a, b) =>
+        b.closed - a.closed ||
+        b.collected - a.collected ||
+        b.bookings - a.bookings ||
+        b.clicked - a.clicked ||
+        b.posts - a.posts ||
+        a.name.localeCompare(b.name)
+    )
+    .map((p, i) => ({ ...p, rank: i + 1 }));
+}
