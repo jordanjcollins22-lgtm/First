@@ -8,6 +8,10 @@ import { listCalendars } from "@/lib/data/calendars";
 import { listProfiles } from "@/lib/data/team";
 import { getBookingLinksBundle, type BookingLinksBundle } from "@/lib/data/booking-links";
 import { PageTabs } from "@/components/ui/page-tabs";
+import { EvaluationLeaderboard } from "@/components/evaluations/evaluation-leaderboard";
+import { getEvaluationBoards } from "@/lib/data/evaluation-leaderboard";
+import { getCurrentProfile } from "@/lib/data/team";
+import { canSeeCompanyMoney } from "@/lib/roles";
 import { listBusinessLocations } from "@/lib/data/locations";
 import {
   describeWeather,
@@ -67,12 +71,30 @@ export async function CalendarTab({ section = "all" }: { section?: "all" | "cale
   );
 }
 
+/** Who turns visits into jobs. Everyone sees the ranking; the money is the owner's. */
+async function LeaderboardTab() {
+  if (!isSupabaseConfigured) return null;
+  const [profile, boards] = await Promise.all([
+    getCurrentProfile(),
+    getEvaluationBoards().catch((err) => {
+      console.error("Evaluation leaderboard failed to load:", err);
+      return { recent: [], allTime: [] };
+    }),
+  ]);
+  return (
+    <div className="mx-auto max-w-4xl">
+      <EvaluationLeaderboard boards={boards} showMoney={canSeeCompanyMoney(profile?.roles ?? [])} meId={profile?.id ?? null} />
+    </div>
+  );
+}
+
 export default async function EvaluationsPage() {
   return (
     <div className="px-4 py-4 sm:py-6">
       <PageTabs
         tabs={[
           { key: "calendar", label: "Calendar", content: await CalendarTab() },
+          { key: "leaderboard", label: "Leaderboard", content: await LeaderboardTab() },
           // You check the forecast to decide what to book, so it belongs next
           // to what is booked rather than on a page of its own.
           { key: "weather", label: "Weather", content: await WeatherTab() },
