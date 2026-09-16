@@ -273,7 +273,10 @@ async function currentPosition(): Promise<{ lat: number; lng: number } | null> {
         clearTimeout(timer);
         resolve(null);
       },
-      { timeout: 3000, maximumAge: 60_000 }
+      // Eight seconds, not three: a phone coming out of a pocket takes a
+      // moment to find itself, and a tap that gives up early records no
+      // place at all.
+      { timeout: 8000, maximumAge: 60_000 }
     );
   });
 }

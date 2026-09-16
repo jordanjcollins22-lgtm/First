@@ -57,6 +57,28 @@ export async function recordCrewEvent(
     });
     if (error) return { ok: false, message: describeDbError(error) };
 
+    // The tap is a position too, and a better one than the phone's last
+    // report: "arrived at the job" with no GPS fix still means they are at
+    // the job, so the dot goes to the house rather than staying wherever
+    // the phone last managed to say.
+    let here = position ?? null;
+    if (!here && jobId && (kind === "arrived_job" || kind === "finished_job")) {
+      const { data: job } = await supabase.from("jobs").select("property_id, properties(lat, lng)").eq("id", jobId).maybeSingle();
+      const prop = (job as { properties?: { lat: number | null; lng: number | null } | null } | null)?.properties;
+      if (prop?.lat != null && prop?.lng != null) here = { lat: prop.lat, lng: prop.lng };
+    }
+    if (here) {
+      await supabase
+        .from("crew_positions")
+        .upsert(
+          { profile_id: profile.id, organization_id: organizationId, at: new Date().toISOString(), lat: here.lat, lng: here.lng, accuracy_m: position ? null : 0, heading: null },
+          { onConflict: "profile_id" }
+        )
+        .then(({ error: posError }) => {
+          if (posError) console.warn("could not move the dot with the tap:", posError.message);
+        });
+    }
+
     revalidatePath("/today");
     return { ok: true };
   } catch (err) {
