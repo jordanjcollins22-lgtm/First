@@ -32,6 +32,9 @@ import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { CallListPanel } from "@/components/sales/call-list";
 import { CollectPanel } from "@/components/sales/collect-panel";
+import { OutreachForm } from "@/components/marketing/outreach-form";
+import { OutreachBoardView } from "@/components/marketing/outreach-board";
+import { getOutreachBoard } from "@/lib/data/outreach-links";
 import { listPaymentsToCollect, type PaymentToCollect } from "@/lib/data/collections";
 import type { CallList } from "@/lib/call-list";
 import { isAccountManager } from "@/lib/affiliate-roles";
@@ -91,7 +94,13 @@ export default async function MyDayPage() {
 
   const viewer = await getCurrentProfile();
   const day =
-    viewer && isFieldOnly(viewer.roles) ? <CrewDay profile={viewer} /> : await OfficeDay();
+    viewer && isFieldOnly(viewer.roles) ? (
+      <CrewDay profile={viewer} />
+    ) : viewer && isGrowthOnly(viewer.roles) ? (
+      await GrowthDay(viewer)
+    ) : (
+      await OfficeDay()
+    );
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
@@ -123,6 +132,7 @@ export default async function MyDayPage() {
           {
             key: "alerts",
             label: "Alerts",
+            visible: !(viewer && isGrowthOnly(viewer.roles)),
             content: (
               <Suspense fallback={<TabLoading />}>
                 <AlertsTab />
@@ -131,6 +141,51 @@ export default async function MyDayPage() {
           },
         ]}
       />
+    </div>
+  );
+}
+
+/**
+ * Somebody whose whole job is answering neighbours: the office role and
+ * nothing else. Their day is the comment responder, and only that. The
+ * crews, the calls, the tiles and the money are somebody else's day.
+ */
+function isGrowthOnly(roles: string[]): boolean {
+  const held = roles.map((r) => r.toLowerCase().trim());
+  return held.includes("office") && held.every((r) => r === "office");
+}
+
+async function GrowthDay(profile: Profile) {
+  const board = await getOutreachBoard({ onlyProfileId: profile.id }).catch((err) => {
+    console.error("Outreach board failed to load:", err);
+    return null;
+  });
+  const first = (profile.first_name || profile.full_name || "").split(" ")[0];
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
+      <h1 className="text-2xl font-bold">My Day</h1>
+      <p className="mb-4 text-muted-foreground">
+        {first ? `${first}, ` : ""}someone asked for a landscaper? Screenshot it, get the reply, paste it with your link.
+      </p>
+
+      <section className="mb-5 rounded-xl border border-primary/40 bg-primary/5 p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+          <MessageSquarePlus className="h-4 w-4 text-primary" />
+          Answer a comment or message
+        </h2>
+        <OutreachForm />
+      </section>
+
+      {board && board.total.posts > 0 ? (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold">Your links, and what came of them</h2>
+          <OutreachBoardView board={board} scope="mine" />
+        </section>
+      ) : (
+        <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+          Nothing answered yet. The first screenshot you upload starts your list.
+        </p>
+      )}
     </div>
   );
 }
