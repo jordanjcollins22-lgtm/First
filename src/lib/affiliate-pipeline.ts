@@ -21,7 +21,7 @@ export const AFFILIATE_STAGE_LABEL: Record<AffiliateStage, string> = {
   answered: "Answered",
   booked: "Booked",
   closed: "Closed",
-  declined: "Said no",
+  declined: "Said no (link still open)",
 };
 
 /** What a person needs to know about somebody who booked from their link. Contact details stay off the leaderboard. */
