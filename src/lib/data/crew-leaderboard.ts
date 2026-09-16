@@ -26,14 +26,15 @@ export async function getCrewBoards(): Promise<CrewBoards> {
   const jobIds = [...new Set(crewRows.map((r) => r.job_id))];
 
   const [{ data: jobs }, { data: sessions }, { data: tickets }, { data: issues }, { data: profiles }] = await Promise.all([
-    supabase.from("jobs").select("id, status, project_end_date, completed_at").in("id", jobIds),
+    supabase.from("jobs").select("id, status, project_end_date, completed_at, property:properties(address, customer:customers(name))").in("id", jobIds),
     supabase.from("job_work_sessions").select("job_id, starts_on, ends_on, status").in("job_id", jobIds),
     supabase.from("job_tickets").select("job_id, cause").in("job_id", jobIds),
     supabase.from("job_issues").select("job_id, type").in("job_id", jobIds),
     supabase.from("profiles").select("id, full_name, email").eq("organization_id", org),
   ]);
 
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
+  type JobRow = { id: string; status: string; project_end_date: string | null; completed_at: string | null; property: { address: string | null; customer: { name: string } | null } | null };
+  const jobById = new Map(((jobs ?? []) as unknown as JobRow[]).map((j) => [j.id, j]));
   const sessionsByJob = new Map<string, { starts_on: string; ends_on: string; status: string }[]>();
   for (const s of (sessions ?? []) as { job_id: string; starts_on: string; ends_on: string; status: string }[]) {
     sessionsByJob.set(s.job_id, [...(sessionsByJob.get(s.job_id) ?? []), s]);
@@ -56,6 +57,8 @@ export async function getCrewBoards(): Promise<CrewBoards> {
     const days = s.flatMap((x) => [x.starts_on, x.ends_on]).sort();
     const entry: CrewJob = {
       jobId: row.job_id,
+      clientName: job.property?.customer?.name ?? "Client",
+      address: job.property?.address ?? null,
       status: job.status,
       lead: Boolean(row.is_lead),
       sessionsScheduled: s.length,

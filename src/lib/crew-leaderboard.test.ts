@@ -5,6 +5,8 @@ import { finishedOnTime, rankCrew, type CrewJob } from "./crew-leaderboard";
 function job(over: Partial<CrewJob>): CrewJob {
   return {
     jobId: Math.random().toString(36).slice(2),
+    clientName: "A Client",
+    address: null,
     status: "completed",
     lead: false,
     sessionsScheduled: 1,

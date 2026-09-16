@@ -11,6 +11,8 @@
 
 export interface CrewJob {
   jobId: string;
+  clientName: string;
+  address: string | null;
   status: string;
   /** Whether this person led the crew on it. */
   lead: boolean;
@@ -46,6 +48,24 @@ export interface CrewStanding {
   onTime: number;
   late: number;
   onTimeRate: number | null;
+  mistakes: number;
+  callbacks: number;
+  complaints: number;
+  /** Every job in the window, latest first, with how it went. */
+  pipeline: CrewJobLine[];
+}
+
+export interface CrewJobLine {
+  jobId: string;
+  clientName: string;
+  address: string | null;
+  status: string;
+  lead: boolean;
+  lastDay: string | null;
+  daysWorked: number;
+  daysScheduled: number;
+  /** True on time, false late, null not finished or not judged. */
+  onTime: boolean | null;
   mistakes: number;
   callbacks: number;
   complaints: number;
@@ -104,6 +124,22 @@ export function rankCrew(inputs: CrewInput[], options: { since?: Date | null } =
         mistakes: jobs.reduce((sum, j) => sum + j.tickets.filter((t) => t.cause != null && MISTAKE_CAUSES.has(t.cause)).length, 0),
         callbacks: jobs.reduce((sum, j) => sum + j.tickets.length, 0),
         complaints: jobs.reduce((sum, j) => sum + j.issues.filter((i) => COMPLAINT_TYPES.has(i.type)).length, 0),
+        pipeline: [...jobs]
+          .sort((a, b) => (b.lastDay ?? "").localeCompare(a.lastDay ?? ""))
+          .map((j) => ({
+            jobId: j.jobId,
+            clientName: j.clientName,
+            address: j.address,
+            status: j.status,
+            lead: j.lead,
+            lastDay: j.lastDay,
+            daysWorked: j.sessionsDone,
+            daysScheduled: j.sessionsScheduled,
+            onTime: j.status === "completed" ? finishedOnTime(j) : null,
+            mistakes: j.tickets.filter((t) => t.cause != null && MISTAKE_CAUSES.has(t.cause)).length,
+            callbacks: j.tickets.length,
+            complaints: j.issues.filter((i) => COMPLAINT_TYPES.has(i.type)).length,
+          })),
       };
     })
     .filter((s) => s.jobs > 0)

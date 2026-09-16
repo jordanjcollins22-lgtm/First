@@ -57,7 +57,7 @@ export function LeaderboardsView({
         <AffiliateLeaderboard standings={affiliates} showMoney={showMoney} canOpen={() => false} selected={null} onSelect={() => {}} />
       )}
       {tab === "evaluators" && <EvaluationLeaderboard boards={evaluations} showMoney={showMoney} meId={meId} />}
-      {tab === "crew" && <CrewLeaderboard boards={crew} meId={meId} />}
+      {tab === "crew" && <CrewLeaderboard boards={crew} meId={meId} canOpenAll={showMoney} />}
     </div>
   );
 }

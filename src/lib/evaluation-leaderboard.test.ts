@@ -5,6 +5,8 @@ import { rankEvaluators, type EvaluatorJob } from "./evaluation-leaderboard";
 function job(over: Partial<EvaluatorJob>): EvaluatorJob {
   return {
     jobId: Math.random().toString(36).slice(2),
+    clientName: "A Client",
+    address: null,
     evaluationStatus: "completed",
     evaluationDate: "2026-09-01T14:00:00Z",
     proposalSentAt: "2026-09-03T14:00:00Z",

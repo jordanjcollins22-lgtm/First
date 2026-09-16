@@ -24,12 +24,19 @@ export async function getEvaluationBoards(): Promise<EvaluationBoards> {
 
   const { data: jobs, error } = await supabase
     .from("jobs")
-    .select("id, assigned_to, evaluation_status, evaluation_date, status")
+    .select("id, assigned_to, evaluation_status, evaluation_date, status, property:properties(address, customer:customers(name))")
     .not("assigned_to", "is", null)
     .not("evaluation_date", "is", null)
     .limit(5000);
   if (error) throw error;
-  const rows = (jobs ?? []) as { id: string; assigned_to: string; evaluation_status: string | null; evaluation_date: string | null; status: string }[];
+  const rows = (jobs ?? []) as unknown as {
+    id: string;
+    assigned_to: string;
+    evaluation_status: string | null;
+    evaluation_date: string | null;
+    status: string;
+    property: { address: string | null; customer: { name: string } | null } | null;
+  }[];
   if (rows.length === 0) return { recent: [], allTime: [] };
 
   const jobIds = rows.map((j) => j.id);
@@ -68,6 +75,8 @@ export async function getEvaluationBoards(): Promise<EvaluationBoards> {
     const sent = p && p.status !== "draft" ? p.generated_at ?? p.created_at : null;
     person.jobs.push({
       jobId: j.id,
+      clientName: j.property?.customer?.name ?? "Client",
+      address: j.property?.address ?? null,
       evaluationStatus: j.evaluation_status,
       evaluationDate: j.evaluation_date,
       proposalSentAt: sent,

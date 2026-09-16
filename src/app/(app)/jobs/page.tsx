@@ -78,6 +78,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
               return { recent: [], allTime: [] };
             })}
             meId={viewer?.id ?? null}
+            canOpenAll={Boolean(viewer && (viewer.roles.includes("admin") || viewer.roles.includes("owner")))}
           />
         ),
       }}

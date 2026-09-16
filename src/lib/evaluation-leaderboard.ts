@@ -12,6 +12,8 @@
 
 export interface EvaluatorJob {
   jobId: string;
+  clientName: string;
+  address: string | null;
   evaluationStatus: string | null;
   evaluationDate: string | null;
   /** When the proposal went out, if one did. */
@@ -49,6 +51,40 @@ export interface EvaluatorStanding {
   daysToProposal: number | null;
   /** Visits done with no proposal yet: the money left on the table. */
   awaitingProposal: number;
+  /** Every job in the window, newest visit first, with where it got to. */
+  pipeline: EvaluatorJobLine[];
+}
+
+export type EvaluatorStage = "booked" | "cancelled" | "visited" | "proposal" | "closed" | "declined";
+
+export const EVALUATOR_STAGE_LABEL: Record<EvaluatorStage, string> = {
+  booked: "Booked",
+  cancelled: "Cancelled",
+  visited: "Visited, no proposal yet",
+  proposal: "Proposal out",
+  closed: "Closed",
+  declined: "Declined",
+};
+
+export interface EvaluatorJobLine {
+  jobId: string;
+  clientName: string;
+  address: string | null;
+  visitDate: string | null;
+  stage: EvaluatorStage;
+  proposalTotal: number | null;
+  collected: number;
+  /** Days from the visit to the proposal, when both happened. */
+  daysToProposal: number | null;
+}
+
+export function stageOf(job: EvaluatorJob): EvaluatorStage {
+  if (isAccepted(job.proposalStatus)) return "closed";
+  if (job.proposalStatus === "declined") return "declined";
+  if (job.proposalSentAt) return "proposal";
+  if (job.evaluationStatus === "cancelled") return "cancelled";
+  if (job.evaluationStatus === "completed") return "visited";
+  return "booked";
 }
 
 const DAY = 86_400_000;
@@ -96,6 +132,21 @@ export function rankEvaluators(inputs: EvaluatorInput[], options: { since?: Date
         collected: Math.round(jobs.reduce((sum, j) => sum + j.collected, 0)),
         daysToProposal: gaps.length > 0 ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : null,
         awaitingProposal,
+        pipeline: [...jobs]
+          .sort((a, b) => (b.evaluationDate ?? "").localeCompare(a.evaluationDate ?? ""))
+          .map((j) => ({
+            jobId: j.jobId,
+            clientName: j.clientName,
+            address: j.address,
+            visitDate: j.evaluationDate,
+            stage: stageOf(j),
+            proposalTotal: j.proposalTotal,
+            collected: j.collected,
+            daysToProposal:
+              j.proposalSentAt && j.evaluationDate
+                ? Math.max(0, Math.round(((new Date(j.proposalSentAt).getTime() - new Date(j.evaluationDate).getTime()) / DAY) * 10) / 10)
+                : null,
+          })),
       };
     })
     .filter((s) => s.evaluations + s.cancelled + s.upcoming + s.proposals > 0);
