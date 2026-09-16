@@ -5,7 +5,6 @@ import { Check, ChevronDown, ChevronUp, Loader2, RotateCcw, X } from "lucide-rea
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { approveScopeRecommendation, declineScopeRecommendation, loadScopeReviews } from "@/lib/actions/scope-review-actions";
 import { groupReviews, nextOpenGroup, zoneListLabel, type ReviewGroup, type ZoneReview } from "@/lib/scope-review";
 
