@@ -6,9 +6,12 @@ import { reportCrewPosition } from "@/lib/actions/crew-position-actions";
 import { metresBetween } from "@/lib/navigation";
 
 /** How often the phone reports in when it has not moved much. */
-const HEARTBEAT_MS = 60_000;
-/** Moving this far reports straight away. */
-const MOVE_METRES = 150;
+const HEARTBEAT_MS = 20_000;
+/** Moving this far reports straight away: a truck at 30 mph covers it in
+ * three seconds, so the office sees the dot move along the road. */
+const MOVE_METRES = 40;
+/** Never more often than this, however the phone jitters. */
+const MIN_GAP_MS = 4_000;
 
 /**
  * Tells the office where this phone is, while the day is on.
@@ -33,6 +36,7 @@ export function LocationBeacon({ active }: { active: boolean }) {
       const moved = prev ? metresBetween(prev, here) : Infinity;
       const stale = !prev || now - prev.at >= HEARTBEAT_MS;
       if (!force && !stale && moved < MOVE_METRES) return;
+      if (!force && prev && now - prev.at < MIN_GAP_MS) return;
       last.current = { ...here, at: now };
       void reportCrewPosition({
         lat: here.lat,
@@ -47,7 +51,7 @@ export function LocationBeacon({ active }: { active: boolean }) {
       () => {
         // Quiet. Nobody driving needs a red box because one fix was missed.
       },
-      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 }
+      { enableHighAccuracy: true, maximumAge: 3_000, timeout: 20_000 }
     );
 
     // Coming back to the app is worth a fresh report even if nothing moved.

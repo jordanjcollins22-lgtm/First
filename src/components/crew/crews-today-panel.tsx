@@ -24,6 +24,7 @@ export function CrewsTodayPanel({ today, showTicks }: { today: CrewsToday; showT
     .map((c) => {
       const to = c.heading ? today.stops.find((s) => s.jobId === c.heading!.jobId) : null;
       return {
+        profileId: c.profileId,
         name: c.name,
         lat: c.position!.lat,
         lng: c.position!.lng,
