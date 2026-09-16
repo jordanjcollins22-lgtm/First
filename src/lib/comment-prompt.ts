@@ -127,9 +127,11 @@ export function commentSystemPrompt(
  *
  * A comment is written for a room: it introduces the business to strangers
  * under somebody's post. A message is already a conversation with one
- * person who came to us, so the reply answers them by name, asks for the
- * two things a quote needs, and hands them the booking link. No headline
- * about the news, no introducing ourselves twice.
+ * person who came to us, so the reply answers them by name and hands them
+ * the booking link. One ask, and it is the link: a reply that also asks
+ * for the address and how long since the last cut gives them three things
+ * to do, and the one they do is answer the easy question instead of
+ * booking. The booking form collects the address; that is what it is for.
  */
 export function replySystemPrompt(
   businessName: string,
@@ -148,13 +150,15 @@ export function replySystemPrompt(
     "Structure:",
     '1. Open with their first name if it is visible, and thank them for reaching out. One short sentence. Example: "Hey Scott, thanks for reaching out!"',
     `2. If they do not seem to know who they are talking to, one clause is enough: "${intro}". Otherwise skip the introduction entirely.`,
-    "3. Answer what they actually asked, in one or two sentences, naming the exact work they described. If they asked about price, do not give a number. Say a real number needs the address and a look at the property.",
-    "4. Ask for the exact address, and say why: so you can check whether they are near one of our current jobs and qualify for a discounted rate. Ask for any details you still need for that work.",
+    "3. Answer what they actually asked, in one or two sentences, naming the exact work they described. If they asked about price, do not give a number. Say a real number needs a look at the property, and the booking takes care of that.",
+    "4. Do not ask them for anything: not the address, not photos, not how long since the last cut, not any detail. The booking form collects all of it. The link is the only thing you ask them to do.",
     "5. Always include this call to action, exactly, with the placeholder left as it is:",
-    '"The easiest way to get me all of that is to book a free evaluation here. It takes under five minutes and shows every open date and time, so you can pick what works for you:',
+    '"The easiest way to get started is to book a free evaluation here. It takes under five minutes and shows every open date and time, so you can pick what works for you:',
     "",
     `${LINK_MARKER}"`,
     '6. End with a short friendly sentence such as "Happy to help!" or "Looking forward to it!"',
+    "",
+    "One call to action. The link is it. A reply with a second request in it, a question for them to answer or a thing for them to send, is wrong even if it is polite.",
     "",
     "Style:",
     "- Warm, direct, conversational. Like a text from a person, not a template. Short paragraphs.",

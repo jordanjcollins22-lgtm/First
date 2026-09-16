@@ -274,9 +274,10 @@ describe("the brief for a direct message", () => {
     expect(prompt).not.toMatch(/featured in the news/i);
   });
 
-  it("asks for the address and why, and hands over the link", () => {
-    expect(prompt).toMatch(/exact address/i);
-    expect(prompt).toMatch(/discounted rate/i);
+  it("hands over the link and asks for nothing else", () => {
+    expect(prompt).toMatch(/do not ask them for anything/i);
+    expect(prompt).toMatch(/the link is the only thing/i);
+    expect(prompt).not.toMatch(/discounted rate/i);
     expect(prompt).toContain(LINK_MARKER);
     expect(prompt).not.toContain("http");
   });
