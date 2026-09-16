@@ -8,6 +8,9 @@ import { jobStanding } from "@/lib/data/job-readiness";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ModuleShell } from "@/components/module-shell";
 import { JobBoardList } from "@/components/jobs/job-board-list";
+import { CrewLeaderboard } from "@/components/crew/crew-leaderboard";
+import { getCrewBoards } from "@/lib/data/crew-leaderboard";
+import { getCurrentProfile } from "@/lib/data/team";
 
 /**
  * The work we sold, and where each piece of it is.
@@ -23,8 +26,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab } = await searchParams;
 
-  const { allowed } = await checkTabAccess("job-detail");
+  const { allowed, profile } = await checkTabAccess("job-detail");
   if (!allowed) redirect("/my-day");
+  const viewer = profile ?? (await getCurrentProfile());
 
   const jobs = await listBoardJobs().catch(() => []);
   // Both computed, never stored: Ready is the pre-start checks passing, and
@@ -67,6 +71,16 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           />
         ),
         completed: <JobBoardList jobs={jobsInView(jobs, "completed")} view="completed" />,
+        crew:
+          tab === "crew" ? (
+            <CrewLeaderboard
+              boards={await getCrewBoards().catch((err) => {
+                console.error("Crew leaderboard failed to load:", err);
+                return { recent: [], allTime: [] };
+              })}
+              meId={viewer?.id ?? null}
+            />
+          ) : null,
       }}
     />
   );

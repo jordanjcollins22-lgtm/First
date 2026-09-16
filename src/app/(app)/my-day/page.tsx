@@ -12,6 +12,8 @@ import { LoadoutPanel } from "@/components/crew/loadout-panel";
 import { LocationBeacon } from "@/components/crew/location-beacon";
 import { AutoRefresh } from "@/components/crew/auto-refresh";
 import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
+import { CrewLeaderboard } from "@/components/crew/crew-leaderboard";
+import { getCrewBoards } from "@/lib/data/crew-leaderboard";
 import { getCrewsToday } from "@/lib/data/crews-today";
 import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/open-time";
@@ -493,6 +495,9 @@ async function CrewDay({ profile }: { profile: Profile }) {
   // truck leaves. It sits above the board until they have left the shop and
   // folds up after, because by then it is either on the truck or it is not.
   const loadout = await getLoadout(profile.id, day.day).catch(() => null);
+  // Where they stand against the rest of the crew: jobs finished, on time,
+  // and what came back. Nothing money on it, so it is theirs to see.
+  const boards = await getCrewBoards().catch(() => null);
   const phase = readDay(day.events, day.stops).phase;
   const loading = phase === "before_shop" || phase === "at_shop";
 
@@ -536,6 +541,11 @@ async function CrewDay({ profile }: { profile: Profile }) {
           events={day.events}
         />
       </div>
+      {boards && (boards.recent.length > 0 || boards.allTime.length > 0) && (
+        <div className="mt-4">
+          <CrewLeaderboard boards={boards} meId={profile.id} compact />
+        </div>
+      )}
     </div>
   );
 }

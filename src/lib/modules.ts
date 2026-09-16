@@ -118,6 +118,7 @@ export const MODULES: readonly AppModule[] = [
       { key: "active", label: "Active", tabs: ["job-detail"], blurb: "Being worked on now." },
       { key: "attention", label: "Needs attention", tabs: ["job-detail"], blurb: "Something unresolved is stopping these, whatever else they are." },
       { key: "completed", label: "Completed", tabs: ["job-detail"], blurb: "Finished work." },
+      { key: "crew", label: "Crew", tabs: ["job-detail"], blurb: "Who gets the work done, and done right." },
     ],
   },
   {

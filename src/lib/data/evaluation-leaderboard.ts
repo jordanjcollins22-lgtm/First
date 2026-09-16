@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadMoney } from "@/lib/data/commission";
 import { rankEvaluators, type EvaluatorInput, type EvaluatorStanding } from "@/lib/evaluation-leaderboard";
+import { isFieldOnly } from "@/lib/affiliate-roles";
 
 /**
  * Every evaluation with somebody on it, and what came of each.
@@ -32,7 +33,7 @@ export async function getEvaluationBoards(): Promise<EvaluationBoards> {
   if (rows.length === 0) return { recent: [], allTime: [] };
 
   const jobIds = rows.map((j) => j.id);
-  const [{ data: proposals }, { data: profiles }, money] = await Promise.all([
+  const [{ data: proposals }, { data: profiles }, money, { data: roleRows }] = await Promise.all([
     supabase
       .from("job_proposals")
       .select("job_id, status, total_cost, discount_amount, generated_at, responded_at, created_at")
@@ -40,7 +41,17 @@ export async function getEvaluationBoards(): Promise<EvaluationBoards> {
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name, email").eq("organization_id", org),
     loadMoney(jobIds),
+    supabase.from("profile_roles").select("profile_id, role_name"),
   ]);
+
+  // A crew member put on a job as its assignee did not do the evaluation;
+  // the visit was somebody else's and the proposal was somebody else's
+  // writing. Only office people are judged here.
+  const rolesOf = new Map<string, string[]>();
+  for (const r of (roleRows ?? []) as { profile_id: string; role_name: string }[]) {
+    rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  }
+  const evaluates = (profileId: string) => !isFieldOnly(rolesOf.get(profileId) ?? []);
 
   // Latest proposal per job.
   const latest = new Map<string, { status: string; total_cost: number | null; discount_amount: number | null; generated_at: string | null; responded_at: string | null; created_at: string }>();
@@ -51,6 +62,7 @@ export async function getEvaluationBoards(): Promise<EvaluationBoards> {
 
   const byPerson = new Map<string, EvaluatorInput>();
   for (const j of rows) {
+    if (!evaluates(j.assigned_to)) continue;
     const person = byPerson.get(j.assigned_to) ?? { profileId: j.assigned_to, name: nameOf.get(j.assigned_to) ?? "Somebody", jobs: [] };
     const p = latest.get(j.id) ?? null;
     const sent = p && p.status !== "draft" ? p.generated_at ?? p.created_at : null;
