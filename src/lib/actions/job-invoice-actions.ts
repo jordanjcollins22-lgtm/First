@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isStripeConfigured } from "@/lib/env";
 import { createAndSendInvoice } from "@/lib/invoicing";
+import { agreedTotal } from "@/lib/agreed-total";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 
@@ -36,7 +37,7 @@ export async function raiseInvoiceForJob(jobId: string): Promise<RaiseResult> {
   // does, and a job with no proposal is not one there is anything to bill for.
   const { data: proposal } = await admin
     .from("job_proposals")
-    .select("id, status, total_cost, organization_id")
+    .select("id, status, total_cost, discount_amount, organization_id")
     .eq("job_id", jobId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
@@ -50,7 +51,9 @@ export async function raiseInvoiceForJob(jobId: string): Promise<RaiseResult> {
     return { ok: false, message: "Nobody has accepted this proposal yet." };
   }
 
-  const amount = Number(proposal.total_cost ?? 0);
+  // The price after the discount. Billing the price before it is how a
+  // client who took a pre-book special got an invoice for the full amount.
+  const amount = agreedTotal(proposal) ?? 0;
   if (!(amount > 0)) return { ok: false, message: "The proposal has no total to bill." };
 
   // Checked here as well as inside, so somebody clicking twice is told what

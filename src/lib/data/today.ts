@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { isTheirs } from "@/lib/dashboard";
@@ -64,7 +65,7 @@ export async function getToday(
     safe(
       supabase
         .from("job_proposals")
-        .select("job_id, status, total_cost, responded_at")
+        .select("job_id, status, total_cost, discount_amount, responded_at")
         .in("job_id", jobIds)
     ),
     safe(supabase.from("invoices").select("id, job_id, amount, paid_at, status").in("job_id", jobIds)),
@@ -99,6 +100,7 @@ export async function getToday(
     job_id: string;
     status: string;
     total_cost: number | null;
+    discount_amount: number | null;
     responded_at: string | null;
   }[]) {
     if (row.status !== "accepted") continue;
@@ -110,7 +112,7 @@ export async function getToday(
       jobId: job.id,
       customerName: job.property.customer.name,
       address: job.property.address,
-      value: row.total_cost,
+      value: agreedTotal(row),
       at: row.responded_at!,
       soldById,
       soldBy: soldById ? (nameOf.get(soldById) ?? null) : null,

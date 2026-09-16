@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { listProfiles } from "@/lib/data/team";
@@ -48,7 +49,7 @@ export async function loadJobInputs(options: DashboardOptions = {}): Promise<Das
   const [{ data: proposals }, profiles] = await Promise.all([
     supabase
       .from("job_proposals")
-      .select("job_id, status, total_cost")
+      .select("job_id, status, total_cost, discount_amount")
       .in(
         "job_id",
         jobs.map((j) => j.id)
@@ -57,7 +58,7 @@ export async function loadJobInputs(options: DashboardOptions = {}): Promise<Das
   ]);
 
   const proposalByJob = new Map(
-    ((proposals ?? []) as { job_id: string; status: string; total_cost: number | null }[]).map((p) => [p.job_id, p])
+    ((proposals ?? []) as { job_id: string; status: string; total_cost: number | null; discount_amount: number | null }[]).map((p) => [p.job_id, p])
   );
   const nameById = new Map(profiles.map((p) => [p.id, p.full_name || p.email]));
 
@@ -95,7 +96,7 @@ export async function loadJobInputs(options: DashboardOptions = {}): Promise<Das
         kind: job.dispute_kind ?? null,
         reason: job.dispute_reason ?? null,
       },
-      value: proposal?.total_cost ?? null,
+      value: agreedTotal(proposal),
       personName: job.assigned_to ? (nameById.get(job.assigned_to) ?? null) : null,
     };
   });

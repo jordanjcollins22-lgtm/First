@@ -1,3 +1,4 @@
+import { agreedTotalCents } from "@/lib/agreed-total";
 import Stripe from "stripe";
 
 import { createClient } from "@/lib/supabase/server";
@@ -128,7 +129,7 @@ async function owedByClients(organizationId: string): Promise<number> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("job_proposals")
-    .select("job_id, total_cost, paid_at")
+    .select("job_id, total_cost, discount_amount, paid_at")
     .eq("organization_id", organizationId)
     .eq("status", "accepted");
 
@@ -149,7 +150,7 @@ async function owedByClients(organizationId: string): Promise<number> {
 
   let owed = 0;
   for (const proposal of proposals) {
-    const totalCents = proposal.total_cost == null ? null : Math.round(Number(proposal.total_cost) * 100);
+    const totalCents = agreedTotalCents(proposal);
     const collectedCents = paidByJob.get(proposal.job_id) ?? 0;
     const facts = { totalCents, collectedCents, settledAt: proposal.paid_at };
     if (paymentState(facts) === "paid") continue;

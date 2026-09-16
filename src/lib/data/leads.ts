@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import {
@@ -84,7 +85,7 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
   const [{ data: proposals }, { data: waves }] = await Promise.all([
     supabase
       .from("job_proposals")
-      .select("job_id, status, total_cost, approved_at")
+      .select("job_id, status, total_cost, discount_amount, approved_at")
       .in(
         "job_id",
         jobs.map((j) => j.id)
@@ -93,7 +94,7 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
   ]);
 
   const proposalByJob = new Map(
-    ((proposals ?? []) as { job_id: string; status: string; total_cost: number | null; approved_at: string | null }[]).map(
+    ((proposals ?? []) as { job_id: string; status: string; total_cost: number | null; discount_amount: number | null; approved_at: string | null }[]).map(
       (p) => [p.job_id, p]
     )
   );
@@ -105,8 +106,9 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
     .map((job) => {
       const proposal = proposalByJob.get(job.id);
       const won = job.status === "completed" || proposal?.status === "accepted";
-      if (!won || !proposal?.total_cost) return null;
-      return { acreage: job.property.acreage ?? null, total: Number(proposal.total_cost) };
+      const total = agreedTotal(proposal);
+      if (!won || !total) return null;
+      return { acreage: job.property.acreage ?? null, total };
     })
     .filter((s): s is { acreage: number | null; total: number } => s !== null);
 
@@ -119,7 +121,7 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
       {
         jobStatus: job.status,
         proposalStatus: proposal?.status ?? null,
-        proposalTotal: proposal?.total_cost != null ? Number(proposal.total_cost) : null,
+        proposalTotal: agreedTotal(proposal),
         evaluationStatus: job.evaluation_status,
         evaluationDate: job.evaluation_date,
         lastActivity: proposal?.approved_at ?? job.evaluation_date ?? job.updated_at,
@@ -156,7 +158,7 @@ export async function getLeadEngine(): Promise<LeadEngineData> {
   for (const job of jobs) {
     const proposal = proposalByJob.get(job.id);
     const won = job.status === "completed" || proposal?.status === "accepted";
-    const total = proposal?.total_cost != null ? Number(proposal.total_cost) : null;
+    const total = agreedTotal(proposal);
 
     const source = job.source_attractor_wave_id
       ? (waveNames.get(job.source_attractor_wave_id) ?? "Marketing wave")

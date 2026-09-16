@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/pagination";
 import { buildContactTree, type ContactNode } from "@/lib/contact-tree";
@@ -35,7 +36,7 @@ export async function getContactTree(): Promise<ContactNode[]> {
         .range(from, to)
     ),
     fetchAllRows((from, to) =>
-      supabase.from("job_proposals").select("job_id, status, total_cost").range(from, to)
+      supabase.from("job_proposals").select("job_id, status, total_cost, discount_amount").range(from, to)
     ),
   ]);
 
@@ -91,6 +92,7 @@ export async function getContactTree(): Promise<ContactNode[]> {
       job_id: string;
       status: string;
       total_cost: number | null;
-    }[]).map((p) => ({ jobId: p.job_id, status: p.status, totalCost: p.total_cost })),
+      discount_amount: number | null;
+    }[]).map((p) => ({ jobId: p.job_id, status: p.status, totalCost: agreedTotal(p) })),
   });
 }

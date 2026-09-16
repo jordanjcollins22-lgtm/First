@@ -1,3 +1,4 @@
+import { agreedTotalCents } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { viewsForAllProposals } from "@/lib/data/proposal-views";
@@ -27,7 +28,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
   const { data: rows } = await supabase
     .from("job_proposals")
     .select(
-      "id, job_id, status, total_cost, approved_at, responded_at, client_response_note, scope_snapshot, job:jobs(id, status, declined_at, cancelled_at, property:properties(address, customer:customers(id, name, phone, account_manager_id, do_not_contact)))"
+      "id, job_id, status, total_cost, discount_amount, approved_at, responded_at, client_response_note, scope_snapshot, job:jobs(id, status, declined_at, cancelled_at, property:properties(address, customer:customers(id, name, phone, account_manager_id, do_not_contact)))"
     )
     .eq("organization_id", organizationId)
     // Sent and unanswered only. A declined proposal is over, whether the
@@ -42,6 +43,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
     job_id: string;
     status: "sent" | "declined";
     total_cost: number | null;
+    discount_amount: number | null;
     approved_at: string | null;
     responded_at: string | null;
     client_response_note: string | null;
@@ -135,7 +137,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
       phone: customer.phone,
       address: p.job?.property?.address ?? "",
       status: p.status,
-      totalCents: p.total_cost != null ? Math.round(Number(p.total_cost) * 100) : null,
+      totalCents: agreedTotalCents(p),
       sentAt: p.approved_at,
       respondedAt: p.responded_at,
       responseNote: p.client_response_note,

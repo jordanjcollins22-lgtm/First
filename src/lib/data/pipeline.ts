@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { isOnPipeline, pipelinePosition, type PipelineOverride, type PipelineStage } from "@/lib/pipeline";
@@ -46,7 +47,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
   const [{ data: proposals }, views] = await Promise.all([
     supabase
       .from("job_proposals")
-      .select("id, job_id, status, total_cost, paid_at")
+      .select("id, job_id, status, total_cost, discount_amount, paid_at")
       .in(
         "job_id",
         jobs.map((j) => j.id)
@@ -63,6 +64,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         job_id: string;
         status: string;
         total_cost: number | null;
+        discount_amount: number | null;
         paid_at: string | null;
       }[]
     ).map((p) => [p.job_id, p])
@@ -115,7 +117,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         stage: position.stage,
         status: position.status,
         actionable: position.actionable,
-        value: proposal?.total_cost ?? null,
+        value: agreedTotal(proposal),
         date:
           position.stage === "evaluation"
             ? job.evaluation_date

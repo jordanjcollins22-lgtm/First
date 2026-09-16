@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -790,7 +791,7 @@ export default async function JobPage({
                     jobId={jobId}
                     invoice={invoice}
                     acceptedLabel={respondedLabel}
-                    agreedTotal={proposal?.total_cost ?? null}
+                    agreedTotal={agreedTotal(proposal)}
                     stripeReady={isStripeConfigured}
                   />
                 )}
@@ -826,7 +827,7 @@ export default async function JobPage({
                 jobId={jobId}
                 invoice={invoice}
                 acceptedLabel={respondedLabel}
-                agreedTotal={proposal?.total_cost ?? null}
+                agreedTotal={agreedTotal(proposal)}
                 stripeReady={isStripeConfigured}
               />
             ),

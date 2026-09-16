@@ -8,6 +8,7 @@ import {
   type CommissionSummary,
 } from "@/lib/commission";
 import type { Profile } from "@/types/domain";
+import { agreedTotal } from "@/lib/agreed-total";
 
 async function safe<T>(query: PromiseLike<{ data: T[] | null }>): Promise<T[]> {
   try {
@@ -54,7 +55,7 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     safe(
       supabase.from("ledger_entries").select("job_id, amount, direction").eq("direction", "in").in("job_id", jobIds)
     ),
-    safe(supabase.from("job_proposals").select("job_id, total_cost").in("job_id", jobIds)),
+    safe(supabase.from("job_proposals").select("job_id, total_cost, discount_amount").in("job_id", jobIds)),
     safe(supabase.from("job_tickets").select("job_id, status").in("job_id", jobIds)),
     safe(supabase.from("commission_payouts").select("job_id, amount, paid_at").in("job_id", jobIds)),
     // The payments table is where Stripe and the hand-recorded cheques both
@@ -110,7 +111,12 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
   }
 
   const contract = new Map<string, number | null>(
-    (proposals as { job_id: string; total_cost: number | null }[]).map((p) => [p.job_id, p.total_cost])
+    // After the discount. Against the full price a discounted job reads as
+    // short forever, and its commission never stops "still to come".
+    (proposals as { job_id: string; total_cost: number | null; discount_amount: number | null }[]).map((p) => [
+      p.job_id,
+      agreedTotal(p),
+    ])
   );
 
   const openTickets = new Map<string, number>();

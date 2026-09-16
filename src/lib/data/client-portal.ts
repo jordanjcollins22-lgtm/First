@@ -1,3 +1,4 @@
+import { agreedTotal, agreedTotalCents } from "@/lib/agreed-total";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { orderProjects, type ClientProject, type ProjectStage } from "@/lib/client-portal";
@@ -85,7 +86,7 @@ export async function projectsForClient(customerId: string): Promise<ClientProje
   const [{ data: proposals }, { data: payments }, { data: observers }] = await Promise.all([
     admin
       .from("job_proposals")
-      .select("job_id, token, status, total_cost, paid_at")
+      .select("job_id, token, status, total_cost, discount_amount, paid_at")
       .in("job_id", jobIds),
     admin.from("payments").select("job_id, amount_cents, surcharge_cents").in("job_id", jobIds),
     admin.from("job_observers").select("job_id, token, revoked_at").in("job_id", jobIds),
@@ -105,7 +106,7 @@ export async function projectsForClient(customerId: string): Promise<ClientProje
   return orderProjects(
     rows.map((job) => {
       const proposal = proposalOf.get(job.id) ?? null;
-      const totalCents = proposal?.total_cost == null ? 0 : Math.round(Number(proposal.total_cost) * 100);
+      const totalCents = agreedTotalCents(proposal) ?? 0;
       const collected = paidOf.get(job.id) ?? 0;
       const settled = Boolean(proposal?.paid_at);
 
@@ -119,7 +120,7 @@ export async function projectsForClient(customerId: string): Promise<ClientProje
         // writing is not one of them.
         proposalToken: proposal && proposal.status !== "needs_approval" ? proposal.token : null,
         proposalStatus: proposal?.status ?? null,
-        totalCost: proposal?.total_cost == null ? null : Number(proposal.total_cost),
+        totalCost: agreedTotal(proposal),
         outstandingCents: settled ? 0 : Math.max(0, totalCents - collected),
         progressToken: progressOf.get(job.id) ?? null,
         updatedAt: job.updated_at ?? job.created_at ?? new Date().toISOString(),

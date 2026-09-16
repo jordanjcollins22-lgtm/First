@@ -1,3 +1,4 @@
+import { agreedTotal } from "@/lib/agreed-total";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { normalizeAddress } from "@/lib/dedupe";
@@ -58,13 +59,13 @@ export async function growProspects(
       .select("id, status, updated_at, project_end_date, property_id, properties(address, lat, lng)")
       .in("status", ["completed", "approved", "in_progress"]),
     supabase.from("business_locations").select("id, name, lat, lng"),
-    supabase.from("job_proposals").select("job_id, status, total_cost"),
+    supabase.from("job_proposals").select("job_id, status, total_cost, discount_amount"),
   ]);
 
   const totalByJob = new Map(
-    ((proposals ?? []) as { job_id: string; status: string; total_cost: number | null }[])
+    ((proposals ?? []) as { job_id: string; status: string; total_cost: number | null; discount_amount: number | null }[])
       .filter((p) => p.status === "accepted")
-      .map((p) => [p.job_id, p.total_cost != null ? Number(p.total_cost) : null])
+      .map((p) => [p.job_id, agreedTotal(p)])
   );
 
   const jobSeeds: SeedCandidate[] = (
