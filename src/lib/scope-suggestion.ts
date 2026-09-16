@@ -191,3 +191,22 @@ export function cleanTidyText(raw: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/**
+ * Writing the line again after somebody said no.
+ *
+ * The same job as the first draft with two more facts: what was proposed
+ * last time, and why it was declined. The reason is the instruction; the
+ * evaluator's note is still the only source of what the work is.
+ */
+export function revisionSystemPrompt(): string {
+  return [
+    systemPrompt(),
+    "",
+    "This is a rewrite. You are given the previous line and the reason it was declined. Fix what the reason names and keep what it does not. Do not add work the evaluator's notes do not support, even if the reason seems to ask for it; say less rather than invent.",
+  ].join("\n");
+}
+
+export function revisionBriefFor(zone: ZoneBrief, previous: string, reason: string): string {
+  return [briefFor(zone), "", `Previous line: ${previous.trim()}`, `Why it was declined: ${reason.trim()}`].join("\n");
+}

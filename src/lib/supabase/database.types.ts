@@ -3468,6 +3468,33 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["operations_targets"]["Row"]>;
         Relationships: [];
       };
+      scope_recommendations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          zone_index: number;
+          zone_name: string;
+          round: number;
+          evaluator_note: string;
+          recommended_text: string;
+          status: string;
+          decline_reason: string | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["scope_recommendations"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          zone_index: number;
+          zone_name: string;
+          evaluator_note: string;
+          recommended_text: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scope_recommendations"]["Row"]>;
+        Relationships: [];
+      };
       ghl_sync_state: {
         Row: {
           organization_id: string;

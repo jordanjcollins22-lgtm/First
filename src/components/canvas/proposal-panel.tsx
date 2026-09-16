@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DiscountSelect } from "@/components/canvas/discount-select";
 import { ViewCount } from "@/components/proposal/view-count";
+import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
 import { suggestZoneScope, tidyZoneScope } from "@/lib/actions/scope-suggestion-actions";
@@ -89,6 +90,8 @@ export function ProposalPanel({
   const [copied, setCopied] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [editing, setEditing] = useState(false);
+  /** Whether every zone the evaluator wrote on has an approved recommendation. */
+  const [reviewSettled, setReviewSettled] = useState<boolean | null>(null);
   const [draftTotal, setDraftTotal] = useState("");
   const [draftZones, setDraftZones] = useState<ProposalZoneSnapshot[]>([]);
   const [draftDiscountId, setDraftDiscountId] = useState<string | null>(null);
@@ -559,9 +562,18 @@ export function ProposalPanel({
           )}
 
           {proposal.status === "needs_approval" && !editing && (
-            <Button type="button" className="self-start" disabled={isPending} onClick={handleApprove}>
-              Approve &amp; send to client
-            </Button>
+            <>
+              <ScopeReviewPanel jobId={jobId} onSettled={setReviewSettled} />
+              <Button
+                type="button"
+                className="self-start"
+                disabled={isPending || reviewSettled === false}
+                title={reviewSettled === false ? "Approve or decline every zone's recommended scope first." : undefined}
+                onClick={handleApprove}
+              >
+                Approve &amp; send to client
+              </Button>
+            </>
           )}
 
           {showBreakdown && !editing && (

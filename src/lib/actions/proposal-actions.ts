@@ -22,6 +22,8 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import type { Database } from "@/lib/supabase/database.types";
+import { listScopeRecommendations } from "@/lib/data/scope-reviews";
+import { reviewBlocker, reviewsFor } from "@/lib/scope-review";
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -92,10 +94,19 @@ export async function generateProposal(
       def,
       pricing: pricingRow ? { name: pricingRow.name, scopeTemplate: pricingRow.scope_template } : undefined,
       values: zone.service?.values ?? {},
-      notes: zone.service?.notes,
+      // The evaluator's note is for us, not the client. It used to go here
+      // and straight onto the proposal. It stays on the design, and what
+      // the client reads is the recommendation the office approved.
+      notes: undefined,
     };
   });
   const scopeTexts = scopesForZones(scopeInputs);
+  const approved = new Map(
+    (await listScopeRecommendations(jobId).catch(() => []))
+      .filter((r) => r.status === "approved")
+      .sort((a, b) => a.round - b.round)
+      .map((r) => [r.zoneName, r.recommendedText])
+  );
 
   const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone, index) => {
     const def = scopeInputs[index].def;
@@ -108,7 +119,7 @@ export async function generateProposal(
     return {
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricing),
-      scopeText: scopeTexts[index],
+      scopeText: approved.get(zone.name) ?? scopeTexts[index],
       photoPaths: zone.service?.photos ?? [],
       points: zone.points,
       color: zone.color,
@@ -252,6 +263,18 @@ export async function updateProposalDraft(
 export async function approveProposal(jobId: string) {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
+
+  // Every zone the evaluator wrote on has to have an approved recommendation
+  // standing for it. A proposal sent with a zone still under review sends
+  // the template wording for that zone, which is not what anybody meant.
+  const design = await getCanvasDesignForJob(jobId);
+  if (design) {
+    const zones = (design.zones as unknown as WorkZone[])
+      .filter((z) => z.service)
+      .map((z, zoneIndex) => ({ zoneIndex, zoneName: z.name, note: (z.service?.notes ?? "").trim() }));
+    const blocker = reviewBlocker(reviewsFor(zones, await listScopeRecommendations(jobId).catch(() => [])));
+    if (blocker) throw new Error(blocker);
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
