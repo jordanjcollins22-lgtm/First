@@ -625,6 +625,35 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["job_photo_waivers"]["Row"]>;
         Relationships: [];
       };
+      sub_quote_requests: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          token: string;
+          service_label: string;
+          areas: Json;
+          note: string | null;
+          status: string;
+          contractor_name: string | null;
+          contractor_phone: string | null;
+          contractor_email: string | null;
+          quote_amount: number | null;
+          quote_note: string | null;
+          quoted_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["sub_quote_requests"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          token: string;
+          service_label: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sub_quote_requests"]["Row"]>;
+        Relationships: [];
+      };
       rank_keywords: {
         Row: {
           id: string;

@@ -24,10 +24,12 @@ import type { Database } from "./database.types";
 // /u is the unsubscribe link in an email. Somebody clicking it does not have
 // an account, and a sign-in wall in front of an unsubscribe is how an
 // unsubscribe becomes a spam report.
+// /quote is a subcontractor's price page: what we want done, the photos,
+// and a box for their number. They have no account either.
 // /my is a client's own corner. It signs them in itself with an emailed code
 // and shows one customer's work, so the staff sign-in wall in front of it
 // would bounce exactly the people it is for.
-export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer"] as const;
+export const PUBLIC_PREFIXES = ["/login", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

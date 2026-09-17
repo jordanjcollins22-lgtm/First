@@ -64,6 +64,10 @@ import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { LocationPanel } from "@/components/canvas/location-panel";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
+import { SubQuotesPanel } from "@/components/job/sub-quotes-panel";
+import { listSubQuoteRequests } from "@/lib/data/sub-quotes";
+import { serviceGroups } from "@/lib/sub-quotes";
+import type { ProposalZoneSnapshot } from "@/types/domain";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { BackLink } from "@/components/ui/back-link";
@@ -498,6 +502,10 @@ export default async function JobPage({
   }
 
   const host = headersList.get("host") ?? "";
+  // Price requests to subcontractors, one per service on the proposal.
+  const subQuoteRequests = proposal ? await listSubQuoteRequests(jobId).catch(() => []) : [];
+  const subQuoteGroups = serviceGroups(((proposal?.scope_snapshot ?? []) as unknown) as ProposalZoneSnapshot[]);
+
   const baseUrl = resolveBaseUrl({
     configured: env.appUrl,
     productionDomain: env.productionDomain,
@@ -602,21 +610,24 @@ export default async function JobPage({
             lockedReason:
               can.proposal.available || proposal ? null : can.proposal.reason,
             body: (
-              <ProposalPanel
-                jobId={jobId}
-                proposal={proposal}
-                baseUrl={baseUrl}
-                labourCost={labourCost}
-                markup={catalog.markup}
-                materialsCost={materialsCost}
-                zones={zoneBreakdowns}
-                discounts={discounts}
-                viewLabel={proposalViewHint}
-                viewsWarm={
-                  proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
-                }
-                respondedLabel={respondedLabel}
-              />
+              <div className="flex flex-col gap-4">
+                <ProposalPanel
+                  jobId={jobId}
+                  proposal={proposal}
+                  baseUrl={baseUrl}
+                  labourCost={labourCost}
+                  markup={catalog.markup}
+                  materialsCost={materialsCost}
+                  zones={zoneBreakdowns}
+                  discounts={discounts}
+                  viewLabel={proposalViewHint}
+                  viewsWarm={
+                    proposalViews ? isWarm(proposalViews, proposal?.status ?? "") : false
+                  }
+                  respondedLabel={respondedLabel}
+                />
+                {proposal && <SubQuotesPanel jobId={jobId} groups={subQuoteGroups} requests={subQuoteRequests} />}
+              </div>
             ),
           }]),
           ...(!seen.jobMoney || !proposalAttention ? [] : [{
