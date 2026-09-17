@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildLoadout, type Loadout, type LoadoutCheck, type LoadoutSession, type LoadoutTool } from "@/lib/loadout";
 import { readDay, type CrewEvent, type CrewEventKind, type Stop } from "@/lib/crew-day";
 import { metresBetween } from "@/lib/navigation";
+import { presenceOf, type Presence } from "@/lib/crew-presence";
 
 export interface CrewToday {
   profileId: string;
@@ -16,6 +17,8 @@ export interface CrewToday {
   position: { lat: number; lng: number; at: string; accuracyM: number | null } | null;
   /** The house they are heading to or standing at, and how far off it is. */
   heading: { jobId: string; customerName: string; address: string; metres: number | null } | null;
+  /** Whether the app has heard from them today, and whether that is now a problem. */
+  presence: Presence;
 }
 
 export interface CrewsToday {
@@ -195,6 +198,12 @@ export async function getCrewsToday(day: string): Promise<CrewsToday> {
         loadout: buildLoadout(mine.map(loadoutSessionOf), tools, containers, checksBy.get(profileId) ?? []),
         position,
         heading,
+        presence: presenceOf({
+          day,
+          eventsToday: (eventsBy.get(profileId) ?? []).length,
+          checksToday: (checksBy.get(profileId) ?? []).length,
+          positionAt: pos?.at ?? null,
+        }),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

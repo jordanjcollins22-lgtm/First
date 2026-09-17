@@ -75,7 +75,14 @@ export function CrewsTodayPanel({ today, showTicks }: { today: CrewsToday; showT
             return (
               <div key={person.profileId} className="rounded-lg border border-border bg-background/70 p-3">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold">{person.name}</p>
+                  <p className="text-sm font-semibold">
+                    {person.name}
+                    {person.presence.quiet && (
+                      <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900" title="No tap, no load-out tick and no location from them today">
+                        Hasn&apos;t used the app today
+                      </span>
+                    )}
+                  </p>
                   {loadout.total > 0 && showTicks && (
                     <span
                       className={`text-xs font-semibold ${loadout.complete ? "text-emerald-700" : "text-amber-800"}`}
