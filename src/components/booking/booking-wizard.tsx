@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { CheckCircle2, Loader2, MapPin, Search, UserCheck, Video } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { CheckCircle2, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
-import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-import { submitPublicBooking } from "@/lib/actions/public-booking-actions";
+import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
+import { recordBookingVisit, recordLocateResult, submitPublicBooking } from "@/lib/actions/public-booking-actions";
+import { assignedVariant, type AddressEntry, type AddressVariant } from "@/lib/booking-test";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
@@ -180,6 +181,24 @@ export function BookingWizard({
   const [addressQuery, setAddressQuery] = useState("");
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<GeocodeSuggestion | null>(null);
+  // The address test. Dealt once per browser and kept, so the same person
+  // sees the same form every time. The visit is recorded once the form is
+  // up, and the booking points back at it.
+  const [variant] = useState<AddressVariant>(() => assignedVariant(typeof window === "undefined" ? null : window.localStorage));
+  const [addressEntry, setAddressEntry] = useState<AddressEntry>("typed");
+  const [locating, setLocating] = useState(false);
+  const visitIdRef = useRef<string | null>(null);
+  const visitRecordedRef = useRef(false);
+  useEffect(() => {
+    if (visitRecordedRef.current) return;
+    visitRecordedRef.current = true;
+    recordBookingVisit({ organizationId, variant, referralCode, linkRef })
+      .then((r) => {
+        visitIdRef.current = r.visitId;
+      })
+      .catch(() => {});
+  }, [organizationId, variant, referralCode, linkRef]);
+
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -237,9 +256,59 @@ export function BookingWizard({
     [linkRef, linkOrg]
   );
 
+  function noteLocate(result: "tapped" | "accepted" | "declined" | "failed") {
+    const id = visitIdRef.current;
+    if (id) void recordLocateResult({ visitId: id, result }).catch(() => {});
+  }
+
+  /**
+   * "Use my location": the phone's fix, turned into a street address, shown
+   * to accept or decline. Never written in without the person agreeing to
+   * it, because a fix is good to a house or two and the wrong house is a
+   * wasted trip.
+   */
+  function useMyLocation() {
+    setError(null);
+    noteLocate("tapped");
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      noteLocate("failed");
+      return setError("Your browser can't share your location. Type the address instead.");
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const found = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          if (!found) {
+            noteLocate("failed");
+            setError("We couldn't match your location to an address. Type it instead.");
+            return;
+          }
+          setSelectedAddress(found);
+          setAddressQuery(found.fullAddress);
+          setSuggestions([]);
+          setAddressEntry("located");
+          void loadTimes(found.lat, found.lng);
+        } catch {
+          noteLocate("failed");
+          setError("Address lookup is unavailable right now. Type it instead.");
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocating(false);
+        noteLocate("failed");
+        setError("We couldn't get your location. Type the address instead.");
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 }
+    );
+  }
+
   function handleAddressQueryChange(value: string) {
     setAddressQuery(value);
     setSelectedAddress(null);
+    setAddressEntry("typed");
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!value.trim()) {
       setSuggestions([]);
@@ -326,6 +395,9 @@ export function BookingWizard({
           lng: selectedAddress.lng,
           requestedServiceTypeIds: Array.from(selectedServiceIds),
           referralCode,
+          bookingVariant: variant,
+          addressEntry,
+          visitId: visitIdRef.current,
           notes,
           // Never blocks the booking. Somebody who has not thought about money
           // yet is still somebody who wants us to come and look.
@@ -524,6 +596,13 @@ export function BookingWizard({
             )}
           </div>
 
+          {variant === "tap" && !selectedAddress && isMapboxConfigured && (
+            <Button type="button" variant="outline" className="h-12 w-full" disabled={locating} onClick={useMyLocation}>
+              {locating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+              {locating ? "Finding you…" : "Use my location"}
+            </Button>
+          )}
+
           {suggestions.length > 0 && !selectedAddress && (
             <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
               {suggestions.map((s) => (
@@ -570,14 +649,23 @@ export function BookingWizard({
                   variant="outline"
                   className="flex-1"
                   onClick={() => {
+                    if (addressEntry === "located") noteLocate("declined");
                     setSelectedAddress(null);
                     setAddressQuery("");
+                    setAddressEntry("typed");
                     setTimes(null);
                   }}
                 >
                   Not this one
                 </Button>
-                <Button type="button" className="flex-1" onClick={() => setStep(2)}>
+                <Button
+                  type="button"
+                  className="flex-1"
+                  onClick={() => {
+                    if (addressEntry === "located") noteLocate("accepted");
+                    setStep(2);
+                  }}
+                >
                   That&apos;s it — continue
                 </Button>
               </div>

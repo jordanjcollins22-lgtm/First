@@ -654,6 +654,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sub_quote_requests"]["Row"]>;
         Relationships: [];
       };
+      booking_visits: {
+        Row: {
+          id: string;
+          organization_id: string | null;
+          variant: string;
+          referral_code: string | null;
+          link_ref: string | null;
+          agent: string;
+          located_tapped: boolean;
+          located_result: string | null;
+          booked_job_id: string | null;
+          booked_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_visits"]["Row"]> & {
+          variant: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_visits"]["Row"]>;
+        Relationships: [];
+      };
       rank_keywords: {
         Row: {
           id: string;
@@ -1673,6 +1693,8 @@ export interface Database {
           evaluation_end_date: string | null;
           evaluation_mode: string;
           ghl_appointment_id: string | null;
+          booking_variant: string | null;
+          address_entry: string | null;
           referral_code: string | null;
           evaluation_status: string;
           project_start_date: string | null;

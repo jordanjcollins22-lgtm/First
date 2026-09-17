@@ -115,3 +115,24 @@ export async function searchAddress(
   if (!lookup.ok) throw new Error(lookup.reason);
   return lookup.suggestions;
 }
+
+/**
+ * The address under a point, for "use my location".
+ *
+ * A phone's fix is good to a house or two, which is why the answer is shown
+ * to the person to accept or decline rather than written straight in. The
+ * nearest street address only: a park or a shop is not where anybody wants
+ * their lawn done.
+ */
+export async function reverseGeocode(lat: number, lng: number, signal?: AbortSignal): Promise<GeocodeSuggestion | null> {
+  if (!env.mapboxToken) return null;
+  const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json`);
+  url.searchParams.set("access_token", env.mapboxToken);
+  url.searchParams.set("types", "address");
+  url.searchParams.set("limit", "1");
+  const outcome = await fetchJson<MapboxResponse>(url, { signal, timeoutMs: LOOKUP_TIMEOUT_MS, attempts: LOOKUP_ATTEMPTS });
+  if (!outcome.ok) throw new Error(`Address lookup unavailable: ${outcome.message}`);
+  const f = outcome.value.features?.[0];
+  if (!f) return null;
+  return { id: f.id, fullAddress: f.place_name, lng: f.center[0], lat: f.center[1] };
+}

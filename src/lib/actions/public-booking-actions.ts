@@ -1,5 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
+import { classifyAgent } from "@/lib/click-agent";
+import { isVariant, type AddressEntry, type AddressVariant, type LocateResult } from "@/lib/booking-test";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import { freeOf } from "@/lib/busy";
@@ -37,6 +40,57 @@ export interface SubmitPublicBookingInput {
   budgetRange: string;
   /** The code off a posted recommendation link, if this came through one. */
   referralCode?: string | null;
+  /** The address test: which side this browser was on, how the address went in, and the visit it came from. */
+  bookingVariant?: AddressVariant | null;
+  addressEntry?: AddressEntry | null;
+  visitId?: string | null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * One open of the booking page, with the side of the address test it was
+ * shown. Recorded from the browser once the form is up, so a prerendered
+ * page still counts. Bots are kept but marked, and left out of the maths.
+ */
+export async function recordBookingVisit(input: {
+  organizationId: string;
+  variant: AddressVariant;
+  referralCode?: string | null;
+  linkRef?: string | null;
+}): Promise<{ visitId: string | null }> {
+  try {
+    if (!isVariant(input.variant) || !UUID_RE.test(input.organizationId)) return { visitId: null };
+    const admin = createAdminClient();
+    const agent = classifyAgent((await headers()).get("user-agent"));
+    const { data } = await admin
+      .from("booking_visits")
+      .insert({
+        organization_id: input.organizationId,
+        variant: input.variant,
+        referral_code: input.referralCode?.trim().slice(0, 40) || null,
+        link_ref: input.linkRef?.trim().slice(0, 80) || null,
+        agent,
+      })
+      .select("id")
+      .single();
+    return { visitId: data?.id ?? null };
+  } catch (err) {
+    console.error("recordBookingVisit failed:", err);
+    return { visitId: null };
+  }
+}
+
+/** What happened when they tapped "Use my location". */
+export async function recordLocateResult(input: { visitId: string; result: LocateResult | "tapped" }): Promise<void> {
+  try {
+    if (!UUID_RE.test(input.visitId)) return;
+    const admin = createAdminClient();
+    const patch = input.result === "tapped" ? { located_tapped: true } : { located_tapped: true, located_result: input.result };
+    await admin.from("booking_visits").update(patch).eq("id", input.visitId);
+  } catch (err) {
+    console.error("recordLocateResult failed:", err);
+  }
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -220,6 +274,8 @@ export async function submitPublicBooking(
       evaluation_status: "scheduled",
       evaluation_mode: mode.mode,
       referral_code: referralCode,
+      booking_variant: isVariant(input.bookingVariant) ? input.bookingVariant : null,
+      address_entry: input.addressEntry === "located" || input.addressEntry === "typed" ? input.addressEntry : null,
       client_notes: input.notes.trim() || null,
       budget_range: budgetRange || null,
       referred_by_profile_id: input.referredByProfileId,
@@ -227,6 +283,15 @@ export async function submitPublicBooking(
     .select()
     .single();
   if (jobError) throw jobError;
+
+  // The visit this booking came from, so the test reads bookings over visits.
+  if (input.visitId && UUID_RE.test(input.visitId)) {
+    await admin
+      .from("booking_visits")
+      .update({ booked_job_id: job.id, booked_at: new Date().toISOString() })
+      .eq("id", input.visitId)
+      .is("booked_job_id", null);
+  }
 
   if (requestedServiceIds.length > 0) {
     const { error: requestedError } = await admin.from("job_requested_services").insert(

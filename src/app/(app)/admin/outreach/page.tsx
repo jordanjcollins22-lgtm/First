@@ -6,6 +6,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { OutreachForm } from "@/components/marketing/outreach-form";
 import { OutreachBoardView } from "@/components/marketing/outreach-board";
+import { BookingTestCard } from "@/components/marketing/booking-test-card";
+import { getBookingTest } from "@/lib/data/booking-test";
 
 /**
  * Link Tracking.
@@ -31,10 +33,13 @@ export default async function OutreachPage() {
   // anyone else's.
   const profile = await getCurrentProfile();
   const owner = isOwnerLevel(profile?.roles ?? []);
-  const board = await getOutreachBoard(owner ? {} : { onlyProfileId: profile?.id ?? "nobody" }).catch((err) => {
-    console.error("Link Tracking failed to load:", err);
-    return null;
-  });
+  const [board, bookingTest] = await Promise.all([
+    getOutreachBoard(owner ? {} : { onlyProfileId: profile?.id ?? "nobody" }).catch((err) => {
+      console.error("Link Tracking failed to load:", err);
+      return null;
+    }),
+    owner ? getBookingTest().catch(() => null) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
@@ -52,6 +57,8 @@ export default async function OutreachPage() {
         <h2 className="mb-3 text-sm font-semibold">Hand out a link</h2>
         <OutreachForm />
       </section>
+
+      {bookingTest && <BookingTestCard test={bookingTest} />}
 
       {board && board.total.posts > 0 ? (
         <OutreachBoardView board={board} scope={owner ? "everyone" : "mine"} />
