@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { log } from "@/lib/log";
 import { modeForAddress } from "@/lib/evaluation-mode";
 import { firstAcceptable } from "@/lib/geocode-guard";
@@ -253,7 +254,34 @@ export async function pullGhlCalendarIfStale(organizationId: string): Promise<vo
     // not both ask GoHighLevel.
     await admin.from("ghl_sync_state").upsert({ organization_id: organizationId, last_pulled_at: new Date().toISOString() });
     await pullGhlCalendar(organizationId);
+    await pushUnsyncedEvaluations(organizationId);
   } catch (err) {
     log.warn("ghl.pull.failed", { organizationId, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
+ * The other direction: a visit booked here that never reached GoHighLevel.
+ *
+ * The push happens when a booking is made, and a push can fail: the
+ * contact could not be made, the calendar was slow, the key was not set
+ * yet. Rather than leave that visit missing from the calendar until somebody
+ * notices, every stale-pull also tries again for any upcoming visit with no
+ * appointment behind it. A handful at most, and each one is logged.
+ */
+async function pushUnsyncedEvaluations(organizationId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("jobs")
+    .select("id, property:properties!inner(customer:customers!inner(organization_id))")
+    .is("ghl_appointment_id", null)
+    .eq("evaluation_status", "scheduled")
+    .gte("evaluation_date", new Date().toISOString())
+    .not("status", "in", "(cancelled,completed)")
+    .eq("property.customer.organization_id", organizationId)
+    .limit(20);
+  for (const job of (data ?? []) as { id: string }[]) {
+    const result = await syncEvaluationToGhl(job.id);
+    if (!result.ok) log.warn("ghl.push.retry_failed", { jobId: job.id, error: result.error });
   }
 }
