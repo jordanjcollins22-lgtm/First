@@ -35,7 +35,7 @@ describe("pricing a lawn", () => {
     expect(small.seedCents).toBe(7200);
     expect(small.laborCents).toBe(3467);
     expect(small.subtotalCents).toBe(20667);
-    expect(small.totalCents).toBe(50000);
+    expect(small.totalCents).toBe(65000);
     expect(small.minimumApplied).toBe(true);
 
     const big = priceAeration(DEFAULT_PRICING, 30000);

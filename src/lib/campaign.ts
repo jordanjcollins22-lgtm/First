@@ -37,7 +37,7 @@ export const DEFAULT_PRICING: AerationPricing = {
   minutesPer1k: 8,
   hourlyRateCents: 6500,
   aeratorCents: 10000,
-  minimumCents: 50000,
+  minimumCents: 65000,
   lawnShare: 0.85,
 };
 
