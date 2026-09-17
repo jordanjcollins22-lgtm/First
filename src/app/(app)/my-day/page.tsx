@@ -55,7 +55,7 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
@@ -108,7 +108,7 @@ export default async function MyDayPage() {
     ) : viewer && isGrowthOnly(viewer.roles) ? (
       await GrowthDay(viewer)
     ) : (
-      await OfficeDay()
+      <OfficeDay />
     );
 
   return (
@@ -210,6 +210,26 @@ async function GrowthDay(profile: Profile) {
   );
 }
 
+/** A section still on its way. Small, so the page never jumps when it lands. */
+function BlockLoading({ lines = 2 }: { lines?: number }) {
+  return (
+    <div className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md" aria-hidden>
+      {Array.from({ length: lines }, (_, i) => (
+        <div key={i} className={`h-4 animate-pulse rounded bg-muted ${i === 0 ? "w-40" : "mt-2 w-64"}`} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The office's day, drawn as it arrives.
+ *
+ * Eleven separate questions used to be asked together and the page waited
+ * for the slowest before drawing anything: the crews, the money, the
+ * marketing, the pulse. Now the frame draws at once and each block streams
+ * in on its own, so the first thing on screen is the page and not a spinner.
+ * Every block still fails on its own.
+ */
 async function OfficeDay() {
   const profile = await getCurrentProfile();
   if (!profile) {
@@ -220,99 +240,8 @@ async function OfficeDay() {
       </div>
     );
   }
-
-  // Bookings made in GoHighLevel, brought in first so today's list is
-  // today's list. Throttled inside; most opens cost nothing.
-  await pullGhlCalendarIfStale(profile.organization_id).catch(() => null);
-
-  // Six reads, together rather than one after another.
-  //
-  // They do not depend on each other -- the board, the forward work, the
-  // book, the early starts, the marketing and the pulse are six separate
-  // questions about the same person -- and asked in series they were six
-  // round trips the page sat through end to end. Each still fails on its own:
-  // a money table that is not set up costs the commission panel and nothing
-  // else, which is why every one of them carries its own catch.
-  const [data, work, today, commission, earlyStarts, marketing, ops, calls, toCollect, crewsToday, openTime] = await Promise.all([
-    getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
-      console.error("My Day failed to load:", err);
-      return null as DashboardData | null;
-    }),
-    loadJobInputs({ forProfileId: profile.id })
-      .then((inputs) => buildMyWork(inputs))
-      .catch((err) => {
-        console.error("My work failed to load:", err);
-        return null as MyWork | null;
-      }),
-    // The narrow question the week-shaped piles below never answered: did we
-    // sell anything today, and did any money turn up.
-    getToday({ mine: profile.id }).catch((err) => {
-      console.error("Today failed to load:", err);
-      return null as TodayView | null;
-    }),
-    getCommissionFor(profile).catch((err) => {
-      console.error("Commission failed to load:", err);
-      return null as CommissionSummary | null;
-    }),
-    pendingEarlyStarts().catch((err) => {
-      console.error("Early start requests failed to load:", err);
-      return [];
-    }),
-    // Read, not synced. The sync used to run here on every load and was
-    // timing out against the API's statement limit -- so opening the app
-    // meant waiting out the timeout before the page would draw, which is
-    // what "it will not open" looks like from the outside. The
-    // marketing-sync cron does the same work every five minutes and
-    // finishes in hundredths of a second.
-    marketingState({ sync: false }).catch((err) => {
-      console.error("Marketing plays failed to load:", err);
-      return { plays: [], reviews: [], defaults: [], autoApproved: 0 };
-    }),
-    opsState().catch((err) => {
-      console.error("The pulse failed to load:", err);
-      return null as OpsState | null;
-    }),
-    // The most valuable list in the business: proposals sent and not
-    // answered, and proposals answered no. Only for the people who ring them.
-    isAccountManager(profile.roles) || isOwnerLevel(profile.roles) || profile.roles.includes("admin")
-      ? getCallList(profile).catch((err) => {
-          console.error("Call list failed to load:", err);
-          return null as CallList | null;
-        })
-      : Promise.resolve(null as CallList | null),
-    // Cash and checks clients have asked us to come and collect.
-    isAccountManager(profile.roles) || isOwnerLevel(profile.roles) || profile.roles.includes("admin")
-      ? listPaymentsToCollect(profile).catch((err) => {
-          console.error("Payments to collect failed to load:", err);
-          return [] as PaymentToCollect[];
-        })
-      : Promise.resolve([] as PaymentToCollect[]),
-    // Today's jobs, crews and load-outs, on the business clock.
-    getCrewsToday(dateKeyIn(new Date())).catch((err) => {
-      console.error("Crews today failed to load:", err);
-      return null;
-    }),
-    // The hours between evaluations, and what is being done with them.
-    loadOpenTime(profile).catch((err) => {
-      console.error("Open time failed to load:", err);
-      return { mine: null as PersonOpenTime | null, team: [] as PersonOpenTime[] };
-    }),
-  ]);
-
-  if (!data) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
-        <h1 className="mb-1 text-2xl font-bold">My Day</h1>
-        <p className="rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
-          Couldn&apos;t load your day right now. Reload the page and try again.
-        </p>
-      </div>
-    );
-  }
-
-  const { summary } = data;
-  const nothing =
-    data.evaluations.every((s) => s.rows.length === 0) && data.jobs.every((s) => s.rows.length === 0);
+  const rings = isAccountManager(profile.roles) || isOwnerLevel(profile.roles) || profile.roles.includes("admin");
+  const showTicks = isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead") || profile.roles.includes("office");
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
@@ -323,35 +252,36 @@ async function OfficeDay() {
 
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
-      <EarlyStartQueue requests={earlyStarts} />
+      <Suspense fallback={null}>
+        <EarlyStartsBlock />
+      </Suspense>
 
       {/* The hours between evaluations are where the next jobs come from.
           Each seller sees their own; the office sees everyone's. */}
-      {openTime.mine && <OpenTimePanel me={openTime.mine} />}
-      {openTime.team.length > 0 && <TeamOpenTimePanel team={openTime.team} />}
+      <Suspense fallback={null}>
+        <OpenTimeBlock profile={profile} />
+      </Suspense>
 
-      {/* What is being done today, by whom, with what on the truck. The
-          same load-out the crew tick on their phones, so a wrong list is
-          caught here before it is discovered at the first stop. */}
-      {crewsToday && crewsToday.stops.length > 0 && <AutoRefresh seconds={60} />}
-      {crewsToday && (
-        <CrewsTodayPanel
-          today={crewsToday}
-          showTicks={isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead") || profile.roles.includes("office")}
-        />
-      )}
+      {/* What is being done today, by whom, with what on the truck. */}
+      <Suspense fallback={<BlockLoading lines={3} />}>
+        <CrewsBlock showTicks={showTicks} />
+      </Suspense>
 
       {/* Above everything else for an account manager: the money on the
           table, and who to ring about it. */}
-      {toCollect.length > 0 && <CollectPanel lines={toCollect} />}
-
-      {calls && (calls.now.length > 0 || calls.later.length > 0) && (
-        <CallListPanel list={calls} callerFirstName={(profile.first_name || profile.full_name || "").split(" ")[0] || "us"} />
+      {rings && (
+        <Suspense fallback={null}>
+          <CollectBlock profile={profile} />
+        </Suspense>
+      )}
+      {rings && (
+        <Suspense fallback={null}>
+          <CallsBlock profile={profile} />
+        </Suspense>
       )}
 
       {/* The cheapest lead in the business, and it only happens if somebody
-          remembers it exists. Put where everybody starts their day rather
-          than four taps into a marketing menu. */}
+          remembers it exists. */}
       <Link
         href="/admin/outreach"
         className="mb-6 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3 transition-colors hover:bg-primary/10"
@@ -366,8 +296,127 @@ async function OfficeDay() {
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
       </Link>
 
-      {ops && <OpsPanel state={ops} />}
+      <Suspense fallback={null}>
+        <OpsBlock />
+      </Suspense>
 
+      <Suspense fallback={<BlockLoading lines={2} />}>
+        <TilesBlock profile={profile} />
+      </Suspense>
+
+      {/* The rounds given to this person, above the general to-do list. */}
+      <Suspense fallback={null}>
+        <MarketingBlock profileId={profile.id} />
+      </Suspense>
+
+      <Suspense fallback={<BlockLoading lines={2} />}>
+        <WorkBlock profile={profile} />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <CommissionBlock profile={profile} />
+      </Suspense>
+
+      <p className="mt-4 text-xs text-muted-foreground">
+        Yours means the client is one you manage, or you are the person assigned to the job. Everything is
+        read from the job itself, so it can never disagree with the job page.
+      </p>
+    </div>
+  );
+}
+
+/** Loaded once per request even though two blocks read it. */
+const myWorkFor = cache(async (profileId: string): Promise<MyWork | null> =>
+  loadJobInputs({ forProfileId: profileId })
+    .then((inputs) => buildMyWork(inputs))
+    .catch((err) => {
+      console.error("My work failed to load:", err);
+      return null;
+    })
+);
+
+async function EarlyStartsBlock() {
+  const requests = await pendingEarlyStarts().catch((err) => {
+    console.error("Early start requests failed to load:", err);
+    return [];
+  });
+  return <EarlyStartQueue requests={requests} />;
+}
+
+async function OpenTimeBlock({ profile }: { profile: Profile }) {
+  const openTime = await loadOpenTime(profile).catch((err) => {
+    console.error("Open time failed to load:", err);
+    return { mine: null as PersonOpenTime | null, team: [] as PersonOpenTime[] };
+  });
+  return (
+    <>
+      {openTime.mine && <OpenTimePanel me={openTime.mine} />}
+      {openTime.team.length > 0 && <TeamOpenTimePanel team={openTime.team} />}
+    </>
+  );
+}
+
+async function CrewsBlock({ showTicks }: { showTicks: boolean }) {
+  const crewsToday = await getCrewsToday(dateKeyIn(new Date())).catch((err) => {
+    console.error("Crews today failed to load:", err);
+    return null;
+  });
+  if (!crewsToday) return null;
+  return (
+    <>
+      {crewsToday.stops.length > 0 && <AutoRefresh seconds={60} />}
+      <CrewsTodayPanel today={crewsToday} showTicks={showTicks} />
+    </>
+  );
+}
+
+async function CollectBlock({ profile }: { profile: Profile }) {
+  const toCollect = await listPaymentsToCollect(profile).catch((err) => {
+    console.error("Payments to collect failed to load:", err);
+    return [] as PaymentToCollect[];
+  });
+  return toCollect.length > 0 ? <CollectPanel lines={toCollect} /> : null;
+}
+
+async function CallsBlock({ profile }: { profile: Profile }) {
+  const calls = await getCallList(profile).catch((err) => {
+    console.error("Call list failed to load:", err);
+    return null as CallList | null;
+  });
+  if (!calls || (calls.now.length === 0 && calls.later.length === 0)) return null;
+  return <CallListPanel list={calls} callerFirstName={(profile.first_name || profile.full_name || "").split(" ")[0] || "us"} />;
+}
+
+async function OpsBlock() {
+  const ops = await opsState().catch((err) => {
+    console.error("The pulse failed to load:", err);
+    return null as OpsState | null;
+  });
+  return ops ? <OpsPanel state={ops} /> : null;
+}
+
+async function TilesBlock({ profile }: { profile: Profile }) {
+  // Bookings made in GoHighLevel, brought in first so today's list is
+  // today's list. Throttled inside; most opens cost nothing.
+  await pullGhlCalendarIfStale(profile.organization_id).catch(() => null);
+  const [data, work] = await Promise.all([
+    getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
+      console.error("My Day failed to load:", err);
+      return null as DashboardData | null;
+    }),
+    myWorkFor(profile.id),
+  ]);
+  if (!data) {
+    return (
+      <p className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
+        Couldn&apos;t load your day right now. Reload the page and try again.
+      </p>
+    );
+  }
+  const { summary } = data;
+  const nothing = data.evaluations.every((s) => s.rows.length === 0) && data.jobs.every((s) => s.rows.length === 0);
+  return (
+    <>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile
           label="Visits still to do"
@@ -382,9 +431,6 @@ async function OfficeDay() {
           hint={summary.needsSignoff > 0 ? "Go and walk it" : undefined}
           alert={summary.needsSignoff > 0}
         />
-        {/* Booked value moved to the "Jobs you're managing" header, where it
-            totals the live work rather than only today's. This slot goes to
-            the pile nothing else in the app surfaces. */}
         <Tile
           label="Needs submitting"
           value={String(work?.submissions.length ?? 0)}
@@ -409,7 +455,6 @@ async function OfficeDay() {
             blurb="Visits on your clients. Anything still outstanding from before today is pulled in and marked late."
             sections={data.evaluations}
           />
-
           <DashboardSections
             title="Today's jobs"
             blurb="Your work. Sold-but-unbooked and sign-off piles ignore the date — they matter whenever they exist."
@@ -417,22 +462,39 @@ async function OfficeDay() {
           />
         </>
       )}
+    </>
+  );
+}
 
-      {/* The rounds given to this person, above the general to-do list: it is
-          their work, with a street and a start button, rather than something
-          the business might do. */}
-      <MyRoutes plays={playsAssignedTo(marketing.plays, profile.id)} />
-
-            {marketing.plays.length > 0 && (
+async function MarketingBlock({ profileId }: { profileId: string }) {
+  // Read, not synced: the marketing-sync cron does that every five minutes.
+  const marketing = await marketingState({ sync: false }).catch((err) => {
+    console.error("Marketing plays failed to load:", err);
+    return { plays: [], reviews: [], defaults: [], autoApproved: 0 };
+  });
+  return (
+    <>
+      <MyRoutes plays={playsAssignedTo(marketing.plays, profileId)} />
+      {marketing.plays.length > 0 && (
         <div className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
           <MarketingTodo plays={marketing.plays} reviews={marketing.reviews} autoApproved={marketing.autoApproved} />
         </div>
       )}
+    </>
+  );
+}
 
-      {/* First, because it is the question somebody opens this page with.
-          Everything below it is about the week. */}
+async function WorkBlock({ profile }: { profile: Profile }) {
+  const [today, work] = await Promise.all([
+    getToday({ mine: profile.id }).catch((err) => {
+      console.error("Today failed to load:", err);
+      return null as TodayView | null;
+    }),
+    myWorkFor(profile.id),
+  ]);
+  return (
+    <>
       {today && <TodayPanel today={withOwed(today, work?.submissions.length ?? 0)} />}
-
       {work && (
         <>
           <NeedsSubmitting items={work.submissions} />
@@ -440,21 +502,20 @@ async function OfficeDay() {
           <ManagedJobs items={work.managed} />
         </>
       )}
+    </>
+  );
+}
 
-      {commission && commission.lines.length > 0 && (
-        <div className="mb-6">
-          <h2 className="mb-1 text-lg font-bold">Your commission</h2>
-          <CommissionPanel
-            summary={commission}
-            subtitle="Across every client you manage, not just today's."
-          />
-        </div>
-      )}
-
-      <p className="mt-4 text-xs text-muted-foreground">
-        Yours means the client is one you manage, or you are the person assigned to the job. Everything is
-        read from the job itself, so it can never disagree with the job page.
-      </p>
+async function CommissionBlock({ profile }: { profile: Profile }) {
+  const commission = await getCommissionFor(profile).catch((err) => {
+    console.error("Commission failed to load:", err);
+    return null as CommissionSummary | null;
+  });
+  if (!commission || commission.lines.length === 0) return null;
+  return (
+    <div className="mb-6">
+      <h2 className="mb-1 text-lg font-bold">Your commission</h2>
+      <CommissionPanel summary={commission} subtitle="Across every client you manage, not just today's." />
     </div>
   );
 }
