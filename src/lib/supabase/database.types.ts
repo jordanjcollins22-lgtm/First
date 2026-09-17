@@ -674,6 +674,47 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["booking_visits"]["Row"]>;
         Relationships: [];
       };
+      crew_shop_days: {
+        Row: {
+          id: string;
+          organization_id: string;
+          day: string;
+          lead_profile_id: string;
+          stage: string;
+          page_index: number;
+          shown_job_ids: string[];
+          clocked_in_at: string;
+          loadout_done_at: string | null;
+          en_route_at: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["crew_shop_days"]["Row"]> & {
+          organization_id: string;
+          day: string;
+          lead_profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crew_shop_days"]["Row"]>;
+        Relationships: [];
+      };
+      crew_shop_checks: {
+        Row: {
+          id: string;
+          shop_day_id: string;
+          organization_id: string;
+          item_kind: string;
+          item_key: string;
+          checked_by: string | null;
+          checked_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["crew_shop_checks"]["Row"]> & {
+          shop_day_id: string;
+          organization_id: string;
+          item_kind: string;
+          item_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crew_shop_checks"]["Row"]>;
+        Relationships: [];
+      };
       rank_keywords: {
         Row: {
           id: string;

@@ -27,6 +27,10 @@ import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
 import { pendingEarlyStarts } from "@/lib/data/early-start";
 import { TodayBoard } from "@/components/crew/today-board";
+import { ShopFlow } from "@/components/crew/shop-flow";
+import { ShopFlowLive } from "@/components/crew/shop-flow-live";
+import { getDayLoadout, getShopDay, getSiteMaps, whoIsAtTheShop } from "@/lib/data/shop-flow";
+import { canLead } from "@/lib/shop-flow";
 import { ClockControl } from "@/components/crew/clock-control";
 import { myOpenEntry } from "@/lib/data/time-clock";
 import type { Profile } from "@/types/domain";
@@ -486,6 +490,13 @@ function Tile({
  * what is on me — asked by somebody whose answer is a list of stops rather
  * than a list of jobs, so it lives here and /today redirects in.
  */
+/** Whether this person is marked lead on any of today's jobs. */
+async function leadsAnyStopToday(profileId: string, jobIds: string[]): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("job_crew").select("job_id").eq("profile_id", profileId).eq("is_lead", true).in("job_id", jobIds).limit(1);
+  return (data ?? []).length > 0;
+}
+
 async function CrewDay({ profile }: { profile: Profile }) {
   const day = await getCrewDay().catch(() => null);
 
@@ -515,12 +526,38 @@ async function CrewDay({ profile }: { profile: Profile }) {
   const phase = readDay(day.events, day.stops).phase;
   const loading = phase === "before_shop" || phase === "at_shop";
 
+  // The morning at the shop, run from the tablet and followed on every
+  // phone: clock in, one kit at a time, the maps, out the door. Shown until
+  // this person has left the shop; after that the day board takes over.
+  const shopDay = loading ? await getShopDay(day.day).catch(() => null) : null;
+  const [dayLoadout, siteMaps, present] = loading
+    ? await Promise.all([
+        getDayLoadout(day.day, shopDay?.checks ?? []).catch(() => null),
+        shopDay && shopDay.stage !== "loadout" ? getSiteMaps(shopDay.shownJobIds).catch(() => []) : Promise.resolve([]),
+        whoIsAtTheShop(day.day).catch(() => []),
+      ])
+    : [null, [], []];
+  const leadsAStop = day.stops.length > 0 && (await leadsAnyStopToday(profile.id, day.stops.map((s) => s.jobId)));
+
   return (
     <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
       {/* Tells the office where this phone is from the shop until the day
           is over, while the app is open. */}
       <LocationBeacon active={phase !== "before_shop" && phase !== "day_over"} />
-      {loadout && loading && (
+      {loading && dayLoadout && (
+        <div className="mb-4">
+          <ShopFlowLive shopDayId={shopDay?.id ?? null} />
+          <ShopFlow
+            me={{ profileId: profile.id, name: profile.full_name || profile.email, canLead: canLead({ roles: profile.roles, leadsAStop }), arrived: phase !== "before_shop" }}
+            shopDay={shopDay}
+            loadout={dayLoadout}
+            stops={day.stops}
+            siteMaps={siteMaps}
+            present={present}
+          />
+        </div>
+      )}
+      {loadout && loading && !dayLoadout && (
         <div className="mb-4">
           <LoadoutPanel day={day.day} loadout={loadout} />
         </div>
@@ -533,12 +570,14 @@ async function CrewDay({ profile }: { profile: Profile }) {
           name: stop.customerName,
         }))}
       />
-      <TodayBoard
-        stops={day.stops}
-        events={day.events}
-        personName={profile.full_name || profile.email}
-        leaveBlockedBy={loadout ? leaveBlockedBy(loadout) : null}
-      />
+      {(!loading || phase === "at_shop") && (
+        <TodayBoard
+          stops={day.stops}
+          events={day.events}
+          personName={profile.full_name || profile.email}
+          leaveBlockedBy={loading && dayLoadout ? leaveBlockedBy(dayLoadout) : loadout ? leaveBlockedBy(loadout) : null}
+        />
+      )}
       {loadout && !loading && phase !== "day_over" && (
         <div className="mt-4">
           <LoadoutPanel day={day.day} loadout={loadout} compact />
