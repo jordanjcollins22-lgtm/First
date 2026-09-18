@@ -24,6 +24,7 @@ import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/d
 import type { Database } from "@/lib/supabase/database.types";
 import { listScopeRecommendations } from "@/lib/data/scope-reviews";
 import { reviewBlocker, reviewsFor } from "@/lib/scope-review";
+import { zeroPriceBlocker } from "@/lib/proposal-guard";
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -229,6 +230,13 @@ export async function updateProposalDraft(
     total_cost: input.totalCost,
     scope_snapshot: input.scopeSnapshot,
   };
+  // The discount as it will stand after this save, so a save that keeps the
+  // old discount is judged on the price it actually produces.
+  let discountAfter = 0;
+  if (input.discountId === undefined) {
+    const { data: current } = await supabase.from("job_proposals").select("discount_amount").eq("job_id", jobId).maybeSingle();
+    discountAfter = Number(current?.discount_amount ?? 0);
+  }
 
   if (input.discountId === null) {
     patch.discount_id = null;
@@ -250,7 +258,13 @@ export async function updateProposalDraft(
     patch.discount_value = discount.value;
     patch.discount_amount = discount.kind === "percentage" ? (input.totalCost * discount.value) / 100 : discount.value;
     patch.discount_reason = discount.name;
+    discountAfter = Number(patch.discount_amount);
   }
+
+  // Never saved at nothing, draft or sent. A draft at $0 is a draft one
+  // click from a $0 quote.
+  const blocker = zeroPriceBlocker({ total_cost: input.totalCost, discount_amount: discountAfter });
+  if (blocker) throw new Error(blocker);
 
   const { error } = await supabase.from("job_proposals").update(patch).eq("job_id", jobId);
   if (error) throw error;
@@ -287,6 +301,13 @@ export async function approveProposal(jobId: string) {
   }
 
   const supabase = await createClient();
+
+  // The last look at the number before a client sees it.
+  const { data: priced } = await supabase.from("job_proposals").select("total_cost, discount_amount").eq("job_id", jobId).maybeSingle();
+  if (!priced) throw new Error("There is no proposal on this job to send.");
+  const priceBlocker = zeroPriceBlocker(priced);
+  if (priceBlocker) throw new Error(priceBlocker);
+
   const { error } = await supabase
     .from("job_proposals")
     .update({ status: "sent", approved_at: new Date().toISOString() })

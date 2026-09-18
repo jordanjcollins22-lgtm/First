@@ -11,6 +11,7 @@ import { ViewCount } from "@/components/proposal/view-count";
 import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
 import { cn } from "@/lib/utils";
 import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
+import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { suggestZoneScope, tidyZoneScope } from "@/lib/actions/scope-suggestion-actions";
 import { groupScopeByService } from "@/lib/zone-scope";
 import { effectiveMultiplier, type Markup } from "@/lib/job-costing";
@@ -564,11 +565,18 @@ export function ProposalPanel({
           {proposal.status === "needs_approval" && !editing && (
             <>
               <ScopeReviewPanel key={proposal.generated_at ?? proposal.id} jobId={jobId} onSettled={setReviewSettled} />
+              {zeroPriceBlocker(proposal) && (
+                <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive">
+                  {zeroPriceBlocker(proposal)}
+                </p>
+              )}
               <Button
                 type="button"
                 className="self-start"
-                disabled={isPending || reviewSettled === false}
-                title={reviewSettled === false ? "Approve or decline every zone's recommended scope first." : undefined}
+                disabled={isPending || reviewSettled === false || Boolean(zeroPriceBlocker(proposal))}
+                title={
+                  zeroPriceBlocker(proposal) ?? (reviewSettled === false ? "Approve or decline every zone's recommended scope first." : undefined)
+                }
                 onClick={handleApprove}
               >
                 Approve &amp; send to client

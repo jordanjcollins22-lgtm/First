@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
+import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
@@ -46,6 +47,10 @@ export async function respondToProposal(token: string, response: "accepted" | "d
   if (!proposal) throw new Error("This proposal link isn't valid.");
   if (proposal.status === "needs_approval") throw new Error("This proposal isn't ready yet — check back soon.");
   if (proposal.status !== "sent") throw new Error("This proposal has already been responded to.");
+  // A $0 proposal should never have got this far. If one did, it is not accepted.
+  if (response === "accepted" && zeroPriceBlocker(proposal)) {
+    throw new Error("This proposal has no price on it yet. Please give us a call before accepting.");
+  }
 
   const { error: updateError } = await admin
     .from("job_proposals")

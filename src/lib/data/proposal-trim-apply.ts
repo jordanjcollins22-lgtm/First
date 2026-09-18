@@ -86,6 +86,10 @@ export async function applyProposalTrim(input: {
     statedTotalCents,
   });
   const newTotalCents = Math.max(0, Math.round(input.totalCents ?? result.newTotalCents));
+  // A trim can shorten a proposal; it cannot make it free.
+  if (newTotalCents <= 0) {
+    return { ok: false, reason: "failed", message: "That would make the proposal $0. Take less off, or set the price it should be." };
+  }
 
   if (input.requireRemoval && result.empty) {
     return { ok: false, reason: "nothing", message: "None of those areas are on the proposal." };
