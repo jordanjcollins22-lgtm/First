@@ -527,10 +527,10 @@ function ProposalBody({
           <div className="flex flex-col items-center gap-2 text-center">
             <XCircle className="h-8 w-8 text-muted-foreground" />
             <p className="font-semibold">
-              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_by), respondedAt }).headline}
+              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_from), respondedAt }).headline}
             </p>
             <p className="text-sm text-muted-foreground">
-              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_by), respondedAt }).detail}
+              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_from), respondedAt }).detail}
             </p>
           </div>
         )}

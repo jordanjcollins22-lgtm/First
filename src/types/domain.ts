@@ -753,8 +753,9 @@ export interface JobProposal {
   responded_at: string | null;
   client_response_note: string | null;
   /** Set when the office closed it, on the board or after a call, rather
-   * than the client pressing Decline. What it said before is kept so the
-   * decline can be taken back. */
+   * than the client pressing Decline. `office_declined_from` is the mark:
+   * what it said before, kept so the decline can be taken back. Who did it
+   * is kept when known. */
   office_declined_by?: string | null;
   office_declined_from?: "needs_approval" | "sent" | null;
   /** How the client chose to pay after accepting. Null means they have

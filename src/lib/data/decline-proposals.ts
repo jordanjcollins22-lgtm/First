@@ -35,7 +35,10 @@ export async function reopenOfficeDeclined(supabase: Client, jobId: string): Pro
     .select("id, office_declined_from")
     .eq("job_id", jobId)
     .eq("status", "declined")
-    .not("office_declined_by", "is", null);
+    // What it said before is the mark of an office close. Who closed it is
+    // kept when known, but a job declined before anyone was recorded still
+    // has to reopen cleanly.
+    .not("office_declined_from", "is", null);
   for (const proposal of proposals ?? []) {
     await supabase
       .from("job_proposals")
