@@ -1,0 +1,162 @@
+/**
+ * Bakes the outstanding migrations into a TypeScript module.
+ *
+ * The Database setup page has to hand somebody the SQL on a phone, which means
+ * it needs the text in the bundle — a server that cannot read its own repo at
+ * runtime (and Vercel's cannot, reliably) has nothing to show. Generated rather
+ * than hand-maintained so the page can never drift from the files.
+ *
+ * Run: node scripts/build-migration-bundle.mjs
+ */
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
+const DIR = "supabase/migrations";
+const OUT = "src/lib/migrations/bundle.ts";
+
+/**
+ * Columns a migration adds, as "table.column", read out of its own SQL.
+ *
+ * An ALTER-only migration creates no table, so it used to be reported as
+ * applied whenever its neighbours were — the wrong answer for exactly the
+ * migrations most likely to be outstanding, since adding a column to an
+ * existing table is the commonest kind.
+ *
+ * Parsed rather than hand-listed. A hand-written map is a second place to
+ * remember, and the one that gets forgotten is always the one that matters.
+ * One column per table is enough: the columns in a migration land together.
+ */
+function columnsAdded(sql) {
+  const found = new Map();
+  const pattern = /alter\s+table\s+(?:only\s+)?([a-z_][a-z0-9_]*)\s+add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)/gi;
+  for (const [, table, column] of sql.matchAll(pattern)) {
+    const key = table.toLowerCase();
+    if (!found.has(key)) found.set(key, `${key}.${column.toLowerCase()}`);
+  }
+  return [...found.values()];
+}
+
+/** Which tables each migration creates, for the "what's missing" probe. */
+const CREATES = {
+  "0076_lead_prospects.sql": ["lead_prospects"],
+  "0077_job_lifecycle_and_ledger.sql": ["ledger_entries"],
+  "0078_job_completion_photos.sql": ["job_photos"],
+  "0079_zone_photo_stages.sql": [],
+  "0080_sessions_and_tickets.sql": ["job_work_sessions", "job_tickets"],
+  "0081_final_walkthrough.sql": ["job_walkthroughs"],
+  "0082_crew_day.sql": ["crew_day_events"],
+  "0083_job_crew.sql": ["job_crew"],
+  "0084_outreach.sql": ["outreach_channels", "outreach_touches"],
+  // Triggers and functions only — nothing to probe for, so it reports as
+  // applied when its neighbours are. Flagged as such on the setup page.
+  "0085_no_double_booking.sql": [],
+  "0086_job_observers.sql": ["job_observers"],
+  // Alters only — nothing to probe for.
+  "0087_referral_outcome.sql": [],
+  "0088_contact_types.sql": [],
+  "0089_job_numbers_and_pipeline.sql": ["org_counters"],
+  "0090_geocode_tracking.sql": [],
+  "0091_contact_merge_undo.sql": ["contact_merges"],
+  "0092_target_markets.sql": ["target_markets"],
+  "0093_knowledge_graph.sql": ["knowledge_nodes", "knowledge_relationships"],
+  // Alters only — nothing to probe for.
+  "0094_knowledge_schedule.sql": [],
+  "0095_knowledge_costs.sql": [],
+  "0096_knowledge_inventory_link.sql": [],
+  // Comments only — nothing to probe for.
+  "0097_costs_from_inventory.sql": [],
+  "0098_knowledge_tool_link.sql": [],
+  "0099_cost_basis.sql": [],
+  "0100_units_outputs_and_fees.sql": ["knowledge_units"],
+  "0101_inventory_kind_resale_steps.sql": [],
+  "0102_node_time_and_rate.sql": [],
+  "0103_inventory_codes_and_movements.sql": ["inventory_codes", "inventory_movements"],
+  "0104_flyer_ad_spots.sql": ["flyer_ad_spots"],
+  "0105_social_posts.sql": ["social_posts"],
+  "0106_knowledge_app_links.sql": [],
+  "0107_canvas_orientation.sql": [],
+  "0108_door_hangers.sql": ["door_hanger_slots"],
+  "0109_door_hanger_backs.sql": [],
+  "0110_rank_grid.sql": ["rank_keywords", "rank_scans", "rank_points"],
+  "0111_canvas_marks.sql": [],
+  "0112_photo_waivers.sql": ["job_photo_waivers"],
+  "0113_time_clock.sql": ["time_entries"],
+  "0114_photo_review.sql": ["job_photo_marks"],
+  "0115_visit_labour.sql": [],
+  "0116_payment_plans.sql": ["payment_plans", "payment_plan_instalments", "payments"],
+  // Alters only — nothing to probe for.
+  "0117_payment_invoice_ref.sql": [],
+  "0118_proposal_objections.sql": ["proposal_objections", "proposal_scope_requests"],
+  "0119_early_start_requests.sql": ["early_start_requests"],
+  "0120_email_sending.sql": ["email_domains", "email_senders"],
+  // Alters and a bucket — nothing new to probe for.
+  "0121_knowledge_issues.sql": [],
+  "0122_service_scope_template.sql": [],
+  "0123_service_performed_by.sql": [],
+  "0124_acceptance_payment_path.sql": [],
+  "0125_client_chosen_day.sql": [],
+  "0126_proposal_views.sql": ["proposal_views"],
+  "0127_flyer_bookings.sql": ["flyer_runs", "flyer_bookings"],
+  // Constraint only — nothing to probe for.
+  "0128_business_contact_type.sql": [],
+  "0129_flyer_artwork_kind.sql": [],
+  // Bucket settings only — nothing to probe for.
+  "0130_flyer_upload_limit.sql": [],
+  "0131_proposal_edits.sql": ["proposal_edits"],
+  "0132_conversation_reads.sql": ["conversation_reads"],
+  "0133_proposal_edit_source.sql": [],
+  "0134_evaluation_edits.sql": ["evaluation_edits"],
+  "0135_pipeline_override.sql": [],
+  // Indexes only — nothing to probe for.
+  "0136_contact_import_conflict_target.sql": [],
+  "0137_job_disputes.sql": [],
+  "0138_archived_proposals.sql": ["archived_proposals"],
+  "0139_payment_import.sql": [],
+  "0140_processing_fees.sql": [],
+  "0141_payment_payer.sql": [],
+  "0142_client_invoices.sql": ["client_invoices"],
+  "0143_invoice_payment_plans.sql": [],
+  "0144_invoice_import.sql": [],
+  "0145_payment_surcharge.sql": [],
+  "0146_payment_invoice_link.sql": [],
+};
+
+const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
+const tracked = files.filter((f) => f in CREATES);
+
+function escape(text) {
+  return text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
+
+const entries = tracked.map((file) => {
+  const sql = readFileSync(join(DIR, file), "utf8");
+  return `  {
+    file: ${JSON.stringify(file)},
+    creates: ${JSON.stringify(CREATES[file])},
+    adds: ${JSON.stringify(columnsAdded(sql))},
+    sql: \`${escape(sql)}\`,
+  },`;
+});
+
+writeFileSync(
+  OUT,
+  `// GENERATED by scripts/build-migration-bundle.mjs — do not edit by hand.
+// Run the script after adding a migration; src/lib/migrations/bundle.test.ts
+// fails if this file has drifted from supabase/migrations.
+
+export interface BundledMigration {
+  file: string;
+  /** Tables this migration creates, used to detect whether it has been run. */
+  creates: string[];
+  /** Columns it adds, as "table.column". Lets an ALTER-only migration be
+   * probed for rather than assumed from its neighbours. */
+  adds: string[];
+  sql: string;
+}
+
+export const MIGRATION_BUNDLE: BundledMigration[] = [
+${entries.join("\n")}
+];
+`
+);
+console.log(`wrote ${OUT} with ${tracked.length} migrations`);
