@@ -125,10 +125,12 @@ export async function recheckSendingDomain(domainId: string): Promise<EmailResul
       return { ok: false, message: "That domain isn't registered with the provider." };
     }
 
-    // Nudge first, then read. Asking for the status without the nudge returns
-    // whatever the last scheduled check found, which on a domain somebody
-    // just fixed is the stale answer they are trying to get past.
+    // Nudge, wait, then read. The provider re-reads DNS on its own clock
+    // after a nudge, so the status straight after one is the old status,
+    // which on a domain somebody just fixed is the stale answer they are
+    // trying to get past. A few seconds is usually enough for it to come round.
     await verifyProviderDomain(domain.provider_domain_id);
+    await new Promise((resolve) => setTimeout(resolve, 6000));
     const fresh = await getProviderDomain(domain.provider_domain_id);
     if (!fresh.ok) return { ok: false, message: fresh.message };
 
