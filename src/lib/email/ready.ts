@@ -2,10 +2,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProviderDomain, verifyProviderDomain } from "@/lib/email/resend";
 import { isResendConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
-import type { MailStream } from "@/lib/sending-domains";
+import type { DnsRecord, MailStream } from "@/lib/sending-domains";
 
 /** How often a pending domain is asked about, so a busy day is not a hundred provider calls. */
 const RECHECK_AFTER_MS = 10 * 60 * 1000;
+
+/** How long to give the provider to re-read DNS after a nudge, before asking again. */
+const SETTLE_MS = 6000;
 
 /**
  * Gets the business's mail ready to send without anybody pressing anything.
@@ -27,7 +30,7 @@ export async function ensureSendingReady(organizationId: string, stream: MailStr
   try {
     const { data: domain } = await admin
       .from("email_domains")
-      .select("id, hostname, status, provider_domain_id, last_checked_at")
+      .select("id, hostname, status, provider_domain_id, last_checked_at, dns_records")
       .eq("organization_id", organizationId)
       .eq("stream", stream)
       .maybeSingle();
@@ -39,13 +42,31 @@ export async function ensureSendingReady(organizationId: string, stream: MailStr
       if (Date.now() - last >= RECHECK_AFTER_MS) {
         // Claimed first, so two sends at once do not both ask the provider.
         await admin.from("email_domains").update({ last_checked_at: new Date().toISOString() }).eq("id", domain.id);
-        await verifyProviderDomain(domain.provider_domain_id).catch(() => null);
-        const fresh = await getProviderDomain(domain.provider_domain_id);
+
+        // Read, then nudge, then read again. The provider checks DNS on its
+        // own clock after a nudge, so the answer straight after one is the
+        // old answer. A few seconds is usually enough for it to come round.
+        let fresh = await getProviderDomain(domain.provider_domain_id);
+        if (fresh.ok && fresh.data.status !== "verified") {
+          await verifyProviderDomain(domain.provider_domain_id).catch(() => null);
+          await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+          fresh = await getProviderDomain(domain.provider_domain_id);
+        }
         if (fresh.ok) {
           status = fresh.data.status;
+          // Our own lookups are kept on the records: the provider's answer
+          // says nothing about whether the paste took, and that line is the
+          // one the settings screen is read for.
+          const previous = ((domain.dns_records ?? []) as unknown as DnsRecord[]);
+          const records = fresh.data.records.map((record) => ({
+            ...record,
+            lookup:
+              previous.find((p) => p.type === record.type && p.name === record.name && p.value === record.value)?.lookup ??
+              null,
+          }));
           await admin
             .from("email_domains")
-            .update({ status: fresh.data.status, dns_records: fresh.data.records, last_checked_at: new Date().toISOString() })
+            .update({ status: fresh.data.status, dns_records: records, last_checked_at: new Date().toISOString() })
             .eq("id", domain.id);
           log.info("email.domain.rechecked", { organizationId, hostname: domain.hostname, status });
         }
