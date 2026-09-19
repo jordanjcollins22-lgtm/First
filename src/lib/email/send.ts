@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { log, maskEmail } from "@/lib/log";
 import { sendProviderEmail } from "@/lib/email/resend";
+import { ensureSendingReady } from "@/lib/email/ready";
 import type { MailStream } from "@/lib/sending-domains";
 
 export type SendResult = { ok: true; id: string } | { ok: false; message: string };
@@ -35,7 +36,7 @@ export interface SendInput {
  * Runs on the service-role client, because the callers are webhooks and cron
  * jobs where nobody is signed in.
  */
-export async function sendEmail(input: SendInput): Promise<SendResult> {
+export async function sendEmail(input: SendInput, attempt = 0): Promise<SendResult> {
   const admin = createAdminClient();
 
   const { data: domain } = await admin
@@ -45,6 +46,12 @@ export async function sendEmail(input: SendInput): Promise<SendResult> {
     .eq("stream", input.stream)
     .eq("status", "verified")
     .maybeSingle();
+
+  // No verified domain, or a domain with no address: get it ready and try
+  // once more, so a domain whose DNS landed last week starts sending today.
+  if (!domain && attempt === 0 && (await ensureSendingReady(input.organizationId, input.stream))) {
+    return sendEmail(input, 1);
+  }
 
   if (!domain) {
     return {
@@ -63,6 +70,9 @@ export async function sendEmail(input: SendInput): Promise<SendResult> {
     .eq("is_default", true)
     .maybeSingle();
 
+  if (!sender && attempt === 0 && (await ensureSendingReady(input.organizationId, input.stream))) {
+    return sendEmail(input, 1);
+  }
   if (!sender) {
     return {
       ok: false,

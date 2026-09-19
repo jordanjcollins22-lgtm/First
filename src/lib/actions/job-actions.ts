@@ -1,6 +1,7 @@
 "use server";
 
 import { cancelEvaluationInGhl, syncEvaluationToGhl } from "@/lib/ghl/sync";
+import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 
 import { revalidatePath } from "next/cache";
 
@@ -322,7 +323,10 @@ export async function scheduleEstimate(
 
     // The GoHighLevel calendar follows: moved with the visit, or marked
     // cancelled when the visit is taken off the calendar.
-    if (date) await syncEvaluationToGhl(jobId);
+    if (date) {
+      await syncEvaluationToGhl(jobId);
+      await sendEvaluationConfirmationNow(jobId);
+    }
     else await cancelEvaluationInGhl(jobId);
 
     refresh(jobId);

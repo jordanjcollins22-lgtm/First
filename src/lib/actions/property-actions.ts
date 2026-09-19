@@ -2,6 +2,7 @@
 
 import { modeForAddress } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
+import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -387,6 +388,7 @@ export async function bookEvaluation(input: ManualEvaluationInput): Promise<Book
 
     // And onto the GoHighLevel calendar, so the office sees one calendar.
     await syncEvaluationToGhl(job.id);
+    await sendEvaluationConfirmationNow(job.id);
 
     revalidatePath("/evaluations");
     revalidatePath("/attractors");

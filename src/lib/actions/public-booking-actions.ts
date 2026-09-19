@@ -17,6 +17,7 @@ import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
+import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
 import { ensureClientAccount } from "@/lib/data/client-accounts";
 
@@ -311,6 +312,9 @@ export async function submitPublicBooking(
   // Onto the GoHighLevel calendar too, so the office sees one calendar.
   // Never fails the booking: it logs and moves on if GoHighLevel is down.
   await syncEvaluationToGhl(job.id);
+
+  // "You're booked", now, not at tomorrow's reminder run.
+  await sendEvaluationConfirmationNow(job.id);
 
   // And give them a way back in. No password: they ask for a code when they
   // want to see their quote again, instead of hunting for our email. Carries
