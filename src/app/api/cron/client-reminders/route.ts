@@ -178,29 +178,38 @@ async function subjectsFor(
   const out: SubjectWithFacts[] = [];
   const recently = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: customers } = await admin
-    .from("customers")
-    .select("id")
-    .eq("organization_id", organizationId);
-  const customerIds = (customers ?? []).map((row) => row.id);
-  if (customerIds.length === 0) return out;
-
-  const { data: properties } = await admin
-    .from("properties")
-    .select("id, address, customer_id")
-    .in("customer_id", customerIds);
-  const propertyById = new Map((properties ?? []).map((row) => [row.id, row]));
-  if (propertyById.size === 0) return out;
-
-  const { data: jobs } = await admin
+  // Filtered on the join rather than by a list of ids. This used to read
+  // every customer in the business and put all their ids in the next
+  // request's URL, and at a couple of thousand customers that request is
+  // refused, quietly, and the run reminds nobody.
+  const { data: jobs, error: jobsError } = await admin
     .from("jobs")
-    .select("id, property_id, evaluation_date, evaluation_status, project_start_date, cancelled_at, completed_at, created_at")
-    .in("property_id", [...propertyById.keys()])
+    .select(
+      "id, evaluation_date, evaluation_status, project_start_date, completed_at, created_at, property:properties!inner(address, customer_id, customer:customers!inner(organization_id))"
+    )
+    .eq("property.customer.organization_id", organizationId)
     .is("cancelled_at", null)
+    .or("evaluation_date.not.is.null,project_start_date.not.is.null")
+    .order("created_at", { ascending: false })
     .limit(1000);
+  if (jobsError) {
+    log.error("cron.client_reminders.jobs", jobsError, { organizationId });
+    return out;
+  }
 
-  for (const job of jobs ?? []) {
-    const property = job.property_id ? propertyById.get(job.property_id) : undefined;
+  type JobRow = {
+    id: string;
+    evaluation_date: string | null;
+    evaluation_status: string | null;
+    project_start_date: string | null;
+    completed_at: string | null;
+    created_at: string;
+    property: { address: string; customer_id: string | null } | null;
+  };
+  const rows = (jobs ?? []) as unknown as JobRow[];
+
+  for (const job of rows) {
+    const property = job.property;
     if (!property?.customer_id) continue;
 
     if (job.evaluation_date) {
@@ -259,19 +268,29 @@ async function subjectsFor(
     }
   }
 
-  const jobById = new Map((jobs ?? []).map((job) => [job.id, job]));
-  const { data: proposals } = await admin
+  // Proposals carry the business directly, so no list of job ids is needed.
+  const { data: proposals, error: proposalsError } = await admin
     .from("job_proposals")
-    .select("id, token, status, created_at, job_id")
-    .in("job_id", [...jobById.keys()])
+    .select("id, token, status, created_at, job:jobs!inner(id, cancelled_at, property:properties!inner(address, customer_id))")
+    .eq("organization_id", organizationId)
     .eq("status", "sent")
     .gte("created_at", recently)
     .limit(500);
+  if (proposalsError) {
+    log.error("cron.client_reminders.proposals", proposalsError, { organizationId });
+    return out;
+  }
 
-  for (const proposal of proposals ?? []) {
-    const job = proposal.job_id ? jobById.get(proposal.job_id) : undefined;
-    const property = job?.property_id ? propertyById.get(job.property_id) : undefined;
-    if (!property?.customer_id) continue;
+  type ProposalRow = {
+    id: string;
+    token: string;
+    status: string;
+    created_at: string;
+    job: { id: string; cancelled_at: string | null; property: { address: string; customer_id: string | null } | null } | null;
+  };
+  for (const proposal of (proposals ?? []) as unknown as ProposalRow[]) {
+    const property = proposal.job?.property;
+    if (!property?.customer_id || proposal.job?.cancelled_at) continue;
     out.push({
       subject: {
         kind: "proposal_follow_up",
