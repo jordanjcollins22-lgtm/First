@@ -752,6 +752,11 @@ export interface JobProposal {
   approved_at: string | null;
   responded_at: string | null;
   client_response_note: string | null;
+  /** Set when the office closed it, on the board or after a call, rather
+   * than the client pressing Decline. What it said before is kept so the
+   * decline can be taken back. */
+  office_declined_by?: string | null;
+  office_declined_from?: "needs_approval" | "sent" | null;
   /** How the client chose to pay after accepting. Null means they have
    * accepted but not chosen yet, which is a job waiting on them, not on us. */
   payment_path: "full" | "plan" | "plan_no_discount" | null;

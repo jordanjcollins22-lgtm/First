@@ -414,7 +414,11 @@ async function TilesBlock({ profile }: { profile: Profile }) {
     );
   }
   const { summary } = data;
-  const nothing = data.evaluations.every((s) => s.rows.length === 0) && data.jobs.every((s) => s.rows.length === 0);
+  // Declined is history, and history belongs on the dashboard. A "Declined"
+  // pile on the day's list is a row of jobs nobody is meant to touch, on the
+  // one screen that is meant to be only what to do next.
+  const jobs = data.jobs.filter((section) => section.key !== "declined");
+  const nothing = data.evaluations.every((s) => s.rows.length === 0) && jobs.every((s) => s.rows.length === 0);
   return (
     <>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -458,7 +462,7 @@ async function TilesBlock({ profile }: { profile: Profile }) {
           <DashboardSections
             title="Today's jobs"
             blurb="Your work. Sold-but-unbooked and sign-off piles ignore the date — they matter whenever they exist."
-            sections={data.jobs}
+            sections={jobs}
           />
         </>
       )}

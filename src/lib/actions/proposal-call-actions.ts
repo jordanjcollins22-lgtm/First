@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { revalidateJobViews } from "@/lib/revalidate-job";
+import { declineOpenProposals } from "@/lib/data/decline-proposals";
 import { defaultCallbackOn, isCallOutcome, OUTCOME_LABEL } from "@/lib/call-list";
 
 export type CallResult = { ok: true; message: string } | { ok: false; message: string };
@@ -77,9 +78,7 @@ export async function recordProposalCall(input: {
           declined_reason: input.note.trim() || OUTCOME_LABEL[input.outcome],
         })
         .eq("id", proposal.job_id);
-      if (proposal.status === "sent") {
-        await supabase.from("job_proposals").update({ status: "declined", responded_at: now }).eq("id", proposal.id);
-      }
+      await declineOpenProposals(supabase, proposal.job_id, profile.id, now);
     }
     if (input.outcome === "do_not_call" && customer) {
       await supabase.from("customers").update({ do_not_contact: true }).eq("id", customer.id);

@@ -3178,6 +3178,8 @@ export interface Database {
           approved_at: string | null;
           responded_at: string | null;
           client_response_note: string | null;
+          office_declined_by: string | null;
+          office_declined_from: string | null;
           created_at: string;
           updated_at: string;
         };

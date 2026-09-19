@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { cancelJob } from "@/lib/actions/job-actions";
 import { revalidateJobViews } from "@/lib/revalidate-job";
+import { declineOpenProposals, reopenOfficeDeclined } from "@/lib/data/decline-proposals";
 import {
   STAGE_STATUSES,
   derivedPosition,
@@ -103,6 +104,12 @@ export async function moveJobOnPipeline(
       .eq("id", jobId);
     if (saveError) return { ok: false, message: saveError.message };
 
+    // The proposal is the other half of the same fact. Left saying "sent",
+    // the proposals list, the call list and the client's own page all went
+    // on treating a declined job as live.
+    if (declining) await declineOpenProposals(supabase, jobId, profile.id, now);
+    else await reopenOfficeDeclined(supabase, jobId);
+
     revalidateJobViews(jobId);
     return { ok: true, status };
   } catch (err) {
@@ -134,6 +141,8 @@ export async function clearPipelineOverride(jobId: string): Promise<MoveResponse
       })
       .eq("id", jobId);
     if (error) return { ok: false, message: error.message };
+
+    await reopenOfficeDeclined(supabase, jobId);
 
     revalidateJobViews(jobId);
     return { ok: true, status: "automatic" };

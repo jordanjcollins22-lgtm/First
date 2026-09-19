@@ -16,6 +16,7 @@ import { ObjectionsPanel } from "@/components/proposal/objections-panel";
 import type { ScopeLine } from "@/lib/objections";
 import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
 import { HOW_TO_REPLY } from "@/lib/message-via";
+import { declinedWording } from "@/lib/proposal-close";
 import { PROPOSAL_REFERENCE, zoneReference } from "@/lib/needs-reply";
 import {
   PROPOSAL_ACCEPT_NOTE,
@@ -526,9 +527,11 @@ function ProposalBody({
           <div className="flex flex-col items-center gap-2 text-center">
             <XCircle className="h-8 w-8 text-muted-foreground" />
             <p className="font-semibold">
-              You declined this proposal{respondedAt ? ` on ${new Date(respondedAt).toLocaleDateString()}` : ""}.
+              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_by), respondedAt }).headline}
             </p>
-            <p className="text-sm text-muted-foreground">Feel free to reach out if anything changes.</p>
+            <p className="text-sm text-muted-foreground">
+              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_by), respondedAt }).detail}
+            </p>
           </div>
         )}
       </div>
