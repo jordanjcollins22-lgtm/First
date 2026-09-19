@@ -8,6 +8,7 @@ import { assessOps, planForDatabase, type OpsPulse } from "@/lib/ops";
 import { syncOrganization } from "@/lib/plaid";
 import { isPlaidConfigured } from "@/lib/env";
 import { probeStripe, recordPaymentsHealth } from "@/lib/data/payments-health";
+import { expireProposals } from "@/lib/data/expire-proposals";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -30,6 +31,13 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   const { data: orgs, error } = await admin.from("organizations").select("id, name");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Proposals whose time ran out overnight close first, so the numbers the
+  // pulse judges do not count money that is no longer on the table.
+  const expired = await expireProposals(admin).catch((err) => {
+    console.error("[ops] expiring proposals:", err);
+    return 0;
+  });
 
   const report: Record<string, unknown>[] = [];
   for (const org of orgs ?? []) {
@@ -89,5 +97,5 @@ export async function GET(request: NextRequest) {
       report.push({ org: org.name, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  return NextResponse.json({ organisations: report });
+  return NextResponse.json({ organisations: report, expiredProposals: expired });
 }

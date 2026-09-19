@@ -17,6 +17,7 @@ import type { ScopeLine } from "@/lib/objections";
 import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
 import { HOW_TO_REPLY } from "@/lib/message-via";
 import { declinedWording } from "@/lib/proposal-close";
+import { clientValidityLine, expiredWording, isExpired } from "@/lib/proposal-validity";
 import { PROPOSAL_REFERENCE, zoneReference } from "@/lib/needs-reply";
 import {
   PROPOSAL_ACCEPT_NOTE,
@@ -423,6 +424,16 @@ function ProposalBody({
           <p className="text-sm text-muted-foreground">
             Not approved yet — the client can&apos;t see or act on this until it&apos;s sent.
           </p>
+        ) : status === "sent" && isExpired(proposal.expires_at, new Date()) ? (
+          // Over, whether or not the morning run has closed it yet. The
+          // buttons go, because a price that stopped standing is not for
+          // accepting; the message box below stays, because that is how a
+          // fresh one gets asked for.
+          <div className="flex flex-col items-center gap-2 text-center">
+            <XCircle className="h-8 w-8 text-muted-foreground" />
+            <p className="font-semibold">{expiredWording(proposal.expires_at!).headline}</p>
+            <p className="text-sm text-muted-foreground">{expiredWording(proposal.expires_at!).detail}</p>
+          </div>
         ) : status === "sent" ? (
           <>
             {!showDeclineForm ? (
@@ -495,6 +506,11 @@ function ProposalBody({
             {!showDeclineForm && (
               <p className="text-center text-xs text-muted-foreground">{PROPOSAL_ACCEPT_NOTE}</p>
             )}
+            {!showDeclineForm && clientValidityLine(proposal.expires_at, new Date()) && (
+              <p className="text-center text-xs font-medium text-muted-foreground">
+                {clientValidityLine(proposal.expires_at, new Date())}
+              </p>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
           </>
         ) : status === "accepted" ? (
@@ -527,10 +543,10 @@ function ProposalBody({
           <div className="flex flex-col items-center gap-2 text-center">
             <XCircle className="h-8 w-8 text-muted-foreground" />
             <p className="font-semibold">
-              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_from), respondedAt }).headline}
+              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_from), respondedAt, expiresAt: proposal.expires_at }).headline}
             </p>
             <p className="text-sm text-muted-foreground">
-              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_from), respondedAt }).detail}
+              {declinedWording({ closedByOffice: Boolean(proposal.office_declined_from), respondedAt, expiresAt: proposal.expires_at }).detail}
             </p>
           </div>
         )}

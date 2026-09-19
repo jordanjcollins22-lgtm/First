@@ -22,6 +22,12 @@ describe("declinedWording", () => {
     expect(words.headline).not.toMatch(/You declined/);
     expect(words.detail).toMatch(/reopen/);
   });
+  it("says it expired when the time ran out before the office closed it", () => {
+    const words = declinedWording({ closedByOffice: true, respondedAt: "2026-09-14T14:51:55Z", expiresAt: "2026-09-14T14:51:55Z" });
+    expect(words.headline).toMatch(/expired on Sep 14/);
+    const early = declinedWording({ closedByOffice: true, respondedAt: "2026-09-11T14:51:55Z", expiresAt: "2026-09-24T14:51:55Z" });
+    expect(early.headline).toMatch(/closed/);
+  });
   it("keeps the client's own decline in their words", () => {
     expect(declinedWording({ closedByOffice: false, respondedAt: null }).headline).toBe("You declined this proposal.");
   });

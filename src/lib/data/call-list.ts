@@ -5,6 +5,7 @@ import { viewsForAllProposals } from "@/lib/data/proposal-views";
 import { attentionForAllProposals } from "@/lib/data/proposal-attention";
 import { isAccountManager } from "@/lib/affiliate-roles";
 import { isOwnerLevel } from "@/lib/roles";
+import { isExpired } from "@/lib/proposal-validity";
 import type { ViewSummary } from "@/lib/proposal-views";
 import type { AttentionSummary } from "@/lib/proposal-attention";
 import { buildCallList, isCallOutcome, type CallItem, type CallList, type PreviousCall, type ObjectionTap } from "@/lib/call-list";
@@ -28,7 +29,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
   const { data: rows } = await supabase
     .from("job_proposals")
     .select(
-      "id, job_id, status, total_cost, discount_amount, approved_at, responded_at, client_response_note, scope_snapshot, job:jobs(id, status, declined_at, cancelled_at, property:properties(address, customer:customers(id, name, phone, account_manager_id, do_not_contact)))"
+      "id, job_id, status, total_cost, discount_amount, approved_at, responded_at, client_response_note, scope_snapshot, expires_at, job:jobs(id, status, declined_at, cancelled_at, property:properties(address, customer:customers(id, name, phone, account_manager_id, do_not_contact)))"
     )
     .eq("organization_id", organizationId)
     // Sent and unanswered only. A declined proposal is over, whether the
@@ -48,6 +49,7 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
     responded_at: string | null;
     client_response_note: string | null;
     scope_snapshot: ProposalZoneSnapshot[] | null;
+    expires_at: string | null;
     job: {
       id: string;
       status: string;
@@ -58,7 +60,15 @@ export async function getCallList(profile: Profile, today: Date = new Date()): P
         customer: { id: string; name: string; phone: string | null; account_manager_id: string | null; do_not_contact: boolean } | null;
       } | null;
     } | null;
-  }[]).filter((p) => p.job && p.job.status !== "cancelled" && !p.job.cancelled_at && !p.job.declined_at);
+  }[]).filter(
+    (p) =>
+      p.job &&
+      p.job.status !== "cancelled" &&
+      !p.job.cancelled_at &&
+      !p.job.declined_at &&
+      // Ran out of time. The morning run closes it; nobody rings it meanwhile.
+      !isExpired(p.expires_at, today)
+  );
 
   const seesAll = isOwnerLevel(profile.roles) || profile.roles.includes("admin");
   const mine = proposals.filter((p) => {

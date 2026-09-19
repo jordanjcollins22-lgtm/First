@@ -7,6 +7,7 @@
  * was written, and the second went on saying "sent" to everybody who read it.
  */
 
+import { expiredWording, isExpired } from "@/lib/proposal-validity";
 import type { ProposalStatus } from "@/types/domain";
 
 /** The statuses a proposal can still be closed from. Accepted is a contract. */
@@ -23,10 +24,18 @@ export function isOpenProposal(status: string | null | undefined): status is "ne
  * office closed it, after a call or on the board, the page says so without
  * putting words in their mouth.
  */
-export function declinedWording(input: { closedByOffice: boolean; respondedAt: string | null }): {
+export function declinedWording(input: {
+  closedByOffice: boolean;
+  respondedAt: string | null;
+  /** When it stopped standing, if it had a life. Run out before it was closed means it expired. */
+  expiresAt?: string | null;
+}): {
   headline: string;
   detail: string;
 } {
+  if (input.closedByOffice && input.expiresAt && isExpired(input.expiresAt, input.respondedAt ? new Date(input.respondedAt) : new Date())) {
+    return expiredWording(input.expiresAt);
+  }
   const on = input.respondedAt ? ` on ${new Date(input.respondedAt).toLocaleDateString()}` : "";
   if (input.closedByOffice) {
     return {

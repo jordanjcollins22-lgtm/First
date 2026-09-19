@@ -758,6 +758,9 @@ export interface JobProposal {
    * is kept when known. */
   office_declined_by?: string | null;
   office_declined_from?: "needs_approval" | "sent" | null;
+  /** How long it stands once sent, 7 or 14 days, and the moment that runs out. */
+  valid_days?: number;
+  expires_at?: string | null;
   /** How the client chose to pay after accepting. Null means they have
    * accepted but not chosen yet, which is a job waiting on them, not on us. */
   payment_path: "full" | "plan" | "plan_no_discount" | null;

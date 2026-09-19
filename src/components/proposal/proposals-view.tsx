@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
+import { updateProposalDraft, approveProposal, setProposalValidity } from "@/lib/actions/proposal-actions";
+import { DEFAULT_VALID_DAYS, VALID_DAY_OPTIONS, validityLine } from "@/lib/proposal-validity";
 import type { ProposalWithJob } from "@/lib/data/all-proposals";
 import { ViewCount } from "@/components/proposal/view-count";
 import { TrimPanel } from "@/components/proposal/trim-panel";
@@ -62,6 +63,17 @@ function ProposalRow({
     });
   }
 
+  function validity(days: number) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await setProposalValidity(job.id, days);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't change how long it stands.");
+      }
+    });
+  }
+
   function approve() {
     setError(null);
     startTransition(async () => {
@@ -99,6 +111,34 @@ function ProposalRow({
           shown, so "when did they sign?" was answered from memory. */}
       {responded && (
         <p className="text-xs font-medium text-muted-foreground">{responded}</p>
+      )}
+
+      {/* How long it has left, or how long it will have. It closes on its
+          own when that runs out, so the number is worth watching. */}
+      {proposal.status === "sent" && validityLine(proposal.expires_at, new Date()) && (
+        <p className="text-xs font-medium text-muted-foreground">{validityLine(proposal.expires_at, new Date())}</p>
+      )}
+      {showApprove && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">Good for</span>
+          {VALID_DAY_OPTIONS.map((days) => {
+            const on = (proposal.valid_days ?? DEFAULT_VALID_DAYS) === days;
+            return (
+              <button
+                key={days}
+                type="button"
+                disabled={isPending}
+                onClick={() => validity(days)}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 font-semibold",
+                  on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+                )}
+              >
+                {days} days
+              </button>
+            );
+          })}
+        </div>
       )}
 
       {/* And whether the money turned up. Nothing is said on a proposal with

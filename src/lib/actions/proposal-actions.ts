@@ -25,6 +25,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { listScopeRecommendations } from "@/lib/data/scope-reviews";
 import { reviewBlocker, reviewsFor } from "@/lib/scope-review";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
+import { DEFAULT_VALID_DAYS, expiryOf, isValidDays } from "@/lib/proposal-validity";
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -308,12 +309,37 @@ export async function approveProposal(jobId: string) {
   const priceBlocker = zeroPriceBlocker(priced);
   if (priceBlocker) throw new Error(priceBlocker);
 
+  // The clock starts now. Seven or fourteen days, whichever was chosen on
+  // the draft, and after that it closes on its own.
+  const { data: life } = await supabase.from("job_proposals").select("valid_days").eq("job_id", jobId).maybeSingle();
+  const validDays = isValidDays(life?.valid_days) ? life.valid_days : DEFAULT_VALID_DAYS;
+  const now = new Date();
   const { error } = await supabase
     .from("job_proposals")
-    .update({ status: "sent", approved_at: new Date().toISOString() })
+    .update({ status: "sent", approved_at: now.toISOString(), valid_days: validDays, expires_at: expiryOf(now, validDays).toISOString() })
     .eq("job_id", jobId)
     .eq("status", "needs_approval");
   if (error) throw error;
 
+  revalidateJobViews(jobId);
+}
+
+/** How long the proposal will stand once it goes out. Set on the draft, before approval. */
+export async function setProposalValidity(jobId: string, days: number): Promise<void> {
+  const profile = await getCurrentProfile();
+  if (!profile) throw new Error("Not signed in.");
+  if (!isValidDays(days)) throw new Error("A proposal is good for 7 or 14 days.");
+
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("job_proposals").select("status, approved_at").eq("job_id", jobId).maybeSingle();
+  if (!current) throw new Error("There is no proposal on this job.");
+
+  // Already out: the clock is running from the day it was sent, so the new
+  // life is measured from then, not from today.
+  const patch: Database["public"]["Tables"]["job_proposals"]["Update"] = { valid_days: days };
+  if (current.status === "sent" && current.approved_at) patch.expires_at = expiryOf(current.approved_at, days).toISOString();
+
+  const { error } = await supabase.from("job_proposals").update(patch).eq("job_id", jobId);
+  if (error) throw error;
   revalidateJobViews(jobId);
 }

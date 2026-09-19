@@ -10,7 +10,8 @@ import { DiscountSelect } from "@/components/canvas/discount-select";
 import { ViewCount } from "@/components/proposal/view-count";
 import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
 import { cn } from "@/lib/utils";
-import { generateProposal, updateProposalDraft, approveProposal } from "@/lib/actions/proposal-actions";
+import { generateProposal, updateProposalDraft, approveProposal, setProposalValidity } from "@/lib/actions/proposal-actions";
+import { DEFAULT_VALID_DAYS, VALID_DAY_OPTIONS, validityLine } from "@/lib/proposal-validity";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { suggestZoneScope, tidyZoneScope } from "@/lib/actions/scope-suggestion-actions";
 import { groupScopeByService } from "@/lib/zone-scope";
@@ -261,6 +262,17 @@ export function ProposalPanel({
     });
   }
 
+  function handleValidity(days: number) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await setProposalValidity(jobId, days);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't change how long it stands.");
+      }
+    });
+  }
+
   function handleApprove() {
     setError(null);
     startTransition(async () => {
@@ -292,6 +304,11 @@ export function ProposalPanel({
           {/* When they answered, not just that they did. It is the date the
               deposit runs from and the answer to "when did I agree to this?" */}
           {respondedLabel && <span className="text-xs text-muted-foreground">{respondedLabel}</span>}
+          {/* How long it has left. A price is a price for a while, and the
+              office should see the while running down. */}
+          {proposal?.status === "sent" && validityLine(proposal.expires_at, new Date()) && (
+            <span className="text-xs text-muted-foreground">{validityLine(proposal.expires_at, new Date())}</span>
+          )}
         </div>
         <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => handleGenerate()}>
           {proposal ? "Regenerate from site map" : "Generate now"}
@@ -570,6 +587,29 @@ export function ProposalPanel({
                   {zeroPriceBlocker(proposal)}
                 </p>
               )}
+              {/* Seven or fourteen days, chosen before it goes. After that it
+                  closes on its own and the client is offered a fresh one. */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Good for</span>
+                {VALID_DAY_OPTIONS.map((days) => {
+                  const on = (proposal.valid_days ?? DEFAULT_VALID_DAYS) === days;
+                  return (
+                    <button
+                      key={days}
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleValidity(days)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 font-semibold",
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+                      )}
+                    >
+                      {days} days
+                    </button>
+                  );
+                })}
+                <span className="text-muted-foreground">then it closes on its own</span>
+              </div>
               <Button
                 type="button"
                 className="self-start"

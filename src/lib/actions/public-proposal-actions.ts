@@ -8,6 +8,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
+import { isExpired } from "@/lib/proposal-validity";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
 import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
@@ -40,13 +41,18 @@ export async function respondToProposal(token: string, response: "accepted" | "d
   const admin = createAdminClient();
   const { data: proposal, error } = await admin
     .from("job_proposals")
-    .select("id, job_id, status, total_cost, discount_amount")
+    .select("id, job_id, status, total_cost, discount_amount, expires_at")
     .eq("token", token)
     .maybeSingle();
   if (error) throw error;
   if (!proposal) throw new Error("This proposal link isn't valid.");
   if (proposal.status === "needs_approval") throw new Error("This proposal isn't ready yet — check back soon.");
   if (proposal.status !== "sent") throw new Error("This proposal has already been responded to.");
+  // The price stood for a while and that while is over. The morning run
+  // will close it; until then the button must not work either.
+  if (response === "accepted" && isExpired(proposal.expires_at, new Date())) {
+    throw new Error("This proposal has expired. Message us and we will send you a fresh one.");
+  }
   // A $0 proposal should never have got this far. If one did, it is not accepted.
   if (response === "accepted" && zeroPriceBlocker(proposal)) {
     throw new Error("This proposal has no price on it yet. Please give us a call before accepting.");
