@@ -5,7 +5,6 @@ import {
   dayLabel,
   groupByDay,
   messageTime,
-  reachLine,
   type ThreadMessage,
 } from "./message-thread";
 
@@ -98,37 +97,16 @@ describe("messageTime", () => {
 describe("channelLabel", () => {
   it("distinguishes a team note from a message to the client", () => {
     expect(channelLabel("internal")).toBe("Team note");
-    expect(channelLabel("external")).toBe("Message");
-  });
-});
-
-describe("reachLine", () => {
-  it("says plainly when only the team sees it", () => {
-    expect(reachLine({ channel: "internal", phone: "410", email: "a@b.com", smsReady: true }))
-      .toBe("Only the team sees this.");
+    expect(channelLabel("external")).toBe("App message");
   });
 
-  it("names every way a client message actually reaches them", () => {
-    // "Message the client" means a text to one business and an email to
-    // another, and somebody typing should know which before they press send.
-    const line = reachLine({ channel: "external", phone: "410 555 0123", email: "jo@x.com", smsReady: true });
-    expect(line).toContain("text 410 555 0123");
-    expect(line).toContain("email jo@x.com");
+  it("says how a client message went out", () => {
+    expect(channelLabel("external", "email")).toBe("Email");
+    expect(channelLabel("external", "sms")).toBe("Text");
+    expect(channelLabel("external", "app")).toBe("App message");
   });
 
-  it("does not promise a text when texting is not switched on", () => {
-    const line = reachLine({ channel: "external", phone: "410 555 0123", email: null, smsReady: false });
-    expect(line).not.toContain("text");
-    expect(line).toContain("proposal page");
-  });
-
-  it("admits when there is no way to reach them but the page", () => {
-    const line = reachLine({ channel: "external", phone: null, email: null, smsReady: true });
-    expect(line).toContain("no phone or email on file");
-  });
-
-  it("uses no dashes", () => {
-    expect(reachLine({ channel: "external", phone: "1", email: "a@b", smsReady: true }))
-      .not.toMatch(/[—–]/);
+  it("says where a client's own message came from", () => {
+    expect(channelLabel("external", null, true)).toBe("From their page");
   });
 });

@@ -13,6 +13,7 @@
 
 import type { Channel } from "@/lib/client-consent";
 import type { ReminderKind } from "@/lib/client-reminders";
+import { HOW_TO_REPLY } from "@/lib/message-via";
 
 export interface MessageFacts {
   businessName: string;
@@ -109,9 +110,11 @@ export function composeReminder(
     };
   }
 
+  // The way back, on every email. The business's phone is a phone, not an
+  // inbox: a text to it lands on one handset and never reaches the thread.
   const foot = options.unsubscribeUrl
-    ? ["", `${facts.businessName}`, `Not want these reminders? ${options.unsubscribeUrl}`]
-    : ["", `${facts.businessName}`];
+    ? [HOW_TO_REPLY, `${facts.businessName}`, `Not want these reminders? ${options.unsubscribeUrl}`]
+    : [HOW_TO_REPLY, `${facts.businessName}`];
   return { subject, body: [...body, ...foot].join("\n\n") };
 }
 

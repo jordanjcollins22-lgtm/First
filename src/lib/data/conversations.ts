@@ -21,6 +21,7 @@ export type ConversationLastMessage = Pick<
   | "author_type"
   | "author_name"
   | "reference_label"
+  | "sent_via"
   | "body"
   | "created_at"
 >;
@@ -39,7 +40,7 @@ const CORE_MESSAGE_COLUMNS =
 
 /** Added by 0132. Asked for separately so its absence costs the reference
  * line rather than the page. */
-const MESSAGE_COLUMNS = `${CORE_MESSAGE_COLUMNS}, reference_label`;
+const MESSAGE_COLUMNS = `${CORE_MESSAGE_COLUMNS}, reference_label, sent_via`;
 
 /** How many conversations one load of the inbox shows. A phone screen holds
  * about six of these, so fifty is several thumb-flicks past what anybody

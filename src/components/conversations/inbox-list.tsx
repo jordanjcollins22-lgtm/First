@@ -128,7 +128,13 @@ export function InboxList({
                 >
                   <ContactAvatar
                     name={conversation.customerName || conversation.propertyAddress}
-                    badge={conversation.channel === "internal" ? Users : MessageSquare}
+                    badge={
+                      conversation.channel === "internal"
+                        ? Users
+                        : conversation.lastMessage.sent_via === "email"
+                          ? Mail
+                          : MessageSquare
+                    }
                     badgeClass={
                       waiting ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                     }

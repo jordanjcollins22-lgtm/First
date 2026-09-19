@@ -29,6 +29,7 @@ export function MessageThread({
   placeholder = "Write a message...",
   emptyLabel = "No messages yet.",
   footnote,
+  notice,
   reference,
   onClearReference,
 }: {
@@ -42,6 +43,9 @@ export function MessageThread({
   placeholder?: string;
   emptyLabel?: string;
   footnote?: string;
+  /** Said under the title, for the reader rather than the sender: how this
+   * conversation works and how it does not. */
+  notice?: string;
   /** What the sender is writing about, shown above the box and sent with the
    * message. Set when they tapped "Ask about this" on one part of a page. */
   reference?: string | null;
@@ -75,6 +79,7 @@ export function MessageThread({
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-white/60 bg-card/60 p-4 backdrop-blur-md">
       <p className="font-semibold">{title}</p>
+      {notice && <p className="-mt-2 text-xs text-muted-foreground">{notice}</p>}
 
       <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
         {messages.length === 0 ? (

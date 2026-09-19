@@ -708,6 +708,9 @@ export interface JobMessage {
    * proposal, or the proposal itself. Null on anything the office sends. */
   reference_label?: string | null;
   reference_kind?: string | null;
+  /** How it reached the client: on their page only, by email, or by text.
+   * Null on team notes and on messages from before this was recorded. */
+  sent_via?: "app" | "email" | "sms" | null;
   body: string;
   created_at: string;
 }

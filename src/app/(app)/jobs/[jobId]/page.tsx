@@ -61,6 +61,7 @@ import { getJobSchedule } from "@/lib/data/work-sessions";
 import { capabilities, deriveStage } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
+import { HOW_THEY_REPLY } from "@/lib/message-via";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { LocationPanel } from "@/components/canvas/location-panel";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -867,11 +868,9 @@ export default async function JobPage({
                   viewerAuthorType="team"
                   placeholder="Message the client..."
                   emptyLabel="No messages with the client yet."
-                  footnote={
-                    isTwilioConfigured
-                      ? "Also sent as a text message."
-                      : "Add Twilio to also send this as a text."
-                  }
+                  footnote={`Emailed when they have an address, ${
+                    isTwilioConfigured ? "texted" : "on their page"
+                  } otherwise. ${HOW_THEY_REPLY}`}
                 />
               </div>
             ),

@@ -2,12 +2,20 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronUp, MessageSquare, Send, User, Users } from "lucide-react";
+import { ChevronLeft, ChevronUp, Mail, MessageSquare, Send, Smartphone, User, Users } from "lucide-react";
 
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
-import { channelLabel, groupByDay, messageTime, reachLine, type ThreadMessage } from "@/lib/message-thread";
-import { postJobMessage } from "@/lib/actions/job-message-actions";
+import { channelLabel, groupByDay, messageTime, type ThreadMessage } from "@/lib/message-thread";
+import {
+  defaultVia,
+  HOW_THEY_REPLY,
+  viaOptions,
+  viaReachLine,
+  type MessageVia,
+  type ViaFacts,
+} from "@/lib/message-via";
+import { postJobMessage, sendClientMessageVia } from "@/lib/actions/job-message-actions";
 import { referenceLine } from "@/lib/needs-reply";
 import { SuggestBar } from "@/components/conversations/suggest-bar";
 
@@ -19,9 +27,13 @@ import { SuggestBar } from "@/components/conversations/suggest-bar";
  * text, a team note and something the client can read on their proposal is
  * unreadable unless each one says which it is.
  *
- * The composer names the channel before anything is typed. "Message the
- * client" means a text at one business and an email at another, and somebody
- * writing should know which before they press send, not after.
+ * The composer names the channel before anything is typed, and for the
+ * client it names the way: on their page, by email, or by text. The three are
+ * always shown, greyed with the reason when one cannot be used, so "why can't
+ * I text them" is answered on the button rather than in a support call.
+ *
+ * Under the box, the fact the office keeps forgetting: a client can write back
+ * from their page or by email, and a text to the office phone never lands here.
  */
 export function ClientThread({
   jobId,
@@ -31,6 +43,8 @@ export function ClientThread({
   phone,
   email,
   smsReady,
+  emailReady,
+  clientLink,
   messages,
 }: {
   jobId: string;
@@ -40,23 +54,36 @@ export function ClientThread({
   phone: string | null;
   email: string | null;
   smsReady: boolean;
+  emailReady: boolean;
+  clientLink: string | null;
   messages: ThreadMessage[];
 }) {
+  const facts: ViaFacts = { phone, email, smsReady, emailReady, clientLink };
   const [channel, setChannel] = useState<"external" | "internal">("external");
+  const [via, setVia] = useState<MessageVia>(() => defaultVia(facts));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const days = groupByDay(messages, new Date());
+  const options = viaOptions(facts);
 
   function send() {
     if (!body.trim()) return;
     setError(null);
+    setNote(null);
     const text = body;
     start(async () => {
       try {
-        await postJobMessage(jobId, channel, text);
+        if (channel === "external") {
+          const result = await sendClientMessageVia(jobId, text, via);
+          // Saved either way. What did not happen is said, not swallowed.
+          if (!result.delivered && result.note) setNote(result.note);
+        } else {
+          await postJobMessage(jobId, channel, text);
+        }
         setBody("");
       } catch {
         setError("That did not send. Try again.");
@@ -120,7 +147,7 @@ export function ClientThread({
                     }`}
                   >
                     <p className="text-[11px] text-muted-foreground">
-                      {channelLabel(message.channel)} · {messageTime(message.createdAt)}
+                      {channelLabel(message.channel, message.via, message.fromClient)} · {messageTime(message.createdAt)}
                       {message.fromClient ? "" : ` · ${message.authorName}`}
                     </p>
                     {referenceLine(message.reference) && (
@@ -168,6 +195,36 @@ export function ClientThread({
           </div>
         )}
 
+        {/* The way out, only when it is going to the client. Three buttons,
+            always, so the switch never jumps under a thumb. */}
+        {channel === "external" && (
+          <div className="mb-2 flex gap-1.5" role="radiogroup" aria-label="How to send this">
+            {options.map((option) => {
+              const Icon = option.via === "email" ? Mail : option.via === "sms" ? Smartphone : MessageSquare;
+              const on = via === option.via;
+              return (
+                <button
+                  key={option.via}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={!option.available}
+                  title={option.reason ?? undefined}
+                  onClick={() => setVia(option.via)}
+                  className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold ${
+                    on
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-muted-foreground"
+                  } disabled:opacity-40`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <button
             type="button"
@@ -203,8 +260,21 @@ export function ClientThread({
         </div>
 
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          {reachLine({ channel, phone, email, smsReady })}
+          {channel === "internal" ? "Only the team sees this." : viaReachLine(via, facts)}
         </p>
+        {channel === "external" && (
+          <>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{HOW_THEY_REPLY}</p>
+            {options
+              .filter((o) => !o.available && o.reason)
+              .map((o) => (
+                <p key={o.via} className="mt-0.5 text-[11px] text-muted-foreground">
+                  {o.label}: {o.reason}
+                </p>
+              ))}
+          </>
+        )}
+        {note && <p className="mt-1 text-xs font-semibold text-amber-700">{note}</p>}
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </div>
     </div>

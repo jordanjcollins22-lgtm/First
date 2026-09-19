@@ -1,3 +1,5 @@
+import { viaBubbleLabel, type MessageVia } from "@/lib/message-via";
+
 /**
  * A conversation, arranged the way somebody reads one.
  *
@@ -18,6 +20,8 @@ export interface ThreadMessage {
   authorName: string;
   /** Which way it went out, for the line above the bubble. */
   channel: string;
+  /** For a client message: on their page only, emailed, or texted. */
+  via?: MessageVia | null;
   /** What the client was writing about, when they said. */
   reference?: string | null;
 }
@@ -89,33 +93,15 @@ export function groupByDay(messages: ThreadMessage[], now: Date): ThreadDay[] {
     }));
 }
 
-/** How a message went out, above the bubble. */
-export function channelLabel(channel: string): string {
-  if (channel === "internal") return "Team note";
-  return "Message";
-}
-
 /**
- * Who a client message actually reaches.
+ * How a message went out, above the bubble.
  *
- * Said on the composer rather than assumed, because "message the client"
- * means a text to one business and an email to another, and somebody typing
- * should know which before they press send.
+ * A thread that mixes an email, a text, a team note and something the client
+ * can only read on their page is unreadable unless each one says which it is.
+ * Client messages coming in always came from their page.
  */
-export function reachLine(input: {
-  channel: string;
-  phone: string | null;
-  email: string | null;
-  smsReady: boolean;
-}): string {
-  if (input.channel === "internal") return "Only the team sees this.";
-
-  const ways: string[] = [];
-  if (input.smsReady && input.phone) ways.push(`text ${input.phone}`);
-  if (input.email) ways.push(`email ${input.email}`);
-
-  if (ways.length === 0) {
-    return "They will see this on their proposal page. We have no phone or email on file for them.";
-  }
-  return `Goes to their proposal page and as a ${ways.join(" and a ")}.`;
+export function channelLabel(channel: string, via?: MessageVia | null, fromClient = false): string {
+  if (channel === "internal") return "Team note";
+  if (fromClient) return "From their page";
+  return viaBubbleLabel(via);
 }

@@ -15,6 +15,7 @@ import { respondToProposal } from "@/lib/actions/public-proposal-actions";
 import { ObjectionsPanel } from "@/components/proposal/objections-panel";
 import type { ScopeLine } from "@/lib/objections";
 import { postPublicClientMessage } from "@/lib/actions/public-job-message-actions";
+import { HOW_TO_REPLY } from "@/lib/message-via";
 import { PROPOSAL_REFERENCE, zoneReference } from "@/lib/needs-reply";
 import {
   PROPOSAL_ACCEPT_NOTE,
@@ -536,6 +537,7 @@ function ProposalBody({
       <div ref={messageBoxRef}>
       <MessageThread
         title="Questions? Send us a message"
+        notice={HOW_TO_REPLY}
         messages={messages}
         onSend={async (body, sentReference) => {
           // Read-only in preview: a test message from the office would land

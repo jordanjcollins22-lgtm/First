@@ -6,6 +6,8 @@ import { listJobMessages } from "@/lib/data/job-messages";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { createClient } from "@/lib/supabase/server";
 import { isTwilioConfigured } from "@/lib/env";
+import { outboundReady } from "@/lib/email/outbound";
+import { jobThreadContext } from "@/lib/message-context";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ClientThread } from "@/components/conversations/client-thread";
 
@@ -40,11 +42,16 @@ export default async function JobThreadPage({
     .eq("id", job.property_id)
     .maybeSingle();
 
-  const [contact, external, internal] = await Promise.all([
+  const [contact, external, internal, context] = await Promise.all([
     getJobCustomerContact(jobId),
     listJobMessages(jobId, "external"),
     listJobMessages(jobId, "internal"),
+    jobThreadContext(jobId),
   ]);
+  // Whether an email can actually leave. Asking also re-checks a pending
+  // sending domain with the provider, so opening a thread is enough to get
+  // a domain whose DNS landed last week sending today.
+  const email = contact ? await outboundReady(contact.organizationId) : { ready: false, why: "" };
 
   // Both sides of the conversation in one thread. Keeping them apart is what
   // made somebody read two panels to find out what had been said.
@@ -55,6 +62,7 @@ export default async function JobThreadPage({
     fromClient: m.author_type === "client",
     authorName: m.author_name,
     channel: m.channel,
+    via: m.sent_via ?? null,
     reference: m.reference_label ?? null,
   }));
 
@@ -67,6 +75,8 @@ export default async function JobThreadPage({
       phone={contact?.phone ?? null}
       email={contact?.email ?? null}
       smsReady={isTwilioConfigured}
+      emailReady={email.ready}
+      clientLink={context?.clientLink ?? null}
       messages={messages}
     />
   );

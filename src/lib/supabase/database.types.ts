@@ -3990,6 +3990,7 @@ export interface Database {
           body: string;
           reference_label: string | null;
           reference_kind: string | null;
+          sent_via: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["job_messages"]["Row"]> & {
