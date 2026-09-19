@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { log } from "@/lib/log";
+import { ensureSendingReady } from "@/lib/email/ready";
 import {
   dueNow,
   mergeRules,
@@ -66,6 +67,11 @@ export async function GET(request: NextRequest) {
   let held = 0;
 
   for (const org of orgs) {
+    // The sending domain, checked once a day whether or not anything is due.
+    // A domain whose DNS landed on Monday should not wait for the first
+    // reminder to find out it is verified.
+    await ensureSendingReady(org.id, "transactional").catch(() => false);
+
     const { data: storedRules } = await admin
       .from("reminder_rules")
       .select("kind, enabled, channels, offsets_hours")
@@ -188,7 +194,7 @@ async function subjectsFor(
 
   const { data: jobs } = await admin
     .from("jobs")
-    .select("id, property_id, evaluation_date, evaluation_status, project_start_date, cancelled_at, completed_at")
+    .select("id, property_id, evaluation_date, evaluation_status, project_start_date, cancelled_at, completed_at, created_at")
     .in("property_id", [...propertyById.keys()])
     .is("cancelled_at", null)
     .limit(1000);
@@ -198,17 +204,41 @@ async function subjectsFor(
     if (!property?.customer_id) continue;
 
     if (job.evaluation_date) {
-      const anchor = new Date(job.evaluation_date);
-      const settled = job.evaluation_status === "cancelled";
-      for (const kind of ["evaluation_confirmed", "evaluation_reminder"] as ReminderKind[]) {
-        out.push({
-          subject: { kind, referenceId: job.id, customerId: property.customer_id, anchor, settled },
-          when: anchor,
-          address: property.address,
-          link: null,
-          amount: null,
-        });
-      }
+      const visit = new Date(job.evaluation_date);
+      const cancelled = job.evaluation_status === "cancelled";
+
+      // The confirmation counts from the booking, not the visit, and there
+      // is nothing to confirm once the visit has happened. Counting it from
+      // the visit was how every evaluation ever done became due for a
+      // "you're booked" email the day the rule was switched on.
+      const booked = new Date(job.created_at);
+      out.push({
+        subject: {
+          kind: "evaluation_confirmed",
+          referenceId: job.id,
+          customerId: property.customer_id,
+          anchor: booked < visit ? booked : visit,
+          settled: cancelled || visit.getTime() <= now.getTime(),
+        },
+        when: visit,
+        address: property.address,
+        link: null,
+        amount: null,
+      });
+
+      out.push({
+        subject: {
+          kind: "evaluation_reminder",
+          referenceId: job.id,
+          customerId: property.customer_id,
+          anchor: visit,
+          settled: cancelled,
+        },
+        when: visit,
+        address: property.address,
+        link: null,
+        amount: null,
+      });
     }
 
     if (job.project_start_date) {

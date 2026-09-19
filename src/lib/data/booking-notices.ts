@@ -33,6 +33,8 @@ export async function sendEvaluationConfirmationNow(jobId: string): Promise<void
       property: { address: string; customer: { id: string; organization_id: string } | null } | null;
     } | null;
     if (!job?.evaluation_date || job.evaluation_status === "cancelled" || !job.property?.customer) return;
+    // Nothing to confirm about a visit that has already happened.
+    if (new Date(job.evaluation_date).getTime() <= Date.now()) return;
     const customerId = job.property.customer.id;
     const organizationId = job.property.customer.organization_id;
 
