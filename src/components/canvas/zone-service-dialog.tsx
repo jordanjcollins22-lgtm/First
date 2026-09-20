@@ -22,6 +22,7 @@ import {
   readClipboardImages,
 } from "@/lib/pasted-images";
 import { Button } from "@/components/ui/button";
+import { SayIt } from "@/components/ui/say-it";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -1147,7 +1148,10 @@ export function ZoneServiceDialog({
             return (
               <div key={materialName} className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{materialName}</p>
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    {materialName}
+                    <SayIt text={materialName} className="h-6 w-6" />
+                  </p>
                   {extraIndex >= 0 && (
                     <button
                       type="button"

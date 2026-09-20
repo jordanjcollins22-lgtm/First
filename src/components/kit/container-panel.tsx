@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink, Plus, Minus, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SayIt } from "@/components/ui/say-it";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -83,9 +84,10 @@ export function ContainerPanel({ containers }: { containers: KitContainer[] }) {
                 key={`${item.containerId}:${item.partId ?? "self"}`}
                 className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 text-xs", item.onOrder && "opacity-60")}
               >
-                <span className="font-medium">
+                <span className="flex items-center gap-1 font-medium">
                   {item.count > 1 ? `${item.count} × ` : ""}
                   {item.name}
+                  <SayIt text={item.name} className="h-6 w-6" />
                 </span>
                 {item.name !== item.containerName && (
                   <span className="text-muted-foreground">from the {item.containerName}</span>
@@ -206,9 +208,10 @@ function PartList({ container, onChanged }: { container: KitContainer; onChanged
       {parts.map((part) => (
         <div key={part.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border px-2.5 py-2">
           <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="text-xs font-medium">
+          <span className="flex items-center gap-1 text-xs font-medium">
             {part.quantity > 1 ? `${part.quantity} × ` : ""}
             {part.name}
+            <SayIt text={part.name} className="h-6 w-6" />
           </span>
           {part.cost != null && <span className="text-xs tabular-nums text-muted-foreground">{money(part.cost)}</span>}
           {part.purchaseUrl && (

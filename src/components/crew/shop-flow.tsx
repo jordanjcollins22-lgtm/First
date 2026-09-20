@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Map as MapIcon, Navigation, Package, Truck, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SayIt } from "@/components/ui/say-it";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import { arriveAtShop, headOut, setShopPage, setShopStage, setShownJobs, tickShopItem } from "@/lib/actions/shop-flow-actions";
 import { allLoaded, clampPage, loadPages, pageComplete, STAGE_LABEL } from "@/lib/shop-flow";
@@ -256,13 +257,13 @@ export function ShopFlow({
 
 function TickRow({ item, who, disabled, onTick }: { item: LoadoutItem; who: string | null; disabled: boolean; onTick: () => void }) {
   return (
-    <li>
+    <li className={`flex items-start gap-2 rounded-xl border p-3 ${item.checked ? "border-emerald-600/40 bg-white/70" : "border-border bg-background/80"}`}>
       <button
         type="button"
         disabled={disabled}
         onClick={onTick}
         aria-pressed={item.checked}
-        className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left ${item.checked ? "border-emerald-600/40 bg-white/70" : "border-border bg-background/80"}`}
+        className="flex min-w-0 flex-1 items-start gap-3 text-left"
       >
         <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${item.checked ? "border-emerald-600 bg-emerald-600 text-white" : "border-border bg-background"}`}>
           {item.checked && <Check className="h-4 w-4" />}
@@ -273,6 +274,8 @@ function TickRow({ item, who, disabled, onTick }: { item: LoadoutItem; who: stri
           {item.checked && who && <span className="block text-xs text-emerald-800">On the truck, {who}</span>}
         </span>
       </button>
+      {/* Beside the tick, not inside it: hearing the name must not load it. */}
+      {item.kind !== "kit" && <SayIt text={item.label} className="mt-0.5 h-9 w-9" />}
     </li>
   );
 }

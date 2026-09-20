@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+import { SayIt } from "@/components/ui/say-it";
 import { ToolImageThumb } from "./tool-image-thumb";
 import { ToolImageUpload } from "./tool-image-upload";
 import { ToolKitsInput } from "./tool-kits-input";
@@ -56,7 +57,10 @@ export function ToolInventoryRow({
               <ToolImageThumb imagePath={tool.image_path} icon={tool.icon} />
             </div>
             <div>
-              <p className="font-medium">{tool.name}</p>
+              <p className="flex items-center gap-1.5 font-medium">
+                {tool.name}
+                <SayIt text={tool.name} />
+              </p>
             </div>
           </div>
         </td>

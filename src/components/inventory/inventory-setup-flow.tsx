@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SayIt } from "@/components/ui/say-it";
 import Link from "next/link";
 
 import { AddInventoryItemForm, type CreatedInventoryItem } from "./add-inventory-item-form";
@@ -22,7 +23,7 @@ export function InventorySetupFlow({ storageLocations }: { storageLocations: str
           <ul className="flex flex-col gap-1 text-sm">
             {added.map((item, i) => (
               <li key={i}>
-                {item.kind === "tool" ? "🧰" : "📦"} {item.name}
+                {item.kind === "tool" ? "🧰" : "📦"} {item.name} <SayIt text={item.name} className="h-6 w-6" />
               </li>
             ))}
           </ul>

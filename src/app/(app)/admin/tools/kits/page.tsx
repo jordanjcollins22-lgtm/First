@@ -9,6 +9,7 @@ import { kitNumbers, toolsInKit, toolsInNoKit } from "@/lib/kit-sheet";
 import { storedInLabel } from "@/lib/kit-containers";
 import { PrintPdfButton } from "@/components/print/print-pdf-button";
 import { ContainerPanel } from "@/components/kit/container-panel";
+import { SayIt } from "@/components/ui/say-it";
 
 /**
  * The kit checklists, and what is on each one.
@@ -70,9 +71,14 @@ export default async function KitsPage() {
                   {inKit.length} tool{inKit.length === 1 ? "" : "s"}
                   {storedIn ? ` · in the ${storedIn}` : ""}
                 </p>
-                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                  {inKit.map((tool) => tool.name).join(", ")}
-                </p>
+                <ul className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  {inKit.map((tool) => (
+                    <li key={tool.id} className="flex items-center gap-1">
+                      {tool.name}
+                      <SayIt text={tool.name} className="h-6 w-6" />
+                    </li>
+                  ))}
+                </ul>
                 <PrintLinks query={`kit=${kit}`} />
               </div>
             );
@@ -103,9 +109,14 @@ export default async function KitsPage() {
       {strays.length > 0 && (
         <section className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
           <h3 className="text-sm font-semibold">{strays.length} tools are in no kit</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {strays.map((tool) => tool.name).join(", ")}
-          </p>
+          <ul className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {strays.map((tool) => (
+              <li key={tool.id} className="flex items-center gap-1">
+                {tool.name}
+                <SayIt text={tool.name} className="h-6 w-6" />
+              </li>
+            ))}
+          </ul>
           <PrintLinks query="kit=unassigned" />
         </section>
       )}

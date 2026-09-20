@@ -19,6 +19,7 @@ import { MaterialStorageAlternativeInput } from "./material-storage-alternative-
 import { MaterialStorageRequirementsInput } from "./material-storage-requirements-input";
 import { MaterialStorageCostInput } from "./material-storage-cost-input";
 import { MaterialImageUpload } from "./material-image-upload";
+import { SayIt } from "@/components/ui/say-it";
 import { MaterialImageThumb } from "./material-image-thumb";
 import { MaterialOrderStatus } from "./material-order-status";
 import { DeactivateMaterialButton } from "./deactivate-material-button";
@@ -41,7 +42,10 @@ export function MaterialInventoryRow({ material, storageLocations }: MaterialInv
               <MaterialImageThumb imagePath={material.image_path} />
             </div>
             <div>
-              <p className="font-medium">{material.name}</p>
+              <p className="flex items-center gap-1.5 font-medium">
+                {material.name}
+                <SayIt text={material.name} />
+              </p>
               <p className="text-xs text-muted-foreground">
                 {/* Square feet only where that is what it means. A flyer
                     covers no square footage, and saying it does is worse than
