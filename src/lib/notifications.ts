@@ -1,7 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isTwilioConfigured } from "@/lib/env";
 import { sendSms, toE164 } from "@/lib/sms";
-import { notificationGate, type NotificationKind as GateKind } from "@/lib/notification-gate";
+import { effectivePrefs, label, notificationGate, type NotificationKind as GateKind } from "@/lib/notification-gate";
+import { sendEmail } from "@/lib/email/send";
+import { textToHtml } from "@/lib/email/plain";
 import type { NotificationKind } from "@/types/domain";
 
 /**
@@ -48,6 +50,13 @@ export async function notifyTeamMember(
   });
 
   if (!verdict.send) {
+    // A text that cannot go because there is no text line, or no number,
+    // goes as an email instead. Every crew alert, client message and
+    // proposal response used to vanish here until Twilio existed.
+    if (verdict.reason === "no_sms_provider" || verdict.reason === "no_phone" || verdict.reason === "unreadable_phone") {
+      const emailed = await emailInstead(profileId, kind, body, options).catch(() => false);
+      if (emailed) return true;
+    }
     // Said out loud rather than swallowed. It is the only trace of a
     // notification that was never sent.
     console.warn(`Notification skipped (${kind}, profile ${profileId}): ${verdict.detail}`);
@@ -67,6 +76,48 @@ export async function notifyTeamMember(
 
   await sendSms(e164, body);
   return true;
+}
+
+/**
+ * The same alert, to their inbox.
+ *
+ * Their own switches still apply: notifications off is off, and a kind they
+ * turned off stays off. Only the channel changes, because "there is no way
+ * to text you" is not a reason for them to hear nothing.
+ */
+async function emailInstead(
+  profileId: string,
+  kind: NotificationKind,
+  body: string,
+  options?: { dedupeKey?: string; overridesKindPreference?: boolean }
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const [{ data: prefsRow }, { data: profile }] = await Promise.all([
+    admin.from("notification_preferences").select("*").eq("profile_id", profileId).maybeSingle(),
+    admin.from("profiles").select("email, organization_id").eq("id", profileId).maybeSingle(),
+  ]);
+  const prefs = effectivePrefs(prefsRow);
+  if (!prefs.sms_enabled) return false;
+  if (!prefs[kind as GateKind] && !options?.overridesKindPreference) return false;
+  const to = profile?.email?.trim();
+  if (!to || !profile?.organization_id) return false;
+
+  if (options?.dedupeKey) {
+    const { error } = await admin
+      .from("notification_log")
+      .insert({ profile_id: profileId, kind, reference_id: options.dedupeKey });
+    if (error) return false;
+  }
+
+  const sent = await sendEmail({
+    organizationId: profile.organization_id,
+    to,
+    subject: label(kind as GateKind),
+    html: textToHtml(body),
+    text: body,
+    stream: "transactional",
+  });
+  return sent.ok;
 }
 
 /** Who on the team should hear about this job: whoever it's assigned to,
