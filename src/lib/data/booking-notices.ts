@@ -4,7 +4,8 @@ import { isTwilioConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
 import { dedupeKeyFor, mergeRules, type ReminderKind, type ReminderRule } from "@/lib/client-reminders";
 import { composeReminder, fitSms, sayWhen } from "@/lib/client-message-templates";
-import { contactsFor, quietWindowFor, sendClientMessage } from "@/lib/data/client-messaging";
+import { alreadySent, contactsFor, quietWindowFor, sendClientMessage } from "@/lib/data/client-messaging";
+import { bookedSequenceKey, sendDueEvaluationEmails } from "@/lib/data/evaluation-sequence-send";
 
 /**
  * "You're booked", the moment they are.
@@ -21,6 +22,15 @@ import { contactsFor, quietWindowFor, sendClientMessage } from "@/lib/data/clien
 export async function sendEvaluationConfirmationNow(jobId: string): Promise<void> {
   try {
     const admin = createAdminClient();
+
+    // The evaluation email sequence owns "you are booked". It used to wait
+    // for its twice-daily run; now it goes for this job the moment the
+    // booking lands, and the reminder rule below only fills in when the
+    // sequence sent nothing.
+    await sendDueEvaluationEmails(admin, { jobId }).catch((err) => {
+      log.warn("booking.sequence.failed", { jobId, error: err instanceof Error ? err.message : String(err) });
+    });
+
     const { data } = await admin
       .from("jobs")
       .select("id, evaluation_date, evaluation_status, property:properties(address, customer:customers(id, organization_id))")
@@ -65,9 +75,13 @@ export async function sendEvaluationConfirmationNow(jobId: string): Promise<void
     const now = new Date();
     const origin = await outboundBaseUrl();
 
+    // Whatever the sequence already said, on whichever channel, is said.
+    const said = await alreadySent(organizationId, rule.channels.map((channel) => bookedSequenceKey(job.id, channel)));
+
     for (const channel of rule.channels) {
       // A text with no text provider is a skipped row in the log for nothing.
       if (channel === "sms" && !isTwilioConfigured) continue;
+      if (said.has(bookedSequenceKey(job.id, channel))) continue;
       const message = composeReminder(
         "evaluation_confirmed",
         channel,

@@ -5,6 +5,7 @@ import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { log } from "@/lib/log";
 import { ensureSendingReady } from "@/lib/email/ready";
+import { bookedSequenceKey } from "@/lib/data/evaluation-sequence-send";
 import {
   dueNow,
   mergeRules,
@@ -94,8 +95,18 @@ export async function GET(request: NextRequest) {
     // reminder: a run reminding forty people is a handful of queries.
     const candidates = dueNow(subjects.map((s) => s.subject), rules, new Set(), now, LATE_WINDOW_HOURS);
     if (candidates.length === 0) continue;
-    const done = await alreadySent(org.id, candidates.map((c) => c.dedupeKey));
-    const due = candidates.filter((c) => !done.has(c.dedupeKey));
+    // The evaluation email sequence sends its own "you are booked". A
+    // confirmation on top of that is the same email twice, a day apart.
+    const aliasOf = (c: { kind: string; referenceId: string; channel: string }) =>
+      c.kind === "evaluation_confirmed" ? bookedSequenceKey(c.referenceId, c.channel) : null;
+    const done = await alreadySent(
+      org.id,
+      candidates.flatMap((c) => [c.dedupeKey, aliasOf(c)].filter((k): k is string => k != null))
+    );
+    const due = candidates.filter((c) => {
+      const alias = aliasOf(c);
+      return !done.has(c.dedupeKey) && !(alias && done.has(alias));
+    });
     if (due.length === 0) continue;
 
     const contacts = await contactsFor(due.map((d) => d.customerId));
