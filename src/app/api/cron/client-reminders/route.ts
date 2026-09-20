@@ -6,6 +6,7 @@ import { authorizeCron } from "@/lib/cron-auth";
 import { log } from "@/lib/log";
 import { ensureSendingReady } from "@/lib/email/ready";
 import { bookedSequenceKey } from "@/lib/data/evaluation-sequence-send";
+import { expireStaleApprovals, notifyApprovers } from "@/lib/data/outbound-approvals";
 import {
   dueNow,
   mergeRules,
@@ -66,6 +67,9 @@ export async function GET(request: NextRequest) {
   let sent = 0;
   let skipped = 0;
   let held = 0;
+  let awaiting = 0;
+
+  await expireStaleApprovals(admin, now).catch(() => 0);
 
   for (const org of orgs) {
     // The sending domain, checked once a day whether or not anything is due.
@@ -111,6 +115,7 @@ export async function GET(request: NextRequest) {
 
     const contacts = await contactsFor(due.map((d) => d.customerId));
     const window = quietWindowFor(org);
+    let parked = 0;
     const byReference = new Map(subjects.map((s) => [`${s.subject.kind}:${s.subject.referenceId}`, s]));
 
     for (const reminder of due) {
@@ -149,6 +154,7 @@ export async function GET(request: NextRequest) {
           dedupeKey: reminder.dedupeKey,
           subject: message.subject,
           body: reminder.channel === "sms" ? fitSms(message.body) : message.body,
+          automatic: true,
         },
         contact,
         window,
@@ -157,12 +163,22 @@ export async function GET(request: NextRequest) {
 
       if (outcome.sent) sent += 1;
       else if (outcome.reason === "quiet_hours") held += 1;
-      else skipped += 1;
+      else if (outcome.reason === "awaiting_approval") {
+        awaiting += 1;
+        parked += 1;
+      } else skipped += 1;
+    }
+
+    // One note per business per run, not one per email.
+    if (parked > 0) {
+      await notifyApprovers(admin, org.id).catch((err) => {
+        log.warn("approvals.notify_failed", { organizationId: org.id, error: err instanceof Error ? err.message : String(err) });
+      });
     }
   }
 
-  log.info("cron.client_reminders", { sent, skipped, held, orgs: orgs.length });
-  return NextResponse.json({ sent, skipped, held });
+  log.info("cron.client_reminders", { sent, skipped, held, awaiting, orgs: orgs.length });
+  return NextResponse.json({ sent, skipped, held, awaiting });
 }
 
 /** One thing a reminder could be about, with what the wording needs. */

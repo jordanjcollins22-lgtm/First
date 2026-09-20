@@ -39,6 +39,8 @@ import { getCommissionFor } from "@/lib/data/commission";
 import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
+import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
+import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
 import { CallListPanel } from "@/components/sales/call-list";
 import { CollectPanel } from "@/components/sales/collect-panel";
 import { OutreachForm } from "@/components/marketing/outreach-form";
@@ -250,6 +252,15 @@ async function OfficeDay() {
         {profile.full_name || profile.email} — your clients and your jobs.
       </p>
 
+      {/* Emails the app wrote and is holding for a person to read. First,
+          because a booking confirmation that waits a day is a client who
+          thinks the booking did not take. */}
+      {(isOwnerLevel(profile.roles) || profile.roles.includes("admin")) && (
+        <Suspense fallback={null}>
+          <ApprovalsBlock />
+        </Suspense>
+      )}
+
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <Suspense fallback={null}>
@@ -334,6 +345,15 @@ const myWorkFor = cache(async (profileId: string): Promise<MyWork | null> =>
       return null;
     })
 );
+
+async function ApprovalsBlock() {
+  const items = await listPendingApprovals().catch((err) => {
+    console.error("Approvals failed to load:", err);
+    return [] as PendingApproval[];
+  });
+  if (items.length === 0) return null;
+  return <ApprovalsPanel items={items} />;
+}
 
 async function EarlyStartsBlock() {
   const requests = await pendingEarlyStarts().catch((err) => {

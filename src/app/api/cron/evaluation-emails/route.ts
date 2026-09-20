@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { sendDueEvaluationEmails } from "@/lib/data/evaluation-sequence-send";
+import { expireStaleApprovals } from "@/lib/data/outbound-approvals";
 
 /**
  * Sends the evaluation email sequence.
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
   if (refused) return refused;
   const admin = createAdminClient();
   try {
+    await expireStaleApprovals(admin).catch(() => 0);
     const { why, ...counts } = await sendDueEvaluationEmails(admin);
     return NextResponse.json({ ok: true, ...counts, ...(why ? { why } : {}) });
   } catch (err) {

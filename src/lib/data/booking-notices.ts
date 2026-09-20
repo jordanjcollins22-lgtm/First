@@ -6,6 +6,7 @@ import { dedupeKeyFor, mergeRules, type ReminderKind, type ReminderRule } from "
 import { composeReminder, fitSms, sayWhen } from "@/lib/client-message-templates";
 import { alreadySent, contactsFor, quietWindowFor, sendClientMessage } from "@/lib/data/client-messaging";
 import { bookedSequenceKey, sendDueEvaluationEmails } from "@/lib/data/evaluation-sequence-send";
+import { notifyApprovers } from "@/lib/data/outbound-approvals";
 
 /**
  * "You're booked", the moment they are.
@@ -109,12 +110,16 @@ export async function sendEvaluationConfirmationNow(jobId: string): Promise<void
           dedupeKey: dedupeKeyFor("evaluation_confirmed", job.id, 0, channel),
           subject: message.subject,
           body: channel === "sms" ? fitSms(message.body) : message.body,
+          automatic: true,
         },
         contact,
         window,
         now
       );
       log.info("booking.confirmation", { jobId, channel, sent: outcome.sent, reason: outcome.sent ? null : outcome.reason });
+      if (!outcome.sent && outcome.reason === "awaiting_approval") {
+        await notifyApprovers(admin, organizationId).catch(() => undefined);
+      }
     }
   } catch (err) {
     log.warn("booking.confirmation.failed", { jobId, error: err instanceof Error ? err.message : String(err) });

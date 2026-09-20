@@ -7,6 +7,11 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ReminderSettingsPanel } from "@/components/messaging/reminder-settings-panel";
 import { EvaluationSequencePanel } from "@/components/messaging/evaluation-sequence-panel";
 import { getEvaluationSequence } from "@/lib/data/evaluation-sequence";
+import { listPendingApprovals } from "@/lib/data/outbound-approvals";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { createClient } from "@/lib/supabase/server";
+import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
+import { ApprovalSwitch } from "@/components/messaging/approval-switch";
 
 /**
  * What clients hear from us without anybody typing it.
@@ -21,9 +26,13 @@ export default async function RemindersPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("reminders", "/admin/tools");
 
-  const [settings, sequence] = await Promise.all([
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const [settings, sequence, pending, { data: org }] = await Promise.all([
     getReminderSettings().catch(() => null),
     getEvaluationSequence().catch(() => null),
+    listPendingApprovals().catch(() => []),
+    supabase.from("organizations").select("require_email_approval").eq("id", organizationId).maybeSingle(),
   ]);
   if (!settings) redirect("/admin/tools");
 
@@ -37,6 +46,8 @@ export default async function RemindersPage() {
           in an email, is taken off straight away and stays off.
         </p>
       </header>
+      <ApprovalSwitch required={Boolean(org?.require_email_approval)} />
+      <ApprovalsPanel items={pending} />
       {sequence && <EvaluationSequencePanel view={sequence} />}
       <ReminderSettingsPanel settings={settings} />
     </div>

@@ -10,6 +10,8 @@ import {
   type SendBasis,
 } from "@/lib/client-consent";
 import { isQuiet, QUIET_DEFAULTS, type QuietWindow } from "@/lib/quiet-hours";
+import { approvalRequired, queueApproval } from "@/lib/data/outbound-approvals";
+import { staleAfter } from "@/lib/outbound-approval";
 
 /**
  * The one door every automated message to a client goes through.
@@ -35,6 +37,12 @@ export interface ClientMessage {
   dedupeKey: string;
   subject: string;
   body: string;
+  /**
+   * Written by the app rather than typed by a person. Where the business
+   * wants to read first, an automatic email is parked for approval and a
+   * typed one goes, because the person typing it is the approval.
+   */
+  automatic?: boolean;
 }
 
 export type SendOutcome =
@@ -188,6 +196,29 @@ export async function sendClientMessage(
   // before" when the job was scheduled at midnight.
   if (isQuiet(now, window)) {
     return { sent: false, reason: "quiet_hours", detail: "Held until the morning." };
+  }
+
+  // Parked for the owner where the business asks for that. The log row
+  // under this key says so, which is what keeps the next run from parking
+  // it again, and the approval carries everything needed to send it later.
+  if (message.automatic && message.channel === "email" && (await approvalRequired(admin, message.organizationId))) {
+    const queued = await queueApproval(admin, {
+      organizationId: message.organizationId,
+      source: "client_reminder",
+      kind: message.kind,
+      dedupeKey: message.dedupeKey,
+      customerId: message.customerId,
+      jobId: null,
+      toEmail: contact.email ?? "",
+      toName: contact.name,
+      subject: message.subject,
+      body: message.body,
+      payload: { reference_id: message.referenceId ?? null },
+      expiresAt: staleAfter(message.kind, now),
+    });
+    if (queued === "already") return { sent: false, reason: "already_sent", detail: "Already waiting for approval." };
+    await record("skipped", { skipReason: "awaiting_approval", detail: "Waiting for approval." });
+    return { sent: false, reason: "awaiting_approval", detail: "Waiting for approval." };
   }
 
   // Claimed before it is sent, so two runs at once cannot both pass here.

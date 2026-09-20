@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { log, maskEmail } from "@/lib/log";
 import { outboundReady, sendOutbound } from "@/lib/email/outbound";
+import { approvalRequired, notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { staleAfter } from "@/lib/outbound-approval";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
@@ -36,6 +38,8 @@ export interface SequenceCounts {
   failed: number;
   claimedElsewhere: number;
   notReady: number;
+  /** Parked for the owner to read first. */
+  held: number;
   why: string | null;
 }
 
@@ -50,13 +54,16 @@ export async function sendDueEvaluationEmails(
 
   const orgNames = new Map<string, { name: string; email: string | null }>();
   const ready = new Map<string, { ready: boolean; why: string }>();
-  const counts: SequenceCounts = { due: due.length, sent: 0, failed: 0, claimedElsewhere: 0, notReady: 0, why: null };
+  const gated = new Map<string, boolean>();
+  const heldFor = new Set<string>();
+  const counts: SequenceCounts = { due: due.length, sent: 0, failed: 0, claimedElsewhere: 0, notReady: 0, held: 0, why: null };
 
   for (const item of due) {
     if (!orgNames.has(item.organization_id)) {
       const { data: org } = await admin.from("organizations").select("name, business_email").eq("id", item.organization_id).maybeSingle();
       orgNames.set(item.organization_id, { name: org?.name ?? "JS Landscaping MD", email: org?.business_email ?? null });
       ready.set(item.organization_id, await outboundReady(item.organization_id));
+      gated.set(item.organization_id, await approvalRequired(admin, item.organization_id));
     }
     const org = orgNames.get(item.organization_id)!;
 
@@ -85,6 +92,30 @@ export async function sendDueEvaluationEmails(
       continue;
     }
 
+    // Parked, not sent, where the business wants to read first. The claim
+    // stands so no run sends it behind the owner's back; the log says why
+    // it is sitting there.
+    if (gated.get(item.organization_id)) {
+      await queueApproval(admin, {
+        organizationId: item.organization_id,
+        source: "evaluation_sequence",
+        kind: `evaluation_${item.step}`,
+        dedupeKey: item.dedupe_key,
+        customerId: item.customer_id,
+        jobId: item.job_id,
+        toEmail: item.to_email,
+        toName: item.to_name,
+        subject: item.subject,
+        body: item.body,
+        payload: { step: item.step, reply_thread_id: item.reply_thread_id },
+        expiresAt: staleAfter(`evaluation_${item.step}`, new Date()),
+      });
+      await admin.from("client_message_log").update({ detail: "awaiting approval" }).eq("dedupe_key", item.dedupe_key);
+      counts.held += 1;
+      heldFor.add(item.organization_id);
+      continue;
+    }
+
     const sent = await sendOutbound({
       organizationId: item.organization_id,
       to: item.to_email,
@@ -109,6 +140,12 @@ export async function sendDueEvaluationEmails(
       counts.failed += 1;
       log.warn("evaluation.email.failed", { jobId: item.job_id, step: item.step, error: sent.message });
     }
+  }
+
+  for (const organizationId of heldFor) {
+    await notifyApprovers(admin, organizationId).catch((err) => {
+      log.warn("approvals.notify_failed", { organizationId, error: err instanceof Error ? err.message : String(err) });
+    });
   }
 
   return counts;

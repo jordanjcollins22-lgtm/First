@@ -16,9 +16,45 @@ export type Json = any;
 export interface Database {
   public: {
     Tables: {
+      outbound_approvals: {
+        Row: {
+          id: string;
+          organization_id: string;
+          source: string;
+          kind: string;
+          dedupe_key: string;
+          customer_id: string | null;
+          job_id: string | null;
+          to_email: string;
+          to_name: string | null;
+          subject: string;
+          body: string;
+          payload: Json;
+          status: string;
+          expires_at: string | null;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          sent_at: string | null;
+          provider_id: string | null;
+          detail: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outbound_approvals"]["Row"]> & {
+          organization_id: string;
+          source: string;
+          kind: string;
+          dedupe_key: string;
+          to_email: string;
+          subject: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outbound_approvals"]["Row"]>;
+        Relationships: [];
+      };
       organizations: {
         Row: {
           id: string;
+          require_email_approval: boolean;
           client_reminders_enabled: boolean;
           reminder_time_zone: string;
           reminder_quiet_start: number;
