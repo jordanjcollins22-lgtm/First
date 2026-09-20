@@ -68,16 +68,41 @@ export interface StageInput {
   evaluationStatus: string;
   evaluationDate: string | null;
   proposalStatus: string | null;
-  sessions: { status: WorkSessionStatus }[];
+  sessions: {
+    status: WorkSessionStatus;
+    /** The day it was booked for, YYYY-MM-DD, when known. */
+    startsOn?: string | null;
+    endsOn?: string | null;
+  }[];
   /** Newest first. Empty means nobody has asked for the manager's walk yet. */
   walkthroughs?: WalkthroughShape[];
+  /** Today, YYYY-MM-DD in the business's clock. Defaults to the server's day. */
+  today?: string;
 }
 
-/** Whether any visit has actually begun. Booking a visit is not the same as
- * turning up to it, and "during" photos only make sense once somebody has. */
+function todayKey(input: StageInput): string {
+  return input.today ?? new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Whether any visit has actually begun.
+ *
+ * Booking a visit is not the same as turning up to it, and "during" photos
+ * only make sense once somebody has. But a visit whose day has come and gone
+ * counts too: a subcontractor's day has no JS crew on it to press Start, and
+ * a job the tree company finished on Tuesday must not sit unsignable on
+ * Thursday because nobody was there to tap a button.
+ */
 export function workHasStarted(input: StageInput): boolean {
   if (input.status === "in_progress" || input.status === "completed") return true;
-  return input.sessions.some((s) => s.status === "in_progress" || s.status === "paused" || s.status === "done");
+  const today = todayKey(input);
+  return input.sessions.some(
+    (s) =>
+      s.status === "in_progress" ||
+      s.status === "paused" ||
+      s.status === "done" ||
+      (s.status === "scheduled" && Boolean(s.endsOn ?? s.startsOn) && (s.endsOn ?? s.startsOn)! < today)
+  );
 }
 
 export function deriveStage(input: StageInput): JobStage {

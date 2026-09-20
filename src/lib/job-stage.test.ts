@@ -79,6 +79,28 @@ describe("capabilities", () => {
     expect(capabilities(job({ status: "approved" })).signOff.available).toBe(false);
   });
 
+  it("counts a visit whose day has passed as started, even if nobody pressed Start", () => {
+    // A subcontractor's day has no JS crew on it to press the button, and the
+    // job must not sit unsignable because of that.
+    const passed = job({
+      status: "approved",
+      sessions: [{ status: "scheduled", startsOn: "2026-09-15", endsOn: "2026-09-15" }],
+      today: "2026-09-17",
+    });
+    expect(capabilities(passed).photoAfter.available).toBe(true);
+    const signOff = capabilities(passed).signOff;
+    expect(signOff.available).toBe(false);
+    expect(signOff.available === false && signOff.reason).toMatch(/account manager/i);
+
+    // Booked for today or later is still only booked.
+    const ahead = job({
+      status: "approved",
+      sessions: [{ status: "scheduled", startsOn: "2026-09-17", endsOn: "2026-09-18" }],
+      today: "2026-09-17",
+    });
+    expect(capabilities(ahead).photoAfter.available).toBe(false);
+  });
+
   it("refuses to sign off work the account manager hasn't walked", () => {
     // The client should never be the first person to find a problem.
     const caps = capabilities(job({ status: "in_progress" }));

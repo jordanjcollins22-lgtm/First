@@ -12,6 +12,7 @@ import { listPhotoMarks } from "@/lib/data/photo-review";
 import type { PhotoMark } from "@/lib/photo-review";
 import { getJobSchedule } from "@/lib/data/work-sessions";
 import { getProposalForJob } from "@/lib/data/proposals";
+import { dateKeyIn } from "@/lib/time-zone";
 import { capabilities } from "@/lib/job-stage";
 import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { EvaluationStatus, JobStatus, ProposalSiteImageTransform } from "@/types/domain";
@@ -137,8 +138,9 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     evaluationStatus: job.evaluation_status,
     evaluationDate: job.evaluation_date,
     proposalStatus: proposal?.status ?? null,
-    sessions: schedule.sessions.map((session) => ({ status: session.status })),
+    sessions: schedule.sessions.map((session) => ({ status: session.status, startsOn: session.starts_on, endsOn: session.ends_on })),
     walkthroughs: schedule.walkthroughs,
+    today: dateKeyIn(new Date()),
   });
 
   const completedByName = job.completed_by

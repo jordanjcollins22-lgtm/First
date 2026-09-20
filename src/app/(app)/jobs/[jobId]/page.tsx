@@ -58,6 +58,7 @@ import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
 import { isAccountManager as isManagerRole } from "@/lib/affiliate-roles";
 import { beforesFromZones, notYetAdopted, type ZoneLike } from "@/lib/evaluation-befores";
 import { getJobSchedule } from "@/lib/data/work-sessions";
+import { dateKeyIn } from "@/lib/time-zone";
 import { capabilities, deriveStage } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
@@ -439,8 +440,11 @@ export default async function JobPage({
     evaluationStatus: job.evaluation_status,
     evaluationDate: job.evaluation_date,
     proposalStatus: proposal?.status ?? null,
-    sessions: schedule.sessions.map((s) => ({ status: s.status })),
+    sessions: schedule.sessions.map((s) => ({ status: s.status, startsOn: s.starts_on, endsOn: s.ends_on })),
     walkthroughs: schedule.walkthroughs,
+    // In the business's own day, so a visit booked for yesterday is over at
+    // midnight in Maryland rather than at midnight in London.
+    today: dateKeyIn(new Date(), organization.reminder_time_zone ?? undefined),
   };
   const stage = deriveStage(stageInput);
   const can = capabilities(stageInput);
