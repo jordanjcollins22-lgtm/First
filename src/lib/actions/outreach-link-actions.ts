@@ -14,9 +14,12 @@ import {
   replySystemPrompt,
   finishComment,
   looksUsable,
+  LINK_MARKER,
 } from "@/lib/comment-prompt";
 import { getCurrentProfile } from "@/lib/data/team";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
+import { readingBrief } from "@/lib/post-reading";
+import { parseReadAndDraft, readAndDraftSystemPrompt } from "@/lib/read-and-draft";
 import { bookingSlug, getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { hashBytes, looksLikeHash } from "@/lib/screenshot-hash";
@@ -51,6 +54,8 @@ export type RecordResult =
 export async function createShotUpload(input: {
   fileType: string;
   fileSize: number;
+  /** The picture's fingerprint, so the duplicate check rides on this call rather than costing its own. */
+  hash?: string | null;
 }): Promise<{ ok: true; path: string; token: string } | { ok: false; error: string }> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -58,6 +63,14 @@ export async function createShotUpload(input: {
     return { ok: false, error: "That needs to be a PNG, a JPG or a WebP." };
   }
   if (input.fileSize > MAX_SHOT_BYTES) return { ok: false, error: "That image is too big." };
+
+  // The same picture twice is the same post twice, and two links under one
+  // neighbour's question is what a group notices. Refused before the slot
+  // is opened, from the fingerprint the phone worked out.
+  if (input.hash && looksLikeHash(input.hash)) {
+    const seen = await checkScreenshotSeen({ hash: input.hash });
+    if (seen.ok && seen.seen) return { ok: false, error: describeSeen(seen.seen) };
+  }
 
   const extension = input.fileType === "image/png" ? "png" : input.fileType === "image/webp" ? "webp" : "jpg";
   const path = `${profile.organization_id}/${crypto.randomUUID()}.${extension}`;
@@ -317,6 +330,125 @@ export async function recordOutreach(input: {
   }
 
   return { ok: false, error: "Couldn't get a unique link. Try once more." };
+}
+
+export type ReadAndDraftResult =
+  | {
+      ok: true;
+      platform: Platform | null;
+      groupName: string | null;
+      askedBy: string | null;
+      note: string;
+      ageDays: number | null;
+      worthAnswering: boolean;
+      /** The words, with the link placeholder still in them. Null when none came back. */
+      draft: string | null;
+      draftNote: string | null;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Read the post and write the words, in one go.
+ *
+ * The reading fills the boxes; the draft waits, placeholder and all, for
+ * the link the record will mint. By the time somebody has checked the group
+ * name and pressed the button, the comment is already written.
+ */
+export async function readAndDraft(input: {
+  screenshotPath: string | null;
+  /** The post's own words, when there is text rather than a picture. */
+  pastedText?: string;
+  kind: OutreachKind;
+}): Promise<ReadAndDraftResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isAnthropicConfigured) return { ok: false, error: "Reading posts isn't set up on this site yet." };
+  if (!input.screenshotPath && !input.pastedText?.trim()) return { ok: false, error: "Nothing to read." };
+
+  try {
+    const supabase = await createClient();
+    const organization = await getCurrentOrganization();
+    const [{ data: serviceRows }, services] = await Promise.all([
+      supabase.from("services").select("name, status, performed_by").eq("organization_id", organization.id),
+      activeServiceNames(organization.id),
+    ]);
+    const live = (serviceRows ?? []).filter((row) => row.status !== "archived");
+    const ownServices = live.filter((row) => row.performed_by !== "partner" && row.status === "active").map((row) => row.name).filter(Boolean);
+    const partnerServices = live.filter((row) => row.performed_by === "partner").map((row) => row.name).filter(Boolean);
+
+    const content: Anthropic.ContentBlockParam[] = [];
+    if (input.screenshotPath) {
+      const { data: file } = await supabase.storage.from("recommendation-shots").download(input.screenshotPath);
+      if (file) {
+        const type = file.type === "image/png" || file.type === "image/webp" ? file.type : "image/jpeg";
+        content.push({ type: "image", source: { type: "base64", media_type: type, data: Buffer.from(await file.arrayBuffer()).toString("base64") } });
+      }
+    }
+    const isMessage = input.kind === "dm";
+    content.push({
+      type: "text",
+      text: [
+        readingBrief({ pastedText: input.pastedText ?? "", note: "" }),
+        "",
+        isMessage
+          ? replyBrief({ note: "", ownServices, partnerServices })
+          : commentBrief({ businessName: organization.name, note: "", where: "", ageDays: null, ownServices, partnerServices }),
+      ].join("\n"),
+    });
+
+    const client = new Anthropic({ apiKey: env.anthropicApiKey });
+    const response = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 1600,
+      thinking: { type: "adaptive" },
+      output_config: { effort: "medium" },
+      system: readAndDraftSystemPrompt({
+        reading: { groupName: "", services, blockWords: [] },
+        writing: isMessage
+          ? replySystemPrompt(organization.name, { own: ownServices, partner: partnerServices }, profile.roles)
+          : commentSystemPrompt(organization.name, { own: ownServices, partner: partnerServices }, profile.roles),
+        what: isMessage ? "reply" : "comment",
+      }),
+      messages: [{ role: "user", content }],
+    });
+    if (response.stop_reason === "refusal") return { ok: false, error: "Couldn't read that one. Fill it in and carry on." };
+
+    const raw = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    const { reading, comment } = parseReadAndDraft(raw, services, isMessage ? "reply" : "comment");
+    if (!reading) return { ok: false, error: "Couldn't read that one. Fill it in and carry on." };
+
+    // Checked now, before anybody can copy it, the same as before.
+    let draft: string | null = null;
+    let draftNote: string | null = null;
+    if (comment) {
+      const check = checkComment(comment.replace(LINK_MARKER, ""));
+      if (check.ok) draft = comment;
+      else {
+        console.error("comment draft refused:", check.problems, comment);
+        draftNote = `Wouldn't send that one. ${check.problems.join(" ")} Use a wording below.`;
+      }
+    } else if (reading.kind === "request") {
+      draftNote = "Couldn't write one for that post. The wordings below still work.";
+    }
+
+    return {
+      ok: true,
+      platform: reading.platform,
+      groupName: reading.groupName,
+      askedBy: reading.author,
+      note: [reading.service, reading.summary].filter(Boolean).join(" — "),
+      ageDays: reading.ageDays,
+      worthAnswering: reading.kind === "request",
+      draft,
+      draftNote,
+    };
+  } catch (err) {
+    console.error("read and draft failed:", err);
+    return { ok: false, error: "Couldn't read that one. Fill it in and carry on." };
+  }
 }
 
 export type CommentResult =

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "JS Landscaping: answer this post",
+  "description": "One click on a group post opens the app with the post's words already read, so the comment is written by the time you look. You still paste it yourself.",
+  "version": "1.0.0",
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "Answer this post in JS Landscaping",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" }
+  },
+  "permissions": ["activeTab", "scripting"],
+  "background": { "service_worker": "background.js" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+J" },
+      "description": "Answer the post you are looking at"
+    }
+  }
+}

@@ -9,13 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   createShotUpload,
-  checkScreenshotSeen,
-  draftCommentFromScreenshot,
+  readAndDraft,
   recordPostedComment,
-  readRecommendationScreenshot,
   recordOutreach,
   saveComment,
 } from "@/lib/actions/outreach-link-actions";
+import { finishComment, looksUsable } from "@/lib/comment-prompt";
+import { shrinkImage } from "@/lib/shrink-image";
 import {
   goesToOnePerson,
   groupWordFor,
@@ -49,10 +49,22 @@ import { hashBytes } from "@/lib/screenshot-hash";
  * group can be counted, and a code somebody typed themselves would be a code
  * nothing recorded.
  */
-export function OutreachForm() {
+export interface OutreachPrefill {
+  /** The post's words, from a paste or the browser button. */
+  text?: string | null;
+  group?: string | null;
+  platform?: Platform | null;
+}
+
+export function OutreachForm({ prefill }: { prefill?: OutreachPrefill } = {}) {
   const [kind, setKind] = useState<OutreachKind>("comment");
-  const [platform, setPlatform] = useState<Platform>("facebook");
-  const [groupName, setGroupName] = useState("");
+  const [platform, setPlatform] = useState<Platform>(prefill?.platform ?? "facebook");
+  const [groupName, setGroupName] = useState(prefill?.group ?? "");
+  // The post as text, for a desktop with the words a copy away.
+  const [pastedText, setPastedText] = useState(prefill?.text ?? "");
+  // Written while the boxes are being checked, placeholder and all.
+  const [draft, setDraft] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState<string | null>(null);
   const [fromPage, setFromPage] = useState("");
   const [askedBy, setAskedBy] = useState("");
   const [note, setNote] = useState("");
@@ -61,9 +73,6 @@ export function OutreachForm() {
   // is written. Uploading twice would mean two copies of the same evidence.
   const [shotPath, setShotPath] = useState<string | null>(null);
   const [shotHash, setShotHash] = useState<string | null>(null);
-  // How old the post is, off the screenshot. Nothing shows it; it decides
-  // which opener the comment gets.
-  const [ageDays, setAgeDays] = useState<number | null>(null);
   // What the last reading put in each box.
   //
   // A second screenshot has to be able to replace its own earlier answers,
@@ -80,8 +89,17 @@ export function OutreachForm() {
   // is being written, and stays null when there was no picture to read.
   const [comment, setComment] = useState<string | null>(null);
   const [commentNote, setCommentNote] = useState<string | null>(null);
-  const [writing, setWriting] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // Arrived with the words already on it, from the browser button: read
+  // them straight away, once.
+  const readOnArrival = useRef(Boolean(prefill?.text?.trim()));
+  useEffect(() => {
+    if (!readOnArrival.current) return;
+    readOnArrival.current = false;
+    readPasted();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Take the picture in and read it, without waiting to be asked.
@@ -102,90 +120,118 @@ export function OutreachForm() {
    * Only while nothing has been chosen yet, so a paste into the note box
    * cannot silently replace the picture somebody already picked.
    */
-  const pick = useCallback(function pick(chosen: File | null) {
-    setFile(chosen);
-    setShotPath(null);
-    setAgeDays(null);
-    setReadNote(null);
-    setError(null);
-    if (!chosen) return;
+  const pick = useCallback(
+    function pick(chosen: File | null) {
+      setFile(chosen);
+      setShotPath(null);
+      setReadNote(null);
+      setDraft(null);
+      setDraftNote(null);
+      setError(null);
+      if (!chosen) return;
 
-    if (!SHOT_TYPES.includes(chosen.type)) return setError("That needs to be a PNG, a JPG or a WebP.");
-    if (chosen.size > MAX_SHOT_BYTES) return setError("That image is too big.");
+      if (!SHOT_TYPES.includes(chosen.type)) return setError("That needs to be a PNG, a JPG or a WebP.");
+      if (chosen.size > MAX_SHOT_BYTES) return setError("That image is too big.");
 
-    setReading(true);
-    void (async () => {
-      try {
-        // The same picture twice is the same post twice, and two links under
-        // one neighbour's question is what a group notices. Refused before
-        // the upload, from the picture's own fingerprint.
-        const hash = await hashBytes(await chosen.arrayBuffer()).catch(() => null);
-        setShotHash(hash);
-        if (hash) {
-          const check = await checkScreenshotSeen({ hash });
-          if (check.ok && check.seen) {
-            setError(describeSeenShot(check.seen));
+      setReading(true);
+      void (async () => {
+        try {
+          // The fingerprint is of the picture as it was on the phone, so the
+          // duplicate check keeps matching what somebody actually chose. The
+          // upload is of a smaller copy, because a four megabyte PNG of
+          // mostly white is the slowest part of standing in a garden.
+          const hash = await hashBytes(await chosen.arrayBuffer()).catch(() => null);
+          setShotHash(hash);
+          const small = await shrinkImage(chosen).catch(() => chosen);
+
+          // One call: the duplicate check rides on the slot.
+          const slot = await createShotUpload({ fileType: small.type, fileSize: small.size, hash });
+          if (!slot.ok) {
+            setError(slot.error);
             setFile(null);
             return;
           }
+          const sent = await createClient()
+            .storage.from("recommendation-shots")
+            .uploadToSignedUrl(slot.path, slot.token, small, { contentType: small.type });
+          if (sent.error) {
+            setError("That image would not upload. Try a smaller one.");
+            return;
+          }
+          setShotPath(slot.path);
+
+          await readInto({ screenshotPath: slot.path, pastedText: "" });
+        } finally {
+          setReading(false);
         }
+      })();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
-        const slot = await createShotUpload({ fileType: chosen.type, fileSize: chosen.size });
-        if (!slot.ok) {
-          setError(slot.error);
-          return;
-        }
-        const sent = await createClient()
-          .storage.from("recommendation-shots")
-          .uploadToSignedUrl(slot.path, slot.token, chosen, { contentType: chosen.type });
-        if (sent.error) {
-          setError("That image would not upload. Try a smaller one.");
-          return;
-        }
-        setShotPath(slot.path);
-
-        const read = await readRecommendationScreenshot({ screenshotPath: slot.path });
-        if (!read.ok) {
-          setReadNote(read.error);
-          return;
-        }
-
-        // Fills a box that is empty, or one this reader filled last time.
-        // Somebody who typed the group name while it was reading meant that
-        // one, and it is left alone.
-        const mine = filled.current;
-        const take = (current: string, previous: string, next: string) =>
-          current.trim() === "" || current === previous ? next : current;
-
-        if (read.platform) setPlatform(read.platform);
-        const groupNext = read.groupName ?? "";
-        const askedNext = read.askedBy ?? "";
-        setGroupName((current) => take(current, mine.groupName, groupNext));
-        setAskedBy((current) => take(current, mine.askedBy, askedNext));
-        setNote((current) => take(current, mine.note, read.note));
-        filled.current = { groupName: groupNext, askedBy: askedNext, note: read.note };
-        setAgeDays(read.ageDays);
-        // Named outright when a box came back empty, because "it filled
-        // everything in" and "it filled two of three in" look identical on a
-        // screen and only one of them needs somebody to finish the job.
-        const blank = [
-          groupNext ? null : "the group",
-          askedNext ? null : "who asked",
-          read.note.trim() ? null : "what they want",
-        ].filter((word): word is string => word != null);
-
-        setReadNote(
-          !read.worthAnswering
-            ? "Read it, but this looks like an advert rather than somebody asking for work."
-            : blank.length === 0
-              ? "Read from the screenshot. Change anything that is wrong."
-              : `Read from the screenshot. It couldn't find ${listOf(blank)} — fill that in.`
-        );
+  /**
+   * The words of a post, pasted rather than photographed.
+   *
+   * On a desktop the text is a select-and-copy away, and a reading from text
+   * is near instant: no upload, no picture to look at. The browser button
+   * arrives here too.
+   */
+  function readPasted() {
+    const text = pastedText.trim();
+    if (!text) return;
+    setError(null);
+    setReading(true);
+    void (async () => {
+      try {
+        await readInto({ screenshotPath: null, pastedText: text });
       } finally {
         setReading(false);
       }
     })();
-  }, []);
+  }
+
+  /**
+   * Read the post and write the words, then fill the boxes.
+   *
+   * Fills a box that is empty, or one this reader filled last time. Somebody
+   * who typed the group name while it was reading meant that one, and it is
+   * left alone. The draft waits, placeholder and all, for the link.
+   */
+  async function readInto(source: { screenshotPath: string | null; pastedText: string }) {
+    const read = await readAndDraft({ ...source, kind });
+    if (!read.ok) {
+      setReadNote(read.error);
+      return;
+    }
+    const mine = filled.current;
+    const take = (current: string, previous: string, next: string) =>
+      current.trim() === "" || current === previous ? next : current;
+
+    if (read.platform) setPlatform(read.platform);
+    const groupNext = read.groupName ?? "";
+    const askedNext = read.askedBy ?? "";
+    setGroupName((current) => take(current, mine.groupName, groupNext));
+    setAskedBy((current) => take(current, mine.askedBy, askedNext));
+    setNote((current) => take(current, mine.note, read.note));
+    filled.current = { groupName: groupNext, askedBy: askedNext, note: read.note };
+    setDraft(read.draft);
+    setDraftNote(read.draftNote);
+
+    const blank = [
+      groupNext ? null : "the group",
+      askedNext ? null : "who asked",
+      read.note.trim() ? null : "what they want",
+    ].filter((word): word is string => word != null);
+
+    setReadNote(
+      !read.worthAnswering
+        ? "Read it, but this looks like an advert rather than somebody asking for work."
+        : blank.length === 0
+          ? "Read it and wrote the comment. Change anything that is wrong, then get your link."
+          : `Read it. It couldn't find ${listOf(blank)} — fill that in, then get your link.`
+    );
+  }
 
   /**
    * Paste a screenshot straight in.
@@ -222,11 +268,12 @@ export function OutreachForm() {
       if (file && !screenshotPath) {
         if (!SHOT_TYPES.includes(file.type)) return setError("That needs to be a PNG, a JPG or a WebP.");
         if (file.size > MAX_SHOT_BYTES) return setError("That image is too big.");
-        const slot = await createShotUpload({ fileType: file.type, fileSize: file.size });
+        const small = await shrinkImage(file).catch(() => file);
+        const slot = await createShotUpload({ fileType: small.type, fileSize: small.size, hash: shotHash });
         if (!slot.ok) return setError(slot.error);
         const sent = await createClient()
           .storage.from("recommendation-shots")
-          .uploadToSignedUrl(slot.path, slot.token, file, { contentType: file.type });
+          .uploadToSignedUrl(slot.path, slot.token, small, { contentType: small.type });
         if (sent.error) return setError("That image would not upload. Try a smaller one.");
         screenshotPath = slot.path;
       }
@@ -245,27 +292,18 @@ export function OutreachForm() {
       if (!outcome.ok) return setError(outcome.error);
       setResult({ id: outcome.id, link: outcome.link, drafts: outcome.drafts });
 
-      // The written-by-hand wordings are already on screen, so this can take
-      // its time. Somebody with no screenshot simply uses those.
-      if (screenshotPath) {
-        setWriting(true);
-        const written = await draftCommentFromScreenshot({
-          screenshotPath,
-          link: outcome.link,
-          groupName,
-          note,
-          ageDays,
-          kind,
-        });
-        setWriting(false);
-        if (written.ok) {
-          setComment(written.comment);
-          // Kept so it can be copied again. A comment shown once and thrown
-          // away is a comment lost the moment a paste fails or a phone locks.
-          void saveComment({ id: outcome.id, comment: written.comment });
+      // Already written while the boxes were being checked. The link goes
+      // in now that it exists, and the words are kept against the record.
+      if (draft) {
+        const written = finishComment(draft, outcome.link);
+        if (looksUsable(written, outcome.link)) {
+          setComment(written);
+          void saveComment({ id: outcome.id, comment: written });
         } else {
-          setCommentNote(written.error);
+          setCommentNote("That came back too thin to use. The wordings below still work.");
         }
+      } else if (draftNote) {
+        setCommentNote(draftNote);
       }
     });
   }
@@ -281,23 +319,14 @@ export function OutreachForm() {
           </p>
         </div>
 
-        {writing && (
-          <div className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {kind === "dm" ? "Reading the message and writing a reply…" : "Reading the post and writing a comment for it…"}
-          </div>
-        )}
-
         {comment && (
           <CopyBlock tone={kind === "dm" ? "Reply written for this message" : "Written for this post"} text={comment} highlight />
         )}
         {commentNote && <p className="text-xs text-muted-foreground">{commentNote}</p>}
 
-        {(comment || commentNote || !writing) && (
-          <p className="text-xs font-medium text-muted-foreground">
-            {comment ? "Or one of these:" : "Ready to paste:"}
-          </p>
-        )}
+        <p className="text-xs font-medium text-muted-foreground">
+          {comment ? "Or one of these:" : "Ready to paste:"}
+        </p>
 
         {result.drafts.map((draft) => (
           <CopyBlock key={draft.tone} tone={draft.tone} text={draft.text} />
@@ -319,8 +348,10 @@ export function OutreachForm() {
             setCommentNote(null);
             setFile(null);
             setShotPath(null);
-            setAgeDays(null);
-            setReadNote(null);
+                  setReadNote(null);
+            setDraft(null);
+            setDraftNote(null);
+            setPastedText("");
             setGroupName("");
             setAskedBy("");
             setNote("");
@@ -362,10 +393,33 @@ export function OutreachForm() {
         </div>
       </label>
 
+      {!file && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">
+            Or paste the post&apos;s words{" "}
+            <span className="font-normal text-muted-foreground">
+              Faster than a picture on a desktop: select the post, copy, paste here.
+            </span>
+          </span>
+          <Textarea
+            value={pastedText}
+            onChange={(e) => setPastedText(e.target.value)}
+            rows={3}
+            placeholder="Looking for someone to mulch our beds before the 4th..."
+            className="text-sm"
+          />
+          {pastedText.trim() && !reading && (
+            <Button type="button" variant="outline" size="sm" className="self-start" onClick={readPasted}>
+              Read it and write the comment
+            </Button>
+          )}
+        </label>
+      )}
+
       {reading && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Reading the post…
+          Reading the post and writing the comment…
         </p>
       )}
       {!reading && readNote && <p className="text-xs text-muted-foreground">{readNote}</p>}
@@ -609,8 +663,3 @@ function listOf(words: string[]): string {
   return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }
 
-function describeSeenShot(seen: { when: string; groupName: string | null; byName: string | null }): string {
-  const who = seen.byName ? ` by ${seen.byName}` : "";
-  const where = seen.groupName ? ` for ${seen.groupName}` : "";
-  return `This screenshot was already used${where}${who} on ${seen.when}. It already has a link and a comment on the board.`;
-}

@@ -5,6 +5,7 @@ import { getOutreachBoard } from "@/lib/data/outreach-links";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { OutreachForm } from "@/components/marketing/outreach-form";
+import { PLATFORMS, type Platform } from "@/lib/outreach-links";
 import { OutreachBoardView } from "@/components/marketing/outreach-board";
 import { BookingTestCard } from "@/components/marketing/booking-test-card";
 import { getBookingTest } from "@/lib/data/booking-test";
@@ -24,8 +25,19 @@ import { getBookingTest } from "@/lib/data/booking-test";
  */
 export const dynamic = "force-dynamic";
 
-export default async function OutreachPage() {
+export default async function OutreachPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ text?: string; group?: string; platform?: string }>;
+} = {}) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  // The browser button lands here with the post already on the URL.
+  const params = (await searchParams) ?? {};
+  const prefill = {
+    text: (params.text ?? "").slice(0, 4000) || null,
+    group: (params.group ?? "").slice(0, 120) || null,
+    platform: PLATFORMS.some((p) => p.key === params.platform) ? (params.platform as Platform) : null,
+  };
   await requireTab("recommendations", "/marketing");
 
   // The owner reads everybody's links and who converted what. Everybody
@@ -55,7 +67,7 @@ export default async function OutreachPage() {
 
       <section className="rounded-lg border border-border p-4">
         <h2 className="mb-3 text-sm font-semibold">Hand out a link</h2>
-        <OutreachForm />
+        <OutreachForm prefill={prefill} />
       </section>
 
       {bookingTest && <BookingTestCard test={bookingTest} />}

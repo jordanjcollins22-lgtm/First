@@ -195,7 +195,7 @@ function cleanAge(value: unknown): number | null {
  * Fenced, prefaced, or on its own. Models asked for JSON produce all three and
  * the difference is not worth a failed reading.
  */
-function parseObject(raw: string): Record<string, unknown> | null {
+export function parseObject(raw: string): Record<string, unknown> | null {
   const text = (raw ?? "").trim();
   if (!text) return null;
 
