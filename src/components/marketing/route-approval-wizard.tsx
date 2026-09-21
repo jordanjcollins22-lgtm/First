@@ -91,6 +91,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
 
       <div className="mt-3">
         <RouteApprovalMap
+          routeId={view.route.id}
           rings={view.route.rings}
           paths={view.route.paths}
           houses={view.houses}

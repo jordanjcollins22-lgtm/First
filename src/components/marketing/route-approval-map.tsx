@@ -28,6 +28,7 @@ if (publicEnv.mapboxToken) mapboxgl.accessToken = publicEnv.mapboxToken;
  * shape takes form.
  */
 export function RouteApprovalMap({
+  routeId,
   rings,
   paths,
   houses,
@@ -40,6 +41,8 @@ export function RouteApprovalMap({
   onShape,
   resetKey = 0,
 }: {
+  /** Which route this is. The map fits to the route once per route, not once per render. */
+  routeId: string;
   rings: LngLatPair[][];
   paths: LngLatPair[][];
   houses: RouteHouse[];
@@ -145,7 +148,11 @@ export function RouteApprovalMap({
     };
   }, []);
 
-  // Route outline and streets, and fit to them.
+  // Route outline and streets, and fit to them. Once per route: My Day
+  // re-reads itself every minute while crews are out, and every re-read
+  // handed the map a fresh copy of the same outline, which zoomed it back
+  // out from under a person half way through drawing.
+  const routeKey = `${routeId}:${rings.length}:${paths.length}`;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -168,9 +175,9 @@ export function RouteApprovalMap({
     };
     if (map.isStyleLoaded() && map.getSource("route")) apply();
     else map.once("ready", apply);
-    // The fit is to the route; the walk's own fit lives with the saved line.
+    // routeKey stands in for rings and paths; the walk's own fit lives with the saved line.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rings, paths]);
+  }, [routeKey]);
 
   // The dots, coloured by what they are right now. Repainted only when a
   // dot's colour has changed: the wizard re-renders for a typed date or a
