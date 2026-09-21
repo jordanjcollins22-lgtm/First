@@ -28,6 +28,7 @@ export function RouteApprovalMap({
   anchorIds,
   onRound,
   drawing,
+  focus = "route",
   initialLine,
   savedLine,
   onLines,
@@ -40,6 +41,13 @@ export function RouteApprovalMap({
   /** The doors the drawn lines reach, in order. Only while drawing. */
   onRound: Set<string>;
   drawing: boolean;
+  /**
+   * What the map is for right now. "route": the whole carrier route and
+   * every door on it, for approving the mailing and drawing the walk.
+   * "round": only the doors on the drawn walk, with the line over them,
+   * and the map fitted to it, for confirming what gets hung.
+   */
+  focus?: "route" | "round";
   /** A line already drawn on this round, to start from. */
   initialLine?: Point[] | null;
   /** The finished line, drawn plain once drawing is over. */
@@ -77,21 +85,23 @@ export function RouteApprovalMap({
       map.addLayer({ id: "route-line", type: "line", source: "route", paint: { "line-color": "#2563eb", "line-width": 3 } });
       map.addSource("streets", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({ id: "streets-line", type: "line", source: "streets", paint: { "line-color": "#93c5fd", "line-width": 2, "line-dasharray": [2, 1] } });
-      map.addSource("saved", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "saved-line", type: "line", source: "saved", paint: { "line-color": "#f59e0b", "line-width": 4 } });
       map.addSource("houses", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "houses-dots",
         type: "circle",
         source: "houses",
         paint: {
-          "circle-radius": ["case", ["==", ["get", "state"], "anchor"], 8, ["==", ["get", "state"], "on"], 6, 4],
+          "circle-radius": ["case", ["==", ["get", "state"], "anchor"], 8, ["==", ["get", "state"], "on"], 6, 3],
           "circle-color": ["match", ["get", "state"], "anchor", "#dc2626", "on", "#f59e0b", "#ffffff"],
-          "circle-stroke-color": "#111827",
-          "circle-stroke-width": 1,
-          "circle-opacity": 0.95,
+          "circle-stroke-color": ["match", ["get", "state"], "on", "#7c2d12", "#111827"],
+          "circle-stroke-width": ["case", ["==", ["get", "state"], "on"], 1.5, 0.5],
+          // The doors not on the walk are there to draw along, not to look at.
+          "circle-opacity": ["case", ["==", ["get", "state"], "off"], 0.55, 1],
         },
       });
+      // The line goes on top of the doors it threads, or it vanishes under them.
+      map.addSource("saved", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "saved-line", type: "line", source: "saved", paint: { "line-color": "#f59e0b", "line-width": 4, "line-opacity": 0.9 } });
       map.fire("ready");
     });
 
@@ -117,12 +127,15 @@ export function RouteApprovalMap({
         type: "FeatureCollection",
         features: paths.length > 0 ? [{ type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: paths } }] : [],
       });
+      if (focus === "round" && savedLine && savedLine.length > 1) return;
       const bounds = new mapboxgl.LngLatBounds();
       for (const ring of rings) for (const [lng, lat] of ring) bounds.extend([lng, lat]);
       if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 30, duration: 0 });
     };
     if (map.isStyleLoaded() && map.getSource("route")) apply();
     else map.once("ready", apply);
+    // The fit is to the route; the walk's own fit lives with the saved line.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rings, paths]);
 
   // The dots, coloured by what they are right now. Repainted only when a
@@ -133,16 +146,17 @@ export function RouteApprovalMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const key = `${houses.length}:${anchorKey}:${onKey}`;
+    const key = `${focus}:${houses.length}:${anchorKey}:${onKey}`;
     if (key === dotsKeyRef.current) return;
     const anchors = new Set(anchorKey ? anchorKey.split("|") : []);
     const apply = () => {
       const source = map.getSource("houses") as mapboxgl.GeoJSONSource | undefined;
       if (!source) return;
       dotsKeyRef.current = key;
+      const shown = focus === "round" ? houses.filter((h) => anchors.has(h.id) || onRound.has(h.id)) : houses;
       source.setData({
         type: "FeatureCollection",
-        features: houses.map((h) => ({
+        features: shown.map((h) => ({
           type: "Feature",
           properties: { state: anchors.has(h.id) ? "anchor" : onRound.has(h.id) ? "on" : "off", address: h.address },
           geometry: { type: "Point", coordinates: [h.lng, h.lat] },
@@ -151,7 +165,7 @@ export function RouteApprovalMap({
     };
     if (map.isStyleLoaded() && map.getSource("houses")) apply();
     else map.once("ready", apply);
-  }, [houses, anchorKey, onKey, onRound]);
+  }, [houses, anchorKey, onKey, onRound, focus]);
 
   // The finished line, once drawing is over.
   useEffect(() => {
@@ -165,10 +179,16 @@ export function RouteApprovalMap({
         type: "FeatureCollection",
         features: line ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: line.map((p) => [p.lng, p.lat]) } }] : [],
       });
+      // Looking at the walk, not the whole route: close in on the line.
+      if (line && focus === "round") {
+        const bounds = new mapboxgl.LngLatBounds();
+        for (const p of line) bounds.extend([p.lng, p.lat]);
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 48, duration: 0, maxZoom: 17 });
+      }
     };
     if (map.isStyleLoaded() && map.getSource("saved")) apply();
     else map.once("ready", apply);
-  }, [drawing, savedLine]);
+  }, [drawing, savedLine, focus]);
 
   // Drawing: the control comes and goes with the step.
   useEffect(() => {

@@ -79,7 +79,8 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
             </Link>
           </span>
         ))}
-        . The red dots are the jobs we finished and were paid for.
+        . The red dots are the jobs we finished and were paid for
+        {view.step === "hangers" || view.step === "submit" ? "; the orange ones are the doors on your line." : "."}
       </p>
 
       <div className="mt-3">
@@ -90,6 +91,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
           anchorIds={anchorIds}
           onRound={onRound}
           drawing={view.step === "draw"}
+          focus={view.step === "hangers" || view.step === "submit" ? "round" : "route"}
           initialLine={view.round?.line ?? null}
           savedLine={view.round?.line ?? null}
           onLines={setLines}
