@@ -90,6 +90,26 @@ export function regenDecision(existing: ExistingProposal | null): RegenDecision 
  * does not change. Only a proposal that has never been in front of anybody
  * waits for approval, and there is nothing live to break in that case.
  */
+/**
+ * The price a rebuilt proposal carries.
+ *
+ * The costing prices what it can measure and time. A service set up as a
+ * flat job with no hours on it, or a zone nobody measured, comes out at
+ * nothing, and the office has been typing the real figure in by hand. A
+ * rebuild that wrote that nothing over the hand-set price would either be
+ * refused (a sent proposal cannot show $0) or send the client a free job.
+ * So when the costing has nothing to say and a price already stands, the
+ * price stands, and the evaluator is told why.
+ */
+export function priceAfterRegen(
+  computed: number,
+  existing: { totalCost: number | null } | null
+): { total: number; kept: boolean } {
+  const standing = Number(existing?.totalCost ?? 0);
+  if (computed > 0 || !(standing > 0)) return { total: computed, kept: false };
+  return { total: standing, kept: true };
+}
+
 export function statusAfterRegen(existing: ExistingProposal | null): ProposalStatus {
   if (!existing) return "needs_approval";
   // accepted and declined are both cleared by a regeneration, but both mean

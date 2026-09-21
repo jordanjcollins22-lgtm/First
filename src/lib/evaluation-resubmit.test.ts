@@ -6,6 +6,7 @@ import {
   diffScope,
   regenDecision,
   statusAfterRegen,
+  priceAfterRegen,
   submitLabel,
 } from "./evaluation-resubmit";
 import type { ExistingProposal } from "./evaluation-resubmit";
@@ -143,6 +144,18 @@ describe("canSubmit", () => {
   it("is off with nothing to submit against", () => {
     expect(canSubmit(null, false)).toBe(false);
     expect(canSubmit(undefined, false)).toBe(false);
+  });
+});
+
+describe("priceAfterRegen", () => {
+  it("takes the costed price whenever there is one", () => {
+    expect(priceAfterRegen(1250, { totalCost: 650 })).toEqual({ total: 1250, kept: false });
+    expect(priceAfterRegen(1250, null)).toEqual({ total: 1250, kept: false });
+  });
+  it("keeps a hand-set price when the costing comes out at nothing", () => {
+    expect(priceAfterRegen(0, { totalCost: 650 })).toEqual({ total: 650, kept: true });
+    expect(priceAfterRegen(0, null)).toEqual({ total: 0, kept: false });
+    expect(priceAfterRegen(0, { totalCost: 0 })).toEqual({ total: 0, kept: false });
   });
 });
 

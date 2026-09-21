@@ -49,7 +49,15 @@ export async function updateEvaluationStatus(
   let outcome: GenerateOutcome | null = null;
 
   if (status === "completed") {
-    outcome = await generateProposal(jobId, options).catch(() => null);
+    // A rebuild that fails used to come back as nothing, which the page
+    // read as "could not be rebuilt" with no reason. The reason is the
+    // whole point: a constraint the database refused, a service with no
+    // price, a photo that would not load.
+    outcome = await generateProposal(jobId, options).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[proposal] rebuild failed:", jobId, message);
+      return { ok: false as const, reason: "failed" as const, message };
+    });
     // The zone photos taken at the evaluation are the befores. Adopting them
     // here means the crew only has to shoot the after, and a job that was
     // photographed properly cannot end up with nothing to show for it. Still

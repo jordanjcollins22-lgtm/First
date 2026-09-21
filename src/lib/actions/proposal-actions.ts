@@ -10,6 +10,7 @@ import {
   diffScope,
   regenDecision,
   statusAfterRegen,
+  priceAfterRegen,
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -41,7 +42,9 @@ function generateToken(): string {
 export type GenerateOutcome =
   | { ok: true; token: string; changes: string[]; unchanged: boolean; note: string | null }
   | { ok: false; reason: "no_design" | "no_services" }
-  | { ok: false; reason: "needs_confirmation"; confirm: string | null };
+  | { ok: false; reason: "needs_confirmation"; confirm: string | null }
+  /** The rebuild itself failed. The message is what went wrong, for the person looking at the button. */
+  | { ok: false; reason: "failed"; message: string };
 
 /**
  * Snapshots the current site map into a proposal awaiting an account
@@ -149,10 +152,18 @@ export async function generateProposal(
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase
     .from("job_proposals")
-    .select("token, status, responded_at, approved_at, scope_snapshot")
+    .select("token, status, responded_at, approved_at, scope_snapshot, total_cost")
     .eq("job_id", jobId)
     .maybeSingle();
   if (existingError) throw existingError;
+
+  // A price typed in by hand outlives a rebuild that could not price the
+  // zones. Saying so is the difference between "nothing changed" and "the
+  // services have no hours on them", which is the thing to go and fix.
+  const price = priceAfterRegen(total, existing ? { totalCost: existing.total_cost == null ? null : Number(existing.total_cost) } : null);
+  const priceNote = price.kept
+    ? `Price kept at $${price.total.toLocaleString()}: the costing could not price these zones (no hours or measurement on the service), so the hand-set price stands.`
+    : null;
 
   // Regenerating clears a client's acceptance. That is right — they agreed to
   // work that is no longer what we are proposing — but it destroys a record
@@ -181,7 +192,7 @@ export async function generateProposal(
       // Updating a proposal updates what their link shows; it does not take
       // the link away while somebody re-approves it.
       status: nextStatus,
-      total_cost: total,
+      total_cost: price.total,
       scope_snapshot: scopeSnapshot,
       site_image_path: design.image_path,
       site_image_transform: siteImageTransform,
@@ -202,7 +213,7 @@ export async function generateProposal(
   // What actually moved, so "the paperwork is stuck on lawn care" is
   // something the evaluator can check on the spot rather than days later.
   const diff = diffScope(previous, scopeSnapshot);
-  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: decision.note };
+  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: [decision.note, priceNote].filter(Boolean).join(" ") || null };
 }
 
 /**

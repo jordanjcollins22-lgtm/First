@@ -1142,6 +1142,8 @@ export function ImageCanvasBoard({
             : `Proposal updated: ${outcome.changes.join(" · ")}`,
           note: outcome.note,
         });
+      } else if (outcome.reason === "failed") {
+        setEvalResult({ tone: "warn", text: `Submitted, but the proposal could not be rebuilt: ${outcome.message}` });
       } else if (outcome.reason === "needs_confirmation") {
         // Not an error. Regenerating clears a client's acceptance, so it asks
         // rather than doing it as a side effect of a button labelled Submit.
