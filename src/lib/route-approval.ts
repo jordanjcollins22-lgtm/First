@@ -151,6 +151,40 @@ export function doorsInArea<T extends Point>(houses: T[], area: Point[]): T[] {
   return houses.filter((h) => pointInArea(h, area));
 }
 
+/** Metres from a point to the nearest edge of a ring. */
+export function metresToRing(p: Point, ring: Point[]): number {
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const k = Math.cos((a.lat * Math.PI) / 180);
+    const ax = a.lng * k, ay = a.lat, bx = b.lng * k, by = b.lat, px = p.lng * k, py = p.lat;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+    const d = Math.hypot((px - (ax + t * dx)) * 111_320, (py - (ay + t * dy)) * 111_320);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * The houses a route's map should show: every one inside its outline, and
+ * any within a few metres of the edge, whichever route the post office
+ * filed them under. A house is assigned to the route whose street it sits
+ * on, and a neighbourhood's outline crosses streets, so a hundred houses
+ * inside the outline were on another route's list and had no dot.
+ */
+export function housesOnRoute<T extends Point & { eddmRouteId?: string | null }>(houses: T[], routeId: string, rings: Point[][], edgeMetres = 25): T[] {
+  return houses.filter((h) => {
+    if (h.eddmRouteId === routeId) return true;
+    for (const ring of rings) {
+      if (ring.length >= 3 && (pointInArea(h, ring) || metresToRing(h, ring) <= edgeMetres)) return true;
+    }
+    return false;
+  });
+}
+
 function metresBetween(a: Point, b: Point): number {
   const k = Math.cos((a.lat * Math.PI) / 180);
   return Math.hypot((a.lat - b.lat) * 111_320, (a.lng - b.lng) * 111_320 * k);

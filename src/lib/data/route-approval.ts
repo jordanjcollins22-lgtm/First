@@ -4,7 +4,7 @@ import { getEddmMailing, type EddmMailing } from "@/lib/data/eddm";
 import { listDoorHangerSlots } from "@/lib/data/door-hangers";
 import { sheetsNeeded } from "@/lib/door-hanger";
 import { collectedByJob } from "@/lib/data/all-proposals";
-import { paidInFull, pickRoute, type RouteHouse, type RouteOrderStatus, type RouteStep } from "@/lib/route-approval";
+import { housesOnRoute, paidInFull, pickRoute, type RouteHouse, type RouteOrderStatus, type RouteStep } from "@/lib/route-approval";
 import type { LngLatPair } from "@/lib/eddm";
 import type { MarketingPlay } from "@/lib/marketing-plays";
 import type { Point } from "@/lib/route-order";
@@ -233,19 +233,33 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   // it there. Read for these houses only rather than every play in the
   // business, and in the same breath as the route and its doors.
   type OpenPlay = { id: string; house_id: string };
-  const [{ data: route }, { data: onRoute }, { data: openPlays }, mailing] = await Promise.all([
-    supabase
-      .from("eddm_routes")
-      .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, paths")
-      .eq("id", picked.eddmRouteId)
-      .maybeSingle(),
-    supabase
-      .from("houses")
-      .select("id, address, lat, lng")
-      .eq("eddm_route_id", picked.eddmRouteId)
-      .eq("kind", "house")
-      .eq("needs_review", false)
-      .limit(3000),
+  const { data: route } = await supabase
+    .from("eddm_routes")
+    .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, paths")
+    .eq("id", picked.eddmRouteId)
+    .maybeSingle();
+  if (!route) return null;
+  const rings = ((Array.isArray(route.rings) ? route.rings : []) as LngLatPair[][]).map((ring) => ring.map(([lng, lat]) => ({ lat, lng })));
+
+  // Every house in the outline's box, then kept to those on the route or
+  // inside its outline. The post office files a house under the route whose
+  // street it sits on, and an outline crosses streets.
+  const lats = rings.flat().map((p) => p.lat);
+  const lngs = rings.flat().map((p) => p.lng);
+  const pad = 0.0005;
+  const [{ data: inBox }, { data: openPlays }, mailing] = await Promise.all([
+    lats.length > 0
+      ? supabase
+          .from("houses")
+          .select("id, address, lat, lng, eddm_route_id")
+          .eq("kind", "house")
+          .eq("needs_review", false)
+          .gte("lat", Math.min(...lats) - pad)
+          .lte("lat", Math.max(...lats) + pad)
+          .gte("lng", Math.min(...lngs) - pad)
+          .lte("lng", Math.max(...lngs) + pad)
+          .limit(5000)
+      : supabase.from("houses").select("id, address, lat, lng, eddm_route_id").eq("eddm_route_id", picked.eddmRouteId).eq("kind", "house").eq("needs_review", false).limit(3000),
     supabase
       .from("marketing_plays")
       .select("id, house_id")
@@ -256,7 +270,11 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       .order("created_at", { ascending: true }),
     order?.mailing_id ? getEddmMailing(order.mailing_id).catch(() => null) : Promise.resolve(null),
   ]);
-  if (!route) return null;
+  const onRoute = housesOnRoute(
+    ((inBox ?? []) as { id: string; address: string; lat: number; lng: number; eddm_route_id: string | null }[]).map((h) => ({ ...h, eddmRouteId: h.eddm_route_id })),
+    picked.eddmRouteId,
+    rings
+  );
 
   const playOfHouse = new Map<string, { id: string }>();
   for (const p of (openPlays ?? []) as unknown as OpenPlay[]) {
@@ -321,7 +339,7 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       rings: (Array.isArray(route.rings) ? route.rings : []) as LngLatPair[][],
       paths: (Array.isArray(route.paths) ? route.paths : []) as LngLatPair[][],
     },
-    houses: (onRoute ?? []).map((h) => ({ id: h.id, address: h.address, lat: h.lat, lng: h.lng })),
+    houses: onRoute.map((h) => ({ id: h.id, address: h.address, lat: h.lat, lng: h.lng })),
     anchors: anchorViews,
     round,
     mailing,

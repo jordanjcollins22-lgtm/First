@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { doorsAlongLines, nextMonday, paidInFull, pickRoute, plusDays, routeName, stepQuestion, EMPTY_SHAPE, walkDoors } from "./route-approval";
+import { doorsAlongLines, nextMonday, paidInFull, pickRoute, plusDays, routeName, stepQuestion, EMPTY_SHAPE, walkDoors, housesOnRoute } from "./route-approval";
 
 describe("paidInFull", () => {
   it("is paid when the app took the money", () => {
@@ -89,6 +89,25 @@ describe("drawing an area", () => {
     ];
     expect(walkDoors(houses, { ...EMPTY_SHAPE, line }).order).toEqual(["on"]);
     expect(walkDoors(houses, EMPTY_SHAPE).order).toEqual([]);
+  });
+});
+
+describe("housesOnRoute", () => {
+  const ring = [
+    { lat: 0, lng: 0 },
+    { lat: 0, lng: 1 },
+    { lat: 1, lng: 1 },
+    { lat: 1, lng: 0 },
+  ];
+  it("takes every house inside the outline whichever route filed it, and those on its edge", () => {
+    const houses = [
+      { id: "mine", lat: 0.5, lng: 0.5, eddmRouteId: "r1" },
+      { id: "theirs-inside", lat: 0.4, lng: 0.6, eddmRouteId: "r2" },
+      { id: "theirs-edge", lat: -0.0001, lng: 0.5, eddmRouteId: "r2" },
+      { id: "theirs-far", lat: 2, lng: 2, eddmRouteId: "r2" },
+      { id: "mine-far", lat: 2, lng: 3, eddmRouteId: "r1" },
+    ];
+    expect(housesOnRoute(houses, "r1", [ring]).map((h) => h.id).sort()).toEqual(["mine", "mine-far", "theirs-edge", "theirs-inside"]);
   });
 });
 
