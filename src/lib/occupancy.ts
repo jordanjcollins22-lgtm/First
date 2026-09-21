@@ -1,45 +1,45 @@
 /**
- * Owns or rents, said plainly at the top of the job.
+ * Owns or rents, said plainly at the top of the job, from the county data.
  *
  * It decides who can say yes to the work and who pays for it, and it was
- * buried in a popup on the county map. What the client told us wins; the
- * State's roll, which says whether the owner claims the house as their
- * principal residence, fills in when nobody asked.
+ * buried in a popup on the county map. Maryland's assessment roll says
+ * whether the owner claims the house as their principal residence; a house
+ * the roll left unknown is settled from the State's own property record
+ * page. Nobody is asked.
  */
 
-export type Occupancy = "owner" | "renter";
-
 export interface OccupancyFacts {
-  /** What the client said, when somebody asked. */
-  told: Occupancy | null;
   /** The State's roll: owner lives there, or not, or unknown. */
-  rollOwnerOccupied: boolean | null;
-  rollReason: string | null;
+  ownerOccupied: boolean | null;
+  reason: string | null;
+  ownerName?: string | null;
+  /** True when there is no county house for this address at all. */
+  noHouse?: boolean;
 }
 
 export interface OccupancyBadge {
   label: string;
   detail: string;
   tone: "good" | "warn" | "muted";
-  /** Where the answer came from. */
-  source: "client" | "roll" | "none";
 }
 
 export function occupancyBadge(facts: OccupancyFacts): OccupancyBadge {
-  if (facts.told === "owner") return { label: "Owns the home", detail: "The client told us.", tone: "good", source: "client" };
-  if (facts.told === "renter") {
-    return { label: "Rents the home", detail: "The client told us. The owner may need to sign off on the work.", tone: "warn", source: "client" };
-  }
-  if (facts.rollOwnerOccupied === true) {
-    return { label: "Owns the home", detail: facts.rollReason ?? "The State's roll says the owner lives here.", tone: "good", source: "roll" };
-  }
-  if (facts.rollOwnerOccupied === false) {
+  if (facts.ownerOccupied === true) {
     return {
-      label: "Likely rents",
-      detail: `${facts.rollReason ?? "The owner lives elsewhere, by the State's roll."} Worth asking.`,
-      tone: "warn",
-      source: "roll",
+      label: "Owns the home",
+      detail: facts.ownerName ? `${facts.ownerName}, per the State's roll.` : "Owner claims it as their principal residence, per the State's roll.",
+      tone: "good",
     };
   }
-  return { label: "Own or rent? Not known", detail: "Ask, and tap the answer here.", tone: "muted", source: "none" };
+  if (facts.ownerOccupied === false) {
+    return {
+      label: "Rents the home",
+      detail: facts.ownerName
+        ? `Owned by ${facts.ownerName}, who lives elsewhere. The owner may need to sign off on the work.`
+        : `${facts.reason ?? "The owner lives elsewhere, per the State's roll."} The owner may need to sign off on the work.`,
+      tone: "warn",
+    };
+  }
+  if (facts.noHouse) return { label: "Own or rent? Not in the county data", detail: "No county house matches this address yet.", tone: "muted" };
+  return { label: "Own or rent? Checking the State's roll", detail: "The roll left this one unknown; reading the State's property record.", tone: "muted" };
 }

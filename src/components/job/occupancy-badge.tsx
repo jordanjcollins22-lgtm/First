@@ -1,32 +1,42 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { Home, KeyRound } from "lucide-react";
 
-import { setPropertyOccupancy } from "@/lib/actions/property-actions";
-import { occupancyBadge, type Occupancy, type OccupancyFacts } from "@/lib/occupancy";
+import { occupancyBadge, type OccupancyFacts } from "@/lib/occupancy";
 import { cn } from "@/lib/utils";
 
 /**
- * Owns or rents, under the address, with the two answers a tap away.
+ * Owns or rents, under the address, from the county data.
  *
- * The badge reads the client's word first and the State's roll second. The
- * buttons record what the client said, so the next person to open the job
- * does not have to ask again.
+ * Rendered from the roll first. When the roll left the house unknown, the
+ * State's property record is read once through the owner lookup, which
+ * keeps what it finds, and the badge settles without anybody asking.
  */
-export function OccupancyBadge({ propertyId, facts }: { propertyId: string; facts: OccupancyFacts }) {
-  const [told, setTold] = useState<Occupancy | null>(facts.told);
-  const [pending, start] = useTransition();
-  const badge = occupancyBadge({ ...facts, told });
+export function OccupancyBadge({ houseId, facts }: { houseId: string | null; facts: OccupancyFacts }) {
+  const [live, setLive] = useState<OccupancyFacts>(facts);
 
-  function record(next: Occupancy) {
-    const value = told === next ? null : next;
-    setTold(value);
-    start(async () => {
-      const result = await setPropertyOccupancy(propertyId, value);
-      if (!result.ok) setTold(told);
-    });
-  }
+  useEffect(() => {
+    if (!houseId || facts.ownerOccupied != null) return;
+    let cancelled = false;
+    fetch(`/api/houses/${houseId}/owner`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { ownerName?: string | null; ownerOccupied?: boolean | null; reason?: string | null } | null) => {
+        if (cancelled || !body) return;
+        setLive({
+          ownerOccupied: body.ownerOccupied ?? null,
+          reason: body.ownerOccupied == null ? (body.reason ?? "The State's record did not settle it.") : null,
+          ownerName: body.ownerName ?? null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [houseId, facts.ownerOccupied]);
+
+  const badge = occupancyBadge(live);
+  const unsettled = live.ownerOccupied == null && !live.noHouse && live.reason;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -37,29 +47,11 @@ export function OccupancyBadge({ propertyId, facts }: { propertyId: string; fact
           badge.tone === "warn" && "border-amber-500/50 bg-amber-50 text-amber-800",
           badge.tone === "muted" && "border-border bg-muted text-muted-foreground"
         )}
-        title={badge.detail}
       >
         {badge.tone === "warn" ? <KeyRound className="h-3.5 w-3.5" /> : <Home className="h-3.5 w-3.5" />}
-        {badge.label}
+        {unsettled ? "Own or rent? Not settled" : badge.label}
       </span>
-      <span className="text-[11px] text-muted-foreground">{badge.detail}</span>
-      <span className="ml-auto flex gap-1">
-        {(["owner", "renter"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            disabled={pending}
-            onClick={() => record(option)}
-            aria-pressed={told === option}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-              told === option ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent/40"
-            )}
-          >
-            {option === "owner" ? "Client owns" : "Client rents"}
-          </button>
-        ))}
-      </span>
+      <span className="text-[11px] text-muted-foreground">{unsettled ? live.reason : badge.detail}</span>
     </div>
   );
 }

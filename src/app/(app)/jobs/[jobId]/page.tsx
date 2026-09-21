@@ -127,7 +127,7 @@ export default async function JobPage({
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
-    .select("*, property:properties(address, lat, lng, occupancy, customers(id, name, phone))")
+    .select("*, property:properties(address, lat, lng, customers(id, name, phone))")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -157,7 +157,6 @@ export default async function JobPage({
       address: string;
       lat: number;
       lng: number;
-      occupancy: string | null;
       customers: { id: string; name: string; phone: string | null } | null;
     } | null;
   };
@@ -510,21 +509,16 @@ export default async function JobPage({
 
   const host = headersList.get("host") ?? "";
 
-  // Owns or rents, from the State's roll unless the client has said. Read
-  // here rather than from the county map's popup, because it is the first
-  // thing to know about a job and it was three taps away.
-  const { data: rollRow } = await supabase
-    .from("houses")
-    .select("house_ownership(owner_occupied, occupancy_reason)")
-    .eq("property_id", job.property_id)
-    .limit(1)
-    .maybeSingle();
-  const roll = (rollRow as { house_ownership?: { owner_occupied: boolean | null; occupancy_reason: string | null } | { owner_occupied: boolean | null; occupancy_reason: string | null }[] | null } | null)?.house_ownership;
-  const rollFacts = Array.isArray(roll) ? roll[0] : roll;
+  // Owns or rents, from the county data. Read here rather than from the
+  // county map's popup, because it is the first thing to know about a job
+  // and it was three taps away. The county house is the one linked to this
+  // property, or failing that the nearest one to its pin.
+  const county = await countyHouseFor(supabase, job.property_id, job.property?.lat ?? null, job.property?.lng ?? null);
   const occupancyFacts = {
-    told: (job.property?.occupancy === "owner" || job.property?.occupancy === "renter" ? job.property.occupancy : null) as "owner" | "renter" | null,
-    rollOwnerOccupied: rollFacts?.owner_occupied ?? null,
-    rollReason: rollFacts?.occupancy_reason ?? null,
+    ownerOccupied: county?.ownerOccupied ?? null,
+    reason: county?.reason ?? null,
+    ownerName: county?.ownerName ?? null,
+    noHouse: !county,
   };
 
   // Price requests to subcontractors, one per service on the proposal.
@@ -556,7 +550,7 @@ export default async function JobPage({
             )}
           </p>
           <div className="mt-2">
-            <OccupancyBadge propertyId={job.property_id} facts={occupancyFacts} />
+            <OccupancyBadge houseId={county?.houseId ?? null} facts={occupancyFacts} />
           </div>
         </div>
         {/* What the crew will actually be looking at on site. Worth a tap from
@@ -1088,4 +1082,52 @@ async function CloseoutTab(jobId: string, roles: string[]) {
       />
     </div>
   );
+}
+
+/**
+ * The county house for a property, and what the State's roll says about it.
+ *
+ * Linked by the matcher when it ran; otherwise the nearest house to the
+ * pin, within about forty metres, so an address that arrived after the
+ * import still reads its owner off the roll.
+ */
+async function countyHouseFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  propertyId: string,
+  lat: number | null,
+  lng: number | null
+): Promise<{ houseId: string; ownerOccupied: boolean | null; reason: string | null; ownerName: string | null } | null> {
+  type Row = {
+    id: string;
+    lat: number;
+    lng: number;
+    house_ownership: { owner_occupied: boolean | null; occupancy_reason: string | null; owner_name: string | null } | { owner_occupied: boolean | null; occupancy_reason: string | null; owner_name: string | null }[] | null;
+  };
+  const shape = (row: Row | null) => {
+    if (!row) return null;
+    const roll = Array.isArray(row.house_ownership) ? row.house_ownership[0] : row.house_ownership;
+    return { houseId: row.id, ownerOccupied: roll?.owner_occupied ?? null, reason: roll?.occupancy_reason ?? null, ownerName: roll?.owner_name ?? null };
+  };
+  const columns = "id, lat, lng, house_ownership(owner_occupied, occupancy_reason, owner_name)";
+
+  const { data: linked } = await supabase.from("houses").select(columns).eq("property_id", propertyId).limit(1).maybeSingle();
+  if (linked) return shape(linked as unknown as Row);
+  if (lat == null || lng == null) return null;
+
+  const { data: near } = await supabase
+    .from("houses")
+    .select(columns)
+    .eq("kind", "house")
+    .gte("lat", lat - 0.0004)
+    .lte("lat", lat + 0.0004)
+    .gte("lng", lng - 0.0005)
+    .lte("lng", lng + 0.0005)
+    .limit(20);
+  const rows = ((near ?? []) as unknown as Row[]).map((row) => ({
+    row,
+    metres: Math.hypot((row.lat - lat) * 110_574, (row.lng - lng) * 111_320 * Math.cos((lat * Math.PI) / 180)),
+  }));
+  rows.sort((a, b) => a.metres - b.metres);
+  const best = rows[0];
+  return best && best.metres <= 40 ? shape(best.row) : null;
 }
