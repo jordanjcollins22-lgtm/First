@@ -321,6 +321,11 @@ export async function approveProposal(jobId: string) {
     .eq("status", "needs_approval");
   if (error) throw error;
 
+  // The job is quoted from this moment. Left at "estimating", every screen
+  // that reads the job's own status went on treating it as an evaluation
+  // still to be written up.
+  await supabase.from("jobs").update({ status: "quoted" }).eq("id", jobId).eq("status", "estimating");
+
   revalidateJobViews(jobId);
 }
 

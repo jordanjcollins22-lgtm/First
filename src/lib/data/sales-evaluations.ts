@@ -19,17 +19,24 @@ interface Row {
  */
 export async function listSalesEvaluations(): Promise<SalesEvaluation[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("jobs")
-    .select(
-      "id, job_number, status, evaluation_status, evaluation_date, " +
-        "properties!inner(address, customers(name)), profiles!jobs_assigned_to_fkey(full_name, email)"
-    )
-    .eq("status", "estimating")
-    .limit(500);
+  const [{ data, error }, { data: quoted }] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select(
+        "id, job_number, status, evaluation_status, evaluation_date, " +
+          "properties!inner(address, customers(name)), profiles!jobs_assigned_to_fkey(full_name, email)"
+      )
+      .eq("status", "estimating")
+      .limit(500),
+    // A job with a proposal on it, in any state, has produced one. It used
+    // to stay here on its job status alone, so a client whose quote went
+    // out a week ago was still listed as an evaluation to write up.
+    supabase.from("job_proposals").select("job_id").limit(2000),
+  ]);
   if (error) throw error;
+  const hasProposal = new Set((quoted ?? []).map((row) => row.job_id));
 
-  return ((data ?? []) as unknown as Row[]).map((row) => ({
+  return ((data ?? []) as unknown as Row[]).filter((row) => !hasProposal.has(row.id)).map((row) => ({
     jobId: row.id,
     jobNumber: row.job_number,
     customerName: row.properties?.customers?.name ?? null,
