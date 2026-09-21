@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -41,7 +42,10 @@ export async function CalendarTab({ section = "all" }: { section?: "all" | "cale
   await requireTab("evaluations", "/my-day");
   // Bookings made in GoHighLevel, brought in before the calendar is drawn.
   // Throttled to every few minutes inside; most opens cost nothing.
-  await pullGhlCalendarIfStale(await getCurrentOrganizationId()).catch(() => null);
+  // After the page is sent, never in front of it: a read of HighLevel's
+  // calendar is worth having and not worth a person waiting for.
+  const orgForPull = await getCurrentOrganizationId();
+  after(() => pullGhlCalendarIfStale(orgForPull).catch(() => null));
 
   const schedule = await getMyScheduleData();
   if (!schedule) {

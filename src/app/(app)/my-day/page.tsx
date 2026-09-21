@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, MessageSquarePlus } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
+import { after } from "next/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
@@ -450,7 +451,7 @@ async function OpsBlock() {
 async function TilesBlock({ profile }: { profile: Profile }) {
   // Bookings made in GoHighLevel, brought in first so today's list is
   // today's list. Throttled inside; most opens cost nothing.
-  await pullGhlCalendarIfStale(profile.organization_id).catch(() => null);
+  after(() => pullGhlCalendarIfStale(profile.organization_id).catch(() => null));
   const [data, work] = await Promise.all([
     getDashboard("today", new Date(), { forProfileId: profile.id }).catch((err) => {
       console.error("My Day failed to load:", err);

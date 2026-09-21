@@ -13,6 +13,13 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { themeScript } from "@/lib/theme";
 import "../globals.css";
 
+// Sixty seconds for every page under the app, not the platform's ten. A
+// cold open of a heavy page, on a slow connection, with a calendar pull in
+// front of it, was tripping the ten-second limit and answering with the
+// platform's error page; the next tap, warm, went through. Sixty is the
+// most the plan allows and more than any page should take.
+export const maxDuration = 60;
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://app.jslandscapingmd.com"),
   title: "JS Landscaping",
