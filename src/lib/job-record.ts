@@ -79,6 +79,7 @@ export interface RecordProposal {
   discountReason: string | null;
   generatedAt: string;
   approvedAt: string | null;
+  sentAt: string | null;
   respondedAt: string | null;
   responseNote: string | null;
   paymentPath: string | null;
@@ -510,7 +511,8 @@ export function timelineOf(input: JobRecordInput): TimelineEntry[] {
   add(job.evaluationDate, "Evaluation visit", job.evaluationStatus === "cancelled" ? "Cancelled" : null);
   if (input.proposal) {
     add(input.proposal.generatedAt, "Proposal written", input.proposal.totalCost != null ? money(Math.round(input.proposal.totalCost * 100)) : null);
-    add(input.proposal.approvedAt, "Proposal sent to the client");
+    add(input.proposal.approvedAt, "Proposal approved", null, true);
+    add(input.proposal.sentAt, "Proposal sent to the client");
     if (input.proposal.status === "accepted" || input.proposal.status === "declined") {
       add(
         input.proposal.respondedAt,

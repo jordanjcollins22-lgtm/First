@@ -298,9 +298,10 @@ async function subjectsFor(
   // Proposals carry the business directly, so no list of job ids is needed.
   const { data: proposals, error: proposalsError } = await admin
     .from("job_proposals")
-    .select("id, token, status, created_at, job:jobs!inner(id, cancelled_at, property:properties!inner(address, customer_id))")
+    .select("id, token, status, created_at, sent_at, job:jobs!inner(id, cancelled_at, property:properties!inner(address, customer_id))")
     .eq("organization_id", organizationId)
     .eq("status", "sent")
+    .not("sent_at", "is", null)
     .gte("created_at", recently)
     .limit(500);
   if (proposalsError) {
@@ -313,6 +314,7 @@ async function subjectsFor(
     token: string;
     status: string;
     created_at: string;
+    sent_at: string | null;
     job: { id: string; cancelled_at: string | null; property: { address: string; customer_id: string | null } | null } | null;
   };
   for (const proposal of (proposals ?? []) as unknown as ProposalRow[]) {
@@ -323,7 +325,8 @@ async function subjectsFor(
         kind: "proposal_follow_up",
         referenceId: proposal.id,
         customerId: property.customer_id,
-        anchor: new Date(proposal.created_at),
+        // From the day the client got it, not the day it was written.
+        anchor: new Date(proposal.sent_at ?? proposal.created_at),
         settled: proposal.status !== "sent",
       },
       when: null,

@@ -750,6 +750,7 @@ export interface JobProposal {
   recommended_scope: string | null;
   generated_at: string;
   approved_at: string | null;
+  sent_at: string | null;
   responded_at: string | null;
   client_response_note: string | null;
   /** Set when the office closed it, on the board or after a call, rather

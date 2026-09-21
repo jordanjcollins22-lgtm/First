@@ -402,6 +402,7 @@ function toRecordProposal(proposal: JobProposal, serviceName: Map<string, string
     discountReason: proposal.discount_reason,
     generatedAt: proposal.generated_at,
     approvedAt: proposal.approved_at,
+    sentAt: proposal.sent_at,
     respondedAt: proposal.responded_at,
     responseNote: proposal.client_response_note,
     paymentPath: proposal.payment_path,

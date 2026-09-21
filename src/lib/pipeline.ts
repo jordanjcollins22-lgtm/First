@@ -36,7 +36,7 @@ export const STAGE_STATUSES: Record<PipelineStage, string[]> = {
   // visit that fell through is a lead that still exists, and the office
   // wants to see how many there were and ring them back.
   evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated", "Cancelled"],
-  sales: ["Needs pricing", "Needs approval", "Sent", "Declined"],
+  sales: ["Needs pricing", "Needs approval", "Approved", "Sent", "Declined"],
   operations: ["Won — not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
   // The kind of trouble rather than a ladder of progress: a dispute does not
   // advance, it is either open or it is over, and what it is decides who
@@ -71,6 +71,8 @@ export interface PipelineInput {
   projectEndDate: string | null;
   /** job_proposals.status, or null when no proposal exists yet. */
   proposalStatus: string | null;
+  /** job_proposals.sent_at: when the client actually got it. Approved is not sent. */
+  proposalSentAt?: string | null;
   /**
    * When somebody decided this job was not happening.
    *
@@ -247,6 +249,9 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
     return { stage: "sales", status: "Declined", actionable: false };
   }
   if (input.proposalStatus === "sent") {
+    // Approved but the email has not gone: still on us. Null is that fact;
+    // a caller that does not carry the column at all is read as before.
+    if (input.proposalSentAt === null) return { stage: "sales", status: "Approved", actionable: true };
     // Waiting on the client, not on us.
     return { stage: "sales", status: "Sent", actionable: false };
   }

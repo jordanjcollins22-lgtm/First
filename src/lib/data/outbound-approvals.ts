@@ -230,6 +230,10 @@ export async function deliverApproval(admin: Admin, approval: ApprovalRow, decid
         : { status: "failed", decided_at: now, decided_by: decidedBy, detail: sent.message }
     )
     .eq("id", approval.id);
+  // The proposal is sent from this moment, not from its approval.
+  if (sent.ok && approval.kind === "proposal_ready" && approval.job_id) {
+    await admin.from("job_proposals").update({ sent_at: now }).eq("job_id", approval.job_id).is("sent_at", null);
+  }
   return sent.ok ? { ok: true, message: "Sent." } : { ok: false, message: sent.message };
 }
 

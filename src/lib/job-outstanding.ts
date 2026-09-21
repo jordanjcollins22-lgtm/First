@@ -15,6 +15,7 @@
  */
 
 import type { JobStage } from "@/lib/job-stage";
+import { wasSent } from "@/lib/proposal-sent";
 
 export interface OutstandingItem {
   id: string;
@@ -35,6 +36,8 @@ export interface JobFacts {
   /** Zones with a service on them, which is what makes a proposal possible. */
   zonesMeasured: number;
   proposalStatus: string | null;
+  /** When the client actually got the proposal. Approved is not sent. */
+  proposalSentAt?: string | null;
   /** Days the client has been sitting on a sent proposal. */
   scheduled: boolean;
   visitsBooked: number;
@@ -100,7 +103,7 @@ export function outstandingFor(facts: JobFacts): OutstandingItem[] {
     {
       id: "proposal_sent",
       label: "Proposal sent",
-      done: facts.proposalStatus != null && facts.proposalStatus !== "needs_approval",
+      done: wasSent(facts.proposalStatus, facts.proposalSentAt),
     },
     {
       id: "proposal_signed",

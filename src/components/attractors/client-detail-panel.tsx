@@ -20,20 +20,14 @@ import { cn } from "@/lib/utils";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 import type { Customer, JobProposal, Profile } from "@/types/domain";
 import type { JobWithLocation } from "@/lib/data/jobs";
+import { proposalShortLabel, proposalStatusTone } from "@/lib/proposal-sent";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 
-const PROPOSAL_STATUS_LABEL: Record<string, string> = {
-  needs_approval: "Needs approval",
-  sent: "Proposal sent",
-  accepted: "Proposal accepted",
-  declined: "Proposal declined",
-};
-
-const PROPOSAL_STATUS_STYLE: Record<string, string> = {
-  needs_approval: "border-amber-400/40 bg-amber-400/10 text-amber-700",
-  sent: "border-blue-400/40 bg-blue-400/10 text-blue-700",
-  accepted: "border-primary/40 bg-primary/10 text-primary",
-  declined: "border-destructive/40 bg-destructive/10 text-destructive",
+const PROPOSAL_TONE_STYLE: Record<ReturnType<typeof proposalStatusTone>, string> = {
+  amber: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  blue: "border-blue-400/40 bg-blue-400/10 text-blue-700",
+  good: "border-primary/40 bg-primary/10 text-primary",
+  bad: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
 /** The full account view for a client — every property they have, and every
@@ -229,10 +223,10 @@ export function ClientDetailPanel({
                           <span
                             className={cn(
                               "rounded-full border px-1.5 py-0 text-[10px] font-semibold",
-                              PROPOSAL_STATUS_STYLE[proposalsByJobId[job.id].status]
+                              PROPOSAL_TONE_STYLE[proposalStatusTone(proposalsByJobId[job.id].status, proposalsByJobId[job.id].sent_at)]
                             )}
                           >
-                            {PROPOSAL_STATUS_LABEL[proposalsByJobId[job.id].status]}
+                            {proposalShortLabel(proposalsByJobId[job.id].status, proposalsByJobId[job.id].sent_at)}
                           </span>
                         )}
                       </div>

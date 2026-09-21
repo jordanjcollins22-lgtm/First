@@ -3240,6 +3240,8 @@ export interface Database {
           recommended_scope: string | null;
           generated_at: string;
           approved_at: string | null;
+          /** When the client actually got it: the email went, or somebody sent the link by hand. */
+          sent_at: string | null;
           responded_at: string | null;
           client_response_note: string | null;
           office_declined_by: string | null;

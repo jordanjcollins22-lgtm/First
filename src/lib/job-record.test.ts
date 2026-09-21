@@ -87,6 +87,7 @@ function input(overrides: Partial<JobRecordInput> = {}): JobRecordInput {
       discountReason: null,
       generatedAt: "2026-08-21T09:00:00Z",
       approvedAt: "2026-08-21T10:00:00Z",
+      sentAt: "2026-08-21T10:05:00Z",
       respondedAt: "2026-08-23T18:10:00Z",
       responseNote: null,
       paymentPath: "full",

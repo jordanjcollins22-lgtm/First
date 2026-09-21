@@ -122,6 +122,9 @@ function ProposalRow({
 
       {/* How long it has left, or how long it will have. It closes on its
           own when that runs out, so the number is worth watching. */}
+      {proposal.status === "sent" && !proposal.sent_at && (
+        <p className="text-xs font-semibold text-amber-700">Approved, not sent yet. The email to the client is waiting on My Day.</p>
+      )}
       {proposal.status === "sent" && validityLine(proposal.expires_at, new Date()) && (
         <p className="text-xs font-medium text-muted-foreground">{validityLine(proposal.expires_at, new Date())}</p>
       )}

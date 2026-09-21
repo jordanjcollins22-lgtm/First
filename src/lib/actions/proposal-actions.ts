@@ -439,6 +439,22 @@ async function parkProposalEmail(jobId: string, approvedAt: Date, signedBy: stri
   return { emailed: "waiting", to };
 }
 
+/** Somebody sent the link themselves, by text or in person. The proposal is sent from now. */
+export async function markProposalSent(jobId: string): Promise<void> {
+  const profile = await getCurrentProfile();
+  if (!profile) throw new Error("Not signed in.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("job_proposals")
+    .update({ sent_at: new Date().toISOString() })
+    .eq("job_id", jobId)
+    .eq("status", "sent")
+    .is("sent_at", null);
+  if (error) throw error;
+  revalidateJobViews(jobId);
+  revalidatePath("/pipeline");
+}
+
 /** How long the proposal will stand once it goes out. Set on the draft, before approval. */
 export async function setProposalValidity(jobId: string, days: number): Promise<void> {
   const profile = await getCurrentProfile();

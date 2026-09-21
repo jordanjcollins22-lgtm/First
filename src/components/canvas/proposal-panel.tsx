@@ -10,7 +10,8 @@ import { DiscountSelect } from "@/components/canvas/discount-select";
 import { ViewCount } from "@/components/proposal/view-count";
 import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
 import { cn } from "@/lib/utils";
-import { generateProposal, updateProposalDraft, approveProposal, setProposalValidity } from "@/lib/actions/proposal-actions";
+import { proposalStatusLabel, proposalStatusTone } from "@/lib/proposal-sent";
+import { generateProposal, updateProposalDraft, approveProposal, setProposalValidity, markProposalSent } from "@/lib/actions/proposal-actions";
 import { DEFAULT_VALID_DAYS, VALID_DAY_OPTIONS, validityLine } from "@/lib/proposal-validity";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { suggestZoneScope, tidyZoneScope } from "@/lib/actions/scope-suggestion-actions";
@@ -41,18 +42,11 @@ function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  needs_approval: "Needs approval",
-  sent: "Sent — awaiting response",
-  accepted: "Accepted",
-  declined: "Declined",
-};
-
-const STATUS_STYLE: Record<string, string> = {
-  needs_approval: "border-amber-400/40 bg-amber-400/10 text-amber-700",
-  sent: "border-blue-400/40 bg-blue-400/10 text-blue-700",
-  accepted: "border-primary/40 bg-primary/10 text-primary",
-  declined: "border-destructive/40 bg-destructive/10 text-destructive",
+const TONE_STYLE: Record<ReturnType<typeof proposalStatusTone>, string> = {
+  amber: "border-amber-400/40 bg-amber-400/10 text-amber-700",
+  blue: "border-blue-400/40 bg-blue-400/10 text-blue-700",
+  good: "border-primary/40 bg-primary/10 text-primary",
+  bad: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
 /** Internal-only breakdown attached to the job — same underlying site map as
@@ -291,6 +285,18 @@ export function ProposalPanel({
     });
   }
 
+  function handleMarkSent() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await markProposalSent(jobId);
+        setApprovedNote("Marked as sent.");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't mark it sent.");
+      }
+    });
+  }
+
   async function handleCopy() {
     if (!link) return;
     await navigator.clipboard.writeText(link);
@@ -304,8 +310,8 @@ export function ProposalPanel({
         <div className="flex items-center gap-2">
           <p className="font-semibold">Client Proposal</p>
           {proposal && (
-            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", STATUS_STYLE[proposal.status])}>
-              {STATUS_LABEL[proposal.status]}
+            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", TONE_STYLE[proposalStatusTone(proposal.status, proposal.sent_at)])}>
+              {proposalStatusLabel(proposal.status, proposal.sent_at)}
             </span>
           )}
           {/* When they answered, not just that they did. It is the date the
@@ -358,6 +364,11 @@ export function ProposalPanel({
                   Preview
                 </a>
               </Button>
+              {proposal.status === "sent" && !proposal.sent_at && (
+                <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={handleMarkSent} title="You sent the link yourself, by text or in person.">
+                  Mark as sent
+                </Button>
+              )}
               <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied ? "Copied" : "Copy link"}

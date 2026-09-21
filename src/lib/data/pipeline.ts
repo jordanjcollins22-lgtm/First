@@ -50,7 +50,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
   const [{ data: proposals }, views] = await Promise.all([
     supabase
       .from("job_proposals")
-      .select("id, job_id, status, total_cost, discount_amount, paid_at")
+      .select("id, job_id, status, total_cost, discount_amount, paid_at, sent_at")
       .in(
         "job_id",
         jobs.map((j) => j.id)
@@ -69,6 +69,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         total_cost: number | null;
         discount_amount: number | null;
         paid_at: string | null;
+        sent_at: string | null;
       }[]
     ).map((p) => [p.job_id, p])
   );
@@ -117,6 +118,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         projectStartDate: job.project_start_date,
         projectEndDate: job.project_end_date,
         proposalStatus: proposal?.status ?? null,
+        proposalSentAt: proposal?.sent_at ?? null,
         override,
         dispute,
       };
