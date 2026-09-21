@@ -16,6 +16,8 @@ export interface DuplicateCandidate {
   status: string;
   evaluationStatus: string;
   proposalStatus: string | null;
+  /** Set when a person said this one is more work, not a copy. */
+  duplicateClearedAt?: string | null;
 }
 
 export interface DuplicateOf {
@@ -73,6 +75,9 @@ export function findDuplicates(jobs: readonly DuplicateCandidate[]): Map<string,
   const groups = new Map<string, DuplicateCandidate[]>();
   for (const job of jobs) {
     if (job.status === "cancelled") continue;
+    // A job somebody has vouched for is more work, and it is neither a
+    // copy nor the thing another job copies.
+    if (job.duplicateClearedAt) continue;
     const key = `${addressKey(job.address)}|${nameKey(job.customerName)}`;
     if (!addressKey(job.address)) continue;
     const list = groups.get(key) ?? [];

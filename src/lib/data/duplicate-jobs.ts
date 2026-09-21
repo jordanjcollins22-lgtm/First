@@ -31,11 +31,12 @@ export async function duplicateStanding(jobId: string): Promise<DuplicateStandin
     status: string;
     evaluation_status: string;
     created_at: string;
+    duplicate_cleared_at: string | null;
     property: { address: string; customer: { name: string; organization_id: string } };
   };
   const { data: rows } = await supabase
     .from("jobs")
-    .select("id, status, evaluation_status, created_at, property:properties!inner(address, customer:customers!inner(name, organization_id))")
+    .select("id, status, evaluation_status, created_at, duplicate_cleared_at, property:properties!inner(address, customer:customers!inner(name, organization_id))")
     .eq("property.customer.organization_id", org)
     .neq("status", "cancelled")
     .ilike("property.address", `${firstLine.split(" ")[0]}%`)
@@ -60,6 +61,7 @@ export async function duplicateStanding(jobId: string): Promise<DuplicateStandin
       status: j.status,
       evaluationStatus: j.evaluation_status,
       proposalStatus: proposalByJob.get(j.id) ?? null,
+      duplicateClearedAt: j.duplicate_cleared_at,
     }))
   );
   const labelOf = new Map(jobs.map((j) => [j.id, j.property.customer.name]));

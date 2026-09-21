@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Trash2 } from "lucide-react";
 
-import { deleteDuplicateJob } from "@/lib/actions/delete-job-actions";
+import { deleteDuplicateJob, markNotDuplicate } from "@/lib/actions/delete-job-actions";
 
 /**
  * One press to take a copied booking off the board.
@@ -30,6 +30,15 @@ export function DeleteDuplicate({
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  function keep() {
+    setNote(null);
+    start(async () => {
+      const result = await markNotDuplicate(jobId);
+      if (result.ok) router.refresh();
+      else setNote(result.message);
+    });
+  }
 
   function remove() {
     setNote(null);
@@ -82,10 +91,17 @@ export function DeleteDuplicate({
           </button>
         </div>
       ) : (
-        <button type="button" onClick={() => setConfirming(true)} className={`inline-flex min-h-8 items-center gap-1 text-destructive hover:underline ${compact ? "text-[11px]" : "mt-1 text-xs font-medium"}`}>
-          <Trash2 className="h-3 w-3" />
-          {keeper ? "Delete this duplicate" : "Delete this job"}
-        </button>
+        <span className={`flex flex-wrap items-center gap-3 ${compact ? "" : "mt-1"}`}>
+          <button type="button" onClick={() => setConfirming(true)} className={`inline-flex min-h-8 items-center gap-1 text-destructive hover:underline ${compact ? "text-[11px]" : "text-xs font-medium"}`}>
+            <Trash2 className="h-3 w-3" />
+            {keeper ? "Delete this duplicate" : "Delete this job"}
+          </button>
+          {keeper && (
+            <button type="button" onClick={keep} disabled={pending} className={`inline-flex min-h-8 items-center gap-1 text-muted-foreground hover:underline ${compact ? "text-[11px]" : "text-xs font-medium"}`}>
+              Not a duplicate, it&apos;s more work
+            </button>
+          )}
+        </span>
       )}
       {note && <p className="mt-1 text-xs text-destructive">{note}</p>}
     </div>

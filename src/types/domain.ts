@@ -131,6 +131,8 @@ export interface Job {
   client_notes: string | null;
   budget_range: string | null;
   referred_by_profile_id: string | null;
+  /** Somebody said this second job at the address is more work, not a copy. */
+  duplicate_cleared_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
   completed_at: string | null;

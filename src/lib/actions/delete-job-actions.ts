@@ -11,6 +11,25 @@ import { log } from "@/lib/log";
 
 export type DeleteJobResult = { ok: true; message: string } | { ok: false; message: string };
 
+/** Somebody looked and it is more work, not a copy. The board stops asking. */
+export async function markNotDuplicate(jobId: string): Promise<DeleteJobResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+    if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin")) {
+      return { ok: false, message: "Only an owner or admin can decide that." };
+    }
+    const supabase = await createClient();
+    const { error } = await supabase.from("jobs").update({ duplicate_cleared_at: new Date().toISOString() }).eq("id", jobId);
+    if (error) return { ok: false, message: error.message };
+    for (const path of ["/pipeline", "/my-day", `/jobs/${jobId}`]) revalidatePath(path);
+    return { ok: true, message: "Kept. It will not be called a duplicate again." };
+  } catch (err) {
+    log.error("job.not_duplicate_failed", { jobId, error: String(err) });
+    return { ok: false, message: "Couldn't save that." };
+  }
+}
+
 /**
  * Deletes a job outright. For copies, not for history.
  *

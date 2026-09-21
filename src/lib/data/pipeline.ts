@@ -89,6 +89,7 @@ export async function getPipeline(): Promise<PipelineCard[]> {
       status: job.status,
       evaluationStatus: job.evaluation_status,
       proposalStatus: proposalByJob.get(job.id)?.status ?? null,
+      duplicateClearedAt: job.duplicate_cleared_at,
     }))
   );
 

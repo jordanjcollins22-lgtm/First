@@ -38,6 +38,12 @@ describe("findDuplicates", () => {
     expect(findDuplicates([second, first]).get("second")?.keeperId).toBe("first");
   });
 
+  it("leaves alone a second job somebody said is more work", () => {
+    const first = job({ id: "first", createdAt: "2026-09-01T00:00:00Z", status: "approved" });
+    const more = job({ id: "more", createdAt: "2026-09-21T00:00:00Z", duplicateClearedAt: "2026-09-21T20:48:00Z" });
+    expect(findDuplicates([first, more]).size).toBe(0);
+  });
+
   it("does not pair different people at one address, nor cancelled jobs", () => {
     const tenant = job({ id: "t", customerName: "Someone Else" });
     const cancelled = job({ id: "x", status: "cancelled" });
