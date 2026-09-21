@@ -89,6 +89,7 @@ export function ProposalPanel({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [approvedNote, setApprovedNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -275,9 +276,15 @@ export function ProposalPanel({
 
   function handleApprove() {
     setError(null);
+    setApprovedNote(null);
     startTransition(async () => {
       try {
-        await approveProposal(jobId);
+        const outcome = await approveProposal(jobId);
+        setApprovedNote(
+          outcome.emailed === "waiting"
+            ? `Approved. The email to ${outcome.to} is waiting on My Day for you to confirm and send.`
+            : "Approved. The client has no email on file, so send them the link yourself."
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't approve the proposal.");
       }
@@ -338,6 +345,7 @@ export function ProposalPanel({
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {approvedNote && <p className="text-xs font-medium text-primary">{approvedNote}</p>}
 
       {proposal && (
         <>

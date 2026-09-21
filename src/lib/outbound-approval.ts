@@ -41,6 +41,8 @@ export function whatLabel(kind: string): string {
       return "Invoice reminder";
     case "measurements_request":
       return "Measurements request";
+    case "proposal_ready":
+      return "Proposal to the client";
     default:
       return kind.replace(/_/g, " ");
   }
@@ -74,6 +76,8 @@ export function staleAfter(kind: string, now: Date): Date {
       case "invoice_reminder":
       case "measurements_request":
         return 24 * 7;
+      case "proposal_ready":
+        return 24 * 14;
       default:
         return 48;
     }

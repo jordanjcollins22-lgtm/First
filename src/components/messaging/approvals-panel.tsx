@@ -20,6 +20,8 @@ export function ApprovalsPanel({ items }: { items: PendingApproval[] }) {
   const [gone, setGone] = useState<string[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  // The words as the person has them now. Untouched until they type.
+  const [drafts, setDrafts] = useState<Record<string, { subject: string; body: string }>>({});
   const [pending, start] = useTransition();
   const now = new Date();
 
@@ -58,7 +60,7 @@ export function ApprovalsPanel({ items }: { items: PendingApproval[] }) {
         </Button>
       </div>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Nothing goes to a client until you approve it. Tap one to read the words.
+        Nothing goes to a client until you approve it. Tap one to read the words, and change them if you want.
       </p>
       {notes.all && <p className="mt-1 text-xs font-medium">{notes.all}</p>}
 
@@ -89,15 +91,26 @@ export function ApprovalsPanel({ items }: { items: PendingApproval[] }) {
               </button>
 
               {isOpen && (
-                <div className="mt-2 rounded-lg border border-border bg-background/70 p-3">
-                  <p className="text-xs text-muted-foreground">To {item.toEmail}</p>
-                  <p className="mt-1 text-sm font-semibold">{item.subject}</p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm">{item.body}</p>
+                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-background/70 p-3">
+                  <p className="text-xs text-muted-foreground">To {item.toEmail}. Change anything you like; it sends as shown here.</p>
+                  <input
+                    value={drafts[item.id]?.subject ?? item.subject}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { subject: e.target.value, body: d[item.id]?.body ?? item.body } }))}
+                    className="h-10 rounded-md border border-border bg-background px-3 text-sm font-semibold"
+                    aria-label="Subject"
+                  />
+                  <textarea
+                    value={drafts[item.id]?.body ?? item.body}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { subject: d[item.id]?.subject ?? item.subject, body: e.target.value } }))}
+                    rows={Math.min(18, Math.max(6, (drafts[item.id]?.body ?? item.body).split("\n").length + 1))}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm leading-relaxed"
+                    aria-label="Email"
+                  />
                 </div>
               )}
 
               <div className="mt-2 flex items-center gap-2">
-                <Button type="button" size="sm" disabled={pending} onClick={() => act(item.id, () => approveOutbound(item.id))}>
+                <Button type="button" size="sm" disabled={pending} onClick={() => act(item.id, () => approveOutbound(item.id, drafts[item.id]))}>
                   <Check className="mr-1 h-3.5 w-3.5" />
                   Approve and send
                 </Button>

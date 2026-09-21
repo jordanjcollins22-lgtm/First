@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { randomUUID } from "node:crypto";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 
@@ -15,6 +17,12 @@ import {
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { requestMeasurements } from "@/lib/data/measurement-request";
+import { notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { staleAfter } from "@/lib/outbound-approval";
+import { proposalReadyEmail } from "@/lib/proposal-ready-email";
+import { proposalPath } from "@/lib/proposal-flow";
+import { outboundBaseUrl } from "@/lib/base-url";
+import { getJobCustomerContact } from "@/lib/job-customer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
@@ -310,9 +318,13 @@ export async function updateProposalDraft(
   revalidateJobViews(jobId);
 }
 
+export type ApproveOutcome = { emailed: "waiting"; to: string } | { emailed: "no_email" };
+
 /** The account manager's sign-off — this is what actually makes the
- * proposal visible on its public link. */
-export async function approveProposal(jobId: string) {
+ * proposal visible on its public link. The email that hands the client
+ * the link is written here and parked on My Day for the owner to read
+ * and send. */
+export async function approveProposal(jobId: string): Promise<ApproveOutcome> {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
 
@@ -363,7 +375,68 @@ export async function approveProposal(jobId: string) {
   // still to be written up.
   await supabase.from("jobs").update({ status: "quoted" }).eq("id", jobId).eq("status", "estimating");
 
+  // Signed by whoever approved it: the name the client will ring.
+  const signedBy = (profile.first_name || profile.full_name || "").trim().split(/\s+/)[0] || null;
+  const outcome = await parkProposalEmail(jobId, now, signedBy).catch((err: unknown) => {
+    console.error("[proposal] client email not parked:", jobId, err);
+    return { emailed: "no_email" as const };
+  });
+
   revalidateJobViews(jobId);
+  revalidatePath("/my-day");
+  return outcome;
+}
+
+/**
+ * The client's copy, written and set aside.
+ *
+ * Nothing goes to the client from the approve button itself. The email is
+ * drafted with the link, the price and how long it stands, and waits on
+ * My Day where the owner reads it, changes a word if they like, and sends
+ * it when the moment is right. A client with no email on file gets nothing
+ * parked, and the approver is told so they can text the link instead.
+ */
+async function parkProposalEmail(jobId: string, approvedAt: Date, signedBy: string | null): Promise<ApproveOutcome> {
+  const admin = createAdminClient();
+  const contact = await getJobCustomerContact(jobId);
+  const to = contact?.email?.trim();
+  if (!contact || !to) return { emailed: "no_email" };
+
+  const [{ data: proposal }, { data: org }, { data: property }] = await Promise.all([
+    admin.from("job_proposals").select("token, total_cost, discount_amount, valid_days, expires_at").eq("job_id", jobId).maybeSingle(),
+    admin.from("organizations").select("name").eq("id", contact.organizationId).maybeSingle(),
+    admin.from("jobs").select("property:properties!inner(address)").eq("id", jobId).maybeSingle(),
+  ]);
+  if (!proposal?.token) return { emailed: "no_email" };
+  const address = (property as unknown as { property: { address: string } } | null)?.property.address ?? "";
+  const total = Number(proposal.total_cost ?? 0) - Number(proposal.discount_amount ?? 0);
+  const email = proposalReadyEmail({
+    clientName: contact.customerName,
+    address,
+    total,
+    discount: Number(proposal.discount_amount ?? 0),
+    validDays: isValidDays(proposal.valid_days) ? proposal.valid_days : DEFAULT_VALID_DAYS,
+    link: `${await outboundBaseUrl()}${proposalPath(proposal.token)}`,
+    businessName: org?.name ?? "",
+    signedBy,
+  });
+
+  await queueApproval(admin, {
+    organizationId: contact.organizationId,
+    source: "client_reminder",
+    kind: "proposal_ready",
+    dedupeKey: `proposal_ready:${jobId}:${approvedAt.toISOString()}`,
+    customerId: contact.customerId,
+    jobId,
+    toEmail: to,
+    toName: contact.customerName,
+    subject: email.subject,
+    body: email.text,
+    payload: { reference_id: jobId },
+    expiresAt: proposal.expires_at ? new Date(proposal.expires_at) : staleAfter("proposal_ready", approvedAt),
+  });
+  await notifyApprovers(admin, contact.organizationId).catch(() => {});
+  return { emailed: "waiting", to };
 }
 
 /** How long the proposal will stand once it goes out. Set on the draft, before approval. */

@@ -47,6 +47,7 @@ function ProposalRow({
   const [total, setTotal] = useState(String(Math.round(proposal.total_cost ?? 0)));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [trimming, setTrimming] = useState(false);
 
@@ -76,9 +77,15 @@ function ProposalRow({
 
   function approve() {
     setError(null);
+    setNote(null);
     startTransition(async () => {
       try {
-        await approveProposal(job.id);
+        const outcome = await approveProposal(job.id);
+        setNote(
+          outcome.emailed === "waiting"
+            ? `Approved. The email to ${outcome.to} is waiting on My Day for you to confirm and send.`
+            : "Approved. The client has no email on file, so send them the link yourself."
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't approve this proposal.");
       }
@@ -252,6 +259,7 @@ function ProposalRow({
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {note && <p className="text-xs font-medium text-primary">{note}</p>}
     </div>
   );
 }

@@ -23,12 +23,24 @@ function refresh() {
   revalidatePath("/admin/reminders");
 }
 
-/** Send it, now, as written. */
-export async function approveOutbound(id: string): Promise<ApprovalResult> {
+/** Send it, now, as written, or as rewritten in the box. */
+export async function approveOutbound(id: string, edits?: { subject?: string; body?: string }): Promise<ApprovalResult> {
   const who = await allowed();
   if (typeof who === "string") return { ok: false, message: who };
 
   const admin = createAdminClient();
+  const subject = edits?.subject?.trim();
+  const body = edits?.body?.trim();
+  if (subject !== undefined || body !== undefined) {
+    if (subject === "" || body === "") return { ok: false, message: "The email needs a subject and some words." };
+    const { error } = await admin
+      .from("outbound_approvals")
+      .update({ ...(subject ? { subject } : {}), ...(body ? { body } : {}) })
+      .eq("id", id)
+      .eq("organization_id", who.organizationId)
+      .eq("status", "pending");
+    if (error) return { ok: false, message: error.message };
+  }
   const { data: row } = await admin
     .from("outbound_approvals")
     .select("*")
