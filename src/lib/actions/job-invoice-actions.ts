@@ -3,7 +3,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isStripeConfigured } from "@/lib/env";
-import { createAndSendInvoice } from "@/lib/invoicing";
+import { createAndSendInvoice, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
+import { isOwnerLevel } from "@/lib/roles";
 import { agreedTotal } from "@/lib/agreed-total";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { reportStripeFailure } from "@/lib/data/payments-health";
@@ -58,7 +59,7 @@ export async function raiseInvoiceForJob(jobId: string): Promise<RaiseResult> {
 
   // Checked here as well as inside, so somebody clicking twice is told what
   // happened rather than watching a button do nothing.
-  const { data: existing } = await admin.from("invoices").select("id").eq("job_id", jobId).maybeSingle();
+  const { data: existing } = await admin.from("invoices").select("id").eq("job_id", jobId).neq("status", "void").limit(1).maybeSingle();
   if (existing) return { ok: false, message: "There's already an invoice on this job." };
 
   try {
@@ -71,11 +72,60 @@ export async function raiseInvoiceForJob(jobId: string): Promise<RaiseResult> {
     return { ok: false, message: "Stripe wouldn't take that. Check the contact's details and try again." };
   }
 
-  const { data: raised } = await admin.from("invoices").select("id").eq("job_id", jobId).maybeSingle();
+  const { data: raised } = await admin.from("invoices").select("id").eq("job_id", jobId).neq("status", "void").limit(1).maybeSingle();
   if (!raised) {
     return { ok: false, message: "Nothing was raised. The job needs a contact with a name on file." };
   }
 
   revalidateJobViews(jobId);
   return { ok: true, message: "Invoice sent. The client has the payment link." };
+}
+
+/**
+ * Bill it again at the price the proposal now says.
+ *
+ * A Stripe invoice cannot be changed once it is out, and the price on a
+ * proposal can: a discount taken off after the bill went, a trim, a
+ * correction. The old bill is voided, on Stripe and here, and a fresh one
+ * goes for the agreed total, with the client texted the new link the way
+ * they were texted the first. Owner or admin only, and only while the old
+ * one is unpaid.
+ */
+export async function reissueInvoiceForJob(jobId: string): Promise<RaiseResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, message: "Not signed in." };
+  if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin")) {
+    return { ok: false, message: "Only an owner or admin can reissue an invoice." };
+  }
+  if (!isStripeConfigured) return { ok: false, message: "Stripe isn't connected." };
+
+  const admin = createAdminClient();
+  const { data: proposal } = await admin
+    .from("job_proposals")
+    .select("id, status, total_cost, discount_amount, organization_id")
+    .eq("job_id", jobId)
+    .eq("organization_id", profile.organization_id)
+    .maybeSingle();
+  if (!proposal) return { ok: false, message: "There's no proposal on this job to bill from." };
+  const amount = agreedTotal(proposal) ?? 0;
+  if (!(amount > 0)) return { ok: false, message: "The proposal has no total to bill." };
+
+  const open = await openInvoiceFor(jobId);
+  if (!open) return { ok: false, message: "There's no unpaid invoice to replace." };
+  const { data: current } = await admin.from("invoices").select("amount").eq("id", open.id).maybeSingle();
+  if (current && Math.abs(Number(current.amount) - amount) < 0.5) {
+    return { ok: false, message: `The invoice is already $${Math.round(amount).toLocaleString()}.` };
+  }
+
+  try {
+    await voidOpenInvoice(jobId);
+    await createAndSendInvoice(jobId, proposal.id, amount);
+  } catch (err) {
+    console.error("reissuing an invoice failed:", err);
+    reportStripeFailure(proposal.organization_id, err).catch(() => {});
+    return { ok: false, message: "Stripe wouldn't take that. The old invoice may already be voided; check the job and try again." };
+  }
+
+  revalidateJobViews(jobId);
+  return { ok: true, message: `Reissued at $${Math.round(amount).toLocaleString()}. The old invoice is voided and the client has the new link.` };
 }

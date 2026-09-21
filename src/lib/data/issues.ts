@@ -188,7 +188,7 @@ export const jobFacts = cache(async function jobFacts(jobId: string): Promise<Jo
         .eq("job_id", jobId)
         .maybeSingle(),
       supabase.from("payments").select("id, job_id, amount_cents, received_at").eq("job_id", jobId),
-      supabase.from("invoices").select("id, amount, status, paid_at, sent_at").eq("job_id", jobId).maybeSingle(),
+      supabase.from("invoices").select("id, amount, status, paid_at, sent_at").eq("job_id", jobId).neq("status", "void").order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase
         .from("job_proposals")
         .select("status, approved_at")
@@ -323,6 +323,6 @@ export const jobFacts = cache(async function jobFacts(jobId: string): Promise<Jo
 /** Cached per request. */
 export const jobInvoicedAt = cache(async function jobInvoicedAt(jobId: string): Promise<string | null> {
   const supabase = await createClient();
-  const { data } = await supabase.from("invoices").select("sent_at, created_at").eq("job_id", jobId).maybeSingle();
+  const { data } = await supabase.from("invoices").select("sent_at, created_at").eq("job_id", jobId).neq("status", "void").order("created_at", { ascending: false }).limit(1).maybeSingle();
   return (data?.sent_at as string | null) ?? (data?.created_at as string | null) ?? null;
 });

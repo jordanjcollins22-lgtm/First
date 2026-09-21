@@ -7,7 +7,7 @@ import { FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InvoicePanel } from "@/components/job/invoice-panel";
 import { CollectPaymentPanel } from "@/components/job/collect-payment-panel";
-import { raiseInvoiceForJob } from "@/lib/actions/job-invoice-actions";
+import { raiseInvoiceForJob, reissueInvoiceForJob } from "@/lib/actions/job-invoice-actions";
 import type { Invoice } from "@/types/domain";
 
 /**
@@ -43,9 +43,39 @@ export function InvoiceSection({
   const [pending, startTransition] = useTransition();
 
   if (invoice) {
+    // An unpaid bill that no longer matches the price: a discount taken off
+    // or put on after it went, a trim, a correction. Said here, with the fix.
+    const offBy = invoice.status === "open" && agreedTotal != null && agreedTotal > 0 && Math.abs(Number(invoice.amount) - agreedTotal) >= 0.5;
     return (
       <div className="flex flex-col gap-3">
         <InvoicePanel invoice={invoice} />
+        {offBy && (
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-400/60 bg-amber-50/70 p-3">
+            <p className="text-sm font-medium text-amber-900">
+              This invoice is for ${Math.round(Number(invoice.amount)).toLocaleString()}, but the agreed price is now $
+              {Math.round(agreedTotal).toLocaleString()}.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="w-fit"
+              disabled={pending}
+              onClick={() => {
+                setResult(null);
+                startTransition(async () => {
+                  const outcome = await reissueInvoiceForJob(jobId);
+                  setResult(outcome);
+                  if (outcome.ok) router.refresh();
+                });
+              }}
+            >
+              {pending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              Reissue at ${Math.round(agreedTotal).toLocaleString()}
+            </Button>
+            <p className="text-xs text-amber-900/80">Voids the old invoice and texts the client the new link.</p>
+            {result && <p className={`text-sm ${result.ok ? "text-emerald-700" : "text-amber-900"}`}>{result.message}</p>}
+          </div>
+        )}
         <CollectPaymentPanel invoice={invoice} />
         {acceptedLabel && <AcceptedLine label={acceptedLabel} />}
       </div>
