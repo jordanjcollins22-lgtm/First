@@ -32,9 +32,9 @@ export function stepQuestion(step: RouteStep, facts: { routeId: string; zip: str
     case "usps":
       return `Approve USPS route ${facts.routeId} in ${facts.zip} for ${facts.pieces.toLocaleString()} mailers?`;
     case "draw":
-      return "Draw the door hanger route over the top of it. Tap along the streets to walk; the doors fall along the line.";
+      return "Draw the area to hang in, mark where the van parks and where the walk starts and ends, and draw the walking line.";
     case "hangers":
-      return `Hang ${facts.doors} door hangers along that line?`;
+      return `Hang ${facts.doors} door hangers on that round?`;
     case "submit":
       return "Pick the days and submit. The order prints with everything on it.";
   }
@@ -113,6 +113,121 @@ export function doorsAlongLines(houses: RouteHouse[], lines: Point[][], snapMetr
     joined.push(...line);
   }
   return { order, line: joined };
+}
+
+/**
+ * Everything a person draws for one walk.
+ *
+ * The area is what gets hung: every door inside it. The parking spots,
+ * the start and the end are where the crew leaves the van and where the
+ * walk begins and finishes. The line is how the walk was actually done,
+ * drawn so the order of the doors follows it; without one, the doors are
+ * ordered nearest-next from the start.
+ */
+export interface WalkShape {
+  area: Point[] | null;
+  line: Point[] | null;
+  parks: Point[];
+  start: Point | null;
+  end: Point | null;
+}
+
+export const EMPTY_SHAPE: WalkShape = { area: null, line: null, parks: [], start: null, end: null };
+
+/** Inside a polygon, by the even-odd rule. On the edge counts as in. */
+export function pointInArea(p: Point, area: Point[]): boolean {
+  if (area.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = area.length - 1; i < area.length; j = i++) {
+    const a = area[i];
+    const b = area[j];
+    const crosses = a.lat > p.lat !== b.lat > p.lat && p.lng < ((b.lng - a.lng) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lng;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+export function doorsInArea<T extends Point>(houses: T[], area: Point[]): T[] {
+  return houses.filter((h) => pointInArea(h, area));
+}
+
+function metresBetween(a: Point, b: Point): number {
+  const k = Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot((a.lat - b.lat) * 111_320, (a.lng - b.lng) * 111_320 * k);
+}
+
+/** How far along a polyline a point falls, in metres from its start, by its nearest segment. */
+export function alongParam(p: Point, line: Point[]): number {
+  let best = Infinity;
+  let at = 0;
+  let sofar = 0;
+  for (let i = 0; i + 1 < line.length; i++) {
+    const a = line[i];
+    const b = line[i + 1];
+    const k = Math.cos((a.lat * Math.PI) / 180);
+    const ax = a.lng * k, ay = a.lat, bx = b.lng * k, by = b.lat, px = p.lng * k, py = p.lat;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+    const qx = ax + t * dx, qy = ay + t * dy;
+    const d = Math.hypot((px - qx) * 111_320, (py - qy) * 111_320);
+    const seg = metresBetween(a, b);
+    if (d < best) {
+      best = d;
+      at = sofar + t * seg;
+    }
+    sofar += seg;
+  }
+  return at;
+}
+
+/**
+ * The doors of a walk, in the order they are walked.
+ *
+ * With a line, in the order they fall along it. Without one, nearest-next
+ * from the start (or the first parking spot, or the first door), which is
+ * what a person does on a street anyway.
+ */
+export function orderDoors<T extends RouteHouse>(doors: T[], shape: Pick<WalkShape, "line" | "start" | "parks">): T[] {
+  if (doors.length === 0) return [];
+  if (shape.line && shape.line.length > 1) {
+    const line = shape.line;
+    return [...doors].sort((a, b) => alongParam(a, line) - alongParam(b, line));
+  }
+  const from = shape.start ?? shape.parks[0] ?? doors[0];
+  const left = new Set(doors);
+  const out: T[] = [];
+  let here: Point = from;
+  while (left.size > 0) {
+    let next: T | null = null;
+    let best = Infinity;
+    for (const d of left) {
+      const m = metresBetween(here, d);
+      if (m < best) {
+        best = m;
+        next = d;
+      }
+    }
+    if (!next) break;
+    left.delete(next);
+    out.push(next);
+    here = next;
+  }
+  return out;
+}
+
+/**
+ * What the drawing amounts to: the doors on the walk, in order.
+ *
+ * An area takes every door inside it. With no area, the line alone takes
+ * the doors within reach of it, as before.
+ */
+export function walkDoors(houses: RouteHouse[], shape: WalkShape): { order: string[] } {
+  if (shape.area && shape.area.length >= 3) {
+    return { order: orderDoors(doorsInArea(houses, shape.area), shape).map((h) => h.id) };
+  }
+  if (shape.line && shape.line.length > 1) return { order: doorsAlongLines(houses, [shape.line]).order };
+  return { order: [] };
 }
 
 /** "Route C029 in 21014", the way the list and the order name it. */

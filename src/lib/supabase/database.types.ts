@@ -1497,6 +1497,12 @@ export interface Database {
           assigned_by: string | null;
           walk_order: Json;
           walk_order_line: Json;
+          /** The area drawn for the walk: every door inside is on it. */
+          walk_area: Json;
+          /** Where the van is left; more than one on a big round. */
+          park_points: Json;
+          start_point: Json;
+          end_point: Json;
           walk_order_set_at: string | null;
           walk_order_set_by: string | null;
           created_at: string;
@@ -4479,7 +4485,18 @@ export interface Database {
       };
       /** A drawn round: the doors set to exactly the line's, in its order, with the line. */
       marketing_play_set_doors: {
-        Args: { org: string; the_play: string; doors: string[]; line?: Json; note?: string | null; by?: string | null };
+        Args: {
+          org: string;
+          the_play: string;
+          doors: string[];
+          line?: Json;
+          note?: string | null;
+          by?: string | null;
+          area?: Json;
+          parks?: Json;
+          start_pt?: Json;
+          end_pt?: Json;
+        };
         Returns: Json;
       };
       /** Put doors back on a round. Only houses inside its own zone. */

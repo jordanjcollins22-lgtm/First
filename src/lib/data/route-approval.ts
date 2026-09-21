@@ -35,6 +35,10 @@ export interface RoundView {
   /** In walking order, when a person drew or tapped one. */
   order: string[] | null;
   line: Point[] | null;
+  area: Point[] | null;
+  parks: Point[];
+  start: Point | null;
+  end: Point | null;
   assignedToName: string | null;
   approved: boolean;
 }
@@ -71,6 +75,10 @@ interface PlayRow {
   targets: unknown;
   walk_order: unknown;
   walk_order_line: unknown;
+  walk_area: unknown;
+  park_points: unknown;
+  start_point: unknown;
+  end_point: unknown;
   approval: string;
   assigned_to: string | null;
 }
@@ -273,7 +281,7 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   if (roundPlayId) {
     const { data: row } = await supabase
       .from("marketing_plays")
-      .select("id, house_id, quantity, targets, walk_order, walk_order_line, approval, assigned_to")
+      .select("id, house_id, quantity, targets, walk_order, walk_order_line, walk_area, park_points, start_point, end_point, approval, assigned_to")
       .eq("id", roundPlayId)
       .maybeSingle();
     const play = row as PlayRow | null;
@@ -287,6 +295,10 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
         doorIds: (Array.isArray(play.targets) ? play.targets : []).filter((t): t is string => typeof t === "string"),
         order: Array.isArray(play.walk_order) ? (play.walk_order as string[]) : null,
         line: Array.isArray(play.walk_order_line) ? (play.walk_order_line as Point[]) : null,
+        area: Array.isArray(play.walk_area) ? (play.walk_area as Point[]) : null,
+        parks: Array.isArray(play.park_points) ? (play.park_points as Point[]) : [],
+        start: isPoint(play.start_point) ? play.start_point : null,
+        end: isPoint(play.end_point) ? play.end_point : null,
         assignedToName: walker?.full_name ?? null,
         approved: play.approval === "approve" || play.approval === "approved" || play.approval === "auto",
       };
@@ -319,13 +331,17 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   };
 }
 
+function isPoint(v: unknown): v is Point {
+  return typeof v === "object" && v !== null && typeof (v as Point).lat === "number" && typeof (v as Point).lng === "number";
+}
+
 /** One submitted order, for the printed page. */
 export interface RouteOrderView {
   id: string;
   status: RouteOrderStatus;
   route: { zip: string; routeId: string; residential: number; total: number; facility: string | null };
   mailing: EddmMailing | null;
-  round: { id: string; doors: { address: string }[]; assignedToName: string | null } | null;
+  round: { id: string; doors: { address: string }[]; assignedToName: string | null; parks: Point[]; start: Point | null; end: Point | null } | null;
   sheets: number | null;
   walkOn: string | null;
   mailOn: string | null;
@@ -358,7 +374,15 @@ export async function getRouteOrder(id: string): Promise<RouteOrderView | null> 
     const playRoute = raw as { doors?: { address: string }[] } | null;
     const { data: listed } = await supabase.rpc("marketing_plays_list", { org, include_done: true });
     const play = ((Array.isArray(listed) ? listed : []) as unknown as MarketingPlay[]).find((p) => p.id === order.play_id);
-    round = { id: order.play_id, doors: playRoute?.doors ?? [], assignedToName: play?.assignedToName ?? null };
+    const { data: pins } = await supabase.from("marketing_plays").select("park_points, start_point, end_point").eq("id", order.play_id).maybeSingle();
+    round = {
+      id: order.play_id,
+      doors: playRoute?.doors ?? [],
+      assignedToName: play?.assignedToName ?? null,
+      parks: Array.isArray(pins?.park_points) ? (pins.park_points as Point[]) : [],
+      start: isPoint(pins?.start_point) ? pins.start_point : null,
+      end: isPoint(pins?.end_point) ? pins.end_point : null,
+    };
   }
 
   return {

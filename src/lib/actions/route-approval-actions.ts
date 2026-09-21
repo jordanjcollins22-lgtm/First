@@ -7,8 +7,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { createEddmMailing } from "@/lib/actions/eddm-mailing-actions";
 import { approveMarketingPlay, setMarketingPlayDoors, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
-import { routeName } from "@/lib/route-approval";
-import type { Point } from "@/lib/route-order";
+import { routeName, type WalkShape } from "@/lib/route-approval";
 import type { Json } from "@/lib/supabase/database.types";
 
 export type RouteActionResult = { ok: true; message: string; orderId?: string } | { ok: false; message: string };
@@ -176,14 +175,23 @@ export async function saveDoorHangerLine(input: {
   eddmRouteId: string;
   playId: string;
   order: string[];
-  line: Point[];
+  shape: WalkShape;
   otherPlayIds: string[];
 }): Promise<RouteActionResult> {
   return run(async () => {
     const profile = await allowed();
-    if (input.order.length === 0) throw new Error("The line reaches no doors. Draw it along the houses.");
+    if (input.order.length === 0) throw new Error("The drawing reaches no doors. Draw the area round the houses.");
     const supabase = await createClient();
-    const saved = await setMarketingPlayDoors({ playId: input.playId, doors: input.order, line: input.line, note: "Drawn over the USPS route." });
+    const saved = await setMarketingPlayDoors({
+      playId: input.playId,
+      doors: input.order,
+      line: input.shape.line,
+      area: input.shape.area,
+      parks: input.shape.parks,
+      start: input.shape.start,
+      end: input.shape.end,
+      note: "Drawn over the USPS route.",
+    });
     if (!saved.ok) throw new Error(saved.error);
 
     for (const other of input.otherPlayIds) {

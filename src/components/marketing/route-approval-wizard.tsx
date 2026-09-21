@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, Loader2, Printer, Undo2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { RouteApprovalMap } from "@/components/marketing/route-approval-map";
+import { RouteApprovalMap, type DrawTool } from "@/components/marketing/route-approval-map";
 import {
   approveUspsRoute,
   backToDrawing,
@@ -15,9 +15,8 @@ import {
   skipUspsRoute,
   submitRouteOrder,
 } from "@/lib/actions/route-approval-actions";
-import { doorsAlongLines, nextMonday, plusDays, routeName, STEP_LABEL, STEP_ORDER, stepQuestion } from "@/lib/route-approval";
+import { EMPTY_SHAPE, nextMonday, plusDays, routeName, STEP_LABEL, STEP_ORDER, stepQuestion, walkDoors, type WalkShape } from "@/lib/route-approval";
 import type { RouteApprovalView } from "@/lib/data/route-approval";
-import type { Point } from "@/lib/route-order";
 
 /**
  * One route, one question.
@@ -31,11 +30,18 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [note, setNote] = useState<string | null>(null);
-  const [lines, setLines] = useState<Point[][]>([]);
+  // The walk as drawn so far, starting from whatever was saved before.
+  const savedShape = useMemo<WalkShape>(
+    () => (view.round ? { area: view.round.area, line: view.round.line, parks: view.round.parks, start: view.round.start, end: view.round.end } : EMPTY_SHAPE),
+    [view.round]
+  );
+  const [shape, setShape] = useState<WalkShape>(savedShape);
+  const [tool, setTool] = useState<DrawTool>("area");
+  const [resetKey, setResetKey] = useState(0);
   const [walkOn, setWalkOn] = useState(view.walkOn ?? nextMonday(new Date()));
   const [mailOn, setMailOn] = useState(view.mailOn ?? plusDays(nextMonday(new Date()), 7));
 
-  const drawn = useMemo(() => doorsAlongLines(view.houses, lines), [view.houses, lines]);
+  const drawn = useMemo(() => walkDoors(view.houses, shape), [view.houses, shape]);
   const onRound = useMemo(() => new Set(view.step === "draw" ? drawn.order : (view.round?.order ?? view.round?.doorIds ?? [])), [view.step, drawn.order, view.round]);
   const anchorIds = useMemo(() => view.anchors.map((a) => a.houseId), [view.anchors]);
   const doors = view.step === "draw" ? drawn.order.length : (view.round?.order?.length || view.round?.doorIds.length || 0);
@@ -80,7 +86,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
           </span>
         ))}
         . The red dots are the jobs we finished and were paid for
-        {view.step === "hangers" || view.step === "submit" ? "; the orange ones are the doors on your line." : "."}
+        {view.step === "hangers" || view.step === "submit" ? "; the orange ones are the doors on the round." : "."}
       </p>
 
       <div className="mt-3">
@@ -92,9 +98,10 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
           onRound={onRound}
           drawing={view.step === "draw"}
           focus={view.step === "hangers" || view.step === "submit" ? "round" : "route"}
-          initialLine={view.round?.line ?? null}
-          savedLine={view.round?.line ?? null}
-          onLines={setLines}
+          tool={view.step === "draw" ? tool : null}
+          shape={view.step === "draw" ? shape : savedShape}
+          onShape={setShape}
+          resetKey={resetKey}
         />
       </div>
 
@@ -115,15 +122,47 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
 
       {view.step === "draw" && (
         <div className="mt-2 flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ["area", "Area"],
+                ["park", "Park"],
+                ["start", "Start"],
+                ["end", "End"],
+                ["line", "Walking line"],
+              ] as [DrawTool, string][]
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTool(key)}
+                className={`min-h-9 rounded-full border px-3 text-xs font-semibold ${tool === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+              >
+                {label}
+                {key === "park" && shape.parks.length > 0 ? ` (${shape.parks.length})` : ""}
+                {key === "area" && shape.area ? " ✓" : ""}
+                {key === "start" && shape.start ? " ✓" : ""}
+                {key === "end" && shape.end ? " ✓" : ""}
+                {key === "line" && shape.line ? " ✓" : ""}
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-muted-foreground">
-            Use the line tool at the top left of the map. Tap along the streets, double tap to finish a line, draw another for a second street. Doors within reach turn orange.
-            {drawn.order.length > 0 ? ` ${drawn.order.length} doors on the line so far.` : ""}
+            {tool === "area" && "Tap round the houses to hang; double tap to close the area. Every door inside it is on the round."}
+            {tool === "park" && "Tap where the van parks. Tap again for another spot on a big round."}
+            {tool === "start" && "Tap where the walk begins."}
+            {tool === "end" && "Tap where the walk finishes."}
+            {tool === "line" && "Tap along the streets the way you would walk them; double tap to finish. The doors are ordered along it, and the app learns the walk from it."}
+            {!tool && "Pick a tool."}
+            {drawn.order.length > 0 ? ` ${drawn.order.length} doors on the round so far.` : ""}
+            {shape.area && drawn.order.length === 0 ? " No doors inside that area yet." : ""}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               className="h-11"
               disabled={pending || drawn.order.length === 0 || !view.round}
+              title={!shape.parks.length ? "Mark where the van parks before saving, if you can." : undefined}
               onClick={() =>
                 view.round &&
                 act(() =>
@@ -131,7 +170,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
                     eddmRouteId: view.route.id,
                     playId: view.round!.id,
                     order: drawn.order,
-                    line: drawn.line,
+                    shape,
                     otherPlayIds: view.anchors.map((a) => a.playId).filter((id): id is string => Boolean(id)),
                   })
                 )
@@ -140,7 +179,15 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
               {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
               Save the door hanger route
             </Button>
+            {shape !== savedShape && (
+              <Button type="button" variant="ghost" className="h-11" disabled={pending} onClick={() => setResetKey((k) => k + 1)}>
+                Clear the drawing
+              </Button>
+            )}
           </div>
+          {shape.parks.length === 0 && drawn.order.length > 0 && (
+            <p className="text-xs text-amber-700">No parking spot marked yet. The crew will want one.</p>
+          )}
         </div>
       )}
 

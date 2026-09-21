@@ -93,6 +93,37 @@ export default async function RouteOrderPage({ params }: { params: Promise<{ ord
               <dd className="font-medium">{order.sheets ? `${order.sheets} sheets` : "set up the door hanger design first"}</dd>
               <dt className="text-muted-foreground">Walked by</dt>
               <dd className="font-medium">{order.round.assignedToName ?? "not assigned yet"}</dd>
+              <dt className="text-muted-foreground">Park at</dt>
+              <dd className="font-medium">
+                {order.round.parks.length === 0
+                  ? "not marked"
+                  : order.round.parks.map((p, i) => (
+                      <span key={i}>
+                        {i > 0 ? " · " : ""}
+                        <a href={`https://www.google.com/maps?q=${p.lat},${p.lng}`} target="_blank" rel="noopener" className="underline">
+                          spot {i + 1}
+                        </a>
+                      </span>
+                    ))}
+              </dd>
+              <dt className="text-muted-foreground">Start / end</dt>
+              <dd className="font-medium">
+                {order.round.start ? (
+                  <a href={`https://www.google.com/maps?q=${order.round.start.lat},${order.round.start.lng}`} target="_blank" rel="noopener" className="underline">
+                    start
+                  </a>
+                ) : (
+                  "start not marked"
+                )}
+                {" / "}
+                {order.round.end ? (
+                  <a href={`https://www.google.com/maps?q=${order.round.end.lat},${order.round.end.lng}`} target="_blank" rel="noopener" className="underline">
+                    end
+                  </a>
+                ) : (
+                  "end not marked"
+                )}
+              </dd>
             </dl>
             <p className="mt-2 text-sm print:hidden">
               <Link href={`/routes/${order.round.id}`} className="underline">

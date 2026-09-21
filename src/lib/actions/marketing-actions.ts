@@ -279,6 +279,11 @@ export async function setMarketingPlayDoors(input: {
   /** House ids in walking order. */
   doors: string[];
   line?: { lat: number; lng: number }[] | null;
+  /** The area drawn, where the crew parks, and where the walk starts and ends. */
+  area?: { lat: number; lng: number }[] | null;
+  parks?: { lat: number; lng: number }[];
+  start?: { lat: number; lng: number } | null;
+  end?: { lat: number; lng: number } | null;
   note?: string;
 }): Promise<ActionResult<{ quantity: number; added: number; removed: number }>> {
   return guard("setMarketingPlayDoors", async () => {
@@ -290,6 +295,10 @@ export async function setMarketingPlayDoors(input: {
       the_play: input.playId,
       doors: input.doors,
       line: (input.line && input.line.length > 1 ? input.line : null) as never,
+      area: (input.area && input.area.length >= 3 ? input.area : null) as never,
+      parks: (input.parks ?? []) as never,
+      start_pt: (input.start ?? null) as never,
+      end_pt: (input.end ?? null) as never,
       note: input.note?.trim() || null,
       by: profile.id,
     });
