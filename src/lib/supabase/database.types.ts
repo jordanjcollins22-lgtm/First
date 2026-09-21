@@ -16,6 +16,32 @@ export type Json = any;
 export interface Database {
   public: {
     Tables: {
+      route_orders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          eddm_route_id: string;
+          status: string;
+          house_ids: string[];
+          mailing_id: string | null;
+          play_id: string | null;
+          usps_approved_at: string | null;
+          usps_approved_by: string | null;
+          walk_on: string | null;
+          mail_on: string | null;
+          submitted_at: string | null;
+          submitted_by: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["route_orders"]["Row"]> & {
+          organization_id: string;
+          eddm_route_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["route_orders"]["Row"]>;
+        Relationships: [];
+      };
       outbound_approvals: {
         Row: {
           id: string;

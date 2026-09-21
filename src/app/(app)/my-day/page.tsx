@@ -41,6 +41,8 @@ import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
+import { nextRouteToApprove } from "@/lib/data/route-approval";
+import { RouteApprovalWizard } from "@/components/marketing/route-approval-wizard";
 import { CallListPanel } from "@/components/sales/call-list";
 import { CollectPanel } from "@/components/sales/collect-panel";
 import { OutreachForm } from "@/components/marketing/outreach-form";
@@ -261,6 +263,14 @@ async function OfficeDay() {
         </Suspense>
       )}
 
+      {/* One USPS route at a time, from the evaluations done: approve it,
+          draw the walk over it, confirm the hangers, submit the order. */}
+      {isOwnerLevel(profile.roles) && (
+        <Suspense fallback={<BlockLoading lines={4} />}>
+          <RouteApprovalBlock />
+        </Suspense>
+      )}
+
       {/* Above the tiles: the only thing on this page with a half-life. The
           crew are standing in a finished garden waiting for an answer. */}
       <Suspense fallback={null}>
@@ -345,6 +355,15 @@ const myWorkFor = cache(async (profileId: string): Promise<MyWork | null> =>
       return null;
     })
 );
+
+async function RouteApprovalBlock() {
+  const view = await nextRouteToApprove().catch((err) => {
+    console.error("Route approval failed to load:", err);
+    return null;
+  });
+  if (!view) return null;
+  return <RouteApprovalWizard view={view} />;
+}
 
 async function ApprovalsBlock() {
   const items = await listPendingApprovals().catch((err) => {
