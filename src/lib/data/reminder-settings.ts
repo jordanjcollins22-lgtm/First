@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganization } from "@/lib/data/organizations";
-import { isResendConfigured, isTwilioConfigured } from "@/lib/env";
+import { isResendConfigured, isSmsConfigured } from "@/lib/env";
 import { mergeRules, type ReminderKind, type ReminderRule } from "@/lib/client-reminders";
 import { QUIET_DEFAULTS } from "@/lib/quiet-hours";
 
@@ -50,7 +50,7 @@ export async function getReminderSettings(): Promise<ReminderSettings> {
     quietStart: organization.reminder_quiet_start ?? QUIET_DEFAULTS.startHour,
     quietEnd: organization.reminder_quiet_end ?? QUIET_DEFAULTS.endHour,
     rules,
-    smsReady: isTwilioConfigured,
+    smsReady: isSmsConfigured,
     emailReady: isResendConfigured,
     optedOut: {
       sms: (consent ?? []).filter((row) => row.channel === "sms").length,

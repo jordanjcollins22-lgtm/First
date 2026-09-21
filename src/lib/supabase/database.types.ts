@@ -1875,6 +1875,7 @@ export interface Database {
       profiles: {
         Row: {
           id: string;
+          ghl_user_id: string | null;
           email: string;
           full_name: string | null;
           first_name: string | null;

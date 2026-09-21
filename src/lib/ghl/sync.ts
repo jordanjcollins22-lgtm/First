@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { log } from "@/lib/log";
-import { createAppointment, isGhlConfigured, updateAppointment, upsertContact } from "@/lib/ghl/client";
+import { createAppointment, isGhlConfigured, listUsers, updateAppointment, upsertContact } from "@/lib/ghl/client";
 import { appointmentTitle, appointmentWindow, splitName } from "@/lib/ghl/payload";
 
 /**
@@ -18,6 +18,7 @@ type Row = {
   evaluation_status: string;
   evaluation_mode: string;
   ghl_appointment_id: string | null;
+  assigned_to: string | null;
   property: {
     address: string;
     customer: { id: string; name: string; email: string | null; phone: string | null; ghl_contact_id: string | null } | null;
@@ -29,7 +30,7 @@ async function loadJob(jobId: string): Promise<Row | null> {
   const { data } = await admin
     .from("jobs")
     .select(
-      "id, evaluation_date, evaluation_end_date, evaluation_status, evaluation_mode, ghl_appointment_id, property:properties(address, customer:customers(id, name, email, phone, ghl_contact_id))"
+      "id, evaluation_date, evaluation_end_date, evaluation_status, evaluation_mode, ghl_appointment_id, assigned_to, property:properties(address, customer:customers(id, name, email, phone, ghl_contact_id))"
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -79,6 +80,7 @@ export async function syncEvaluationToGhl(jobId: string): Promise<GhlSyncResult>
       title,
       ...window,
       address: job.property.address,
+      assignedUserId: await ghlUserFor(job.assigned_to),
     });
     await admin.from("jobs").update({ ghl_appointment_id: appointmentId }).eq("id", jobId);
     log.info("ghl.appointment.created", { jobId, appointmentId });
@@ -88,6 +90,41 @@ export async function syncEvaluationToGhl(jobId: string): Promise<GhlSyncResult>
     log.warn("ghl.sync.failed", { jobId, error });
     return { ok: false, error };
   }
+}
+
+/**
+ * The GoHighLevel user an evaluation goes on the calendar under.
+ *
+ * Its calendar refuses an appointment with nobody on it. The evaluator is
+ * matched by email against GoHighLevel's team list once and remembered on
+ * their profile; with no evaluator, or one GoHighLevel does not know, the
+ * first teammate anybody has matched stands in, so the booking still lands.
+ */
+async function ghlUserFor(profileId: string | null): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data: known } = await admin.from("profiles").select("id, email, ghl_user_id").not("ghl_user_id", "is", null).limit(20);
+  const remembered = (known ?? []).find((p) => p.id === profileId)?.ghl_user_id ?? null;
+  if (remembered) return remembered;
+
+  let users: Awaited<ReturnType<typeof listUsers>> = [];
+  try {
+    users = await listUsers();
+  } catch {
+    return (known ?? [])[0]?.ghl_user_id ?? null;
+  }
+  const byEmail = new Map(users.filter((u) => u.email).map((u) => [u.email!.trim().toLowerCase(), u.id]));
+
+  if (profileId) {
+    const { data: profile } = await admin.from("profiles").select("email").eq("id", profileId).maybeSingle();
+    const match = profile?.email ? byEmail.get(profile.email.trim().toLowerCase()) : null;
+    if (match) {
+      await admin.from("profiles").update({ ghl_user_id: match }).eq("id", profileId);
+      return match;
+    }
+  }
+  if ((known ?? []).length > 0) return known![0].ghl_user_id;
+  // Nobody matched yet: any teammate GoHighLevel lists, so the calendar takes it.
+  return users[0]?.id ?? null;
 }
 
 /** Marks the calendar entry cancelled. Nothing to do when it was never there. */

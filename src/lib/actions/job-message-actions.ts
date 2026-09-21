@@ -13,7 +13,7 @@ import { notifyJobTeam } from "@/lib/notifications";
 import { contactsFor, sendClientMessage } from "@/lib/data/client-messaging";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { outboundReady } from "@/lib/email/outbound";
-import { isTwilioConfigured } from "@/lib/env";
+import { isSmsConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
 import type { MessageChannel } from "@/types/domain";
 
@@ -115,7 +115,7 @@ async function pickVia(jobId: string, organizationId: string): Promise<MessageVi
   return defaultVia({
     phone: contact?.phone ?? null,
     email: contact?.email ?? null,
-    smsReady: isTwilioConfigured,
+    smsReady: isSmsConfigured,
     emailReady: email.ready,
     clientLink: context?.clientLink ?? null,
   });

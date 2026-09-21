@@ -5,7 +5,7 @@ import { requireJobAccess } from "@/lib/data/access";
 import { listJobMessages } from "@/lib/data/job-messages";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { createClient } from "@/lib/supabase/server";
-import { isTwilioConfigured } from "@/lib/env";
+import { isSmsConfigured } from "@/lib/env";
 import { outboundReady } from "@/lib/email/outbound";
 import { jobThreadContext } from "@/lib/message-context";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -74,7 +74,7 @@ export default async function JobThreadPage({
       customerId={contact?.customerId ?? null}
       phone={contact?.phone ?? null}
       email={contact?.email ?? null}
-      smsReady={isTwilioConfigured}
+      smsReady={isSmsConfigured}
       emailReady={email.ready}
       clientLink={context?.clientLink ?? null}
       messages={messages}

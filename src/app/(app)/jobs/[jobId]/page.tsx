@@ -94,7 +94,7 @@ import { formatJobNumber } from "@/lib/job-number";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { isGhlConfigured } from "@/lib/ghl/client";
 import { costJob, costZone, zoneCrewHours, allMaterialLineItems, formatMaterialQuantity } from "@/lib/proposal-pricing";
-import { env, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
+import { env, isSmsConfigured, isSupabaseConfigured, isTwilioConfigured } from "@/lib/env";
 import { resolveBaseUrl } from "@/lib/app-url";
 import type { WorkZone } from "@/components/canvas/types";
 import type { EvaluationStatus, JobCrewMember, JobStatus, Profile } from "@/types/domain";
@@ -873,7 +873,7 @@ export default async function JobPage({
                   placeholder="Message the client..."
                   emptyLabel="No messages with the client yet."
                   footnote={`Emailed when they have an address, ${
-                    isTwilioConfigured ? "texted" : "on their page"
+                    isSmsConfigured ? "texted" : "on their page"
                   } otherwise. ${HOW_THEY_REPLY}`}
                 />
               </div>

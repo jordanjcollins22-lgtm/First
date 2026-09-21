@@ -1,7 +1,8 @@
 import Twilio from "twilio";
 import { log, maskPhone } from "@/lib/log";
 
-import { env, isTwilioConfigured } from "@/lib/env";
+import { env, isSmsConfigured, isTwilioConfigured } from "@/lib/env";
+import { isGhlConfigured, sendSmsMessage, upsertContact } from "@/lib/ghl/client";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { frozenForClient } from "@/lib/data/job-dispute";
 
@@ -22,8 +23,24 @@ export function last10Digits(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
 }
 
-export async function sendSms(to: string, body: string): Promise<void> {
-  if (!isTwilioConfigured) return;
+export async function sendSms(to: string, body: string, who: { name?: string | null } = {}): Promise<void> {
+  if (!isSmsConfigured) return;
+
+  // No Twilio line of our own: the number GoHighLevel holds for us sends
+  // it, into the same conversation the office reads there.
+  if (!isTwilioConfigured && isGhlConfigured) {
+    try {
+      const [firstName, ...rest] = (who.name ?? "").trim().split(/\s+/).filter(Boolean);
+      const contactId = await upsertContact({ firstName: firstName || "Client", lastName: rest.join(" "), email: null, phone: to, address: null });
+      const id = await sendSmsMessage(contactId, body);
+      log.info("sms.sent", { to: maskPhone(to), via: "ghl", id, length: body.length });
+      return;
+    } catch (err) {
+      log.error("sms.failed", err, { to: maskPhone(to), via: "ghl" });
+      throw err;
+    }
+  }
+
   const client = Twilio(env.twilioAccountSid, env.twilioAuthToken);
   try {
     const sent = await client.messages.create({ to, from: env.twilioPhoneNumber, body });
@@ -39,7 +56,7 @@ export async function sendSms(to: string, body: string): Promise<void> {
  * or the customer has no usable phone number — a text is a bonus on top of
  * the in-app message, never a reason to fail saving it. */
 export async function notifyCustomerBySms(jobId: string, body: string): Promise<void> {
-  if (!isTwilioConfigured) {
+  if (!isSmsConfigured) {
     // Said out loud. This returning quietly is why a client never heard
     // anything and nothing anywhere explained it.
     console.warn(
@@ -61,5 +78,5 @@ export async function notifyCustomerBySms(jobId: string, body: string): Promise<
   const e164 = toE164(contact.phone);
   if (!e164) return;
 
-  await sendSms(e164, body);
+  await sendSms(e164, body, { name: contact.customerName });
 }

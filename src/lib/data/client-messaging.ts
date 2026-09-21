@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { log, maskEmail, maskPhone } from "@/lib/log";
-import { isResendConfigured, isTwilioConfigured } from "@/lib/env";
+import { isResendConfigured, isSmsConfigured } from "@/lib/env";
 import { sendSms, toE164 } from "@/lib/sms";
 import { sendEmail } from "@/lib/email/send";
 import {
@@ -159,7 +159,7 @@ export async function sendClientMessage(
     channel: message.channel,
     state: message.channel === "sms" ? contact.smsConsent : contact.emailConsent,
     doNotContact: contact.doNotContact,
-    providerReady: message.channel === "sms" ? isTwilioConfigured : isResendConfigured,
+    providerReady: message.channel === "sms" ? isSmsConfigured : isResendConfigured,
     address,
   });
 
@@ -241,7 +241,7 @@ export async function sendClientMessage(
     if (message.channel === "sms") {
       const number = toE164(contact.phone ?? "");
       if (!number) throw new Error("Unreadable phone number.");
-      await sendSms(number, message.body);
+      await sendSms(number, message.body, { name: contact.name });
       log.info("client_message.sent", { kind: message.kind, channel: "sms", customerId: message.customerId, to: maskPhone(number) });
       return { sent: true, providerId: null };
     }

@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { outboundBaseUrl } from "@/lib/base-url";
-import { isTwilioConfigured } from "@/lib/env";
+import { isSmsConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
 import { dedupeKeyFor, mergeRules, type ReminderKind, type ReminderRule } from "@/lib/client-reminders";
 import { composeReminder, fitSms, sayWhen } from "@/lib/client-message-templates";
@@ -81,7 +81,7 @@ export async function sendEvaluationConfirmationNow(jobId: string): Promise<void
 
     for (const channel of rule.channels) {
       // A text with no text provider is a skipped row in the log for nothing.
-      if (channel === "sms" && !isTwilioConfigured) continue;
+      if (channel === "sms" && !isSmsConfigured) continue;
       if (said.has(bookedSequenceKey(job.id, channel))) continue;
       const message = composeReminder(
         "evaluation_confirmed",

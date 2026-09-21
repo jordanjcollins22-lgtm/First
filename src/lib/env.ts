@@ -97,6 +97,11 @@ export const isMapboxConfigured = Boolean(env.mapboxToken);
 export const isRentcastConfigured = Boolean(env.rentcastApiKey);
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuthToken && env.twilioPhoneNumber);
+/**
+ * Whether a text can reach a client at all: our own Twilio line, or the
+ * number GoHighLevel holds for us, which its API will send from.
+ */
+export const isSmsConfigured = isTwilioConfigured || Boolean(env.ghlApiKey && env.ghlLocationId);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
 /** Reading the bank. Without it the cash on hand is typed in by hand. */
 export const isPlaidConfigured = Boolean(env.plaidClientId && env.plaidSecret);

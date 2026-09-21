@@ -62,6 +62,8 @@ export interface GhlAppointmentInput {
   startTime: string;
   endTime: string;
   address: string | null;
+  /** The GoHighLevel user the appointment is under. Its calendar refuses one without. */
+  assignedUserId?: string | null;
 }
 
 export async function createAppointment(input: GhlAppointmentInput): Promise<string> {
@@ -73,6 +75,7 @@ export async function createAppointment(input: GhlAppointmentInput): Promise<str
     startTime: input.startTime,
     endTime: input.endTime,
     address: input.address || undefined,
+    assignedUserId: input.assignedUserId || undefined,
     appointmentStatus: "confirmed",
     // The app has already checked the evaluator is free; the GoHighLevel
     // calendar's own availability rules must not refuse what we booked.
@@ -121,6 +124,40 @@ export async function listAppointments(startsAfter: Date, endsBefore: Date): Pro
     title: (e.title as string) ?? null,
     address: (e.address as string) ?? null,
   })).filter((e) => e.id && e.startTime);
+}
+
+export interface GhlUser {
+  id: string;
+  email: string | null;
+  name: string | null;
+}
+
+/** The team as GoHighLevel knows it, so an evaluator can be matched by email. */
+export async function listUsers(): Promise<GhlUser[]> {
+  const query = new URLSearchParams({ locationId: env.ghlLocationId });
+  const result = await call<{ users?: Record<string, unknown>[] }>("GET", `/users/?${query.toString()}`);
+  return (result.users ?? [])
+    .map((u) => ({
+      id: String(u.id ?? ""),
+      email: typeof u.email === "string" ? u.email : null,
+      name: (u.name as string) ?? [u.firstName, u.lastName].filter(Boolean).join(" ") ?? null,
+    }))
+    .filter((u) => u.id);
+}
+
+/**
+ * A text to a contact, from the number GoHighLevel holds for us.
+ *
+ * The same conversation the office sees in GoHighLevel, so a reply typed in
+ * either place lands in one thread there and, through the webhook, here.
+ */
+export async function sendSmsMessage(contactId: string, message: string): Promise<string | null> {
+  const result = await call<{ messageId?: string; conversationId?: string }>("POST", "/conversations/messages", {
+    type: "SMS",
+    contactId,
+    message,
+  });
+  return result.messageId ?? null;
 }
 
 export interface GhlContact {
