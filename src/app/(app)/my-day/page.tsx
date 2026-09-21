@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isFieldOnly } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
+import { owedToProfile } from "@/lib/data/owed-to-me";
 import { getLoadout } from "@/lib/data/loadout";
 import { leaveBlockedBy } from "@/lib/loadout";
 import { readDay } from "@/lib/crew-day";
@@ -22,7 +23,7 @@ import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/open-time";
 import { OpenTimePanel, TeamOpenTimePanel } from "@/components/team/open-time-panel";
 import { createClient } from "@/lib/supabase/server";
-import { dateKeyIn } from "@/lib/time-zone";
+import { dateKeyIn, dateShort } from "@/lib/time-zone";
 import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
 import { pendingEarlyStarts } from "@/lib/data/early-start";
@@ -725,9 +726,30 @@ async function TrialDay({ profile }: { profile: Profile }) {
   if (!day) {
     return <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">Couldn&apos;t load your day. Try again in a moment.</p>;
   }
+  const owed = await owedToProfile(profile.id).catch(() => ({ total: 0, lines: [] }));
   return (
     <div className="mx-auto max-w-md">
       <TodayBoard stops={day.stops} events={day.events} personName={profile.full_name || profile.email} leaveBlockedBy={null} />
+      {/* What they have earned and not yet been paid. On the day, where they
+          look, so "how much am I owed" never needs asking. */}
+      {owed.total > 0 && (
+        <section className="mt-4 rounded-2xl border border-emerald-600/40 bg-emerald-50/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Owed to you</p>
+          <p className="mt-1 text-2xl font-bold">${owed.total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
+          <ul className="mt-2 flex flex-col gap-1 text-sm">
+            {owed.lines.map((line) => (
+              <li key={line.id} className="flex items-start justify-between gap-3">
+                <span className="min-w-0 text-muted-foreground">
+                  {line.on ? dateShort(`${line.on}T12:00:00Z`) : ""}
+                  {line.note ? ` · ${line.note}` : ""}
+                </span>
+                <span className="shrink-0 font-medium">${line.amount.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">Held for you until you ask for it. Tell Jordan when you want it paid out.</p>
+        </section>
+      )}
     </div>
   );
 }
