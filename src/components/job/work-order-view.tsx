@@ -56,6 +56,7 @@ export function WorkOrderView({
   accountManager,
   approvedAdditions,
   back,
+  bare = false,
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -91,6 +92,8 @@ export function WorkOrderView({
    * crew member came from; the office opens this from the job and wants to go
    * back there instead. */
   back?: { href: string; label: string };
+  /** The work and the completion photos, nothing else: for somebody trying out with us. */
+  bare?: boolean;
 }) {
   // Worked out here rather than stored: zones get edited and a zone's service
   // can change, and a stored grouping goes wrong the first time somebody
@@ -103,7 +106,7 @@ export function WorkOrderView({
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
       <Link
-        href={back?.href ?? "/today"}
+        href={back?.href ?? (bare ? "/my-day" : "/today")}
         className="flex min-h-9 items-center gap-1 text-sm text-muted-foreground hover:text-primary"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -126,7 +129,7 @@ export function WorkOrderView({
         </Link>
       </header>
 
-      {accountManager && (
+      {accountManager && !bare && (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <span className="text-muted-foreground">Questions:</span>
           <span className="font-medium">{accountManager.name}</span>
@@ -289,15 +292,17 @@ export function WorkOrderView({
       {/* The manager's punch list, where the crew are standing. They cannot
           mark or approve — that is the point of the step — but they can see
           what came back and tick it off. */}
-      <PhotoReviewPanel
-        jobId={jobId}
-        photos={photos.filter((photo) => photo.kind === "after")}
-        marks={photoMarks}
-        crewSignedOff={jobStatus === "completed"}
-        approvedAt={photosApprovedAt}
-        approvedByName={null}
-        canReview={false}
-      />
+      {!bare && (
+        <PhotoReviewPanel
+          jobId={jobId}
+          photos={photos.filter((photo) => photo.kind === "after")}
+          marks={photoMarks}
+          crewSignedOff={jobStatus === "completed"}
+          approvedAt={photosApprovedAt}
+          approvedByName={null}
+          canReview={false}
+        />
+      )}
 
       <CompletionPanel
         jobId={jobId}

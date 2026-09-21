@@ -106,6 +106,18 @@ export default async function MyDayPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const viewer = await getCurrentProfile();
+
+  // Somebody trying out with us sees their work and nothing else: no tabs,
+  // no shop, no clock, no leaderboard. What they need is where to go and
+  // what to do when they get there.
+  if (viewer?.trial_crew) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
+        <TrialDay profile={viewer} />
+      </div>
+    );
+  }
+
   const day =
     viewer && isFieldOnly(viewer.roles) ? (
       <CrewDay profile={viewer} />
@@ -703,6 +715,19 @@ async function CrewDay({ profile }: { profile: Profile }) {
           <CrewLeaderboard boards={boards} meId={profile.id} compact />
         </div>
       )}
+    </div>
+  );
+}
+
+/** The work, and only the work: today's stops, directions, on my way. */
+async function TrialDay({ profile }: { profile: Profile }) {
+  const day = await getCrewDay().catch(() => null);
+  if (!day) {
+    return <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">Couldn&apos;t load your day. Try again in a moment.</p>;
+  }
+  return (
+    <div className="mx-auto max-w-md">
+      <TodayBoard stops={day.stops} events={day.events} personName={profile.full_name || profile.email} leaveBlockedBy={null} />
     </div>
   );
 }

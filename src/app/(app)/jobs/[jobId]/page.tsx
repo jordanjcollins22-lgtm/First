@@ -500,13 +500,15 @@ export default async function JobPage({
   // Proposal totals, discounts and invoices are none of a crew member's
   // business to be reading on a customer's driveway — and until now this page
   // showed them all of it.
-  const viewerRoles = (await getCurrentProfile())?.roles ?? [];
-  if (isFieldOnly(viewerRoles)) {
+  const me = await getCurrentProfile();
+  const viewerRoles = me?.roles ?? [];
+  if (isFieldOnly(viewerRoles) || me?.trial_crew) {
     // The same loader the sheet's own URL uses, so what the crew see here and
-    // what anybody else sees there can never be two different things.
+    // what anybody else sees there can never be two different things. A
+    // trial gets the work and the completion photos, nothing else.
     const sheet = await getWorkOrderForJob(jobId);
     if (!sheet) notFound();
-    return <WorkOrderView jobId={jobId} {...sheet} />;
+    return <WorkOrderView jobId={jobId} {...sheet} bare={Boolean(me?.trial_crew)} />;
   }
 
   const host = headersList.get("host") ?? "";

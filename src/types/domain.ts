@@ -283,6 +283,8 @@ export interface Profile {
    * at all to whether they visit properties.
    */
   does_evaluations: boolean | null;
+  /** Trying out with us: own tools, meets on site, sees the work and nothing else. */
+  trial_crew: boolean;
   phone: string | null;
   /** Licence details only matter for people who drive for the business. */
   drives_for_company: boolean;
