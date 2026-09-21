@@ -266,6 +266,43 @@ export async function addMarketingPlayDoors(
 }
 
 /**
+ * A drawn round, saved whole.
+ *
+ * The doors the line reaches become the round, in the order they fall
+ * along it, and the line is kept to show back. One call rather than an
+ * add, an edit and an order: the edit measured every door twice with
+ * PostGIS and timed out, and a save that dies half way leaves the doors
+ * added and the line lost.
+ */
+export async function setMarketingPlayDoors(input: {
+  playId: string;
+  /** House ids in walking order. */
+  doors: string[];
+  line?: { lat: number; lng: number }[] | null;
+  note?: string;
+}): Promise<ActionResult<{ quantity: number; added: number; removed: number }>> {
+  return guard("setMarketingPlayDoors", async () => {
+    const profile = await requireUser();
+    if (input.doors.length === 0) throw new Error("The line reaches no doors. Draw it along the houses.");
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("marketing_play_set_doors", {
+      org: profile.organization_id,
+      the_play: input.playId,
+      doors: input.doors,
+      line: (input.line && input.line.length > 1 ? input.line : null) as never,
+      note: input.note?.trim() || null,
+      by: profile.id,
+    });
+    if (error) throw error;
+    const result = (data ?? {}) as { ok?: boolean; error?: string; quantity?: number; added?: number; removed?: number };
+    if (!result.ok) throw new Error(result.error ?? "That round could not be saved.");
+    for (const page of PAGES) revalidatePath(page);
+    revalidatePath("/my-day");
+    return { quantity: result.quantity ?? 0, added: result.added ?? 0, removed: result.removed ?? 0 };
+  });
+}
+
+/**
  * Say what order a round is walked in.
  *
  * Two ways in, one thing out: a list of house ids. Drawing a line orders the

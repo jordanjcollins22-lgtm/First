@@ -4477,6 +4477,11 @@ export interface Database {
         Args: { org: string; the_play: string; order_ids: string[] | null; line?: Json; by?: string | null };
         Returns: Json;
       };
+      /** A drawn round: the doors set to exactly the line's, in its order, with the line. */
+      marketing_play_set_doors: {
+        Args: { org: string; the_play: string; doors: string[]; line?: Json; note?: string | null; by?: string | null };
+        Returns: Json;
+      };
       /** Put doors back on a round. Only houses inside its own zone. */
       marketing_play_add_doors: {
         Args: { org: string; the_play: string; add: string[]; by?: string | null };

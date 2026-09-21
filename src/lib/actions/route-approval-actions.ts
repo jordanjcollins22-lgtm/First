@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { createEddmMailing } from "@/lib/actions/eddm-mailing-actions";
-import { addMarketingPlayDoors, approveMarketingPlay, editMarketingPlay, setMarketingPlayOrder, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
+import { approveMarketingPlay, setMarketingPlayDoors, setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
 import { routeName } from "@/lib/route-approval";
 import type { Point } from "@/lib/route-order";
 import type { Json } from "@/lib/supabase/database.types";
@@ -168,10 +168,9 @@ export async function skipUspsRoute(input: { eddmRouteId: string; houseIds: stri
 /**
  * The line drawn, as the round's doors in walking order.
  *
- * Doors on the round that the line does not reach come off; doors the line
- * reaches that were not on it go on; the order is the line's. Any other
- * house's round on this route is folded into this one, so a route is
- * walked once.
+ * The round becomes exactly the doors the line reaches, in the line's
+ * order, in one step. Any other house's round on this route is folded
+ * into this one, so a route is walked once.
  */
 export async function saveDoorHangerLine(input: {
   eddmRouteId: string;
@@ -184,23 +183,8 @@ export async function saveDoorHangerLine(input: {
     const profile = await allowed();
     if (input.order.length === 0) throw new Error("The line reaches no doors. Draw it along the houses.");
     const supabase = await createClient();
-    const { data: play } = await supabase.from("marketing_plays").select("id, targets").eq("id", input.playId).maybeSingle();
-    if (!play) throw new Error("That round is gone.");
-    const current = new Set((Array.isArray(play.targets) ? play.targets : []).filter((t): t is string => typeof t === "string"));
-    const wanted = new Set(input.order);
-
-    const remove = [...current].filter((id) => !wanted.has(id));
-    const add = input.order.filter((id) => !current.has(id));
-    if (add.length > 0) {
-      const added = await addMarketingPlayDoors(input.playId, add);
-      if (!added.ok) throw new Error(added.error);
-    }
-    if (remove.length > 0) {
-      const edited = await editMarketingPlay({ playId: input.playId, remove, note: "Drawn over the USPS route." });
-      if (!edited.ok) throw new Error(edited.error);
-    }
-    const ordered = await setMarketingPlayOrder({ playId: input.playId, order: input.order, line: input.line });
-    if (!ordered.ok) throw new Error(ordered.error);
+    const saved = await setMarketingPlayDoors({ playId: input.playId, doors: input.order, line: input.line, note: "Drawn over the USPS route." });
+    if (!saved.ok) throw new Error(saved.error);
 
     for (const other of input.otherPlayIds) {
       if (other === input.playId) continue;
