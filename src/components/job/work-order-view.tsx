@@ -92,7 +92,7 @@ export function WorkOrderView({
    * crew member came from; the office opens this from the job and wants to go
    * back there instead. */
   back?: { href: string; label: string };
-  /** The work and the completion photos, nothing else: for somebody trying out with us. */
+  /** The work and nothing else: for somebody trying out with us. No contact line, no punch list, no completion or photos. */
   bare?: boolean;
 }) {
   // Worked out here rather than stored: zones get edited and a zone's service
@@ -304,6 +304,7 @@ export function WorkOrderView({
         />
       )}
 
+      {!bare && (
       <CompletionPanel
         jobId={jobId}
         status={jobStatus}
@@ -319,6 +320,7 @@ export function WorkOrderView({
         completedByName={completedByName}
         completionNotes={completionNotes}
       />
+      )}
     </div>
   );
 }
