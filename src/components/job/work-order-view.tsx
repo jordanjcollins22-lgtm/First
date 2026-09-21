@@ -4,6 +4,7 @@ import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 import type { CanvasMark } from "@/lib/canvas-marks";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import { ZonePhotos } from "@/components/job/marked-photo";
+import { GuidedZones } from "@/components/job/guided-zones";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
 import type { PhotoMark } from "@/lib/photo-review";
@@ -57,6 +58,7 @@ export function WorkOrderView({
   approvedAdditions,
   back,
   bare = false,
+  arrived = false,
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -94,6 +96,8 @@ export function WorkOrderView({
   back?: { href: string; label: string };
   /** The work and nothing else: for somebody trying out with us. No contact line, no punch list, no completion or photos. */
   bare?: boolean;
+  /** They have tapped Arrived on My Day: the sheet walks them through one area at a time. */
+  arrived?: boolean;
 }) {
   // Worked out here rather than stored: zones get edited and a zone's service
   // can change, and a stored grouping goes wrong the first time somebody
@@ -207,7 +211,16 @@ export function WorkOrderView({
       )}
 
       {/* ----------------------------------------------------------- the work */}
-      {order.zones.length === 0 ? (
+      {bare && arrived ? (
+        /* On site: one area at a time, each closed with an after photo from
+           the evaluation's angle before the next one shows. */
+        <GuidedZones jobId={jobId} zones={order.zones} photos={photos} />
+      ) : bare && order.zones.length > 0 ? (
+        <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+          When you get there, tap <span className="font-semibold">Arrived</span> on My Day. This sheet will then show you one area at a time.
+        </p>
+      ) : null}
+      {bare && arrived ? null : order.zones.length === 0 ? (
         <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">
           No zones have been marked up on this job yet. Check with the office before you start.
         </p>

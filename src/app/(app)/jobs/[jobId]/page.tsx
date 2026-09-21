@@ -105,6 +105,8 @@ import { getJobCommission } from "@/lib/data/commission";
 import { JobCommissionPanel } from "@/components/payments/job-commission";
 import { requireJobAccess } from "@/lib/data/access";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
+import { getCrewDay } from "@/lib/data/crew-day";
+import { readDay } from "@/lib/crew-day";
 import { isAccountManager } from "@/lib/affiliate-roles";
 import { serviceLabelFor } from "@/lib/zone-scope";
 
@@ -508,7 +510,14 @@ export default async function JobPage({
     // trial gets the work and the completion photos, nothing else.
     const sheet = await getWorkOrderForJob(jobId);
     if (!sheet) notFound();
-    return <WorkOrderView jobId={jobId} {...sheet} bare={Boolean(me?.trial_crew)} />;
+    // Whether they have tapped Arrived here today, from their own day.
+    let arrived = false;
+    if (me?.trial_crew) {
+      const day = await getCrewDay().catch(() => null);
+      const state = day ? readDay(day.events, day.stops) : null;
+      arrived = state?.phase === "on_site" && state.currentStop?.jobId === jobId;
+    }
+    return <WorkOrderView jobId={jobId} {...sheet} bare={Boolean(me?.trial_crew)} arrived={arrived} />;
   }
 
   const host = headersList.get("host") ?? "";
