@@ -14,6 +14,8 @@ import {
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { requestMeasurements } from "@/lib/data/measurement-request";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
@@ -210,10 +212,34 @@ export async function generateProposal(
 
   revalidateJobViews(jobId);
 
+  // Areas drawn but never measured cannot be priced. The evaluator is
+  // asked for them, once per set, and the answer is said here so the person
+  // who pressed the button knows an email went (or is waiting to go).
+  const asked = await requestMeasurements(createAdminClient(), {
+    jobId,
+    zones,
+    catalog,
+    serviceLabel: (zone) => {
+      const def = zone.service ? serviceTypeById(zone.service.typeId) : undefined;
+      const row = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
+      return serviceLabelFor(def, row ? { name: row.name, scopeTemplate: row.scope_template } : undefined) || null;
+    },
+  }).catch((err: unknown) => {
+    console.error("[proposal] measurements request failed:", jobId, err);
+    return null;
+  });
+  const askedNote = asked?.asked
+    ? asked.how === "sent"
+      ? `Asked the evaluator by email to measure ${asked.zones.join(", ")}.`
+      : asked.how === "queued"
+        ? `An email asking the evaluator to measure ${asked.zones.join(", ")} is waiting for approval on My Day.`
+        : null
+    : null;
+
   // What actually moved, so "the paperwork is stuck on lawn care" is
   // something the evaluator can check on the spot rather than days later.
   const diff = diffScope(previous, scopeSnapshot);
-  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: [decision.note, priceNote].filter(Boolean).join(" ") || null };
+  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: [decision.note, priceNote, askedNote].filter(Boolean).join(" ") || null };
 }
 
 /**

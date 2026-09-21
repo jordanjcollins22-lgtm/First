@@ -10,11 +10,12 @@
  * What is here is the wording and the clock. Nothing here sends.
  */
 
-export type ApprovalSource = "evaluation_sequence" | "client_reminder";
+export type ApprovalSource = "evaluation_sequence" | "client_reminder" | "team_request";
 
 export const SOURCE_LABEL: Record<ApprovalSource, string> = {
   evaluation_sequence: "Evaluation email",
   client_reminder: "Reminder",
+  team_request: "Team request",
 };
 
 /** What each one is, in the words the list shows. */
@@ -38,6 +39,8 @@ export function whatLabel(kind: string): string {
       return "Job start reminder";
     case "invoice_reminder":
       return "Invoice reminder";
+    case "measurements_request":
+      return "Measurements request";
     default:
       return kind.replace(/_/g, " ");
   }
@@ -69,6 +72,7 @@ export function staleAfter(kind: string, now: Date): Date {
       case "proposal_follow_up":
         return 72;
       case "invoice_reminder":
+      case "measurements_request":
         return 24 * 7;
       default:
         return 48;

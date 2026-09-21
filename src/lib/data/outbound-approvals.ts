@@ -205,7 +205,8 @@ export async function deliverApproval(admin: Admin, approval: ApprovalRow, decid
     text: approval.body,
     stream: "transactional",
   });
-  await admin.from("client_message_log").upsert(
+  // A note to somebody on the team is not client correspondence.
+  if (approval.source !== "team_request") await admin.from("client_message_log").upsert(
     {
       organization_id: approval.organization_id,
       customer_id: approval.customer_id,
