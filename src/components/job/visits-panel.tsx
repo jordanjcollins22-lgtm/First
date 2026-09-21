@@ -16,7 +16,7 @@ import {
   setWorkSessionStatus,
   updateTicketCause,
 } from "@/lib/actions/work-session-actions";
-import { setSessionBring } from "@/lib/actions/loadout-actions";
+import { setMeetOnSite, setSessionBring } from "@/lib/actions/loadout-actions";
 import { bringSummary, type LoadoutTool } from "@/lib/loadout";
 import {
   SESSION_STATUS_LABELS,
@@ -468,6 +468,7 @@ function BringEditor({
   const [kits, setKits] = useState<number[]>(session.kits ?? []);
   const [toolIds, setToolIds] = useState<string[]>(session.tool_ids ?? []);
   const [materials, setMaterials] = useState((session.materials ?? []).join(", "));
+  const [meetOnSite, setMeetOnSiteState] = useState(Boolean(session.meet_on_site));
   const [isPending, startTransition] = useTransition();
 
   const summary = bringSummary(
@@ -490,13 +491,39 @@ function BringEditor({
         className="mt-1 flex items-start gap-1 text-left text-xs text-muted-foreground hover:text-foreground"
       >
         <Package className="mt-0.5 h-3 w-3 shrink-0" />
-        <span>{summary ? `Bring: ${summary}` : "Say what to bring"}</span>
+        <span>
+          {meetOnSite ? "Meets on site with their own tools. " : ""}
+          {summary ? `Bring: ${summary}` : meetOnSite ? "" : "Say what to bring"}
+        </span>
       </button>
     );
   }
 
   return (
     <div className="mt-2 rounded-lg border border-border bg-muted/20 p-2.5">
+      {/* No shop for this visit. The day flow starts on the way to the site,
+          which is what a trial day for somebody new looks like. */}
+      <label className="mb-2 flex items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={meetOnSite}
+          disabled={isPending}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setMeetOnSiteState(next);
+            startTransition(async () => {
+              const result = await setMeetOnSite(session.id, next);
+              onResult(result);
+              if (!result.ok) setMeetOnSiteState(!next);
+            });
+          }}
+          className="mt-0.5 h-4 w-4"
+        />
+        <span>
+          <span className="font-medium">Meets on site with their own tools</span>
+          <span className="block text-muted-foreground">No shop stop and no loadout. Their day starts on the way to this address.</span>
+        </span>
+      </label>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Bring</p>
       {allKits.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">

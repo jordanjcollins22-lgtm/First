@@ -59,6 +59,23 @@ export async function toggleLoadoutItem(input: {
 }
 
 /** What a visit needs brought, set from the job page. */
+/** Straight to the site with their own tools, or through the shop like everyone else. */
+export async function setMeetOnSite(sessionId: string, meetOnSite: boolean): Promise<{ ok: true } | { ok: false; message: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, message: "Sign in first." };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("job_work_sessions")
+    .update({ meet_on_site: meetOnSite })
+    .eq("id", sessionId)
+    .select("job_id")
+    .single();
+  if (error || !data) return { ok: false, message: error?.message ?? "Couldn't change that visit." };
+  revalidatePath(`/jobs/${data.job_id}`);
+  revalidatePath("/my-day");
+  return { ok: true };
+}
+
 export async function setSessionBring(
   sessionId: string,
   input: { kits: number[]; toolIds: string[]; materials: string[] }

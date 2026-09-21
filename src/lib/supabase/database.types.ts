@@ -3411,6 +3411,7 @@ export interface Database {
           kits: number[];
           tool_ids: string[];
           materials: string[];
+          meet_on_site: boolean;
           created_by: string | null;
           created_at: string;
           updated_at: string;

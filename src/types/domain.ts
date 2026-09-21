@@ -917,6 +917,8 @@ export interface JobWorkSession {
   kits: number[];
   tool_ids: string[];
   materials: string[];
+  /** Straight to the site with their own tools: no shop stop, no loadout. */
+  meet_on_site?: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

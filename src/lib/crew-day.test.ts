@@ -38,6 +38,31 @@ function upTo(step: number): CrewEvent[] {
   return all.slice(0, step);
 }
 
+describe("readDay on a day with no shop in it", () => {
+  const ON_SITE: Stop[] = STOPS.map((s) => ({ ...s, meetOnSite: true }));
+
+  it("starts on the way to the first stop, with no shop to tap", () => {
+    // A trial day for somebody with their own tools: nobody should be asked
+    // to say they are at a shop they have never seen.
+    const day = readDay([], ON_SITE);
+    expect(day.phase).toBe("between_stops");
+    expect(day.action?.kind).toBe("travelling");
+    expect(day.nextStop?.jobId).toBe("j1");
+  });
+
+  it("closes the day without a shop to go back to", () => {
+    clock = 0;
+    const day = readDay([ev("travelling", "j1"), ev("arrived_job", "j1"), ev("finished_job", "j1"), ev("travelling", "j2"), ev("arrived_job", "j2"), ev("finished_job", "j2")], ON_SITE);
+    expect(day.phase).toBe("stops_done");
+    expect(day.action?.label).toBe("I'm done for the day");
+  });
+
+  it("still goes through the shop when only one stop is met on site", () => {
+    const mixed: Stop[] = [{ ...STOPS[0], meetOnSite: true }, STOPS[1]];
+    expect(readDay([], mixed).phase).toBe("before_shop");
+  });
+});
+
 describe("readDay", () => {
   it("starts by asking them to get to the shop", () => {
     const day = readDay([], STOPS);

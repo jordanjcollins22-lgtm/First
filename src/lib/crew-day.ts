@@ -34,8 +34,17 @@ export interface Stop {
   lat: number | null;
   lng: number | null;
   purpose: string | null;
-  /** Every tool this stop's zones call for, unresolved. Totalled across the
-   * day so the crew load once rather than per job. */
+  /**
+   * The crew goes straight here with their own tools: no shop stop and no
+   * loadout. A trial day for somebody new, or a job that wants nothing from
+   * the shop.
+   */
+  meetOnSite?: boolean;
+}
+
+/** A day with no shop in it: every stop is met on site. */
+export function skipsShop(stops: readonly Stop[]): boolean {
+  return stops.length > 0 && stops.every((s) => s.meetOnSite);
 }
 
 /** Where the day has got to. */
@@ -102,7 +111,9 @@ export function readDay(events: CrewEvent[], stops: Stop[]): DayState {
     };
   }
 
-  if (!lastOf(events, "arrived_shop")) {
+  const noShop = skipsShop(stops);
+
+  if (!noShop && !lastOf(events, "arrived_shop")) {
     return {
       phase: "before_shop",
       currentStop: null,
@@ -149,12 +160,14 @@ export function readDay(events: CrewEvent[], stops: Stop[]): DayState {
       currentStop: null,
       nextStop: null,
       stopsDone,
-      action: { kind: "returned_shop", label: "Back at the shop", jobId: null },
-      headline: "All stops done. Head back to the shop.",
+      // The same event either way, so the day closes the same way in the
+      // record. Only the words change: there is no shop to go back to.
+      action: { kind: "returned_shop", label: noShop ? "I'm done for the day" : "Back at the shop", jobId: null },
+      headline: noShop ? "All done. Nice work." : "All stops done. Head back to the shop.",
     };
   }
 
-  if (!lastOf(events, "left_shop")) {
+  if (!noShop && !lastOf(events, "left_shop")) {
     return {
       phase: "at_shop",
       currentStop: null,
