@@ -191,20 +191,14 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
 
-  // The paid, finished jobs, the county house each sits in, and its route.
-  const anchors = await anchorHouses(supabase, await paidCompletedJobs(supabase, org));
-  if (anchors.length === 0) return null;
-
-  const [{ data: listed }, { data: orderRows }] = await Promise.all([
-    supabase.rpc("marketing_plays_list", { org, include_done: false }),
+  // The paid, finished jobs and the county house each sits in, alongside
+  // the orders and the printer, which do not depend on them.
+  const [anchors, { data: orderRows }, slots] = await Promise.all([
+    paidCompletedJobs(supabase, org).then((jobs) => anchorHouses(supabase, jobs)),
     supabase.from("route_orders").select("id, eddm_route_id, status, house_ids, mailing_id, play_id, walk_on, mail_on").eq("organization_id", org),
+    listDoorHangerSlots().catch(() => []),
   ]);
-  // The open door hanger round on each house, whatever put it there.
-  const playOfHouse = new Map<string, MarketingPlay>();
-  for (const p of (Array.isArray(listed) ? listed : []) as unknown as MarketingPlay[]) {
-    if (p.kind !== "door_hangers" || p.status !== "open") continue;
-    if (!playOfHouse.has(p.houseId)) playOfHouse.set(p.houseId, p);
-  }
+  if (anchors.length === 0) return null;
   const orderByRoute = new Map((orderRows ?? []).map((o) => [o.eddm_route_id, o]));
 
   const byRoute = new Map<string, { since: string; houseIds: string[] }>();
@@ -227,7 +221,11 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   const order = orderByRoute.get(picked.eddmRouteId) ?? null;
   const step: RouteStep = order && order.status !== "ordered" && order.status !== "skipped" ? (order.status as RouteStep) : "usps";
 
-  const [{ data: route }, { data: onRoute }, slots] = await Promise.all([
+  // The open door hanger round on each of this route's houses, whatever put
+  // it there. Read for these houses only rather than every play in the
+  // business, and in the same breath as the route and its doors.
+  type OpenPlay = { id: string; house_id: string };
+  const [{ data: route }, { data: onRoute }, { data: openPlays }, mailing] = await Promise.all([
     supabase
       .from("eddm_routes")
       .select("id, zip, route_id, residential_count, business_count, total_count, attributes, rings, paths")
@@ -240,17 +238,29 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       .eq("kind", "house")
       .eq("needs_review", false)
       .limit(3000),
-    listDoorHangerSlots().catch(() => []),
+    supabase
+      .from("marketing_plays")
+      .select("id, house_id")
+      .eq("organization_id", org)
+      .eq("kind", "door_hangers")
+      .eq("status", "open")
+      .in("house_id", picked.houseIds)
+      .order("created_at", { ascending: true }),
+    order?.mailing_id ? getEddmMailing(order.mailing_id).catch(() => null) : Promise.resolve(null),
   ]);
   if (!route) return null;
+
+  const playOfHouse = new Map<string, { id: string }>();
+  for (const p of (openPlays ?? []) as unknown as OpenPlay[]) {
+    if (!playOfHouse.has(p.house_id)) playOfHouse.set(p.house_id, { id: p.id });
+  }
 
   const attributes = (route.attributes ?? {}) as Record<string, unknown>;
   const facility = [attributes.FAC_NAME, attributes.FACILITY_NAME, attributes.FACILITY].find((v) => typeof v === "string" && v.trim()) as string | undefined;
 
-  const onThisRoute = anchors.filter((a) => picked.houseIds.includes(a.houseId));
   const seen = new Set<string>();
   const anchorViews: AnchorHouse[] = [];
-  for (const a of onThisRoute) {
+  for (const a of anchors.filter((x) => picked.houseIds.includes(x.houseId))) {
     if (seen.has(a.houseId)) continue;
     seen.add(a.houseId);
     anchorViews.push({ houseId: a.houseId, address: a.address, customerName: a.customerName, jobId: a.jobId, playId: playOfHouse.get(a.houseId)?.id ?? null });
@@ -268,20 +278,21 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       .maybeSingle();
     const play = row as PlayRow | null;
     if (play) {
-      const listedPlay = [...playOfHouse.values()].find((p) => p.id === play.id);
+      const { data: walker } = play.assigned_to
+        ? await supabase.from("profiles").select("full_name").eq("id", play.assigned_to).maybeSingle()
+        : { data: null };
       round = {
         id: play.id,
         quantity: play.quantity,
         doorIds: (Array.isArray(play.targets) ? play.targets : []).filter((t): t is string => typeof t === "string"),
         order: Array.isArray(play.walk_order) ? (play.walk_order as string[]) : null,
         line: Array.isArray(play.walk_order_line) ? (play.walk_order_line as Point[]) : null,
-        assignedToName: listedPlay?.assignedToName ?? null,
+        assignedToName: walker?.full_name ?? null,
         approved: play.approval === "approve" || play.approval === "approved" || play.approval === "auto",
       };
     }
   }
 
-  const mailing = order?.mailing_id ? await getEddmMailing(order.mailing_id).catch(() => null) : null;
   const doors = round ? (round.order?.length || round.doorIds.length) : 0;
 
   return {

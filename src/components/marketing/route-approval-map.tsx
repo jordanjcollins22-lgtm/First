@@ -49,6 +49,9 @@ export function RouteApprovalMap({
   const box = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
+  // What the dots last showed, so a render that changes nothing on the map
+  // does not push six hundred features through it again.
+  const dotsKeyRef = useRef<string>("");
   // The latest handler, so the draw control is not rebuilt on every render.
   const onLinesRef = useRef(onLines);
   useEffect(() => {
@@ -122,14 +125,21 @@ export function RouteApprovalMap({
     else map.once("ready", apply);
   }, [rings, paths]);
 
-  // The dots, coloured by what they are right now.
+  // The dots, coloured by what they are right now. Repainted only when a
+  // dot's colour has changed: the wizard re-renders for a typed date or a
+  // note, and the map has nothing to do with either.
+  const anchorKey = anchorIds.join("|");
+  const onKey = [...onRound].join("|");
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const anchors = new Set(anchorIds);
+    const key = `${houses.length}:${anchorKey}:${onKey}`;
+    if (key === dotsKeyRef.current) return;
+    const anchors = new Set(anchorKey ? anchorKey.split("|") : []);
     const apply = () => {
       const source = map.getSource("houses") as mapboxgl.GeoJSONSource | undefined;
       if (!source) return;
+      dotsKeyRef.current = key;
       source.setData({
         type: "FeatureCollection",
         features: houses.map((h) => ({
@@ -141,7 +151,9 @@ export function RouteApprovalMap({
     };
     if (map.isStyleLoaded() && map.getSource("houses")) apply();
     else map.once("ready", apply);
-  }, [houses, anchorIds, onRound]);
+    // anchorKey and onKey stand in for the array and the set they are built from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [houses, anchorKey, onKey, onRound]);
 
   // The finished line, once drawing is over.
   useEffect(() => {
@@ -179,18 +191,26 @@ export function RouteApprovalMap({
     }
     draw.changeMode("draw_line_string");
 
+    // Dragging a point fires an update on every pixel. One publish per
+    // frame is all the eye can use, and all the doors need recounting for.
+    let frame: number | null = null;
     const publish = () => {
-      const lines = draw
-        .getAll()
-        .features.filter((f) => f.geometry.type === "LineString")
-        .map((f) => (f.geometry as GeoJSON.LineString).coordinates.map(([lng, lat]) => ({ lat, lng })));
-      onLinesRef.current(lines);
+      if (frame != null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        const lines = draw
+          .getAll()
+          .features.filter((f) => f.geometry.type === "LineString")
+          .map((f) => (f.geometry as GeoJSON.LineString).coordinates.map(([lng, lat]) => ({ lat, lng })));
+        onLinesRef.current(lines);
+      });
     };
     map.on("draw.create", publish);
     map.on("draw.update", publish);
     map.on("draw.delete", publish);
     if (initialLine && initialLine.length > 1) publish();
     return () => {
+      if (frame != null) cancelAnimationFrame(frame);
       map.off("draw.create", publish);
       map.off("draw.update", publish);
       map.off("draw.delete", publish);

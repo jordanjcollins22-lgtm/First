@@ -37,7 +37,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
 
   const drawn = useMemo(() => doorsAlongLines(view.houses, lines), [view.houses, lines]);
   const onRound = useMemo(() => new Set(view.step === "draw" ? drawn.order : (view.round?.order ?? view.round?.doorIds ?? [])), [view.step, drawn.order, view.round]);
-  const anchorIds = view.anchors.map((a) => a.houseId);
+  const anchorIds = useMemo(() => view.anchors.map((a) => a.houseId), [view.anchors]);
   const doors = view.step === "draw" ? drawn.order.length : (view.round?.order?.length || view.round?.doorIds.length || 0);
   const facts = { routeId: view.route.routeId, zip: view.route.zip, pieces: view.route.residential, doors };
   const stepIndex = STEP_ORDER.indexOf(view.step);
