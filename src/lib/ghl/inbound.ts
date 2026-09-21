@@ -51,8 +51,21 @@ export async function createBookingFromGhl(input: GhlBookingInput): Promise<GhlB
   if (!checked.match) return { ok: false, error: `Couldn't place that address: ${input.address}. ${checked.reason ?? ""}`.trim() };
   const { lat, lng, fullAddress } = checked.match;
 
+  // The client, found before made: by their GoHighLevel contact, then by
+  // email, then by phone. A booking from the calendar is nearly always
+  // somebody the app already has.
   let customerId: string | null = null;
-  if (input.email) {
+  if (input.contactId) {
+    const { data } = await admin
+      .from("customers")
+      .select("id")
+      .eq("organization_id", input.organizationId)
+      .eq("ghl_contact_id", input.contactId)
+      .limit(1)
+      .maybeSingle();
+    customerId = data?.id ?? null;
+  }
+  if (!customerId && input.email) {
     const { data } = await admin
       .from("customers")
       .select("id")
@@ -85,12 +98,44 @@ export async function createBookingFromGhl(input: GhlBookingInput): Promise<GhlB
     await admin.from("customers").update({ ghl_contact_id: input.contactId }).eq("id", customerId).is("ghl_contact_id", null);
   }
 
-  const { data: property, error: propertyError } = await admin
-    .from("properties")
-    .insert({ customer_id: customerId, address: fullAddress, lat, lng })
-    .select("id")
-    .single();
-  if (propertyError) return { ok: false, error: propertyError.message };
+  // Their property at this address, if they already have one; a second
+  // row for the same house splits its history in two.
+  let propertyId: string | null = null;
+  {
+    const { data: theirs } = await admin.from("properties").select("id, address, lat, lng").eq("customer_id", customerId).limit(50);
+    const found = ((theirs ?? []) as { id: string; address: string; lat: number | null; lng: number | null }[]).find(
+      (p) => sameAddress(p.address, fullAddress) || (p.lat != null && p.lng != null && Math.abs(p.lat - lat) < 0.0003 && Math.abs(p.lng - lng) < 0.0004)
+    );
+    propertyId = found?.id ?? null;
+  }
+  if (!propertyId) {
+    const { data: property, error: propertyError } = await admin
+      .from("properties")
+      .insert({ customer_id: customerId, address: fullAddress, lat, lng })
+      .select("id")
+      .single();
+    if (propertyError) return { ok: false, error: propertyError.message };
+    propertyId = property.id;
+  }
+
+  // One visit at one time. A job already booked here within an hour of this
+  // one is this booking seen twice, not a second evaluation.
+  const startsAt = new Date(input.startsAt).getTime();
+  const { data: clash } = await admin
+    .from("jobs")
+    .select("id, evaluation_date")
+    .eq("property_id", propertyId)
+    .neq("status", "cancelled")
+    .neq("evaluation_status", "cancelled")
+    .not("evaluation_date", "is", null)
+    .gte("evaluation_date", new Date(startsAt - 3_600_000).toISOString())
+    .lte("evaluation_date", new Date(startsAt + 3_600_000).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (clash) {
+    if (input.appointmentId) await admin.from("jobs").update({ ghl_appointment_id: input.appointmentId }).eq("id", clash.id).is("ghl_appointment_id", null);
+    return { ok: true, jobId: clash.id, customerId, propertyId };
+  }
 
   // Jace is the only person who does evaluations, so a booking made in
   // GoHighLevel is his. When several people do, nobody is guessed.
@@ -104,7 +149,7 @@ export async function createBookingFromGhl(input: GhlBookingInput): Promise<GhlB
   const { data: job, error: jobError } = await admin
     .from("jobs")
     .insert({
-      property_id: property.id,
+      property_id: propertyId,
       name: `${fullAddress} — Evaluation`,
       status: "estimating",
       assigned_to: assignedTo,
@@ -118,7 +163,28 @@ export async function createBookingFromGhl(input: GhlBookingInput): Promise<GhlB
     .single();
   if (jobError) return { ok: false, error: jobError.message };
 
-  return { ok: true, jobId: job.id, customerId, propertyId: property.id };
+  return { ok: true, jobId: job.id, customerId, propertyId };
+}
+
+/** "3 Idlewild Court, Bel Air" and "3 Idlewild Ct, Bel Air, MD 21014" are one house. */
+function sameAddress(a: string, b: string): boolean {
+  const key = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/\b(court|ct)\b/g, "ct")
+      .replace(/\b(drive|dr)\b/g, "dr")
+      .replace(/\b(road|rd)\b/g, "rd")
+      .replace(/\b(street|st)\b/g, "st")
+      .replace(/\b(lane|ln)\b/g, "ln")
+      .replace(/\b(avenue|ave)\b/g, "ave")
+      .replace(/\b(circle|cir)\b/g, "cir")
+      .replace(/\b(place|pl)\b/g, "pl")
+      .replace(/\b(way)\b/g, "way")
+      .split(",")
+      .slice(0, 2)
+      .join(",")
+      .replace(/[^a-z0-9,]/g, "");
+  return key(a) === key(b);
 }
 
 /** Reads the calendar now, whatever the clock says. */
@@ -134,7 +200,7 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
 
     const { data: jobRows } = await admin
       .from("jobs")
-      .select("id, ghl_appointment_id, evaluation_date, evaluation_end_date, evaluation_status, status, property:properties!inner(customer:customers!inner(organization_id, email, phone))")
+      .select("id, ghl_appointment_id, evaluation_date, evaluation_end_date, evaluation_status, status, property:properties!inner(customer:customers!inner(organization_id, email, phone, ghl_contact_id))")
       .not("evaluation_date", "is", null)
       .gte("evaluation_date", new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString());
     type Row = {
@@ -144,7 +210,7 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
       evaluation_end_date: string | null;
       evaluation_status: string;
       status: string;
-      property: { customer: { organization_id: string; email: string | null; phone: string | null } };
+      property: { customer: { organization_id: string; email: string | null; phone: string | null; ghl_contact_id: string | null } };
     };
     const jobs: KnownJob[] = ((jobRows ?? []) as unknown as Row[])
       .filter((r) => r.property.customer.organization_id === organizationId)
@@ -156,6 +222,7 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
         cancelled: r.evaluation_status === "cancelled" || r.status === "cancelled",
         email: r.property.customer.email,
         phone: r.property.customer.phone,
+        ghlContactId: r.property.customer.ghl_contact_id,
       }));
 
     // Contacts are only fetched for appointments the app has not seen, and
@@ -178,7 +245,7 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
 
     const changes = planChanges(ghlEvents, jobs, (id) => {
       const c = id ? contacts.get(id) : null;
-      return c ? { email: c.email, phone: c.phone } : null;
+      return c ? { id: c.id, email: c.email, phone: c.phone } : null;
     });
 
     const counts = { created: 0, moved: 0, cancelled: 0, reinstated: 0, linked: 0, failed: 0 };

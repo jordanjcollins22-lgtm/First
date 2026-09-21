@@ -5,7 +5,9 @@
  * changes. Tested without a token. The rules are few. An appointment we
  * already know is moved or cancelled to match. One we do not know is
  * linked to an app booking by the same person at the same time, which is
- * our own booking echoed back, or otherwise created. A cancelled
+ * our own booking echoed back, or otherwise created. The same person
+ * already booked at that time under another appointment is a duplicate on
+ * the calendar, not a second visit, and is left alone. A cancelled
  * appointment we never had is nothing to do.
  */
 export interface GhlEvent {
@@ -24,6 +26,8 @@ export interface KnownJob {
   cancelled: boolean;
   email: string | null;
   phone: string | null;
+  /** The client's GoHighLevel contact, once known. The surest match of all. */
+  ghlContactId?: string | null;
 }
 
 export type Change =
@@ -43,8 +47,9 @@ export function digits(value: string | null): string {
   return (value ?? "").replace(/\D/g, "").slice(-10);
 }
 
-/** Whether a job's client is the person on the appointment, by email or phone. */
-export function samePerson(job: KnownJob, contact: { email: string | null; phone: string | null }): boolean {
+/** Whether a job's client is the person on the appointment: the same GoHighLevel contact, or the same email or phone. */
+export function samePerson(job: KnownJob, contact: { id?: string | null; email: string | null; phone: string | null }): boolean {
+  if (job.ghlContactId && contact.id && job.ghlContactId === contact.id) return true;
   if (job.email && contact.email && job.email.trim().toLowerCase() === contact.email.trim().toLowerCase()) return true;
   const a = digits(job.phone);
   const b = digits(contact.phone);
@@ -54,7 +59,7 @@ export function samePerson(job: KnownJob, contact: { email: string | null; phone
 export function planChanges(
   events: readonly GhlEvent[],
   jobs: readonly KnownJob[],
-  contactOf: (contactId: string | null) => { email: string | null; phone: string | null } | null
+  contactOf: (contactId: string | null) => { id?: string | null; email: string | null; phone: string | null } | null
 ): Change[] {
   const byAppointment = new Map(jobs.filter((j) => j.ghlAppointmentId).map((j) => [j.ghlAppointmentId as string, j]));
   const out: Change[] = [];
@@ -76,11 +81,14 @@ export function planChanges(
     }
 
     const contact = contactOf(event.contactId);
-    const echo = contact
-      ? jobs.find((j) => !j.ghlAppointmentId && !j.cancelled && sameInstant(j.evaluationAt, event.startTime) && samePerson(j, contact))
-      : undefined;
+    const same = contact ? jobs.filter((j) => !j.cancelled && sameInstant(j.evaluationAt, event.startTime) && samePerson(j, contact)) : [];
+    const echo = same.find((j) => !j.ghlAppointmentId);
     if (echo) {
       out.push({ kind: "link", jobId: echo.id, appointmentId: event.id });
+      continue;
+    }
+    if (same.length > 0) {
+      out.push({ kind: "skip", appointmentId: event.id, why: `the same person is already booked then on job ${same[0].id}` });
       continue;
     }
 

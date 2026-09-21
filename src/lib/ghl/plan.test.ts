@@ -35,6 +35,18 @@ describe("planChanges", () => {
     expect(planChanges([event({})], [job({})], contacts)).toEqual([{ kind: "link", jobId: "j1", appointmentId: "a1" }]);
   });
 
+  it("links by the GoHighLevel contact when the email and phone differ", () => {
+    const byContact = (id: string | null) => (id === "c1" ? { id: "c1", email: null, phone: null } : null);
+    expect(planChanges([event({})], [job({ ghlContactId: "c1", email: null, phone: null })], byContact)).toEqual([
+      { kind: "link", jobId: "j1", appointmentId: "a1" },
+    ]);
+  });
+
+  it("leaves a second appointment for the same person at the same time alone", () => {
+    const changes = planChanges([event({ id: "a2" })], [job({ ghlAppointmentId: "a1" })], contacts);
+    expect(changes).toEqual([{ kind: "skip", appointmentId: "a2", why: "the same person is already booked then on job j1" }]);
+  });
+
   it("creates a booking it has never seen and skips one cancelled before it was seen", () => {
     const changes = planChanges([event({ id: "a9", contactId: "c9" }), event({ id: "a8", cancelled: true })], [], contacts);
     expect(changes[0]).toMatchObject({ kind: "create" });
