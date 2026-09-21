@@ -3,7 +3,8 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getEddmMailing, type EddmMailing } from "@/lib/data/eddm";
 import { listDoorHangerSlots } from "@/lib/data/door-hangers";
 import { sheetsNeeded } from "@/lib/door-hanger";
-import { pickRoute, type RouteHouse, type RouteOrderStatus, type RouteStep } from "@/lib/route-approval";
+import { collectedByJob } from "@/lib/data/all-proposals";
+import { paidInFull, pickRoute, type RouteHouse, type RouteOrderStatus, type RouteStep } from "@/lib/route-approval";
 import type { LngLatPair } from "@/lib/eddm";
 import type { MarketingPlay } from "@/lib/marketing-plays";
 import type { Point } from "@/lib/route-order";
@@ -11,16 +12,20 @@ import type { Point } from "@/lib/route-order";
 /**
  * The route to put in front of the owner next, with everything the four
  * questions need: the USPS outline and streets to draw, every house on it
- * to walk, the evaluated houses it was chosen for, the round as it stands,
- * and the mailing once there is one.
+ * to walk, the paid jobs it was chosen for, the round as it stands, and the
+ * mailing once there is one.
+ *
+ * A route earns its place through a job that is finished and paid for.
+ * Evaluations, jobs under way and jobs still owed on do not count.
  */
 
-export interface EvaluatedHouse {
+export interface AnchorHouse {
   houseId: string;
   address: string;
   customerName: string | null;
-  jobId: string | null;
-  playId: string;
+  jobId: string;
+  /** The open door hanger round on the house, once there is one. */
+  playId: string | null;
 }
 
 export interface RoundView {
@@ -49,7 +54,8 @@ export interface RouteApprovalView {
     paths: LngLatPair[][];
   };
   houses: RouteHouse[];
-  evaluated: EvaluatedHouse[];
+  /** The paid, finished jobs the route was picked for. */
+  anchors: AnchorHouse[];
   round: RoundView | null;
   mailing: EddmMailing | null;
   /** Sheets the hangers take through the printer, from the current design. Null with no design. */
@@ -69,33 +75,145 @@ interface PlayRow {
   assigned_to: string | null;
 }
 
+interface PaidJob {
+  jobId: string;
+  propertyId: string;
+  customerName: string | null;
+  lat: number | null;
+  lng: number | null;
+  /** When the money was in, or failing that when the job closed. */
+  paidOn: string;
+}
+
+interface AnchorRow extends PaidJob {
+  houseId: string;
+  address: string;
+  eddmRouteId: string | null;
+}
+
+/** Jobs finished and paid in full, with where they are. */
+async function paidCompletedJobs(supabase: Awaited<ReturnType<typeof createClient>>, org: string): Promise<PaidJob[]> {
+  type Row = {
+    id: string;
+    property_id: string;
+    completed_at: string | null;
+    updated_at: string;
+    property: { lat: number | null; lng: number | null; customer: { name: string | null; organization_id: string } | null } | null;
+  };
+  const { data: rows } = await supabase
+    .from("jobs")
+    .select("id, property_id, completed_at, updated_at, property:properties!inner(lat, lng, customer:customers!inner(name, organization_id))")
+    .eq("property.customer.organization_id", org)
+    .eq("status", "completed")
+    .is("cancelled_at", null)
+    .order("completed_at", { ascending: true, nullsFirst: false })
+    .limit(500);
+  const jobs = (rows ?? []) as unknown as Row[];
+  if (jobs.length === 0) return [];
+  const jobIds = jobs.map((j) => j.id);
+
+  type Proposal = { job_id: string; total_cost: number | null; discount_amount: number | null; paid_at: string | null; responded_at: string | null };
+  const [{ data: proposals }, collected] = await Promise.all([
+    supabase
+      .from("job_proposals")
+      .select("job_id, total_cost, discount_amount, paid_at, responded_at")
+      .in("job_id", jobIds)
+      .in("status", ["accepted", "paid"])
+      .order("responded_at", { ascending: false, nullsFirst: false }),
+    collectedByJob(jobIds),
+  ]);
+  const accepted = new Map<string, Proposal>();
+  for (const p of (proposals ?? []) as Proposal[]) if (!accepted.has(p.job_id)) accepted.set(p.job_id, p);
+
+  const out: PaidJob[] = [];
+  for (const job of jobs) {
+    const proposal = accepted.get(job.id) ?? null;
+    const paid = paidInFull({
+      collectedCents: collected.get(job.id) ?? 0,
+      priceCents: proposal?.total_cost == null ? null : Math.round(Number(proposal.total_cost) * 100),
+      discountCents: Math.round(Number(proposal?.discount_amount ?? 0) * 100),
+      paidAt: proposal?.paid_at ?? null,
+    });
+    if (!paid) continue;
+    out.push({
+      jobId: job.id,
+      propertyId: job.property_id,
+      customerName: job.property?.customer?.name ?? null,
+      lat: job.property?.lat ?? null,
+      lng: job.property?.lng ?? null,
+      paidOn: proposal?.paid_at ?? job.completed_at ?? job.updated_at,
+    });
+  }
+  return out;
+}
+
+/**
+ * The county house for each job: the one linked to the property, or the
+ * nearest one within 40 m of the pin when nothing has been linked yet.
+ */
+async function anchorHouses(supabase: Awaited<ReturnType<typeof createClient>>, jobs: PaidJob[]): Promise<AnchorRow[]> {
+  if (jobs.length === 0) return [];
+  type House = { id: string; address: string; lat: number; lng: number; eddm_route_id: string | null; property_id: string | null };
+  const columns = "id, address, lat, lng, eddm_route_id, property_id";
+  const { data: linkedRows } = await supabase
+    .from("houses")
+    .select(columns)
+    .in("property_id", [...new Set(jobs.map((j) => j.propertyId))]);
+  const linked = new Map<string, House>();
+  for (const h of (linkedRows ?? []) as House[]) if (h.property_id && !linked.has(h.property_id)) linked.set(h.property_id, h);
+
+  const out: AnchorRow[] = [];
+  for (const job of jobs) {
+    let house = linked.get(job.propertyId) ?? null;
+    if (!house && job.lat != null && job.lng != null) {
+      const { lat, lng } = job;
+      const { data: near } = await supabase
+        .from("houses")
+        .select(columns)
+        .eq("kind", "house")
+        .gte("lat", lat - 0.0004)
+        .lte("lat", lat + 0.0004)
+        .gte("lng", lng - 0.0005)
+        .lte("lng", lng + 0.0005)
+        .limit(20);
+      const best = ((near ?? []) as House[])
+        .map((row) => ({ row, metres: Math.hypot((row.lat - lat) * 110_574, (row.lng - lng) * 111_320 * Math.cos((lat * Math.PI) / 180)) }))
+        .sort((a, b) => a.metres - b.metres)[0];
+      house = best && best.metres <= 40 ? best.row : null;
+    }
+    if (!house) continue;
+    out.push({ ...job, houseId: house.id, address: house.address, eddmRouteId: house.eddm_route_id });
+  }
+  return out;
+}
+
 export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   const supabase = await createClient();
   const org = await getCurrentOrganizationId();
 
-  // The evaluations with hangers still to do, and the route each house is on.
-  const { data: listed } = await supabase.rpc("marketing_plays_list", { org, include_done: false });
-  const plays = ((Array.isArray(listed) ? listed : []) as unknown as MarketingPlay[]).filter(
-    (p) => p.kind === "door_hangers" && p.reason === "evaluation" && p.status === "open"
-  );
-  if (plays.length === 0) return null;
+  // The paid, finished jobs, the county house each sits in, and its route.
+  const anchors = await anchorHouses(supabase, await paidCompletedJobs(supabase, org));
+  if (anchors.length === 0) return null;
 
-  const houseIds = [...new Set(plays.map((p) => p.houseId))];
-  const [{ data: houseRows }, { data: orderRows }] = await Promise.all([
-    supabase.from("houses").select("id, eddm_route_id").in("id", houseIds),
+  const [{ data: listed }, { data: orderRows }] = await Promise.all([
+    supabase.rpc("marketing_plays_list", { org, include_done: false }),
     supabase.from("route_orders").select("id, eddm_route_id, status, house_ids, mailing_id, play_id, walk_on, mail_on").eq("organization_id", org),
   ]);
-  const routeOfHouse = new Map((houseRows ?? []).map((h) => [h.id, h.eddm_route_id]));
+  // The open door hanger round on each house, whatever put it there.
+  const playOfHouse = new Map<string, MarketingPlay>();
+  for (const p of (Array.isArray(listed) ? listed : []) as unknown as MarketingPlay[]) {
+    if (p.kind !== "door_hangers" || p.status !== "open") continue;
+    if (!playOfHouse.has(p.houseId)) playOfHouse.set(p.houseId, p);
+  }
   const orderByRoute = new Map((orderRows ?? []).map((o) => [o.eddm_route_id, o]));
 
   const byRoute = new Map<string, { since: string; houseIds: string[] }>();
-  for (const play of plays) {
-    const routeId = routeOfHouse.get(play.houseId);
-    if (!routeId) continue;
-    const entry = byRoute.get(routeId) ?? { since: play.createdAt, houseIds: [] };
-    entry.since = play.createdAt < entry.since ? play.createdAt : entry.since;
-    entry.houseIds.push(play.houseId);
-    byRoute.set(routeId, entry);
+  for (const anchor of anchors) {
+    if (!anchor.eddmRouteId) continue;
+    const entry = byRoute.get(anchor.eddmRouteId) ?? { since: anchor.paidOn, houseIds: [] };
+    entry.since = anchor.paidOn < entry.since ? anchor.paidOn : entry.since;
+    if (!entry.houseIds.includes(anchor.houseId)) entry.houseIds.push(anchor.houseId);
+    byRoute.set(anchor.eddmRouteId, entry);
   }
   const candidates = [...byRoute.entries()].map(([eddmRouteId, entry]) => ({
     eddmRouteId,
@@ -129,9 +247,18 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
   const attributes = (route.attributes ?? {}) as Record<string, unknown>;
   const facility = [attributes.FAC_NAME, attributes.FACILITY_NAME, attributes.FACILITY].find((v) => typeof v === "string" && v.trim()) as string | undefined;
 
-  // The round is the first evaluated house's play unless the order already
-  // says which one carries the line.
-  const roundPlayId = order?.play_id ?? plays.find((p) => picked.houseIds.includes(p.houseId))?.id ?? null;
+  const onThisRoute = anchors.filter((a) => picked.houseIds.includes(a.houseId));
+  const seen = new Set<string>();
+  const anchorViews: AnchorHouse[] = [];
+  for (const a of onThisRoute) {
+    if (seen.has(a.houseId)) continue;
+    seen.add(a.houseId);
+    anchorViews.push({ houseId: a.houseId, address: a.address, customerName: a.customerName, jobId: a.jobId, playId: playOfHouse.get(a.houseId)?.id ?? null });
+  }
+
+  // The round is the first house's play unless the order already says
+  // which one carries the line.
+  const roundPlayId = order?.play_id ?? anchorViews.find((a) => a.playId)?.playId ?? null;
   let round: RoundView | null = null;
   if (roundPlayId) {
     const { data: row } = await supabase
@@ -141,7 +268,7 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       .maybeSingle();
     const play = row as PlayRow | null;
     if (play) {
-      const listedPlay = plays.find((p) => p.id === play.id);
+      const listedPlay = [...playOfHouse.values()].find((p) => p.id === play.id);
       round = {
         id: play.id,
         quantity: play.quantity,
@@ -153,10 +280,6 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       };
     }
   }
-
-  const evaluated: EvaluatedHouse[] = plays
-    .filter((p) => picked.houseIds.includes(p.houseId))
-    .map((p) => ({ houseId: p.houseId, address: p.address, customerName: p.customerName, jobId: p.jobId, playId: p.id }));
 
   const mailing = order?.mailing_id ? await getEddmMailing(order.mailing_id).catch(() => null) : null;
   const doors = round ? (round.order?.length || round.doorIds.length) : 0;
@@ -176,7 +299,7 @@ export async function nextRouteToApprove(): Promise<RouteApprovalView | null> {
       paths: (Array.isArray(route.paths) ? route.paths : []) as LngLatPair[][],
     },
     houses: (onRoute ?? []).map((h) => ({ id: h.id, address: h.address, lat: h.lat, lng: h.lng })),
-    evaluated,
+    anchors: anchorViews,
     round,
     mailing,
     sheets: doors > 0 ? sheetsNeeded(doors, slots) : null,
@@ -196,7 +319,8 @@ export interface RouteOrderView {
   walkOn: string | null;
   mailOn: string | null;
   submittedAt: string | null;
-  evaluated: { address: string; customerName: string | null }[];
+  /** The paid jobs the route was ordered round. */
+  anchors: { address: string; customerName: string | null }[];
 }
 
 export async function getRouteOrder(id: string): Promise<RouteOrderView | null> {
@@ -205,7 +329,7 @@ export async function getRouteOrder(id: string): Promise<RouteOrderView | null> 
   const { data: order } = await supabase.from("route_orders").select("*").eq("id", id).eq("organization_id", org).maybeSingle();
   if (!order) return null;
 
-  const [{ data: route }, mailing, slots, { data: evaluatedRows }] = await Promise.all([
+  const [{ data: route }, mailing, slots, { data: anchorRows }] = await Promise.all([
     supabase.from("eddm_routes").select("zip, route_id, residential_count, total_count, attributes").eq("id", order.eddm_route_id).maybeSingle(),
     order.mailing_id ? getEddmMailing(order.mailing_id).catch(() => null) : Promise.resolve(null),
     listDoorHangerSlots().catch(() => []),
@@ -236,7 +360,7 @@ export async function getRouteOrder(id: string): Promise<RouteOrderView | null> 
     walkOn: order.walk_on,
     mailOn: order.mail_on,
     submittedAt: order.submitted_at,
-    evaluated: ((evaluatedRows ?? []) as unknown as { address: string; property: { customer: { name: string } | null } | null }[]).map((h) => ({
+    anchors: ((anchorRows ?? []) as unknown as { address: string; property: { customer: { name: string } | null } | null }[]).map((h) => ({
       address: h.address,
       customerName: h.property?.customer?.name ?? null,
     })),

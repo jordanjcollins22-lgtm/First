@@ -243,7 +243,7 @@ type ProposalEditRow = {
  * fail on its own: a missing table should cost a money line, not the list of
  * proposals.
  */
-async function collectedByJob(jobIds: string[]): Promise<Map<string, number>> {
+export async function collectedByJob(jobIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (jobIds.length === 0) return out;
 

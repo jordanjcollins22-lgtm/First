@@ -263,7 +263,7 @@ async function OfficeDay() {
         </Suspense>
       )}
 
-      {/* One USPS route at a time, from the evaluations done: approve it,
+      {/* One USPS route at a time, round the jobs finished and paid for: approve it,
           draw the walk over it, confirm the hangers, submit the order. */}
       {isOwnerLevel(profile.roles) && (
         <Suspense fallback={<BlockLoading lines={4} />}>

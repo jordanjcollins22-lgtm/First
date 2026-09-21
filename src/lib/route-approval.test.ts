@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { doorsAlongLines, nextMonday, pickRoute, plusDays, routeName, stepQuestion } from "./route-approval";
+import { doorsAlongLines, nextMonday, paidInFull, pickRoute, plusDays, routeName, stepQuestion } from "./route-approval";
+
+describe("paidInFull", () => {
+  it("is paid when the app took the money", () => {
+    expect(paidInFull({ collectedCents: 0, priceCents: 390_000, discountCents: 0, paidAt: "2026-09-02T00:15:26Z" })).toBe(true);
+  });
+  it("is paid when what came in covers the price after the discount", () => {
+    expect(paidInFull({ collectedCents: 351_000, priceCents: 390_000, discountCents: 39_000, paidAt: null })).toBe(true);
+    expect(paidInFull({ collectedCents: 350_000, priceCents: 390_000, discountCents: 39_000, paidAt: null })).toBe(false);
+  });
+  it("is not paid when nothing came in, whatever the price", () => {
+    expect(paidInFull({ collectedCents: 0, priceCents: 0, discountCents: 0, paidAt: null })).toBe(false);
+    expect(paidInFull({ collectedCents: 0, priceCents: null, discountCents: 0, paidAt: null })).toBe(false);
+    expect(paidInFull({ collectedCents: 6_500, priceCents: null, discountCents: 0, paidAt: null })).toBe(true);
+  });
+});
 
 describe("pickRoute", () => {
   const a = { eddmRouteId: "a", since: "2026-09-06", houseIds: ["h1"], status: null };

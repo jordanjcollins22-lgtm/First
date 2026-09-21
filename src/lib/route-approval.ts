@@ -1,12 +1,13 @@
 /**
  * One USPS route at a time, one question at a time.
  *
- * Every evaluation we do sits on a carrier route, and that route is the
- * natural place to mail and to walk: the neighbours have just watched a van
- * turn up. So each route with an evaluated house on it is put to the owner
- * as a short sequence, and the sequence never shows two things at once:
- * approve the route for mail, draw the door hanger round over it, confirm
- * the hangers, submit the lot for printing.
+ * Flyers and door hangers go out round the jobs we have done and been paid
+ * for: the neighbours watched the work happen, and the yard says what we
+ * can do. So each carrier route with a paid, finished job on it is put to
+ * the owner as a short sequence, and the sequence never shows two things at
+ * once: approve the route for mail, draw the door hanger round over it,
+ * confirm the hangers, submit the lot for printing. Evaluations and jobs
+ * still owed on never make it here.
  *
  * Nothing here reads or writes. It orders, picks and words.
  */
@@ -39,9 +40,31 @@ export function stepQuestion(step: RouteStep, facts: { routeId: string; zip: str
   }
 }
 
+/** What a job has to show before its street gets a route: nothing owed. */
+export interface PaidFacts {
+  /** Everything the client has paid, net of card fees. */
+  collectedCents: number;
+  /** The accepted price, before the discount. Null when no proposal was accepted. */
+  priceCents: number | null;
+  discountCents: number;
+  /** Set when the app itself took the payment in full. */
+  paidAt: string | null;
+}
+
+/**
+ * Paid in full: the app took the money, or what came in covers the price
+ * after the discount. A job with no accepted price counts only when
+ * something was paid, so a test job at $0 does not get a mailing.
+ */
+export function paidInFull(facts: PaidFacts): boolean {
+  if (facts.paidAt) return true;
+  const owed = facts.priceCents == null ? 1 : Math.max(facts.priceCents - facts.discountCents, 1);
+  return facts.collectedCents >= owed;
+}
+
 export interface RouteCandidate {
   eddmRouteId: string;
-  /** When the first evaluation on it happened. Oldest goes first. */
+  /** When the first job on it was paid. Oldest goes first. */
   since: string;
   houseIds: string[];
 }

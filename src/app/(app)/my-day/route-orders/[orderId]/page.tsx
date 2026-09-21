@@ -40,7 +40,7 @@ export default async function RouteOrderPage({ params }: { params: Promise<{ ord
           <h1 className="text-2xl font-bold">{routeName(order.route)}</h1>
           <p className="text-sm text-muted-foreground">
             {order.submittedAt ? `Submitted ${dateShort(order.submittedAt)}` : "Not submitted yet"}
-            {order.evaluated.length > 0 ? ` · around ${order.evaluated.map((e) => e.customerName ?? e.address).join(", ")}` : ""}
+            {order.anchors.length > 0 ? ` · around ${order.anchors.map((e) => e.customerName ?? e.address).join(", ")}` : ""}
           </p>
         </div>
         <div className="flex gap-2 print:hidden">

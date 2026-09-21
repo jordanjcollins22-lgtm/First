@@ -87,11 +87,63 @@ export async function approveUspsRoute(input: {
       .select("id")
       .single();
     if (error) throw error;
+    await ensureHangerRounds(supabase, profile.organization_id, input.houseIds);
     return { message: "Route approved. Now draw the door hanger route over it.", orderId: order.id };
   });
 }
 
-/** No to the USPS route. The evaluations on it are left alone; the route is not asked about again. */
+/**
+ * Every house the route was picked for gets a door hanger round to draw
+ * over. A house with an open round keeps it; one whose last round was
+ * walked or dropped gets that round back with fresh doors; one that never
+ * had a round gets one, as a client's.
+ */
+async function ensureHangerRounds(supabase: Awaited<ReturnType<typeof createClient>>, org: string, houseIds: string[]) {
+  if (houseIds.length === 0) return;
+  const { data: existing } = await supabase
+    .from("marketing_plays")
+    .select("id, house_id, status, created_at")
+    .eq("organization_id", org)
+    .eq("kind", "door_hangers")
+    .in("house_id", houseIds)
+    .order("created_at", { ascending: false });
+  const rounds = (existing ?? []) as { id: string; house_id: string; status: string; created_at: string }[];
+  const now = new Date().toISOString();
+  for (const houseId of houseIds) {
+    const mine = rounds.filter((r) => r.house_id === houseId);
+    if (mine.some((r) => r.status === "open")) continue;
+    const { data: targets } = await supabase.rpc("marketing_hanger_targets", { the_house: houseId, wanted: 100 });
+    const doors = Array.isArray(targets) ? targets : [];
+    const last = mine[0];
+    if (last) {
+      const { error } = await supabase
+        .from("marketing_plays")
+        .update({ status: "open", approval: "pending", targets: doors as Json, quantity: doors.length, done_at: null, done_by: null, walk_order: null, walk_order_line: null, updated_at: now })
+        .eq("id", last.id);
+      if (error) throw error;
+      continue;
+    }
+    const { data: house } = await supabase.from("houses").select("property_id, properties(customer_id)").eq("id", houseId).maybeSingle();
+    const property = (house as { property_id: string | null; properties: { customer_id: string | null } | { customer_id: string | null }[] | null } | null)?.properties;
+    const customerId = (Array.isArray(property) ? property[0] : property)?.customer_id ?? null;
+    const { data: job } = house?.property_id
+      ? await supabase.from("jobs").select("id").eq("property_id", house.property_id).eq("status", "completed").order("completed_at", { ascending: false, nullsFirst: false }).limit(1).maybeSingle()
+      : { data: null };
+    const { error } = await supabase.from("marketing_plays").insert({
+      organization_id: org,
+      house_id: houseId,
+      job_id: job?.id ?? null,
+      customer_id: customerId,
+      reason: "client",
+      kind: "door_hangers",
+      quantity: doors.length,
+      targets: doors as Json,
+    });
+    if (error) throw error;
+  }
+}
+
+/** No to the USPS route. The jobs on it are left alone; the route is not asked about again. */
 export async function skipUspsRoute(input: { eddmRouteId: string; houseIds: string[]; note?: string }): Promise<RouteActionResult> {
   return run(async () => {
     const profile = await allowed();
@@ -118,7 +170,7 @@ export async function skipUspsRoute(input: { eddmRouteId: string; houseIds: stri
  *
  * Doors on the round that the line does not reach come off; doors the line
  * reaches that were not on it go on; the order is the line's. Any other
- * evaluation's round on this route is folded into this one, so a route is
+ * house's round on this route is folded into this one, so a route is
  * walked once.
  */
 export async function saveDoorHangerLine(input: {

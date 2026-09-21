@@ -17,7 +17,7 @@ if (publicEnv.mapboxToken) mapboxgl.accessToken = publicEnv.mapboxToken;
  * One USPS route, big, with the houses on it.
  *
  * The outline and the carrier's streets are what USPS sells; the dots are
- * every door on it; the rings are the houses we evaluated. While drawing,
+ * every door on it; the rings are the paid jobs we did. While drawing,
  * each tap along a street adds to the line and the doors within reach of
  * it light up, so the person sees the round take shape as they draw it.
  */
@@ -25,7 +25,7 @@ export function RouteApprovalMap({
   rings,
   paths,
   houses,
-  evaluatedIds,
+  anchorIds,
   onRound,
   drawing,
   initialLine,
@@ -35,7 +35,8 @@ export function RouteApprovalMap({
   rings: LngLatPair[][];
   paths: LngLatPair[][];
   houses: RouteHouse[];
-  evaluatedIds: string[];
+  /** The houses of the paid, finished jobs the route was picked for. */
+  anchorIds: string[];
   /** The doors the drawn lines reach, in order. Only while drawing. */
   onRound: Set<string>;
   drawing: boolean;
@@ -81,8 +82,8 @@ export function RouteApprovalMap({
         type: "circle",
         source: "houses",
         paint: {
-          "circle-radius": ["case", ["==", ["get", "state"], "evaluated"], 8, ["==", ["get", "state"], "on"], 6, 4],
-          "circle-color": ["match", ["get", "state"], "evaluated", "#dc2626", "on", "#f59e0b", "#ffffff"],
+          "circle-radius": ["case", ["==", ["get", "state"], "anchor"], 8, ["==", ["get", "state"], "on"], 6, 4],
+          "circle-color": ["match", ["get", "state"], "anchor", "#dc2626", "on", "#f59e0b", "#ffffff"],
           "circle-stroke-color": "#111827",
           "circle-stroke-width": 1,
           "circle-opacity": 0.95,
@@ -125,7 +126,7 @@ export function RouteApprovalMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const evaluated = new Set(evaluatedIds);
+    const anchors = new Set(anchorIds);
     const apply = () => {
       const source = map.getSource("houses") as mapboxgl.GeoJSONSource | undefined;
       if (!source) return;
@@ -133,14 +134,14 @@ export function RouteApprovalMap({
         type: "FeatureCollection",
         features: houses.map((h) => ({
           type: "Feature",
-          properties: { state: evaluated.has(h.id) ? "evaluated" : onRound.has(h.id) ? "on" : "off", address: h.address },
+          properties: { state: anchors.has(h.id) ? "anchor" : onRound.has(h.id) ? "on" : "off", address: h.address },
           geometry: { type: "Point", coordinates: [h.lng, h.lat] },
         })),
       });
     };
     if (map.isStyleLoaded() && map.getSource("houses")) apply();
     else map.once("ready", apply);
-  }, [houses, evaluatedIds, onRound]);
+  }, [houses, anchorIds, onRound]);
 
   // The finished line, once drawing is over.
   useEffect(() => {

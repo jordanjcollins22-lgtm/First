@@ -37,7 +37,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
 
   const drawn = useMemo(() => doorsAlongLines(view.houses, lines), [view.houses, lines]);
   const onRound = useMemo(() => new Set(view.step === "draw" ? drawn.order : (view.round?.order ?? view.round?.doorIds ?? [])), [view.step, drawn.order, view.round]);
-  const evaluatedIds = view.evaluated.map((e) => e.houseId);
+  const anchorIds = view.anchors.map((a) => a.houseId);
   const doors = view.step === "draw" ? drawn.order.length : (view.round?.order?.length || view.round?.doorIds.length || 0);
   const facts = { routeId: view.route.routeId, zip: view.route.zip, pieces: view.route.residential, doors };
   const stepIndex = STEP_ORDER.indexOf(view.step);
@@ -71,19 +71,15 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
 
       <p className="mt-1 text-sm text-muted-foreground">
         Around{" "}
-        {view.evaluated.map((e, i) => (
-          <span key={e.houseId}>
-            {i > 0 ? (i === view.evaluated.length - 1 ? " and " : ", ") : ""}
-            {e.jobId ? (
-              <Link href={`/jobs/${e.jobId}`} className="underline">
-                {e.customerName ?? e.address}
-              </Link>
-            ) : (
-              e.customerName ?? e.address
-            )}
+        {view.anchors.map((a, i) => (
+          <span key={a.houseId}>
+            {i > 0 ? (i === view.anchors.length - 1 ? " and " : ", ") : ""}
+            <Link href={`/jobs/${a.jobId}`} className="underline">
+              {a.customerName ?? a.address}
+            </Link>
           </span>
         ))}
-        . The red dots are the houses we evaluated.
+        . The red dots are the jobs we finished and were paid for.
       </p>
 
       <div className="mt-3">
@@ -91,7 +87,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
           rings={view.route.rings}
           paths={view.route.paths}
           houses={view.houses}
-          evaluatedIds={evaluatedIds}
+          anchorIds={anchorIds}
           onRound={onRound}
           drawing={view.step === "draw"}
           initialLine={view.round?.line ?? null}
@@ -104,11 +100,11 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
 
       {view.step === "usps" && (
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" className="h-11" disabled={pending} onClick={() => act(() => approveUspsRoute({ eddmRouteId: view.route.id, houseIds: evaluatedIds }))}>
+          <Button type="button" className="h-11" disabled={pending} onClick={() => act(() => approveUspsRoute({ eddmRouteId: view.route.id, houseIds: anchorIds }))}>
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
             Yes, approve this route
           </Button>
-          <Button type="button" variant="outline" className="h-11" disabled={pending} onClick={() => act(() => skipUspsRoute({ eddmRouteId: view.route.id, houseIds: evaluatedIds }))}>
+          <Button type="button" variant="outline" className="h-11" disabled={pending} onClick={() => act(() => skipUspsRoute({ eddmRouteId: view.route.id, houseIds: anchorIds }))}>
             <X className="mr-2 h-4 w-4" />
             No, skip it
           </Button>
@@ -134,7 +130,7 @@ export function RouteApprovalWizard({ view }: { view: RouteApprovalView }) {
                     playId: view.round!.id,
                     order: drawn.order,
                     line: drawn.line,
-                    otherPlayIds: view.evaluated.map((e) => e.playId),
+                    otherPlayIds: view.anchors.map((a) => a.playId).filter((id): id is string => Boolean(id)),
                   })
                 )
               }
