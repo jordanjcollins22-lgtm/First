@@ -231,10 +231,14 @@ type ProposalEditRow = {
 /**
  * What has arrived against each job, in cents, counted once.
  *
- * Four routes and one trap. A card payment writes a row in `payments` and
- * marks its invoice paid, so adding both counts the same money twice and a
- * half-paid job reads as settled. Payments carry the invoice they settled, so
- * an invoice already answered for by a payment is skipped rather than added.
+ * Four routes and one trap. A payment writes a row in `payments` and marks
+ * its invoice paid, so adding both counts the same money twice and a
+ * half-paid job reads as settled. A payment carries the invoice it settled,
+ * by our id for a client invoice or by Stripe's id for a job invoice, so an
+ * invoice already answered for by a payment is skipped rather than added.
+ * An invoice marked paid with no payment pointing at it counts only for
+ * what the job's untied payments do not already cover: a check recorded on
+ * the job and the invoice ticked paid an hour later are one $650, not two.
  *
  * The card surcharge is taken back off. A $4,520 job paid by card arrives as
  * $4,678.20, and counting the whole would read as the client overpaying.
@@ -262,14 +266,14 @@ export async function collectedByJob(jobIds: string[]): Promise<Map<string, numb
   };
 
   const [payments, ledger, invoices, plans] = await Promise.all([
-    safe<{ job_id: string | null; amount_cents: number | null; surcharge_cents: number | null; invoice_id: string | null }>(
-      supabase.from("payments").select("job_id, amount_cents, surcharge_cents, invoice_id").in("job_id", jobIds)
+    safe<{ job_id: string | null; amount_cents: number | null; surcharge_cents: number | null; invoice_id: string | null; stripe_invoice_id: string | null }>(
+      supabase.from("payments").select("job_id, amount_cents, surcharge_cents, invoice_id, stripe_invoice_id").in("job_id", jobIds)
     ),
     safe<{ job_id: string | null; amount: number | null }>(
       supabase.from("ledger_entries").select("job_id, amount").eq("direction", "in").in("job_id", jobIds)
     ),
-    safe<{ id: string; job_id: string | null; amount: number | null; status: string | null; paid_at: string | null }>(
-      supabase.from("invoices").select("id, job_id, amount, status, paid_at").in("job_id", jobIds)
+    safe<{ id: string; job_id: string | null; amount: number | null; status: string | null; paid_at: string | null; stripe_invoice_id: string | null }>(
+      supabase.from("invoices").select("id, job_id, amount, status, paid_at, stripe_invoice_id").in("job_id", jobIds)
     ),
     safe<{ id: string; job_id: string | null }>(
       supabase.from("payment_plans").select("id, job_id").in("job_id", jobIds)
@@ -277,11 +281,17 @@ export async function collectedByJob(jobIds: string[]): Promise<Map<string, numb
   ]);
 
   const invoicesAlreadyPaidByAPayment = new Set(
-    payments.map((p) => p.invoice_id).filter((id): id is string => Boolean(id))
+    payments.flatMap((p) => [p.invoice_id, p.stripe_invoice_id]).filter((id): id is string => Boolean(id))
   );
-
+  // Per job, the payments that name no invoice at all. A paid invoice with
+  // nobody pointing at it is set against these before it adds anything.
+  const untiedByJob = new Map<string, number>();
   for (const payment of payments) {
-    add(payment.job_id, (payment.amount_cents ?? 0) - (payment.surcharge_cents ?? 0));
+    const net = (payment.amount_cents ?? 0) - (payment.surcharge_cents ?? 0);
+    add(payment.job_id, net);
+    if (payment.job_id && !payment.invoice_id && !payment.stripe_invoice_id && net > 0) {
+      untiedByJob.set(payment.job_id, (untiedByJob.get(payment.job_id) ?? 0) + net);
+    }
   }
   for (const entry of ledger) {
     add(entry.job_id, Math.round((Number(entry.amount) || 0) * 100));
@@ -289,7 +299,12 @@ export async function collectedByJob(jobIds: string[]): Promise<Map<string, numb
   for (const invoice of invoices) {
     if (!invoice.paid_at && invoice.status !== "paid") continue;
     if (invoicesAlreadyPaidByAPayment.has(invoice.id)) continue;
-    add(invoice.job_id, Math.round((Number(invoice.amount) || 0) * 100));
+    if (invoice.stripe_invoice_id && invoicesAlreadyPaidByAPayment.has(invoice.stripe_invoice_id)) continue;
+    const cents = Math.round((Number(invoice.amount) || 0) * 100);
+    const untied = invoice.job_id ? (untiedByJob.get(invoice.job_id) ?? 0) : 0;
+    const covered = Math.min(cents, untied);
+    if (invoice.job_id && covered > 0) untiedByJob.set(invoice.job_id, untied - covered);
+    add(invoice.job_id, cents - covered);
   }
   // Instalments last, and only for jobs nothing else accounted for. A plan's
   // instalment is normally settled through the payments table; this catches
