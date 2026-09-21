@@ -1,5 +1,6 @@
 import { agreedTotal } from "@/lib/agreed-total";
 import { createClient } from "@/lib/supabase/server";
+import { findDuplicates } from "@/lib/duplicate-jobs";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { isOnPipeline, pipelinePosition, type PipelineOverride, type PipelineStage } from "@/lib/pipeline";
 import { disputeLine } from "@/lib/dispute";
@@ -36,6 +37,8 @@ export interface PipelineCard {
   overridden: boolean;
   /** What is wrong, when the job is in dispute. Null on all the rest. */
   disputeLine: string | null;
+  /** The job this one copies, when the same person is booked twice at one address. */
+  duplicateOf: { jobId: string; label: string } | null;
 }
 
 export async function getPipeline(): Promise<PipelineCard[]> {
@@ -73,6 +76,20 @@ export async function getPipeline(): Promise<PipelineCard[]> {
   // Worded here rather than in the page, so the board and the proposals list
   // can never describe the same activity differently.
   const now = new Date();
+
+  // The same person booked twice at one address: the copy says so on its
+  // card, and can be taken off from there.
+  const duplicates = findDuplicates(
+    jobs.map((job) => ({
+      id: job.id,
+      address: job.property.address,
+      customerName: job.property.customer.name,
+      createdAt: job.created_at,
+      status: job.status,
+      evaluationStatus: job.evaluation_status,
+      proposalStatus: proposalByJob.get(job.id)?.status ?? null,
+    }))
+  );
 
   return jobs
     .map((job) => {
@@ -128,6 +145,10 @@ export async function getPipeline(): Promise<PipelineCard[]> {
         activityHot: watching && isHot(summary, proposal?.status ?? ""),
         overridden: position.overridden === true,
         disputeLine: disputeLine(dispute),
+        duplicateOf: (() => {
+          const d = duplicates.get(job.id);
+          return d ? { jobId: d.keeperId, label: d.keeperLabel } : null;
+        })(),
       } satisfies PipelineCard;
     })
     .filter((c): c is PipelineCard => c !== null);

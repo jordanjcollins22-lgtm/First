@@ -8,6 +8,9 @@ import { shortWhen } from "@/lib/time-zone";
 import { formatJobNumber } from "@/lib/job-number";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MoveJob } from "@/components/pipeline/move-job";
+import { DeleteDuplicate } from "@/components/pipeline/delete-duplicate";
+import { getCurrentProfile } from "@/lib/data/team";
+import { isOwnerLevel } from "@/lib/roles";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -41,6 +44,8 @@ export default async function PipelinePage() {
 }
 
 async function PipelineTab() {
+  const roles = (await getCurrentProfile())?.roles ?? [];
+  const canDelete = isOwnerLevel(roles) || roles.includes("admin");
   let cards: PipelineCard[] = [];
   try {
     cards = await getPipeline();
@@ -194,6 +199,12 @@ async function PipelineTab() {
                                   overridden={card.overridden}
                                   disputed={Boolean(card.disputeLine)}
                                 />
+                                {card.duplicateOf && canDelete && (
+                                  <DeleteDuplicate jobId={card.jobId} keeper={{ jobId: card.duplicateOf.jobId, label: card.duplicateOf.label }} compact />
+                                )}
+                                {card.duplicateOf && !canDelete && (
+                                  <p className="mt-1 text-[11px] font-medium text-amber-700">Looks like a duplicate of another job at this address.</p>
+                                )}
                               </li>
                             ))}
                           </ul>

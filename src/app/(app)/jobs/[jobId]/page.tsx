@@ -21,7 +21,7 @@ import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
 import { jobFacts, listGateOverrides, listJobIssues } from "@/lib/data/issues";
 import { evaluateGate } from "@/lib/readiness";
 import { canOverrideGate } from "@/lib/affiliate-roles";
-import { visibilityFor } from "@/lib/roles";
+import { isOwnerLevel, visibilityFor } from "@/lib/roles";
 import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
 import { FieldScreen } from "@/components/job/field-screen";
 import { IssuesPanel } from "@/components/issues/issues-panel";
@@ -64,6 +64,8 @@ import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { HOW_THEY_REPLY } from "@/lib/message-via";
 import { OccupancyBadge } from "@/components/job/occupancy-badge";
+import { DeleteDuplicate } from "@/components/pipeline/delete-duplicate";
+import { duplicateStanding } from "@/lib/data/duplicate-jobs";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { LocationPanel } from "@/components/canvas/location-panel";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -514,6 +516,7 @@ export default async function JobPage({
   // and it was three taps away. The county house is the one linked to this
   // property, or failing that the nearest one to its pin.
   const county = await countyHouseFor(supabase, job.property_id, job.property?.lat ?? null, job.property?.lng ?? null);
+  const standing = job.status === "cancelled" ? { copyOf: null, copies: [] } : await duplicateStanding(jobId).catch(() => ({ copyOf: null, copies: [] }));
   const occupancyFacts = {
     ownerOccupied: county?.ownerOccupied ?? null,
     reason: county?.reason ?? null,
@@ -552,6 +555,11 @@ export default async function JobPage({
           <div className="mt-2">
             <OccupancyBadge houseId={county?.houseId ?? null} facts={occupancyFacts} />
           </div>
+          {/* The same person booked twice here. Said on the page, with the
+              way out, for the people allowed to take one. */}
+          {(isOwnerLevel(viewerRoles) || viewerRoles.includes("admin")) && (standing.copyOf || standing.copies.length > 0) && (
+            <DeleteDuplicate jobId={jobId} keeper={standing.copyOf} copies={standing.copies} />
+          )}
         </div>
         {/* What the crew will actually be looking at on site. Worth a tap from
             here rather than only from inside the drawing tool — checking the
