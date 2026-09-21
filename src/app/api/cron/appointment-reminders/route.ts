@@ -8,6 +8,7 @@ import { NIGHTLY_BUDGET } from "@/lib/prospecting";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { log } from "@/lib/log";
+import { shortWhen } from "@/lib/time-zone";
 
 /**
  * Texts each person an "evaluation coming up" reminder, however many hours
@@ -93,13 +94,9 @@ export async function GET(request: NextRequest) {
     const hoursAway = (new Date(job.evaluation_date).getTime() - now) / 3600_000;
     if (hoursAway > leadHours) continue;
 
-    const when = new Date(job.evaluation_date).toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    // On the business clock. The server runs on UTC, and a 9 AM visit
+    // written as "1:00 PM" sends somebody to the wrong hour.
+    const when = shortWhen(job.evaluation_date);
     const address = addressByProperty.get(job.property_id) ?? job.name;
     const didSend = await notifyTeamMember(
       job.assigned_to,

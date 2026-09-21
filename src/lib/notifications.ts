@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isTwilioConfigured } from "@/lib/env";
+import { isSmsConfigured } from "@/lib/env";
 import { sendSms, toE164 } from "@/lib/sms";
 import { effectivePrefs, label, notificationGate, type NotificationKind as GateKind } from "@/lib/notification-gate";
 import { sendEmail } from "@/lib/email/send";
@@ -40,7 +40,7 @@ export async function notifyTeamMember(
   // `return false` -- indistinguishable from a send, from the outside and
   // from the logs, which is why "nobody got notified" had no answer.
   const verdict = notificationGate({
-    smsConfigured: isTwilioConfigured,
+    smsConfigured: isSmsConfigured,
     prefs,
     hasStoredPrefs: Boolean(prefs),
     phone: profile?.phone,
