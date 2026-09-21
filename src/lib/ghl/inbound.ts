@@ -192,6 +192,13 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
   if (!isGhlConfigured) return { ok: false, summary: "GoHighLevel is not set up." };
   const admin = createAdminClient();
   const now = new Date();
+  // One GoHighLevel account, one business. The keys are site-wide, so
+  // every organization on the site could read the same calendar and each
+  // would make its own copy of every booking. Only the business that has
+  // put something on that calendar reads it back.
+  if (!(await ownsGhlCalendar(admin, organizationId))) {
+    return { ok: false, summary: "GoHighLevel is another business's calendar." };
+  }
   try {
     const events = await listAppointments(
       new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000),
@@ -307,6 +314,20 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
     log.warn("ghl.pull.failed", { organizationId, error });
     return { ok: false, summary: error };
   }
+}
+
+/**
+ * Whether this business is the one on the GoHighLevel account: somebody on
+ * its team is matched to a GoHighLevel user, or one of its clients is a
+ * GoHighLevel contact. A business that has never touched the calendar has
+ * no business reading it.
+ */
+async function ownsGhlCalendar(admin: ReturnType<typeof createAdminClient>, organizationId: string): Promise<boolean> {
+  const [{ count: people }, { count: clients }] = await Promise.all([
+    admin.from("profiles").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).not("ghl_user_id", "is", null),
+    admin.from("customers").select("id", { count: "exact", head: true }).eq("organization_id", organizationId).not("ghl_contact_id", "is", null),
+  ]);
+  return (people ?? 0) > 0 || (clients ?? 0) > 0;
 }
 
 /** Reads the calendar unless it was read in the last few minutes. */

@@ -4397,6 +4397,7 @@ export interface Database {
       marketing_play_set: { Args: { the_play: string; new_status: string; by: string | null; designs?: number }; Returns: Json };
       marketing_plays_list: { Args: { org: string; include_done?: boolean }; Returns: Json };
       marketing_knock_targets: { Args: { the_house: string }; Returns: Json };
+      delete_job: { Args: { the_job: string; by: string; why?: string | null }; Returns: Json };
       marketing_hanger_targets: { Args: { the_house: string; wanted?: number; max_m?: number | null; skip?: string[] }; Returns: Json };
       marketing_play_doors: { Args: { the_play: string }; Returns: Json };
       marketing_play_review: { Args: { org: string; the_play: string; decision: string; remove?: string[] | null; set_quantity?: number | null; note?: string | null; by?: string | null }; Returns: Json };
