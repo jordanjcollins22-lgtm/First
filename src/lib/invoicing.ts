@@ -132,16 +132,40 @@ export async function createAndSendInvoice(
 }
 
 /** The live invoice on a job, if there is one to pay. */
-export async function openInvoiceFor(jobId: string): Promise<{ id: string; hostedUrl: string | null; stripeInvoiceId: string | null } | null> {
+export async function openInvoiceFor(jobId: string): Promise<{ id: string; hostedUrl: string | null; stripeInvoiceId: string | null; amount: number } | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("invoices")
-    .select("id, hosted_invoice_url, stripe_invoice_id, status")
+    .select("id, hosted_invoice_url, stripe_invoice_id, status, amount")
     .eq("job_id", jobId)
     .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (!data) return null;
-  return { id: data.id, hostedUrl: data.hosted_invoice_url, stripeInvoiceId: data.stripe_invoice_id };
+  return { id: data.id, hostedUrl: data.hosted_invoice_url, stripeInvoiceId: data.stripe_invoice_id, amount: Number(data.amount) };
+}
+
+/**
+ * The invoice's payment page, as Stripe has it now.
+ *
+ * The link stored at signing can stop matching what Stripe serves, and a
+ * client tapping a dead link is a client who does not pay. Read fresh and
+ * remembered, so the next tap is right too.
+ */
+export async function freshInvoiceLink(invoice: { id: string; hostedUrl: string | null; stripeInvoiceId: string | null }): Promise<string | null> {
+  if (!isStripeConfigured || !invoice.stripeInvoiceId) return invoice.hostedUrl;
+  try {
+    const live = await getStripeClient().invoices.retrieve(invoice.stripeInvoiceId);
+    const url = live.hosted_invoice_url ?? invoice.hostedUrl;
+    if (url && url !== invoice.hostedUrl) {
+      await createAdminClient().from("invoices").update({ hosted_invoice_url: url, invoice_pdf: live.invoice_pdf ?? null }).eq("id", invoice.id);
+    }
+    return url;
+  } catch (err) {
+    console.error("could not read the invoice back from Stripe:", err);
+    return invoice.hostedUrl;
+  }
 }
 
 /**

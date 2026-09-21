@@ -6,7 +6,7 @@ import { revalidateJobViews } from "@/lib/revalidate-job";
 import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createAndSendInvoice, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
+import { createAndSendInvoice, freshInvoiceLink, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { isExpired } from "@/lib/proposal-validity";
 import { reportStripeFailure } from "@/lib/data/payments-health";
@@ -488,7 +488,7 @@ export async function choosePaymentPath(input: {
 
     const { data: proposal } = await admin
       .from("job_proposals")
-      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path, paid_at")
       .eq("token", input.token)
       .maybeSingle();
 
@@ -496,7 +496,10 @@ export async function choosePaymentPath(input: {
     if (proposal.status !== "accepted") {
       return { ok: false, message: "Accept the proposal first." };
     }
-    if (proposal.payment_path) {
+    // Chose to pay in full and never finished: back to the same payment page,
+    // not a wall. Only a plan is a choice with something behind it.
+    const retrying = proposal.payment_path === "full" && input.pathId === "full" && !proposal.paid_at;
+    if (proposal.payment_path && !retrying) {
       return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
     }
 
@@ -514,14 +517,16 @@ export async function choosePaymentPath(input: {
 
     // Claim the choice before doing the work. Two taps on a slow connection
     // otherwise both get past the check above and raise two of everything.
-    const { data: claimed } = await admin
-      .from("job_proposals")
-      .update({ payment_path: option.id, payment_path_at: new Date().toISOString() })
-      .eq("id", proposal.id)
-      .is("payment_path", null)
-      .select("id")
-      .maybeSingle();
-    if (!claimed) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
+    if (!retrying) {
+      const { data: claimed } = await admin
+        .from("job_proposals")
+        .update({ payment_path: option.id, payment_path_at: new Date().toISOString() })
+        .eq("id", proposal.id)
+        .is("payment_path", null)
+        .select("id")
+        .maybeSingle();
+      if (!claimed) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
+    }
 
     // What is owed right now, and what to call it on their receipt. Paying
     // in full is the whole amount; a plan is its first payment, because a
@@ -560,8 +565,18 @@ export async function choosePaymentPath(input: {
     // takes a card or Apple Pay just as checkout would, and a second
     // charge alongside an open invoice is how a client pays twice.
     if (option.id === "full") {
-      const open = await openInvoiceFor(proposal.job_id).catch(() => null);
-      if (open?.hostedUrl) checkoutUrl = open.hostedUrl;
+      let open = await openInvoiceFor(proposal.job_id).catch(() => null);
+      // An invoice for a price the proposal no longer says (a discount taken
+      // off after it went) is voided and raised again at what is owed now.
+      if (open && Math.abs(Math.round(open.amount * 100) - dueNowCents) >= 50) {
+        await voidOpenInvoice(proposal.job_id).catch((err) => console.error("could not void the stale invoice:", err));
+        await createAndSendInvoice(proposal.job_id, proposal.id, dueNowCents / 100).catch((err) => console.error("could not reissue the invoice:", err));
+        open = await openInvoiceFor(proposal.job_id).catch(() => null);
+      }
+      if (open) {
+        const link = await freshInvoiceLink(open);
+        if (link) checkoutUrl = link;
+      }
     }
 
     try {
