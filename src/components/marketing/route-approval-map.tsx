@@ -49,10 +49,10 @@ export function RouteApprovalMap({
   onRound: Set<string>;
   drawing: boolean;
   /**
-   * What the map is for right now. "route": the whole carrier route and
-   * every door on it, for approving the mailing and drawing the walk.
-   * "round": only the doors on the drawn walk, with the line over them,
-   * and the map fitted to it, for confirming what gets hung.
+   * What the map is for right now. "route": the whole carrier route, for
+   * approving the mailing and drawing the walk. "round": the drawn walk,
+   * with the line over the doors and the map fitted to it, for confirming
+   * what gets hung. Every house has a dot either way; the round's are orange.
    */
   focus?: "route" | "round";
   /** What the next taps put down, while drawing. */
@@ -104,12 +104,13 @@ export function RouteApprovalMap({
         type: "circle",
         source: "houses",
         paint: {
-          "circle-radius": ["case", ["==", ["get", "state"], "anchor"], 8, ["==", ["get", "state"], "on"], 6, 3],
+          // Every house is a dot you can see. The ones on the round are
+          // bigger and orange; the paid job is red.
+          "circle-radius": ["case", ["==", ["get", "state"], "anchor"], 8, ["==", ["get", "state"], "on"], 6, 4],
           "circle-color": ["match", ["get", "state"], "anchor", "#dc2626", "on", "#f59e0b", "#ffffff"],
           "circle-stroke-color": ["match", ["get", "state"], "on", "#7c2d12", "#111827"],
-          "circle-stroke-width": ["case", ["==", ["get", "state"], "on"], 1.5, 0.5],
-          // The doors not on the walk are there to draw along, not to look at.
-          "circle-opacity": ["case", ["==", ["get", "state"], "off"], 0.55, 1],
+          "circle-stroke-width": ["case", ["==", ["get", "state"], "on"], 1.5, 1],
+          "circle-opacity": 0.95,
         },
       });
       // The line goes on top of the doors it threads, or it vanishes under them.
@@ -186,10 +187,9 @@ export function RouteApprovalMap({
       const source = map.getSource("houses") as mapboxgl.GeoJSONSource | undefined;
       if (!source) return;
       dotsKeyRef.current = key;
-      const shown = focus === "round" ? houses.filter((h) => anchors.has(h.id) || onRound.has(h.id)) : houses;
       source.setData({
         type: "FeatureCollection",
-        features: shown.map((h) => ({
+        features: houses.map((h) => ({
           type: "Feature",
           properties: { state: anchors.has(h.id) ? "anchor" : onRound.has(h.id) ? "on" : "off", address: h.address },
           geometry: { type: "Point", coordinates: [h.lng, h.lat] },
