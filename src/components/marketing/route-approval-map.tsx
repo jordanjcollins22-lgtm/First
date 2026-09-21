@@ -151,8 +151,6 @@ export function RouteApprovalMap({
     };
     if (map.isStyleLoaded() && map.getSource("houses")) apply();
     else map.once("ready", apply);
-    // anchorKey and onKey stand in for the array and the set they are built from.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [houses, anchorKey, onKey, onRound]);
 
   // The finished line, once drawing is over.
