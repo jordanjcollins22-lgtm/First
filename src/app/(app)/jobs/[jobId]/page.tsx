@@ -63,6 +63,7 @@ import { capabilities, deriveStage } from "@/lib/job-stage";
 import { isMissingTable } from "@/lib/setup-errors";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { HOW_THEY_REPLY } from "@/lib/message-via";
+import { OccupancyBadge } from "@/components/job/occupancy-badge";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import { LocationPanel } from "@/components/canvas/location-panel";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
@@ -126,7 +127,7 @@ export default async function JobPage({
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
-    .select("*, property:properties(address, lat, lng, customers(id, name, phone))")
+    .select("*, property:properties(address, lat, lng, occupancy, customers(id, name, phone))")
     .eq("id", jobId)
     .maybeSingle();
   if (jobError) throw jobError;
@@ -156,6 +157,7 @@ export default async function JobPage({
       address: string;
       lat: number;
       lng: number;
+      occupancy: string | null;
       customers: { id: string; name: string; phone: string | null } | null;
     } | null;
   };
@@ -507,6 +509,24 @@ export default async function JobPage({
   }
 
   const host = headersList.get("host") ?? "";
+
+  // Owns or rents, from the State's roll unless the client has said. Read
+  // here rather than from the county map's popup, because it is the first
+  // thing to know about a job and it was three taps away.
+  const { data: rollRow } = await supabase
+    .from("houses")
+    .select("house_ownership(owner_occupied, occupancy_reason)")
+    .eq("property_id", job.property_id)
+    .limit(1)
+    .maybeSingle();
+  const roll = (rollRow as { house_ownership?: { owner_occupied: boolean | null; occupancy_reason: string | null } | { owner_occupied: boolean | null; occupancy_reason: string | null }[] | null } | null)?.house_ownership;
+  const rollFacts = Array.isArray(roll) ? roll[0] : roll;
+  const occupancyFacts = {
+    told: (job.property?.occupancy === "owner" || job.property?.occupancy === "renter" ? job.property.occupancy : null) as "owner" | "renter" | null,
+    rollOwnerOccupied: rollFacts?.owner_occupied ?? null,
+    rollReason: rollFacts?.occupancy_reason ?? null,
+  };
+
   // Price requests to subcontractors, one per service on the proposal.
   const subQuoteRequests = proposal ? await listSubQuoteRequests(jobId).catch(() => []) : [];
   const subQuoteGroups = serviceGroups(((proposal?.scope_snapshot ?? []) as unknown) as ProposalZoneSnapshot[]);
@@ -535,6 +555,9 @@ export default async function JobPage({
               </span>
             )}
           </p>
+          <div className="mt-2">
+            <OccupancyBadge propertyId={job.property_id} facts={occupancyFacts} />
+          </div>
         </div>
         {/* What the crew will actually be looking at on site. Worth a tap from
             here rather than only from inside the drawing tool — checking the

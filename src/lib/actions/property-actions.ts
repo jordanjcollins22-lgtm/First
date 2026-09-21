@@ -156,6 +156,17 @@ export async function deleteProperty(id: string) {
   revalidatePath("/attractors");
 }
 
+/** What the client said about the home: they own it, they rent it, or the question is open again. */
+export async function setPropertyOccupancy(id: string, occupancy: "owner" | "renter" | null): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("properties").update({ occupancy }).eq("id", id).select("id").maybeSingle();
+  if (error || !data) return { ok: false, message: error?.message ?? "Couldn't save that." };
+  const { data: jobs } = await supabase.from("jobs").select("id").eq("property_id", id);
+  for (const job of jobs ?? []) revalidatePath(`/jobs/${job.id}`);
+  return { ok: true };
+}
+
 export async function updatePropertyAddress(id: string, input: { address: string; lat: number; lng: number }) {
   const supabase = await createClient();
 

@@ -191,6 +191,7 @@ export interface Database {
           notes: string | null;
           sqft: number | null;
           acreage: number | null;
+          occupancy: string | null;
           created_at: string;
           updated_at: string;
         };
