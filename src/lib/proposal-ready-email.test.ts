@@ -14,18 +14,19 @@ describe("proposalReadyEmail", () => {
     signedBy: "Jordan",
   };
 
-  it("hands over the link, the price and how long it stands", () => {
+  it("hands over the link and how long it stands, and never the price", () => {
     const email = proposalReadyEmail(base);
     expect(email.subject).toBe("Your proposal from JS Landscaping MD");
     expect(email.text).toContain("Hi Jonathan,");
     expect(email.text).toContain("415 Harrington Road, Bel Air");
     expect(email.text).toContain("https://app.example/proposal/abc");
-    expect(email.text).toContain("The price is $650. It's good for 14 days");
+    expect(email.text).toContain("It's good for 14 days");
+    expect(email.text).not.toContain("$");
     expect(email.text).toContain("Jordan, JS Landscaping MD");
   });
 
-  it("mentions a discount only when there is one", () => {
-    expect(proposalReadyEmail({ ...base, total: 2115, discount: 235 }).text).toContain("The price is $2,115, with $235 already taken off.");
+  it("keeps the price off even with a discount, and signs as the business when nobody is named", () => {
+    expect(proposalReadyEmail({ ...base, total: 2115, discount: 235 }).text).not.toMatch(/\$|price/i);
     expect(proposalReadyEmail({ ...base, signedBy: null }).text.trim().endsWith("JS Landscaping MD")).toBe(true);
   });
 });

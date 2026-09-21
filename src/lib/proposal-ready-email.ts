@@ -9,18 +9,14 @@
 export interface ProposalReadyInput {
   clientName: string;
   address: string;
-  /** The price after any discount, in dollars. */
-  total: number;
-  discount: number;
+  /** Kept off the email on purpose: the price is read on the proposal page, with the scope beside it. */
+  total?: number;
+  discount?: number;
   validDays: number;
   link: string;
   businessName: string;
   /** Who signs it. The owner's first name, or the business when nobody's. */
   signedBy: string | null;
-}
-
-function money(n: number): string {
-  return `$${Math.round(n).toLocaleString()}`;
 }
 
 function firstName(name: string): string {
@@ -29,17 +25,13 @@ function firstName(name: string): string {
 
 export function proposalReadyEmail(input: ProposalReadyInput): { subject: string; text: string } {
   const shortAddress = input.address.split(",").slice(0, 2).join(",").trim();
-  const priceLine =
-    input.discount > 0
-      ? `The price is ${money(input.total)}, with ${money(input.discount)} already taken off.`
-      : `The price is ${money(input.total)}.`;
   const text = [
     `Hi ${firstName(input.clientName)},`,
     "",
     `Thanks for having us out to ${shortAddress}. Your proposal is ready:`,
     input.link,
     "",
-    `${priceLine} It's good for ${input.validDays} days, and you can accept it right on that page.`,
+    `It's good for ${input.validDays} days, and you can read it through and accept it right on that page.`,
     "",
     "Reply to this email or message us through that link with any questions.",
     "",
