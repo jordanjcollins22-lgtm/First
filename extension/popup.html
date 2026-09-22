@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font: 13px/1.4 system-ui, sans-serif; margin: 0; width: 300px; color: #1a1a1a; }
+      header { padding: 10px 12px; background: #2f6d3c; color: #fff; font-weight: 600; }
+      main { padding: 10px 12px; display: grid; gap: 8px; }
+      .status { min-height: 2.6em; color: #333; }
+      .muted { color: #666; font-size: 12px; }
+      button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
+      button.primary { background: #2f6d3c; border-color: #2f6d3c; color: #fff; }
+      .row { display: flex; gap: 6px; flex-wrap: wrap; }
+      a { color: #2f6d3c; }
+    </style>
+  </head>
+  <body>
+    <header>JS Landscaping group agent</header>
+    <main>
+      <div class="status" id="status">Checking…</div>
+      <div class="muted" id="counts"></div>
+      <div class="row">
+        <button id="look">Look now</button>
+        <button id="post">Post the next one now</button>
+      </div>
+      <div class="row">
+        <button class="primary" id="hand">Answer this post by hand</button>
+      </div>
+      <div class="muted"><a id="settings" href="#" target="_blank">Groups, caps and the pause button are in the app.</a></div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

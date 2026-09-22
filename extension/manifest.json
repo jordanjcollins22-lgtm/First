@@ -1,19 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "JS Landscaping: answer this post",
-  "description": "One click on a group post opens the app with the post's words already read, so the comment is written by the time you look. You still paste it yourself.",
-  "version": "1.0.0",
+  "name": "JS Landscaping: group agent",
+  "description": "Looks through your Facebook groups for neighbours asking for lawn and landscaping work, has the app write the comment with a tracked link, and posts it under the caps you set in the app.",
+  "version": "2.0.0",
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "action": {
-    "default_title": "Answer this post in JS Landscaping",
+    "default_title": "JS Landscaping group agent",
+    "default_popup": "popup.html",
     "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" }
   },
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "alarms", "tabs", "storage", "notifications"],
+  "host_permissions": ["https://www.facebook.com/*", "https://app.jslandscapingmd.com/*"],
   "background": { "service_worker": "background.js" },
   "commands": {
     "_execute_action": {
       "suggested_key": { "default": "Alt+Shift+J" },
-      "description": "Answer the post you are looking at"
+      "description": "Open the agent"
     }
   }
 }

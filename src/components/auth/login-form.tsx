@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/actions/auth-actions";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -28,6 +28,7 @@ export function LoginForm() {
 
   return (
     <form action={handleSubmit} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="flex flex-col gap-2">
         <Label htmlFor="email">Email</Label>
         <Input

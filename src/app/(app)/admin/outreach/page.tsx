@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -56,7 +58,14 @@ export default async function OutreachPage({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
       <header>
-        <h1 className="text-xl font-semibold">Link Tracking</h1>
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-xl font-semibold">Link Tracking</h1>
+          {owner && (
+            <Link href="/admin/outreach/agent" className="text-xs text-muted-foreground hover:underline">
+              Group Agent →
+            </Link>
+          )}
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Every post, comment and message gets its own link. Screenshot what you are answering and the
           rest fills itself in. From then on the link counts its own opens, and anything that comes of

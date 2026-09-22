@@ -385,7 +385,12 @@ async function ApprovalsBlock() {
     return [] as PendingApproval[];
   });
   if (items.length === 0) return null;
-  return <ApprovalsPanel items={items} />;
+  // The anchor the "approve them here" email points at.
+  return (
+    <div id="approvals" className="scroll-mt-4">
+      <ApprovalsPanel items={items} />
+    </div>
+  );
 }
 
 async function EarlyStartsBlock() {

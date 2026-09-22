@@ -3057,6 +3057,8 @@ export interface Database {
           posted_comment_at: string | null;
           posted_at: string;
           created_at: string;
+          via: string;
+          post_url: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["outreach_links"]["Row"]> & {
           organization_id: string;
@@ -3065,6 +3067,55 @@ export interface Database {
           platform: string;
         };
         Update: Partial<Database["public"]["Tables"]["outreach_links"]["Row"]>;
+        Relationships: [];
+      };
+      outreach_agent_settings: {
+        Row: {
+          organization_id: string;
+          groups: Json;
+          keywords: string[];
+          daily_cap: number;
+          hourly_cap: number;
+          active_from: string;
+          active_to: string;
+          scan_every_minutes: number;
+          max_age_days: number;
+          auto_post: boolean;
+          paused_until: string | null;
+          pause_reason: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_agent_settings"]["Row"]> & {
+          organization_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_agent_settings"]["Row"]>;
+        Relationships: [];
+      };
+      outreach_seen_posts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          post_key: string;
+          url: string;
+          group_name: string | null;
+          author: string | null;
+          text: string | null;
+          age_days: number | null;
+          decision: string;
+          reason: string | null;
+          link_id: string | null;
+          seen_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_seen_posts"]["Row"]> & {
+          organization_id: string;
+          post_key: string;
+          url: string;
+          decision: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_seen_posts"]["Row"]>;
         Relationships: [];
       };
       outreach_clicks: {

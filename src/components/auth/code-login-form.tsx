@@ -17,7 +17,7 @@ import { cleanCode, codeLooksComplete, looksLikeEmail } from "@/lib/client-porta
  * is good once and for about an hour, and comes to the address on the
  * account, which is the one thing a stranger does not have.
  */
-export function CodeLoginForm() {
+export function CodeLoginForm({ next = "/" }: { next?: string } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -40,7 +40,9 @@ export function CodeLoginForm() {
     startTransition(async () => {
       const result = await verifyLoginCode(email, code);
       if (!result.ok) return setError(result.error);
-      router.replace(result.message === "client" ? "/my" : "/");
+      // A client goes to their own screen; the team goes back to the page
+      // that sent them here, or the front door when nothing did.
+      router.replace(result.message === "client" ? "/my" : next);
       router.refresh();
     });
   }

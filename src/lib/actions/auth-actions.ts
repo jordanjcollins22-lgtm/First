@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cleanCode, looksLikeEmail } from "@/lib/client-portal";
 import { deliverLoginCode } from "@/lib/login-code";
+import { safeReturnTo } from "@/lib/return-to";
 
 export type CodeResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -24,7 +25,8 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/");
+  // Back to the page they were sent to, when there was one.
+  redirect(safeReturnTo(String(formData.get("next") ?? "")));
 }
 
 export async function logout() {

@@ -341,6 +341,9 @@ export type ReadAndDraftResult =
       note: string;
       ageDays: number | null;
       worthAnswering: boolean;
+      /** What the reader made of it, for a caller deciding without a person. */
+      kind: "request" | "promotion" | "other";
+      service: string | null;
       /** The words, with the link placeholder still in them. Null when none came back. */
       draft: string | null;
       draftNote: string | null;
@@ -442,6 +445,8 @@ export async function readAndDraft(input: {
       note: [reading.service, reading.summary].filter(Boolean).join(" — "),
       ageDays: reading.ageDays,
       worthAnswering: reading.kind === "request",
+      kind: reading.kind,
+      service: reading.service,
       draft,
       draftNote,
     };

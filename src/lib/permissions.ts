@@ -90,6 +90,7 @@ export const TABS: readonly TabDefinition[] = [
   { key: "social", label: "Before & After Posts", href: "/admin/social" },
   { key: "campaigns", label: "Email Campaigns", href: "/admin/campaigns" },
   { key: "recommendations", label: "Link Tracking", href: "/admin/outreach" },
+  { key: "group-agent", label: "Group Agent", href: "/admin/outreach/agent", parent: "recommendations" },
   { key: "groups", label: "Local Groups", href: "/admin/groups" },
   { key: "fleet", label: "Fleet", href: "/admin/fleet" },
   { key: "salt", label: "Salt Route", href: "/admin/salt" },

@@ -124,7 +124,9 @@ export async function notifyApprovers(admin: Admin, organizationId: string): Pro
   const to = org?.business_email?.trim();
   if (!to || !rows || rows.length === 0) return;
 
-  const link = `${await outboundBaseUrl()}/my-day`;
+  // Straight to the approvals on My Day. A signed-out phone goes through
+  // the sign-in page and comes back here rather than to the front door.
+  const link = `${await outboundBaseUrl()}/my-day#approvals`;
   const note = digest({
     items: rows.map((row) => ({ toName: row.to_name, toEmail: row.to_email, kind: row.kind, expiresAt: row.expires_at })),
     link,

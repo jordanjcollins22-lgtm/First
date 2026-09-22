@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { loginUrlFor } from "@/lib/return-to";
+
 import { env, isSupabaseConfigured } from "@/lib/env";
 import { decideAccess } from "@/lib/supabase/auth-guard";
 
@@ -115,8 +117,12 @@ export async function updateSession(request: NextRequest) {
   });
 
   if (decision === "redirect_to_login") {
+    // The page they wanted rides along, so signing in lands them on it
+    // rather than at the front door.
     const url = request.nextUrl.clone();
+    const wanted = loginUrlFor(request.nextUrl.pathname, request.nextUrl.search);
     url.pathname = "/login";
+    url.search = wanted.includes("?") ? wanted.slice(wanted.indexOf("?")) : "";
     return NextResponse.redirect(url);
   }
 
