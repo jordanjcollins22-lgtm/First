@@ -28,9 +28,20 @@ export interface KnownJob {
   phone: string | null;
   /** The client's GoHighLevel contact, once known. The surest match of all. */
   ghlContactId?: string | null;
+  /**
+   * The app's time is the newer one.
+   *
+   * Set when a visit is moved in the app without the calendar being told.
+   * The pull pushes the app's time to the calendar instead of reading the
+   * calendar's time over it, which is what it did before and how a visit
+   * moved in the database got moved back the next time anybody opened
+   * My Day.
+   */
+  pushPending?: boolean;
 }
 
 export type Change =
+  | { kind: "push"; jobId: string }
   | { kind: "move"; jobId: string; startTime: string; endTime: string | null }
   | { kind: "cancel"; jobId: string }
   | { kind: "reinstate"; jobId: string; startTime: string; endTime: string | null }
@@ -64,9 +75,21 @@ export function planChanges(
   const byAppointment = new Map(jobs.filter((j) => j.ghlAppointmentId).map((j) => [j.ghlAppointmentId as string, j]));
   const out: Change[] = [];
 
+  // A visit the app moved goes out to the calendar, whether or not the
+  // calendar has it yet. Listed first, so the pass over the calendar's
+  // events below never reads an older time over it.
+  const pushed = new Set<string>();
+  for (const job of jobs) {
+    if (job.pushPending && !job.cancelled && job.evaluationAt) {
+      out.push({ kind: "push", jobId: job.id });
+      pushed.add(job.id);
+    }
+  }
+
   for (const event of events) {
     const known = byAppointment.get(event.id);
     if (known) {
+      if (pushed.has(known.id)) continue;
       if (event.cancelled && !known.cancelled) out.push({ kind: "cancel", jobId: known.id });
       else if (!event.cancelled && known.cancelled)
         out.push({ kind: "reinstate", jobId: known.id, startTime: event.startTime, endTime: event.endTime });

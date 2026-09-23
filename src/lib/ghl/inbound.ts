@@ -207,12 +207,13 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
 
     const { data: jobRows } = await admin
       .from("jobs")
-      .select("id, ghl_appointment_id, evaluation_date, evaluation_end_date, evaluation_status, status, property:properties!inner(customer:customers!inner(organization_id, email, phone, ghl_contact_id))")
+      .select("id, ghl_appointment_id, ghl_push_pending, evaluation_date, evaluation_end_date, evaluation_status, status, property:properties!inner(customer:customers!inner(organization_id, email, phone, ghl_contact_id))")
       .not("evaluation_date", "is", null)
       .gte("evaluation_date", new Date(now.getTime() - LOOK_BACK_DAYS * 86_400_000).toISOString());
     type Row = {
       id: string;
       ghl_appointment_id: string | null;
+      ghl_push_pending: boolean | null;
       evaluation_date: string | null;
       evaluation_end_date: string | null;
       evaluation_status: string;
@@ -230,6 +231,7 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
         email: r.property.customer.email,
         phone: r.property.customer.phone,
         ghlContactId: r.property.customer.ghl_contact_id,
+        pushPending: Boolean(r.ghl_push_pending),
       }));
 
     // Contacts are only fetched for appointments the app has not seen, and
@@ -255,10 +257,21 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
       return c ? { id: c.id, email: c.email, phone: c.phone } : null;
     });
 
-    const counts = { created: 0, moved: 0, cancelled: 0, reinstated: 0, linked: 0, failed: 0 };
+    const counts = { created: 0, moved: 0, pushed: 0, cancelled: 0, reinstated: 0, linked: 0, failed: 0 };
     for (const change of changes) {
       if (change.kind === "skip") continue;
-      if (change.kind === "move") {
+      if (change.kind === "push") {
+        // The app's time goes to the calendar. The flag clears only when it
+        // lands, so a calendar that is down is tried again next pull.
+        const pushed = await syncEvaluationToGhl(change.jobId);
+        if (pushed.ok) {
+          await admin.from("jobs").update({ ghl_push_pending: false }).eq("id", change.jobId);
+          counts.pushed += 1;
+        } else {
+          log.warn("ghl.pull.push_failed", { jobId: change.jobId, error: pushed.error });
+          counts.failed += 1;
+        }
+      } else if (change.kind === "move") {
         await admin.from("jobs").update({ evaluation_date: change.startTime, evaluation_end_date: change.endTime }).eq("id", change.jobId);
         counts.moved += 1;
       } else if (change.kind === "cancel") {
@@ -304,7 +317,7 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
       }
     }
 
-    const summary = `${events.length} on the calendar: ${counts.created} created, ${counts.moved} moved, ${counts.cancelled} cancelled, ${counts.reinstated} reinstated, ${counts.linked} linked, ${counts.failed} failed.`;
+    const summary = `${events.length} on the calendar: ${counts.created} created, ${counts.moved} moved, ${counts.pushed} pushed, ${counts.cancelled} cancelled, ${counts.reinstated} reinstated, ${counts.linked} linked, ${counts.failed} failed.`;
     await admin.from("ghl_sync_state").upsert({ organization_id: organizationId, last_pulled_at: now.toISOString(), last_result: summary });
     log.info("ghl.pull.done", { organizationId, ...counts, events: events.length });
     return { ok: true, summary };

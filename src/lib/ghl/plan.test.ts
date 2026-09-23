@@ -24,6 +24,15 @@ describe("planChanges", () => {
     ]);
   });
 
+  it("pushes a visit the app moved, rather than reading the calendar's old time over it", () => {
+    const stale = event({ startTime: "2026-09-16T15:00:00.000Z", endTime: "2026-09-16T16:00:00.000Z" });
+    expect(planChanges([stale], [job({ ghlAppointmentId: "a1", pushPending: true })], contacts)).toEqual([{ kind: "push", jobId: "j1" }]);
+    // With no appointment on the calendar yet, it is pushed all the same.
+    expect(planChanges([], [job({ pushPending: true })], contacts)).toEqual([{ kind: "push", jobId: "j1" }]);
+    // A cancelled visit has nothing to push.
+    expect(planChanges([], [job({ pushPending: true, cancelled: true })], contacts)).toEqual([]);
+  });
+
   it("cancels and reinstates to match", () => {
     expect(planChanges([event({ cancelled: true })], [job({ ghlAppointmentId: "a1" })], contacts)).toEqual([{ kind: "cancel", jobId: "j1" }]);
     expect(planChanges([event({})], [job({ ghlAppointmentId: "a1", cancelled: true })], contacts)).toEqual([

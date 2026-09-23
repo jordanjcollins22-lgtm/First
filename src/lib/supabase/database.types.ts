@@ -1803,6 +1803,7 @@ export interface Database {
           evaluation_end_date: string | null;
           evaluation_mode: string;
           ghl_appointment_id: string | null;
+          ghl_push_pending: boolean;
           booking_variant: string | null;
           address_entry: string | null;
           referral_code: string | null;
