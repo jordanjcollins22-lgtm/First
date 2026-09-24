@@ -15,7 +15,7 @@
 
 import { inDispute, kindLabel, type DisputeState } from "@/lib/dispute";
 
-export type PipelineStage = "evaluation" | "sales" | "operations" | "disputes";
+export type PipelineStage = "evaluation" | "sales" | "operations" | "disputes" | "declined";
 
 export const STAGES: { key: PipelineStage; label: string; blurb: string }[] = [
   { key: "evaluation", label: "Evaluation", blurb: "Booked to go look at it." },
@@ -28,6 +28,11 @@ export const STAGES: { key: PipelineStage; label: string; blurb: string }[] = [
     label: "Disputes",
     blurb: "Stopped until somebody sorts it out. Nothing automatic goes to these clients.",
   },
+  // Not a stage of the pipeline at all: somebody said no, so the job left it.
+  // It used to be the last column of Sales, where it sat among live quotes
+  // and its money was counted as quoted and not yet won. The board shows it
+  // apart, underneath, to count and to win back.
+  { key: "declined", label: "Declined", blurb: "Not going ahead. Off the pipeline, kept to count and to win back." },
 ];
 
 /** The statuses a job can hold within each stage, in order of progress. */
@@ -36,12 +41,13 @@ export const STAGE_STATUSES: Record<PipelineStage, string[]> = {
   // visit that fell through is a lead that still exists, and the office
   // wants to see how many there were and ring them back.
   evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated", "Cancelled"],
-  sales: ["Needs pricing", "Needs approval", "Approved", "Sent", "Declined"],
+  sales: ["Needs pricing", "Needs approval", "Approved", "Sent"],
   operations: ["Won — not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
   // The kind of trouble rather than a ladder of progress: a dispute does not
   // advance, it is either open or it is over, and what it is decides who
   // deals with it.
   disputes: ["Legal", "Payment", "Quality", "Other"],
+  declined: ["Declined"],
 };
 
 /**
@@ -156,7 +162,7 @@ export function pipelinePosition(input: PipelineInput, today: Date = new Date())
   // A hand placement wins, right up until the facts it was made against
   // change. Then it is a note about a situation that has passed, and the job
   // goes back to being read off what is true now.
-  const override = input.override;
+  const override = currentPlace(input.override);
   if (override && override.from === derived.status && isKnownStatus(override)) {
     return {
       stage: override.stage,
@@ -168,6 +174,17 @@ export function pipelinePosition(input: PipelineInput, today: Date = new Date())
   }
 
   return derived;
+}
+
+/**
+ * A stored placement, in today's terms. Declined was a column of Sales
+ * until it became its own section; a job placed there then still says
+ * "sales", and is read as the declined section it means.
+ */
+export function currentPlace<T extends PipelineOverride>(override: T | null | undefined): T | null {
+  if (!override) return null;
+  if (override.stage === "sales" && override.status === "Declined") return { ...override, stage: "declined" };
+  return override;
 }
 
 /** Whether a stored override still names a place on the board. A stage or a
@@ -199,7 +216,7 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
   // saying no. Work that was declined and then genuinely sold is un-declined
   // by moving it back on the board, which clears the date.
   if (input.declinedAt) {
-    return { stage: "sales", status: "Declined", actionable: false };
+    return { stage: "declined", status: "Declined", actionable: false };
   }
   // Work whose window has passed but that nobody has signed off. This is the
   // one that disappears in practice: the crew finished, drove away, and the
@@ -246,7 +263,7 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
 
   // Everything else is a sale in progress.
   if (input.proposalStatus === "declined") {
-    return { stage: "sales", status: "Declined", actionable: false };
+    return { stage: "declined", status: "Declined", actionable: false };
   }
   if (input.proposalStatus === "sent") {
     // Approved but the email has not gone: still on us. Null is that fact;
@@ -282,7 +299,7 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
 export function isClosedWork(position: PipelinePosition): boolean {
   if (position.stage === "disputes") return true;
   if (position.stage === "evaluation" && position.status === "Cancelled") return true;
-  if (position.stage === "sales" && position.status === "Declined") return true;
+  if (position.stage === "declined") return true;
   if (position.stage === "operations" && position.status === "Completed") return true;
   return false;
 }
@@ -295,7 +312,7 @@ export function isClosedWork(position: PipelinePosition): boolean {
  * should stop appearing in anybody's queue but still be countable.
  */
 export function isDeclined(position: PipelinePosition): boolean {
-  return position.stage === "sales" && position.status === "Declined";
+  return position.stage === "declined";
 }
 
 /** Every place a job can be put by hand, as one flat list for a picker. */

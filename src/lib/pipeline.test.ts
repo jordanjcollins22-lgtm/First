@@ -71,7 +71,7 @@ describe("pipelinePosition", () => {
 
   it("keeps a declined quote visible but not actionable", () => {
     const p = pipelinePosition(job({ proposalStatus: "declined" }));
-    expect(p).toEqual({ stage: "sales", status: "Declined", actionable: false });
+    expect(p).toEqual({ stage: "declined", status: "Declined", actionable: false });
   });
 
   it("only ever returns a status its own stage declares", () => {
@@ -315,5 +315,18 @@ describe("a job in dispute", () => {
     expect(pipelinePosition({ ...sold, dispute: null }, today)).toEqual(
       pipelinePosition(sold, today)
     );
+  });
+});
+
+describe("declined is off the pipeline", () => {
+  it("is not a column of Sales", () => {
+    expect(STAGE_STATUSES.sales).not.toContain("Declined");
+  });
+
+  it("still reads a job placed in the old Sales column as declined", () => {
+    const p = pipelinePosition(
+      job({ proposalStatus: "sent", proposalSentAt: "2026-09-01T00:00:00Z", override: { stage: "sales", status: "Declined", from: "Sent" } })
+    );
+    expect(p).toMatchObject({ stage: "declined", status: "Declined" });
   });
 });

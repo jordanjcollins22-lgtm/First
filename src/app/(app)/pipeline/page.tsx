@@ -53,8 +53,11 @@ async function PipelineTab() {
     console.error("Pipeline failed to load:", err);
   }
 
+  // Declined is off the pipeline: a quote somebody said no to is not money
+  // still to be won.
+  const declined = cards.filter((c) => c.stage === "declined");
   const totalValue = cards
-    .filter((c) => c.stage !== "operations" && c.value)
+    .filter((c) => c.stage !== "operations" && c.stage !== "declined" && c.value)
     .reduce((sum, c) => sum + (c.value ?? 0), 0);
   const needsAction = cards.filter((c) => c.actionable).length;
   // Cancelled visits sit on the board to be seen, not counted as live.
@@ -79,7 +82,7 @@ async function PipelineTab() {
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-          {STAGES.map((stage) => {
+          {STAGES.filter((stage) => stage.key !== "declined").map((stage) => {
             const inStage = cards.filter((c) => c.stage === stage.key);
             const stageValue = inStage.reduce((sum, c) => sum + (c.value ?? 0), 0);
 
@@ -217,6 +220,37 @@ async function PipelineTab() {
             );
           })}
         </div>
+      )}
+
+      {/* Out of the pipeline, not a column of it: under the board, folded
+          away, with the way back on each card for the ones worth another go. */}
+      {declined.length > 0 && (
+        <details className="mt-6 rounded-xl border border-border bg-card/40 p-3">
+          <summary className="cursor-pointer text-sm font-semibold">
+            Declined ({declined.length})
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              Not going ahead. Off the pipeline, kept to count and to win back.
+            </span>
+          </summary>
+          <ul className="mt-3 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {declined.map((card) => (
+              <li key={card.jobId}>
+                <Link
+                  href={`/jobs/${card.jobId}`}
+                  className="block rounded-lg border border-border bg-background/50 p-2 text-sm hover:bg-accent/50"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate font-medium">{card.customerName}</span>
+                    {card.value != null && <span className="shrink-0 text-xs tabular-nums">{money(card.value)}</span>}
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">{card.address}</p>
+                  {card.note && <p className="truncate text-[11px] italic text-muted-foreground">{card.note}</p>}
+                </Link>
+                <MoveJob jobId={card.jobId} overridden={card.overridden} disputed={false} />
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">

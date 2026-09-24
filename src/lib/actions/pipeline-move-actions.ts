@@ -76,7 +76,7 @@ export async function moveJobOnPipeline(
     //
     // Moving it anywhere else clears the date, because that is somebody
     // saying the decline is over.
-    const declining = stage === "sales" && status === "Declined";
+    const declining = stage === "declined";
     // Finishing is a fact too. Moved to Completed as a note only, the job
     // kept its old status underneath and every other screen went on
     // treating it as live work: My Day kept it, the proposals list kept
@@ -164,7 +164,7 @@ export type CloseHow = "declined" | "finished" | "cancelled";
  * the board.
  */
 export async function closeJob(jobId: string, how: CloseHow, note?: string): Promise<MoveResponse> {
-  if (how === "declined") return moveJobOnPipeline(jobId, "sales", "Declined", note);
+  if (how === "declined") return moveJobOnPipeline(jobId, "declined", "Declined", note);
   if (how === "finished") return moveJobOnPipeline(jobId, "operations", "Completed", note);
   const result = await cancelJob(jobId, note?.trim() || null);
   return result.ok ? { ok: true, status: "Cancelled" } : { ok: false, message: result.message };

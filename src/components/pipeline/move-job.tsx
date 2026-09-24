@@ -233,7 +233,7 @@ export function MoveJob({
           <p className="mt-1 border-t border-border pt-1.5 text-[11px] font-semibold text-muted-foreground">Move this to</p>
           {movableTo()
             .filter((place) => place.stage !== "disputes")
-            .filter((place) => !(place.stage === "sales" && place.status === "Declined"))
+            .filter((place) => place.stage !== "declined")
             .filter((place) => !(place.stage === "operations" && place.status === "Completed"))
             .map((place) => (
               <button
