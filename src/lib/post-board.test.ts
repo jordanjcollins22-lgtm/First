@@ -25,21 +25,23 @@ describe("standingFor", () => {
     expect(standingFor([], "me", now).pile).toBe("open");
   });
 
-  it("is taken while somebody else is writing, and open again after the hold", () => {
-    expect(standingFor([answer({})], "me", now).pile).toBe("taken");
-    const stale = answer({ updatedAt: "2026-09-24T15:00:00Z" });
-    expect(standingFor([stale], "me", now).pile).toBe("open");
+  it("stays open with one person on it, and is full with two", () => {
+    expect(standingFor([answer({})], "me", now)).toMatchObject({ pile: "open", others: [{ name: "Jace" }] });
+    const two = [answer({ status: "posted" }), answer({ id: "b", profileId: "p2", name: "Andrew" })];
+    expect(standingFor(two, "me", now).pile).toBe("full");
   });
 
-  it("is answered for good once somebody posted", () => {
-    const posted = answer({ status: "posted", updatedAt: "2026-09-20T12:00:00Z" });
-    expect(standingFor([posted], "me", now)).toMatchObject({ pile: "answered", heldBy: { name: "Jace" } });
+  it("frees a place once the hold runs out, but never once posted", () => {
+    const stale = answer({ id: "b", profileId: "p2", name: "Andrew", updatedAt: "2026-09-24T15:00:00Z" });
+    expect(standingFor([answer({}), stale], "me", now).pile).toBe("open");
+    const oldPosts = [answer({ status: "posted", updatedAt: "2026-09-20T12:00:00Z" }), answer({ id: "b", profileId: "p2", status: "posted", updatedAt: "2026-09-20T12:00:00Z" })];
+    expect(standingFor(oldPosts, "me", now).pile).toBe("full");
   });
 
   it("stays mine however many others answered", () => {
     const mine = answer({ id: "m", profileId: "me", name: "Jordan" });
-    const theirs = answer({ status: "posted" });
-    expect(standingFor([mine, theirs], "me", now)).toMatchObject({ pile: "mine", mine: { id: "m" } });
+    const theirs = [answer({ status: "posted" }), answer({ id: "b", profileId: "p2", status: "posted" })];
+    expect(standingFor([mine, ...theirs], "me", now)).toMatchObject({ pile: "mine", mine: { id: "m" } });
   });
 
   it("lets go of a post handed back", () => {
@@ -50,16 +52,21 @@ describe("standingFor", () => {
 
 describe("whyNotTake", () => {
   const base = { profileId: "me", now, answeredToday: 0, dailyLimit: 6 };
-  it("allows an open post", () => {
+  const two = [answer({ status: "posted" }), answer({ id: "b", profileId: "p2", name: "Andrew" })];
+  it("allows a post with a place left", () => {
     expect(whyNotTake({ ...base, answers: [] })).toBeNull();
+    expect(whyNotTake({ ...base, answers: [answer({ status: "posted" })] })).toBeNull();
   });
-  it("names who has it", () => {
-    expect(whyNotTake({ ...base, answers: [answer({})] })).toMatch(/Jace is answering/);
-    expect(whyNotTake({ ...base, answers: [answer({ status: "posted" })] })).toMatch(/Jace already answered/);
+  it("names who has a full one", () => {
+    expect(whyNotTake({ ...base, answers: two })).toMatch(/Jace and Andrew already have this one/);
   });
   it("stops at the day's limit, but never stops you reopening your own", () => {
     expect(whyNotTake({ ...base, answers: [], answeredToday: 6 })).toMatch(/6 from your account today/);
     expect(whyNotTake({ ...base, answers: [answer({ profileId: "me" })], answeredToday: 6 })).toBeNull();
+  });
+  it("never turns the owner away", () => {
+    expect(whyNotTake({ ...base, answers: two, override: true })).toBeNull();
+    expect(whyNotTake({ ...base, answers: two, answeredToday: 20, override: true })).toBeNull();
   });
 });
 

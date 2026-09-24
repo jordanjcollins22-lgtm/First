@@ -16,11 +16,12 @@ import { shortWhen } from "@/lib/time-zone";
  * Every post the browser found of somebody asking for the work. Press
  * "Answer this one" and a comment is written for you, with your own link;
  * copy it, open the post, paste it under the post from your own Facebook,
- * and press "I posted it". A post somebody has taken is held for them for a
- * couple of hours, and one somebody posted under is theirs, so the same
- * neighbour never gets two comments from us.
+ * and press "I posted it". Two people may answer each post: a place is held
+ * for a couple of hours while somebody writes, and for good once they post, so the same
+ * neighbour never gets more than two comments from us. The owner can
+ * always add theirs.
  */
-type Tab = "open" | "mine" | "others";
+type Tab = "open" | "mine" | "full";
 
 export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: BoardPost[]; owner: boolean; answeredToday: number; dailyLimit: number }) {
   const router = useRouter();
@@ -33,8 +34,8 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
 
-  const pileOf = (p: BoardPost): Tab => (written[p.id] || p.pile === "mine" ? "mine" : p.pile === "open" ? "open" : "others");
-  const counts = { open: 0, mine: 0, others: 0 };
+  const pileOf = (p: BoardPost): Tab => (written[p.id] || p.pile === "mine" ? "mine" : p.pile);
+  const counts = { open: 0, mine: 0, full: 0 };
   for (const p of posts) counts[pileOf(p)] += 1;
   const shown = posts.filter((p) => pileOf(p) === tab);
 
@@ -102,9 +103,9 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
       <div className="flex flex-wrap items-center gap-2">
         {tabButton("open", "Waiting for an answer")}
         {tabButton("mine", "Mine")}
-        {tabButton("others", "Taken by the team")}
+        {tabButton("full", "Two answers already")}
         <span className="text-xs text-muted-foreground">
-          You&apos;ve answered {answeredToday} of {dailyLimit} today.
+          {owner ? `You've answered ${answeredToday} today.` : `You've answered ${answeredToday} of ${dailyLimit} today.`}
         </span>
       </div>
 
@@ -114,7 +115,7 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
             ? "Nothing waiting. New posts land here as the finder reads Facebook."
             : tab === "mine"
               ? "You haven't taken any yet. Pick one from “Waiting for an answer”."
-              : "Nobody else has taken any yet."}
+              : "No post has two answers yet."}
         </p>
       )}
 
@@ -157,12 +158,11 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
               {post.hasUrl ? "Open the post" : "Find it on Facebook"} <ExternalLink className="h-3 w-3" />
             </a>
 
-            {post.heldBy && (
+            {post.others.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                {post.heldBy.status === "posted"
-                  ? `${post.heldBy.name} answered this ${shortWhen(post.heldBy.postedAt ?? post.heldBy.updatedAt)}${post.heldBy.clicks > 0 ? ` · ${post.heldBy.clicks} click${post.heldBy.clicks === 1 ? "" : "s"}` : ""}.`
-                  : `${post.heldBy.name} is answering this (took it ${shortWhen(post.heldBy.updatedAt)}).`}
-                {pileOf(post) === "mine" && post.heldBy.status === "posted" && !posted ? " Probably best to hand yours back." : ""}
+                {post.others.map((a) => describeAnswer(a)).join(" ")}
+                {pileOf(post) === "open" ? " There's room for one more." : ""}
+                {pileOf(post) === "full" && owner ? " You can still add yours." : ""}
               </p>
             )}
 
@@ -203,13 +203,13 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
                   </>
                 )}
               </div>
-            ) : post.pile === "open" ? (
+            ) : post.pile === "open" || owner ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="sm" disabled={busy !== null} onClick={() => act(post, "take")}>
                   {busy === `${post.id}:take` ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <PenLine className="mr-1 h-4 w-4" />}
-                  {busy === `${post.id}:take` ? "Writing yours…" : "Answer this one"}
+                  {busy === `${post.id}:take` ? "Writing yours…" : post.others.length > 0 ? "Answer it too" : "Answer this one"}
                 </Button>
-                {owner && (
+                {owner && post.pile === "open" && (
                   <Button type="button" size="sm" variant="ghost" disabled={busy !== null} onClick={() => act(post, "remove")}>
                     <X className="mr-1 h-4 w-4" /> Not a lead, take it off
                   </Button>
@@ -229,4 +229,13 @@ function mentionOf(post: BoardPost, comment: string): string | null {
   const first = post.author?.trim().split(/\s+/)[0];
   if (!first) return null;
   return comment.startsWith(`@${first}`) ? first : null;
+}
+
+/** "Jace answered this Thu 2:10 PM · 3 clicks." or "Jace is answering this (took it 1:05 PM)." */
+function describeAnswer(a: BoardPost["others"][number]): string {
+  if (a.status === "posted") {
+    const clicks = a.clicks > 0 ? ` · ${a.clicks} click${a.clicks === 1 ? "" : "s"}` : "";
+    return `${a.name} answered this ${shortWhen(a.postedAt ?? a.updatedAt)}${clicks}.`;
+  }
+  return `${a.name} is answering this (took it ${shortWhen(a.updatedAt)}).`;
 }

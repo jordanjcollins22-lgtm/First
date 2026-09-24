@@ -2,14 +2,22 @@
  * The rules of the Posts to answer board.
  *
  * The browser finds the posts; the team answers them, each from their own
- * account. Two people answering the same neighbour looks like exactly the
- * thing it is, so a post is held by whoever took it: for good once they say
- * it is posted, and for a couple of hours while they are writing it. After
- * that it is open again, because somebody who took a post and went to lunch
- * should not leave the neighbour unanswered.
+ * account. Two comments from us under one neighbour's post reads as two
+ * people who can vouch for the business; a third starts to look like a
+ * campaign. So a post takes two answers. A place is held by whoever took
+ * it: for good once they say it is posted, and for a couple of hours while
+ * they are writing it. After that the place is free again, because somebody
+ * who took a post and went to lunch should not leave the neighbour waiting.
+ *
+ * The owner is never turned away. It is their business and their call,
+ * so they can take a post however many have answered it, and however many
+ * they have answered today.
  *
  * Pure functions, so the rules are tested without a database.
  */
+
+/** How many of the team may answer one post. The owner can always add one more. */
+export const ANSWERS_PER_POST = 2;
 
 /** How long taking a post holds it before somebody else may. */
 export const HOLD_HOURS = 2;
@@ -39,15 +47,20 @@ export interface BoardAnswer {
   postedAt: string | null;
 }
 
-/** Where a post stands for the person looking at it. */
-export type BoardPile = "open" | "mine" | "taken" | "answered";
+/**
+ * Where a post stands for the person looking at it.
+ *
+ * mine: they took it. open: there is still a place on it. full: both
+ * places are taken by others.
+ */
+export type BoardPile = "open" | "mine" | "full";
 
 export interface BoardStanding {
   pile: BoardPile;
   /** This person's own answer, when they took it. */
   mine: BoardAnswer | null;
-  /** Whoever else holds it or answered it, when somebody does. */
-  heldBy: BoardAnswer | null;
+  /** Everybody else holding a place on it: posted, or writing right now. */
+  others: BoardAnswer[];
 }
 
 function holds(answer: BoardAnswer, now: Date): boolean {
@@ -60,32 +73,45 @@ function holds(answer: BoardAnswer, now: Date): boolean {
  * Which pile a post is in for one person.
  *
  * Mine first: a post somebody took stays in front of them however many
- * others answered it since. Then answered, when anybody else's comment is
- * up. Then taken, while somebody else is writing theirs. Otherwise open.
+ * others answered it since. Otherwise it is open while fewer than two of
+ * the others hold it, and full once two do.
  */
 export function standingFor(answers: BoardAnswer[], profileId: string, now: Date): BoardStanding {
   const mine = answers.find((a) => a.profileId === profileId && a.status !== "let_go") ?? null;
-  const others = answers.filter((a) => a.profileId !== profileId);
-  const posted = others.find((a) => a.status === "posted") ?? null;
-  const writing = others.find((a) => holds(a, now)) ?? null;
-  if (mine) return { pile: "mine", mine, heldBy: posted ?? writing };
-  if (posted) return { pile: "answered", mine: null, heldBy: posted };
-  if (writing) return { pile: "taken", mine: null, heldBy: writing };
-  return { pile: "open", mine: null, heldBy: null };
+  const others = answers
+    .filter((a) => a.profileId !== profileId && holds(a, now))
+    // Posted before writing, then earliest first, so the names read in order.
+    .sort((a, b) => (a.status === b.status ? a.createdAt.localeCompare(b.createdAt) : a.status === "posted" ? -1 : 1));
+  if (mine) return { pile: "mine", mine, others };
+  return { pile: others.length >= ANSWERS_PER_POST ? "full" : "open", mine: null, others };
 }
 
-/** Why this person may not take this post, or null when they may. */
+/** "Jace and Andrew", for saying who has a post. */
+export function namesOf(answers: BoardAnswer[]): string {
+  const names = answers.map((a) => a.name);
+  if (names.length <= 1) return names[0] ?? "Somebody";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Why this person may not take this post, or null when they may.
+ *
+ * `override` is the owner: never turned away, by a full post or by the
+ * day's limit.
+ */
 export function whyNotTake(input: {
   answers: BoardAnswer[];
   profileId: string;
   now: Date;
   answeredToday: number;
   dailyLimit: number;
+  override?: boolean;
 }): string | null {
   const standing = standingFor(input.answers, input.profileId, input.now);
-  if (standing.pile === "mine") return null;
-  if (standing.pile === "answered") return `${standing.heldBy?.name ?? "Somebody"} already answered this one.`;
-  if (standing.pile === "taken") return `${standing.heldBy?.name ?? "Somebody"} is answering this one right now.`;
+  if (standing.pile === "mine" || input.override) return null;
+  if (standing.pile === "full") {
+    return `${namesOf(standing.others)} already have this one. Two answers a post is the most, so leave it to them.`;
+  }
   if (input.answeredToday >= input.dailyLimit) {
     return `That's ${input.answeredToday} from your account today. More than that in a day and Facebook starts to notice, so leave the rest for tomorrow or for somebody else.`;
   }

@@ -30,9 +30,8 @@ export interface BoardPost {
   foundAt: string;
   pile: BoardPile;
   mine: BoardAnswer | null;
-  heldBy: BoardAnswer | null;
-  /** Everybody who answered it, for the record under the post. */
-  answers: BoardAnswer[];
+  /** Everybody else holding a place on it: posted, or writing right now. */
+  others: BoardAnswer[];
 }
 
 /** Midnight this morning, the business's time. */
@@ -122,17 +121,20 @@ export async function getPostBoard(organizationId: string, profileId: string, no
       foundAt: row.created_at,
       pile: standing.pile,
       mine: standing.mine,
-      heldBy: standing.heldBy,
-      answers: list.filter((a) => a.status === "posted"),
+      others: standing.others,
     };
   });
 }
 
-/** How many fresh posts nobody has taken or answered. For My Day and the extension. */
+/**
+ * How many fresh posts nobody on the team has taken yet. For My Day and the
+ * extension: a post with one answer already has somebody on it, so the
+ * number that needs saying is the ones with none.
+ */
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return posts.filter((p) => standingFor(answers.get(p.id) ?? [], "", now).pile === "open").length;
+  return posts.filter((p) => standingFor(answers.get(p.id) ?? [], "", now).others.length === 0).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */

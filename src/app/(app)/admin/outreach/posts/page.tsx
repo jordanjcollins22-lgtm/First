@@ -48,7 +48,9 @@ export default async function PostsToAnswerPage() {
           People in local Facebook groups asking for lawn and landscaping work, found for you. Pick one, press
           &ldquo;Answer this one&rdquo; and a comment is written for you with your own link, so anything it books
           counts for you. Copy it, open the post, comment from your own Facebook, then press &ldquo;I posted
-          it&rdquo;. Once you take a post it&apos;s held for you, so nobody else answers the same person.
+          it&rdquo;. Two of the team can answer each post; once two have it, it moves to &ldquo;Two answers
+          already&rdquo; so nobody piles on.
+          {owner && " As the owner you can add yours to any post, however many have answered it."}
         </p>
       </header>
 

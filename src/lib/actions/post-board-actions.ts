@@ -32,9 +32,10 @@ function refresh() {
 /**
  * Take a post and get the comment for it.
  *
- * Taking it holds it for a couple of hours, so nobody else answers the same
- * neighbour meanwhile. Somebody who takes a post they took before gets the
- * comment they already had back, rather than a second link.
+ * Taking it holds one of the post's two places for a couple of hours, so a
+ * third person does not pile on meanwhile. The owner is never turned away,
+ * by a full post or by the day's limit. Somebody who takes a post they took
+ * before gets the comment they already had back, rather than a second link.
  */
 export async function takePost(seenId: string): Promise<TakeResult> {
   const profile = await getCurrentProfile();
@@ -47,7 +48,14 @@ export async function takePost(seenId: string): Promise<TakeResult> {
 
   const now = new Date();
   const [answers, today, settings] = await Promise.all([answersToPost(org, seenId), answeredToday(org, profile.id, now), getAgentSettings(org)]);
-  const refusal = whyNotTake({ answers, profileId: profile.id, now, answeredToday: today, dailyLimit: settings.dailyCap });
+  const refusal = whyNotTake({
+    answers,
+    profileId: profile.id,
+    now,
+    answeredToday: today,
+    dailyLimit: settings.dailyCap,
+    override: isOwnerLevel(profile.roles),
+  });
   if (refusal) return { ok: false, error: refusal };
 
   const supabase = await createClient();
