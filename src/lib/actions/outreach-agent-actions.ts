@@ -18,6 +18,7 @@ import { mentionComment, normaliseGroupUrl, type AgentGroup, type AgentSources }
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import { createClient } from "@/lib/supabase/server";
+import { removeBusiness, setPostKind, sortReadPosts } from "@/lib/data/post-sorter";
 
 /**
  * The owner's hand on the group agent: which groups, how many a day, when,
@@ -127,7 +128,7 @@ export async function acceptAgentPost(seenId: string): Promise<Result> {
   if (!profile) return { ok: false, error: "Not signed in." };
   const row = await getSeen(profile.organization_id, seenId);
   if (!row) return { ok: false, error: "Couldn't find that post." };
-  if (row.decision !== "read") return { ok: false, error: "That one has already been picked." };
+  if (row.decision !== "read" && row.decision !== "advert") return { ok: false, error: "That one has already been picked." };
   if (!row.text) return { ok: false, error: "There are no words on that post to answer." };
 
   const read = await readAndDraft({ screenshotPath: null, pastedText: row.text, kind: "comment" });
@@ -159,6 +160,42 @@ export async function acceptAgentPost(seenId: string): Promise<Result> {
   await setPicked(profile.organization_id, seenId, "accepted", { decision: "ready", reason: read.note, linkId: recorded.id });
   revalidatePath("/admin/outreach/agent");
   revalidatePath("/my-day");
+  return { ok: true };
+}
+
+/**
+ * The owner says what a post is: somebody asking for work, somebody
+ * advertising, or neither. An advert's business is written down.
+ */
+export async function setAgentPostKind(input: { seenId: string; kind: "request" | "promotion" | "other" }): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const result = await setPostKind(profile.organization_id, input.seenId, input.kind);
+  if (!result.ok) return { ok: false, error: result.error ?? "Couldn't save that." };
+  revalidatePath("/admin/outreach/agent");
+  return { ok: true };
+}
+
+/** Sort whatever is still unsorted in the pile, now. */
+export async function sortAgentPosts(): Promise<Result & { sorted?: number }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const result = await sortReadPosts(profile.organization_id, { limit: 40 });
+  revalidatePath("/admin/outreach/agent");
+  return { ok: true, sorted: result.sorted };
+}
+
+/** Not a business worth keeping. Off the list, and it stays off. */
+export async function removeAgentBusiness(id: string): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  try {
+    await removeBusiness(profile.organization_id, id);
+  } catch (err) {
+    console.error("remove business failed:", err);
+    return { ok: false, error: "Couldn't remove that. Try again." };
+  }
+  revalidatePath("/admin/outreach/agent");
   return { ok: true };
 }
 

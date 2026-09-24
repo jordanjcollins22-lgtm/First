@@ -274,7 +274,8 @@ export type Decision =
   | "not_member"
   | "outside_area"
   | "declined"
-  | "read";
+  | "read"
+  | "advert";
 
 export const DECISION_LABEL: Record<Decision, string> = {
   queued: "Waiting to post",
@@ -290,6 +291,7 @@ export const DECISION_LABEL: Record<Decision, string> = {
   outside_area: "Outside the area",
   declined: "Declined",
   read: "Read, waiting for you to pick",
+  advert: "Advertising, saved to businesses",
 };
 
 /**

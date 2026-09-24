@@ -23,6 +23,7 @@ const TONE: Record<Decision, string> = {
   outside_area: "text-muted-foreground",
   declined: "text-muted-foreground",
   read: "text-sky-700",
+  advert: "text-muted-foreground",
 };
 
 export function AgentActivity({ rows }: { rows: SeenRow[] }) {

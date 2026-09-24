@@ -235,10 +235,10 @@ async function tick(options = {}) {
     const stats = found.stats ?? {};
     if (typeof answer.kept === "number") {
       await setStatus(
-        `${next.name}: read ${stats.posts ?? 0} posts, ${stats.mentioned ?? 0} mention the work. ` +
-          `${answer.kept} new for you to pick in the app` +
+        `${next.name}: read ${stats.posts ?? 0} posts, ${answer.kept} new` +
           ((answer.skipped ?? 0) > 0 ? `, ${answer.skipped} seen before` : "") +
-          "."
+          ((answer.businesses ?? 0) > 0 ? `, ${answer.businesses} businesses saved` : "") +
+          ". New ones are sorted and waiting in the app."
       );
       return;
     }

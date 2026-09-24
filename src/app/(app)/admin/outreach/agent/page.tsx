@@ -13,6 +13,8 @@ import { AgentActivity } from "@/components/marketing/agent-activity";
 import { GroupsToJoin } from "@/components/marketing/groups-to-join";
 import { AgentReview } from "@/components/marketing/agent-review";
 import { AgentPicker } from "@/components/marketing/agent-picker";
+import { AgentBusinesses } from "@/components/marketing/agent-businesses";
+import { listBusinesses } from "@/lib/data/post-sorter";
 
 /**
  * The group agent.
@@ -33,13 +35,14 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, activity, toJoin, look, toPick] = await Promise.all([
+  const [settings, counts, activity, toJoin, look, toPick, businesses] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     recentAgentActivity(profile.organization_id, 80, "decided").catch(() => []),
     groupsToJoin(profile.organization_id).catch(() => []),
     lastLook(profile.organization_id).catch(() => null),
     recentAgentActivity(profile.organization_id, 200, "read").catch(() => []),
+    listBusinesses(profile.organization_id).catch(() => []),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
 
@@ -84,11 +87,21 @@ export default async function GroupAgentPage() {
       <section id="posts" className="scroll-mt-4 rounded-lg border border-border p-4">
         <h2 className="mb-1 text-sm font-semibold">Posts it read</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          Every post the extension read on its last looks, newest first. Pick the ones worth answering and it writes a
-          comment for each, which then waits under &ldquo;Comments to approve&rdquo; for a last read. Your picks are
-          kept, so it can learn which posts you go for.
+          Every post the extension reads is sorted as it arrives: people asking for work first, other posts one tap
+          away, and ads straight to the Businesses list below. Pick the ones worth answering and it writes a comment
+          for each, which then waits under &ldquo;Comments to approve&rdquo;. If it put a post in the wrong pile,
+          move it; your picks and moves are kept, so it learns which posts you go for.
         </p>
         <AgentPicker rows={toPick} />
+      </section>
+
+      <section id="businesses" className="scroll-mt-4 rounded-lg border border-border p-4">
+        <h2 className="mb-1 text-sm font-semibold">Businesses advertising ({businesses.length})</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Everyone it has seen advertising their own work in the groups, kept for subcontracting later. Only what they
+          wrote in their posts, one row per business however many groups they post in.
+        </p>
+        <AgentBusinesses rows={businesses} />
       </section>
 
       <section id="review" className="scroll-mt-4 rounded-lg border border-border p-4">

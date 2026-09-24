@@ -27,6 +27,7 @@ import {
   type ScanSource,
 } from "@/lib/outreach-agent";
 import { createClient } from "@/lib/supabase/server";
+import { sortReadPosts } from "@/lib/data/post-sorter";
 
 /**
  * The posts the browser found, and which of them to answer.
@@ -168,7 +169,11 @@ export async function POST(request: NextRequest) {
       if (id) kept += 1;
       else skipped += 1;
     }
-    return NextResponse.json({ ok: true, actions: [], decided: [], kept, skipped, moreToRead: false });
+    // Sorted before the answer goes back: who wants work done, who is
+    // selling it, and the businesses among the second kept. Anything left
+    // unsorted from before is swept up in the same call.
+    const sort = kept > 0 ? await sortReadPosts(profile.organization_id, { limit: 40 }) : { sorted: 0, businesses: 0 };
+    return NextResponse.json({ ok: true, actions: [], decided: [], kept, skipped, sorted: sort.sorted, businesses: sort.businesses, moreToRead: false });
   }
 
   // Keyed, cleaned, and matched again here. The browser filtered already,

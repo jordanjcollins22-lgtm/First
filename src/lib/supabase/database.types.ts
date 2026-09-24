@@ -3099,6 +3099,36 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["outreach_agent_settings"]["Row"]>;
         Relationships: [];
       };
+      outreach_businesses: {
+        Row: {
+          id: string;
+          organization_id: string;
+          business_key: string;
+          name: string | null;
+          person: string | null;
+          phone: string | null;
+          email: string | null;
+          website: string | null;
+          services: string[];
+          area: string | null;
+          times_seen: number;
+          first_seen_at: string;
+          last_seen_at: string;
+          last_post_url: string | null;
+          last_post_text: string | null;
+          last_group_name: string | null;
+          notes: string | null;
+          removed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_businesses"]["Row"]> & {
+          organization_id: string;
+          business_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_businesses"]["Row"]>;
+        Relationships: [];
+      };
       outreach_groups: {
         Row: {
           id: string;
@@ -3140,6 +3170,9 @@ export interface Database {
           matched: boolean | null;
           picked: string | null;
           picked_at: string | null;
+          kind: string | null;
+          kind_by: string | null;
+          business_id: string | null;
           created_at: string;
           updated_at: string;
         };

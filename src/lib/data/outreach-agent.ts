@@ -372,6 +372,10 @@ export interface SeenRow {
   matched: boolean | null;
   source: string;
   picked: string | null;
+  /** What the post is: a request for work, an advert, or anything else. Null until sorted. */
+  kind: "request" | "promotion" | "other" | null;
+  /** Who said so: the model's sort, or the owner's correction. */
+  kindBy: string | null;
 }
 
 /** One comment the browser should go and post. */
@@ -556,14 +560,15 @@ export async function setPicked(
   if (error) throw error;
 }
 
-/** How many read posts are waiting for the owner to pick. */
+/** How many people asking for work are waiting for the owner to pick, counting posts not sorted yet. */
 export async function countToPick(organizationId: string): Promise<number> {
   const supabase = await createClient();
   const { count } = await supabase
     .from("outreach_seen_posts")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", organizationId)
-    .eq("decision", "read");
+    .eq("decision", "read")
+    .or("kind.is.null,kind.eq.request");
   return count ?? 0;
 }
 
@@ -581,7 +586,7 @@ export async function recentAgentActivity(
   const supabase = await createClient();
   let query = supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, author, text, age_days, decision, reason, link_id, matched, source, picked, created_at, updated_at")
+    .select("id, url, group_name, author, text, age_days, decision, reason, link_id, matched, source, picked, kind, kind_by, created_at, updated_at")
     .eq("organization_id", organizationId);
   if (only === "read") query = query.eq("decision", "read");
   if (only === "decided") query = query.neq("decision", "read");
@@ -618,6 +623,8 @@ export async function recentAgentActivity(
       matched: row.matched,
       source: row.source,
       picked: row.picked,
+      kind: (row.kind as SeenRow["kind"]) ?? null,
+      kindBy: row.kind_by,
     };
   });
 }
