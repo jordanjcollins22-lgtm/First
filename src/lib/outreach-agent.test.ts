@@ -4,7 +4,10 @@ import {
   DEFAULT_SETTINGS,
   ageDaysFromLabel,
   allowance,
+  cleanPostText,
   cleanPostUrl,
+  findPostUrl,
+  textKeyFor,
   firstNameOf,
   groupKeyFrom,
   groupUrlFrom,
@@ -190,6 +193,22 @@ describe("groups and mentions", () => {
     expect(mentionFromComment("@Mary-Kate we can help")).toBe("Mary-Kate");
     expect(mentionFromComment("We can help with that.")).toBeNull();
     expect(mentionFromComment(null)).toBeNull();
+  });
+
+  it("takes Facebook's scattered letters out of a post", () => {
+    expect(cleanPostText("Facebook\nFacebook\nF\nLooking for an affordable landscaper in Bel Air.\nLike\nComment")).toBe(
+      "Looking for an affordable landscaper in Bel Air."
+    );
+  });
+
+  it("keys a post with no link on what it says", () => {
+    const a = textKeyFor("Looking for a landscaper in Bel Air!", "abc");
+    expect(a).toBe(textKeyFor("looking for a  landscaper in bel air", "abc"));
+    expect(a).not.toBe(textKeyFor("Looking for a landscaper in Bel Air!", "xyz"));
+    expect(a.startsWith("text:abc:")).toBe(true);
+    expect(findPostUrl("Looking for an affordable landscaper in Bel Air please")).toBe(
+      "https://www.facebook.com/search/posts?q=Looking%20for%20an%20affordable%20landscaper%20in%20Bel%20Air%20please"
+    );
   });
 
   it("builds a search link", () => {

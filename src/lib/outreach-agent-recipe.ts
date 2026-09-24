@@ -16,7 +16,7 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.2.0";
+export const EXTENSION_VERSION = "2.3.0";
 export const EXTENSION_DOWNLOAD_URL = "https://github.com/jordanjcollins22-lgtm/First/archive/refs/heads/claude/image-upload-canvas-382r1a.zip";
 
 export interface AgentRecipe {
@@ -90,7 +90,7 @@ export const DEFAULT_RECIPE: AgentRecipe = {
     revealWaitMs: 500,
     settleMs: 4000,
     searchSettleMs: 6000,
-    maxPosts: 25,
+    maxPosts: 40,
     maxTextChars: 3000,
   },
   post: {

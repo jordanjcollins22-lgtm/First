@@ -30,6 +30,7 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
   const [scanEvery, setScanEvery] = useState(String(settings.scanEveryMinutes));
   const [maxAge, setMaxAge] = useState(String(settings.maxAgeDays));
   const [autoPost, setAutoPost] = useState(settings.autoPost);
+  const [pickPosts, setPickPosts] = useState(settings.pickPosts);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -49,6 +50,7 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
         scanEveryMinutes: Number(scanEvery),
         maxAgeDays: Number(maxAge),
         autoPost,
+        pickPosts,
       });
       setMessage(result.ok ? "Saved. The browser picks it up within a minute." : result.error);
     });
@@ -166,6 +168,17 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
         <Field label="Post until" value={activeTo} onChange={setActiveTo} disabled={disabled} type="time" />
         <Field label="Ignore posts older than (days)" value={maxAge} onChange={setMaxAge} disabled={disabled} type="number" />
       </div>
+
+      <label className="flex items-start gap-3 text-sm">
+        <Checkbox checked={pickPosts} disabled={disabled} onCheckedChange={(v) => setPickPosts(v === true)} className="mt-0.5" />
+        <span>
+          <span className="font-medium">Let me pick the posts.</span>
+          <span className="block text-xs text-muted-foreground">
+            On, and every post it reads shows under &ldquo;Posts it read&rdquo; for you to pick, and a comment is
+            written only for the ones you pick. Off, and it decides for itself which posts to answer.
+          </span>
+        </span>
+      </label>
 
       <label className="flex items-start gap-3 text-sm">
         <Checkbox checked={autoPost} disabled={disabled} onCheckedChange={(v) => setAutoPost(v === true)} className="mt-0.5" />

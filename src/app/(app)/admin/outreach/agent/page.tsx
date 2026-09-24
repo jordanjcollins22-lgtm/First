@@ -12,6 +12,7 @@ import { AgentSettingsForm } from "@/components/marketing/agent-settings";
 import { AgentActivity } from "@/components/marketing/agent-activity";
 import { GroupsToJoin } from "@/components/marketing/groups-to-join";
 import { AgentReview } from "@/components/marketing/agent-review";
+import { AgentPicker } from "@/components/marketing/agent-picker";
 
 /**
  * The group agent.
@@ -32,12 +33,13 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, activity, toJoin, look] = await Promise.all([
+  const [settings, counts, activity, toJoin, look, toPick] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
-    recentAgentActivity(profile.organization_id).catch(() => []),
+    recentAgentActivity(profile.organization_id, 80, "decided").catch(() => []),
     groupsToJoin(profile.organization_id).catch(() => []),
     lastLook(profile.organization_id).catch(() => null),
+    recentAgentActivity(profile.organization_id, 200, "read").catch(() => []),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
 
@@ -77,6 +79,16 @@ export default async function GroupAgentPage() {
               (look.version ? ` Extension v${look.version}.` : "")
             : "No look recorded yet. Press Look now in the extension popup."}
         </p>
+      </section>
+
+      <section id="posts" className="scroll-mt-4 rounded-lg border border-border p-4">
+        <h2 className="mb-1 text-sm font-semibold">Posts it read</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Every post the extension read on its last looks, newest first. Pick the ones worth answering and it writes a
+          comment for each, which then waits under &ldquo;Comments to approve&rdquo; for a last read. Your picks are
+          kept, so it can learn which posts you go for.
+        </p>
+        <AgentPicker rows={toPick} />
       </section>
 
       <section id="review" className="scroll-mt-4 rounded-lg border border-border p-4">

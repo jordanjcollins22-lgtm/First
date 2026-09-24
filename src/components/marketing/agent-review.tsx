@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ExternalLink, X } from "lucide-react";
+import { Check, Copy, ExternalLink, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { approveAgentComment, declineAgentComment } from "@/lib/actions/outreach-agent-actions";
+import { approveAgentComment, declineAgentComment, markAgentCommentPosted } from "@/lib/actions/outreach-agent-actions";
 import type { SeenRow } from "@/lib/data/outreach-agent";
+import { findPostUrl } from "@/lib/outreach-agent";
 import { shortWhen } from "@/lib/time-zone";
 
 /**
@@ -28,13 +29,15 @@ export function AgentReview({ rows }: { rows: SeenRow[] }) {
     return <p className="text-sm text-muted-foreground">Nothing waiting. When it writes one, it shows here for you to approve.</p>;
   }
 
-  function decide(row: SeenRow, what: "approve" | "decline") {
+  function decide(row: SeenRow, what: "approve" | "decline" | "pasted") {
     setMessage(null);
     startTransition(async () => {
       const result =
         what === "approve"
           ? await approveAgentComment({ seenId: row.id, comment: drafts[row.id] ?? row.comment ?? "" })
-          : await declineAgentComment({ seenId: row.id });
+          : what === "pasted"
+            ? await markAgentCommentPosted(row.id)
+            : await declineAgentComment({ seenId: row.id });
       if (result.ok) setGone((s) => new Set(s).add(row.id));
       else setMessage(result.error);
     });
@@ -53,9 +56,15 @@ export function AgentReview({ rows }: { rows: SeenRow[] }) {
             <span>found {shortWhen(row.createdAt)}</span>
           </div>
           {row.text && <p className="whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-sm">{row.text}</p>}
-          <a href={row.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs underline">
-            Open the post <ExternalLink className="h-3 w-3" />
+          <a href={row.url || findPostUrl(row.text ?? "")} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs underline">
+            {row.url ? "Open the post" : "Find it on Facebook"} <ExternalLink className="h-3 w-3" />
           </a>
+          {!row.url && (
+            <p className="text-xs text-amber-700">
+              The page showed this post without a link, so it can&apos;t be posted for you. Copy the comment, paste it under
+              the post, then press &ldquo;I posted it&rdquo;.
+            </p>
+          )}
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">The comment</p>
             <Textarea
@@ -65,10 +74,26 @@ export function AgentReview({ rows }: { rows: SeenRow[] }) {
               onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
             />
           </div>
-          <div className="flex gap-2">
-            <Button type="button" size="sm" disabled={pending} onClick={() => decide(row, "approve")}>
-              <Check className="mr-1 h-4 w-4" /> Approve and post
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            {row.url ? (
+              <Button type="button" size="sm" disabled={pending} onClick={() => decide(row, "approve")}>
+                <Check className="mr-1 h-4 w-4" /> Approve and post
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigator.clipboard?.writeText(drafts[row.id] ?? row.comment ?? "").catch(() => {})}
+                >
+                  <Copy className="mr-1 h-4 w-4" /> Copy comment
+                </Button>
+                <Button type="button" size="sm" disabled={pending} onClick={() => decide(row, "pasted")}>
+                  <Check className="mr-1 h-4 w-4" /> I posted it
+                </Button>
+              </>
+            )}
             <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => decide(row, "decline")}>
               <X className="mr-1 h-4 w-4" /> Decline
             </Button>

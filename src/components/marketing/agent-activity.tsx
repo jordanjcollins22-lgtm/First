@@ -22,6 +22,7 @@ const TONE: Record<Decision, string> = {
   not_member: "text-amber-700",
   outside_area: "text-muted-foreground",
   declined: "text-muted-foreground",
+  read: "text-sky-700",
 };
 
 export function AgentActivity({ rows }: { rows: SeenRow[] }) {

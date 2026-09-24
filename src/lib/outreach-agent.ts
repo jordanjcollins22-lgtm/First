@@ -48,6 +48,11 @@ export interface AgentSettings {
   scanEveryMinutes: number;
   maxAgeDays: number;
   autoPost: boolean;
+  /**
+   * Every post read is kept for the owner to pick from, and nothing is
+   * written until they do. Off, and the model decides which to answer.
+   */
+  pickPosts: boolean;
   pausedUntil: string | null;
   pauseReason: string | null;
 }
@@ -95,6 +100,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   scanEveryMinutes: 30,
   maxAgeDays: 5,
   autoPost: true,
+  pickPosts: true,
   pausedUntil: null,
   pauseReason: null,
 };
@@ -267,7 +273,8 @@ export type Decision =
   | "skipped"
   | "not_member"
   | "outside_area"
-  | "declined";
+  | "declined"
+  | "read";
 
 export const DECISION_LABEL: Record<Decision, string> = {
   queued: "Waiting to post",
@@ -282,7 +289,46 @@ export const DECISION_LABEL: Record<Decision, string> = {
   not_member: "In a group you haven't joined",
   outside_area: "Outside the area",
   declined: "Declined",
+  read: "Read, waiting for you to pick",
 };
+
+/**
+ * The words of a post with Facebook's noise taken out.
+ *
+ * Facebook scatters the letters of "Facebook" and single characters through
+ * a post's time stamp and sponsored label, so a post read straight off the
+ * page can open with twenty lines of "Facebook". Those lines, and any line
+ * of one or two characters, are dropped.
+ */
+export function cleanPostText(text: string): string {
+  return (text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 2 && !/^facebook$/i.test(line) && !/^(like|comment|share|reply|follow|join|·)$/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * A name for a post that has no link: its group and its first words.
+ *
+ * Search results often show a post without a link that can be read off
+ * the page. It is still worth showing the owner, and it still must not be
+ * shown twice, so it is keyed on what it says.
+ */
+export function textKeyFor(text: string, groupKey: string | null): string {
+  const words = cleanPostText(text).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+  let hash = 0;
+  for (let i = 0; i < words.length; i += 1) hash = (hash * 31 + words.charCodeAt(i)) | 0;
+  return `text:${groupKey ?? "any"}:${(hash >>> 0).toString(36)}:${words.length}`;
+}
+
+/** A Facebook search for a post's opening words, for a post with no link of its own. */
+export function findPostUrl(text: string): string {
+  const words = cleanPostText(text).split(/\s+/).slice(0, 10).join(" ");
+  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(words)}`;
+}
 
 /** The first name a stored comment opens with, for the browser's mention picker. */
 export function mentionFromComment(comment: string | null | undefined): string | null {
@@ -424,6 +470,7 @@ export function settingsForBrowser(
     scanEveryMinutes: settings.scanEveryMinutes,
     maxAgeDays: settings.maxAgeDays,
     autoPost: settings.autoPost,
+    pickPosts: settings.pickPosts,
   };
 }
 

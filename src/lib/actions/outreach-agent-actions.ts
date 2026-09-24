@@ -4,8 +4,20 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
-import { approveReady, declineReady, dismissGroup, pauseAgent, saveAgentSettings, setGroupJoined } from "@/lib/data/outreach-agent";
-import { normaliseGroupUrl, type AgentGroup, type AgentSources } from "@/lib/outreach-agent";
+import {
+  approveReady,
+  declineReady,
+  dismissGroup,
+  getSeen,
+  pauseAgent,
+  saveAgentSettings,
+  setGroupJoined,
+  setPicked,
+} from "@/lib/data/outreach-agent";
+import { mentionComment, normaliseGroupUrl, type AgentGroup, type AgentSources } from "@/lib/outreach-agent";
+import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
+import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * The owner's hand on the group agent: which groups, how many a day, when,
@@ -27,6 +39,7 @@ export async function updateAgentSettings(input: {
   scanEveryMinutes: number;
   maxAgeDays: number;
   autoPost: boolean;
+  pickPosts: boolean;
 }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -75,6 +88,7 @@ export async function updateAgentSettings(input: {
       scanEveryMinutes: clamp(input.scanEveryMinutes, 10, 240),
       maxAgeDays: clamp(input.maxAgeDays, 0, 30),
       autoPost: Boolean(input.autoPost),
+      pickPosts: Boolean(input.pickPosts),
     });
   } catch (err) {
     console.error("agent settings failed to save:", err);
@@ -97,6 +111,97 @@ export async function pauseGroupAgent(input: { hours: number | null; reason: str
     return { ok: false, error: "Couldn't pause it. Try again." };
   }
   revalidatePath("/admin/outreach/agent");
+  return { ok: true };
+}
+
+/**
+ * Yes to one post: write the comment for it.
+ *
+ * The owner has already said it is worth answering, so the model's own
+ * view of that is not asked; it only writes. The comment lands under
+ * "Comments to approve" with the tracked link in it, for a last read
+ * before it goes up. The pick is kept as a label either way.
+ */
+export async function acceptAgentPost(seenId: string): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const row = await getSeen(profile.organization_id, seenId);
+  if (!row) return { ok: false, error: "Couldn't find that post." };
+  if (row.decision !== "read") return { ok: false, error: "That one has already been picked." };
+  if (!row.text) return { ok: false, error: "There are no words on that post to answer." };
+
+  const read = await readAndDraft({ screenshotPath: null, pastedText: row.text, kind: "comment" });
+  if (!read.ok) return { ok: false, error: read.error };
+  if (!read.draft) return { ok: false, error: read.draftNote ?? "Couldn't write one for that post. Try again." };
+
+  const askedBy = row.author ?? read.askedBy ?? null;
+  const recorded = await recordOutreach({
+    kind: "comment",
+    platform: "facebook",
+    audience: row.group_name || read.groupName || "",
+    fromPage: "",
+    sentTo: askedBy ?? "",
+    service: read.service ?? "",
+    note: read.note,
+    screenshotPath: null,
+  });
+  if (!recorded.ok) return { ok: false, error: recorded.error };
+
+  const written = finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link);
+  if (!looksUsable(written, recorded.link)) return { ok: false, error: "The comment came back too thin. Try again." };
+  const { text: comment } = mentionComment(written, askedBy);
+
+  const supabase = await createClient();
+  await Promise.all([
+    saveComment({ id: recorded.id, comment }),
+    supabase.from("outreach_links").update({ via: "agent", post_url: row.url || null }).eq("id", recorded.id),
+  ]);
+  await setPicked(profile.organization_id, seenId, "accepted", { decision: "ready", reason: read.note, linkId: recorded.id });
+  revalidatePath("/admin/outreach/agent");
+  revalidatePath("/my-day");
+  return { ok: true };
+}
+
+/** No to one post. Nothing is written, and the post is not shown again. */
+export async function passAgentPost(seenId: string): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const row = await getSeen(profile.organization_id, seenId);
+  if (!row) return { ok: false, error: "Couldn't find that post." };
+  if (row.decision !== "read") return { ok: false, error: "That one has already been picked." };
+  try {
+    await setPicked(profile.organization_id, seenId, "declined", { decision: "declined", reason: "Passed on." });
+  } catch (err) {
+    console.error("pass post failed:", err);
+    return { ok: false, error: "Couldn't save that. Try again." };
+  }
+  revalidatePath("/admin/outreach/agent");
+  return { ok: true };
+}
+
+/**
+ * The owner pasted this one by hand.
+ *
+ * For a post the page showed without a link, which the browser cannot
+ * open to comment on. The comment is marked posted, so the link's opens
+ * and bookings count against the words.
+ */
+export async function markAgentCommentPosted(seenId: string): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const row = await getSeen(profile.organization_id, seenId);
+  if (!row || !row.link_id) return { ok: false, error: "Couldn't find that comment." };
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { data: link } = await supabase.from("outreach_links").select("comment").eq("id", row.link_id).maybeSingle();
+  await supabase.from("outreach_links").update({ posted_comment: link?.comment ?? null, posted_comment_at: now }).eq("id", row.link_id);
+  await supabase
+    .from("outreach_seen_posts")
+    .update({ decision: "posted", reason: "Pasted by hand.", updated_at: now })
+    .eq("organization_id", profile.organization_id)
+    .eq("id", seenId);
+  revalidatePath("/admin/outreach/agent");
+  revalidatePath("/my-day");
   return { ok: true };
 }
 

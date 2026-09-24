@@ -233,6 +233,15 @@ async function tick(options = {}) {
     const answer = await sendCandidates(next, found);
     if (!answer) return;
     const stats = found.stats ?? {};
+    if (typeof answer.kept === "number") {
+      await setStatus(
+        `${next.name}: read ${stats.posts ?? 0} posts, ${stats.mentioned ?? 0} mention the work. ` +
+          `${answer.kept} new for you to pick in the app` +
+          ((answer.skipped ?? 0) > 0 ? `, ${answer.skipped} seen before` : "") +
+          "."
+      );
+      return;
+    }
     if (found.posts.length === 0) {
       await setStatus(
         `${next.name}: read ${stats.posts ?? 0} posts, ${stats.mentioned ?? 0} mentioned the work` +
@@ -427,16 +436,35 @@ async function scanPosts(keywords, r) {
   };
 
   // Facebook fills in a post's real link only when the pointer passes over
-  // it: until then the time stamp that carries it points at "#". So every
-  // link in a post is given a hover before it is read.
+  // it: until then the time stamp that carries it points at "#". Only those
+  // unfilled links are hovered. Hovering a name or a group opens its card,
+  // which is what looked like it was clicking on people's accounts.
+  const unfilled = (a) => {
+    const href = a.getAttribute("href");
+    return !href || href === "#" || href.startsWith("#") || /^javascript:/i.test(href);
+  };
   const reveal = (el) => {
     for (const a of el.querySelectorAll("a")) {
-      for (const type of ["mouseover", "mouseenter", "mousemove"]) {
-        a.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      if (!unfilled(a)) continue;
+      const init = { bubbles: true, cancelable: true, view: window, relatedTarget: document.body };
+      for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter", "mousemove"]) {
+        a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
       }
-      a.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+      a.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      for (const type of ["pointerout", "pointerleave", "mouseout", "mouseleave"]) {
+        a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+      }
     }
   };
+  // Facebook scatters the letters of "Facebook" through a post's time stamp
+  // so it cannot be read off the page. Those lines, and one- and two-letter
+  // lines, come out.
+  const tidy = (text) =>
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 2 && !/^facebook$/i.test(line))
+      .join("\n");
   const expand = () => {
     for (const button of document.querySelectorAll('div[role="button"]')) {
       if (seeMore.test((button.innerText || "").trim())) {
@@ -463,7 +491,7 @@ async function scanPosts(keywords, r) {
         .slice(2)
         .join("\n");
     }
-    return clean(text).slice(0, r.maxTextChars ?? 3000);
+    return clean(tidy(text)).slice(0, r.maxTextChars ?? 3000);
   };
 
   // Read as it scrolls, not after. Facebook takes posts that have scrolled
@@ -499,9 +527,13 @@ async function scanPosts(keywords, r) {
       if (stats.samples.length < 8) {
         stats.samples.push({ text: text.slice(0, 120), link: Boolean(permalink), matched });
       }
-      if (!matched || !permalink) continue;
+      // Every post read is sent, link or no link, words or no words: the
+      // owner picks from all of them in the app. Only the model's own
+      // answering needs a link and a match, and the app sorts that out.
+      const key = permalink ? permalink.href : `text:${text.slice(0, 200)}`;
+      if (byUrl.has(key)) continue;
 
-      const ageLabel = (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40);
+      const ageLabel = permalink ? (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40) : "";
       // The header: the group's name, then the poster's. On a group's own
       // page the group is the page, so the first named link is the poster.
       const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
@@ -520,9 +552,7 @@ async function scanPosts(keywords, r) {
           if (candidate && (!group || candidate !== group.name)) author = candidate;
         }
       }
-      if (!byUrl.has(permalink.href)) {
-        byUrl.set(permalink.href, { url: permalink.href, text, author: author.slice(0, 80), anonymous, ageLabel, group });
-      }
+      byUrl.set(key, { url: permalink ? permalink.href : null, text, author: author.slice(0, 80), anonymous, ageLabel, group, matched });
     }
   };
 

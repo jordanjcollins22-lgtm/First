@@ -13,6 +13,7 @@ import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreac
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import {
   ageDaysFromLabel,
+  cleanPostText,
   cleanPostUrl,
   groupKeyFrom,
   groupUrlFrom,
@@ -21,6 +22,7 @@ import {
   matchesKeywords,
   mentionComment,
   postKeyFrom,
+  textKeyFor,
   worthAnswering,
   type ScanSource,
 } from "@/lib/outreach-agent";
@@ -51,7 +53,8 @@ export const maxDuration = 60;
 const MAX_READS_PER_CALL = 4;
 
 interface IncomingPost {
-  url: string;
+  /** Null when the page showed the post without a link to it. */
+  url: string | null;
   text: string;
   author?: string | null;
   anonymous?: boolean;
@@ -134,12 +137,46 @@ export async function POST(request: NextRequest) {
   }
   if (listedGroupKey) joined.add(listedGroupKey);
 
+  // Pick mode: every post read is kept for the owner to choose from, link
+  // or no link, words or no words. Nothing is read by the model and nothing
+  // is written until the owner picks one.
+  if (settings.pickPosts) {
+    let kept = 0;
+    let skipped = 0;
+    for (const post of posts) {
+      const text = cleanPostText(post.text ?? "").slice(0, 4000);
+      if (text.length < 12) continue;
+      const url = typeof post.url === "string" && /^https:\/\/(www\.|m\.)?facebook\.com\//.test(post.url) ? cleanPostUrl(post.url) : "";
+      const groupKey = groupKeyFrom(post.group?.url) ?? (url ? groupKeyFrom(url) : null) ?? listedGroupKey;
+      const key = (url ? postKeyFrom(url) : null) ?? textKeyFor(text, groupKey);
+      const anonymous = post.anonymous === true || isAnonymousAuthor(post.author);
+      const matched = matchesKeywords(text, settings.keywords);
+      const id = await recordSeen(profile.organization_id, profile.id, {
+        postKey: key,
+        url,
+        groupName: (post.group?.name ?? "").trim().slice(0, 120) || listedGroupName || null,
+        author: anonymous ? null : post.author?.trim().slice(0, 80) || null,
+        text,
+        ageDays: ageDaysFromLabel(post.ageLabel, now),
+        decision: "read",
+        reason: null,
+        linkId: null,
+        source,
+        groupKey,
+        matched,
+      });
+      if (id) kept += 1;
+      else skipped += 1;
+    }
+    return NextResponse.json({ ok: true, actions: [], decided: [], kept, skipped, moreToRead: false });
+  }
+
   // Keyed, cleaned, and matched again here. The browser filtered already,
   // but the browser is the part somebody can edit.
   const fresh = new Map<string, IncomingPost & { key: string; url: string }>();
   for (const post of posts) {
     const key = typeof post.url === "string" ? postKeyFrom(post.url) : null;
-    if (!key || fresh.has(key)) continue;
+    if (!key || fresh.has(key) || typeof post.url !== "string") continue;
     if (!matchesKeywords(post.text ?? "", settings.keywords)) continue;
     fresh.set(key, { ...post, key, url: cleanPostUrl(post.url) });
   }

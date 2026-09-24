@@ -42,7 +42,7 @@ import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
-import { countReadyForReview } from "@/lib/data/outreach-agent";
+import { countReadyForReview, countToPick } from "@/lib/data/outreach-agent";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
 import { nextRouteToApprove } from "@/lib/data/route-approval";
@@ -392,17 +392,22 @@ async function RouteApprovalBlock() {
 async function AgentReviewBlock() {
   const organizationId = await getCurrentOrganizationId().catch(() => null);
   if (!organizationId) return null;
-  const waiting = await countReadyForReview(organizationId).catch(() => 0);
-  if (waiting === 0) return null;
+  const [waiting, toPick] = await Promise.all([
+    countReadyForReview(organizationId).catch(() => 0),
+    countToPick(organizationId).catch(() => 0),
+  ]);
+  if (waiting === 0 && toPick === 0) return null;
+  const parts = [
+    toPick > 0 ? `${toPick} Facebook post${toPick === 1 ? "" : "s"} to pick from` : null,
+    waiting > 0 ? `${waiting} comment${waiting === 1 ? "" : "s"} waiting for your OK` : null,
+  ].filter(Boolean);
   return (
     <Link
-      href="/admin/outreach/agent#review"
+      href={toPick > 0 ? "/admin/outreach/agent#posts" : "/admin/outreach/agent#review"}
       className="block rounded-lg border border-border bg-card/70 px-4 py-3 text-sm hover:bg-card"
     >
-      <span className="font-medium">
-        {waiting} Facebook comment{waiting === 1 ? "" : "s"} waiting for your OK
-      </span>
-      <span className="block text-xs text-muted-foreground">The agent found the posts and wrote the replies. Read them, change what you like, approve or decline.</span>
+      <span className="font-medium">{parts.join(" · ")}</span>
+      <span className="block text-xs text-muted-foreground">Pick the posts worth answering; a comment is written for each for you to approve.</span>
     </Link>
   );
 }

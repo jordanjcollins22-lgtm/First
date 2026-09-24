@@ -3089,6 +3089,7 @@ export interface Database {
           area_words: string[];
           last_look: Json | null;
           last_look_at: string | null;
+          pick_posts: boolean;
           updated_at: string;
           updated_by: string | null;
         };
@@ -3136,6 +3137,9 @@ export interface Database {
           seen_by: string | null;
           source: string;
           group_key: string | null;
+          matched: boolean | null;
+          picked: string | null;
+          picked_at: string | null;
           created_at: string;
           updated_at: string;
         };

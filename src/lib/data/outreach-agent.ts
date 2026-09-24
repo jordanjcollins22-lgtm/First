@@ -57,6 +57,7 @@ export async function getAgentSettings(organizationId: string): Promise<AgentSet
     scanEveryMinutes: data.scan_every_minutes,
     maxAgeDays: data.max_age_days,
     autoPost: data.auto_post,
+    pickPosts: data.pick_posts ?? true,
     pausedUntil: data.paused_until,
     pauseReason: data.pause_reason,
   };
@@ -83,6 +84,7 @@ export async function saveAgentSettings(
       scan_every_minutes: settings.scanEveryMinutes,
       max_age_days: settings.maxAgeDays,
       auto_post: settings.autoPost,
+      pick_posts: settings.pickPosts,
       updated_at: new Date().toISOString(),
       updated_by: by,
     },
@@ -182,6 +184,8 @@ export interface SeenInput {
   linkId: string | null;
   source?: ScanSource;
   groupKey?: string | null;
+  /** Whether the post mentioned any of the work words. */
+  matched?: boolean | null;
 }
 
 /**
@@ -207,6 +211,7 @@ export async function recordSeen(organizationId: string, by: string, input: Seen
       seen_by: by,
       source: input.source ?? "group",
       group_key: input.groupKey ?? null,
+      matched: input.matched ?? null,
     })
     .select("id")
     .single();
@@ -363,6 +368,10 @@ export interface SeenRow {
   comment: string | null;
   code: string | null;
   clicks: number;
+  /** Whether the post mentioned any of the work words. Null on rows from before this was kept. */
+  matched: boolean | null;
+  source: string;
+  picked: string | null;
 }
 
 /** One comment the browser should go and post. */
@@ -401,6 +410,7 @@ export async function queuedForBrowser(organizationId: string, staleHours: numbe
     .eq("organization_id", organizationId)
     .eq("decision", "queued")
     .not("link_id", "is", null)
+    .like("url", "https://%")
     .order("updated_at", { ascending: true })
     .limit(20);
   const linkIds = (rows ?? []).map((row) => row.link_id).filter((id): id is string => Boolean(id));
@@ -504,15 +514,78 @@ export async function declineReady(organizationId: string, seenId: string, reaso
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-/** What the agent has looked at lately, newest first. */
-export async function recentAgentActivity(organizationId: string, limit = 60): Promise<SeenRow[]> {
+/** One read post, for the owner to pick or pass on. */
+export async function getSeen(organizationId: string, id: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, author, text, age_days, decision, reason, link_id, created_at, updated_at")
+    .select("id, url, group_name, group_key, author, text, age_days, decision, source, link_id")
     .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .eq("id", id)
+    .maybeSingle();
+  return data;
+}
+
+/**
+ * The owner's pick, kept apart from what happened next.
+ *
+ * Accepted or declined is the label a person put on the post, and it
+ * stays whatever later becomes of the comment, so there is a clean record
+ * of which posts a person would answer.
+ */
+export async function setPicked(
+  organizationId: string,
+  id: string,
+  pick: "accepted" | "declined",
+  patch: { decision: Decision; reason?: string | null; linkId?: string | null }
+): Promise<void> {
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("outreach_seen_posts")
+    .update({
+      picked: pick,
+      picked_at: now,
+      decision: patch.decision,
+      reason: patch.reason ?? null,
+      ...(patch.linkId !== undefined ? { link_id: patch.linkId } : {}),
+      updated_at: now,
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** How many read posts are waiting for the owner to pick. */
+export async function countToPick(organizationId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("outreach_seen_posts")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .eq("decision", "read");
+  return count ?? 0;
+}
+
+/**
+ * What the agent has looked at lately, newest first.
+ *
+ * `only: "read"` is the pile waiting for the owner to pick; `only:
+ * "decided"` is everything else, which is what the history shows.
+ */
+export async function recentAgentActivity(
+  organizationId: string,
+  limit = 60,
+  only: "read" | "decided" | "all" = "all"
+): Promise<SeenRow[]> {
+  const supabase = await createClient();
+  let query = supabase
+    .from("outreach_seen_posts")
+    .select("id, url, group_name, author, text, age_days, decision, reason, link_id, matched, source, picked, created_at, updated_at")
+    .eq("organization_id", organizationId);
+  if (only === "read") query = query.eq("decision", "read");
+  if (only === "decided") query = query.neq("decision", "read");
+  const { data } = await query.order("created_at", { ascending: false }).limit(limit);
   const rows = data ?? [];
   const linkIds = rows.map((row) => row.link_id).filter((id): id is string => Boolean(id));
   const links = new Map<string, { comment: string | null; code: string; clicks: number }>();
@@ -542,6 +615,9 @@ export async function recentAgentActivity(organizationId: string, limit = 60): P
       comment: link?.comment ?? null,
       code: link?.code ?? null,
       clicks: link?.clicks ?? 0,
+      matched: row.matched,
+      source: row.source,
+      picked: row.picked,
     };
   });
 }
