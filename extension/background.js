@@ -223,7 +223,13 @@ async function tick(options = {}) {
     }
 
     await setStatus(`Looking at ${next.name}…`);
-    const found = await scanPage(next, config.settings.keywords ?? [], recipe);
+    // Posts it has already asked the Share menu about, by their opening
+    // words, so the same post is not opened again on every look.
+    const asked = (await chrome.storage.local.get("sharedAsked")).sharedAsked ?? [];
+    const found = await scanPage(next, config.settings.keywords ?? [], recipe, asked);
+    if (found?.askedNow?.length) {
+      await chrome.storage.local.set({ sharedAsked: [...asked, ...found.askedNow].slice(-600) });
+    }
     scans[next.key] = Date.now();
     await chrome.storage.local.set({ scans });
     if (!found) return;
@@ -331,7 +337,10 @@ async function report(item, outcome) {
  * window of its own, off to the side and never given focus, is drawn and
  * loads, and goes away when the look is done.
  */
-async function inTab(url, func, args, settleMs, loadTimeoutMs) {
+// `world` is where the function runs. "MAIN" is the page's own JavaScript,
+// which the scan needs so it can catch the link Facebook copies when its
+// "Copy link" is pressed. Posting stays in the extension's own world.
+async function inTab(url, func, args, settleMs, loadTimeoutMs, world) {
   const bounds = await windowBounds();
   const win = await chrome.windows.create({ url, type: "popup", focused: false, ...bounds });
   const tab = win.tabs && win.tabs[0];
@@ -346,7 +355,7 @@ async function inTab(url, func, args, settleMs, loadTimeoutMs) {
   try {
     await waitForLoad(tab.id, loadTimeoutMs ?? 30000);
     await sleep(settleMs);
-    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func, args });
+    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func, args, ...(world ? { world } : {}) });
     return result?.result ?? null;
   } finally {
     try {
@@ -390,10 +399,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function scanPage(target, keywords, recipe) {
+async function scanPage(target, keywords, recipe, asked = []) {
   try {
     const settle = target.source === "search" ? recipe.scan.searchSettleMs : recipe.scan.settleMs;
-    return await inTab(target.url, scanPosts, [keywords, recipe.scan], settle, recipe.pacing.tabLoadTimeoutMs);
+    return await inTab(target.url, scanPosts, [keywords, recipe.scan, asked], settle, recipe.pacing.tabLoadTimeoutMs, "MAIN");
   } catch (err) {
     await setStatus(`Couldn't look at ${target.name}: ${err?.message ?? err}`);
     return null;
@@ -419,7 +428,9 @@ async function postOne(item, recipe) {
  * On a feed, a search, or a group page: the posts on the first few screens
  * that mention the work, each with who posted it and which group it is in.
  */
-async function scanPosts(keywords, r) {
+async function scanPosts(keywords, r, asked) {
+  const askedBefore = new Set(asked || []);
+  const askedNow = [];
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
   const clean = (s) => (s || "").replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   const re = (p) => new RegExp(p, "i");
@@ -500,7 +511,66 @@ async function scanPosts(keywords, r) {
   const done = new WeakSet();
   const tries = new WeakMap();
   const byUrl = new Map();
-  const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, samples: [] };
+  const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, shared: 0, samples: [] };
+
+  // Catch what Facebook copies. Pressing "Copy link" makes the page write
+  // the post's link to the clipboard; the write is caught here instead, so
+  // the link is read without touching what is on your own clipboard.
+  const grab = { text: null };
+  try {
+    const board = navigator.clipboard;
+    if (board) {
+      board.writeText = async (text) => {
+        grab.text = String(text);
+      };
+      board.write = async (items) => {
+        try {
+          for (const item of items) {
+            if (item.types.includes("text/plain")) grab.text = await (await item.getType("text/plain")).text();
+          }
+        } catch {
+          // Not text.
+        }
+      };
+    }
+    const setData = DataTransfer.prototype.setData;
+    DataTransfer.prototype.setData = function (type, data) {
+      if (/text/i.test(type)) grab.text = String(data);
+      return setData.call(this, type, data);
+    };
+  } catch {
+    // The page would not let the clipboard be watched; posts go without links.
+  }
+  const shareRe = re(r.shareButton ?? "^share$");
+  const copyRe = re(r.copyLinkText ?? "^copy link$");
+  const labelOf = (el) => (el.getAttribute("aria-label") || el.innerText || "").trim();
+  const escape = () => {
+    for (const type of ["keydown", "keyup"]) {
+      document.dispatchEvent(new KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+    }
+  };
+  const isFacebookLink = (text) => /^https?:\/\/(www\.|m\.)?facebook\.com\/\S+$/i.test((text || "").trim());
+
+  // A post with no link on the page: open its Share menu, press "Copy link",
+  // and take the link Facebook copies. Nothing is shared; the menu is closed
+  // straight after, and nothing but "Copy link" is ever pressed.
+  const shareLink = async (box) => {
+    const button = Array.from(box.querySelectorAll('[role="button"]')).find((el) => shareRe.test(labelOf(el)));
+    if (!button) return null;
+    grab.text = null;
+    button.click();
+    await sleep(r.shareMenuWaitMs ?? 1200);
+    const item = Array.from(document.querySelectorAll('[role="menuitem"], [role="button"], [role="dialog"] span')).find(
+      (el) => copyRe.test(labelOf(el)) && el.getBoundingClientRect().height > 0
+    );
+    if (item) {
+      (item.closest('[role="menuitem"], [role="button"]') || item).click();
+      await sleep(r.copyWaitMs ?? 700);
+    }
+    escape();
+    await sleep(300);
+    return isFacebookLink(grab.text) ? grab.text.trim() : null;
+  };
 
   const readVisible = async () => {
     expand();
@@ -521,16 +591,25 @@ async function scanPosts(keywords, r) {
       stats.posts += 1;
       stats.withText += 1;
       const matched = mentionsWork(text);
-      if (permalink) stats.withLink += 1;
+      // Still no link: ask the Share menu for one, for posts about the work.
+      let url = permalink ? permalink.href : null;
+      const opening = text.slice(0, 80);
+      if (!url && matched && r.shareForLink !== false && stats.shared < (r.shareMax ?? 15) && !askedBefore.has(opening)) {
+        url = await shareLink(box);
+        askedNow.push(opening);
+        askedBefore.add(opening);
+        if (url) stats.shared += 1;
+      }
+      if (url) stats.withLink += 1;
       if (matched) stats.mentioned += 1;
-      if (matched && !permalink) stats.mentionedNoLink += 1;
+      if (matched && !url) stats.mentionedNoLink += 1;
       if (stats.samples.length < 8) {
-        stats.samples.push({ text: text.slice(0, 120), link: Boolean(permalink), matched });
+        stats.samples.push({ text: text.slice(0, 120), link: Boolean(url), matched });
       }
       // Every post read is sent, link or no link, words or no words: the
       // owner picks from all of them in the app. Only the model's own
       // answering needs a link and a match, and the app sorts that out.
-      const key = permalink ? permalink.href : `text:${text.slice(0, 200)}`;
+      const key = url ?? `text:${text.slice(0, 200)}`;
       if (byUrl.has(key)) continue;
 
       const ageLabel = permalink ? (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40) : "";
@@ -552,7 +631,7 @@ async function scanPosts(keywords, r) {
           if (candidate && (!group || candidate !== group.name)) author = candidate;
         }
       }
-      byUrl.set(key, { url: permalink ? permalink.href : null, text, author: author.slice(0, 80), anonymous, ageLabel, group, matched });
+      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, group, matched });
     }
   };
 
@@ -567,6 +646,7 @@ async function scanPosts(keywords, r) {
   return {
     group: pageGroup,
     posts: Array.from(byUrl.values()).slice(0, r.maxPosts ?? 25),
+    askedNow,
     // What the page looked like, so a look that found nothing can say why.
     stats: { ...stats, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
   };

@@ -26,6 +26,8 @@ describe("the recipe", () => {
       DEFAULT_RECIPE.post.openCommentLabel,
       DEFAULT_RECIPE.post.joinButton,
       DEFAULT_RECIPE.post.blocked,
+      DEFAULT_RECIPE.scan.shareButton,
+      DEFAULT_RECIPE.scan.copyLinkText,
     ];
     for (const pattern of patterns) expect(() => new RegExp(pattern, "i")).not.toThrow();
     expect(new RegExp(DEFAULT_RECIPE.scan.postLink, "i").test("https://www.facebook.com/groups/123/posts/456/")).toBe(true);
@@ -33,5 +35,9 @@ describe("the recipe", () => {
     expect(new RegExp(DEFAULT_RECIPE.scan.notGroupLink, "i").test("https://www.facebook.com/groups/feed/")).toBe(true);
     expect(new RegExp(DEFAULT_RECIPE.scan.anonymous, "i").test("Anonymous participant · 3h")).toBe(true);
     expect(new RegExp(DEFAULT_RECIPE.post.blocked, "i").test("You're Temporarily Blocked")).toBe(true);
+    expect(new RegExp(DEFAULT_RECIPE.scan.shareButton, "i").test("Share")).toBe(true);
+    expect(new RegExp(DEFAULT_RECIPE.scan.shareButton, "i").test("Send this to friends or post it on your profile.")).toBe(true);
+    expect(new RegExp(DEFAULT_RECIPE.scan.shareButton, "i").test("Share now (Public)")).toBe(false);
+    expect(new RegExp(DEFAULT_RECIPE.scan.copyLinkText, "i").test("Copy link")).toBe(true);
   });
 });

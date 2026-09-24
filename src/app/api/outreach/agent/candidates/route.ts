@@ -149,7 +149,29 @@ export async function POST(request: NextRequest) {
       if (text.length < 12) continue;
       const url = typeof post.url === "string" && /^https:\/\/(www\.|m\.)?facebook\.com\//.test(post.url) ? cleanPostUrl(post.url) : "";
       const groupKey = groupKeyFrom(post.group?.url) ?? (url ? groupKeyFrom(url) : null) ?? listedGroupKey;
-      const key = (url ? postKeyFrom(url) : null) ?? textKeyFor(text, groupKey);
+      const textKey = textKeyFor(text, groupKey);
+      // A link copied from the Share menu is a short link that differs from
+      // the post's own; the post is keyed on its words instead, so the same
+      // post read twice is still one row.
+      const isShareLink = /facebook\.com\/share\//i.test(url);
+      const key = (url && !isShareLink ? postKeyFrom(url) : null) ?? textKey;
+      // Read before without a link: this time there is one, so the row it
+      // already has gets it rather than a second row being made.
+      if (url) {
+        const { data: earlier } = await (await createClient())
+          .from("outreach_seen_posts")
+          .select("id, url")
+          .eq("organization_id", profile.organization_id)
+          .eq("post_key", textKey)
+          .maybeSingle();
+        if (earlier) {
+          if (!earlier.url) {
+            await (await createClient()).from("outreach_seen_posts").update({ url, updated_at: now.toISOString() }).eq("id", earlier.id);
+          }
+          skipped += 1;
+          continue;
+        }
+      }
       const anonymous = post.anonymous === true || isAnonymousAuthor(post.author);
       const matched = matchesKeywords(text, settings.keywords);
       const id = await recordSeen(profile.organization_id, profile.id, {

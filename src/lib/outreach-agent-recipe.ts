@@ -16,7 +16,7 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.3.0";
+export const EXTENSION_VERSION = "2.4.0";
 export const EXTENSION_DOWNLOAD_URL = "https://github.com/jordanjcollins22-lgtm/First/archive/refs/heads/claude/image-upload-canvas-382r1a.zip";
 
 export interface AgentRecipe {
@@ -38,6 +38,17 @@ export interface AgentRecipe {
     scrollWaitMs: number;
     /** How long to wait after hovering a post's links for Facebook to fill in the real ones. */
     revealWaitMs: number;
+    /**
+     * For a post that still has no link, open its Share menu and press
+     * "Copy link", catching the link as Facebook copies it. Only posts that
+     * mention the work, and only so many a look.
+     */
+    shareForLink: boolean;
+    shareButton: string;
+    copyLinkText: string;
+    shareMax: number;
+    shareMenuWaitMs: number;
+    copyWaitMs: number;
     settleMs: number;
     searchSettleMs: number;
     maxPosts: number;
@@ -88,6 +99,12 @@ export const DEFAULT_RECIPE: AgentRecipe = {
     scrollScreens: 0.9,
     scrollWaitMs: 1400,
     revealWaitMs: 500,
+    shareForLink: true,
+    shareButton: "^share$|^send this to friends or post it on your profile\\.?$",
+    copyLinkText: "^copy link$",
+    shareMax: 15,
+    shareMenuWaitMs: 1200,
+    copyWaitMs: 700,
     settleMs: 4000,
     searchSettleMs: 6000,
     maxPosts: 40,
