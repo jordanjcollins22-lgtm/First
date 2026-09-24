@@ -31,6 +31,10 @@ The popup shows what it is doing. **Look now** scans every group straight away; 
 - If Facebook shows anything like "temporarily blocked" or "action blocked", it stops for a day on its own and says so in the app. Do not turn it back on the same day.
 - Facebook's terms do not allow automated posting. Running this is a risk to the account it runs on. Keep the caps low, keep the comments honest, and turn **Post the comments itself** off in the app if you would rather it only found and wrote them.
 
+## Updates
+
+You should rarely need to download this again. Every selector and every wait the extension uses on a Facebook page comes from the app each minute (the "recipe" in `src/lib/outreach-agent-recipe.ts`), so when Facebook moves a button the fix is deployed to the app and every copy has it within a minute. When a change does need new extension code, the popup shows "A newer version is ready" with a download link, and the old copy keeps running until you swap it. To swap: download, unzip, and in `chrome://extensions` either replace the files in the folder you loaded and press the reload arrow, or remove the old one and Load unpacked again.
+
 ## If it stops working
 
-Facebook changes its pages. If the popup says it could not find the comment box or the comment did not appear, the page has changed and the two page functions at the bottom of `background.js` (`scanPosts` and `postComment`) need updating. Until then, turn **Post the comments itself** off and paste from the board.
+If the popup says it could not find the comment box or the comment did not appear, Facebook's page has changed. That is a recipe fix in the app, not a download. Until it is fixed, turn **Post the comments itself** off and paste from the board.

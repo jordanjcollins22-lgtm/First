@@ -8,6 +8,12 @@
 // asked of the app each minute, so the only thing kept here is the queue
 // of comments the app has written and not yet posted.
 //
+// Nothing here knows what a Facebook page looks like. Every selector and
+// every wait comes from the app in the "recipe", asked for each minute
+// alongside the settings, so a layout change is fixed in the app and this
+// copy has it within a minute with nothing to download. When the app wants
+// newer extension code it says so, and the popup shows a download link.
+//
 // Three places it looks. The account's own groups feed, which is every
 // group it is in on one page. Facebook's post search, for the phrases set
 // in the app, which reaches public groups it is not in yet. And any group
@@ -20,8 +26,8 @@
 const APP = "https://app.jslandscapingmd.com";
 const API = `${APP}/api/outreach/agent`;
 const TICK = "agent-tick";
-const STALE_QUEUE_MS = 12 * 60 * 60 * 1000;
 const LOCK_MS = 3 * 60 * 1000;
+const VERSION = chrome.runtime.getManifest().version;
 
 chrome.runtime.onInstalled.addListener(() => arm());
 chrome.runtime.onStartup.addListener(() => arm());
@@ -59,6 +65,7 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
 async function snapshot() {
   const store = await chrome.storage.local.get(["config", "queue", "nextPostAt", "status", "scans"]);
   return {
+    version: VERSION,
     config: store.config ?? null,
     queue: (store.queue ?? []).length,
     nextPostAt: store.nextPostAt ?? 0,
@@ -74,7 +81,7 @@ async function setStatus(text) {
 /** What the app says right now. Null when not signed in or unreachable. */
 async function fetchConfig() {
   try {
-    const res = await fetch(`${API}/config`, { credentials: "include", cache: "no-store" });
+    const res = await fetch(`${API}/config?v=${encodeURIComponent(VERSION)}`, { credentials: "include", cache: "no-store" });
     if (res.status === 401) {
       await setStatus("Not signed in to the app. Open it and sign in, then this carries on.");
       return null;
@@ -90,6 +97,11 @@ async function fetchConfig() {
     await setStatus(`Couldn't reach the app: ${err?.message ?? err}`);
     return null;
   }
+}
+
+/** The recipe the app sent, or the last one it sent, or nothing usable. */
+function recipeOf(config) {
+  return config?.recipe && config.recipe.scan && config.recipe.post && config.recipe.pacing ? config.recipe : null;
 }
 
 /**
@@ -128,13 +140,19 @@ async function tick(options = {}) {
   try {
     const config = await fetchConfig();
     if (!config) return;
+    const recipe = recipeOf(config);
+    if (!recipe) {
+      await setStatus("The app didn't send the page recipe. It may be mid-deploy; trying again next minute.");
+      return;
+    }
 
-    // Anything the app wrote that has sat here half a day is not going up
+    // Anything the app wrote that has sat here too long is not going up
     // now: the neighbour has found somebody. Told so the board stops
     // showing it as waiting.
+    const staleMs = (recipe.pacing.stalePostHours ?? 12) * 60 * 60 * 1000;
     let queue = (store.queue ?? []).filter((item) => item.post);
-    const stale = queue.filter((item) => Date.now() - item.addedAt > STALE_QUEUE_MS);
-    for (const item of stale) await report(item, { ok: false, error: "Not posted within twelve hours, so left alone." });
+    const stale = queue.filter((item) => Date.now() - item.addedAt > staleMs);
+    for (const item of stale) await report(item, { ok: false, error: `Not posted within ${recipe.pacing.stalePostHours ?? 12} hours, so left alone.` });
     queue = queue.filter((item) => !stale.includes(item));
     await chrome.storage.local.set({ queue });
 
@@ -150,12 +168,12 @@ async function tick(options = {}) {
     if (queue.length > 0 && config.active && (due || options.force)) {
       const item = queue[0];
       await setStatus(`Posting in ${item.groupName ?? "a group"}…`);
-      const outcome = await postOne(item);
+      const outcome = await postOne(item, recipe);
       await report(item, outcome);
       const rest = queue.slice(1);
       await chrome.storage.local.set({
         queue: rest,
-        nextPostAt: Date.now() + delayMs(),
+        nextPostAt: Date.now() + delayMs(recipe),
       });
       await setStatus(
         outcome.ok
@@ -184,7 +202,7 @@ async function tick(options = {}) {
     }
 
     await setStatus(`Looking at ${next.name}…`);
-    const found = await scanPage(next, config.settings.keywords ?? []);
+    const found = await scanPage(next, config.settings.keywords ?? [], recipe);
     scans[next.key] = Date.now();
     await chrome.storage.local.set({ scans });
     if (!found) return;
@@ -217,8 +235,10 @@ async function tick(options = {}) {
   }
 }
 
-function delayMs() {
-  return (90 + Math.floor(Math.random() * 210)) * 1000;
+function delayMs(recipe) {
+  const min = recipe.pacing.minDelaySeconds ?? 90;
+  const max = recipe.pacing.maxDelaySeconds ?? 300;
+  return (min + Math.floor(Math.random() * Math.max(1, max - min))) * 1000;
 }
 
 async function sendCandidates(target, found) {
@@ -269,10 +289,10 @@ async function report(item, outcome) {
 }
 
 /** Open a page in the background, wait for it, run something in it, close it. */
-async function inTab(url, func, args, settleMs) {
+async function inTab(url, func, args, settleMs, loadTimeoutMs) {
   const tab = await chrome.tabs.create({ url, active: false });
   try {
-    await waitForLoad(tab.id, 30000);
+    await waitForLoad(tab.id, loadTimeoutMs ?? 30000);
     await sleep(settleMs);
     const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func, args });
     return result?.result ?? null;
@@ -304,18 +324,19 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function scanPage(target, keywords) {
+async function scanPage(target, keywords, recipe) {
   try {
-    return await inTab(target.url, scanPosts, [keywords], target.source === "search" ? 6000 : 4000);
+    const settle = target.source === "search" ? recipe.scan.searchSettleMs : recipe.scan.settleMs;
+    return await inTab(target.url, scanPosts, [keywords, recipe.scan], settle, recipe.pacing.tabLoadTimeoutMs);
   } catch (err) {
     await setStatus(`Couldn't look at ${target.name}: ${err?.message ?? err}`);
     return null;
   }
 }
 
-async function postOne(item) {
+async function postOne(item, recipe) {
   try {
-    const result = await inTab(item.url, postComment, [item.comment, item.code, item.mention ?? null], 5000);
+    const result = await inTab(item.url, postComment, [item.comment, item.code, item.mention ?? null, recipe.post], recipe.post.settleMs, recipe.pacing.tabLoadTimeoutMs);
     return result ?? { ok: false, error: "The page gave nothing back." };
   } catch (err) {
     return { ok: false, error: String(err?.message ?? err) };
@@ -324,23 +345,31 @@ async function postOne(item) {
 
 // ---------------------------------------------------------------------------
 // The two things that run inside a Facebook page. Each is self-contained: it
-// is copied into the page by name, so nothing outside it exists there.
+// is copied into the page by name, so nothing outside it exists there. Every
+// selector and wait they use arrives in the recipe.
 // ---------------------------------------------------------------------------
 
 /**
  * On a feed, a search, or a group page: the posts on the first few screens
  * that mention the work, each with who posted it and which group it is in.
  */
-async function scanPosts(keywords) {
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function scanPosts(keywords, r) {
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
   const clean = (s) => (s || "").replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  const re = (p) => new RegExp(p, "i");
+  const seeMore = re(r.seeMoreText);
+  const postLink = re(r.postLink);
+  const groupLink = re(r.groupLink);
+  const notGroupLink = re(r.notGroupLink);
+  const profileLink = re(r.profileLink);
+  const anonymousRe = re(r.anonymous);
 
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < (r.scrollTimes ?? 3); i += 1) {
     window.scrollBy(0, window.innerHeight * 2);
-    await sleep(1500);
+    await sleep(r.scrollWaitMs ?? 1500);
   }
   for (const button of document.querySelectorAll('div[role="button"]')) {
-    if (/^see more$/i.test((button.innerText || "").trim())) {
+    if (seeMore.test((button.innerText || "").trim())) {
       try {
         button.click();
       } catch {
@@ -350,41 +379,36 @@ async function scanPosts(keywords) {
   }
   await sleep(800);
 
-  const isPostLink = (href) => /\/groups\/[^/]+\/(posts|permalink)\/|story_fbid=|multi_permalinks=/.test(href);
-  const isGroupLink = (href) => /\/groups\/[^/?#]+\/?(\?|#|$)/.test(href) && !/\/groups\/(feed|discover|joins)\b/.test(href);
-  const isProfileLink = (href) =>
-    /\/groups\/[^/]+\/user\/\d+/.test(href) || /\/profile\.php\?id=\d+/.test(href) || /^https?:\/\/(www\.)?facebook\.com\/[A-Za-z0-9.]+\/?(\?|$)/.test(href);
+  const isGroupLink = (href) => groupLink.test(href) && !notGroupLink.test(href);
 
   // A post is an article that is not inside another article: comments are
   // articles too, nested in the post they answer.
-  const articles = Array.from(document.querySelectorAll('[role="article"]')).filter(
-    (el) => !(el.parentElement && el.parentElement.closest('[role="article"]'))
-  );
+  const articles = Array.from(document.querySelectorAll(r.article)).filter((el) => !(el.parentElement && el.parentElement.closest(r.article)));
   const posts = [];
   for (const article of articles) {
     const links = Array.from(article.querySelectorAll("a[href]"));
-    const permalink = links.find((a) => isPostLink(a.href));
+    const permalink = links.find((a) => postLink.test(a.href));
     if (!permalink) continue;
     const ageLabel = (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40);
 
     // The header: the group's name, then the poster's. On a group's own
     // page the group is the page, so the first named link is the poster.
-    const groupLink = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
-    const group = groupLink ? { url: groupLink.href, name: clean(groupLink.innerText).slice(0, 120) } : null;
+    const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
+    const group = gl ? { url: gl.href, name: clean(gl.innerText).slice(0, 120) } : null;
     const header = clean(article.innerText).split("\n").slice(0, 4).join(" ");
-    const anonymous = /anonymous (participant|member)/i.test(header);
+    const anonymous = anonymousRe.test(header);
     let author = "";
     if (!anonymous) {
-      const profile = links.find((a) => isProfileLink(a.href) && !isGroupLink(a.href) && (a.innerText || "").trim().length > 1 && (a.innerText || "").trim().length < 60);
+      const profile = links.find((a) => profileLink.test(a.href) && !isGroupLink(a.href) && (a.innerText || "").trim().length > 1 && (a.innerText || "").trim().length < 60);
       author = clean(profile ? profile.innerText : "");
       if (!author) {
-        const strong = article.querySelector("h2 strong, h3 strong, h4 strong, strong a, strong");
+        const strong = article.querySelector(r.authorFallback);
         const candidate = clean(strong ? strong.innerText : "");
         if (candidate && (!group || candidate !== group.name)) author = candidate;
       }
     }
 
-    const body = article.querySelector('[data-ad-preview="message"], [data-ad-comet-preview="message"]');
+    const body = article.querySelector(r.messageBody);
     let text = body ? body.innerText : "";
     if (!text) {
       text = (article.innerText || "")
@@ -393,14 +417,14 @@ async function scanPosts(keywords) {
         .slice(2)
         .join("\n");
     }
-    text = clean(text).slice(0, 3000);
+    text = clean(text).slice(0, r.maxTextChars ?? 3000);
     if (!text) continue;
     const low = text.toLowerCase();
     if (!keywords.some((word) => word && low.includes(String(word).toLowerCase()))) continue;
     posts.push({ url: permalink.href, text, author: author.slice(0, 80), anonymous, ageLabel, group });
   }
   const pageGroup = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
-  return { group: pageGroup, posts: posts.slice(0, 25) };
+  return { group: pageGroup, posts: posts.slice(0, r.maxPosts ?? 25) };
 }
 
 /**
@@ -408,24 +432,24 @@ async function scanPosts(keywords) {
  * send it. A page with a "Join group" button and no box is a group the
  * account is not in, and says so rather than failing.
  */
-async function postComment(text, code, mention) {
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function postComment(text, code, mention, r) {
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const re = (p) => new RegExp(p, "i");
+  const boxLabel = re(r.commentBoxLabel);
+  const openLabel = re(r.openCommentLabel);
+  const joinLabel = re(r.joinButton);
+  const blockedRe = re(r.blocked);
   const dialogText = () => {
-    const dialog = document.querySelector('[role="dialog"]');
+    const dialog = document.querySelector(r.dialog);
     return dialog ? (dialog.innerText || "").trim() : "";
   };
-  const looksBlocked = (s) => /temporarily blocked|action blocked|can'?t use this feature|you.re blocked|going too fast|restricted from/i.test(s);
   const findBox = () => {
-    const boxes = Array.from(document.querySelectorAll('[contenteditable="true"][role="textbox"]'));
+    const boxes = Array.from(document.querySelectorAll(r.commentBox));
     const visible = boxes.filter((el) => el.getBoundingClientRect().height > 0);
-    return (
-      visible.find((el) => /comment/i.test(el.getAttribute("aria-label") || "") || /comment/i.test(el.getAttribute("aria-placeholder") || "")) ||
-      visible[0] ||
-      null
-    );
+    return visible.find((el) => boxLabel.test(el.getAttribute("aria-label") || "") || boxLabel.test(el.getAttribute("aria-placeholder") || "")) || visible[0] || null;
   };
   const joinButton = () =>
-    Array.from(document.querySelectorAll('[role="button"], a[role="link"]')).find((el) => /^(join group|join|request to join)$/i.test((el.innerText || el.getAttribute("aria-label") || "").trim()));
+    Array.from(document.querySelectorAll('[role="button"], a[role="link"]')).find((el) => joinLabel.test((el.innerText || el.getAttribute("aria-label") || "").trim()));
   const onPage = () => {
     const box = findBox();
     const inBox = box ? (box.innerText || "").includes(code) : false;
@@ -433,18 +457,15 @@ async function postComment(text, code, mention) {
   };
 
   const already = dialogText();
-  if (already && looksBlocked(already)) return { ok: false, error: already.slice(0, 300) };
+  if (already && blockedRe.test(already)) return { ok: false, error: already.slice(0, 300) };
   if (onPage()) return { ok: true, posted: text, note: "It was already there." };
 
   let box = findBox();
   if (!box) {
-    const opener = Array.from(document.querySelectorAll('[role="button"]')).find((el) => {
-      const label = (el.getAttribute("aria-label") || el.innerText || "").trim();
-      return /^(leave a )?comment$/i.test(label) || /^write a comment/i.test(label);
-    });
+    const opener = Array.from(document.querySelectorAll('[role="button"]')).find((el) => openLabel.test((el.getAttribute("aria-label") || el.innerText || "").trim()));
     if (opener) {
       opener.click();
-      await sleep(1500);
+      await sleep(r.afterOpenMs ?? 1500);
       box = findBox();
     }
   }
@@ -455,57 +476,53 @@ async function postComment(text, code, mention) {
 
   box.scrollIntoView({ block: "center" });
   box.focus();
-  await sleep(500);
+  await sleep(r.afterFocusMs ?? 500);
 
   // The mention first: "@Name" typed, the picker given a moment, the poster
   // picked from it. If no picker comes, the typed name stays as plain text,
   // which still reads right.
   let rest = text;
   if (mention) {
-    const prefix = new RegExp(`^@${mention.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*`, "i");
+    const prefix = new RegExp(`^@${mention.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "i");
     rest = text.replace(prefix, "");
     document.execCommand("insertText", false, `@${mention}`);
-    await sleep(1800);
-    const options = Array.from(document.querySelectorAll('[role="listbox"] [role="option"], [role="option"]')).filter(
-      (el) => el.getBoundingClientRect().height > 0
-    );
+    await sleep(r.mentionWaitMs ?? 1800);
+    const options = Array.from(document.querySelectorAll(r.mentionOption)).filter((el) => el.getBoundingClientRect().height > 0);
     const pick = options.find((el) => (el.innerText || "").toLowerCase().includes(mention.toLowerCase())) || options[0];
     if (pick) {
       pick.click();
       await sleep(600);
-      document.execCommand("insertText", false, " ");
-    } else {
-      document.execCommand("insertText", false, " ");
     }
+    document.execCommand("insertText", false, " ");
     await sleep(300);
   }
   document.execCommand("insertText", false, rest);
-  await sleep(800);
+  await sleep(r.afterTypeMs ?? 800);
   const head = rest.slice(0, 30);
   if (!(box.innerText || "").includes(head)) {
     const data = new DataTransfer();
     data.setData("text/plain", rest);
     box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-    await sleep(800);
+    await sleep(r.afterTypeMs ?? 800);
   }
   if (!(box.innerText || "").includes(head)) return { ok: false, error: "Couldn't type into the comment box." };
 
-  await sleep(1200 + Math.floor(Math.random() * 1500));
+  await sleep((r.beforeSendMinMs ?? 1200) + Math.floor(Math.random() * (r.beforeSendJitterMs ?? 1500)));
   for (const type of ["keydown", "keypress", "keyup"]) {
     box.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
   }
-  await sleep(2500);
+  await sleep(r.afterSendMs ?? 2500);
   if (!onPage()) {
-    const submit = document.querySelector('[aria-label="Comment"][role="button"], [aria-label="Post"][role="button"], [aria-label="Submit"][role="button"]');
+    const submit = document.querySelector(r.submitButton);
     if (submit) {
       submit.click();
-      await sleep(2500);
+      await sleep(r.afterSendMs ?? 2500);
     }
   }
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < (r.verifyTries ?? 8); i += 1) {
     if (onPage()) return { ok: true, posted: text };
     const dialog = dialogText();
-    if (dialog && looksBlocked(dialog)) return { ok: false, error: dialog.slice(0, 300) };
+    if (dialog && blockedRe.test(dialog)) return { ok: false, error: dialog.slice(0, 300) };
     await sleep(1000);
   }
   const dialog = dialogText();
