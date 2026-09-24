@@ -11,8 +11,10 @@ Out of the box it asks before posting. Every comment it writes waits under **Com
 ## What it does, once a minute
 
 1. Asks the app whether it is allowed to post right now: the sources, the caps, the hours, and the pause button all live at **app → Link Tracking → Group Agent**.
-2. If a comment is waiting and it is due, opens that post in a background tab, types an @mention of the person who asked, types the comment, sends it, checks it went up, closes the tab, and tells the app. Then waits ninety seconds to five minutes before the next.
-3. Otherwise, opens whichever page is most overdue a look, in a background tab: your groups feed (every group you're in, on one page), a Facebook post search for one of the phrases set in the app, or a group listed by hand. It reads the first few screens and sends the posts that mention the work to the app. The app throws out anything seen before, reads the rest, writes a comment for each real request, and hands the finished words back to be queued.
+2. If a comment is waiting and it is due, opens that post in a small window of its own to the right of yours, types an @mention of the person who asked, types the comment, sends it, checks it went up, closes the window, and tells the app. Then waits ninety seconds to five minutes before the next.
+3. Otherwise, opens whichever page is most overdue a look, in that same kind of window: your groups feed (every group you're in, on one page), a Facebook post search for one of the phrases set in the app, or a group listed by hand. It reads the first few screens and sends the posts that mention the work to the app. The app throws out anything seen before, reads the rest, writes a comment for each real request, and hands the finished words back to be queued.
+
+The window is drawn on screen because Chrome only loads a Facebook page it is drawing; a hidden tab stays empty. It never takes focus from what you're doing and closes within about ten seconds.
 
 A post found by search in a group you haven't joined can't be answered. The group goes on the **Groups to join** list on the Group Agent page, with a count of the leads seen in it, so you can join the ones that matter. Press "I joined" and its posts get answered from then on.
 

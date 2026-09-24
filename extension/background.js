@@ -227,6 +227,14 @@ async function tick(options = {}) {
     scans[next.key] = Date.now();
     await chrome.storage.local.set({ scans });
     if (!found) return;
+    if (found.posts.length === 0) {
+      const stats = found.stats ?? {};
+      await setStatus(
+        `${next.name}: ${stats.articles ?? 0} posts on the page, ${stats.withLink ?? 0} readable, none mentioned the work.` +
+          (stats.articles === 0 ? ` The page may not have loaded (title "${found.group || ""}", ${stats.textChars ?? 0} characters of text).` : "")
+      );
+      return;
+    }
 
     const answer = await sendCandidates(next, found);
     if (!answer) return;
@@ -235,8 +243,9 @@ async function tick(options = {}) {
     const actions = answer.actions ?? [];
     const held = actions.filter((action) => !action.post).length;
     const notMember = (answer.decided ?? []).filter((d) => d.decision === "not_member").length;
+    const stats = found.stats ?? {};
     await setStatus(
-      `${next.name}: ${found.posts.length} post${found.posts.length === 1 ? "" : "s"} mentioned the work, ${actions.length} worth answering` +
+      `${next.name}: ${stats.articles ?? "?"} posts on the page, ${stats.withLink ?? "?"} readable, ${found.posts.length} mentioned the work, ${actions.length} worth answering` +
         (held > 0 ? ` (${held} waiting for your OK in the app)` : "") +
         (notMember > 0 ? `, ${notMember} in groups you haven't joined` : "") +
         `, ${answer.skipped ?? 0} seen before.`
@@ -299,9 +308,28 @@ async function report(item, outcome) {
   }
 }
 
-/** Open a page in the background, wait for it, run something in it, close it. */
+/**
+ * Open a page in its own small window, wait for it, run something in it,
+ * close it.
+ *
+ * Not a background tab: Chrome does not draw a tab you are not looking at,
+ * and Facebook only loads the feed into a page that is being drawn, so a
+ * background tab scrolled through an empty shell and found nothing. A
+ * window of its own, off to the side and never given focus, is drawn and
+ * loads, and goes away when the look is done.
+ */
 async function inTab(url, func, args, settleMs, loadTimeoutMs) {
-  const tab = await chrome.tabs.create({ url, active: false });
+  const bounds = await windowBounds();
+  const win = await chrome.windows.create({ url, type: "popup", focused: false, ...bounds });
+  const tab = win.tabs && win.tabs[0];
+  if (!tab) {
+    try {
+      await chrome.windows.remove(win.id);
+    } catch {
+      // Already gone.
+    }
+    throw new Error("Couldn't open a window for the page.");
+  }
   try {
     await waitForLoad(tab.id, loadTimeoutMs ?? 30000);
     await sleep(settleMs);
@@ -309,10 +337,24 @@ async function inTab(url, func, args, settleMs, loadTimeoutMs) {
     return result?.result ?? null;
   } finally {
     try {
-      await chrome.tabs.remove(tab.id);
+      await chrome.windows.remove(win.id);
     } catch {
       // Already gone.
     }
+  }
+}
+
+/** A desktop-sized window tucked to the right of the one you are using. */
+async function windowBounds() {
+  const width = 1100;
+  const height = 900;
+  try {
+    const current = await chrome.windows.getLastFocused();
+    const left = Math.max(0, (current.left ?? 0) + (current.width ?? width) - width);
+    const top = Math.max(0, current.top ?? 0);
+    return { width, height, left, top };
+  } catch {
+    return { width, height };
   }
 }
 
@@ -396,10 +438,12 @@ async function scanPosts(keywords, r) {
   // articles too, nested in the post they answer.
   const articles = Array.from(document.querySelectorAll(r.article)).filter((el) => !(el.parentElement && el.parentElement.closest(r.article)));
   const posts = [];
+  let withLink = 0;
   for (const article of articles) {
     const links = Array.from(article.querySelectorAll("a[href]"));
     const permalink = links.find((a) => postLink.test(a.href));
     if (!permalink) continue;
+    withLink += 1;
     const ageLabel = (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40);
 
     // The header: the group's name, then the poster's. On a group's own
@@ -435,7 +479,12 @@ async function scanPosts(keywords, r) {
     posts.push({ url: permalink.href, text, author: author.slice(0, 80), anonymous, ageLabel, group });
   }
   const pageGroup = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
-  return { group: pageGroup, posts: posts.slice(0, r.maxPosts ?? 25) };
+  return {
+    group: pageGroup,
+    posts: posts.slice(0, r.maxPosts ?? 25),
+    // What the page looked like, so a look that found nothing can say why.
+    stats: { articles: articles.length, withLink, textChars: (document.body.innerText || "").length, height: document.documentElement.scrollHeight },
+  };
 }
 
 /**
