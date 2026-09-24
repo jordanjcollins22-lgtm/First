@@ -266,7 +266,8 @@ export type Decision =
   | "draft_failed"
   | "skipped"
   | "not_member"
-  | "outside_area";
+  | "outside_area"
+  | "declined";
 
 export const DECISION_LABEL: Record<Decision, string> = {
   queued: "Waiting to post",
@@ -280,7 +281,14 @@ export const DECISION_LABEL: Record<Decision, string> = {
   skipped: "Skipped",
   not_member: "In a group you haven't joined",
   outside_area: "Outside the area",
+  declined: "Declined",
 };
+
+/** The first name a stored comment opens with, for the browser's mention picker. */
+export function mentionFromComment(comment: string | null | undefined): string | null {
+  const match = (comment ?? "").trim().match(/^@([\p{L}\p{N}'’-]{2,40})\b/u);
+  return match ? match[1] : null;
+}
 
 /** The id or slug out of a group's URL, as one name for the group. */
 export function groupKeyFrom(url: string | null | undefined): string | null {

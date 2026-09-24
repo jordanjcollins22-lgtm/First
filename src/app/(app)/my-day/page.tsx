@@ -42,6 +42,8 @@ import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
+import { countReadyForReview } from "@/lib/data/outreach-agent";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
 import { nextRouteToApprove } from "@/lib/data/route-approval";
 import { RouteApprovalWizard } from "@/components/marketing/route-approval-wizard";
@@ -277,6 +279,14 @@ async function OfficeDay() {
         </Suspense>
       )}
 
+      {/* Comments the group agent wrote and is holding for a yes. One line
+          and a link: the reading happens on the agent's own page. */}
+      {isOwnerLevel(profile.roles) && (
+        <Suspense fallback={null}>
+          <AgentReviewBlock />
+        </Suspense>
+      )}
+
       {/* One USPS route at a time, round the jobs finished and paid for: approve it,
           draw the walk over it, confirm the hangers, submit the order. */}
       {isOwnerLevel(profile.roles) && (
@@ -377,6 +387,24 @@ async function RouteApprovalBlock() {
   });
   if (!view) return null;
   return <RouteApprovalWizard view={view} />;
+}
+
+async function AgentReviewBlock() {
+  const organizationId = await getCurrentOrganizationId().catch(() => null);
+  if (!organizationId) return null;
+  const waiting = await countReadyForReview(organizationId).catch(() => 0);
+  if (waiting === 0) return null;
+  return (
+    <Link
+      href="/admin/outreach/agent#review"
+      className="block rounded-lg border border-border bg-card/70 px-4 py-3 text-sm hover:bg-card"
+    >
+      <span className="font-medium">
+        {waiting} Facebook comment{waiting === 1 ? "" : "s"} waiting for your OK
+      </span>
+      <span className="block text-xs text-muted-foreground">The agent found the posts and wrote the replies. Read them, change what you like, approve or decline.</span>
+    </Link>
+  );
 }
 
 async function ApprovalsBlock() {

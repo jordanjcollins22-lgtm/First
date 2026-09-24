@@ -19,7 +19,15 @@ function render(snap) {
     if (config.active) lines.push("On.");
     else lines.push(`Not posting: ${config.because}.`);
     const c = config.counts ?? {};
-    counts.textContent = `${c.postedToday ?? 0} posted today · ${c.postedThisHour ?? 0} this hour · ${snap.queue} waiting · signed in as ${config.who ?? "?"}`;
+    counts.textContent = `${c.postedToday ?? 0} posted today · ${c.postedThisHour ?? 0} this hour · ${snap.queue} approved and waiting · ${c.toReview ?? 0} for your OK · signed in as ${config.who ?? "?"}`;
+    const review = document.getElementById("review");
+    if ((c.toReview ?? 0) > 0) {
+      review.hidden = false;
+      review.href = config.reviewUrl || `${APP}/admin/outreach/agent#review`;
+      review.textContent = `Approve ${c.toReview} waiting comment${c.toReview === 1 ? "" : "s"}`;
+    } else {
+      review.hidden = true;
+    }
     const ext = config.extension;
     if (ext && ext.updateAvailable) {
       update.hidden = false;

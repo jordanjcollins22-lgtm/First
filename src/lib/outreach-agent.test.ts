@@ -12,6 +12,7 @@ import {
   isAnonymousAuthor,
   localClock,
   mentionComment,
+  mentionFromComment,
   searchUrl,
   looksLikeBlock,
   matchesKeywords,
@@ -182,6 +183,13 @@ describe("groups and mentions", () => {
     expect(inArea("Looking for a landscaper in Bel Air", DEFAULT_SETTINGS.areaWords)).toBe(true);
     expect(inArea("Anyone in 21014 know a good mower?", DEFAULT_SETTINGS.areaWords)).toBe(true);
     expect(inArea("Looking for a landscaper in Austin TX", DEFAULT_SETTINGS.areaWords)).toBe(false);
+  });
+
+  it("reads the mention back off a stored comment", () => {
+    expect(mentionFromComment("@Scott Thanks for reaching out!")).toBe("Scott");
+    expect(mentionFromComment("@Mary-Kate we can help")).toBe("Mary-Kate");
+    expect(mentionFromComment("We can help with that.")).toBeNull();
+    expect(mentionFromComment(null)).toBeNull();
   });
 
   it("builds a search link", () => {

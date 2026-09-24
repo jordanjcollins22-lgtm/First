@@ -11,6 +11,7 @@
       .muted { color: #666; font-size: 12px; }
       .update { background: #fff7e0; border: 1px solid #f0d58c; border-radius: 6px; padding: 8px; font-size: 12px; }
       .update a { display: inline-block; margin-top: 4px; font-weight: 600; }
+      .review { display: block; padding: 8px 10px; border-radius: 6px; background: #e8f3ea; font-weight: 600; text-decoration: none; }
       button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
       button.primary { background: #2f6d3c; border-color: #2f6d3c; color: #fff; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -26,6 +27,7 @@
       </div>
       <div class="status" id="status">Checking…</div>
       <div class="muted" id="counts"></div>
+      <a id="review" class="review" href="#" target="_blank" hidden>Approve waiting comments</a>
       <div class="row">
         <button id="look">Look now</button>
         <button id="post">Post the next one now</button>

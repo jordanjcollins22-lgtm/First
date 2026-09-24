@@ -99,6 +99,18 @@ async function fetchConfig() {
   }
 }
 
+/** The comments the app says to post, oldest first. Empty when it cannot be reached. */
+async function fetchQueue() {
+  try {
+    const res = await fetch(`${API}/queue`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.queue ?? []).map((item) => ({ ...item, post: true }));
+  } catch {
+    return [];
+  }
+}
+
 /** The recipe the app sent, or the last one it sent, or nothing usable. */
 function recipeOf(config) {
   return config?.recipe && config.recipe.scan && config.recipe.post && config.recipe.pacing ? config.recipe : null;
@@ -146,15 +158,24 @@ async function tick(options = {}) {
       return;
     }
 
-    // Anything the app wrote that has sat here too long is not going up
-    // now: the neighbour has found somebody. Told so the board stops
-    // showing it as waiting.
-    const staleMs = (recipe.pacing.stalePostHours ?? 12) * 60 * 60 * 1000;
-    let queue = (store.queue ?? []).filter((item) => item.post);
-    const stale = queue.filter((item) => Date.now() - item.addedAt > staleMs);
-    for (const item of stale) await report(item, { ok: false, error: `Not posted within ${recipe.pacing.stalePostHours ?? 12} hours, so left alone.` });
-    queue = queue.filter((item) => !stale.includes(item));
+    // The app holds the queue: everything approved and not yet posted,
+    // whether approved by hand on a phone or straight away because the
+    // owner said to post without asking. Read fresh each minute, so a
+    // comment approved anywhere is posted here.
+    const queue = await fetchQueue();
     await chrome.storage.local.set({ queue });
+
+    const toReview = config.counts?.toReview ?? 0;
+    const seenReview = (await chrome.storage.local.get("noticedReview")).noticedReview ?? 0;
+    if (toReview > 0 && toReview !== seenReview) {
+      chrome.notifications.create({
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "Comments waiting for your OK",
+        message: `${toReview} written and waiting. Open the Group Agent page in the app to approve or decline.`,
+      });
+    }
+    await chrome.storage.local.set({ noticedReview: toReview });
 
     const paused = !config.active && config.because === "paused";
     if (paused) {
@@ -209,24 +230,14 @@ async function tick(options = {}) {
 
     const answer = await sendCandidates(next, found);
     if (!answer) return;
-    const actions = (answer.actions ?? []).map((action) => ({ ...action, groupName: action.groupName ?? next.groupName ?? null, addedAt: Date.now() }));
-    const toPost = actions.filter((action) => action.post);
-    const toPaste = actions.filter((action) => !action.post);
-    if (toPost.length > 0) {
-      const current = (await chrome.storage.local.get("queue")).queue ?? [];
-      await chrome.storage.local.set({ queue: [...current, ...toPost] });
-    }
-    if (toPaste.length > 0) {
-      chrome.notifications.create({
-        type: "basic",
-        iconUrl: "icons/icon128.png",
-        title: "Comments ready to paste",
-        message: `${toPaste.length} written from ${next.name}. They are on the Link Tracking board.`,
-      });
-    }
+    // The app keeps what it wrote: posted straight away or held for a yes,
+    // depending on the setting. Either way it comes back through the queue.
+    const actions = answer.actions ?? [];
+    const held = actions.filter((action) => !action.post).length;
     const notMember = (answer.decided ?? []).filter((d) => d.decision === "not_member").length;
     await setStatus(
       `${next.name}: ${found.posts.length} post${found.posts.length === 1 ? "" : "s"} mentioned the work, ${actions.length} worth answering` +
+        (held > 0 ? ` (${held} waiting for your OK in the app)` : "") +
         (notMember > 0 ? `, ${notMember} in groups you haven't joined` : "") +
         `, ${answer.skipped ?? 0} seen before.`
     );

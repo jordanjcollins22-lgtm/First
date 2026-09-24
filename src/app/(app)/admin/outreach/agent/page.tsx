@@ -11,6 +11,7 @@ import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 import { AgentSettingsForm } from "@/components/marketing/agent-settings";
 import { AgentActivity } from "@/components/marketing/agent-activity";
 import { GroupsToJoin } from "@/components/marketing/groups-to-join";
+import { AgentReview } from "@/components/marketing/agent-review";
 
 /**
  * The group agent.
@@ -63,10 +64,19 @@ export default async function GroupAgentPage() {
             <span className="font-medium text-amber-700">Not posting right now: {state.because}.</span>
           )}{" "}
           <span className="text-muted-foreground">
-            {counts.postedToday} posted today, {counts.postedThisHour} in the last hour, {counts.queued} waiting.
+            {counts.postedToday} posted today, {counts.postedThisHour} in the last hour, {counts.queued} approved and waiting to post.
           </span>
           {settings.pauseReason && <span className="block text-muted-foreground">{settings.pauseReason}</span>}
         </p>
+      </section>
+
+      <section id="review" className="scroll-mt-4 rounded-lg border border-border p-4">
+        <h2 className="mb-1 text-sm font-semibold">Comments to approve</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          The post, and the comment it wrote. Change the words if you like, then approve and the browser posts it
+          on its next minute. Decline and the post is left alone.
+        </p>
+        <AgentReview rows={activity.filter((row) => row.decision === "ready")} />
       </section>
 
       <section className="rounded-lg border border-border p-4">

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
-import { dismissGroup, pauseAgent, saveAgentSettings, setGroupJoined } from "@/lib/data/outreach-agent";
+import { approveReady, declineReady, dismissGroup, pauseAgent, saveAgentSettings, setGroupJoined } from "@/lib/data/outreach-agent";
 import { normaliseGroupUrl, type AgentGroup, type AgentSources } from "@/lib/outreach-agent";
 
 /**
@@ -97,6 +97,28 @@ export async function pauseGroupAgent(input: { hours: number | null; reason: str
     return { ok: false, error: "Couldn't pause it. Try again." };
   }
   revalidatePath("/admin/outreach/agent");
+  return { ok: true };
+}
+
+/** Yes to one written comment, edits and all. The browser posts it on its next minute. */
+export async function approveAgentComment(input: { seenId: string; comment: string }): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const result = await approveReady(profile.organization_id, input.seenId, input.comment);
+  if (!result.ok) return { ok: false, error: result.error ?? "Couldn't approve that." };
+  revalidatePath("/admin/outreach/agent");
+  revalidatePath("/my-day");
+  return { ok: true };
+}
+
+/** No to one written comment. */
+export async function declineAgentComment(input: { seenId: string; reason?: string }): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const result = await declineReady(profile.organization_id, input.seenId, input.reason ?? null);
+  if (!result.ok) return { ok: false, error: result.error ?? "Couldn't decline that." };
+  revalidatePath("/admin/outreach/agent");
+  revalidatePath("/my-day");
   return { ok: true };
 }
 

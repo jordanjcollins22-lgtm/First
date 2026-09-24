@@ -4,6 +4,10 @@ A Chrome extension that does what you were doing by hand: looks through your Fac
 
 It runs as you, in your Chrome, on your Facebook account, with your app sign-in. Nothing here logs in anywhere. Close Chrome and it stops.
 
+## Review first
+
+Out of the box it asks before posting. Every comment it writes waits under **Comments to approve** on the Group Agent page (and as a line on My Day) with the post beside it. Change the words if you like, then approve and the browser posts it on its next minute; decline and the post is left alone. The popup shows how many are waiting. Once you trust it, tick **Post without asking me** in the app and it posts as soon as it has written one.
+
 ## What it does, once a minute
 
 1. Asks the app whether it is allowed to post right now: the sources, the caps, the hours, and the pause button all live at **app → Link Tracking → Group Agent**.
@@ -29,7 +33,7 @@ The popup shows what it is doing. **Look now** scans every group straight away; 
 
 - It never posts more than the caps in the app (two an hour and six a day to start), never outside the hours set there, and never twice on one post.
 - If Facebook shows anything like "temporarily blocked" or "action blocked", it stops for a day on its own and says so in the app. Do not turn it back on the same day.
-- Facebook's terms do not allow automated posting. Running this is a risk to the account it runs on. Keep the caps low, keep the comments honest, and turn **Post the comments itself** off in the app if you would rather it only found and wrote them.
+- Facebook's terms do not allow automated posting. Running this is a risk to the account it runs on. Keep the caps low, keep the comments honest, and leave **Post without asking me** off if you would rather see each one first.
 
 ## Updates
 
@@ -37,4 +41,4 @@ You should rarely need to download this again. Every selector and every wait the
 
 ## If it stops working
 
-If the popup says it could not find the comment box or the comment did not appear, Facebook's page has changed. That is a recipe fix in the app, not a download. Until it is fixed, turn **Post the comments itself** off and paste from the board.
+If the popup says it could not find the comment box or the comment did not appear, Facebook's page has changed. That is a recipe fix in the app, not a download. Until it is fixed, the written comments are still on the Link Tracking board to paste by hand.

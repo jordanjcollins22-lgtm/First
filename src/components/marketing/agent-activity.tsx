@@ -21,6 +21,7 @@ const TONE: Record<Decision, string> = {
   skipped: "text-muted-foreground",
   not_member: "text-amber-700",
   outside_area: "text-muted-foreground",
+  declined: "text-muted-foreground",
 };
 
 export function AgentActivity({ rows }: { rows: SeenRow[] }) {
@@ -29,7 +30,7 @@ export function AgentActivity({ rows }: { rows: SeenRow[] }) {
   }
   return (
     <ul className="divide-y divide-border">
-      {rows.map((row) => (
+      {rows.filter((row) => row.decision !== "ready").map((row) => (
         <li key={row.id} className="space-y-1 py-3 text-sm">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className={`font-medium ${TONE[row.decision] ?? ""}`}>{DECISION_LABEL[row.decision] ?? row.decision}</span>

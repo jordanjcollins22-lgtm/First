@@ -170,9 +170,10 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
       <label className="flex items-start gap-3 text-sm">
         <Checkbox checked={autoPost} disabled={disabled} onCheckedChange={(v) => setAutoPost(v === true)} className="mt-0.5" />
         <span>
-          <span className="font-medium">Post the comments itself.</span>
+          <span className="font-medium">Post without asking me.</span>
           <span className="block text-xs text-muted-foreground">
-            Off, and it still finds and writes them, but they wait on the Link Tracking board for you to paste.
+            Off, and every comment it writes waits under &ldquo;Comments to approve&rdquo; above until you approve it.
+            On, and it posts as soon as it has written one.
           </span>
         </span>
       </label>

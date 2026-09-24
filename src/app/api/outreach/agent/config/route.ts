@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
-import { agentCounts, getAgentSettings } from "@/lib/data/outreach-agent";
+import { agentCounts, countReadyForReview, getAgentSettings } from "@/lib/data/outreach-agent";
 import { settingsForBrowser, standing } from "@/lib/outreach-agent";
 import { DEFAULT_RECIPE, EXTENSION_DOWNLOAD_URL, EXTENSION_VERSION, versionIsBehind } from "@/lib/outreach-agent-recipe";
 import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
@@ -29,9 +29,10 @@ export async function GET(request: NextRequest) {
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const now = new Date();
-  const [settings, counts] = await Promise.all([
+  const [settings, counts, toReview] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
+    countReadyForReview(profile.organization_id),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
   const installed = request.nextUrl.searchParams.get("v");
@@ -39,7 +40,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     settings: settingsForBrowser(settings),
-    counts,
+    counts: { ...counts, toReview },
+    reviewUrl: `${request.nextUrl.origin}/admin/outreach/agent#review`,
     active: state.active,
     because: state.active ? null : state.because,
     pausedUntil: settings.pausedUntil,

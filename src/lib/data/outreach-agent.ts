@@ -7,6 +7,7 @@ import {
   type AgentSources,
   type Decision,
   type ScanSource,
+  mentionFromComment,
 } from "@/lib/outreach-agent";
 
 /**
@@ -362,6 +363,110 @@ export interface SeenRow {
   comment: string | null;
   code: string | null;
   clicks: number;
+}
+
+/** One comment the browser should go and post. */
+export interface QueuedComment {
+  seenId: string;
+  linkId: string;
+  code: string;
+  url: string;
+  comment: string;
+  mention: string | null;
+  groupName: string | null;
+  queuedAt: string;
+}
+
+/**
+ * The comments approved and not yet posted, oldest first.
+ *
+ * The app is the queue, not the browser: a comment approved on a phone is
+ * picked up by the Chrome at home on its next minute. Anything queued
+ * longer than the recipe allows is closed here as skipped, because the
+ * neighbour has found somebody by then.
+ */
+export async function queuedForBrowser(organizationId: string, staleHours: number): Promise<QueuedComment[]> {
+  const supabase = await createClient();
+  const cutoff = new Date(Date.now() - staleHours * 3_600_000).toISOString();
+  await supabase
+    .from("outreach_seen_posts")
+    .update({ decision: "skipped", reason: `Not posted within ${staleHours} hours, so left alone.`, updated_at: new Date().toISOString() })
+    .eq("organization_id", organizationId)
+    .eq("decision", "queued")
+    .lt("updated_at", cutoff);
+
+  const { data: rows } = await supabase
+    .from("outreach_seen_posts")
+    .select("id, url, group_name, link_id, updated_at")
+    .eq("organization_id", organizationId)
+    .eq("decision", "queued")
+    .not("link_id", "is", null)
+    .order("updated_at", { ascending: true })
+    .limit(20);
+  const linkIds = (rows ?? []).map((row) => row.link_id).filter((id): id is string => Boolean(id));
+  if (linkIds.length === 0) return [];
+  const { data: links } = await supabase.from("outreach_links").select("id, code, comment").in("id", linkIds);
+  const byId = new Map((links ?? []).map((link) => [link.id, link]));
+  return (rows ?? []).flatMap((row) => {
+    const link = row.link_id ? byId.get(row.link_id) : undefined;
+    if (!link || !link.comment) return [];
+    return [
+      {
+        seenId: row.id,
+        linkId: link.id,
+        code: link.code,
+        url: row.url,
+        comment: link.comment,
+        mention: mentionFromComment(link.comment),
+        groupName: row.group_name,
+        queuedAt: row.updated_at,
+      },
+    ];
+  });
+}
+
+/** How many comments are written and waiting for a person to say yes. */
+export async function countReadyForReview(organizationId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("outreach_seen_posts")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .eq("decision", "ready");
+  return count ?? 0;
+}
+
+/** Approve one written comment, with any edits, so the browser posts it. */
+export async function approveReady(organizationId: string, seenId: string, comment: string | null): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("outreach_seen_posts")
+    .select("id, decision, link_id")
+    .eq("organization_id", organizationId)
+    .eq("id", seenId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "Couldn't find that one." };
+  if (row.decision !== "ready") return { ok: false, error: "That one has already been decided." };
+  if (comment && row.link_id) {
+    await supabase.from("outreach_links").update({ comment: comment.trim().slice(0, 4000) }).eq("id", row.link_id);
+  }
+  const { error } = await supabase
+    .from("outreach_seen_posts")
+    .update({ decision: "queued", reason: "Approved.", updated_at: new Date().toISOString() })
+    .eq("id", row.id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/** Decline one written comment. Nothing is posted, and the post is not read again. */
+export async function declineReady(organizationId: string, seenId: string, reason: string | null): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("outreach_seen_posts")
+    .update({ decision: "declined", reason: reason?.trim().slice(0, 300) || "Declined.", updated_at: new Date().toISOString() })
+    .eq("organization_id", organizationId)
+    .eq("id", seenId)
+    .eq("decision", "ready");
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 /** What the agent has looked at lately, newest first. */
