@@ -127,3 +127,18 @@ export function roleViewFor(roles: string[]): RoleView {
   if (isEvaluator(roles)) return "evaluator";
   return "full";
 }
+
+/**
+ * Who an evaluation can be handed to, as picker options: everybody who can
+ * be booked for one, and whoever has it now even if they no longer could,
+ * so the picker never shows a blank for a real assignment.
+ */
+export function evaluatorOptions(
+  profiles: { id: string; full_name: string | null; email: string | null; roles: string[]; does_evaluations?: boolean | null }[],
+  currentlyAssigned: string | null
+): { id: string; name: string }[] {
+  return profiles
+    .filter((p) => canDoEvaluations(p.roles, p.does_evaluations) || p.id === currentlyAssigned)
+    .map((p) => ({ id: p.id, name: p.full_name || p.email || "Unnamed" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

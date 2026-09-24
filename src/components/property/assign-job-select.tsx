@@ -1,13 +1,17 @@
 "use client";
 
-import { useTransition } from "react";
-
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { assignJob } from "@/lib/actions/job-actions";
+import { EvaluatorPicker } from "@/components/jobs/evaluator-picker";
+import { evaluatorOptions } from "@/lib/affiliate-roles";
 import type { Profile } from "@/types/domain";
 
-const UNASSIGNED = "unassigned";
-
+/**
+ * Who a job is assigned to, on the client panel.
+ *
+ * The same picker as the job page and the evaluations list, so a change made
+ * here is checked for double-booking, moves the calendar entry and tells both
+ * people. It used to write the column directly and swallow any refusal, so a
+ * change that could not be made looked as though it had been.
+ */
 export function AssignJobSelect({
   jobId,
   initialAssignedTo,
@@ -17,31 +21,13 @@ export function AssignJobSelect({
   initialAssignedTo: string | null;
   profiles: Profile[];
 }) {
-  const [isPending, startTransition] = useTransition();
-
-  function handleChange(value: string) {
-    startTransition(async () => {
-      try {
-        await assignJob(jobId, value === UNASSIGNED ? null : value);
-      } catch {
-        // Best-effort — e.g. the "assigned_to" column migration hasn't run yet.
-      }
-    });
-  }
-
   return (
-    <Select defaultValue={initialAssignedTo ?? UNASSIGNED} onValueChange={handleChange} disabled={isPending}>
-      <SelectTrigger className="h-8 w-40 text-xs">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
-        {profiles.map((profile) => (
-          <SelectItem key={profile.id} value={profile.id}>
-            {profile.full_name || profile.email}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <EvaluatorPicker
+      jobId={jobId}
+      assignedTo={initialAssignedTo}
+      options={evaluatorOptions(profiles, initialAssignedTo)}
+      canChange
+      compact
+    />
   );
 }

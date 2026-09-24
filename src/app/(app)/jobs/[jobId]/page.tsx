@@ -21,7 +21,7 @@ import { outstandingFor, sectionToOpen } from "@/lib/job-outstanding";
 import { jobFacts, listGateOverrides, listJobIssues } from "@/lib/data/issues";
 import { evaluateGate } from "@/lib/readiness";
 import { canOverrideGate } from "@/lib/affiliate-roles";
-import { isOwnerLevel, visibilityFor } from "@/lib/roles";
+import { canRunJobs, isOwnerLevel, visibilityFor } from "@/lib/roles";
 import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
 import { FieldScreen } from "@/components/job/field-screen";
 import { IssuesPanel } from "@/components/issues/issues-panel";
@@ -105,6 +105,8 @@ import { getJobCommission } from "@/lib/data/commission";
 import { JobCommissionPanel } from "@/components/payments/job-commission";
 import { requireJobAccess } from "@/lib/data/access";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
+import { EvaluatorPicker } from "@/components/jobs/evaluator-picker";
+import { evaluatorOptions } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
 import { readDay } from "@/lib/crew-day";
 import { isAccountManager } from "@/lib/affiliate-roles";
@@ -157,6 +159,7 @@ export default async function JobPage({
     client_notes: string | null;
     budget_range: string | null;
     ghl_appointment_id: string | null;
+    assigned_to: string | null;
     property: {
       address: string;
       lat: number;
@@ -688,6 +691,13 @@ export default async function JobPage({
             title: "Schedule",
             hint: job.project_start_date ?? job.evaluation_date ?? "Nothing booked",
             body: (
+              <div className="space-y-3">
+              <EvaluatorPicker
+                jobId={jobId}
+                assignedTo={job.assigned_to}
+                options={evaluatorOptions(teamProfiles, job.assigned_to)}
+                canChange={Boolean(viewer && canRunJobs(viewer.roles))}
+              />
               <SchedulePanel
                 jobId={jobId}
                 status={job.status}
@@ -701,6 +711,7 @@ export default async function JobPage({
                 ghlAppointmentId={job.ghl_appointment_id ?? null}
                 ghlReady={isGhlConfigured}
               />
+              </div>
             ),
           },
           {

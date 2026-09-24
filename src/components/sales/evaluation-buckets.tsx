@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 
+import { EvaluatorPicker, type EvaluatorOption } from "@/components/jobs/evaluator-picker";
 import {
   BUCKET_LABEL,
   EVALUATION_BUCKETS,
@@ -24,7 +25,18 @@ function when(value: string | null): string {
  * drove to a house and measured it, and the only thing between that and money
  * is a proposal nobody has written.
  */
-export function EvaluationBuckets({ evaluations, now }: { evaluations: SalesEvaluation[]; now: string }) {
+export function EvaluationBuckets({
+  evaluations,
+  now,
+  evaluators,
+  canReassign = false,
+}: {
+  evaluations: SalesEvaluation[];
+  now: string;
+  /** Who an evaluation can be handed to. Without it the name is only shown. */
+  evaluators?: EvaluatorOption[];
+  canReassign?: boolean;
+}) {
   const counts = bucketCounts(evaluations, now);
 
   return (
@@ -48,10 +60,10 @@ export function EvaluationBuckets({ evaluations, now }: { evaluations: SalesEval
             ) : (
               <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
                 {rows.map((row) => (
-                  <li key={row.jobId}>
+                  <li key={row.jobId} className="flex flex-wrap items-center gap-x-3 gap-y-1 hover:bg-accent">
                     <Link
                       href={`/jobs/${row.jobId}`}
-                      className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2.5 hover:bg-accent"
+                      className="flex min-h-14 min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2.5"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">
@@ -66,9 +78,21 @@ export function EvaluationBuckets({ evaluations, now }: { evaluations: SalesEval
                       </span>
                       <span className="shrink-0 text-right text-xs text-muted-foreground">
                         <span className="block">{when(row.at)}</span>
-                        {row.assignedToName && <span className="block">{row.assignedToName}</span>}
+                        {!(canReassign && evaluators) && row.assignedToName && <span className="block">{row.assignedToName}</span>}
                       </span>
                     </Link>
+                    {/* Outside the link, so choosing somebody doesn't open the job. */}
+                    {canReassign && evaluators && (
+                      <span className="px-3 pb-2.5 sm:pb-0">
+                        <EvaluatorPicker
+                          jobId={row.jobId}
+                          assignedTo={row.assignedToId ?? null}
+                          options={withCurrent(evaluators, row)}
+                          canChange
+                          compact
+                        />
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -78,4 +102,10 @@ export function EvaluationBuckets({ evaluations, now }: { evaluations: SalesEval
       })}
     </div>
   );
+}
+
+/** The options, plus whoever has this one now if they are not among them. */
+function withCurrent(options: EvaluatorOption[], row: SalesEvaluation): EvaluatorOption[] {
+  if (!row.assignedToId || options.some((o) => o.id === row.assignedToId)) return options;
+  return [...options, { id: row.assignedToId, name: row.assignedToName ?? "Somebody" }];
 }

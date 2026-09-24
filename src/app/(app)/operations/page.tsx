@@ -14,10 +14,10 @@ import { listBoardJobs } from "@/lib/data/job-board";
 import { jobStanding } from "@/lib/data/job-readiness";
 import { getCrewBoards } from "@/lib/data/crew-leaderboard";
 import { getAllowedTabs } from "@/lib/data/access";
-import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { isTheirs, jobsInView, sortForView, type BoardJob } from "@/lib/job-board";
 import { subtabsFor } from "@/lib/modules";
-import { roleViewFor } from "@/lib/affiliate-roles";
+import { evaluatorOptions, roleViewFor } from "@/lib/affiliate-roles";
 import { canRunJobs, isOwnerLevel } from "@/lib/roles";
 import type { Profile } from "@/types/domain";
 
@@ -47,11 +47,17 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
   const content: Record<string, React.ReactNode> = {};
   if (shown.has("calendar")) content.calendar = await CalendarTab({ section: "calendar" });
   if (shown.has("evaluations")) {
-    const evaluations = await listSalesEvaluations().catch(() => []);
+    const canReassign = Boolean(profile && canRunJobs(profile.roles));
+    const [evaluations, team] = await Promise.all([
+      listSalesEvaluations().catch(() => []),
+      canReassign ? listProfiles().catch(() => []) : Promise.resolve([]),
+    ]);
     content.evaluations = (
       <EvaluationBuckets
         evaluations={onlyTheirs && profile ? evaluations.filter((e) => isTheirs(e, profile.id)) : evaluations}
         now={new Date().toISOString()}
+        evaluators={canReassign ? evaluatorOptions(team, null) : undefined}
+        canReassign={canReassign}
       />
     );
   }

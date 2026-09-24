@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canDoEvaluations,
   canOverrideGate,
+  evaluatorOptions,
   roleViewFor,
   canSeeMoney,
   isAccountManager,
@@ -141,5 +142,23 @@ describe("roleViewFor", () => {
     expect(roleViewFor(["admin", "crew", "evaluator"])).toBe("full");
     expect(roleViewFor(["office"])).toBe("full");
     expect(roleViewFor(["owner", "account manager"])).toBe("full");
+  });
+});
+
+describe("evaluatorOptions", () => {
+  const person = (id: string, name: string, roles: string[], does_evaluations: boolean | null = null) => ({
+    id,
+    full_name: name,
+    email: `${id}@x.com`,
+    roles,
+    does_evaluations,
+  });
+  it("offers whoever can be booked for an evaluation, by name", () => {
+    const team = [person("m", "Max", ["crew"]), person("j", "Jace", ["account manager"]), person("o", "Jordan", ["admin"], true)];
+    expect(evaluatorOptions(team, null).map((o) => o.name)).toEqual(["Jace", "Jordan"]);
+  });
+  it("keeps whoever has it now, even if they couldn't be booked for a new one", () => {
+    const team = [person("m", "Max", ["crew"]), person("j", "Jace", ["account manager"])];
+    expect(evaluatorOptions(team, "m").map((o) => o.name)).toEqual(["Jace", "Max"]);
   });
 });

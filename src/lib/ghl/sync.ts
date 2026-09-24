@@ -93,6 +93,31 @@ export async function syncEvaluationToGhl(jobId: string): Promise<GhlSyncResult>
 }
 
 /**
+ * Hands the calendar entry to whoever the evaluation is assigned to now.
+ *
+ * An evaluation never put on the calendar has nothing to hand over, and one
+ * whose new evaluator GoHighLevel does not know stays where it was rather
+ * than landing on a stand-in: a stand-in is right for a new booking the
+ * calendar would otherwise refuse, and wrong for moving somebody's visit.
+ */
+export async function reassignEvaluationInGhl(jobId: string): Promise<GhlSyncResult> {
+  if (!isGhlConfigured) return { ok: true, appointmentId: null };
+  try {
+    const job = await loadJob(jobId);
+    if (!job?.ghl_appointment_id) return { ok: true, appointmentId: null };
+    const user = job.assigned_to ? await ghlUserFor(job.assigned_to, { standIn: false }) : null;
+    if (!user) return { ok: false, error: "GoHighLevel doesn't know the new evaluator, so the calendar entry stayed with the old one." };
+    await updateAppointment(job.ghl_appointment_id, { assignedUserId: user });
+    log.info("ghl.appointment.reassigned", { jobId, appointmentId: job.ghl_appointment_id });
+    return { ok: true, appointmentId: job.ghl_appointment_id };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    log.warn("ghl.reassign.failed", { jobId, error });
+    return { ok: false, error };
+  }
+}
+
+/**
  * The GoHighLevel user an evaluation goes on the calendar under.
  *
  * Its calendar refuses an appointment with nobody on it. The evaluator is
@@ -100,7 +125,8 @@ export async function syncEvaluationToGhl(jobId: string): Promise<GhlSyncResult>
  * their profile; with no evaluator, or one GoHighLevel does not know, the
  * first teammate anybody has matched stands in, so the booking still lands.
  */
-async function ghlUserFor(profileId: string | null): Promise<string | null> {
+async function ghlUserFor(profileId: string | null, options: { standIn?: boolean } = {}): Promise<string | null> {
+  const standIn = options.standIn !== false;
   const admin = createAdminClient();
   const { data: known } = await admin.from("profiles").select("id, email, ghl_user_id").not("ghl_user_id", "is", null).limit(20);
   const remembered = (known ?? []).find((p) => p.id === profileId)?.ghl_user_id ?? null;
@@ -110,7 +136,7 @@ async function ghlUserFor(profileId: string | null): Promise<string | null> {
   try {
     users = await listUsers();
   } catch {
-    return (known ?? [])[0]?.ghl_user_id ?? null;
+    return standIn ? (known ?? [])[0]?.ghl_user_id ?? null : null;
   }
   const byEmail = new Map(users.filter((u) => u.email).map((u) => [u.email!.trim().toLowerCase(), u.id]));
 
@@ -122,6 +148,7 @@ async function ghlUserFor(profileId: string | null): Promise<string | null> {
       return match;
     }
   }
+  if (!standIn) return null;
   if ((known ?? []).length > 0) return known![0].ghl_user_id;
   // Nobody matched yet: any teammate GoHighLevel lists, so the calendar takes it.
   return users[0]?.id ?? null;

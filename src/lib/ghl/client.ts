@@ -88,7 +88,14 @@ export async function createAppointment(input: GhlAppointmentInput): Promise<str
 
 export async function updateAppointment(
   id: string,
-  patch: { title?: string; startTime?: string; endTime?: string; appointmentStatus?: "confirmed" | "cancelled" }
+  patch: {
+    title?: string;
+    startTime?: string;
+    endTime?: string;
+    appointmentStatus?: "confirmed" | "cancelled";
+    /** Hands the appointment to another GoHighLevel user. */
+    assignedUserId?: string;
+  }
 ): Promise<void> {
   await call("PUT", `/calendars/events/appointments/${encodeURIComponent(id)}`, {
     ...patch,

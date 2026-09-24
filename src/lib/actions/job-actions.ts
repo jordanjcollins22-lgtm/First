@@ -1,6 +1,10 @@
 "use server";
 
-import { cancelEvaluationInGhl, syncEvaluationToGhl } from "@/lib/ghl/sync";
+import { cancelEvaluationInGhl, reassignEvaluationInGhl, syncEvaluationToGhl } from "@/lib/ghl/sync";
+import { getCurrentProfile } from "@/lib/data/team";
+import { canRunJobs } from "@/lib/roles";
+import { notifyTeamMember } from "@/lib/notifications";
+import { shortWhen } from "@/lib/time-zone";
 import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 
 import { revalidatePath } from "next/cache";
@@ -130,6 +134,73 @@ export async function assignJob(jobId: string, profileId: string | null) {
   const { error } = await supabase.from("jobs").update({ assigned_to: profileId }).eq("id", jobId);
   if (error) throw error;
   revalidatePath("/attractors");
+}
+
+/**
+ * Hands an evaluation to somebody else.
+ *
+ * The same double-booking check as assigning, but said back rather than
+ * thrown, so the person changing it sees why it was refused instead of a
+ * dropdown that quietly snaps back. Then the calendar entry follows it, and
+ * both people are told: the new evaluator that the visit is theirs, the old
+ * one that it is not, so nobody drives to a house that is somebody else's.
+ */
+export async function reassignEvaluator(jobId: string, profileId: string | null): Promise<JobActionResult> {
+  const viewer = await getCurrentProfile();
+  if (!viewer) return { ok: false, message: "Not signed in." };
+  if (!canRunJobs(viewer.roles)) return { ok: false, message: "Only an owner, account manager or project lead can change the evaluator." };
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("jobs")
+    .select("assigned_to, evaluation_date, evaluation_end_date, evaluation_status, property:properties(address)")
+    .eq("id", jobId)
+    .maybeSingle();
+  const job = row as unknown as {
+    assigned_to: string | null;
+    evaluation_date: string | null;
+    evaluation_end_date: string | null;
+    evaluation_status: string;
+    property: { address: string | null } | null;
+  } | null;
+  if (!job) return { ok: false, message: "Couldn't find that job." };
+  const before = job.assigned_to;
+  if (before === profileId) return { ok: true };
+
+  if (profileId && job.evaluation_date && job.evaluation_status !== "cancelled") {
+    const clash = await findClashFor(supabase, jobId, profileId, job.evaluation_date, job.evaluation_end_date);
+    if (clash) return { ok: false, message: clash };
+  }
+
+  const { error } = await supabase.from("jobs").update({ assigned_to: profileId }).eq("id", jobId);
+  if (error) return { ok: false, message: error.message };
+
+  const notes: string[] = [];
+  const ghl = await reassignEvaluationInGhl(jobId);
+  if (!ghl.ok) notes.push(ghl.error);
+
+  // Told only about a visit still to come. Handing over a finished one is
+  // bookkeeping, and a text about it is noise.
+  const upcoming = job.evaluation_date && job.evaluation_status !== "cancelled" && new Date(job.evaluation_date).getTime() > Date.now();
+  if (upcoming) {
+    const where = job.property?.address?.split(",")[0] ?? "a property";
+    const when = shortWhen(job.evaluation_date!);
+    const by = viewer.full_name || viewer.email || "The office";
+    if (profileId) {
+      await notifyTeamMember(profileId, "appointment_reminders", `${by} gave you the evaluation at ${where}, ${when}.`, {
+        dedupeKey: `reassign:${jobId}:${profileId}:${job.evaluation_date}`,
+      }).catch(() => false);
+    }
+    if (before) {
+      await notifyTeamMember(before, "appointment_reminders", `${by} moved the evaluation at ${where}, ${when}, to somebody else. It's off your day.`, {
+        dedupeKey: `unassign:${jobId}:${before}:${job.evaluation_date}`,
+      }).catch(() => false);
+    }
+  }
+
+  refresh(jobId);
+  revalidatePath("/operations");
+  return { ok: true, message: notes.length > 0 ? `Changed. ${notes.join(" ")}` : undefined };
 }
 
 /**
