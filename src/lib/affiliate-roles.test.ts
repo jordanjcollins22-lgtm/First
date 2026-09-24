@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canDoEvaluations,
   canOverrideGate,
+  roleViewFor,
   canSeeMoney,
   isAccountManager,
   isCrew,
@@ -124,5 +125,21 @@ describe("who can be sent to do an evaluation", () => {
     for (const roles of [["evaluator"], ["account manager"], ["crew"], ["admin"], []]) {
       expect(canDoEvaluations(roles)).toBe(qualifiesForAffiliateLink(roles));
     }
+  });
+});
+
+describe("roleViewFor", () => {
+  it("gives the crew the field view", () => {
+    expect(roleViewFor(["crew"])).toBe("field");
+  });
+  it("narrows an account manager and an evaluator", () => {
+    expect(roleViewFor(["account manager"])).toBe("account-manager");
+    expect(roleViewFor(["Evaluator"])).toBe("evaluator");
+    expect(roleViewFor(["evaluator", "account_manager"])).toBe("account-manager");
+  });
+  it("lets running the business win over a narrower role", () => {
+    expect(roleViewFor(["admin", "crew", "evaluator"])).toBe("full");
+    expect(roleViewFor(["office"])).toBe("full");
+    expect(roleViewFor(["owner", "account manager"])).toBe("full");
   });
 });

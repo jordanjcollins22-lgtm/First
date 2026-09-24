@@ -7,7 +7,8 @@ interface Row {
   status: string;
   evaluation_status: string;
   evaluation_date: string | null;
-  properties: { address: string | null; customers: { name: string | null } | null } | null;
+  assigned_to: string | null;
+  properties: { address: string | null; customers: { name: string | null; account_manager_id: string | null } | null } | null;
   profiles: { full_name: string | null; email: string | null } | null;
 }
 
@@ -24,7 +25,7 @@ export async function listSalesEvaluations(): Promise<SalesEvaluation[]> {
       .from("jobs")
       .select(
         "id, job_number, status, evaluation_status, evaluation_date, " +
-          "properties!inner(address, customers(name)), profiles!jobs_assigned_to_fkey(full_name, email)"
+          "assigned_to, properties!inner(address, customers(name, account_manager_id)), profiles!jobs_assigned_to_fkey(full_name, email)"
       )
       .eq("status", "estimating")
       .limit(500),
@@ -45,5 +46,7 @@ export async function listSalesEvaluations(): Promise<SalesEvaluation[]> {
     evaluationStatus: row.evaluation_status,
     status: row.status,
     assignedToName: row.profiles?.full_name || row.profiles?.email || null,
+    assignedToId: row.assigned_to,
+    accountManagerId: row.properties?.customers?.account_manager_id ?? null,
   }));
 }

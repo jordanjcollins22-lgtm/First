@@ -258,18 +258,18 @@ describe("what each kind of person can open", () => {
     expect(modulesFor([])).toEqual(["my-day"]);
   });
 
-  it("an account manager gets selling and the calendar, not the money", () => {
+  it("somebody granted selling and the calendar gets those, not the money", () => {
     const keys = modulesFor(["pipeline", "contacts", "proposals", "evaluations", "job-detail"]);
-    expect(keys).toEqual(["my-day", "sales", "schedule", "jobs"]);
-    expect(subtabsFor("more", ["pipeline", "contacts"])).toEqual([]);
+    expect(keys).toEqual(["my-day", "sales", "operations"]);
+    expect(subtabsFor("admin", ["pipeline", "contacts"])).toEqual([]);
   });
 
-  it("a manager who can see jobs gets the board", () => {
-    expect(modulesFor(["job-detail"])).toEqual(["my-day", "jobs"]);
+  it("a manager who can see jobs gets the board, under Operations", () => {
+    expect(modulesFor(["job-detail"])).toEqual(["my-day", "operations"]);
   });
 
-  it("a money-trusted role gets Finance under More and nothing else there", () => {
-    expect(subtabsFor("more", ["payments"]).map((s) => s.key)).toEqual(["finance"]);
+  it("a money-trusted role gets Finance under Admin and nothing else there", () => {
+    expect(subtabsFor("admin", ["payments"]).map((s) => s.key)).toEqual(["finance"]);
   });
 
   it("severity still decides whether an issue stops the work by default", () => {

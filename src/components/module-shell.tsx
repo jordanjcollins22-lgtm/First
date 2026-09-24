@@ -5,6 +5,7 @@ import { listRolePermissions } from "@/lib/data/permissions";
 import { getCurrentProfile } from "@/lib/data/team";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { moduleFor, openingSubtab, subtabsFor, type ModuleKey } from "@/lib/modules";
+import { roleViewFor } from "@/lib/affiliate-roles";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 
 /**
@@ -36,8 +37,11 @@ export async function ModuleShell({
   const profile = await getCurrentProfile();
   const permissions = await listRolePermissions().catch(() => []);
   const allowed = Array.from(tabsAllowedForRoles(profile?.roles ?? [], permissions));
+  // Narrowed again to what this person's work needs: an evaluator opening
+  // Operations sees the calendar and the evaluations, not the salt route.
+  const view = roleViewFor(profile?.roles ?? []);
 
-  const open = subtabsFor(key, allowed).filter((subtab) => content[subtab.key] != null);
+  const open = subtabsFor(key, allowed, view).filter((subtab) => content[subtab.key] != null);
   // Nothing in here is theirs. Send them to their own screen rather than
   // showing an empty page with a heading on it.
   if (open.length === 0) redirect("/my-day");
@@ -55,7 +59,7 @@ export async function ModuleShell({
         <h1 className="text-xl font-semibold">{mod.label}</h1>
         <p className="text-sm text-muted-foreground">{mod.question}</p>
       </header>
-      <PageTabs tabs={tabs} initialKey={openingSubtab(key, allowed, asked) ?? undefined} />
+      <PageTabs tabs={tabs} initialKey={openingSubtab(key, allowed, asked, view) ?? undefined} />
     </div>
   );
 }

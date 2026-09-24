@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SaltPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("salt", "/more");
+  await requireTab("salt", "/my-day");
 
   const board = await getSaltBoard().catch((err) => {
     console.error("Salt route failed to load:", err);

@@ -111,8 +111,8 @@ export async function acceptSuggestion(input: {
       } as never)
       .then(undefined, () => undefined);
 
-    revalidatePath("/schedule");
-    revalidatePath("/jobs");
+    revalidatePath("/operations");
+    revalidatePath("/operations");
     revalidatePath(`/jobs/${input.jobId}`);
     return { ok: true, value: { sessionId: session.id as string } };
   } catch (err) {
@@ -135,7 +135,7 @@ export async function setScheduleEngineEnabled(enabled: boolean): Promise<Action
       .eq("id", profile.organization_id as string);
     if (error) throw error;
 
-    revalidatePath("/schedule");
+    revalidatePath("/operations");
     return { ok: true, value: { enabled } };
   } catch (err) {
     return failed(err);

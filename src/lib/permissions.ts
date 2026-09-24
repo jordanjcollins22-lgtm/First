@@ -175,18 +175,17 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
   "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
   "/sales":
-    "One of the six modules. It holds no feature of its own — every subtab renders the page that " +
+    "One of the four departments. It holds no feature of its own — every subtab renders the page that " +
     "already existed, at the permission it already had, and a subtab the viewer cannot open is not " +
     "rendered. A tick here would be a second lock on doors that are already locked.",
-  "/schedule": "One of the six modules. Same reason as /sales: it renders the Calendar and Weather at their own permissions.",
-  "/jobs":
-    "One of the six modules, and the list of sold work. Guarded by the Job Detail tab directly — " +
-    "whoever can open a job can see the list of jobs.",
-  "/marketing": "One of the six modules. Same reason as /sales: the map, the leads, the print tools and the posts, each at its own permission.",
-  "/more":
-    "The drawer holding every tool that is not one of the eight. It lists only pages the viewer " +
-    "already has permission for and links to nothing else, so a tick of its own would withhold " +
-    "nothing and could leave somebody with no way to reach a page they were granted.",
+  "/operations":
+    "One of the four departments. Same reason as /sales: the calendar, the evaluations, the job board, " +
+    "the crew, the weather and the salt route, each at its own permission.",
+  "/marketing": "One of the four departments. Same reason as /sales: the map, the leads, the print tools and the posts, each at its own permission.",
+  "/admin":
+    "The department holding everything the business runs on. It lists only pages the viewer already " +
+    "has permission for and links to nothing else, so a tick of its own would withhold nothing and " +
+    "could leave somebody with no way to reach a page they were granted.",
 };
 
 /**

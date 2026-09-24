@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SubscriptionsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("payments", "/more");
+  await requireTab("payments", "/admin");
 
   const board = await getRecurringBoard().catch((err) => {
     console.error("Subscriptions failed to load:", err);

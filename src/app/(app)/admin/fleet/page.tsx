@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 
 export default async function FleetPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("fleet", "/more");
+  await requireTab("fleet", "/admin");
 
   const board = await getFleetBoard().catch((err) => {
     console.error("Fleet failed to load:", err);

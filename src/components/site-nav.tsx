@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Menu, Plus, X } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
-import { isFieldOnly } from "@/lib/affiliate-roles";
+import { isFieldOnly, roleViewFor } from "@/lib/affiliate-roles";
 import { navModules } from "@/lib/modules";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -39,26 +39,14 @@ export function SiteNav({
   // Field-only people get one link. The rest of the app is for the office, and
   // a menu of seventeen things they cannot use is worse than no menu.
   //
-  // Everybody else gets the eight, in a fixed order, and one door to the rest.
-  // A nav of seventeen equals is a list people scan for the two things they
-  // use; naming the work of the business directly and putting the tools behind
-  // More is the same pages, arranged so the daily ones are the ones you see.
+  // Everybody else gets My Day and the four departments, narrowed to what
+  // their work needs: an evaluator sees My Day and Operations, and inside
+  // Operations only the calendar and the evaluations. A department with
+  // nothing open inside it is left out entirely. Settings and View as live
+  // inside Admin now, so they are not doors of their own.
   const links = fieldOnly
     ? [{ href: "/my-day", label: "My Day" }]
-    : [
-        // Six pieces of work rather than thirty-three pages. A module with
-        // nothing open inside it is left out entirely — a door that opens on
-        // a refusal is worse than no door.
-        ...navModules(allowedTabs).map((mod) => ({ href: mod.href, label: mod.label })),
-        // Gated on the admin role itself, never on the table it edits —
-        // otherwise one stray uncheck would take away the way back in.
-        ...(roles.includes("admin")
-          ? [
-              { href: "/admin/view-as", label: "View as" },
-              { href: "/admin/settings", label: "Settings" },
-            ]
-          : []),
-      ];
+    : navModules(allowedTabs, roleViewFor(roles)).map((mod) => ({ href: mod.href, label: mod.label }));
 
   useEffect(() => {
     if (!open) return;

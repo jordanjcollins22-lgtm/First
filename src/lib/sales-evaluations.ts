@@ -29,6 +29,9 @@ export interface SalesEvaluation {
   /** The job's own status: estimating, quoted, approved... */
   status: string;
   assignedToName: string | null;
+  /** Who the job is assigned to, and who manages the client: whose it is. */
+  assignedToId?: string | null;
+  accountManagerId?: string | null;
 }
 
 /**

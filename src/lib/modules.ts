@@ -1,26 +1,29 @@
 /**
- * The app as six pieces of work, not thirty-three pages.
+ * The app as four departments and one screen of your own.
  *
  * The navigation used to name the database: Contacts, Pipeline, Proposals,
- * Project Data, Door Hangers, Labels. Every one of those is a real thing, and
- * none of them is a question anybody asks. The questions are: what do I do
- * today, how do I sell this, when does it happen, how do we do the work, where
- * does the next customer come from, and where is everything else.
+ * Project Data, Door Hangers, Labels. Then it named six pieces of work, which
+ * was better and still one too many doors for a business this size. Now it is
+ * the departments a customer passes through, in the order they pass: where
+ * the next one comes from (Marketing), winning them (Sales), doing the work
+ * (Operations), and everything the business runs on (Admin). My Day sits in
+ * front of all four and is the only screen most people need.
  *
- * So there are six modules, and every existing page becomes a subtab of one of
- * them. Nothing here holds any feature: a subtab names the permission keys that
- * open it, and the module page renders the component that already existed. That
- * is what keeps this a reorganisation rather than a rewrite -- the permission
- * a person was granted still governs exactly what it governed, it is just
- * reached through a door named after the work.
+ * Nothing here holds any feature: a subtab names the permission keys that
+ * open it, and the module page renders the component that already existed.
+ * That is what keeps this a reorganisation rather than a rewrite -- the
+ * permission a person was granted still governs exactly what it governed, it
+ * is just reached through a door named after the department.
  *
- * `permissions.ts` still decides who gets in. This file decides what the doors
- * are called and what is behind each one.
+ * `permissions.ts` still decides who gets in, and `role-views.ts` narrows the
+ * doors for the people who only do one part of the work. This file decides
+ * what the doors are called and what is behind each one.
  */
 
 import { TABS } from "@/lib/permissions";
+import type { RoleView } from "@/lib/affiliate-roles";
 
-export type ModuleKey = "my-day" | "sales" | "schedule" | "jobs" | "marketing" | "more";
+export type ModuleKey = "my-day" | "marketing" | "sales" | "operations" | "admin";
 
 export interface ModuleSubtab {
   /** The `?tab=` value. Stable: it is in links people send each other. */
@@ -47,9 +50,9 @@ export interface AppModule {
 }
 
 /**
- * The six, in the order of the day: your own work first, then winning it,
- * then when it happens, then doing it, then where the next one comes from,
- * and everything else last.
+ * The five, in the order a customer meets the business: your own work first,
+ * then where the next customer comes from, winning them, doing the work, and
+ * everything the business runs on last.
  */
 export const MODULES: readonly AppModule[] = [
   {
@@ -69,57 +72,6 @@ export const MODULES: readonly AppModule[] = [
       { key: "business", label: "Business", tabs: ["dashboard"], blurb: "The pulse, the targets and the money." },
       { key: "leaderboards", label: "Leaderboards", tabs: [], blurb: "Affiliates, evaluators and crew, best first." },
       { key: "alerts", label: "Alerts", tabs: [] },
-    ],
-  },
-  {
-    key: "sales",
-    label: "Sales",
-    href: "/sales",
-    question: "How do I get this customer sold?",
-    subtabs: [
-      { key: "pipeline", label: "Pipeline", tabs: ["pipeline"], blurb: "Every opportunity, and what is holding it up." },
-      { key: "leads", label: "Leads", tabs: ["leads"], blurb: "People being worked toward an evaluation." },
-      { key: "evaluations", label: "Evaluations", tabs: ["evaluations"], blurb: "Booked, done, and waiting on a proposal." },
-      { key: "proposals", label: "Proposals", tabs: ["proposals", "invoices"], blurb: "What we offered, and what came back." },
-      { key: "clients", label: "Clients", tabs: ["contacts"], blurb: "The contact book." },
-    ],
-  },
-  {
-    key: "schedule",
-    label: "Schedule",
-    href: "/schedule",
-    question: "When does it happen?",
-    subtabs: [
-      // Availability is not a tab of its own on purpose: the weekly hours and
-      // the days off are drawn on the grid itself, which is where somebody
-      // looks at them. Separating them would mean rewriting the grid to
-      // satisfy a tab, and would put "who is free" on a different screen from
-      // "what they are booked on".
-      { key: "calendar", label: "Calendar", tabs: ["evaluations"], blurb: "Evaluations and work sessions, with everyone's hours and days off on the grid." },
-      { key: "weather", label: "Weather", tabs: ["evaluations", "weather"], blurb: "What the forecasts agree on, and where they do not." },
-      { key: "booking", label: "Booking", tabs: ["evaluations"], blurb: "The links clients book themselves with, and the calendars those land on." },
-      // Last, and never the opening subtab: the calendar is the thing somebody
-      // came for, and a suggestion is an opinion about it.
-      { key: "suggestions", label: "Suggestions", tabs: ["evaluations"], blurb: "What the calendar would do, if you agreed with it. It books nothing on its own." },
-    ],
-  },
-  {
-    key: "jobs",
-    label: "Jobs",
-    href: "/jobs",
-    question: "How do we perform and close the work?",
-    subtabs: [
-      // Ready and Needs attention are computed every time they are asked,
-      // never stored: Ready is the answer to the pre-start checks, and Needs
-      // attention is the open blocking issues. Neither is a status somebody
-      // sets, so neither can be left switched on after the fact it described
-      // has gone away.
-      { key: "upcoming", label: "Upcoming", tabs: ["job-detail"], blurb: "Sold work, scheduled or waiting to be." },
-      { key: "ready", label: "Ready", tabs: ["job-detail"], blurb: "Every pre-start check passing and nothing blocking. Safe to send a crew." },
-      { key: "active", label: "Active", tabs: ["job-detail"], blurb: "Being worked on now." },
-      { key: "attention", label: "Needs attention", tabs: ["job-detail"], blurb: "Something unresolved is stopping these, whatever else they are." },
-      { key: "completed", label: "Completed", tabs: ["job-detail"], blurb: "Finished work." },
-      { key: "crew", label: "Crew", tabs: ["job-detail"], blurb: "Who gets the work done, and done right." },
     ],
   },
   {
@@ -143,10 +95,48 @@ export const MODULES: readonly AppModule[] = [
     ],
   },
   {
-    key: "more",
-    label: "More",
-    href: "/more",
-    question: "Where are the company and admin tools?",
+    key: "sales",
+    label: "Sales",
+    href: "/sales",
+    question: "How do we win this customer?",
+    subtabs: [
+      { key: "pipeline", label: "Pipeline", tabs: ["pipeline"], blurb: "Every opportunity, and what is holding it up." },
+      { key: "leads", label: "Leads", tabs: ["leads"], blurb: "People being worked toward an evaluation." },
+      { key: "proposals", label: "Proposals", tabs: ["proposals", "invoices"], blurb: "What we offered, and what came back." },
+      { key: "clients", label: "Clients", tabs: ["contacts"], blurb: "The contact book." },
+    ],
+  },
+  {
+    key: "operations",
+    label: "Operations",
+    href: "/operations",
+    question: "When does the work happen, and is it getting done?",
+    subtabs: [
+      // Availability is not a tab of its own on purpose: the weekly hours and
+      // the days off are drawn on the grid itself, which is where somebody
+      // looks at them.
+      { key: "calendar", label: "Calendar", tabs: ["evaluations"], blurb: "Evaluations and work sessions, with everyone's hours and days off on the grid." },
+      { key: "evaluations", label: "Evaluations", tabs: ["evaluations"], blurb: "Booked, done, and waiting on a proposal." },
+      // One subtab for the whole job board, with the views as chips inside
+      // it. Five tabs for five states of one list was five clicks to find a
+      // job that could be in any of them.
+      { key: "jobs", label: "Jobs", tabs: ["job-detail"], blurb: "Sold work: coming up, ready to start, underway, stuck, and done." },
+      { key: "crew", label: "Crew", tabs: ["job-detail"], blurb: "Who gets the work done, and done right." },
+      { key: "weather", label: "Weather", tabs: ["evaluations", "weather"], blurb: "What the forecasts agree on, and where they do not." },
+      { key: "booking", label: "Booking", tabs: ["evaluations"], blurb: "The links clients book themselves with, and the calendars those land on." },
+      // A prepaid winter is work on a schedule like any other: who is owed a
+      // visit, and the salt to do it with.
+      { key: "salt", label: "Salt route", tabs: ["salt"], blurb: "Who is prepaid for the winter, and the salt it takes." },
+      // Last, and never the opening subtab: the calendar is the thing somebody
+      // came for, and a suggestion is an opinion about it.
+      { key: "suggestions", label: "Suggestions", tabs: ["evaluations"], blurb: "What the calendar would do, if you agreed with it. It books nothing on its own." },
+    ],
+  },
+  {
+    key: "admin",
+    label: "Admin",
+    href: "/admin",
+    question: "Where is everything the business runs on?",
     subtabs: [
       { key: "inventory", label: "Inventory", tabs: ["tools", "materials", "labels", "inventory-setup", "kits"] },
       // Next to Inventory because it is the same question at a bigger size:
@@ -155,10 +145,6 @@ export const MODULES: readonly AppModule[] = [
       { key: "team", label: "Team", tabs: ["team"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments", "subscriptions", "transactions"] },
-      // Its own subtab rather than folded into the schedule: a prepaid winter
-      // is a list of people owed something and a pile of salt to buy, and
-      // neither is a thing the calendar answers.
-      { key: "salt", label: "Salt route", tabs: ["salt"] },
       // Both are what somebody reads standing on a property: which weed that
       // is, and what to say about how long the work takes to look right.
       { key: "field-guide", label: "Field guide", tabs: ["weeds", "expectations"] },
@@ -175,6 +161,27 @@ export function moduleFor(key: string): AppModule | null {
   return BY_KEY.get(key as ModuleKey) ?? null;
 }
 
+/**
+ * What each narrower view is shown, module by module.
+ *
+ * A module missing from a view's list is not shown at all; a module listed
+ * with `null` is shown with every subtab their permissions open. The full
+ * view is not listed: it is narrowed by permissions alone.
+ */
+const VIEW_SCOPE: Record<Exclude<RoleView, "full">, Partial<Record<ModuleKey, readonly string[] | null>>> = {
+  field: { "my-day": null },
+  evaluator: { "my-day": null, operations: ["calendar", "evaluations"] },
+  "account-manager": { "my-day": null, operations: ["calendar", "evaluations", "jobs"] },
+};
+
+function inView(view: RoleView, key: string, subtab: string): boolean {
+  if (view === "full") return true;
+  const scope = VIEW_SCOPE[view];
+  if (!(key in scope)) return false;
+  const only = scope[key as ModuleKey];
+  return only == null || only.includes(subtab);
+}
+
 /** Whether a person can open a subtab: any one of its keys is enough. */
 export function canOpenSubtab(subtab: ModuleSubtab, allowed: readonly string[]): boolean {
   if (subtab.tabs.length === 0) return true;
@@ -188,8 +195,8 @@ export function canOpenSubtab(subtab: ModuleSubtab, allowed: readonly string[]):
  * opens Inventory and sees the materials half -- rather than being handed a
  * page of controls that refuse them, or being refused the page.
  */
-export function subtabsFor(key: string, allowed: readonly string[]): ModuleSubtab[] {
-  return (moduleFor(key)?.subtabs ?? []).filter((subtab) => canOpenSubtab(subtab, allowed));
+export function subtabsFor(key: string, allowed: readonly string[], view: RoleView = "full"): ModuleSubtab[] {
+  return (moduleFor(key)?.subtabs ?? []).filter((subtab) => canOpenSubtab(subtab, allowed) && inView(view, key, subtab.key));
 }
 
 /**
@@ -199,18 +206,18 @@ export function subtabsFor(key: string, allowed: readonly string[]): ModuleSubta
  * on a refusal is worse than no door. My Day is always there -- it shows one
  * person their own work, which there is nothing to withhold.
  */
-export function navModules(allowed: readonly string[]): AppModule[] {
-  return MODULES.filter((mod) => subtabsFor(mod.key, allowed).length > 0);
+export function navModules(allowed: readonly string[], view: RoleView = "full"): AppModule[] {
+  return MODULES.filter((mod) => subtabsFor(mod.key, allowed, view).length > 0);
 }
 
 /** The subtab a link asks for, or the first one this person can open. */
-export function openingSubtab(key: string, allowed: readonly string[], asked?: string | null): string | null {
-  const open = subtabsFor(key, allowed);
+export function openingSubtab(key: string, allowed: readonly string[], asked?: string | null, view: RoleView = "full"): string | null {
+  const open = subtabsFor(key, allowed, view);
   if (asked && open.some((s) => s.key === asked)) return asked;
   return open[0]?.key ?? null;
 }
 
-export { MOVED, REACHED_VIA_MORE } from "@/lib/moved-routes";
+export { MOVED, REACHED_VIA_ADMIN } from "@/lib/moved-routes";
 
 
 /**

@@ -62,7 +62,7 @@ export async function applyMeasuredHours(input: {
     if (error) throw error;
 
     revalidatePath("/admin/team");
-    revalidatePath("/more");
+    revalidatePath("/admin");
     return { ok: true, value: { hours: input.hours } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

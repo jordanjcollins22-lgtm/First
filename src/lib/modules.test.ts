@@ -7,7 +7,7 @@ import {
   moduleFor,
   navModules,
   openingSubtab,
-  REACHED_VIA_MORE,
+  REACHED_VIA_ADMIN,
   subtabsFor,
   unplacedTabKeys,
 } from "./modules";
@@ -15,11 +15,11 @@ import { TABS, UNGOVERNED_ROUTES } from "./permissions";
 
 const ADMIN = TABS.map((t) => t.key);
 
-describe("the six modules", () => {
-  it("is six, and stays six", () => {
+describe("My Day and the four departments", () => {
+  it("is five, and stays five", () => {
     // The brief's whole point: another primary entry is a decision, not a
     // side effect of adding a page.
-    expect(MODULES).toHaveLength(6);
+    expect(MODULES.map((m) => m.key)).toEqual(["my-day", "marketing", "sales", "operations", "admin"]);
   });
 
   it("names each one after a question rather than a table", () => {
@@ -54,14 +54,7 @@ describe("the six modules", () => {
 
 describe("who sees what", () => {
   it("shows an admin every module", () => {
-    expect(navModules(ADMIN).map((m) => m.key)).toEqual([
-      "my-day",
-      "sales",
-      "schedule",
-      "jobs",
-      "marketing",
-      "more",
-    ]);
+    expect(navModules(ADMIN).map((m) => m.key)).toEqual(["my-day", "marketing", "sales", "operations", "admin"]);
   });
 
   it("leaves out a module with nothing open inside it", () => {
@@ -69,7 +62,7 @@ describe("who sees what", () => {
     const keys = navModules(["pipeline"]).map((m) => m.key);
     expect(keys).toContain("sales");
     expect(keys).not.toContain("marketing");
-    expect(keys).not.toContain("more");
+    expect(keys).not.toContain("admin");
   });
 
   it("always keeps My Day, which is the viewer's own work", () => {
@@ -78,7 +71,7 @@ describe("who sees what", () => {
 
   it("opens a shared page on the half somebody is allowed", () => {
     // Granted Materials but not Tools: Inventory still opens.
-    expect(subtabsFor("more", ["materials"]).map((s) => s.key)).toEqual(["inventory"]);
+    expect(subtabsFor("admin", ["materials"]).map((s) => s.key)).toEqual(["inventory"]);
   });
 
   it("takes any one of a subtab's keys as enough", () => {
@@ -115,6 +108,8 @@ describe("which subtab a link opens", () => {
 describe("old addresses", () => {
   it("sends every moved page to a subtab that exists", () => {
     for (const [from, to] of Object.entries(MOVED)) {
+      // More became Admin whole: a page, not a subtab.
+      if (to === "/admin") continue;
       // Settings is not a module: it hangs off the admin role rather than a
       // tab, for the reason permissions.ts gives.
       if (to === "/admin/settings") continue;
@@ -146,23 +141,23 @@ describe("old addresses", () => {
     }
   });
 
-  it("never redirects a page that More links to, which would be a loop", () => {
-    // More lists these and links to them. A redirect from one into More is a
-    // door that opens onto itself.
-    for (const path of Object.keys(REACHED_VIA_MORE)) {
+  it("never redirects a page that Admin links to, which would be a loop", () => {
+    // Admin lists these and links to them. A redirect from one into Admin is
+    // a door that opens onto itself.
+    for (const path of Object.keys(REACHED_VIA_ADMIN)) {
       expect(MOVED[path], `${path} is both a More destination and a redirect`).toBeUndefined();
     }
   });
 
-  it("puts every More destination under a group that exists", () => {
-    const groups = new Set(moduleFor("more")!.subtabs.map((s) => s.key));
-    for (const [path, group] of Object.entries(REACHED_VIA_MORE)) {
-      expect(groups.has(group), `${path} is filed under "${group}", which More has no group for`).toBe(true);
+  it("puts every Admin destination under a group that exists", () => {
+    const groups = new Set(moduleFor("admin")!.subtabs.map((s) => s.key));
+    for (const [path, group] of Object.entries(REACHED_VIA_ADMIN)) {
+      expect(groups.has(group), `${path} is filed under "${group}", which Admin has no group for`).toBe(true);
     }
   });
 });
 
-describe("everything in More can actually be clicked", () => {
+describe("everything in Admin can actually be clicked", () => {
   it("gives every group at least one page to open", () => {
     // The More page used to keep a second, hand-written list of what each
     // group contained, beside the modules. It went stale exactly the way a
@@ -171,7 +166,7 @@ describe("everything in More can actually be clicked", () => {
     // resolved to nothing vanished from the screen. Somebody with every
     // permission granted still could not reach them.
     const everything = TABS.map((tab) => tab.key);
-    for (const subtab of subtabsFor("more", everything)) {
+    for (const subtab of subtabsFor("admin", everything)) {
       expect(
         subtab.tabs.length,
         `the ${subtab.label} group opens nothing, so it will not render`
@@ -194,5 +189,29 @@ describe("everything in More can actually be clicked", () => {
         }
       }
     }
+  });
+});
+
+describe("role views", () => {
+  it("shows an evaluator My Day and, in Operations, the calendar and evaluations", () => {
+    expect(navModules(ADMIN, "evaluator").map((m) => m.key)).toEqual(["my-day", "operations"]);
+    expect(subtabsFor("operations", ADMIN, "evaluator").map((s) => s.key)).toEqual(["calendar", "evaluations"]);
+  });
+
+  it("adds the jobs for an account manager", () => {
+    expect(navModules(ADMIN, "account-manager").map((m) => m.key)).toEqual(["my-day", "operations"]);
+    expect(subtabsFor("operations", ADMIN, "account-manager").map((s) => s.key)).toEqual(["calendar", "evaluations", "jobs"]);
+  });
+
+  it("shows the crew My Day alone", () => {
+    expect(navModules(ADMIN, "field").map((m) => m.key)).toEqual(["my-day"]);
+  });
+
+  it("still never shows a view more than its permissions open", () => {
+    expect(subtabsFor("operations", ["job-detail"], "account-manager").map((s) => s.key)).toEqual(["jobs"]);
+  });
+
+  it("opens a narrowed view on a subtab it can see, whatever the link asked for", () => {
+    expect(openingSubtab("operations", ADMIN, "salt", "evaluator")).toBe("calendar");
   });
 });

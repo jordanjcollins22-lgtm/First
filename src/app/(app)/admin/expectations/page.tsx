@@ -24,7 +24,7 @@ import { PROPOSAL_TERMS } from "@/lib/proposal-terms";
 export const dynamic = "force-dynamic";
 
 export default async function ExpectationsPage() {
-  await requireTab("expectations", "/more");
+  await requireTab("expectations", "/admin");
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">

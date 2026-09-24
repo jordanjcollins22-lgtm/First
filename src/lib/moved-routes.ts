@@ -25,8 +25,14 @@ export const MOVED: Record<string, string> = {
   "/pipeline": "/sales?tab=pipeline",
   "/contacts": "/sales?tab=clients",
   "/proposals": "/sales?tab=proposals",
-  "/evaluations": "/schedule?tab=calendar",
-  "/weather": "/schedule?tab=weather",
+  "/evaluations": "/operations?tab=calendar",
+  "/weather": "/operations?tab=weather",
+  // The six modules became four departments. Schedule and Jobs are both
+  // Operations now, and More is Admin.
+  "/schedule": "/operations?tab=calendar",
+  "/jobs": "/operations?tab=jobs",
+  "/more": "/admin",
+  "/admin/salt": "/operations?tab=salt",
   "/attractors": "/marketing?tab=map",
   "/leads": "/marketing?tab=leads",
   "/admin/door-hangers": "/marketing?tab=print",
@@ -36,14 +42,15 @@ export const MOVED: Record<string, string> = {
 };
 
 /**
- * Pages that are still their own page, reached through More.
+ * Pages that are still their own page, reached through Admin.
  *
- * These were never absorbed into a module: More lists them and links to them,
- * so redirecting them into More would be a door that opens onto itself. They
- * keep their addresses, their permissions and their screens, and the grouping
- * on the More page is the only thing that changed about them.
+ * These were never absorbed into a module: Admin lists them and links to
+ * them, so redirecting them into Admin would be a door that opens onto
+ * itself. They keep their addresses, their permissions and their screens,
+ * and the grouping on the Admin page is the only thing that changed about
+ * them.
  */
-export const REACHED_VIA_MORE: Record<string, string> = {
+export const REACHED_VIA_ADMIN: Record<string, string> = {
   "/admin/tools": "inventory",
   "/admin/materials": "inventory",
   "/admin/labels": "inventory",

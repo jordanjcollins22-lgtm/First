@@ -91,7 +91,7 @@ describe("one bottleneck, chosen by rule", () => {
   it("puts a stopped crew above everything except cash", () => {
     const b = bottleneck(g({ crewsStopped: 1, weeksBooked: 0, ownerHoursLastWeek: 40 }));
     expect(b.key).toBe("crew-stopped");
-    expect(b.fix?.href).toBe("/jobs?tab=attention");
+    expect(b.fix?.href).toBe("/operations?tab=jobs&view=attention");
   });
 
   it("notices spending more than earning", () => {

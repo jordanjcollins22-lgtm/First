@@ -30,7 +30,7 @@ export default async function TransactionsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("payments", "/more");
+  await requireTab("payments", "/admin");
 
   const params = await searchParams;
   const filters = filtersFromParams(params);

@@ -239,7 +239,7 @@ export function bottleneck(input: GrowthInput): Bottleneck {
     return {
       key: "cash-below-floor",
       says: `Cash is the constraint: ${money(input.cash)} against a floor of ${money(input.cashFloor)}.`,
-      fix: { label: "See what is owed", href: "/more?tab=finance" },
+      fix: { label: "See what is owed", href: "/admin" },
     };
   }
 
@@ -250,7 +250,7 @@ export function bottleneck(input: GrowthInput): Bottleneck {
         input.crewsStopped === 1
           ? "A crew is stopped on site and waiting on a decision."
           : `${input.crewsStopped} crews are stopped on site and waiting on a decision.`,
-      fix: { label: "Deal with it", href: "/jobs?tab=attention" },
+      fix: { label: "Deal with it", href: "/operations?tab=jobs&view=attention" },
     };
   }
 
@@ -259,7 +259,7 @@ export function bottleneck(input: GrowthInput): Bottleneck {
     return {
       key: "spending-more-than-earning",
       says: `You are spending more than you are taking in: ${money(-profit)} down over ${Math.max(1, input.windowWeeks)} weeks.`,
-      fix: { label: "Look at the money", href: "/more?tab=finance" },
+      fix: { label: "Look at the money", href: "/admin" },
     };
   }
 
@@ -288,7 +288,7 @@ export function bottleneck(input: GrowthInput): Bottleneck {
       says: where
         ? `You are the constraint: ${over.toFixed(1)} hours over what you wanted, mostly ${where}.`
         : `You are the constraint: ${over.toFixed(1)} hours over what you wanted last week.`,
-      fix: { label: "See what came to you", href: "/jobs?tab=attention" },
+      fix: { label: "See what came to you", href: "/operations?tab=jobs&view=attention" },
     };
   }
 
@@ -299,7 +299,7 @@ export function bottleneck(input: GrowthInput): Bottleneck {
         input.changesAwaitingReview === 1
           ? "A change request is sitting unanswered, and the crew cannot do the work until it is."
           : `${input.changesAwaitingReview} change requests are sitting unanswered.`,
-      fix: { label: "Clear them", href: "/jobs?tab=attention" },
+      fix: { label: "Clear them", href: "/operations?tab=jobs&view=attention" },
     };
   }
 

@@ -6,10 +6,11 @@ import { moduleFor, subtabsFor } from "@/lib/modules";
 import { TABS, type TabDefinition } from "@/lib/permissions";
 
 /**
- * The company and admin tools, grouped by what they are for.
+ * Admin: everything the business runs on, grouped by what it is for.
  *
- * The nav names the work of the business; this is everything the work runs on
- * — stock, people, prices, money, references, the county data, the settings.
+ * The nav names the departments a customer passes through; this is everything
+ * the work runs on — stock, vehicles, people, prices, money, references, the
+ * county data, the settings, and seeing the app as somebody else sees it.
  * Same pages, same addresses, same permissions, one tap further away instead
  * of competing for attention with the screens somebody opens every day.
  *
@@ -39,17 +40,17 @@ function pagesFor(subtab: { tabs: string[] }, allowed: string[]): TabDefinition[
     .filter((tab): tab is TabDefinition => tab != null && allowed.includes(tab.key));
 }
 
-export default async function MorePage() {
+export default async function AdminPage() {
   const profile = await getCurrentProfile();
   const allowed = [...(await getAllowedTabs())];
-  const groups = subtabsFor("more", allowed);
-  const question = moduleFor("more")?.question ?? "";
+  const groups = subtabsFor("admin", allowed);
+  const question = moduleFor("admin")?.question ?? "";
   const isAdmin = profile?.roles.includes("admin") ?? false;
   const listed = new Set<string>();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
-      <h1 className="text-xl font-semibold">More</h1>
+      <h1 className="text-xl font-semibold">Admin</h1>
       <p className="mb-5 text-sm text-muted-foreground">{question}</p>
 
       {groups.length === 0 && !isAdmin ? (
@@ -99,6 +100,14 @@ export default async function MorePage() {
                     className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary"
                   >
                     Permissions, email, database &amp; organizations
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/admin/view-as"
+                    className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary"
+                  >
+                    View the app as somebody else
                   </Link>
                 </li>
               </ul>

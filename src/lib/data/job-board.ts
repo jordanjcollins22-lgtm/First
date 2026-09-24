@@ -10,7 +10,8 @@ interface Row {
   evaluation_date: string | null;
   completed_at: string | null;
   declined_at?: string | null;
-  properties: { address: string | null; customers: { name: string | null } | null } | null;
+  assigned_to: string | null;
+  properties: { address: string | null; customers: { name: string | null; account_manager_id: string | null } | null } | null;
   profiles: { full_name: string | null; email: string | null } | null;
 }
 
@@ -29,7 +30,7 @@ export async function listBoardJobs(): Promise<BoardJob[]> {
     .from("jobs")
     .select(
       "id, job_number, name, status, project_start_date, evaluation_date, completed_at, declined_at, " +
-        "properties!inner(address, customers(name)), profiles!jobs_assigned_to_fkey(full_name, email)"
+        "assigned_to, properties!inner(address, customers(name, account_manager_id)), profiles!jobs_assigned_to_fkey(full_name, email)"
     )
     .in("status", ["approved", "in_progress", "completed"])
     .limit(500);
@@ -43,6 +44,8 @@ export async function listBoardJobs(): Promise<BoardJob[]> {
     address: row.properties?.address ?? null,
     customerName: row.properties?.customers?.name ?? null,
     assignedToName: row.profiles?.full_name || row.profiles?.email || null,
+    assignedToId: row.assigned_to,
+    accountManagerId: row.properties?.customers?.account_manager_id ?? null,
     startsOn: row.project_start_date ?? row.evaluation_date ?? null,
     declined: Boolean(row.declined_at),
     completedAt: row.completed_at,

@@ -45,7 +45,7 @@ function failed(err: unknown): { ok: false; error: string } {
 
 function touch(jobId: string) {
   revalidatePath(`/jobs/${jobId}`);
-  revalidatePath("/jobs");
+  revalidatePath("/operations");
   revalidatePath("/my-day");
 }
 

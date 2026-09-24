@@ -26,7 +26,7 @@ export default async function ViewAsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
-      <div className="mb-3"><BackLink fallbackHref="/more" /></div>
+      <div className="mb-3"><BackLink fallbackHref="/admin" /></div>
       <h1 className="mb-1 text-2xl font-bold">View as</h1>
       <p className="mb-6 text-muted-foreground">
         Pick someone and the whole app becomes what they see: their tabs, their day, their jobs. A

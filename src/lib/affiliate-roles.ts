@@ -99,3 +99,31 @@ const OVERRIDE_ROLES = ["admin", "owner", "manager"];
 export function canOverrideGate(roles: string[]): boolean {
   return roles.some((role) => OVERRIDE_ROLES.includes(normalizeRole(role)));
 }
+
+/**
+ * How much of the app somebody's work needs.
+ *
+ * Permissions say what a person may open; this says what they are shown.
+ * Somebody who only does one part of the work gets the screens for that part
+ * and nothing else, because a menu of every department is a menu they have to
+ * read past to find the two things they use.
+ *
+ * - field: the crew. My Day and nothing else, as it always was.
+ * - evaluator: My Day, and in Operations the calendar and their evaluations.
+ * - account manager: the same, plus the jobs they manage.
+ * - full: anybody who runs the business, however else they are labelled.
+ *
+ * Running the business wins over any narrower role held beside it, so an
+ * owner who also does evaluations still sees everything.
+ */
+export type RoleView = "full" | "account-manager" | "evaluator" | "field";
+
+const RUNS_THE_BUSINESS = ["admin", "owner", "overhead", "office", "manager"];
+
+export function roleViewFor(roles: string[]): RoleView {
+  if (isFieldOnly(roles)) return "field";
+  if (roles.some((r) => RUNS_THE_BUSINESS.includes(normalizeRole(r)))) return "full";
+  if (isAccountManager(roles)) return "account-manager";
+  if (isEvaluator(roles)) return "evaluator";
+  return "full";
+}

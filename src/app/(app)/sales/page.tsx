@@ -10,15 +10,14 @@ import PipelinePage from "@/app/(app)/pipeline/page";
 import LeadsPage from "@/app/(app)/leads/page";
 import ProposalsPage from "@/app/(app)/proposals/page";
 import ContactsPage from "@/app/(app)/contacts/page";
-import { listSalesEvaluations } from "@/lib/data/sales-evaluations";
-import { EvaluationBuckets } from "@/components/sales/evaluation-buckets";
 
 /**
  * Selling, in the order it happens.
  *
  * Contacts, Pipeline, Proposals and New Estimate were four entries in the nav
  * for one conversation with one customer: who they are, where the deal is,
- * what we offered, and what came back. They are one module now.
+ * what we offered, and what came back. They are one department now. The
+ * evaluations moved to Operations, beside the calendar they are booked on.
  */
 export const dynamic = "force-dynamic";
 
@@ -26,10 +25,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab } = await searchParams;
 
-  const [pipeline, leads, evaluations, proposals, clients] = await Promise.all([
+  const [pipeline, leads, proposals, clients] = await Promise.all([
     holdsAny(["pipeline"]),
     holdsAny(["leads"]),
-    holdsAny(["evaluations"]),
     holdsAny(["proposals", "invoices"]),
     holdsAny(["contacts"]),
   ]);
@@ -41,13 +39,6 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       content={{
         ...(pipeline ? { pipeline: <PipelinePage /> } : {}),
         ...(leads ? { leads: <LeadsPage /> } : {}),
-        ...(evaluations
-          ? {
-              evaluations: (
-                <EvaluationBuckets evaluations={await listSalesEvaluations().catch(() => [])} now={new Date().toISOString()} />
-              ),
-            }
-          : {}),
         ...(proposals ? { proposals: <ProposalsPage /> } : {}),
         ...(clients ? { clients: <ContactsPage /> } : {}),
       }}

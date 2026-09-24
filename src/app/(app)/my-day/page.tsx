@@ -531,9 +531,9 @@ async function TilesBlock({ profile }: { profile: Profile }) {
       {nothing ? (
         <p className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
           Nothing on your plate today. Anything overdue would show here, so a quiet screen means a quiet
-          day — check the{" "}
-          <Link href="/pipeline" className="underline">
-            pipeline
+          day — check{" "}
+          <Link href="/operations?tab=evaluations" className="underline">
+            the evaluations
           </Link>{" "}
           if you want something to push on.
         </p>

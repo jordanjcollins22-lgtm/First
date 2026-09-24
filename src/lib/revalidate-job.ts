@@ -28,6 +28,9 @@ const DERIVED_FROM_JOB_STATUS = [
   "/today",
   "/attractors",
   "/contacts",
+  // The departments that list jobs, evaluations and proposals.
+  "/sales",
+  "/operations",
   // The root is the dashboard for most roles.
   "/",
 ];

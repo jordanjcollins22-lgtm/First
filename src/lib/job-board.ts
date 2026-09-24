@@ -27,6 +27,9 @@ export interface BoardJob {
   address: string | null;
   customerName: string | null;
   assignedToName: string | null;
+  /** Who the job is assigned to, and who manages the client: whose it is. */
+  assignedToId?: string | null;
+  accountManagerId?: string | null;
   /** Start of the work, or the evaluation that is still standing in for it. */
   startsOn: string | null;
   completedAt: string | null;
@@ -93,4 +96,13 @@ export function sortForView(jobs: readonly BoardJob[], view: JobView): BoardJob[
     if (!y) return -1;
     return view === "completed" ? y.localeCompare(x) : x.localeCompare(y);
   });
+}
+
+/**
+ * Whether a job or an evaluation is this person's: assigned to them, or for a
+ * client they manage. What an account manager or an evaluator is shown in
+ * Operations, rather than the whole company's list.
+ */
+export function isTheirs(item: { assignedToId?: string | null; accountManagerId?: string | null }, profileId: string): boolean {
+  return item.assignedToId === profileId || item.accountManagerId === profileId;
 }
