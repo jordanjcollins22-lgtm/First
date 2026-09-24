@@ -17,8 +17,28 @@ export interface AgentGroup {
   name: string;
 }
 
+/**
+ * Where the agent looks.
+ *
+ * The groups feed is every group the account is in, on one page. Search
+ * reaches public groups it is not in yet. The list is the groups typed
+ * into the app, for any that deserve a look of their own.
+ */
+export interface AgentSources {
+  feed: boolean;
+  search: boolean;
+  list: boolean;
+}
+
+export type ScanSource = "feed" | "search" | "group";
+
 export interface AgentSettings {
   groups: AgentGroup[];
+  sources: AgentSources;
+  /** What to type into Facebook's post search. */
+  searchPhrases: string[];
+  /** A post found by search has to mention one of these, or it is somebody in another state. */
+  areaWords: string[];
   keywords: string[];
   dailyCap: number;
   hourlyCap: number;
@@ -38,8 +58,35 @@ export const DEFAULT_KEYWORDS = [
   "snow", "plow", "salt", "gutter", "brush", "overgrown", "flower bed", "garden",
 ];
 
+export const DEFAULT_SEARCH_PHRASES = [
+  "looking for a landscaper Harford County",
+  "lawn care recommendations Bel Air MD",
+  "need lawn service Abingdon MD",
+  "landscaper Aberdeen MD",
+  "leaf cleanup Harford County",
+  "snow removal Harford County",
+  "lawn mowing Edgewood Joppa MD",
+];
+
+export const DEFAULT_AREA_WORDS = [
+  "harford", "bel air", "abingdon", "aberdeen", "havre de grace", "edgewood", "joppa", "joppatowne", "fallston",
+  "forest hill", "jarrettsville", "churchville", "belcamp", "perryman", "darlington", "whiteford", "pylesville",
+  "street, md", "white marsh", "kingsville", "perry hall", "rosedale", "parkville", "nottingham",
+  "21001", "21009", "21014", "21015", "21017", "21028", "21034", "21040", "21047", "21050", "21078", "21084", "21085", "21087", "21154", "21160", "21161",
+];
+
+export const GROUPS_FEED_URL = "https://www.facebook.com/groups/feed/";
+
+/** Facebook's post search for one phrase. */
+export function searchUrl(phrase: string): string {
+  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(phrase.trim())}`;
+}
+
 export const DEFAULT_SETTINGS: AgentSettings = {
   groups: [],
+  sources: { feed: true, search: true, list: true },
+  searchPhrases: DEFAULT_SEARCH_PHRASES,
+  areaWords: DEFAULT_AREA_WORDS,
   keywords: DEFAULT_KEYWORDS,
   dailyCap: 6,
   hourlyCap: 2,
@@ -69,7 +116,7 @@ export function postKeyFrom(url: string): string | null {
     return null;
   }
   const path = parsed.pathname.replace(/\/+$/, "");
-  const groupPost = path.match(/\/groups\/([^/]+)\/(?:posts|permalink)\/(\d+)/);
+  const groupPost = path.match(/\/groups\/([^/]+)\/(?:posts|permalink)\/([^/?#]+)/);
   if (groupPost) return `${groupPost[1]}/${groupPost[2]}`;
   const story = parsed.searchParams.get("story_fbid");
   const owner = parsed.searchParams.get("id");
@@ -208,7 +255,18 @@ export function allowance(input: {
   return Math.max(0, Math.min(day, hour));
 }
 
-export type Decision = "queued" | "ready" | "posted" | "failed" | "not_request" | "too_old" | "capped" | "draft_failed" | "skipped";
+export type Decision =
+  | "queued"
+  | "ready"
+  | "posted"
+  | "failed"
+  | "not_request"
+  | "too_old"
+  | "capped"
+  | "draft_failed"
+  | "skipped"
+  | "not_member"
+  | "outside_area";
 
 export const DECISION_LABEL: Record<Decision, string> = {
   queued: "Waiting to post",
@@ -220,7 +278,76 @@ export const DECISION_LABEL: Record<Decision, string> = {
   capped: "Over the cap, not answered",
   draft_failed: "Couldn't write one",
   skipped: "Skipped",
+  not_member: "In a group you haven't joined",
+  outside_area: "Outside the area",
 };
+
+/** The id or slug out of a group's URL, as one name for the group. */
+export function groupKeyFrom(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/\/groups\/([^/?#]+)/);
+    if (!match || match[1] === "feed" || match[1] === "discover") return null;
+    return match[1].toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** The group's own page, from any URL inside it. */
+export function groupUrlFrom(url: string | null | undefined): string | null {
+  const key = groupKeyFrom(url);
+  return key ? `https://www.facebook.com/groups/${key}/` : null;
+}
+
+/**
+ * Whether the poster posted without a name.
+ *
+ * Facebook shows "Anonymous participant" or "Anonymous member" where the
+ * name would be. Such a person cannot be mentioned, and a comment that
+ * opens "@Anonymous" reads as a joke.
+ */
+export function isAnonymousAuthor(name: string | null | undefined): boolean {
+  const value = (name ?? "").trim();
+  if (!value) return true;
+  return /anonymous|group member|participant/i.test(value);
+}
+
+/** The first name, as it would be typed after an @. */
+export function firstNameOf(name: string | null | undefined): string | null {
+  if (isAnonymousAuthor(name)) return null;
+  const first = (name ?? "").trim().split(/\s+/)[0]?.replace(/[^\p{L}\p{N}'’-]/gu, "") ?? "";
+  return first.length > 1 ? first : null;
+}
+
+/**
+ * The comment opened with an @mention of the person who asked.
+ *
+ * The writer already opens with a greeting by name. That greeting comes off
+ * and the mention goes on, so the poster is tagged and told at once, the
+ * way a person answering in a group does it. Nobody is mentioned who
+ * posted without a name.
+ */
+export function mentionComment(comment: string, author: string | null | undefined): { text: string; mention: string | null } {
+  const first = firstNameOf(author);
+  const body = comment.trim();
+  if (!first) return { text: body, mention: null };
+  if (new RegExp(`^@${escapeRegExp(first)}\\b`, "i").test(body)) return { text: body, mention: first };
+  const greeting = new RegExp(`^(?:hi|hey|hello|hi there|hey there)\\s+${escapeRegExp(first)}\\s*[,!.\\-–—]*\\s*`, "i");
+  const rest = body.replace(greeting, "").trim();
+  const opened = rest ? rest[0].toUpperCase() + rest.slice(1) : "";
+  return { text: `@${first} ${opened}`.trim(), mention: first };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Whether a post found by search is anywhere near the business. */
+export function inArea(text: string, areaWords: readonly string[]): boolean {
+  return matchesKeywords(text, areaWords);
+}
 
 /**
  * Whether the reading of a post says it is worth answering.
@@ -271,9 +398,16 @@ export function looksLikeBlock(text: string): boolean {
 }
 
 /** The settings as the browser gets them, with the keys it reads. */
-export function settingsForBrowser(settings: AgentSettings): Omit<AgentSettings, "pausedUntil" | "pauseReason"> {
+export function settingsForBrowser(
+  settings: AgentSettings
+): Omit<AgentSettings, "pausedUntil" | "pauseReason"> & { feedUrl: string; searches: { phrase: string; url: string }[] } {
   return {
     groups: settings.groups,
+    sources: settings.sources,
+    searchPhrases: settings.searchPhrases,
+    areaWords: settings.areaWords,
+    feedUrl: GROUPS_FEED_URL,
+    searches: settings.searchPhrases.map((phrase) => ({ phrase, url: searchUrl(phrase) })),
     keywords: settings.keywords,
     dailyCap: settings.dailyCap,
     hourlyCap: settings.hourlyCap,

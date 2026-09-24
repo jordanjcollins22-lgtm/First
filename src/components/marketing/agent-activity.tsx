@@ -19,6 +19,8 @@ const TONE: Record<Decision, string> = {
   too_old: "text-muted-foreground",
   draft_failed: "text-muted-foreground",
   skipped: "text-muted-foreground",
+  not_member: "text-amber-700",
+  outside_area: "text-muted-foreground",
 };
 
 export function AgentActivity({ rows }: { rows: SeenRow[] }) {

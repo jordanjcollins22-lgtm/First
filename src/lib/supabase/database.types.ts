@@ -3084,6 +3084,9 @@ export interface Database {
           auto_post: boolean;
           paused_until: string | null;
           pause_reason: string | null;
+          sources: Json;
+          search_phrases: string[];
+          area_words: string[];
           updated_at: string;
           updated_by: string | null;
         };
@@ -3091,6 +3094,28 @@ export interface Database {
           organization_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["outreach_agent_settings"]["Row"]>;
+        Relationships: [];
+      };
+      outreach_groups: {
+        Row: {
+          id: string;
+          organization_id: string;
+          group_key: string;
+          url: string;
+          name: string | null;
+          joined: boolean;
+          posts_found: number;
+          last_post_at: string | null;
+          dismissed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_groups"]["Row"]> & {
+          organization_id: string;
+          group_key: string;
+          url: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_groups"]["Row"]>;
         Relationships: [];
       };
       outreach_seen_posts: {
@@ -3107,6 +3132,8 @@ export interface Database {
           reason: string | null;
           link_id: string | null;
           seen_by: string | null;
+          source: string;
+          group_key: string | null;
           created_at: string;
           updated_at: string;
         };

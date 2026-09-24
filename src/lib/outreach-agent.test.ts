@@ -5,7 +5,14 @@ import {
   ageDaysFromLabel,
   allowance,
   cleanPostUrl,
+  firstNameOf,
+  groupKeyFrom,
+  groupUrlFrom,
+  inArea,
+  isAnonymousAuthor,
   localClock,
+  mentionComment,
+  searchUrl,
   looksLikeBlock,
   matchesKeywords,
   nextDelaySeconds,
@@ -134,6 +141,51 @@ describe("pacing and blocks", () => {
     expect(looksLikeBlock("You're Temporarily Blocked. It looks like you were misusing this feature")).toBe(true);
     expect(looksLikeBlock("Action Blocked: You can't use this feature right now")).toBe(true);
     expect(looksLikeBlock("Write a comment…")).toBe(false);
+  });
+});
+
+describe("groups and mentions", () => {
+  it("names a group from any URL inside it", () => {
+    expect(groupKeyFrom("https://www.facebook.com/groups/ThisIsAberdeen/posts/123/")).toBe("thisisaberdeen");
+    expect(groupKeyFrom("https://www.facebook.com/groups/1061875135099189/?ref=share")).toBe("1061875135099189");
+    expect(groupKeyFrom("https://www.facebook.com/groups/feed/")).toBeNull();
+    expect(groupKeyFrom("https://www.facebook.com/someone/posts/1")).toBeNull();
+    expect(groupUrlFrom("https://www.facebook.com/groups/ThisIsAberdeen/posts/123/")).toBe("https://www.facebook.com/groups/thisisaberdeen/");
+  });
+
+  it("keys a post whose id is not numeric", () => {
+    expect(postKeyFrom("https://www.facebook.com/groups/abc/posts/pfbid0AbCdEf/")).toBe("abc/pfbid0AbCdEf");
+  });
+
+  it("knows an anonymous poster", () => {
+    expect(isAnonymousAuthor("Anonymous participant")).toBe(true);
+    expect(isAnonymousAuthor("Anonymous member")).toBe(true);
+    expect(isAnonymousAuthor("")).toBe(true);
+    expect(isAnonymousAuthor("Jordan Collins")).toBe(false);
+    expect(firstNameOf("Jordan Collins")).toBe("Jordan");
+    expect(firstNameOf("Mary-Kate O'Neil")).toBe("Mary-Kate");
+    expect(firstNameOf("Anonymous participant")).toBeNull();
+  });
+
+  it("opens the comment with a mention and drops the written greeting", () => {
+    expect(mentionComment("Hey Scott, thanks for reaching out! We can help.", "Scott Clements")).toEqual({
+      text: "@Scott Thanks for reaching out! We can help.",
+      mention: "Scott",
+    });
+    expect(mentionComment("Hi Laura! We use JS Landscaping.", "Laura")).toEqual({ text: "@Laura We use JS Landscaping.", mention: "Laura" });
+    expect(mentionComment("We can help with that.", "Dan Piotrowski")).toEqual({ text: "@Dan We can help with that.", mention: "Dan" });
+    expect(mentionComment("@Dan already there.", "Dan P")).toEqual({ text: "@Dan already there.", mention: "Dan" });
+    expect(mentionComment("Hey there, we can help.", "Anonymous participant")).toEqual({ text: "Hey there, we can help.", mention: null });
+  });
+
+  it("keeps a searched post only when it is near the business", () => {
+    expect(inArea("Looking for a landscaper in Bel Air", DEFAULT_SETTINGS.areaWords)).toBe(true);
+    expect(inArea("Anyone in 21014 know a good mower?", DEFAULT_SETTINGS.areaWords)).toBe(true);
+    expect(inArea("Looking for a landscaper in Austin TX", DEFAULT_SETTINGS.areaWords)).toBe(false);
+  });
+
+  it("builds a search link", () => {
+    expect(searchUrl("lawn care Bel Air MD")).toBe("https://www.facebook.com/search/posts?q=lawn%20care%20Bel%20Air%20MD");
   });
 });
 

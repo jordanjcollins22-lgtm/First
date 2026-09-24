@@ -1,12 +1,17 @@
 // The group agent, in the browser.
 //
 // Once a minute an alarm fires and one small thing happens: a comment that
-// is due goes up, or one group gets looked at. Never both, never more than
+// is due goes up, or one page gets looked at. Never both, never more than
 // one, so the browser is doing about what a person would be doing in the
 // same chair, only without forgetting. Everything that decides whether a
-// comment may go up — the groups, the caps, the hours, the pause — is asked
-// of the app each minute, so the only thing kept here is the queue of
-// comments the app has written and not yet posted.
+// comment may go up — the sources, the caps, the hours, the pause — is
+// asked of the app each minute, so the only thing kept here is the queue
+// of comments the app has written and not yet posted.
+//
+// Three places it looks. The account's own groups feed, which is every
+// group it is in on one page. Facebook's post search, for the phrases set
+// in the app, which reaches public groups it is not in yet. And any group
+// listed by hand in the app.
 //
 // It runs as you, in your Chrome, on your account. Nothing here logs in
 // anywhere: the app is reached with the app's own cookies, and Facebook
@@ -87,6 +92,35 @@ async function fetchConfig() {
   }
 }
 
+/**
+ * Everything there is to look at, in the order it is due.
+ *
+ * The feed every scan interval; each search phrase every two, since search
+ * moves slower and there are several; each listed group every interval.
+ */
+function scanTargets(settings, scans, force) {
+  const every = (settings.scanEveryMinutes ?? 30) * 60 * 1000;
+  const sources = settings.sources ?? { feed: true, search: true, list: true };
+  const targets = [];
+  if (sources.feed !== false) {
+    targets.push({ key: "feed", source: "feed", url: settings.feedUrl || "https://www.facebook.com/groups/feed/", name: "your groups feed", every });
+  }
+  if (sources.search !== false) {
+    for (const s of settings.searches ?? []) {
+      targets.push({ key: `search:${s.phrase}`, source: "search", url: s.url, name: `search for "${s.phrase}"`, phrase: s.phrase, every: every * 2 });
+    }
+  }
+  if (sources.list !== false) {
+    for (const g of settings.groups ?? []) {
+      targets.push({ key: g.url, source: "group", url: g.url, name: g.name || g.url, groupUrl: g.url, groupName: g.name, every });
+    }
+  }
+  return targets
+    .map((t) => ({ ...t, last: scans[t.key] ?? 0 }))
+    .filter((t) => force || Date.now() - t.last >= t.every)
+    .sort((a, b) => a.last - b.last);
+}
+
 async function tick(options = {}) {
   const store = await chrome.storage.local.get(["lock", "queue", "nextPostAt", "scans"]);
   if (!options.force && store.lock && Date.now() - store.lock < LOCK_MS) return;
@@ -110,11 +144,6 @@ async function tick(options = {}) {
       return;
     }
     const outsideHours = !config.active && config.because === "outside hours";
-    const noGroups = !config.active && config.because === "no groups";
-    if (noGroups) {
-      await setStatus("No groups to watch yet. Add some in the app.");
-      return;
-    }
 
     // A comment first, when one is due and the app says the way is clear.
     const due = Date.now() >= (store.nextPostAt ?? 0);
@@ -128,7 +157,13 @@ async function tick(options = {}) {
         queue: rest,
         nextPostAt: Date.now() + delayMs(),
       });
-      await setStatus(outcome.ok ? `Posted in ${item.groupName ?? "a group"}. ${rest.length} waiting.` : `Couldn't post: ${outcome.error}`);
+      await setStatus(
+        outcome.ok
+          ? `Posted in ${item.groupName ?? "a group"}. ${rest.length} waiting.`
+          : outcome.notMember
+            ? `Not a member of ${item.groupName ?? "that group"}; it's on the groups-to-join list.`
+            : `Couldn't post: ${outcome.error}`
+      );
       return;
     }
 
@@ -137,30 +172,26 @@ async function tick(options = {}) {
       return;
     }
 
-    // Otherwise, one group whose turn it is.
+    // Otherwise, whichever page is most overdue a look.
     const scans = store.scans ?? {};
-    const every = (config.settings.scanEveryMinutes ?? 30) * 60 * 1000;
-    const groups = config.settings.groups ?? [];
-    const next = groups
-      .map((group) => ({ group, last: scans[group.url] ?? 0 }))
-      .filter((entry) => options.force || Date.now() - entry.last >= every)
-      .sort((a, b) => a.last - b.last)[0];
+    const targets = scanTargets(config.settings, scans, options.force);
+    const next = targets[0];
     if (!next) {
       if (queue.length > 0 && !config.active) await setStatus(`${queue.length} waiting: ${config.because}.`);
       else if (queue.length > 0) await setStatus(`${queue.length} waiting. Next one in about ${Math.max(1, Math.round(((store.nextPostAt ?? 0) - Date.now()) / 60000))} min.`);
-      else await setStatus(`Watching ${groups.length} group${groups.length === 1 ? "" : "s"}. Nothing new.`);
+      else await setStatus("Nothing new. Looking again soon.");
       return;
     }
 
-    await setStatus(`Looking at ${next.group.name}…`);
-    const found = await scanGroup(next.group, config.settings.keywords ?? []);
-    scans[next.group.url] = Date.now();
+    await setStatus(`Looking at ${next.name}…`);
+    const found = await scanPage(next, config.settings.keywords ?? []);
+    scans[next.key] = Date.now();
     await chrome.storage.local.set({ scans });
     if (!found) return;
 
-    const answer = await sendCandidates(next.group, found);
+    const answer = await sendCandidates(next, found);
     if (!answer) return;
-    const actions = (answer.actions ?? []).map((action) => ({ ...action, groupName: next.group.name, addedAt: Date.now() }));
+    const actions = (answer.actions ?? []).map((action) => ({ ...action, groupName: action.groupName ?? next.groupName ?? null, addedAt: Date.now() }));
     const toPost = actions.filter((action) => action.post);
     const toPaste = actions.filter((action) => !action.post);
     if (toPost.length > 0) {
@@ -172,11 +203,14 @@ async function tick(options = {}) {
         type: "basic",
         iconUrl: "icons/icon128.png",
         title: "Comments ready to paste",
-        message: `${toPaste.length} written for ${next.group.name}. They are on the Link Tracking board.`,
+        message: `${toPaste.length} written from ${next.name}. They are on the Link Tracking board.`,
       });
     }
+    const notMember = (answer.decided ?? []).filter((d) => d.decision === "not_member").length;
     await setStatus(
-      `${next.group.name}: ${found.posts.length} post${found.posts.length === 1 ? "" : "s"} mentioned the work, ${actions.length} worth answering, ${answer.skipped ?? 0} seen before.`
+      `${next.name}: ${found.posts.length} post${found.posts.length === 1 ? "" : "s"} mentioned the work, ${actions.length} worth answering` +
+        (notMember > 0 ? `, ${notMember} in groups you haven't joined` : "") +
+        `, ${answer.skipped ?? 0} seen before.`
     );
   } finally {
     await chrome.storage.local.set({ lock: 0 });
@@ -187,13 +221,19 @@ function delayMs() {
   return (90 + Math.floor(Math.random() * 210)) * 1000;
 }
 
-async function sendCandidates(group, found) {
+async function sendCandidates(target, found) {
   try {
     const res = await fetch(`${API}/candidates`, {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ groupUrl: group.url, groupName: group.name || found.group, posts: found.posts }),
+      body: JSON.stringify({
+        source: target.source,
+        phrase: target.phrase ?? null,
+        groupUrl: target.groupUrl ?? null,
+        groupName: target.groupName || found.group || null,
+        posts: found.posts,
+      }),
     });
     if (!res.ok) {
       await setStatus(`The app couldn't take the posts (${res.status}).`);
@@ -218,6 +258,9 @@ async function report(item, outcome) {
         ok: Boolean(outcome.ok),
         postedText: outcome.ok ? outcome.posted ?? item.comment : undefined,
         error: outcome.ok ? undefined : outcome.error,
+        notMember: Boolean(outcome.notMember),
+        postUrl: item.url,
+        groupName: item.groupName ?? null,
       }),
     });
   } catch (err) {
@@ -261,18 +304,18 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function scanGroup(group, keywords) {
+async function scanPage(target, keywords) {
   try {
-    return await inTab(group.url, scanPosts, [keywords], 4000);
+    return await inTab(target.url, scanPosts, [keywords], target.source === "search" ? 6000 : 4000);
   } catch (err) {
-    await setStatus(`Couldn't look at ${group.name}: ${err?.message ?? err}`);
+    await setStatus(`Couldn't look at ${target.name}: ${err?.message ?? err}`);
     return null;
   }
 }
 
 async function postOne(item) {
   try {
-    const result = await inTab(item.url, postComment, [item.comment, item.code], 5000);
+    const result = await inTab(item.url, postComment, [item.comment, item.code, item.mention ?? null], 5000);
     return result ?? { ok: false, error: "The page gave nothing back." };
   } catch (err) {
     return { ok: false, error: String(err?.message ?? err) };
@@ -284,7 +327,10 @@ async function postOne(item) {
 // is copied into the page by name, so nothing outside it exists there.
 // ---------------------------------------------------------------------------
 
-/** On a group page: the posts on the first few screens that mention the work. */
+/**
+ * On a feed, a search, or a group page: the posts on the first few screens
+ * that mention the work, each with who posted it and which group it is in.
+ */
 async function scanPosts(keywords) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const clean = (s) => (s || "").replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -304,6 +350,11 @@ async function scanPosts(keywords) {
   }
   await sleep(800);
 
+  const isPostLink = (href) => /\/groups\/[^/]+\/(posts|permalink)\/|story_fbid=|multi_permalinks=/.test(href);
+  const isGroupLink = (href) => /\/groups\/[^/?#]+\/?(\?|#|$)/.test(href) && !/\/groups\/(feed|discover|joins)\b/.test(href);
+  const isProfileLink = (href) =>
+    /\/groups\/[^/]+\/user\/\d+/.test(href) || /\/profile\.php\?id=\d+/.test(href) || /^https?:\/\/(www\.)?facebook\.com\/[A-Za-z0-9.]+\/?(\?|$)/.test(href);
+
   // A post is an article that is not inside another article: comments are
   // articles too, nested in the post they answer.
   const articles = Array.from(document.querySelectorAll('[role="article"]')).filter(
@@ -312,11 +363,27 @@ async function scanPosts(keywords) {
   const posts = [];
   for (const article of articles) {
     const links = Array.from(article.querySelectorAll("a[href]"));
-    const permalink = links.find((a) => /\/groups\/[^/]+\/(posts|permalink)\/\d+|story_fbid=|multi_permalinks=/.test(a.href));
+    const permalink = links.find((a) => isPostLink(a.href));
     if (!permalink) continue;
     const ageLabel = (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40);
-    const authorEl = article.querySelector("h2 a, h3 a, h2 strong, h3 strong, strong a, strong");
-    const author = clean(authorEl ? authorEl.innerText : "").slice(0, 80);
+
+    // The header: the group's name, then the poster's. On a group's own
+    // page the group is the page, so the first named link is the poster.
+    const groupLink = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
+    const group = groupLink ? { url: groupLink.href, name: clean(groupLink.innerText).slice(0, 120) } : null;
+    const header = clean(article.innerText).split("\n").slice(0, 4).join(" ");
+    const anonymous = /anonymous (participant|member)/i.test(header);
+    let author = "";
+    if (!anonymous) {
+      const profile = links.find((a) => isProfileLink(a.href) && !isGroupLink(a.href) && (a.innerText || "").trim().length > 1 && (a.innerText || "").trim().length < 60);
+      author = clean(profile ? profile.innerText : "");
+      if (!author) {
+        const strong = article.querySelector("h2 strong, h3 strong, h4 strong, strong a, strong");
+        const candidate = clean(strong ? strong.innerText : "");
+        if (candidate && (!group || candidate !== group.name)) author = candidate;
+      }
+    }
+
     const body = article.querySelector('[data-ad-preview="message"], [data-ad-comet-preview="message"]');
     let text = body ? body.innerText : "";
     if (!text) {
@@ -330,14 +397,18 @@ async function scanPosts(keywords) {
     if (!text) continue;
     const low = text.toLowerCase();
     if (!keywords.some((word) => word && low.includes(String(word).toLowerCase()))) continue;
-    posts.push({ url: permalink.href, text, author, ageLabel });
+    posts.push({ url: permalink.href, text, author: author.slice(0, 80), anonymous, ageLabel, group });
   }
-  const group = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
-  return { group, posts: posts.slice(0, 25) };
+  const pageGroup = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
+  return { group: pageGroup, posts: posts.slice(0, 25) };
 }
 
-/** On a post's own page: put the comment in the box and send it. */
-async function postComment(text, code) {
+/**
+ * On a post's own page: mention the poster, put the comment in the box and
+ * send it. A page with a "Join group" button and no box is a group the
+ * account is not in, and says so rather than failing.
+ */
+async function postComment(text, code, mention) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const dialogText = () => {
     const dialog = document.querySelector('[role="dialog"]');
@@ -353,6 +424,8 @@ async function postComment(text, code) {
       null
     );
   };
+  const joinButton = () =>
+    Array.from(document.querySelectorAll('[role="button"], a[role="link"]')).find((el) => /^(join group|join|request to join)$/i.test((el.innerText || el.getAttribute("aria-label") || "").trim()));
   const onPage = () => {
     const box = findBox();
     const inBox = box ? (box.innerText || "").includes(code) : false;
@@ -375,17 +448,43 @@ async function postComment(text, code) {
       box = findBox();
     }
   }
-  if (!box) return { ok: false, error: `No comment box on this post.${already ? ` The page says: ${already.slice(0, 200)}` : ""}` };
+  if (!box) {
+    if (joinButton()) return { ok: false, notMember: true, error: "Not a member of this group." };
+    return { ok: false, error: `No comment box on this post.${already ? ` The page says: ${already.slice(0, 200)}` : ""}` };
+  }
 
   box.scrollIntoView({ block: "center" });
   box.focus();
   await sleep(500);
-  document.execCommand("insertText", false, text);
+
+  // The mention first: "@Name" typed, the picker given a moment, the poster
+  // picked from it. If no picker comes, the typed name stays as plain text,
+  // which still reads right.
+  let rest = text;
+  if (mention) {
+    const prefix = new RegExp(`^@${mention.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*`, "i");
+    rest = text.replace(prefix, "");
+    document.execCommand("insertText", false, `@${mention}`);
+    await sleep(1800);
+    const options = Array.from(document.querySelectorAll('[role="listbox"] [role="option"], [role="option"]')).filter(
+      (el) => el.getBoundingClientRect().height > 0
+    );
+    const pick = options.find((el) => (el.innerText || "").toLowerCase().includes(mention.toLowerCase())) || options[0];
+    if (pick) {
+      pick.click();
+      await sleep(600);
+      document.execCommand("insertText", false, " ");
+    } else {
+      document.execCommand("insertText", false, " ");
+    }
+    await sleep(300);
+  }
+  document.execCommand("insertText", false, rest);
   await sleep(800);
-  const head = text.slice(0, 30);
+  const head = rest.slice(0, 30);
   if (!(box.innerText || "").includes(head)) {
     const data = new DataTransfer();
-    data.setData("text/plain", text);
+    data.setData("text/plain", rest);
     box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
     await sleep(800);
   }

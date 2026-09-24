@@ -1,25 +1,49 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
-import { alreadySeen, getAgentSettings, recordSeen, type SeenInput } from "@/lib/data/outreach-agent";
+import {
+  alreadySeen,
+  getAgentSettings,
+  joinedGroupKeys,
+  noteGroup,
+  recordSeen,
+  type SeenInput,
+} from "@/lib/data/outreach-agent";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
-import { ageDaysFromLabel, cleanPostUrl, matchesKeywords, postKeyFrom, worthAnswering } from "@/lib/outreach-agent";
+import {
+  ageDaysFromLabel,
+  cleanPostUrl,
+  groupKeyFrom,
+  groupUrlFrom,
+  inArea,
+  isAnonymousAuthor,
+  matchesKeywords,
+  mentionComment,
+  postKeyFrom,
+  worthAnswering,
+  type ScanSource,
+} from "@/lib/outreach-agent";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * The posts the browser found, and which of them to answer.
  *
- * The browser sends every post on a group's first screen that mentions the
- * work. This side throws out the ones already decided about, reads the rest,
+ * The browser sends every post on a page that mentions the work: the
+ * account's own groups feed, a search for a phrase, or one listed group.
+ * This side throws out the ones already decided about, reads the rest,
  * writes a comment for each one that is a real request for something we
- * sell, mints its tracked link, and hands back the finished words. Under
- * the caps, and never more than a few reads per call: a route has a minute,
- * and a read takes a good part of ten seconds.
+ * sell, mints its tracked link, and hands back the finished words. Never
+ * more than a few reads per call: a route has a minute, and a read takes a
+ * good part of ten seconds.
  *
- * Every post that gets this far is written down with its decision, whether
- * or not it is answered, so the same post is never read twice and the
- * board can show what was passed over and why.
+ * A post found by search in a group the account is not in cannot be
+ * answered. The group is written down with one more lead against it, so
+ * the owner can see which groups are worth joining.
+ *
+ * Every post that gets this far is written down with its decision, so the
+ * same post is never read twice and the board can show what was passed
+ * over and why.
  */
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +54,9 @@ interface IncomingPost {
   url: string;
   text: string;
   author?: string | null;
+  anonymous?: boolean;
   ageLabel?: string | null;
+  group?: { url?: string | null; name?: string | null } | null;
 }
 
 export interface AgentAction {
@@ -39,25 +65,33 @@ export interface AgentAction {
   code: string;
   url: string;
   comment: string;
+  /** The first name to @-mention before the words, or null for an anonymous poster. */
+  mention: string | null;
+  groupName: string | null;
   /** False when the comment is written but must be pasted by a person. */
   post: boolean;
 }
+
+const SOURCES: ScanSource[] = ["feed", "search", "group"];
 
 export async function POST(request: NextRequest) {
   const profile = await getCurrentProfile();
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  let body: { groupUrl?: string; groupName?: string; posts?: IncomingPost[] };
+  let body: { source?: string; phrase?: string; groupUrl?: string; groupName?: string; posts?: IncomingPost[] };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Bad request." }, { status: 400 });
   }
-  const groupName = (body.groupName ?? "").trim().slice(0, 120);
+  const source: ScanSource = SOURCES.includes(body.source as ScanSource) ? (body.source as ScanSource) : "group";
+  const listedGroupName = (body.groupName ?? "").trim().slice(0, 120);
+  const listedGroupKey = source === "group" ? groupKeyFrom(body.groupUrl) : null;
   const posts = Array.isArray(body.posts) ? body.posts.slice(0, 40) : [];
 
   const now = new Date();
-  const settings = await getAgentSettings(profile.organization_id);
+  const [settings, joined] = await Promise.all([getAgentSettings(profile.organization_id), joinedGroupKeys(profile.organization_id)]);
+  if (listedGroupKey) joined.add(listedGroupKey);
 
   // Keyed, cleaned, and matched again here. The browser filtered already,
   // but the browser is the part somebody can edit.
@@ -71,9 +105,6 @@ export async function POST(request: NextRequest) {
   const seen = await alreadySeen(profile.organization_id, Array.from(fresh.keys()));
   const unseen = Array.from(fresh.values()).filter((post) => !seen.has(post.key));
 
-  // The caps are not applied here. The browser asks the app before every
-  // comment whether the way is clear, so a lead found over the cap waits
-  // in the queue for the next hour rather than being passed over.
   const actions: AgentAction[] = [];
   const decided: { key: string; decision: string }[] = [];
   let reads = 0;
@@ -83,19 +114,45 @@ export async function POST(request: NextRequest) {
     if (reads >= MAX_READS_PER_CALL) break;
     looked += 1;
 
+    const groupKey = groupKeyFrom(post.group?.url) ?? groupKeyFrom(post.url) ?? listedGroupKey;
+    const groupUrl = groupUrlFrom(post.group?.url) ?? groupUrlFrom(post.url) ?? groupUrlFrom(body.groupUrl);
+    const groupName = (post.group?.name ?? "").trim().slice(0, 120) || listedGroupName || null;
+    const anonymous = post.anonymous === true || isAnonymousAuthor(post.author);
+    const author = anonymous ? null : post.author?.trim().slice(0, 80) || null;
     const ageDays = ageDaysFromLabel(post.ageLabel, now);
     const base: Omit<SeenInput, "decision" | "reason" | "linkId"> = {
       postKey: post.key,
       url: post.url,
-      groupName: groupName || null,
-      author: post.author?.trim().slice(0, 80) || null,
+      groupName,
+      author,
       text: post.text,
       ageDays,
+      source,
+      groupKey,
     };
+    const write = (decision: SeenInput["decision"], reason: string | null, linkId: string | null = null, extra: Partial<SeenInput> = {}) =>
+      recordSeen(profile.organization_id, profile.id, { ...base, ...extra, decision, reason, linkId });
+
+    // A post from the account's own feed proves the group is joined. One
+    // from search proves nothing, and one from another state is nothing.
+    if (source === "search" && !inArea(`${post.text} ${groupName ?? ""}`, settings.areaWords)) {
+      await write("outside_area", "Doesn't mention anywhere near us.");
+      decided.push({ key: post.key, decision: "outside_area" });
+      continue;
+    }
+    if (groupKey && groupUrl) {
+      const isJoined = source !== "search" || joined.has(groupKey);
+      await noteGroup(profile.organization_id, { groupKey, url: groupUrl, name: groupName, joined: isJoined, foundPost: true });
+      if (!isJoined) {
+        await write("not_member", `In ${groupName ?? "a group"} you haven't joined. It's on the groups-to-join list.`);
+        decided.push({ key: post.key, decision: "not_member" });
+        continue;
+      }
+    }
 
     // Cheap refusals first, so a stale post never costs a read.
     if (ageDays != null && ageDays > settings.maxAgeDays) {
-      await recordSeen(profile.organization_id, profile.id, { ...base, decision: "too_old", reason: `Posted ${ageDays} days ago.`, linkId: null });
+      await write("too_old", `Posted ${ageDays} days ago.`);
       decided.push({ key: post.key, decision: "too_old" });
       continue;
     }
@@ -103,7 +160,7 @@ export async function POST(request: NextRequest) {
     reads += 1;
     const read = await readAndDraft({ screenshotPath: null, pastedText: post.text, kind: "comment" });
     if (!read.ok) {
-      await recordSeen(profile.organization_id, profile.id, { ...base, decision: "draft_failed", reason: read.error, linkId: null });
+      await write("draft_failed", read.error);
       decided.push({ key: post.key, decision: "draft_failed" });
       continue;
     }
@@ -114,21 +171,15 @@ export async function POST(request: NextRequest) {
       ageDays: read.ageDays ?? ageDays,
       maxAgeDays: settings.maxAgeDays,
     });
+    const askedBy = author ?? (anonymous ? null : read.askedBy);
     if (!verdict.yes) {
-      await recordSeen(profile.organization_id, profile.id, {
-        ...base,
-        author: base.author ?? read.askedBy,
-        ageDays: read.ageDays ?? ageDays,
-        decision: verdict.decision,
-        reason: [verdict.reason, read.note].filter(Boolean).join(" "),
-        linkId: null,
-      });
+      await write(verdict.decision, [verdict.reason, read.note].filter(Boolean).join(" "), null, { author: askedBy, ageDays: read.ageDays ?? ageDays });
       decided.push({ key: post.key, decision: verdict.decision });
       continue;
     }
 
     if (!read.draft) {
-      await recordSeen(profile.organization_id, profile.id, { ...base, decision: "draft_failed", reason: read.draftNote ?? "No comment came back.", linkId: null });
+      await write("draft_failed", read.draftNote ?? "No comment came back.");
       decided.push({ key: post.key, decision: "draft_failed" });
       continue;
     }
@@ -138,25 +189,27 @@ export async function POST(request: NextRequest) {
     const recorded = await recordOutreach({
       kind: "comment",
       platform: "facebook",
-      audience: read.groupName || groupName,
+      audience: groupName || read.groupName || "",
       fromPage: "",
-      sentTo: read.askedBy ?? base.author ?? "",
+      sentTo: askedBy ?? "",
       service: read.service ?? "",
       note: read.note,
       screenshotPath: null,
     });
     if (!recorded.ok) {
-      await recordSeen(profile.organization_id, profile.id, { ...base, decision: "draft_failed", reason: recorded.error, linkId: null });
+      await write("draft_failed", recorded.error);
       decided.push({ key: post.key, decision: "draft_failed" });
       continue;
     }
 
-    const comment = finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link);
-    if (!looksUsable(comment, recorded.link)) {
-      await recordSeen(profile.organization_id, profile.id, { ...base, decision: "draft_failed", reason: "The comment came back too thin to post.", linkId: recorded.id });
+    const written = finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link);
+    if (!looksUsable(written, recorded.link)) {
+      await write("draft_failed", "The comment came back too thin to post.", recorded.id);
       decided.push({ key: post.key, decision: "draft_failed" });
       continue;
     }
+    // Opened with the poster's name, the way a person answering does it.
+    const { text: comment, mention } = mentionComment(written, askedBy);
 
     const supabase = await createClient();
     await Promise.all([
@@ -165,17 +218,10 @@ export async function POST(request: NextRequest) {
     ]);
 
     const decision = settings.autoPost ? "queued" : "ready";
-    const seenId = await recordSeen(profile.organization_id, profile.id, {
-      ...base,
-      author: base.author ?? read.askedBy,
-      ageDays: read.ageDays ?? ageDays,
-      decision,
-      reason: read.note,
-      linkId: recorded.id,
-    });
+    const seenId = await write(decision, read.note, recorded.id, { author: askedBy, ageDays: read.ageDays ?? ageDays });
     decided.push({ key: post.key, decision });
     if (!seenId) continue;
-    actions.push({ seenId, linkId: recorded.id, code: recorded.code, url: post.url, comment, post: settings.autoPost });
+    actions.push({ seenId, linkId: recorded.id, code: recorded.code, url: post.url, comment, mention, groupName, post: settings.autoPost });
   }
 
   return NextResponse.json({

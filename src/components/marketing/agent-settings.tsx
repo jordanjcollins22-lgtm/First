@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { pauseGroupAgent, resumeGroupAgent, updateAgentSettings } from "@/lib/actions/outreach-agent-actions";
-import type { AgentGroup, AgentSettings } from "@/lib/outreach-agent";
+import type { AgentGroup, AgentSettings, AgentSources } from "@/lib/outreach-agent";
 
 /**
  * The owner's controls for the group agent.
@@ -19,6 +19,9 @@ import type { AgentGroup, AgentSettings } from "@/lib/outreach-agent";
  */
 export function AgentSettingsForm({ settings, owner, paused }: { settings: AgentSettings; owner: boolean; paused: boolean }) {
   const [groups, setGroups] = useState<AgentGroup[]>(settings.groups.length > 0 ? settings.groups : [{ url: "", name: "" }]);
+  const [sources, setSources] = useState<AgentSources>(settings.sources);
+  const [searchPhrases, setSearchPhrases] = useState(settings.searchPhrases.join("\n"));
+  const [areaWords, setAreaWords] = useState(settings.areaWords.join(", "));
   const [keywords, setKeywords] = useState(settings.keywords.join(", "));
   const [dailyCap, setDailyCap] = useState(String(settings.dailyCap));
   const [hourlyCap, setHourlyCap] = useState(String(settings.hourlyCap));
@@ -35,6 +38,9 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
     startTransition(async () => {
       const result = await updateAgentSettings({
         groups: groups.filter((g) => g.url.trim()),
+        sources,
+        searchPhrases,
+        areaWords,
         keywords,
         dailyCap: Number(dailyCap),
         hourlyCap: Number(hourlyCap),
@@ -69,7 +75,48 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Groups to watch</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Where it looks</p>
+        <SourceRow
+          checked={sources.feed}
+          disabled={disabled}
+          onChange={(v) => setSources((s) => ({ ...s, feed: v }))}
+          label="Your groups feed"
+          blurb="Every group you're a member of, on one page. Covers any group you join from now on with nothing to type here."
+        />
+        <SourceRow
+          checked={sources.search}
+          disabled={disabled}
+          onChange={(v) => setSources((s) => ({ ...s, search: v }))}
+          label="Facebook post search"
+          blurb="Searches the phrases below. Reaches public groups you're not in yet; those go on the groups-to-join list."
+        />
+        <SourceRow
+          checked={sources.list}
+          disabled={disabled}
+          onChange={(v) => setSources((s) => ({ ...s, list: v }))}
+          label="The groups listed below"
+          blurb="For any group that deserves a look of its own."
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="agent-phrases">
+            Search phrases, one per line
+          </label>
+          <Textarea id="agent-phrases" value={searchPhrases} disabled={disabled || !sources.search} rows={5} onChange={(e) => setSearchPhrases(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="agent-area">
+            A searched post has to mention one of these
+          </label>
+          <Textarea id="agent-area" value={areaWords} disabled={disabled || !sources.search} rows={5} onChange={(e) => setAreaWords(e.target.value)} />
+          <p className="text-xs text-muted-foreground">Towns and zip codes. Without this, search answers people in other states.</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Groups to watch on their own</p>
         {groups.map((group, index) => (
           <div key={index} className="flex flex-col gap-2 sm:flex-row">
             <Input
@@ -153,6 +200,30 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
       </div>
       {!owner && <p className="text-xs text-muted-foreground">Only the owner can change these.</p>}
     </div>
+  );
+}
+
+function SourceRow({
+  checked,
+  disabled,
+  onChange,
+  label,
+  blurb,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  blurb: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 text-sm">
+      <Checkbox checked={checked} disabled={disabled} onCheckedChange={(v) => onChange(v === true)} className="mt-0.5" />
+      <span>
+        <span className="font-medium">{label}</span>
+        <span className="block text-xs text-muted-foreground">{blurb}</span>
+      </span>
+    </label>
   );
 }
 

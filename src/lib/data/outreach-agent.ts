@@ -4,7 +4,9 @@ import {
   DEFAULT_SETTINGS,
   type AgentGroup,
   type AgentSettings,
+  type AgentSources,
   type Decision,
+  type ScanSource,
 } from "@/lib/outreach-agent";
 
 /**
@@ -27,6 +29,12 @@ function groupsFrom(raw: unknown): AgentGroup[] {
     .filter((g): g is AgentGroup => g !== null);
 }
 
+function sourcesFrom(raw: unknown): AgentSources {
+  const row = (raw ?? {}) as Partial<Record<keyof AgentSources, unknown>>;
+  const on = (key: keyof AgentSources) => (typeof row[key] === "boolean" ? (row[key] as boolean) : DEFAULT_SETTINGS.sources[key]);
+  return { feed: on("feed"), search: on("search"), list: on("list") };
+}
+
 export async function getAgentSettings(organizationId: string): Promise<AgentSettings> {
   const supabase = await createClient();
   const { data } = await supabase
@@ -37,6 +45,9 @@ export async function getAgentSettings(organizationId: string): Promise<AgentSet
   if (!data) return { ...DEFAULT_SETTINGS };
   return {
     groups: groupsFrom(data.groups),
+    sources: sourcesFrom(data.sources),
+    searchPhrases: data.search_phrases ?? DEFAULT_SETTINGS.searchPhrases,
+    areaWords: data.area_words ?? DEFAULT_SETTINGS.areaWords,
     keywords: data.keywords ?? DEFAULT_SETTINGS.keywords,
     dailyCap: data.daily_cap,
     hourlyCap: data.hourly_cap,
@@ -60,6 +71,9 @@ export async function saveAgentSettings(
     {
       organization_id: organizationId,
       groups: settings.groups,
+      sources: settings.sources,
+      search_phrases: settings.searchPhrases,
+      area_words: settings.areaWords,
       keywords: settings.keywords,
       daily_cap: settings.dailyCap,
       hourly_cap: settings.hourlyCap,
@@ -165,6 +179,8 @@ export interface SeenInput {
   decision: Decision;
   reason: string | null;
   linkId: string | null;
+  source?: ScanSource;
+  groupKey?: string | null;
 }
 
 /**
@@ -188,6 +204,8 @@ export async function recordSeen(organizationId: string, by: string, input: Seen
       reason: input.reason,
       link_id: input.linkId,
       seen_by: by,
+      source: input.source ?? "group",
+      group_key: input.groupKey ?? null,
     })
     .select("id")
     .single();
@@ -207,6 +225,122 @@ export async function updateSeen(
   const { error } = await supabase
     .from("outreach_seen_posts")
     .update({ decision: patch.decision, reason: patch.reason ?? null, updated_at: new Date().toISOString() })
+    .eq("organization_id", organizationId)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export interface GroupRow {
+  id: string;
+  groupKey: string;
+  url: string;
+  name: string | null;
+  joined: boolean;
+  postsFound: number;
+  lastPostAt: string | null;
+  dismissedAt: string | null;
+}
+
+function groupRow(row: {
+  id: string;
+  group_key: string;
+  url: string;
+  name: string | null;
+  joined: boolean;
+  posts_found: number;
+  last_post_at: string | null;
+  dismissed_at: string | null;
+}): GroupRow {
+  return {
+    id: row.id,
+    groupKey: row.group_key,
+    url: row.url,
+    name: row.name,
+    joined: row.joined,
+    postsFound: row.posts_found,
+    lastPostAt: row.last_post_at,
+    dismissedAt: row.dismissed_at,
+  };
+}
+
+/**
+ * Write down a group the agent has seen, and what it saw there.
+ *
+ * Joined is one-way: a group seen in the account's own feed, or one a
+ * comment went up in, stays joined. A lead counted here is one more reason
+ * to join a group the account is not in.
+ */
+export async function noteGroup(
+  organizationId: string,
+  input: { groupKey: string; url: string; name: string | null; joined?: boolean; foundPost?: boolean }
+): Promise<void> {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("outreach_groups")
+    .select("id, joined, posts_found, name")
+    .eq("organization_id", organizationId)
+    .eq("group_key", input.groupKey)
+    .maybeSingle();
+  const now = new Date().toISOString();
+  if (existing) {
+    const patch: { updated_at: string; joined?: boolean; name?: string; posts_found?: number; last_post_at?: string } = { updated_at: now };
+    if (input.joined && !existing.joined) patch.joined = true;
+    if (input.name && !existing.name) patch.name = input.name;
+    if (input.foundPost) {
+      patch.posts_found = existing.posts_found + 1;
+      patch.last_post_at = now;
+    }
+    await supabase.from("outreach_groups").update(patch).eq("id", existing.id);
+    return;
+  }
+  await supabase.from("outreach_groups").insert({
+    organization_id: organizationId,
+    group_key: input.groupKey,
+    url: input.url,
+    name: input.name,
+    joined: Boolean(input.joined),
+    posts_found: input.foundPost ? 1 : 0,
+    last_post_at: input.foundPost ? now : null,
+  });
+}
+
+/** The groups the account is known to be in. */
+export async function joinedGroupKeys(organizationId: string): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("outreach_groups").select("group_key").eq("organization_id", organizationId).eq("joined", true);
+  return new Set((data ?? []).map((row) => row.group_key));
+}
+
+/** Groups seen with leads in them that the account has not joined, most leads first. */
+export async function groupsToJoin(organizationId: string): Promise<GroupRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("outreach_groups")
+    .select("id, group_key, url, name, joined, posts_found, last_post_at, dismissed_at")
+    .eq("organization_id", organizationId)
+    .eq("joined", false)
+    .is("dismissed_at", null)
+    .order("posts_found", { ascending: false })
+    .order("last_post_at", { ascending: false })
+    .limit(100);
+  return (data ?? []).map(groupRow);
+}
+
+export async function setGroupJoined(organizationId: string, id: string, joined: boolean): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("outreach_groups")
+    .update({ joined, dismissed_at: null, updated_at: new Date().toISOString() })
+    .eq("organization_id", organizationId)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function dismissGroup(organizationId: string, id: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("outreach_groups")
+    .update({ dismissed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("organization_id", organizationId)
     .eq("id", id);
   if (error) throw error;
