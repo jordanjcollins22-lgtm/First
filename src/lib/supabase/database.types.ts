@@ -3087,6 +3087,8 @@ export interface Database {
           sources: Json;
           search_phrases: string[];
           area_words: string[];
+          last_look: Json | null;
+          last_look_at: string | null;
           updated_at: string;
           updated_by: string | null;
         };

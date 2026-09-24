@@ -425,6 +425,41 @@ export async function queuedForBrowser(organizationId: string, staleHours: numbe
   });
 }
 
+export interface LastLook {
+  at: string;
+  name: string | null;
+  posts: number | null;
+  mentioned: number | null;
+  mentionedNoLink: number | null;
+  withLink: number | null;
+  sent: number | null;
+  version: string | null;
+}
+
+/** What the browser saw on its last look, or null before the first. */
+export async function lastLook(organizationId: string): Promise<LastLook | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("outreach_agent_settings")
+    .select("last_look, last_look_at")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (!data?.last_look || !data.last_look_at) return null;
+  const look = data.last_look as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" ? v : null);
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  return {
+    at: data.last_look_at,
+    name: str(look.name),
+    posts: num(look.posts),
+    mentioned: num(look.mentioned),
+    mentionedNoLink: num(look.mentionedNoLink),
+    withLink: num(look.withLink),
+    sent: num(look.sent),
+    version: str(look.version),
+  };
+}
+
 /** How many comments are written and waiting for a person to say yes. */
 export async function countReadyForReview(organizationId: string): Promise<number> {
   const supabase = await createClient();

@@ -16,7 +16,7 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.1.1";
+export const EXTENSION_VERSION = "2.2.0";
 export const EXTENSION_DOWNLOAD_URL = "https://github.com/jordanjcollins22-lgtm/First/archive/refs/heads/claude/image-upload-canvas-382r1a.zip";
 
 export interface AgentRecipe {
@@ -33,7 +33,11 @@ export interface AgentRecipe {
     messageBody: string;
     authorFallback: string;
     scrollTimes: number;
+    /** How far each scroll goes, in screens. Under one, so nothing is skipped between reads. */
+    scrollScreens: number;
     scrollWaitMs: number;
+    /** How long to wait after hovering a post's links for Facebook to fill in the real ones. */
+    revealWaitMs: number;
     settleMs: number;
     searchSettleMs: number;
     maxPosts: number;
@@ -69,17 +73,21 @@ export interface AgentRecipe {
 export const DEFAULT_RECIPE: AgentRecipe = {
   version: 1,
   scan: {
-    article: '[role="article"]',
+    // Facebook marks a feed post with a position in the feed, and some pages
+    // still with an article role. Either counts; the outermost one wins.
+    article: '[aria-posinset], [role="article"], [data-pagelet^="FeedUnit"]',
     seeMoreText: "^see more$",
-    postLink: "\\/groups\\/[^/]+\\/(posts|permalink)\\/|story_fbid=|multi_permalinks=",
+    postLink: "\\/groups\\/[^/]+\\/(posts|permalink)\\/|story_fbid=|multi_permalinks=|\\/posts\\/pfbid",
     groupLink: "\\/groups\\/[^/?#]+\\/?(\\?|#|$)",
     notGroupLink: "\\/groups\\/(feed|discover|joins)\\b",
     profileLink: "\\/groups\\/[^/]+\\/user\\/\\d+|\\/profile\\.php\\?id=\\d+|^https?:\\/\\/(www\\.)?facebook\\.com\\/[A-Za-z0-9.]+\\/?(\\?|$)",
     anonymous: "anonymous (participant|member)",
     messageBody: '[data-ad-preview="message"], [data-ad-comet-preview="message"]',
     authorFallback: "h2 strong, h3 strong, h4 strong, strong a, strong",
-    scrollTimes: 3,
-    scrollWaitMs: 1500,
+    scrollTimes: 10,
+    scrollScreens: 0.9,
+    scrollWaitMs: 1400,
+    revealWaitMs: 500,
     settleMs: 4000,
     searchSettleMs: 6000,
     maxPosts: 25,

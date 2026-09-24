@@ -227,25 +227,28 @@ async function tick(options = {}) {
     scans[next.key] = Date.now();
     await chrome.storage.local.set({ scans });
     if (!found) return;
+
+    // Sent even when nothing matched: the app keeps what the page looked
+    // like, so a look that found nothing can be diagnosed from the app.
+    const answer = await sendCandidates(next, found);
+    if (!answer) return;
+    const stats = found.stats ?? {};
     if (found.posts.length === 0) {
-      const stats = found.stats ?? {};
       await setStatus(
-        `${next.name}: ${stats.articles ?? 0} posts on the page, ${stats.withLink ?? 0} readable, none mentioned the work.` +
-          (stats.articles === 0 ? ` The page may not have loaded (title "${found.group || ""}", ${stats.textChars ?? 0} characters of text).` : "")
+        `${next.name}: read ${stats.posts ?? 0} posts, ${stats.mentioned ?? 0} mentioned the work` +
+          ((stats.mentionedNoLink ?? 0) > 0 ? ` but ${stats.mentionedNoLink} had no link to open` : "") +
+          "." +
+          ((stats.posts ?? 0) === 0 ? ` The page may not have loaded (title "${found.group || ""}", ${stats.textChars ?? 0} characters of text).` : "")
       );
       return;
     }
-
-    const answer = await sendCandidates(next, found);
-    if (!answer) return;
     // The app keeps what it wrote: posted straight away or held for a yes,
     // depending on the setting. Either way it comes back through the queue.
     const actions = answer.actions ?? [];
     const held = actions.filter((action) => !action.post).length;
     const notMember = (answer.decided ?? []).filter((d) => d.decision === "not_member").length;
-    const stats = found.stats ?? {};
     await setStatus(
-      `${next.name}: ${stats.articles ?? "?"} posts on the page, ${stats.withLink ?? "?"} readable, ${found.posts.length} mentioned the work, ${actions.length} worth answering` +
+      `${next.name}: read ${stats.posts ?? "?"} posts, ${found.posts.length} mentioned the work, ${actions.length} worth answering` +
         (held > 0 ? ` (${held} waiting for your OK in the app)` : "") +
         (notMember > 0 ? `, ${notMember} in groups you haven't joined` : "") +
         `, ${answer.skipped ?? 0} seen before.`
@@ -273,6 +276,7 @@ async function sendCandidates(target, found) {
         groupUrl: target.groupUrl ?? null,
         groupName: target.groupName || found.group || null,
         posts: found.posts,
+        look: { name: target.name, source: target.source, stats: found.stats ?? null, version: VERSION },
       }),
     });
     if (!res.ok) {
@@ -416,74 +420,125 @@ async function scanPosts(keywords, r) {
   const notGroupLink = re(r.notGroupLink);
   const profileLink = re(r.profileLink);
   const anonymousRe = re(r.anonymous);
-
-  for (let i = 0; i < (r.scrollTimes ?? 3); i += 1) {
-    window.scrollBy(0, window.innerHeight * 2);
-    await sleep(r.scrollWaitMs ?? 1500);
-  }
-  for (const button of document.querySelectorAll('div[role="button"]')) {
-    if (seeMore.test((button.innerText || "").trim())) {
-      try {
-        button.click();
-      } catch {
-        // Nothing to expand.
-      }
-    }
-  }
-  await sleep(800);
-
   const isGroupLink = (href) => groupLink.test(href) && !notGroupLink.test(href);
+  const mentionsWork = (text) => {
+    const low = text.toLowerCase();
+    return keywords.some((word) => word && low.includes(String(word).toLowerCase()));
+  };
 
-  // A post is an article that is not inside another article: comments are
-  // articles too, nested in the post they answer.
-  const articles = Array.from(document.querySelectorAll(r.article)).filter((el) => !(el.parentElement && el.parentElement.closest(r.article)));
-  const posts = [];
-  let withLink = 0;
-  for (const article of articles) {
-    const links = Array.from(article.querySelectorAll("a[href]"));
-    const permalink = links.find((a) => postLink.test(a.href));
-    if (!permalink) continue;
-    withLink += 1;
-    const ageLabel = (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40);
-
-    // The header: the group's name, then the poster's. On a group's own
-    // page the group is the page, so the first named link is the poster.
-    const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
-    const group = gl ? { url: gl.href, name: clean(gl.innerText).slice(0, 120) } : null;
-    const header = clean(article.innerText).split("\n").slice(0, 4).join(" ");
-    const anonymous = anonymousRe.test(header);
-    let author = "";
-    if (!anonymous) {
-      const profile = links.find((a) => profileLink.test(a.href) && !isGroupLink(a.href) && (a.innerText || "").trim().length > 1 && (a.innerText || "").trim().length < 60);
-      author = clean(profile ? profile.innerText : "");
-      if (!author) {
-        const strong = article.querySelector(r.authorFallback);
-        const candidate = clean(strong ? strong.innerText : "");
-        if (candidate && (!group || candidate !== group.name)) author = candidate;
+  // Facebook fills in a post's real link only when the pointer passes over
+  // it: until then the time stamp that carries it points at "#". So every
+  // link in a post is given a hover before it is read.
+  const reveal = (el) => {
+    for (const a of el.querySelectorAll("a")) {
+      for (const type of ["mouseover", "mouseenter", "mousemove"]) {
+        a.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      }
+      a.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+    }
+  };
+  const expand = () => {
+    for (const button of document.querySelectorAll('div[role="button"]')) {
+      if (seeMore.test((button.innerText || "").trim())) {
+        try {
+          button.click();
+        } catch {
+          // Nothing to expand.
+        }
       }
     }
+  };
+  // A post is the outermost box of its kind: comments are boxes too, nested
+  // in the post they answer.
+  const outermost = () =>
+    Array.from(document.querySelectorAll(r.article)).filter((el) => !(el.parentElement && el.parentElement.closest(r.article)));
 
-    const body = article.querySelector(r.messageBody);
+  const textOf = (post) => {
+    const body = post.querySelector(r.messageBody);
     let text = body ? body.innerText : "";
     if (!text) {
-      text = (article.innerText || "")
+      text = (post.innerText || "")
         .split("\n")
         .filter((line) => line.trim().length > 0)
         .slice(2)
         .join("\n");
     }
-    text = clean(text).slice(0, r.maxTextChars ?? 3000);
-    if (!text) continue;
-    const low = text.toLowerCase();
-    if (!keywords.some((word) => word && low.includes(String(word).toLowerCase()))) continue;
-    posts.push({ url: permalink.href, text, author: author.slice(0, 80), anonymous, ageLabel, group });
+    return clean(text).slice(0, r.maxTextChars ?? 3000);
+  };
+
+  // Read as it scrolls, not after. Facebook takes posts that have scrolled
+  // well out of view back off the page, so a read at the end only ever saw
+  // the last screen or two.
+  const done = new WeakSet();
+  const tries = new WeakMap();
+  const byUrl = new Map();
+  const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, samples: [] };
+
+  const readVisible = async () => {
+    expand();
+    const boxes = outermost().filter((el) => !done.has(el));
+    for (const box of boxes) reveal(box);
+    await sleep(r.revealWaitMs ?? 500);
+    for (const box of boxes) {
+      const text = textOf(box);
+      // Not drawn yet: come back to it on the next pass.
+      if (!text || text.length < 12) continue;
+      const links = Array.from(box.querySelectorAll("a[href]"));
+      const permalink = links.find((a) => postLink.test(a.href));
+      const attempt = (tries.get(box) ?? 0) + 1;
+      tries.set(box, attempt);
+      // No link yet: one more hover on the next pass before giving up on it.
+      if (!permalink && attempt < 2) continue;
+      done.add(box);
+      stats.posts += 1;
+      stats.withText += 1;
+      const matched = mentionsWork(text);
+      if (permalink) stats.withLink += 1;
+      if (matched) stats.mentioned += 1;
+      if (matched && !permalink) stats.mentionedNoLink += 1;
+      if (stats.samples.length < 8) {
+        stats.samples.push({ text: text.slice(0, 120), link: Boolean(permalink), matched });
+      }
+      if (!matched || !permalink) continue;
+
+      const ageLabel = (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40);
+      // The header: the group's name, then the poster's. On a group's own
+      // page the group is the page, so the first named link is the poster.
+      const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
+      const group = gl ? { url: gl.href, name: clean(gl.innerText).slice(0, 120) } : null;
+      const header = clean(box.innerText).split("\n").slice(0, 4).join(" ");
+      const anonymous = anonymousRe.test(header);
+      let author = "";
+      if (!anonymous) {
+        const profile = links.find(
+          (a) => profileLink.test(a.href) && !isGroupLink(a.href) && (a.innerText || "").trim().length > 1 && (a.innerText || "").trim().length < 60
+        );
+        author = clean(profile ? profile.innerText : "");
+        if (!author) {
+          const strong = box.querySelector(r.authorFallback);
+          const candidate = clean(strong ? strong.innerText : "");
+          if (candidate && (!group || candidate !== group.name)) author = candidate;
+        }
+      }
+      if (!byUrl.has(permalink.href)) {
+        byUrl.set(permalink.href, { url: permalink.href, text, author: author.slice(0, 80), anonymous, ageLabel, group });
+      }
+    }
+  };
+
+  await readVisible();
+  for (let i = 0; i < (r.scrollTimes ?? 3); i += 1) {
+    window.scrollBy(0, Math.round(window.innerHeight * (r.scrollScreens ?? 0.9)));
+    await sleep(r.scrollWaitMs ?? 1500);
+    await readVisible();
   }
+
   const pageGroup = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
   return {
     group: pageGroup,
-    posts: posts.slice(0, r.maxPosts ?? 25),
+    posts: Array.from(byUrl.values()).slice(0, r.maxPosts ?? 25),
     // What the page looked like, so a look that found nothing can say why.
-    stats: { articles: articles.length, withLink, textChars: (document.body.innerText || "").length, height: document.documentElement.scrollHeight },
+    stats: { ...stats, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
   };
 }
 

@@ -74,11 +74,42 @@ export interface AgentAction {
 
 const SOURCES: ScanSource[] = ["feed", "search", "group"];
 
+/** The browser's account of one look, with only the fields we keep, each bounded. */
+function lookFrom(raw: { name?: unknown; source?: unknown; stats?: unknown; version?: unknown }, sent: number) {
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(100_000, Math.round(v))) : null);
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : null);
+  const stats = (raw.stats && typeof raw.stats === "object" ? raw.stats : {}) as Record<string, unknown>;
+  const samples = Array.isArray(stats.samples) ? stats.samples.slice(0, 8) : [];
+  return {
+    name: str(raw.name, 120),
+    source: str(raw.source, 20),
+    version: str(raw.version, 20),
+    title: str(stats.title, 80),
+    posts: num(stats.posts),
+    mentioned: num(stats.mentioned),
+    mentionedNoLink: num(stats.mentionedNoLink),
+    withLink: num(stats.withLink),
+    textChars: num(stats.textChars),
+    sent,
+    samples: samples.map((s) => {
+      const row = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
+      return { text: str(row.text, 120), link: row.link === true, matched: row.matched === true };
+    }),
+  };
+}
+
 export async function POST(request: NextRequest) {
   const profile = await getCurrentProfile();
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  let body: { source?: string; phrase?: string; groupUrl?: string; groupName?: string; posts?: IncomingPost[] };
+  let body: {
+    source?: string;
+    phrase?: string;
+    groupUrl?: string;
+    groupName?: string;
+    posts?: IncomingPost[];
+    look?: { name?: unknown; source?: unknown; stats?: unknown; version?: unknown } | null;
+  };
   try {
     body = await request.json();
   } catch {
@@ -91,6 +122,16 @@ export async function POST(request: NextRequest) {
 
   const now = new Date();
   const [settings, joined] = await Promise.all([getAgentSettings(profile.organization_id), joinedGroupKeys(profile.organization_id)]);
+
+  // What the page looked like, kept whether or not anything matched, so a
+  // scanner that has stopped seeing posts shows up here and not only in a
+  // popup on one computer. Trimmed: this is a diagnosis, not an archive.
+  if (body.look && typeof body.look === "object") {
+    await (await createClient())
+      .from("outreach_agent_settings")
+      .update({ last_look: lookFrom(body.look, posts.length), last_look_at: now.toISOString() })
+      .eq("organization_id", profile.organization_id);
+  }
   if (listedGroupKey) joined.add(listedGroupKey);
 
   // Keyed, cleaned, and matched again here. The browser filtered already,

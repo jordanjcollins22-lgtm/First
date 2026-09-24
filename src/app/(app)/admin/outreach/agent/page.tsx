@@ -5,9 +5,9 @@ import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
-import { agentCounts, getAgentSettings, groupsToJoin, recentAgentActivity } from "@/lib/data/outreach-agent";
+import { agentCounts, getAgentSettings, groupsToJoin, lastLook, recentAgentActivity } from "@/lib/data/outreach-agent";
 import { standing } from "@/lib/outreach-agent";
-import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
+import { BUSINESS_TIME_ZONE, shortWhen } from "@/lib/time-zone";
 import { AgentSettingsForm } from "@/components/marketing/agent-settings";
 import { AgentActivity } from "@/components/marketing/agent-activity";
 import { GroupsToJoin } from "@/components/marketing/groups-to-join";
@@ -32,11 +32,12 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, activity, toJoin] = await Promise.all([
+  const [settings, counts, activity, toJoin, look] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     recentAgentActivity(profile.organization_id).catch(() => []),
     groupsToJoin(profile.organization_id).catch(() => []),
+    lastLook(profile.organization_id).catch(() => null),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
 
@@ -67,6 +68,14 @@ export default async function GroupAgentPage() {
             {counts.postedToday} posted today, {counts.postedThisHour} in the last hour, {counts.queued} approved and waiting to post.
           </span>
           {settings.pauseReason && <span className="block text-muted-foreground">{settings.pauseReason}</span>}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {look
+            ? `Last look ${shortWhen(look.at)} at ${look.name ?? "a page"}: read ${look.posts ?? 0} posts, ${look.mentioned ?? 0} mentioned the work` +
+              ((look.mentionedNoLink ?? 0) > 0 ? ` (${look.mentionedNoLink} without a link it could open)` : "") +
+              `, ${look.sent ?? 0} sent to be read.` +
+              (look.version ? ` Extension v${look.version}.` : "")
+            : "No look recorded yet. Press Look now in the extension popup."}
         </p>
       </section>
 
