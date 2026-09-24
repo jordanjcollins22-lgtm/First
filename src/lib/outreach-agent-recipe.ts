@@ -16,7 +16,7 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.4.0";
+export const EXTENSION_VERSION = "2.5.0";
 export const EXTENSION_DOWNLOAD_URL = "https://github.com/jordanjcollins22-lgtm/First/archive/refs/heads/claude/image-upload-canvas-382r1a.zip";
 
 export interface AgentRecipe {

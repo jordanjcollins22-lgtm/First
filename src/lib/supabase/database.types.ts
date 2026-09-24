@@ -3151,6 +3151,27 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["outreach_groups"]["Row"]>;
         Relationships: [];
       };
+      outreach_post_answers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          seen_post_id: string;
+          profile_id: string;
+          link_id: string | null;
+          comment: string | null;
+          status: "written" | "posted" | "let_go";
+          posted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["outreach_post_answers"]["Row"]> & {
+          organization_id: string;
+          seen_post_id: string;
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["outreach_post_answers"]["Row"]>;
+        Relationships: [];
+      };
       outreach_seen_posts: {
         Row: {
           id: string;

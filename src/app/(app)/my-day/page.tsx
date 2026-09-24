@@ -42,7 +42,8 @@ import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
-import { countReadyForReview, countToPick } from "@/lib/data/outreach-agent";
+import { countOpenPosts } from "@/lib/data/post-board";
+import { checkTabAccess } from "@/lib/data/access";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
 import { nextRouteToApprove } from "@/lib/data/route-approval";
@@ -279,13 +280,12 @@ async function OfficeDay() {
         </Suspense>
       )}
 
-      {/* Comments the group agent wrote and is holding for a yes. One line
-          and a link: the reading happens on the agent's own page. */}
-      {isOwnerLevel(profile.roles) && (
-        <Suspense fallback={null}>
-          <AgentReviewBlock />
-        </Suspense>
-      )}
+      {/* Facebook posts the finder brought in, waiting for somebody on the
+          team to answer. One line and a link: the answering happens on the
+          board itself. */}
+      <Suspense fallback={null}>
+        <PostsToAnswerBlock />
+      </Suspense>
 
       {/* One USPS route at a time, round the jobs finished and paid for: approve it,
           draw the walk over it, confirm the hangers, submit the order. */}
@@ -389,25 +389,19 @@ async function RouteApprovalBlock() {
   return <RouteApprovalWizard view={view} />;
 }
 
-async function AgentReviewBlock() {
+async function PostsToAnswerBlock() {
+  const { allowed } = await checkTabAccess("posts-to-answer").catch(() => ({ allowed: false }));
+  if (!allowed) return null;
   const organizationId = await getCurrentOrganizationId().catch(() => null);
   if (!organizationId) return null;
-  const [waiting, toPick] = await Promise.all([
-    countReadyForReview(organizationId).catch(() => 0),
-    countToPick(organizationId).catch(() => 0),
-  ]);
-  if (waiting === 0 && toPick === 0) return null;
-  const parts = [
-    toPick > 0 ? `${toPick} Facebook post${toPick === 1 ? "" : "s"} to pick from` : null,
-    waiting > 0 ? `${waiting} comment${waiting === 1 ? "" : "s"} waiting for your OK` : null,
-  ].filter(Boolean);
+  const waiting = await countOpenPosts(organizationId).catch(() => 0);
+  if (waiting === 0) return null;
   return (
-    <Link
-      href={toPick > 0 ? "/admin/outreach/agent#posts" : "/admin/outreach/agent#review"}
-      className="block rounded-lg border border-border bg-card/70 px-4 py-3 text-sm hover:bg-card"
-    >
-      <span className="font-medium">{parts.join(" · ")}</span>
-      <span className="block text-xs text-muted-foreground">Pick the posts worth answering; a comment is written for each for you to approve.</span>
+    <Link href="/admin/outreach/posts" className="block rounded-lg border border-border bg-card/70 px-4 py-3 text-sm hover:bg-card">
+      <span className="font-medium">
+        {waiting} Facebook post{waiting === 1 ? "" : "s"} of people asking for work, waiting for an answer
+      </span>
+      <span className="block text-xs text-muted-foreground">Take one and a comment is written for you with your own link. You post it from your own Facebook.</span>
     </Link>
   );
 }

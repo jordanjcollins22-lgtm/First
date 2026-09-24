@@ -1,5 +1,5 @@
-// The popup: what the agent is doing, three buttons, and a word when the
-// app wants a newer copy of the extension.
+// The popup: what the finder is doing, how many posts are waiting for the
+// team, two buttons, and a word when the app wants a newer copy.
 const APP = "https://app.jslandscapingmd.com";
 document.getElementById("settings").href = `${APP}/admin/outreach/agent`;
 
@@ -16,15 +16,16 @@ function render(snap) {
   const config = snap.config;
   const lines = [];
   if (config) {
-    if (config.active) lines.push("On.");
-    else lines.push(`Not posting: ${config.because}.`);
+    if (config.because === "paused") lines.push("Paused.");
+    else if (config.because === "outside hours") lines.push("Outside its hours.");
+    else lines.push("On. It only reads; it never comments.");
     const c = config.counts ?? {};
-    counts.textContent = `${c.postedToday ?? 0} posted today · ${c.postedThisHour ?? 0} this hour · ${snap.queue} approved and waiting · ${c.toReview ?? 0} for your OK · signed in as ${config.who ?? "?"}`;
+    counts.textContent = `Signed in as ${config.who ?? "?"}`;
     const review = document.getElementById("review");
-    if ((c.toReview ?? 0) > 0) {
+    if ((c.toAnswer ?? 0) > 0) {
       review.hidden = false;
-      review.href = config.reviewUrl || `${APP}/admin/outreach/agent#review`;
-      review.textContent = `Approve ${c.toReview} waiting comment${c.toReview === 1 ? "" : "s"}`;
+      review.href = config.postsUrl || `${APP}/admin/outreach/posts`;
+      review.textContent = `${c.toAnswer} post${c.toAnswer === 1 ? "" : "s"} waiting for an answer`;
     } else {
       review.hidden = true;
     }
@@ -56,10 +57,6 @@ ask({ type: "status" }).then(render);
 document.getElementById("look").addEventListener("click", async () => {
   document.getElementById("status").textContent = "Looking…";
   render(await ask({ type: "look-now" }));
-});
-document.getElementById("post").addEventListener("click", async () => {
-  document.getElementById("status").textContent = "Posting…";
-  render(await ask({ type: "post-now" }));
 });
 document.getElementById("hand").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

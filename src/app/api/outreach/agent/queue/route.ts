@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
-import { queuedForBrowser } from "@/lib/data/outreach-agent";
-import { DEFAULT_RECIPE } from "@/lib/outreach-agent-recipe";
 
 /**
- * The comments the browser should go and post, oldest first.
+ * The comments the browser should post: none, ever.
  *
- * The app holds the queue. A comment the agent wrote goes straight in when
- * the owner has said to post without asking, and waits for a tap on the
- * review list when they have not. Either way the browser reads this each
- * minute and posts the first one when the way is clear.
+ * The browser used to post the comments the app wrote, all from one
+ * account, and one account answering every lead in the county is the
+ * pattern Facebook bans. It only finds posts now; the team answers them
+ * from their own accounts off the Posts to answer board. Kept, and kept
+ * empty, because a copy of the extension from before the change still asks
+ * here each minute, and an empty answer is what stops it posting.
  */
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const profile = await getCurrentProfile();
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  const queue = await queuedForBrowser(profile.organization_id, DEFAULT_RECIPE.pacing.stalePostHours);
-  return NextResponse.json({ ok: true, queue });
+  return NextResponse.json({ ok: true, queue: [] });
 }

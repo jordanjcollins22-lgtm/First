@@ -60,11 +60,16 @@ export default async function OutreachPage({
       <header>
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-xl font-semibold">Link Tracking</h1>
-          {owner && (
-            <Link href="/admin/outreach/agent" className="text-xs text-muted-foreground hover:underline">
-              Group Agent →
+          <span className="flex gap-3">
+            <Link href="/admin/outreach/posts" className="text-xs font-medium hover:underline">
+              Posts to answer →
             </Link>
-          )}
+            {owner && (
+              <Link href="/admin/outreach/agent" className="text-xs text-muted-foreground hover:underline">
+                Group Agent →
+              </Link>
+            )}
+          </span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Every post, comment and message gets its own link. Screenshot what you are answering and the

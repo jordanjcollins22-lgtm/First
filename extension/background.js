@@ -1,12 +1,15 @@
-// The group agent, in the browser.
+// The group agent, in the browser: the finder.
 //
-// Once a minute an alarm fires and one small thing happens: a comment that
-// is due goes up, or one page gets looked at. Never both, never more than
-// one, so the browser is doing about what a person would be doing in the
-// same chair, only without forgetting. Everything that decides whether a
-// comment may go up — the sources, the caps, the hours, the pause — is
-// asked of the app each minute, so the only thing kept here is the queue
-// of comments the app has written and not yet posted.
+// Once a minute an alarm fires and at most one page gets looked at: the
+// groups feed, a search, or a listed group, whichever is most overdue.
+// Every post it reads is sent to the app, which sorts it and puts the
+// people asking for work on the team's Posts to answer board.
+//
+// It never comments, likes, shares or messages. One account answering
+// every lead in the county is what gets an account banned, so the
+// answering is done by people, each from their own account, off the board.
+// The only thing it presses on Facebook is a post's "Copy link", to bring
+// back a link for a post the page showed without one.
 //
 // Nothing here knows what a Facebook page looks like. Every selector and
 // every wait comes from the app in the "recipe", asked for each minute
@@ -24,6 +27,7 @@
 // with Facebook's. Close Chrome and it stops.
 
 const APP = "https://app.jslandscapingmd.com";
+const BOARD = `${APP}/admin/outreach/posts`;
 const API = `${APP}/api/outreach/agent`;
 const TICK = "agent-tick";
 const LOCK_MS = 3 * 60 * 1000;
@@ -36,6 +40,10 @@ async function arm() {
   const existing = await chrome.alarms.get(TICK);
   if (!existing) await chrome.alarms.create(TICK, { periodInMinutes: 1 });
 }
+
+chrome.notifications.onClicked.addListener((id) => {
+  if (id === "to-answer") chrome.tabs.create({ url: BOARD });
+});
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TICK) tick().catch((err) => setStatus(`Stopped on an error: ${err?.message ?? err}`));
@@ -50,10 +58,6 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       await chrome.storage.local.set({ scans: {} });
       await tick({ force: true });
       reply(await snapshot());
-    } else if (message?.type === "post-now") {
-      await chrome.storage.local.set({ nextPostAt: 0 });
-      await tick({ force: true });
-      reply(await snapshot());
     } else if (message?.type === "answer-by-hand") {
       await answerByHand(message.tabId);
       reply({ ok: true });
@@ -63,12 +67,10 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
 });
 
 async function snapshot() {
-  const store = await chrome.storage.local.get(["config", "queue", "nextPostAt", "status", "scans"]);
+  const store = await chrome.storage.local.get(["config", "status", "scans"]);
   return {
     version: VERSION,
     config: store.config ?? null,
-    queue: (store.queue ?? []).length,
-    nextPostAt: store.nextPostAt ?? 0,
     status: store.status ?? null,
     scans: store.scans ?? {},
   };
@@ -99,21 +101,9 @@ async function fetchConfig() {
   }
 }
 
-/** The comments the app says to post, oldest first. Empty when it cannot be reached. */
-async function fetchQueue() {
-  try {
-    const res = await fetch(`${API}/queue`, { credentials: "include", cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.queue ?? []).map((item) => ({ ...item, post: true }));
-  } catch {
-    return [];
-  }
-}
-
 /** The recipe the app sent, or the last one it sent, or nothing usable. */
 function recipeOf(config) {
-  return config?.recipe && config.recipe.scan && config.recipe.post && config.recipe.pacing ? config.recipe : null;
+  return config?.recipe && config.recipe.scan && config.recipe.pacing ? config.recipe : null;
 }
 
 /**
@@ -146,7 +136,7 @@ function scanTargets(settings, scans, force) {
 }
 
 async function tick(options = {}) {
-  const store = await chrome.storage.local.get(["lock", "queue", "nextPostAt", "scans"]);
+  const store = await chrome.storage.local.get(["lock", "scans"]);
   if (!options.force && store.lock && Date.now() - store.lock < LOCK_MS) return;
   await chrome.storage.local.set({ lock: Date.now() });
   try {
@@ -158,56 +148,26 @@ async function tick(options = {}) {
       return;
     }
 
-    // The app holds the queue: everything approved and not yet posted,
-    // whether approved by hand on a phone or straight away because the
-    // owner said to post without asking. Read fresh each minute, so a
-    // comment approved anywhere is posted here.
-    const queue = await fetchQueue();
-    await chrome.storage.local.set({ queue });
-
-    const toReview = config.counts?.toReview ?? 0;
-    const seenReview = (await chrome.storage.local.get("noticedReview")).noticedReview ?? 0;
-    if (toReview > 0 && toReview !== seenReview) {
-      chrome.notifications.create({
+    // Posts waiting for the team, said once each time the number grows,
+    // so whoever runs the finder knows there is answering to do.
+    const toAnswer = config.counts?.toAnswer ?? 0;
+    const noticed = (await chrome.storage.local.get("noticedToAnswer")).noticedToAnswer ?? 0;
+    if (toAnswer > noticed) {
+      chrome.notifications.create("to-answer", {
         type: "basic",
         iconUrl: "icons/icon128.png",
-        title: "Comments waiting for your OK",
-        message: `${toReview} written and waiting. Open the Group Agent page in the app to approve or decline.`,
+        title: "People asking for work",
+        message: `${toAnswer} post${toAnswer === 1 ? "" : "s"} waiting on the Posts to answer board. Click to open it.`,
       });
     }
-    await chrome.storage.local.set({ noticedReview: toReview });
+    await chrome.storage.local.set({ noticedToAnswer: toAnswer });
 
-    const paused = !config.active && config.because === "paused";
-    if (paused) {
+    if (!config.active && config.because === "paused") {
       await setStatus(`Paused. ${config.pauseReason ?? ""}`.trim());
       return;
     }
-    const outsideHours = !config.active && config.because === "outside hours";
-
-    // A comment first, when one is due and the app says the way is clear.
-    const due = Date.now() >= (store.nextPostAt ?? 0);
-    if (queue.length > 0 && config.active && (due || options.force)) {
-      const item = queue[0];
-      await setStatus(`Posting in ${item.groupName ?? "a group"}…`);
-      const outcome = await postOne(item, recipe);
-      await report(item, outcome);
-      const rest = queue.slice(1);
-      await chrome.storage.local.set({
-        queue: rest,
-        nextPostAt: Date.now() + delayMs(recipe),
-      });
-      await setStatus(
-        outcome.ok
-          ? `Posted in ${item.groupName ?? "a group"}. ${rest.length} waiting.`
-          : outcome.notMember
-            ? `Not a member of ${item.groupName ?? "that group"}; it's on the groups-to-join list.`
-            : `Couldn't post: ${outcome.error}`
-      );
-      return;
-    }
-
-    if (outsideHours) {
-      await setStatus(`Outside posting hours (${config.settings.activeFrom}–${config.settings.activeTo}). Looking again later.`);
+    if (!config.active && config.because === "outside hours") {
+      await setStatus(`Outside looking hours (${config.settings.activeFrom}–${config.settings.activeTo}). Looking again later.`);
       return;
     }
 
@@ -216,9 +176,7 @@ async function tick(options = {}) {
     const targets = scanTargets(config.settings, scans, options.force);
     const next = targets[0];
     if (!next) {
-      if (queue.length > 0 && !config.active) await setStatus(`${queue.length} waiting: ${config.because}.`);
-      else if (queue.length > 0) await setStatus(`${queue.length} waiting. Next one in about ${Math.max(1, Math.round(((store.nextPostAt ?? 0) - Date.now()) / 60000))} min.`);
-      else await setStatus("Nothing new. Looking again soon.");
+      await setStatus("Nothing due. Looking again soon.");
       return;
     }
 
@@ -239,44 +197,15 @@ async function tick(options = {}) {
     const answer = await sendCandidates(next, found);
     if (!answer) return;
     const stats = found.stats ?? {};
-    if (typeof answer.kept === "number") {
-      await setStatus(
-        `${next.name}: read ${stats.posts ?? 0} posts, ${answer.kept} new` +
-          ((answer.skipped ?? 0) > 0 ? `, ${answer.skipped} seen before` : "") +
-          ((answer.businesses ?? 0) > 0 ? `, ${answer.businesses} businesses saved` : "") +
-          ". New ones are sorted and waiting in the app."
-      );
-      return;
-    }
-    if (found.posts.length === 0) {
-      await setStatus(
-        `${next.name}: read ${stats.posts ?? 0} posts, ${stats.mentioned ?? 0} mentioned the work` +
-          ((stats.mentionedNoLink ?? 0) > 0 ? ` but ${stats.mentionedNoLink} had no link to open` : "") +
-          "." +
-          ((stats.posts ?? 0) === 0 ? ` The page may not have loaded (title "${found.group || ""}", ${stats.textChars ?? 0} characters of text).` : "")
-      );
-      return;
-    }
-    // The app keeps what it wrote: posted straight away or held for a yes,
-    // depending on the setting. Either way it comes back through the queue.
-    const actions = answer.actions ?? [];
-    const held = actions.filter((action) => !action.post).length;
-    const notMember = (answer.decided ?? []).filter((d) => d.decision === "not_member").length;
     await setStatus(
-      `${next.name}: read ${stats.posts ?? "?"} posts, ${found.posts.length} mentioned the work, ${actions.length} worth answering` +
-        (held > 0 ? ` (${held} waiting for your OK in the app)` : "") +
-        (notMember > 0 ? `, ${notMember} in groups you haven't joined` : "") +
-        `, ${answer.skipped ?? 0} seen before.`
+      `${next.name}: read ${stats.posts ?? 0} posts, ${answer.kept ?? 0} new` +
+        ((answer.skipped ?? 0) > 0 ? `, ${answer.skipped} seen before` : "") +
+        ((answer.businesses ?? 0) > 0 ? `, ${answer.businesses} businesses saved` : "") +
+        ". The ones asking for work are on the board."
     );
   } finally {
     await chrome.storage.local.set({ lock: 0 });
   }
-}
-
-function delayMs(recipe) {
-  const min = recipe.pacing.minDelaySeconds ?? 90;
-  const max = recipe.pacing.maxDelaySeconds ?? 300;
-  return (min + Math.floor(Math.random() * Math.max(1, max - min))) * 1000;
 }
 
 async function sendCandidates(target, found) {
@@ -302,28 +231,6 @@ async function sendCandidates(target, found) {
   } catch (err) {
     await setStatus(`Couldn't send the posts: ${err?.message ?? err}`);
     return null;
-  }
-}
-
-async function report(item, outcome) {
-  try {
-    await fetch(`${API}/posted`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        seenId: item.seenId,
-        linkId: item.linkId,
-        ok: Boolean(outcome.ok),
-        postedText: outcome.ok ? outcome.posted ?? item.comment : undefined,
-        error: outcome.ok ? undefined : outcome.error,
-        notMember: Boolean(outcome.notMember),
-        postUrl: item.url,
-        groupName: item.groupName ?? null,
-      }),
-    });
-  } catch (err) {
-    console.warn("Couldn't report:", err);
   }
 }
 
@@ -409,17 +316,8 @@ async function scanPage(target, keywords, recipe, asked = []) {
   }
 }
 
-async function postOne(item, recipe) {
-  try {
-    const result = await inTab(item.url, postComment, [item.comment, item.code, item.mention ?? null, recipe.post], recipe.post.settleMs, recipe.pacing.tabLoadTimeoutMs);
-    return result ?? { ok: false, error: "The page gave nothing back." };
-  } catch (err) {
-    return { ok: false, error: String(err?.message ?? err) };
-  }
-}
-
 // ---------------------------------------------------------------------------
-// The two things that run inside a Facebook page. Each is self-contained: it
+// What runs inside a Facebook page. It is self-contained: it
 // is copied into the page by name, so nothing outside it exists there. Every
 // selector and wait they use arrives in the recipe.
 // ---------------------------------------------------------------------------
@@ -650,108 +548,6 @@ async function scanPosts(keywords, r, asked) {
     // What the page looked like, so a look that found nothing can say why.
     stats: { ...stats, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
   };
-}
-
-/**
- * On a post's own page: mention the poster, put the comment in the box and
- * send it. A page with a "Join group" button and no box is a group the
- * account is not in, and says so rather than failing.
- */
-async function postComment(text, code, mention, r) {
-  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
-  const re = (p) => new RegExp(p, "i");
-  const boxLabel = re(r.commentBoxLabel);
-  const openLabel = re(r.openCommentLabel);
-  const joinLabel = re(r.joinButton);
-  const blockedRe = re(r.blocked);
-  const dialogText = () => {
-    const dialog = document.querySelector(r.dialog);
-    return dialog ? (dialog.innerText || "").trim() : "";
-  };
-  const findBox = () => {
-    const boxes = Array.from(document.querySelectorAll(r.commentBox));
-    const visible = boxes.filter((el) => el.getBoundingClientRect().height > 0);
-    return visible.find((el) => boxLabel.test(el.getAttribute("aria-label") || "") || boxLabel.test(el.getAttribute("aria-placeholder") || "")) || visible[0] || null;
-  };
-  const joinButton = () =>
-    Array.from(document.querySelectorAll('[role="button"], a[role="link"]')).find((el) => joinLabel.test((el.innerText || el.getAttribute("aria-label") || "").trim()));
-  const onPage = () => {
-    const box = findBox();
-    const inBox = box ? (box.innerText || "").includes(code) : false;
-    return (document.body.innerText || "").includes(code) && !inBox;
-  };
-
-  const already = dialogText();
-  if (already && blockedRe.test(already)) return { ok: false, error: already.slice(0, 300) };
-  if (onPage()) return { ok: true, posted: text, note: "It was already there." };
-
-  let box = findBox();
-  if (!box) {
-    const opener = Array.from(document.querySelectorAll('[role="button"]')).find((el) => openLabel.test((el.getAttribute("aria-label") || el.innerText || "").trim()));
-    if (opener) {
-      opener.click();
-      await sleep(r.afterOpenMs ?? 1500);
-      box = findBox();
-    }
-  }
-  if (!box) {
-    if (joinButton()) return { ok: false, notMember: true, error: "Not a member of this group." };
-    return { ok: false, error: `No comment box on this post.${already ? ` The page says: ${already.slice(0, 200)}` : ""}` };
-  }
-
-  box.scrollIntoView({ block: "center" });
-  box.focus();
-  await sleep(r.afterFocusMs ?? 500);
-
-  // The mention first: "@Name" typed, the picker given a moment, the poster
-  // picked from it. If no picker comes, the typed name stays as plain text,
-  // which still reads right.
-  let rest = text;
-  if (mention) {
-    const prefix = new RegExp(`^@${mention.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "i");
-    rest = text.replace(prefix, "");
-    document.execCommand("insertText", false, `@${mention}`);
-    await sleep(r.mentionWaitMs ?? 1800);
-    const options = Array.from(document.querySelectorAll(r.mentionOption)).filter((el) => el.getBoundingClientRect().height > 0);
-    const pick = options.find((el) => (el.innerText || "").toLowerCase().includes(mention.toLowerCase())) || options[0];
-    if (pick) {
-      pick.click();
-      await sleep(600);
-    }
-    document.execCommand("insertText", false, " ");
-    await sleep(300);
-  }
-  document.execCommand("insertText", false, rest);
-  await sleep(r.afterTypeMs ?? 800);
-  const head = rest.slice(0, 30);
-  if (!(box.innerText || "").includes(head)) {
-    const data = new DataTransfer();
-    data.setData("text/plain", rest);
-    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-    await sleep(r.afterTypeMs ?? 800);
-  }
-  if (!(box.innerText || "").includes(head)) return { ok: false, error: "Couldn't type into the comment box." };
-
-  await sleep((r.beforeSendMinMs ?? 1200) + Math.floor(Math.random() * (r.beforeSendJitterMs ?? 1500)));
-  for (const type of ["keydown", "keypress", "keyup"]) {
-    box.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
-  }
-  await sleep(r.afterSendMs ?? 2500);
-  if (!onPage()) {
-    const submit = document.querySelector(r.submitButton);
-    if (submit) {
-      submit.click();
-      await sleep(r.afterSendMs ?? 2500);
-    }
-  }
-  for (let i = 0; i < (r.verifyTries ?? 8); i += 1) {
-    if (onPage()) return { ok: true, posted: text };
-    const dialog = dialogText();
-    if (dialog && blockedRe.test(dialog)) return { ok: false, error: dialog.slice(0, 300) };
-    await sleep(1000);
-  }
-  const dialog = dialogText();
-  return { ok: false, error: `The comment didn't appear after sending.${dialog ? ` The page says: ${dialog.slice(0, 200)}` : ""}` };
 }
 
 // ---------------------------------------------------------------------------

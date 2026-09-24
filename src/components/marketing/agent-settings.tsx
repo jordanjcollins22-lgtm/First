@@ -13,9 +13,10 @@ import type { AgentGroup, AgentSettings, AgentSources } from "@/lib/outreach-age
 /**
  * The owner's controls for the group agent.
  *
- * Groups by link, the words a post has to contain, how many comments an
- * hour and a day, the hours it may post in, and whether it posts at all or
- * only writes. Saved as one thing, because they only make sense together.
+ * Where it looks, the words a post has to contain, how often and in what
+ * hours it looks, and how many posts one person may answer in a day. It
+ * never posts: the team answers from their own accounts off the board.
+ * Saved as one thing, because they only make sense together.
  */
 export function AgentSettingsForm({ settings, owner, paused }: { settings: AgentSettings; owner: boolean; paused: boolean }) {
   const [groups, setGroups] = useState<AgentGroup[]>(settings.groups.length > 0 ? settings.groups : [{ url: "", name: "" }]);
@@ -24,13 +25,9 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
   const [areaWords, setAreaWords] = useState(settings.areaWords.join(", "));
   const [keywords, setKeywords] = useState(settings.keywords.join(", "));
   const [dailyCap, setDailyCap] = useState(String(settings.dailyCap));
-  const [hourlyCap, setHourlyCap] = useState(String(settings.hourlyCap));
   const [activeFrom, setActiveFrom] = useState(settings.activeFrom);
   const [activeTo, setActiveTo] = useState(settings.activeTo);
   const [scanEvery, setScanEvery] = useState(String(settings.scanEveryMinutes));
-  const [maxAge, setMaxAge] = useState(String(settings.maxAgeDays));
-  const [autoPost, setAutoPost] = useState(settings.autoPost);
-  const [pickPosts, setPickPosts] = useState(settings.pickPosts);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -44,13 +41,15 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
         areaWords,
         keywords,
         dailyCap: Number(dailyCap),
-        hourlyCap: Number(hourlyCap),
+        hourlyCap: settings.hourlyCap,
         activeFrom,
         activeTo,
         scanEveryMinutes: Number(scanEvery),
-        maxAgeDays: Number(maxAge),
-        autoPost,
-        pickPosts,
+        maxAgeDays: settings.maxAgeDays,
+        // The browser only finds posts now. Every post is kept for the
+        // board, and nothing is posted from here.
+        autoPost: false,
+        pickPosts: true,
       });
       setMessage(result.ok ? "Saved. The browser picks it up within a minute." : result.error);
     });
@@ -161,35 +160,15 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Field label="Comments a day" value={dailyCap} onChange={setDailyCap} disabled={disabled} type="number" />
-        <Field label="Comments an hour" value={hourlyCap} onChange={setHourlyCap} disabled={disabled} type="number" />
+        <Field label="Answers a day, each person" value={dailyCap} onChange={setDailyCap} disabled={disabled} type="number" />
         <Field label="Look every (minutes)" value={scanEvery} onChange={setScanEvery} disabled={disabled} type="number" />
-        <Field label="Post from" value={activeFrom} onChange={setActiveFrom} disabled={disabled} type="time" />
-        <Field label="Post until" value={activeTo} onChange={setActiveTo} disabled={disabled} type="time" />
-        <Field label="Ignore posts older than (days)" value={maxAge} onChange={setMaxAge} disabled={disabled} type="number" />
+        <Field label="Look from" value={activeFrom} onChange={setActiveFrom} disabled={disabled} type="time" />
+        <Field label="Look until" value={activeTo} onChange={setActiveTo} disabled={disabled} type="time" />
       </div>
-
-      <label className="flex items-start gap-3 text-sm">
-        <Checkbox checked={pickPosts} disabled={disabled} onCheckedChange={(v) => setPickPosts(v === true)} className="mt-0.5" />
-        <span>
-          <span className="font-medium">Let me pick the posts.</span>
-          <span className="block text-xs text-muted-foreground">
-            On, and every post it reads shows under &ldquo;Posts it read&rdquo; for you to pick, and a comment is
-            written only for the ones you pick. Off, and it decides for itself which posts to answer.
-          </span>
-        </span>
-      </label>
-
-      <label className="flex items-start gap-3 text-sm">
-        <Checkbox checked={autoPost} disabled={disabled} onCheckedChange={(v) => setAutoPost(v === true)} className="mt-0.5" />
-        <span>
-          <span className="font-medium">Post without asking me.</span>
-          <span className="block text-xs text-muted-foreground">
-            Off, and every comment it writes waits under &ldquo;Comments to approve&rdquo; above until you approve it.
-            On, and it posts as soon as it has written one.
-          </span>
-        </span>
-      </label>
+      <p className="text-xs text-muted-foreground">
+        &ldquo;Answers a day&rdquo; is per person, from their own Facebook account. Keep it low: spreading the
+        answering across the team only protects the accounts if no one of them answers everything.
+      </p>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" onClick={save} disabled={disabled}>

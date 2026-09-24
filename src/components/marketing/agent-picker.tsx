@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ExternalLink, Loader2, PenLine, X } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { acceptAgentPost, passAgentPost, setAgentPostKind, sortAgentPosts } from "@/lib/actions/outreach-agent-actions";
+import { passAgentPost, setAgentPostKind, sortAgentPosts } from "@/lib/actions/outreach-agent-actions";
 import type { SeenRow } from "@/lib/data/outreach-agent";
 import { findPostUrl } from "@/lib/outreach-agent";
 import { shortWhen } from "@/lib/time-zone";
 
 /**
- * Every post the browser read, sorted, for the owner to pick from.
+ * Every post the browser read, sorted, for the owner to check.
  *
- * Three piles. People asking for work come first, and are the ones a
- * comment gets written for. Other posts are one tap away, in case the
+ * Three piles. People asking for work come first, and are the ones on the
+ * team's Posts to answer board. Other posts are one tap away, in case the
  * sort got one wrong. Adverts have already left: the business behind each
  * one is on the Businesses list. Any post can be moved to another pile,
  * and a move is kept as the owner's word.
@@ -36,16 +37,12 @@ export function AgentPicker({ rows }: { rows: SeenRow[] }) {
   for (const r of left) counts[kindOf(r)] += 1;
   const shown = left.filter((r) => kindOf(r) === pile);
 
-  function run(row: SeenRow, what: "accept" | "pass" | "ad" | "request" | "other") {
+  function run(row: SeenRow, what: "pass" | "ad" | "request" | "other") {
     setBusy(`${row.id}:${what}`);
     setErrors((e) => ({ ...e, [row.id]: "" }));
     startTransition(async () => {
       const result =
-        what === "accept"
-          ? await acceptAgentPost(row.id)
-          : what === "pass"
-            ? await passAgentPost(row.id)
-            : await setAgentPostKind({ seenId: row.id, kind: what === "ad" ? "promotion" : what });
+        what === "pass" ? await passAgentPost(row.id) : await setAgentPostKind({ seenId: row.id, kind: what === "ad" ? "promotion" : what });
       setBusy(null);
       if (!result.ok) {
         setErrors((e) => ({ ...e, [row.id]: result.error }));
@@ -67,7 +64,7 @@ export function AgentPicker({ rows }: { rows: SeenRow[] }) {
   }
 
   if (left.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nothing to pick yet. Press Look now in the extension and the posts it reads show up here.</p>;
+    return <p className="text-sm text-muted-foreground">Nothing read yet. Press Look now in the extension and the posts it reads show up here.</p>;
   }
 
   const tab = (key: Pile, label: string) => (
@@ -138,10 +135,11 @@ export function AgentPicker({ rows }: { rows: SeenRow[] }) {
               {row.url ? "Open the post" : "Find it on Facebook"} <ExternalLink className="h-3 w-3" />
             </a>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" disabled={busy !== null} onClick={() => run(row, "accept")}>
-                {busy === `${row.id}:accept` ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <PenLine className="mr-1 h-4 w-4" />}
-                {busy === `${row.id}:accept` ? "Writing…" : "Write a comment"}
-              </Button>
+              {here === "request" && (
+                <Link href="/admin/outreach/posts" className="text-xs font-medium underline">
+                  Answer it on the board
+                </Link>
+              )}
               <Button type="button" size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(row, "pass")}>
                 <X className="mr-1 h-4 w-4" /> Pass
               </Button>

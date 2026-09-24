@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "JS Landscaping: group agent",
-  "description": "Looks through your Facebook groups for neighbours asking for lawn and landscaping work, has the app write the comment with a tracked link, and posts it under the caps you set in the app.",
-  "version": "2.4.0",
+  "name": "JS Landscaping: post finder",
+  "description": "Reads your Facebook groups for neighbours asking for lawn and landscaping work and brings each post into the app for the team to answer. It never comments.",
+  "version": "2.5.0",
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "action": {
-    "default_title": "JS Landscaping group agent",
+    "default_title": "JS Landscaping post finder",
     "default_popup": "popup.html",
     "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" }
   },
