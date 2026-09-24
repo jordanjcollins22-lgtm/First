@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { sortForView, type BoardJob, type JobView } from "@/lib/job-board";
+import { needsScheduling, sortForView, type BoardJob, type JobView } from "@/lib/job-board";
+import { ScheduleJobButton } from "@/components/jobs/schedule-job-button";
 
 function when(value: string | null): string {
   if (!value) return "Not scheduled";
@@ -21,6 +22,7 @@ export function JobBoardList({
   view,
   waiting,
   empty,
+  canSchedule = false,
 }: {
   jobs: BoardJob[];
   view: JobView;
@@ -28,6 +30,8 @@ export function JobBoardList({
   waiting?: Map<string, string>;
   /** What to say when there is nothing, where the view has its own words. */
   empty?: string;
+  /** Show a Schedule button on signed jobs with no work day. */
+  canSchedule?: boolean;
 }) {
   const rows = sortForView(jobs, view);
 
@@ -47,10 +51,10 @@ export function JobBoardList({
   return (
     <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
       {rows.map((job) => (
-        <li key={job.id}>
+        <li key={job.id} className="hover:bg-accent">
           <Link
             href={`/jobs/${job.id}`}
-            className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2.5 hover:bg-accent"
+            className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2.5"
           >
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium">
@@ -69,10 +73,18 @@ export function JobBoardList({
               )}
             </span>
             <span className="shrink-0 text-right text-xs text-muted-foreground">
-              <span className="block">{when(view === "completed" ? job.completedAt : job.startsOn)}</span>
+              <span className="block">
+                {view === "completed" ? when(job.completedAt) : needsScheduling(job) ? "Not scheduled" : when(job.startsOn)}
+              </span>
               {job.assignedToName && <span className="block">{job.assignedToName}</span>}
             </span>
           </Link>
+          {/* Outside the link, so booking it doesn't open the job. */}
+          {canSchedule && needsScheduling(job) && (
+            <div className="px-3 pb-2.5">
+              <ScheduleJobButton jobId={job.id} />
+            </div>
+          )}
         </li>
       ))}
     </ul>

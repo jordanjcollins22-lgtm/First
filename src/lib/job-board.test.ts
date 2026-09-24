@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { jobsInView, sortForView, viewCounts, viewOf, type BoardJob } from "./job-board";
+import { jobsInView, needsScheduling, sortForView, viewCounts, viewOf, type BoardJob } from "./job-board";
 
 const job = (over: Partial<BoardJob>): BoardJob => ({
   id: "j",
@@ -85,5 +85,19 @@ describe("the order a view is read in", () => {
     const jobs = [job({ id: "b", startsOn: "2026-09-20" }), job({ id: "a", startsOn: "2026-09-01" })];
     sortForView(jobs, "upcoming");
     expect(jobs.map((j) => j.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("needsScheduling", () => {
+  it("is a signed job with no work day", () => {
+    expect(needsScheduling({ status: "approved", declined: false, workStartsOn: null })).toBe(true);
+  });
+  it("is not a job with a work day, even one still showing its evaluation date", () => {
+    expect(needsScheduling({ status: "approved", declined: false, workStartsOn: "2026-09-26" })).toBe(false);
+  });
+  it("is not work underway, finished, or declined", () => {
+    expect(needsScheduling({ status: "in_progress", workStartsOn: null })).toBe(false);
+    expect(needsScheduling({ status: "completed", workStartsOn: null })).toBe(false);
+    expect(needsScheduling({ status: "approved", declined: true, workStartsOn: null })).toBe(false);
   });
 });

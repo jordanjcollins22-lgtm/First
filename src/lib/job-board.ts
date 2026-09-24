@@ -32,6 +32,8 @@ export interface BoardJob {
   accountManagerId?: string | null;
   /** Start of the work, or the evaluation that is still standing in for it. */
   startsOn: string | null;
+  /** Start of the work alone: null until a work day is booked. */
+  workStartsOn?: string | null;
   completedAt: string | null;
   /** Somebody said this is not going ahead, whatever the status still says. */
   declined?: boolean;
@@ -105,4 +107,13 @@ export function sortForView(jobs: readonly BoardJob[], view: JobView): BoardJob[
  */
 export function isTheirs(item: { assignedToId?: string | null; accountManagerId?: string | null }, profileId: string): boolean {
   return item.assignedToId === profileId || item.accountManagerId === profileId;
+}
+
+/**
+ * Sold and waiting on a date: the proposal is signed and no work day is
+ * booked. `startsOn` cannot answer this, because it stands in with the
+ * evaluation date until the work has one of its own.
+ */
+export function needsScheduling(job: Pick<BoardJob, "status" | "declined" | "workStartsOn">): boolean {
+  return job.status === "approved" && !job.declined && !job.workStartsOn;
 }

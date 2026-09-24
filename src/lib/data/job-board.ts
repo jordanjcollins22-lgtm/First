@@ -47,6 +47,7 @@ export async function listBoardJobs(): Promise<BoardJob[]> {
     assignedToId: row.assigned_to,
     accountManagerId: row.properties?.customers?.account_manager_id ?? null,
     startsOn: row.project_start_date ?? row.evaluation_date ?? null,
+    workStartsOn: row.project_start_date,
     declined: Boolean(row.declined_at),
     completedAt: row.completed_at,
   }));

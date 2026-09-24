@@ -18,7 +18,7 @@ import { CrewLeaderboard } from "@/components/crew/crew-leaderboard";
 import { getCrewBoards } from "@/lib/data/crew-leaderboard";
 import { LeaderboardsView } from "@/components/leaderboards/leaderboards-view";
 import { getEvaluationBoards } from "@/lib/data/evaluation-leaderboard";
-import { canSeeCompanyMoney } from "@/lib/roles";
+import { canRunJobs, canSeeCompanyMoney } from "@/lib/roles";
 import { getCrewsToday } from "@/lib/data/crews-today";
 import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/open-time";
@@ -43,6 +43,8 @@ import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
 import { countOpenPosts } from "@/lib/data/post-board";
+import { listBoardJobs } from "@/lib/data/job-board";
+import { needsScheduling } from "@/lib/job-board";
 import { checkTabAccess } from "@/lib/data/access";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
@@ -280,6 +282,13 @@ async function OfficeDay() {
         </Suspense>
       )}
 
+      {/* Sold work with no date. One line and a link, for whoever books it. */}
+      {canRunJobs(profile.roles) && (
+        <Suspense fallback={null}>
+          <ToScheduleBlock />
+        </Suspense>
+      )}
+
       {/* Facebook posts the finder brought in, waiting for somebody on the
           team to answer. One line and a link: the answering happens on the
           board itself. */}
@@ -387,6 +396,27 @@ async function RouteApprovalBlock() {
   });
   if (!view) return null;
   return <RouteApprovalWizard view={view} />;
+}
+
+async function ToScheduleBlock() {
+  const jobs = await listBoardJobs().catch(() => []);
+  const waiting = jobs.filter(needsScheduling);
+  if (waiting.length === 0) return null;
+  const names = waiting.slice(0, 3).map((j) => j.customerName ?? "a client").join(", ");
+  return (
+    <Link
+      href="/operations?tab=jobs&view=schedule"
+      className="block rounded-lg border border-amber-300/70 bg-amber-50/70 px-4 py-3 text-sm hover:bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30"
+    >
+      <span className="font-medium">
+        {waiting.length} signed job{waiting.length === 1 ? "" : "s"} waiting for a date
+      </span>
+      <span className="block text-xs text-muted-foreground">
+        {names}
+        {waiting.length > 3 ? ` and ${waiting.length - 3} more` : ""}. Tap to schedule.
+      </span>
+    </Link>
+  );
 }
 
 async function PostsToAnswerBlock() {

@@ -15,7 +15,7 @@ import { jobStanding } from "@/lib/data/job-readiness";
 import { getCrewBoards } from "@/lib/data/crew-leaderboard";
 import { getAllowedTabs } from "@/lib/data/access";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
-import { isTheirs, jobsInView, sortForView, type BoardJob } from "@/lib/job-board";
+import { isTheirs, jobsInView, needsScheduling, sortForView, type BoardJob } from "@/lib/job-board";
 import { subtabsFor } from "@/lib/modules";
 import { evaluatorOptions, roleViewFor } from "@/lib/affiliate-roles";
 import { canRunJobs, isOwnerLevel } from "@/lib/roles";
@@ -97,17 +97,35 @@ async function JobsTab({ profile, onlyTheirs, initial }: { profile: Profile | nu
   const attention: BoardJob[] = standing ? sortForView(jobs.filter((job) => standing.attention.has(job.id)), "upcoming") : [];
   const active = jobsInView(jobs, "active");
   const completed = jobsInView(jobs, "completed");
+  // Signed and waiting on a date. First, and open by default while there are
+  // any: a sold job nobody has booked is money sitting still.
+  const toSchedule = upcoming.filter(needsScheduling);
+  const canSchedule = Boolean(profile && canRunJobs(profile.roles));
 
   return (
     <JobViews
-      initial={initial}
+      initial={initial ?? (toSchedule.length > 0 ? "schedule" : null)}
       views={[
+        {
+          key: "schedule",
+          label: "To schedule",
+          count: toSchedule.length,
+          blurb: "Signed, and no work day booked yet. Press Schedule to put it on the calendar.",
+          content: (
+            <JobBoardList
+              jobs={toSchedule}
+              view="upcoming"
+              canSchedule={canSchedule}
+              empty="Every signed job has a date."
+            />
+          ),
+        },
         {
           key: "upcoming",
           label: "Upcoming",
           count: upcoming.length,
           blurb: "Sold work, scheduled or waiting to be.",
-          content: <JobBoardList jobs={upcoming} view="upcoming" waiting={standing?.line} />,
+          content: <JobBoardList jobs={upcoming} view="upcoming" waiting={standing?.line} canSchedule={canSchedule} />,
         },
         {
           key: "ready",

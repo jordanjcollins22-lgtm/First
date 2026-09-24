@@ -106,6 +106,7 @@ import { JobCommissionPanel } from "@/components/payments/job-commission";
 import { requireJobAccess } from "@/lib/data/access";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { EvaluatorPicker } from "@/components/jobs/evaluator-picker";
+import { ScheduleJobButton } from "@/components/jobs/schedule-job-button";
 import { evaluatorOptions } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
 import { readDay } from "@/lib/crew-day";
@@ -595,6 +596,15 @@ export default async function JobPage({
           </Link>
         </div>
       </div>
+
+      {/* Signed and not on the calendar: the one thing this job needs next,
+          so it leads the page for whoever can book it. */}
+      {job.status === "approved" && !alreadyScheduled && viewer && canRunJobs(viewer.roles) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300/70 bg-amber-50/70 px-4 py-3 dark:border-amber-500/40 dark:bg-amber-950/30">
+          <p className="text-sm font-medium">Signed, and not scheduled yet.</p>
+          <ScheduleJobButton jobId={jobId} />
+        </div>
+      )}
 
       <JobSummary items={outstanding} />
 
