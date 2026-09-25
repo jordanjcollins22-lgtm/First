@@ -15,6 +15,7 @@ import {
   type ReminderSubject,
 } from "@/lib/client-reminders";
 import { composeReminder, fitSms, sayWhen } from "@/lib/client-message-templates";
+import { BUSINESS_TIME_ZONE, zonedToUtc } from "@/lib/time-zone";
 import {
   alreadySent,
   contactsFor,
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
         {
           businessName: org.name,
           clientName: contact.name,
-          when: facts.when ? sayWhen(facts.when, window.timeZone, now) : null,
+          when: facts.when ? sayWhen(facts.when, window.timeZone, now, { dayOnly: facts.dayOnly }) : null,
           address: facts.address,
           link: facts.link ? `${origin}${facts.link}` : null,
           amount: facts.amount,
@@ -185,6 +186,8 @@ export async function GET(request: NextRequest) {
 interface SubjectWithFacts {
   subject: ReminderSubject;
   when: Date | null;
+  /** A day with no time on it: a work day, not an appointment. */
+  dayOnly?: boolean;
   address: string | null;
   link: string | null;
   amount: string | null;
@@ -278,7 +281,10 @@ async function subjectsFor(
     }
 
     if (job.project_start_date) {
-      const anchor = new Date(job.project_start_date);
+      // The work day's morning, on the business's clock. Read as a bare date
+      // it was midnight UTC, which is eight the evening before here: the
+      // reminder fired a day early and said "today at 8pm".
+      const anchor = zonedToUtc(job.project_start_date.slice(0, 10), "08:00", BUSINESS_TIME_ZONE);
       out.push({
         subject: {
           kind: "job_start_reminder",
@@ -288,6 +294,7 @@ async function subjectsFor(
           settled: Boolean(job.completed_at),
         },
         when: anchor,
+        dayOnly: true,
         address: property.address,
         link: null,
         amount: null,

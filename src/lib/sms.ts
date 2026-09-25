@@ -29,6 +29,13 @@ export async function sendSms(to: string, body: string, who: { name?: string | n
   // No Twilio line of our own: the number GoHighLevel holds for us sends
   // it, into the same conversation the office reads there.
   if (!isTwilioConfigured && isGhlConfigured) {
+    // Belt and braces: isSmsConfigured is already false while texting
+    // through GoHighLevel is off, but nothing should reach its number
+    // however this was called.
+    if (!env.ghlTextsEnabled) {
+      log.info("sms.skipped", { to: maskPhone(to), via: "ghl", reason: "ghl_texts_off" });
+      return;
+    }
     try {
       const [firstName, ...rest] = (who.name ?? "").trim().split(/\s+/).filter(Boolean);
       const contactId = await upsertContact({ firstName: firstName || "Client", lastName: rest.join(" "), email: null, phone: to, address: null });

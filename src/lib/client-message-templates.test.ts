@@ -128,3 +128,18 @@ describe("how a moment reads in a message", () => {
     expect(sayWhen(new Date("2026-03-11T13:00:00Z"), ZONE, NOW)).toContain("9am");
   });
 });
+
+describe("sayWhen for a work day", () => {
+  const tz = "America/New_York";
+  // Friday morning, the day before a Saturday job.
+  const now = new Date("2026-09-25T12:29:00Z");
+  it("names the day and never invents a time", () => {
+    const saturdayMorning = new Date("2026-09-26T12:00:00Z");
+    expect(sayWhen(saturdayMorning, tz, now, { dayOnly: true })).toBe("tomorrow");
+    expect(sayWhen(new Date("2026-09-29T12:00:00Z"), tz, now, { dayOnly: true })).toBe("Tuesday");
+    expect(sayWhen(new Date("2026-10-07T12:00:00Z"), tz, now, { dayOnly: true })).toBe("Wednesday, October 7");
+  });
+  it("was the bug: a bare date read as midnight UTC is 8pm the evening before", () => {
+    expect(sayWhen(new Date("2026-09-26"), tz, now)).toBe("today at 8pm");
+  });
+});

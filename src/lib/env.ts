@@ -75,6 +75,8 @@ export const env = {
   ghlApiKey: process.env.GHL_API_KEY ?? "",
   ghlLocationId: process.env.GHL_LOCATION_ID ?? "",
   ghlCalendarId: process.env.GHL_CALENDAR_ID ?? "",
+  /** "true" to let texts go out through GoHighLevel's number. Off unless set. */
+  ghlTextsEnabled: process.env.GHL_TEXTS_ENABLED === "true",
   // Sends the evaluation emails from the business's own Gmail, so replies
   // land in the inbox the office already reads. The address, and a Google
   // app password for it (two-step verification has to be on).
@@ -100,8 +102,14 @@ export const isTwilioConfigured = Boolean(env.twilioAccountSid && env.twilioAuth
 /**
  * Whether a text can reach a client at all: our own Twilio line, or the
  * number GoHighLevel holds for us, which its API will send from.
+ *
+ * GoHighLevel's number only when GHL_TEXTS_ENABLED is "true". An automatic
+ * reminder went out through it telling a client his Saturday job started
+ * "today at 8pm", so texting through it is off until somebody turns it back
+ * on on purpose. Off, the app behaves as it does with no text line at all:
+ * client reminders skip the text, and team alerts go by email instead.
  */
-export const isSmsConfigured = isTwilioConfigured || Boolean(env.ghlApiKey && env.ghlLocationId);
+export const isSmsConfigured = isTwilioConfigured || Boolean(env.ghlApiKey && env.ghlLocationId && env.ghlTextsEnabled);
 export const isStripeConfigured = Boolean(env.stripeSecretKey);
 /** Reading the bank. Without it the cash on hand is typed in by hand. */
 export const isPlaidConfigured = Boolean(env.plaidClientId && env.plaidSecret);

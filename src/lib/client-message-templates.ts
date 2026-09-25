@@ -137,7 +137,7 @@ export function fitSms(text: string, limit = SMS_LIMIT): string {
 }
 
 /** How a moment reads in a message, in the client's own words. */
-export function sayWhen(at: Date, timeZone: string, now: Date): string {
+export function sayWhen(at: Date, timeZone: string, now: Date, options: { dayOnly?: boolean } = {}): string {
   const day = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "long" }).format(at);
   const time = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" })
     .format(at)
@@ -148,6 +148,15 @@ export function sayWhen(at: Date, timeZone: string, now: Date): string {
 
   const dayOf = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone }).format(d);
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  // A work day has a date and no time. Saying a time for it invents one: a
+  // job booked for Saturday went out as "today at 8pm", which was the
+  // midnight the date was read as, in the wrong time zone.
+  if (options.dayOnly) {
+    if (dayOf(at) === dayOf(now)) return "today";
+    if (dayOf(at) === dayOf(tomorrow)) return "tomorrow";
+    const away = (new Date(dayOf(at)).getTime() - new Date(dayOf(now)).getTime()) / (24 * 60 * 60 * 1000);
+    return away > 0 && away < 7 ? day : `${day}, ${date}`;
+  }
   if (dayOf(at) === dayOf(now)) return `today at ${time}`;
   if (dayOf(at) === dayOf(tomorrow)) return `tomorrow at ${time}`;
 
