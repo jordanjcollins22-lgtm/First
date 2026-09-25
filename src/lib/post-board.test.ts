@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ageNow, standingFor, stillFresh, whyNotTake, type BoardAnswer } from "./post-board";
+import { ageNow, isPostLink, standingFor, stillFresh, whyNotTake, type BoardAnswer } from "./post-board";
 
 const now = new Date("2026-09-24T18:00:00Z");
 
@@ -76,5 +76,23 @@ describe("age", () => {
     expect(ageNow(null, "2026-09-24T10:00:00Z", now)).toBe(0);
     expect(stillFresh(0, "2026-09-01T00:00:00Z", now)).toBe(false);
     expect(stillFresh(1, "2026-09-22T00:00:00Z", now)).toBe(true);
+  });
+});
+
+describe("isPostLink", () => {
+  it("takes a link to the post itself", () => {
+    expect(isPostLink("https://www.facebook.com/groups/harfordhappenings/posts/1234567890/")).toBe(true);
+    expect(isPostLink("https://www.facebook.com/groups/123/permalink/456/")).toBe(true);
+    expect(isPostLink("https://www.facebook.com/share/p/1AbCdEfGh/")).toBe(true);
+    expect(isPostLink("https://www.facebook.com/permalink.php?story_fbid=123&id=456")).toBe(true);
+    expect(isPostLink("https://m.facebook.com/HarfordLawnCare/posts/pfbid02abc")).toBe(true);
+  });
+  it("refuses no link, a search, a group's front page and somebody's profile", () => {
+    expect(isPostLink("")).toBe(false);
+    expect(isPostLink(null)).toBe(false);
+    expect(isPostLink("https://www.facebook.com/search/posts?q=need%20a%20landscaper")).toBe(false);
+    expect(isPostLink("https://www.facebook.com/groups/harfordhappenings/")).toBe(false);
+    expect(isPostLink("https://www.facebook.com/profile.php?id=100000")).toBe(false);
+    expect(isPostLink("https://evil.example.com/groups/1/posts/2")).toBe(false);
   });
 });

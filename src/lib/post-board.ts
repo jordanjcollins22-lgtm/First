@@ -133,3 +133,31 @@ export function ageNow(ageDaysWhenRead: number | null, readAt: string, now: Date
 export function stillFresh(ageDaysWhenRead: number | null, readAt: string, now: Date): boolean {
   return ageNow(ageDaysWhenRead, readAt, now) <= BOARD_MAX_AGE_DAYS;
 }
+
+/**
+ * Whether a link opens the post itself.
+ *
+ * A post the page showed without a link used to go on the board with a
+ * Facebook search for its words instead, and the search almost never found
+ * it: the person pressing "Open the post" landed on a page of other people's
+ * posts. Only a link to the post counts -- a group post, a permalink, a page
+ * post, or the short link Facebook's Share menu copies. A group's front page
+ * or somebody's profile is not the post.
+ */
+export function isPostLink(url: string | null | undefined): boolean {
+  if (!url) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" || !/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
+  const path = parsed.pathname;
+  return (
+    /\/groups\/[^/]+\/(posts|permalink)\/\d+/i.test(path) ||
+    /\/share\/(p|r|v)?\/?[A-Za-z0-9]+/i.test(path) ||
+    /\/[^/]+\/posts\/[A-Za-z0-9]+/i.test(path) ||
+    (/\/permalink\.php$|\/story\.php$/i.test(path) && parsed.searchParams.has("story_fbid"))
+  );
+}

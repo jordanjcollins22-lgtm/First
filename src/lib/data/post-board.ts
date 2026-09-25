@@ -4,6 +4,7 @@ import { findPostUrl } from "@/lib/outreach-agent";
 import {
   BOARD_MAX_AGE_DAYS,
   ageNow,
+  isPostLink,
   standingFor,
   stillFresh,
   type AnswerStatus,
@@ -106,14 +107,18 @@ async function answersFor(organizationId: string, postIds: string[]): Promise<Ma
 export async function getPostBoard(organizationId: string, profileId: string, now: Date = new Date()): Promise<BoardPost[]> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return posts.map((row) => {
+  // Only posts that can be opened. One without a working link stays off the
+  // board until the finder brings its link back, unless somebody already
+  // took it, who still needs to see what they took.
+  const shown = posts.filter((row) => isPostLink(row.url) || (answers.get(row.id) ?? []).some((a) => a.status !== "let_go"));
+  return shown.map((row) => {
     const list = answers.get(row.id) ?? [];
     const standing = standingFor(list, profileId, now);
     const text = row.text ?? "";
     return {
       id: row.id,
-      link: row.url || findPostUrl(text),
-      hasUrl: Boolean(row.url),
+      link: isPostLink(row.url) ? row.url : findPostUrl(text),
+      hasUrl: isPostLink(row.url),
       groupName: row.group_name,
       author: row.author,
       text,
@@ -134,7 +139,7 @@ export async function getPostBoard(organizationId: string, profileId: string, no
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return posts.filter((p) => standingFor(answers.get(p.id) ?? [], "", now).others.length === 0).length;
+  return posts.filter((p) => isPostLink(p.url) && standingFor(answers.get(p.id) ?? [], "", now).others.length === 0).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */

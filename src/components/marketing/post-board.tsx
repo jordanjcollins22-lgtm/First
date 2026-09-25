@@ -85,7 +85,7 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
     } catch {
       setErrors((e) => ({ ...e, [post.id]: "Couldn't copy. Press and hold the comment to copy it by hand." }));
     }
-    window.open(post.link, "_blank", "noopener");
+    if (post.hasUrl) window.open(post.link, "_blank", "noopener");
   }
 
   const tabButton = (key: Tab, label: string) => (
@@ -154,9 +154,13 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
                 </button>
               )}
             </p>
-            <a href={post.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs underline">
-              {post.hasUrl ? "Open the post" : "Find it on Facebook"} <ExternalLink className="h-3 w-3" />
-            </a>
+            {/* Only a link that opens the post. A search for its words almost
+                never found it, so a post without one shows no link at all. */}
+            {post.hasUrl && (
+              <a href={post.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs underline">
+                Open the post <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
 
             {post.others.length > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -181,7 +185,7 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
                   <>
                     <div className="flex flex-wrap items-center gap-2">
                       <Button type="button" size="sm" onClick={() => copyAndOpen(post, comment)}>
-                        <Copy className="mr-1 h-4 w-4" /> Copy &amp; open the post
+                        <Copy className="mr-1 h-4 w-4" /> {post.hasUrl ? <>Copy &amp; open the post</> : "Copy comment"}
                       </Button>
                       <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => act(post, "posted")}>
                         {busy === `${post.id}:posted` ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}

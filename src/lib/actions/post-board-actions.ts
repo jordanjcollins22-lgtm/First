@@ -7,7 +7,7 @@ import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings, getSeen, setPicked } from "@/lib/data/outreach-agent";
 import { answeredToday, answersToPost } from "@/lib/data/post-board";
 import { mentionComment } from "@/lib/outreach-agent";
-import { whyNotTake } from "@/lib/post-board";
+import { isPostLink, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import { createClient } from "@/lib/supabase/server";
@@ -45,6 +45,7 @@ export async function takePost(seenId: string): Promise<TakeResult> {
   const row = await getSeen(org, seenId);
   if (!row || row.decision !== "read") return { ok: false, error: "That post isn't on the board any more." };
   if (!row.text) return { ok: false, error: "There are no words on that post to answer." };
+  if (!isPostLink(row.url)) return { ok: false, error: "That post has no working link yet, so it can't be answered from here." };
 
   const now = new Date();
   const [answers, today, settings] = await Promise.all([answersToPost(org, seenId), answeredToday(org, profile.id, now), getAgentSettings(org)]);
