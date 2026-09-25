@@ -10,6 +10,7 @@ import { validateSession } from "@/lib/scheduling";
 import { getBusyBlocks } from "@/lib/data/busy";
 import { conflictFor, describeConflict } from "@/lib/busy";
 import { canRescheduleJob } from "@/lib/job-lifecycle";
+import { daysNotWorked, describeDayNotWorked } from "@/lib/crew-availability";
 import type {
   JobStatus,
   TicketCause,
@@ -22,6 +23,7 @@ export type SessionResult = { ok: true; message?: string } | { ok: false; messag
 
 function refresh(jobId: string) {
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/my-day");
   revalidatePath("/attractors");
   revalidatePath("/evaluations");
   revalidatePath("/pipeline");
@@ -56,6 +58,21 @@ async function crewClash(
   // Nobody on it yet means nobody to double-book. Jobs are routinely booked
   // before the crew is picked, and refusing that would be wrong.
   if (people.size === 0) return null;
+
+  // Somebody booked on a day they have said they do not work. Their weekly
+  // hours are what they put in on My Day; nobody with none set is refused.
+  const { data: weekly } = await supabase
+    .from("availability_weekly")
+    .select("profile_id, day_of_week")
+    .in("profile_id", [...people]);
+  for (const profileId of people) {
+    const theirs = (weekly ?? []).filter((w) => (w as { profile_id: string }).profile_id === profileId) as { day_of_week: number }[];
+    const off = daysNotWorked(theirs, startsOn, endsOn);
+    if (off.length === 0) continue;
+    const { data: person } = await supabase.from("profiles").select("full_name, email").eq("id", profileId).maybeSingle();
+    const p = person as { full_name: string | null; email: string } | null;
+    return describeDayNotWorked(p?.full_name || p?.email || "Somebody on the crew", off[0]);
+  }
 
   // Other work days are not a clash. One person works several jobs in a
   // day and the stops are ordered; only an evaluation they are running or

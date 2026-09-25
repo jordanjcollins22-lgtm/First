@@ -35,7 +35,9 @@ import { getDayLoadout, getShopDay, getSiteMaps, whoIsAtTheShop } from "@/lib/da
 import { canLead } from "@/lib/shop-flow";
 import { ClockControl } from "@/components/crew/clock-control";
 import { myOpenEntry } from "@/lib/data/time-clock";
-import type { Profile } from "@/types/domain";
+import type { Profile, WeeklyAvailability } from "@/types/domain";
+import { WeeklyAvailabilityEditor } from "@/components/evaluations/weekly-availability";
+import { DaysOffEditor } from "@/components/team/days-off-editor";
 import { getDashboard, loadJobInputs } from "@/lib/data/dashboard";
 import { getCommissionFor } from "@/lib/data/commission";
 import { buildMyWork, type MyWork } from "@/lib/my-work";
@@ -170,6 +172,20 @@ export default async function MyDayPage() {
               </Suspense>
             ),
           },
+          // The days somebody is booked on, and the days and hours they can
+          // work. The crew put their own in here; bookings are checked
+          // against it, so a job can't land on a day they said they're off.
+          {
+            key: "schedule",
+            label: "My schedule",
+            visible: Boolean(viewer) && !(viewer && isGrowthOnly(viewer.roles)),
+            blurb: "The days you're booked on, the hours you work, and the days you can't.",
+            content: viewer ? (
+              <Suspense fallback={<TabLoading />}>
+                <MyScheduleTab profile={viewer} />
+              </Suspense>
+            ) : null,
+          },
           // Personal settings on the personal screen. They were a nav entry
           // of their own for something nobody opens twice a year.
           {
@@ -183,6 +199,83 @@ export default async function MyDayPage() {
             ),
           },
         ]}
+      />
+    </div>
+  );
+}
+
+/**
+ * My schedule: the work days this person is booked on, then their weekly
+ * hours and their days off, both theirs to change.
+ */
+async function MyScheduleTab({ profile }: { profile: Profile }) {
+  const supabase = await createClient();
+  const today = dateKeyIn(new Date());
+  const [{ data: weekly }, { data: daysOff }, { data: crewRows }] = await Promise.all([
+    supabase.from("availability_weekly").select("*").eq("profile_id", profile.id),
+    supabase
+      .from("availability_days_off")
+      .select("date, start_time, end_time, reason")
+      .eq("profile_id", profile.id)
+      .gte("date", today)
+      .order("date"),
+    supabase.from("job_crew").select("job_id").eq("profile_id", profile.id),
+  ]);
+  const jobIds = (crewRows ?? []).map((r) => (r as { job_id: string }).job_id);
+  const { data: sessions } = jobIds.length
+    ? await supabase
+        .from("job_work_sessions")
+        .select("id, job_id, starts_on, ends_on, status, purpose, jobs(name, properties(address))")
+        .in("job_id", jobIds)
+        .neq("status", "cancelled")
+        .gte("ends_on", today)
+        .order("starts_on")
+        .limit(30)
+    : { data: [] };
+  const workDays = (sessions ?? []) as unknown as {
+    id: string;
+    job_id: string;
+    starts_on: string;
+    ends_on: string;
+    purpose: string | null;
+    jobs: { name: string; properties: { address: string } | null } | null;
+  }[];
+  const day = (d: string) =>
+    new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+
+  return (
+    <div className="flex flex-col gap-6">
+      <section>
+        <p className="mb-2 text-sm font-semibold text-muted-foreground">Days you&apos;re booked on</p>
+        {workDays.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nothing booked yet. Work days show here as soon as you&apos;re put on a job.</p>
+        ) : (
+          <ul className="divide-y divide-border/60 rounded-lg border border-border bg-card/60">
+            {workDays.map((w) => (
+              <li key={w.id}>
+                <Link href={`/jobs/${w.job_id}`} className="flex flex-col px-3 py-2 text-sm hover:bg-accent">
+                  <span className="font-medium">
+                    {day(w.starts_on)}
+                    {w.ends_on !== w.starts_on ? ` – ${day(w.ends_on)}` : ""}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {w.jobs?.properties?.address?.split(",").slice(0, 2).join(",") ?? w.jobs?.name ?? "A job"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <WeeklyAvailabilityEditor myAvailability={(weekly ?? []) as unknown as WeeklyAvailability[]} />
+      <DaysOffEditor
+        today={today}
+        daysOff={(daysOff ?? []).map((d) => ({
+          date: (d as { date: string }).date,
+          startTime: (d as { start_time: string | null }).start_time?.slice(0, 5) ?? null,
+          endTime: (d as { end_time: string | null }).end_time?.slice(0, 5) ?? null,
+          reason: (d as { reason: string | null }).reason,
+        }))}
       />
     </div>
   );

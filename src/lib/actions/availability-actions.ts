@@ -47,6 +47,7 @@ export async function saveWeeklyAvailability(days: WeeklyAvailabilityDayInput[])
   }
 
   revalidatePath("/evaluations");
+  revalidatePath("/my-day");
 }
 
 export async function addDayOff(
@@ -82,6 +83,7 @@ export async function addDayOff(
     );
   if (error) throw error;
   revalidatePath("/evaluations");
+  revalidatePath("/my-day");
 }
 
 export async function removeDayOff(date: string) {
@@ -96,4 +98,5 @@ export async function removeDayOff(date: string) {
     .eq("date", date);
   if (error) throw error;
   revalidatePath("/evaluations");
+  revalidatePath("/my-day");
 }
