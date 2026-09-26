@@ -99,7 +99,17 @@ describe("the details that set the price", () => {
 
   it("asks no more than two things about any one kind of work", () => {
     const services = INTAKE_QUESTIONS[0].options!.map((o) => o.value);
-    for (const s of services) expect(detailQuestionsFor([s]).filter((q) => q.services !== null).length, s).toBeLessThanOrEqual(2);
+    // Follow-ups that only appear after an answer (which mulch, sod or seed) are not counted.
+    for (const s of services) expect(detailQuestionsFor([s]).filter((q) => q.services !== null && !q.showIf).length, s).toBeLessThanOrEqual(2);
+  });
+
+  it("asks which mulch or rock only once they pick it, with a photo of each", () => {
+    expect(detailQuestionsFor(["beds"], { beds_add: ["plants"] }).map((q) => q.id)).toEqual(["beds_now", "beds_add", "yard"]);
+    expect(detailQuestionsFor(["beds"], { beds_add: ["mulch", "stone"] }).map((q) => q.id)).toEqual(["beds_now", "beds_add", "mulch_color", "bed_stone", "yard"]);
+    const mulch = DETAIL_QUESTIONS.find((q) => q.id === "mulch_color")!;
+    expect(mulch.options!.filter((o) => o.image).map((o) => o.label)).toEqual(["Brown", "Black", "Natural"]);
+    const stone = DETAIL_QUESTIONS.find((q) => q.id === "bed_stone")!;
+    expect(stone.options!.every((o) => o.value === "unsure" || /river-rock/.test(o.image ?? ""))).toBe(true);
   });
 
   it("asks sod or seed only when the lawn is being repaired", () => {

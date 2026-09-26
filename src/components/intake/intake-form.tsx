@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { ArrowLeft, Camera, CheckCircle2, ChevronDown, Loader2, MessageCircleQuestion, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -439,6 +440,9 @@ function Question({
           className="text-base"
         />
       ) : (
+        (options ?? []).some((o) => o.image) ? (
+          <PhotoChoices options={options ?? []} picked={picked} disabled={disabled} onChoose={(v) => onChoose(v, kind === "single")} />
+        ) : (
         <div className="flex flex-col gap-1.5">
           {(options ?? []).map((option) => (
             <button
@@ -457,9 +461,81 @@ function Question({
             </button>
           ))}
         </div>
+        )
       )}
 
       {children}
+    </div>
+  );
+}
+
+/** Where a choice's photo lives: the public material-images bucket. */
+function photoUrl(path: string): string {
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/material-images/${path}`;
+}
+
+/**
+ * Choices with a photo each, two to a row, so they pick the colour or the
+ * stone by what it looks like. A choice with no photo (Not sure) sits under
+ * them as a plain button.
+ */
+function PhotoChoices({
+  options,
+  picked,
+  disabled,
+  onChoose,
+}: {
+  options: IntakeOption[];
+  picked: (value: string) => boolean;
+  disabled: boolean;
+  onChoose: (value: string) => void;
+}) {
+  const withPhoto = options.filter((o) => o.image);
+  const without = options.filter((o) => !o.image);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        {withPhoto.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={picked(option.value)}
+            onClick={() => onChoose(option.value)}
+            className={cn(
+              "overflow-hidden rounded-xl border-2 text-left transition-colors",
+              picked(option.value) ? "border-primary" : "border-transparent"
+            )}
+          >
+            <span className="relative block aspect-[4/3] bg-muted">
+              <Image src={photoUrl(option.image!)} alt="" fill sizes="(max-width: 512px) 50vw, 240px" className="object-cover" />
+              {picked(option.value) && (
+                <CheckCircle2 className="absolute right-1.5 top-1.5 h-6 w-6 rounded-full bg-background text-primary" />
+              )}
+            </span>
+            <span className={cn("block px-2 py-1.5", picked(option.value) ? "bg-primary/10 text-primary" : "bg-muted/40")}>
+              <span className="block text-sm font-semibold">{option.label}</span>
+              {option.note && <span className="block text-xs text-muted-foreground">{option.note}</span>}
+            </span>
+          </button>
+        ))}
+      </div>
+      {without.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          disabled={disabled}
+          aria-pressed={picked(option.value)}
+          onClick={() => onChoose(option.value)}
+          className={cn(
+            "flex min-h-11 items-center justify-between gap-3 rounded-xl border px-4 text-left text-base",
+            picked(option.value) ? "border-primary bg-primary/10 font-medium text-primary" : "border-border bg-background"
+          )}
+        >
+          {option.label}
+          {picked(option.value) && <CheckCircle2 className="h-5 w-5 shrink-0" />}
+        </button>
+      ))}
     </div>
   );
 }

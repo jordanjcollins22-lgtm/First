@@ -22,6 +22,10 @@ export type IntakeKind = "multi" | "single" | "text";
 export interface IntakeOption {
   value: string;
   label: string;
+  /** A photo of it, as a path in the public material-images bucket. */
+  image?: string;
+  /** A line under the label, e.g. the size. */
+  note?: string;
 }
 
 /** Where a question sits on the form. */
@@ -236,7 +240,42 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     title: "What should go in?",
     short: "Beds get",
     kind: "multi",
-    options: opts(["mulch", "Mulch"], ["stone", "Stone or rock"], ["plants", "New plants"], ["edging", "Edging"], ["unsure", "Not sure"]),
+    options: opts(["mulch", "Mulch"], ["stone", "River rock"], ["plants", "New plants"], ["edging", "Edging"], ["unsure", "Not sure"]),
+  },
+  // The mulch and stone themselves, with the supplier's photos (Lehnhoff's
+  // Supply, Fallston, copied into material-images/lehnhoffs). Stone is river
+  // rock only: the gravels and crushed stone they sell are for bases,
+  // drainage, paths and driveways, not for covering a bed.
+  {
+    id: "mulch_color",
+    services: ["beds"],
+    showIf: { id: "beds_add", values: ["mulch"] },
+    group: "Beds",
+    title: "Which mulch?",
+    short: "Mulch",
+    kind: "single",
+    options: [
+      { value: "brown", label: "Brown", image: "lehnhoffs/mulch-brown.jpg" },
+      { value: "black", label: "Black", image: "lehnhoffs/mulch-black.jpg" },
+      { value: "natural", label: "Natural", image: "lehnhoffs/mulch-natural.jpg" },
+      { value: "unsure", label: "Not sure" },
+    ],
+  },
+  {
+    id: "bed_stone",
+    services: ["beds"],
+    showIf: { id: "beds_add", values: ["stone"] },
+    group: "Beds",
+    title: "Which river rock?",
+    short: "River rock",
+    kind: "single",
+    options: [
+      { value: "small", label: "Small", note: "About 3/4 inch", image: "lehnhoffs/river-rock-small.jpg" },
+      { value: "medium", label: "Medium", note: "1 to 3 inch", image: "lehnhoffs/river-rock-medium.jpg" },
+      { value: "large", label: "Large", note: "3 to 5 inch", image: "lehnhoffs/river-rock-large.jpg" },
+      { value: "local", label: "Local", note: "1 to 3 inch, warmer tones", image: "lehnhoffs/river-rock-local.jpg" },
+      { value: "unsure", label: "Not sure" },
+    ],
   },
   {
     id: "lawn_need",
