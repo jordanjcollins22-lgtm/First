@@ -6,6 +6,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { reviewSourceFrom } from "@/lib/review-import";
 
 type ProofUpdate = Database["public"]["Tables"]["booking_proof"]["Update"];
 
@@ -124,7 +125,73 @@ export async function deleteProof(id: string): Promise<Result> {
   const who = await owner();
   if ("error" in who) return { ok: false, error: who.error! };
   const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("booking_proof")
+    .select("external_key")
+    .eq("id", id)
+    .eq("organization_id", who.profile.organization_id)
+    .maybeSingle();
+  // A pulled review that is deleted stays deleted: the next pull would
+  // otherwise bring it straight back.
+  if (row?.external_key) {
+    await supabase
+      .from("booking_proof_dismissed")
+      .upsert({ organization_id: who.profile.organization_id, external_key: row.external_key }, { onConflict: "organization_id,external_key" });
+  }
   const { error } = await supabase.from("booking_proof").delete().eq("id", id).eq("organization_id", who.profile.organization_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/booking-page");
+  return { ok: true };
+}
+
+/**
+ * A Facebook page or Google listing to pull reviews from. Saving it asks for
+ * a pull straight away; one per platform, so pasting a new Facebook link
+ * replaces the old one.
+ */
+export async function saveReviewSource(link: string): Promise<Result> {
+  const who = await owner();
+  if ("error" in who) return { ok: false, error: who.error! };
+  const check = reviewSourceFrom(link);
+  if (!check.ok) return { ok: false, error: check.error };
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase.from("booking_review_sources").upsert(
+    {
+      organization_id: who.profile.organization_id,
+      platform: check.platform,
+      url: check.url,
+      pull_requested_at: now,
+      created_by: who.profile.id,
+      updated_at: now,
+    },
+    { onConflict: "organization_id,platform" }
+  );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/booking-page");
+  return { ok: true };
+}
+
+/** Ask the extension to read every saved page again now. */
+export async function requestReviewPull(): Promise<Result> {
+  const who = await owner();
+  if ("error" in who) return { ok: false, error: who.error! };
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("booking_review_sources")
+    .update({ pull_requested_at: now, updated_at: now })
+    .eq("organization_id", who.profile.organization_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/booking-page");
+  return { ok: true };
+}
+
+export async function removeReviewSource(id: string): Promise<Result> {
+  const who = await owner();
+  if ("error" in who) return { ok: false, error: who.error! };
+  const supabase = await createClient();
+  const { error } = await supabase.from("booking_review_sources").delete().eq("id", id).eq("organization_id", who.profile.organization_id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/booking-page");
   return { ok: true };

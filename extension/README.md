@@ -1,6 +1,6 @@
 # JS Landscaping: post finder
 
-A Chrome extension that finds the posts; the team answers them. It reads your Facebook groups feed, a Facebook search for the phrases set in the app, and any groups listed there, and sends every post it reads to the app. The app sorts each one into somebody asking for work, somebody advertising, or neither. The people asking for work go on the **Posts to answer** board (app → Link Tracking → Posts to answer), and the businesses advertising go on the Businesses list for subcontracting.
+A Chrome extension that finds the posts; the team answers them. It reads your Facebook groups feed, a Facebook search for the phrases set in the app, and any groups listed there, and sends every post it reads to the app. The app sorts each one into somebody asking for work, somebody advertising, or neither. The people asking for work go on the **Posts to answer** board (app → Marketing → Posts to Answer), and the businesses advertising go on the Businesses list for subcontracting.
 
 It never comments, likes, shares or messages. One account answering every lead in the county is what gets an account banned, so the answering is shared out: each person takes a post off the board, gets a comment written for them with their own tracked link, and posts it from their own Facebook. The only thing the finder presses on Facebook is a post's Share → **Copy link**, to bring back a link for a post the page showed without one. It never presses Share now.
 
@@ -8,22 +8,23 @@ It runs as you, in your Chrome, on your Facebook account, with your app sign-in.
 
 ## What it does, once a minute
 
-1. Asks the app whether it may look right now: the sources, the hours and the pause button all live at **app → Link Tracking → Group Agent**.
+1. Asks the app whether it may look right now: the sources, the hours and the pause button all live at **app → Marketing → Where Posts Come From**.
 2. Opens whichever page is most overdue a look in a small window of its own to the right of yours, scrolls the first few screens, and sends every post it read to the app. The app keeps the new ones and sorts them.
 3. When more posts are waiting for the team than last time, shows a notification; click it to open the board.
+4. When the app lists one of the business's own review pages as due (a Facebook page or a Google Maps listing, set on **app → Marketing → Booking Page**), opens its reviews instead, scrolls them, opens every "More", and sends the text to the app. The app keeps only the five-star reviews with something written for the booking page. This runs even while the finder is paused, because the owner asked for it, and again every week.
 
 The window is drawn on screen because Chrome only loads a Facebook page it is drawing; a hidden tab stays empty. It never takes focus from what you're doing and closes within about ten seconds.
 
-A post found by search in a group you haven't joined still goes on the board. The group also goes on the **Groups to join** list on the Group Agent page, with a count of the leads seen in it.
+A post found by search in a group you haven't joined still goes on the board. The group also goes on the **Groups to join** list on the Where Posts Come From page, with a count of the leads seen in it.
 
 ## Install
 
 1. Open `chrome://extensions` in Chrome.
 2. Turn on **Developer mode** (top right).
-3. Press **Load unpacked** and choose this `extension` folder.
+3. Press **Load unpacked** and choose this folder (unzipped from the download on Where Posts Come From).
 4. Pin it from the puzzle-piece menu.
 5. Sign in to the app in this Chrome, and stay signed in to Facebook.
-6. In the app, check where it looks (app → Link Tracking → Group Agent) and press Save.
+6. In the app, check where it looks (app → Marketing → Where Posts Come From) and press Save.
 
 The popup shows what it is doing and how many posts are waiting for the team. **Look now** looks straight away; **Answer this post by hand** is the old button, and opens the app with the post you are looking at.
 
@@ -39,4 +40,4 @@ You should rarely need to download this again. Every selector and every wait the
 
 ## If it stops finding posts
 
-The Group Agent page shows its last look: how many posts it read and what the page looked like. A look that reads nothing means Facebook's page has changed. That is a recipe fix in the app, not a download.
+Where Posts Come From shows its last look: how many posts it read and what the page looked like. A look that reads nothing means Facebook's page has changed. That is a recipe fix in the app, not a download.

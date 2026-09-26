@@ -22,6 +22,12 @@
 // in the app, which reaches public groups it is not in yet. And any group
 // listed by hand in the app.
 //
+// It also reads the business's own reviews: when the app lists a Facebook
+// page or Google listing as due, it opens the reviews there and sends the
+// page's text back, and the app keeps the five-star ones for the booking
+// page. That is asked for by the owner, so it happens even while the
+// finder is paused.
+//
 // It runs as you, in your Chrome, on your account. Nothing here logs in
 // anywhere: the app is reached with the app's own cookies, and Facebook
 // with Facebook's. Close Chrome and it stops.
@@ -162,6 +168,14 @@ async function tick(options = {}) {
     }
     await chrome.storage.local.set({ noticedToAnswer: toAnswer });
 
+    // The business's own review pages, one a minute, before anything else:
+    // the owner asked for these, so a paused finder does not hold them up.
+    const due = Array.isArray(config.reviews) ? config.reviews : [];
+    if (due.length > 0) {
+      await pullReviews(due[0]);
+      return;
+    }
+
     if (!config.active && config.because === "paused") {
       await setStatus(`Paused. ${config.pauseReason ?? ""}`.trim());
       return;
@@ -205,6 +219,32 @@ async function tick(options = {}) {
     );
   } finally {
     await chrome.storage.local.set({ lock: 0 });
+  }
+}
+
+/** Read one review page and hand it to the app, which keeps the five-star ones. */
+async function pullReviews(source) {
+  const label = source.platform === "google" ? "Google" : "Facebook";
+  await setStatus(`Reading your ${label} reviews…`);
+  let page = null;
+  try {
+    page = await inTab(source.reviewsUrl, readReviewsPage, [source.platform], 6000, 45000);
+  } catch (err) {
+    await setStatus(`Couldn't open your ${label} reviews: ${err?.message ?? err}`);
+  }
+  try {
+    const res = await fetch(`${API}/reviews`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      // Sent even when nothing was read, so the app marks the page looked at
+      // and says so, rather than asking again every minute.
+      body: JSON.stringify({ sourceId: source.id, text: page?.text ?? "", stats: page?.stats ?? null }),
+    });
+    const answer = await res.json().catch(() => null);
+    await setStatus(res.ok && answer?.said ? `${label} reviews: ${answer.said}` : `The app couldn't take the ${label} reviews (${res.status}).`);
+  } catch (err) {
+    await setStatus(`Couldn't send the ${label} reviews: ${err?.message ?? err}`);
   }
 }
 
@@ -612,4 +652,98 @@ function capture() {
   }
   const text = best ? clean(best.innerText || "") : "";
   return { text: text.slice(0, 4000), group };
+}
+
+// ---------------------------------------------------------------------------
+// What runs inside a review page. Self-contained, like scanPosts.
+// ---------------------------------------------------------------------------
+
+/**
+ * The reviews on a Facebook page's Reviews tab or a Google Maps listing, as
+ * text. On Google it presses the listing's Reviews tab first. It scrolls to
+ * load more, opens every "More" so long reviews are whole, and writes each
+ * star rating into the text as [5 stars] so the app can read it. It only
+ * reads: nothing is liked, answered or reported.
+ */
+async function readReviewsPage(platform) {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const labelOf = (el) => `${el.getAttribute("aria-label") || ""} ${(el.textContent || "").trim()}`.trim();
+  const press = (test) => {
+    const el = [...document.querySelectorAll('button, [role="tab"], [role="button"], a')].find((b) => test(labelOf(b)));
+    if (!el) return false;
+    el.click();
+    return true;
+  };
+
+  if (platform === "google") {
+    for (let i = 0; i < 4; i += 1) {
+      if (press((t) => /^reviews\b/i.test(t) || /^reviews for /i.test(t))) break;
+      await wait(1500);
+    }
+    await wait(2500);
+  }
+
+  // Everything that scrolls on its own, plus the page itself.
+  const scrollers = () =>
+    [...document.querySelectorAll("div")].filter((el) => {
+      if (el.scrollHeight <= el.clientHeight + 80) return false;
+      const overflow = getComputedStyle(el).overflowY;
+      return overflow === "auto" || overflow === "scroll";
+    });
+  for (let i = 0; i < 14; i += 1) {
+    for (const el of scrollers()) el.scrollTop = el.scrollHeight;
+    window.scrollTo(0, document.body.scrollHeight);
+    await wait(1300);
+  }
+
+  // Long reviews are cut off behind "More" / "See more".
+  const more = [...document.querySelectorAll('button, [role="button"]')].filter((b) => {
+    const text = (b.textContent || "").trim();
+    const aria = b.getAttribute("aria-label") || "";
+    return /^(more|see more|read more)$/i.test(text) || /^see more$/i.test(aria);
+  });
+  for (const b of more.slice(0, 300)) {
+    try {
+      b.click();
+    } catch {
+      // A button that went away is one fewer to press.
+    }
+  }
+  await wait(1200);
+
+  const root = document.querySelector('[role="main"]') || document.body;
+  const out = [];
+  let stars = 0;
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = node.textContent.replace(/\s+/g, " ").trim();
+      if (t) out.push(t);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node;
+    if (["SCRIPT", "STYLE", "NOSCRIPT", "svg", "SVG", "IMG", "PATH"].includes(el.tagName)) {
+      const label = el.getAttribute("aria-label");
+      if (label && /star|rated/i.test(label)) {
+        out.push(`[${label}]`);
+        stars += 1;
+      }
+      return;
+    }
+    const label = el.getAttribute("aria-label");
+    if (label && (el.getAttribute("role") === "img" || /\bstars?\b|rated/i.test(label))) {
+      out.push(`[${label}]`);
+      stars += 1;
+    }
+    for (const child of el.childNodes) walk(child);
+    if (/^(DIV|P|LI|ARTICLE|SECTION|H[1-6])$/.test(el.tagName)) out.push("\n");
+  };
+  walk(root);
+
+  const text = out
+    .join(" ")
+    .replace(/ *\n[ \n]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .slice(0, 140000);
+  return { text, stats: { url: location.href, title: document.title.slice(0, 80), chars: text.length, stars, more: more.length } };
 }

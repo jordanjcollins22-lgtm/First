@@ -11,6 +11,9 @@ import { listProofRows, proofFromRows } from "@/lib/data/booking-proof";
 import { BOOKING_PAGES, promisesKept } from "@/lib/booking-proof";
 import { BookingPreview } from "@/components/booking/booking-preview";
 import { ProofEditor } from "@/components/booking/proof-editor";
+import { ReviewSourcesPanel } from "@/components/booking/review-sources-panel";
+import { listReviewSources } from "@/lib/data/review-sources";
+import { EXTENSION_VERSION, versionIsBehind } from "@/lib/outreach-agent-recipe";
 
 /**
  * Booking Page: the owner's view of what a client sees after tapping the
@@ -33,10 +36,13 @@ export default async function BookingPagePage() {
   const { data: org } = await supabase.from("organizations").select("slug").eq("id", profile.organization_id).maybeSingle();
   const slug = org?.slug ?? null;
 
-  const [rows, options] = await Promise.all([
+  const [rows, options, sources, { data: agent }] = await Promise.all([
     listProofRows(profile.organization_id),
     slug ? loadBookingOptions({ org: slug }).catch(() => null) : Promise.resolve(null),
+    listReviewSources(profile.organization_id).catch(() => []),
+    supabase.from("outreach_agent_settings").select("extension_version").eq("organization_id", profile.organization_id).maybeSingle(),
   ]);
+  const installed = agent?.extension_version ?? null;
   // What the card shows, read fresh from the editor's rows, so a review just
   // added is in the preview straight away.
   const proof = proofFromRows(rows);
@@ -105,6 +111,12 @@ export default async function BookingPagePage() {
               ))}
             </ul>
           </section>
+
+          <ReviewSourcesPanel
+            sources={sources}
+            extensionBehind={Boolean(installed && versionIsBehind(installed, EXTENSION_VERSION))}
+            expectedVersion={EXTENSION_VERSION}
+          />
 
           <ProofEditor rows={rows} />
         </div>

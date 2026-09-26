@@ -1,11 +1,14 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
+import { createClient } from "@/lib/supabase/server";
+import { isOwnerLevel } from "@/lib/roles";
 import { agentCounts, getAgentSettings } from "@/lib/data/outreach-agent";
 import { countOpenPosts } from "@/lib/data/post-board";
 import { settingsForBrowser, standing } from "@/lib/outreach-agent";
 import { DEFAULT_RECIPE, EXTENSION_DOWNLOAD_URL, EXTENSION_VERSION, versionIsBehind } from "@/lib/outreach-agent-recipe";
 import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
+import { reviewSourcesDue } from "@/lib/data/review-sources";
 
 /**
  * What the browser is allowed to do right now, and how to read the page.
@@ -31,13 +34,28 @@ export async function GET(request: NextRequest) {
   if (!profile) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const now = new Date();
-  const [settings, counts, toAnswer] = await Promise.all([
+  const [settings, counts, toAnswer, reviews] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     countOpenPosts(profile.organization_id).catch(() => 0),
+    // The business's own review pages due a read. Only the owner's copy
+    // reads them: it is their Facebook the page opens in.
+    isOwnerLevel(profile.roles) ? reviewSourcesDue(profile.organization_id, now).catch(() => []) : Promise.resolve([]),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
   const installed = request.nextUrl.searchParams.get("v");
+  // Which copy asked, so the app can say when it needs updating even while
+  // the finder is paused and nothing is being looked at. Never holds up the
+  // answer.
+  if (installed && /^\d+(\.\d+){0,3}$/.test(installed)) {
+    const supabase = await createClient();
+    after(async () => {
+      await supabase
+        .from("outreach_agent_settings")
+        .update({ extension_version: installed, extension_seen_at: now.toISOString() })
+        .eq("organization_id", profile.organization_id);
+    });
+  }
 
   return NextResponse.json({
     ok: true,
@@ -55,6 +73,7 @@ export async function GET(request: NextRequest) {
     who: profile.full_name || profile.email,
     now: now.toISOString(),
     recipe: DEFAULT_RECIPE,
+    reviews,
     extension: {
       expectedVersion: EXTENSION_VERSION,
       installedVersion: installed,

@@ -3094,6 +3094,8 @@ export interface Database {
           reddit_subreddits: string[];
           last_reddit_look: Json | null;
           last_reddit_look_at: string | null;
+          extension_version: string | null;
+          extension_seen_at: string | null;
           finder_token_hash: string | null;
           updated_at: string;
           updated_by: string | null;
@@ -3171,6 +3173,8 @@ export interface Database {
           url: string | null;
           position: number;
           shown: boolean;
+          external_key: string | null;
+          source_id: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -3180,6 +3184,42 @@ export interface Database {
           kind: "review" | "news";
         };
         Update: Partial<Database["public"]["Tables"]["booking_proof"]["Row"]>;
+        Relationships: [];
+      };
+      booking_review_sources: {
+        Row: {
+          id: string;
+          organization_id: string;
+          platform: "facebook" | "google";
+          url: string;
+          pull_requested_at: string | null;
+          pulled_at: string | null;
+          last_result: string | null;
+          last_found: number | null;
+          last_kept: number | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_review_sources"]["Row"]> & {
+          organization_id: string;
+          platform: "facebook" | "google";
+          url: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_review_sources"]["Row"]>;
+        Relationships: [];
+      };
+      booking_proof_dismissed: {
+        Row: {
+          organization_id: string;
+          external_key: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_proof_dismissed"]["Row"]> & {
+          organization_id: string;
+          external_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_proof_dismissed"]["Row"]>;
         Relationships: [];
       };
       outreach_post_answers: {

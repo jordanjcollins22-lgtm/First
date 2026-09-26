@@ -38,8 +38,8 @@ export function ProofEditor({ rows }: { rows: ProofRow[] }) {
       <section className="rounded-2xl border border-border bg-card p-4">
         <h2 className="text-sm font-semibold">Reviews ({reviews.length})</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          Backs up &ldquo;amazing reviews&rdquo;. Copy them word for word from Google or Facebook. The first three show on the
-          card, the rest behind &ldquo;See all&rdquo;.
+          Backs up &ldquo;amazing reviews&rdquo;. Pulled ones arrive here on their own; you can add one by hand too. Only
+          5-star reviews show on the page. The first three show on the card, the rest behind &ldquo;See all&rdquo;.
         </p>
         <ul className="mb-3 flex flex-col gap-2">
           {reviews.map((r, i) => (
@@ -139,6 +139,9 @@ function ProofItem({ row, first, last }: { row: ProofRow; first: boolean; last: 
           <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
         </Button>
         {!row.shown && <span className="text-xs text-muted-foreground">Hidden from the page</span>}
+        {row.kind === "review" && row.shown && row.stars != null && row.stars < 5 && (
+          <span className="text-xs text-amber-700">Not on the page: only 5-star reviews show</span>
+        )}
       </div>
       {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
     </li>

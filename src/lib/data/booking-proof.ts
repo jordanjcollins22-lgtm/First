@@ -45,10 +45,14 @@ export async function listProofRows(organizationId: string, client?: Db): Promis
   }));
 }
 
-/** What the landing card shows: only the rows switched on, and only complete ones. */
+/**
+ * What the landing card shows: only the rows switched on, only complete
+ * ones, and only five-star reviews. One entered by hand with fewer stars
+ * stays in the editor and never reaches the page.
+ */
 export function proofFromRows(rows: ProofRow[]): BookingProof {
   const reviews: ProofReview[] = rows
-    .filter((r) => r.kind === "review" && r.shown && r.body?.trim() && r.author?.trim())
+    .filter((r) => r.kind === "review" && r.shown && r.body?.trim() && r.author?.trim() && (r.stars == null || r.stars === 5))
     .map((r) => ({ id: r.id, author: r.author!.trim(), body: r.body!.trim(), stars: r.stars, source: r.source, writtenOn: r.writtenOn }));
   const news: ProofNews[] = rows
     .filter((r) => r.kind === "news" && r.shown && r.outlet?.trim() && r.headline?.trim())
