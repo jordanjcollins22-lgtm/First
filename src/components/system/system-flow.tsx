@@ -15,7 +15,7 @@ const DOT: Record<SystemStatus, string> = {
  * A square opens where that system is run; one that is not built yet says so
  * and opens nothing.
  */
-export function SystemFlow() {
+export function SystemFlow({ jobLinks = { map: null, proposal: null } }: { jobLinks?: { map: string | null; proposal: string | null } }) {
   let step = 0;
   return (
     <div className="flex flex-col gap-2">
@@ -30,7 +30,7 @@ export function SystemFlow() {
               const number = stage.key === "marketing" ? null : ++step;
               return (
                 <li key={square.key}>
-                  <Square square={square} number={number} />
+                  <Square square={{ ...square, href: (square.onJob && jobLinks[square.onJob]) || square.href }} number={number} />
                 </li>
               );
             })}

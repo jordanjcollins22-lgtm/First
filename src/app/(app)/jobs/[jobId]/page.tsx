@@ -76,7 +76,7 @@ import type { ProposalZoneSnapshot } from "@/types/domain";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { BackLink } from "@/components/ui/back-link";
-import { canonicalTab } from "@/lib/job-tabs";
+import { canonicalTab, tabOfSection } from "@/lib/job-tabs";
 import { IntakeSummary } from "@/components/intake/intake-summary";
 import { getIntakeForJob } from "@/lib/data/evaluation-intake";
 import { intakeHeadline } from "@/lib/evaluation-intake";
@@ -118,11 +118,14 @@ export default async function JobPage({
   searchParams,
 }: {
   params: Promise<{ jobId: string }>;
-  searchParams?: Promise<{ view?: string }>;
+  searchParams?: Promise<{ view?: string; open?: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { jobId } = await params;
-  const { view } = (await searchParams) ?? {};
+  const { view, open } = (await searchParams) ?? {};
+  // ?open=map lands on the site map with it open, ?open=proposal on the
+  // proposal: a link that means one panel should not stop a tab short of it.
+  const openSection = open && tabOfSection(open) ? open : null;
 
   // Reachable from Project Data, the calendar and the pipeline — anyone who
   // can see the job in one of those can open it. Assignment counts too: a
@@ -609,9 +612,9 @@ export default async function JobPage({
       <JobSummary items={outstanding} />
 
       <JobTabbedSections
-        initialTab={canonicalTab(view)}
+        initialTab={openSection ? (tabOfSection(openSection) ?? undefined) : canonicalTab(view)}
         stage={stage}
-        defaultOpen={sectionToOpen(outstanding)}
+        defaultOpen={openSection ?? sectionToOpen(outstanding)}
         overview={await OverviewTab(jobId, viewer?.roles ?? [], viewer)}
         field={await FieldTab(jobId, job.property?.address ?? null, clientPhone, viewer?.roles ?? [])}
         issues={await IssuesTab(jobId, viewer?.roles ?? [])}

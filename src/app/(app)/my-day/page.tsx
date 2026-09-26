@@ -72,6 +72,7 @@ import { Suspense, cache } from "react";
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
 import { SystemFlow } from "@/components/system/system-flow";
+import { systemJobLinks } from "@/lib/data/system-flow";
 import { growthView } from "@/lib/data/growth";
 import { isOwnerLevel } from "@/lib/roles";
 import { isTwilioConfigured } from "@/lib/env";
@@ -83,6 +84,12 @@ import { MyRoutes } from "@/components/marketing/my-routes";
 import { playsAssignedTo } from "@/lib/marketing-plays";
 import { opsState, type OpsState } from "@/lib/data/ops";
 import { OpsPanel } from "@/components/ops/ops-panel";
+
+/** The system map, with the tool squares opening on real jobs. */
+async function SystemTab() {
+  const jobLinks = await systemJobLinks().catch(() => ({ map: null, proposal: null }));
+  return <SystemFlow jobLinks={jobLinks} />;
+}
 
 /**
  * One person's own work — whoever they are.
@@ -168,7 +175,11 @@ export default async function MyDayPage() {
             label: "The system",
             visible: isOwnerLevel(viewer?.roles ?? []),
             blurb: "Every system, in the order a customer moves through them.",
-            content: isOwnerLevel(viewer?.roles ?? []) ? <SystemFlow /> : null,
+            content: isOwnerLevel(viewer?.roles ?? []) ? (
+              <Suspense fallback={<SystemFlow />}>
+                <SystemTab />
+              </Suspense>
+            ) : null,
           },
           // Everybody's standing, on everybody's screen: the person who
           // wants to know where they rank is the person on the board.

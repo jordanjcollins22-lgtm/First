@@ -24,6 +24,11 @@ export interface SystemSquare {
   line: string;
   /** Where it is run or seen. Null when there is nowhere yet. */
   href: string | null;
+  /**
+   * A panel on a real job to open instead, when there is one: the tool
+   * itself rather than the list it is reached from. `href` is the fallback.
+   */
+  onJob?: "map" | "proposal";
   status: SystemStatus;
   /** What is missing, when it is not all live. */
   gap?: string;
@@ -117,16 +122,18 @@ export const SYSTEM_FLOW: SystemStage[] = [
       },
       {
         key: "evaluation",
-        title: "On-site evaluation",
-        line: "The evaluator walks it with them and draws the site map.",
+        title: "Evaluation site map",
+        line: "On site, the evaluator draws each area on the map with its photos and measurements.",
         href: "/operations?tab=evaluations",
+        onJob: "map",
         status: "live",
       },
       {
         key: "proposal",
-        title: "Proposal",
-        line: "The site map priced area by area, sent to accept and pay.",
+        title: "Proposal from the site map",
+        line: "Each area on the map becomes a priced line, then it goes out to accept and pay.",
         href: "/sales?tab=proposals",
+        onJob: "proposal",
         status: "live",
       },
     ],
