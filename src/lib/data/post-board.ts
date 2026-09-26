@@ -226,12 +226,16 @@ export async function affiliateClosedBoard(organizationId: string, now: Date = n
     assigned_to: string | null;
     project_start_date: string | null;
     property: { customer: { organization_id: string; account_manager_id: string | null } | null } | null;
-    job_proposals: { status: string; total_cost: number | string | null; responded_at: string | null }[] | null;
+    job_proposals: ProposalRow[] | ProposalRow | null;
   };
+  type ProposalRow = { status: string; total_cost: number | string | null; responded_at: string | null };
   const all: SoldJobInput[] = ((jobs ?? []) as unknown as JobRow[])
     .filter((j) => j.property?.customer?.organization_id === organizationId)
     .map((j) => {
-      const accepted = (j.job_proposals ?? []).filter((p) => p.status === "accepted");
+      // A job has one proposal, so the database hands it back as one row
+      // rather than a list; take either.
+      const proposals = j.job_proposals == null ? [] : Array.isArray(j.job_proposals) ? j.job_proposals : [j.job_proposals];
+      const accepted = proposals.filter((p) => p.status === "accepted");
       const best = accepted.sort((a, b) => Number(b.total_cost ?? 0) - Number(a.total_cost ?? 0))[0];
       return {
         id: j.id,
