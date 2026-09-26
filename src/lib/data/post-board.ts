@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
 import { findPostUrl } from "@/lib/outreach-agent";
 import type { Platform } from "@/lib/social-finder";
@@ -180,4 +181,90 @@ export async function answeredToday(organizationId: string, profileId: string, n
 /** Every answer to one post, for deciding whether somebody may take it. */
 export async function answersToPost(organizationId: string, postId: string): Promise<BoardAnswer[]> {
   return (await answersFor(organizationId, [postId])).get(postId) ?? [];
+}
+
+export interface AnswererStanding {
+  profileId: string;
+  name: string;
+  /** Comments posted in the last seven days. */
+  week: number;
+  allTime: number;
+  /** Opens of the links in their comments. */
+  clicks: number;
+  /** Evaluations booked through those links. */
+  booked: number;
+  /** Posts they found themselves and added. */
+  found: number;
+}
+
+/**
+ * Who is answering posts, best first.
+ *
+ * Counted from what happened, not from what anybody typed: comments marked
+ * posted, the opens their links got, the evaluations booked through them,
+ * and the posts they found and added. Names and counts only, so it is the
+ * same board on everybody's screen.
+ */
+export async function answeringLeaderboard(organizationId: string, now: Date = new Date()): Promise<AnswererStanding[]> {
+  // Read with the service client, scoped to the business by hand: an
+  // affiliate may not see other people's links or jobs, and the board has to
+  // read the same on every screen. Only names and counts leave here.
+  const supabase = createAdminClient();
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const [{ data: answers }, { data: added }] = await Promise.all([
+    supabase
+      .from("outreach_post_answers")
+      .select("profile_id, link_id, posted_at")
+      .eq("organization_id", organizationId)
+      .eq("status", "posted")
+      .limit(5000),
+    supabase.from("outreach_seen_posts").select("added_by").eq("organization_id", organizationId).not("added_by", "is", null).limit(5000),
+  ]);
+  const rows = answers ?? [];
+  const linkIds = rows.map((r) => r.link_id).filter((id): id is string => Boolean(id));
+  const { data: links } = linkIds.length
+    ? await supabase.from("outreach_links").select("id, code, click_count").eq("organization_id", organizationId).in("id", linkIds)
+    : { data: [] as { id: string; code: string; click_count: number }[] };
+  const codes = (links ?? []).map((l) => l.code);
+  const { data: jobs } = codes.length
+    ? // The codes are this business's own links, so the jobs they booked are its own.
+      await supabase.from("jobs").select("referral_code").in("referral_code", codes)
+    : { data: [] as { referral_code: string | null }[] };
+  const linkById = new Map((links ?? []).map((l) => [l.id, l]));
+  const bookedCodes = new Map<string, number>();
+  for (const job of jobs ?? []) {
+    if (job.referral_code) bookedCodes.set(job.referral_code, (bookedCodes.get(job.referral_code) ?? 0) + 1);
+  }
+
+  const by = new Map<string, AnswererStanding>();
+  const get = (id: string) => {
+    let s = by.get(id);
+    if (!s) {
+      s = { profileId: id, name: "", week: 0, allTime: 0, clicks: 0, booked: 0, found: 0 };
+      by.set(id, s);
+    }
+    return s;
+  };
+  for (const r of rows) {
+    const s = get(r.profile_id);
+    s.allTime += 1;
+    if (r.posted_at && r.posted_at >= weekAgo) s.week += 1;
+    const link = r.link_id ? linkById.get(r.link_id) : undefined;
+    if (link) {
+      s.clicks += link.click_count ?? 0;
+      s.booked += bookedCodes.get(link.code) ?? 0;
+    }
+  }
+  for (const r of added ?? []) if (r.added_by) get(r.added_by).found += 1;
+
+  const ids = [...by.keys()];
+  if (ids.length === 0) return [];
+  const { data: people } = await supabase.from("profiles").select("id, full_name, email").eq("organization_id", organizationId).in("id", ids);
+  for (const p of people ?? []) {
+    const s = by.get(p.id);
+    if (s) s.name = (p.full_name || p.email || "Somebody").split(" ")[0];
+  }
+  return [...by.values()]
+    .map((s) => ({ ...s, name: s.name || "Somebody" }))
+    .sort((a, b) => b.booked - a.booked || b.week - a.week || b.allTime - a.allTime || b.found - a.found);
 }

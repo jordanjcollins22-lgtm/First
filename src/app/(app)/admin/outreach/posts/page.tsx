@@ -6,7 +6,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
-import { answeredToday, getPostBoard } from "@/lib/data/post-board";
+import { answeredToday, answeringLeaderboard, getPostBoard } from "@/lib/data/post-board";
+import { AnsweringLeaderboard } from "@/components/marketing/answering-leaderboard";
 import { PostBoard } from "@/components/marketing/post-board";
 import { CommentCard } from "@/components/marketing/comment-card";
 
@@ -30,13 +31,14 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
   const owner = isOwnerLevel(profile.roles);
 
   const now = new Date();
-  const [posts, today, settings] = await Promise.all([
+  const [posts, today, settings, leaderboard] = await Promise.all([
     getPostBoard(profile.organization_id, profile.id, now).catch((err) => {
       console.error("Posts to answer failed to load:", err);
       return [];
     }),
     answeredToday(profile.organization_id, profile.id, now).catch(() => 0),
     getAgentSettings(profile.organization_id),
+    answeringLeaderboard(profile.organization_id, now).catch(() => []),
   ]);
 
   return (
@@ -60,6 +62,8 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
       </header>
 
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
+
+      <AnsweringLeaderboard standings={leaderboard} meId={profile.id} />
 
       {/* Every post at once, for anybody who wants to see who has what. The
           card above is the way to answer them. */}
