@@ -1,5 +1,5 @@
-// The popup: what the finder is doing, how many posts are waiting for the
-// team, two buttons, and a word when the app wants a newer copy.
+// The popup: the on and off switch, what the finder is doing, how many
+// posts are waiting for the team, and a word when the app wants a newer copy.
 const APP = "https://app.jslandscapingmd.com";
 document.getElementById("settings").href = `${APP}/admin/outreach/agent`;
 
@@ -15,10 +15,17 @@ function render(snap) {
   version.textContent = `v${snap.version ?? "?"}`;
   const config = snap.config;
   const lines = [];
+  const power = document.getElementById("power");
   if (config) {
-    if (config.because === "paused") lines.push("Paused.");
-    else if (config.because === "outside hours") lines.push("Outside its hours.");
-    else lines.push("On. It only reads; it never comments.");
+    const off = config.because === "paused";
+    power.hidden = false;
+    power.disabled = false;
+    power.dataset.on = off ? "false" : "true";
+    power.textContent = off ? "Turn on" : "Turn off";
+    power.className = off ? "power" : "power off";
+    if (off) lines.push("Off.");
+    else if (config.because === "outside hours") lines.push("On, but outside its hours. The window opens again then.");
+    else lines.push(snap.windowOpen ? "On. Looking in its own window; it only reads, never comments." : "On. Opening its window…");
     const c = config.counts ?? {};
     counts.textContent = `Signed in as ${config.who ?? "?"}`;
     const review = document.getElementById("review");
@@ -54,6 +61,13 @@ function ask(message) {
 
 ask({ type: "status" }).then(render);
 
+document.getElementById("power").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const turningOn = button.dataset.on !== "true";
+  button.disabled = true;
+  button.textContent = turningOn ? "Turning on…" : "Turning off…";
+  render(await ask({ type: "power", on: turningOn }));
+});
 document.getElementById("look").addEventListener("click", async () => {
   document.getElementById("status").textContent = "Looking…";
   render(await ask({ type: "look-now" }));

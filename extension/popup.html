@@ -15,6 +15,8 @@
       button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
       button.primary { background: #2f6d3c; border-color: #2f6d3c; color: #fff; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; }
+      .power { width: 100%; padding: 10px; font-weight: 700; font-size: 14px; border: none; color: #fff; background: #2f6d3c; }
+      .power.off { background: #9b2c2c; }
       a { color: #2f6d3c; }
     </style>
   </head>
@@ -25,16 +27,17 @@
         <span></span>
         <a href="#" target="_blank">Download the new version</a>
       </div>
+      <button class="power" id="power" hidden>Turn on</button>
       <div class="status" id="status">Checking…</div>
       <div class="muted" id="counts"></div>
       <a id="review" class="review" href="#" target="_blank" hidden>Posts waiting for an answer</a>
       <div class="row">
-        <button id="look">Look now</button>
+        <button id="look">Look somewhere else now</button>
       </div>
       <div class="row">
         <button class="primary" id="hand">Answer this post by hand</button>
       </div>
-      <div class="muted"><a id="settings" href="#" target="_blank">Where it looks, its hours and the pause button are in the app.</a></div>
+      <div class="muted"><a id="settings" href="#" target="_blank">Where it looks and its hours are in the app.</a></div>
     </main>
     <script src="popup.js"></script>
   </body>

@@ -92,7 +92,7 @@ export default async function GroupAgentPage() {
             <p className="mt-0.5 text-xs text-muted-foreground">
               {look
                 ? `Last look ${shortWhen(look.at)}: read ${look.posts ?? 0} posts, ${look.mentioned ?? 0} mentioned the work, ${look.sent ?? 0} kept.`
-                : "No look yet. It reads while Chrome is open with the extension installed."}
+                : "No look yet. Turn it on and the extension opens its own window in Chrome and keeps scrolling until you turn it off."}
             </p>
           </li>
           <li className="py-2.5">

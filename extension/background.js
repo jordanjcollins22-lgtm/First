@@ -1,9 +1,11 @@
 // The group agent, in the browser: the finder.
 //
-// Once a minute an alarm fires and at most one page gets looked at: the
-// groups feed, a search, or a listed group, whichever is most overdue.
-// Every post it reads is sent to the app, which sorts it and puts the
-// people asking for work on the team's Posts to answer board.
+// Turned on, it opens one window of its own and keeps it open, scrolling
+// down the groups feed and sending every post it reads to the app, which
+// sorts it and puts the people asking for work on the team's Posts to
+// answer board. Once a minute it scrolls further down the page it is on.
+// After a while it moves on to a search or a listed group, and then back
+// to the top of the feed for what is new. Turned off, the window closes.
 //
 // It never comments, likes, shares or messages. One account answering
 // every lead in the county is what gets an account banned, so the
@@ -64,6 +66,9 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       await chrome.storage.local.set({ scans: {} });
       await tick({ force: true });
       reply(await snapshot());
+    } else if (message?.type === "power") {
+      await power(Boolean(message.on));
+      reply(await snapshot());
     } else if (message?.type === "answer-by-hand") {
       await answerByHand(message.tabId);
       reply({ ok: true });
@@ -73,13 +78,92 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
 });
 
 async function snapshot() {
-  const store = await chrome.storage.local.get(["config", "status", "scans"]);
+  const store = await chrome.storage.local.get(["config", "status", "scans", FINDER]);
   return {
     version: VERSION,
     config: store.config ?? null,
     status: store.status ?? null,
     scans: store.scans ?? {},
+    windowOpen: Boolean(store[FINDER]),
   };
+}
+
+/** On or off, from the popup: the same switch as Resume and Pause in the app. */
+async function power(on) {
+  try {
+    const res = await fetch(`${API}/power`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ on }),
+    });
+    if (!res.ok) {
+      const answer = await res.json().catch(() => null);
+      await setStatus(answer?.error ?? `The app answered ${res.status}.`);
+      return;
+    }
+  } catch (err) {
+    await setStatus(`Couldn't reach the app: ${err?.message ?? err}`);
+    return;
+  }
+  // Straight away, not at the next minute: open the window, or close it.
+  await tick({ force: true });
+}
+
+// ---------------------------------------------------------------------------
+// The finder's own window: opened when it is turned on, kept open while it
+// looks, closed when it is turned off.
+// ---------------------------------------------------------------------------
+
+const FINDER = "finderWindow";
+
+/** The window and the tab in it, when they are still open. */
+async function finderState() {
+  const { [FINDER]: state } = await chrome.storage.local.get(FINDER);
+  if (!state) return null;
+  try {
+    const tab = await chrome.tabs.get(state.tabId);
+    if (tab && tab.windowId === state.windowId) return state;
+  } catch {
+    // Closed by hand. It opens again on the next look while it is on.
+  }
+  await chrome.storage.local.remove(FINDER);
+  return null;
+}
+
+async function saveFinder(state) {
+  await chrome.storage.local.set({ [FINDER]: state });
+}
+
+async function closeFinder() {
+  const state = await finderState();
+  if (state) {
+    try {
+      await chrome.windows.remove(state.windowId);
+    } catch {
+      // Already gone.
+    }
+  }
+  await chrome.storage.local.remove(FINDER);
+}
+
+/** Go to a page in the finder's window, opening the window if it is not open. */
+async function finderGo(url, loadTimeoutMs) {
+  let state = await finderState();
+  if (!state) {
+    const bounds = await windowBounds();
+    const win = await chrome.windows.create({ url, type: "popup", focused: false, ...bounds });
+    const tab = win.tabs && win.tabs[0];
+    if (!tab) throw new Error("Couldn't open the finder's window.");
+    state = { windowId: win.id, tabId: tab.id, key: null, since: 0, scrolls: 0 };
+    await saveFinder(state);
+    await waitForLoad(tab.id, loadTimeoutMs);
+    return state;
+  }
+  const loaded = waitForLoad(state.tabId, loadTimeoutMs);
+  await chrome.tabs.update(state.tabId, { url });
+  await loaded;
+  return state;
 }
 
 async function setStatus(text) {
@@ -177,43 +261,81 @@ async function tick(options = {}) {
     }
 
     if (!config.active && config.because === "paused") {
-      await setStatus(`Paused. ${config.pauseReason ?? ""}`.trim());
+      await closeFinder();
+      await setStatus(`Off. ${config.pauseReason ?? ""}`.trim());
       return;
     }
     if (!config.active && config.because === "outside hours") {
-      await setStatus(`Outside looking hours (${config.settings.activeFrom}–${config.settings.activeTo}). Looking again later.`);
+      await closeFinder();
+      await setStatus(`Outside looking hours (${config.settings.activeFrom}–${config.settings.activeTo}). The window opens again then.`);
       return;
     }
 
-    // Otherwise, whichever page is most overdue a look.
+    // On: keep looking in the finder's own window.
+    const watch = { scrollsPerLook: 14, feedMinutes: 10, otherMinutes: 3, reloadAfterScrolls: 140, ...(recipe.watch ?? {}) };
     const scans = store.scans ?? {};
-    const targets = scanTargets(config.settings, scans, options.force);
-    const next = targets[0];
-    if (!next) {
-      await setStatus("Nothing due. Looking again soon.");
+    // Every place it looks, the one looked at longest ago first.
+    const targets = scanTargets(config.settings, scans, true);
+    if (targets.length === 0) {
+      await closeFinder();
+      await setStatus("Nothing to look at. Turn on the groups feed, search or a group in the app.");
       return;
     }
 
-    await setStatus(`Looking at ${next.name}…`);
+    let finder = await finderState();
+    const current = finder?.key ? targets.find((t) => t.key === finder.key) : null;
+    const stay = ((current?.source === "feed" ? watch.feedMinutes : watch.otherMinutes) || 3) * 60 * 1000;
+    const moveOn = options.force || !current || Date.now() - finder.since >= stay || finder.scrolls >= watch.reloadAfterScrolls;
+
+    let target = current;
+    if (moveOn) {
+      // The place looked at longest ago, other than this one. With only the
+      // feed to look at, that is the feed again, from the top.
+      target = targets.find((t) => t.key !== finder?.key) ?? targets[0];
+      await setStatus(`Opening ${target.name}…`);
+      try {
+        finder = await finderGo(target.url, recipe.pacing.tabLoadTimeoutMs);
+      } catch (err) {
+        await setStatus(`Couldn't open ${target.name}: ${err?.message ?? err}`);
+        return;
+      }
+      await sleep(target.source === "search" ? recipe.scan.searchSettleMs : recipe.scan.settleMs);
+      finder = { ...finder, key: target.key, since: Date.now(), scrolls: 0 };
+      await saveFinder(finder);
+      scans[target.key] = Date.now();
+      await chrome.storage.local.set({ scans });
+    }
+
+    await setStatus(`Scrolling ${target.name}…`);
     // Posts it has already asked the Share menu about, by their opening
     // words, so the same post is not opened again on every look.
     const asked = (await chrome.storage.local.get("sharedAsked")).sharedAsked ?? [];
-    const found = await scanPage(next, config.settings.keywords ?? [], recipe, asked);
+    let found = null;
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: finder.tabId },
+        func: scanPosts,
+        args: [config.settings.keywords ?? [], { ...recipe.scan, scrollTimes: watch.scrollsPerLook }, asked],
+        world: "MAIN",
+      });
+      found = result?.result ?? null;
+    } catch (err) {
+      await setStatus(`Couldn't read ${target.name}: ${err?.message ?? err}`);
+    }
+    finder = { ...finder, scrolls: (finder.scrolls ?? 0) + watch.scrollsPerLook };
+    await saveFinder(finder);
     if (found?.askedNow?.length) {
       await chrome.storage.local.set({ sharedAsked: [...asked, ...found.askedNow].slice(-600) });
     }
-    scans[next.key] = Date.now();
-    await chrome.storage.local.set({ scans });
     if (!found) return;
 
-    // Sent even when nothing matched: the app keeps what the page looked
-    // like, so a look that found nothing can be diagnosed from the app.
-    const answer = await sendCandidates(next, found);
+    // Sent even when nothing new turned up: the app keeps what the page
+    // looked like, so a look that found nothing can be diagnosed from it.
+    const answer = await sendCandidates(target, found);
     if (!answer) return;
     const stats = found.stats ?? {};
     await setStatus(
-      `${next.name}: read ${stats.posts ?? 0} posts, ${answer.kept ?? 0} new` +
-        ((answer.skipped ?? 0) > 0 ? `, ${answer.skipped} seen before` : "") +
+      `Scrolling ${target.name}: ${stats.posts ?? 0} more posts read, ${answer.kept ?? 0} new` +
         ((answer.businesses ?? 0) > 0 ? `, ${answer.businesses} businesses saved` : "") +
         ". The ones asking for work are on the board."
     );
@@ -282,7 +404,8 @@ async function sendCandidates(target, found) {
  * and Facebook only loads the feed into a page that is being drawn, so a
  * background tab scrolled through an empty shell and found nothing. A
  * window of its own, off to the side and never given focus, is drawn and
- * loads, and goes away when the look is done.
+ * loads, and goes away when the look is done. Used for the weekly read of
+ * the business's own reviews; the finder keeps a window of its own open.
  */
 // `world` is where the function runs. "MAIN" is the page's own JavaScript,
 // which the scan needs so it can catch the link Facebook copies when its
@@ -346,16 +469,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function scanPage(target, keywords, recipe, asked = []) {
-  try {
-    const settle = target.source === "search" ? recipe.scan.searchSettleMs : recipe.scan.settleMs;
-    return await inTab(target.url, scanPosts, [keywords, recipe.scan, asked], settle, recipe.pacing.tabLoadTimeoutMs, "MAIN");
-  } catch (err) {
-    await setStatus(`Couldn't look at ${target.name}: ${err?.message ?? err}`);
-    return null;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // What runs inside a Facebook page. It is self-contained: it
 // is copied into the page by name, so nothing outside it exists there. Every
@@ -363,8 +476,9 @@ async function scanPage(target, keywords, recipe, asked = []) {
 // ---------------------------------------------------------------------------
 
 /**
- * On a feed, a search, or a group page: the posts on the first few screens
- * that mention the work, each with who posted it and which group it is in.
+ * On a feed, a search, or a group page: the posts on the next few screens
+ * down from wherever it got to last time, each with who posted it and which
+ * group it is in.
  */
 async function scanPosts(keywords, r, asked) {
   const askedBefore = new Set(asked || []);
@@ -446,8 +560,12 @@ async function scanPosts(keywords, r, asked) {
   // Read as it scrolls, not after. Facebook takes posts that have scrolled
   // well out of view back off the page, so a read at the end only ever saw
   // the last screen or two.
-  const done = new WeakSet();
-  const tries = new WeakMap();
+  // Kept on the page between looks: the window stays open and each look
+  // carries on down the same page, so a post read or sent in an earlier
+  // look is neither read nor sent again. A new page starts afresh.
+  const memory = (window.__jsFinder = window.__jsFinder || { done: new WeakSet(), tries: new WeakMap(), sent: new Set() });
+  const done = memory.done;
+  const tries = memory.tries;
   const byUrl = new Map();
   const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, shared: 0, samples: [] };
 
@@ -548,7 +666,8 @@ async function scanPosts(keywords, r, asked) {
       // owner picks from all of them in the app. Only the model's own
       // answering needs a link and a match, and the app sorts that out.
       const key = url ?? `text:${text.slice(0, 200)}`;
-      if (byUrl.has(key)) continue;
+      if (byUrl.has(key) || memory.sent.has(key)) continue;
+      memory.sent.add(key);
 
       const ageLabel = permalink ? (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40) : "";
       // The header: the group's name, then the poster's. On a group's own

@@ -16,8 +16,9 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.6.0";
-export const EXTENSION_DOWNLOAD_URL = "https://github.com/jordanjcollins22-lgtm/First/archive/refs/heads/claude/image-upload-canvas-382r1a.zip";
+export const EXTENSION_VERSION = "2.7.0";
+/** Packed from the extension folder on every build; see scripts/zip-extension.mjs. */
+export const EXTENSION_DOWNLOAD_URL = "https://app.jslandscapingmd.com/downloads/js-post-finder.zip";
 
 export interface AgentRecipe {
   version: number;
@@ -72,6 +73,21 @@ export interface AgentRecipe {
     beforeSendJitterMs: number;
     afterSendMs: number;
     verifyTries: number;
+  };
+  /**
+   * The finder's own window, kept open while it is on. Each minute it
+   * scrolls further down the page it is on; after a while it moves to the
+   * next place to look, and back to the top of the feed for what is new.
+   */
+  watch: {
+    /** Scrolls in each minute's look. */
+    scrollsPerLook: number;
+    /** Minutes on the groups feed before moving on. */
+    feedMinutes: number;
+    /** Minutes on a search or a listed group before moving on. */
+    otherMinutes: number;
+    /** After this many scrolls down one page, start it again from the top. */
+    reloadAfterScrolls: number;
   };
   pacing: {
     minDelaySeconds: number;
@@ -128,6 +144,12 @@ export const DEFAULT_RECIPE: AgentRecipe = {
     beforeSendJitterMs: 1500,
     afterSendMs: 2500,
     verifyTries: 8,
+  },
+  watch: {
+    scrollsPerLook: 14,
+    feedMinutes: 10,
+    otherMinutes: 3,
+    reloadAfterScrolls: 140,
   },
   pacing: {
     minDelaySeconds: 90,
