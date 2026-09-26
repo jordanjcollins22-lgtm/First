@@ -167,3 +167,21 @@ export function isPostLink(url: string | null | undefined): boolean {
     (/\/permalink\.php$|\/story\.php$/i.test(path) && parsed.searchParams.has("story_fbid"))
   );
 }
+
+/**
+ * Why somebody couldn't respond to a post, as the card asks it.
+ *
+ * An ad goes to the Businesses list; everything else leaves the board as
+ * not a job post. The reason is kept either way, because "random post" and
+ * "too far away" tune the finder differently.
+ */
+export const CANT_RESPOND_REASONS = [
+  { key: "ad", label: "It's an ad", kind: "promotion" },
+  { key: "unrelated", label: "Not related to our work", kind: "other" },
+  { key: "random", label: "Random post, not asking for anything", kind: "other" },
+  { key: "far", label: "Too far away", kind: "other" },
+  { key: "found", label: "They already found someone", kind: "other" },
+  { key: "other", label: "Something else", kind: "other" },
+] as const;
+
+export type CantRespondReason = (typeof CANT_RESPOND_REASONS)[number]["key"];

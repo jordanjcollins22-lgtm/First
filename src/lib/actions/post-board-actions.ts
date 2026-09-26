@@ -13,7 +13,7 @@ import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import { createClient } from "@/lib/supabase/server";
 import { setPostKind } from "@/lib/data/post-sorter";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
-import { standingFor } from "@/lib/post-board";
+import { CANT_RESPOND_REASONS, standingFor, type CantRespondReason } from "@/lib/post-board";
 import { cleanLink, platformOfLink, postKeyForLink, postedAtFromAge, PLATFORM_LABEL } from "@/lib/social-finder";
 
 /**
@@ -191,16 +191,27 @@ export async function removeFromBoard(seenId: string): Promise<Result> {
 }
 
 /**
- * Not a job post, or an ad: said by whoever is looking at it.
+ * Somebody can't respond to a post, and says why.
  *
- * It leaves the board for everybody. An ad's business goes on the
- * Businesses list, the same as when the sorter spots one.
+ * It leaves the board for everybody: an ad's business goes on the
+ * Businesses list, anything else is set aside as not a job post. The reason
+ * is kept on the post, with who gave it.
  */
-export async function markPostKind(seenId: string, kind: "other" | "promotion"): Promise<Result> {
+export async function markCantRespond(seenId: string, reason: CantRespondReason, note?: string): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
-  const result = await setPostKind(profile.organization_id, seenId, kind);
+  const picked = CANT_RESPOND_REASONS.find((r) => r.key === reason);
+  if (!picked) return { ok: false, error: "Pick a reason." };
+  const result = await setPostKind(profile.organization_id, seenId, picked.kind);
   if (!result.ok) return { ok: false, error: result.error ?? "Couldn't save that." };
+  const who = (profile.full_name || profile.email || "somebody").split(" ")[0];
+  const said = [picked.label, note?.trim().slice(0, 200)].filter(Boolean).join(": ");
+  const supabase = await createClient();
+  await supabase
+    .from("outreach_seen_posts")
+    .update({ reason: `${said} (${who})` })
+    .eq("organization_id", profile.organization_id)
+    .eq("id", seenId);
   refresh();
   revalidatePath("/admin/outreach/agent");
   return { ok: true };

@@ -2,12 +2,13 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Copy, ExternalLink, ImagePlus, Loader2, Megaphone, MessageSquareReply, Undo2 } from "lucide-react";
+import { Ban, Copy, ExternalLink, ImagePlus, Loader2, MessageSquareReply, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { letPostGo, markAnswerPosted, markPostKind, submitFoundPost, takePost } from "@/lib/actions/post-board-actions";
+import { letPostGo, markAnswerPosted, markCantRespond, submitFoundPost, takePost } from "@/lib/actions/post-board-actions";
+import { CANT_RESPOND_REASONS, type CantRespondReason } from "@/lib/post-board";
 import { createShotUpload } from "@/lib/actions/outreach-link-actions";
 import { createClient } from "@/lib/supabase/client";
 import { hashBytes } from "@/lib/screenshot-hash";
@@ -65,6 +66,8 @@ export function CommentCard({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedTip, setCopiedTip] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [otherNote, setOtherNote] = useState("");
   const [, startTransition] = useTransition();
 
   const post = useMemo(() => nextPost(posts, pinned, skipped), [posts, pinned, skipped]);
@@ -75,10 +78,28 @@ export function CommentCard({
   function done() {
     setPinned(null);
     setCopiedTip(null);
+    setAsking(false);
+    setOtherNote("");
     router.refresh();
   }
 
-  function run(what: "not-job" | "ad" | "respond" | "hand-back") {
+  function cantRespond(reason: CantRespondReason) {
+    if (!post) return;
+    if (reason === "other" && !otherNote.trim()) {
+      setError("Say what it was, in a few words.");
+      return;
+    }
+    setError(null);
+    setBusy(reason);
+    startTransition(async () => {
+      const result = await markCantRespond(post.id, reason, reason === "other" ? otherNote : undefined);
+      setBusy(null);
+      if (!result.ok) return setError(result.error);
+      done();
+    });
+  }
+
+  function run(what: "respond" | "hand-back") {
     if (!post) return;
     setError(null);
     setBusy(what);
@@ -90,13 +111,10 @@ export function CommentCard({
         setWritten((w) => ({ ...w, [post.id]: { answerId: result.answerId, comment: result.comment } }));
         return;
       }
-      const result =
-        what === "hand-back"
-          ? await letPostGo(mine?.answerId ?? "")
-          : await markPostKind(post.id, what === "ad" ? "promotion" : "other");
+      const result = await letPostGo(mine?.answerId ?? "");
       setBusy(null);
       if (!result.ok) return setError(result.error);
-      if (what === "hand-back") setSkipped((s) => new Set(s).add(post.id));
+      setSkipped((s) => new Set(s).add(post.id));
       done();
     });
   }
@@ -160,18 +178,42 @@ export function CommentCard({
               </p>
             )}
 
-            {!mine ? (
-              <div className="mt-auto grid grid-cols-3 gap-2">
-                <Button type="button" variant="outline" disabled={busy !== null} onClick={() => run("not-job")} className="h-auto flex-col gap-1 py-2 text-xs">
-                  {busy === "not-job" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-                  Not a job post
+            {!mine && asking ? (
+              <div className="mt-auto space-y-2">
+                <p className="text-sm font-semibold">Why can&apos;t you respond?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {CANT_RESPOND_REASONS.filter((r) => r.key !== "other").map((r) => (
+                    <Button
+                      key={r.key}
+                      type="button"
+                      variant="outline"
+                      disabled={busy !== null}
+                      onClick={() => cantRespond(r.key)}
+                      className="h-auto whitespace-normal py-2 text-xs"
+                    >
+                      {busy === r.key ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                      {r.label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input value={otherNote} placeholder="Something else? Say what" onChange={(e) => setOtherNote(e.target.value)} className="h-9" />
+                  <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => cantRespond("other")}>
+                    {busy === "other" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+                <button type="button" onClick={() => setAsking(false)} className="mx-auto block text-[11px] text-muted-foreground underline">
+                  Back
+                </button>
+              </div>
+            ) : !mine ? (
+              <div className="mt-auto grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setError(null); setAsking(true); }} className="h-auto flex-col gap-1 py-3 text-sm">
+                  <Ban className="h-5 w-5" />
+                  Can&apos;t respond
                 </Button>
-                <Button type="button" variant="outline" disabled={busy !== null} onClick={() => run("ad")} className="h-auto flex-col gap-1 py-2 text-xs">
-                  {busy === "ad" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-                  It&apos;s an ad
-                </Button>
-                <Button type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-auto flex-col gap-1 py-2 text-xs">
-                  {busy === "respond" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareReply className="h-4 w-4" />}
+                <Button type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-auto flex-col gap-1 py-3 text-sm">
+                  {busy === "respond" ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquareReply className="h-5 w-5" />}
                   {busy === "respond" ? "Writing…" : "Respond"}
                 </Button>
               </div>
@@ -193,11 +235,7 @@ export function CommentCard({
                 </button>
               </div>
             )}
-            {!mine && (
-              <button type="button" onClick={() => setSkipped((s) => new Set(s).add(post.id))} className="mx-auto text-[11px] text-muted-foreground underline">
-                Skip for now
-              </button>
-            )}
+
           </div>
         )}
         {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
