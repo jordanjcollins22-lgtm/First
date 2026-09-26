@@ -6,9 +6,9 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
-import { affiliateClosedBoard, answeredToday, getPostBoard } from "@/lib/data/post-board";
+import { affiliateClosedBoard, answeredPostsFor, answeredToday, getPostBoard } from "@/lib/data/post-board";
 import { AnsweringLeaderboard } from "@/components/marketing/answering-leaderboard";
-import { PostBoard } from "@/components/marketing/post-board";
+import { AnsweredPosts } from "@/components/marketing/answered-posts";
 import { CommentCard } from "@/components/marketing/comment-card";
 
 /**
@@ -22,16 +22,20 @@ import { CommentCard } from "@/components/marketing/comment-card";
  */
 export const dynamic = "force-dynamic";
 
-export default async function PostsToAnswerPage({ searchParams }: { searchParams?: Promise<{ post?: string }> } = {}) {
-  const pinned = ((await searchParams) ?? {}).post ?? null;
+export default async function PostsToAnswerPage({ searchParams }: { searchParams?: Promise<{ post?: string; who?: string }> } = {}) {
+  const params = (await searchParams) ?? {};
+  const pinned = params.post ?? null;
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("posts-to-answer", "/admin/outreach");
   const profile = await getCurrentProfile();
   if (!profile) return null;
   const owner = isOwnerLevel(profile.roles);
+  // The owner can look at anybody's answered posts from the leaderboard;
+  // everybody else sees their own.
+  const whoId = owner && params.who ? params.who : profile.id;
 
   const now = new Date();
-  const [posts, today, settings, leaderboard] = await Promise.all([
+  const [posts, today, settings, leaderboard, answered] = await Promise.all([
     getPostBoard(profile.organization_id, profile.id, now).catch((err) => {
       console.error("Posts to answer failed to load:", err);
       return [];
@@ -44,7 +48,12 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
       console.error("Affiliate leaderboard failed to load:", err);
       return null;
     }),
+    answeredPostsFor(profile.organization_id, whoId).catch((err) => {
+      console.error("Answered posts failed to load:", err);
+      return null;
+    }),
   ]);
+  const whose = whoId === profile.id ? null : leaderboard?.find((s) => s.profileId === whoId)?.name ?? "Their";
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
@@ -69,21 +78,20 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
 
       {leaderboard ? (
-        <AnsweringLeaderboard standings={leaderboard} meId={profile.id} />
+        <AnsweringLeaderboard standings={leaderboard} meId={profile.id} viewingId={whoId} linkNames={owner} />
       ) : (
         <p className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
           The leaderboard couldn&apos;t load just now. Reload the page.
         </p>
       )}
 
-      {/* Every post at once, for anybody who wants to see who has what. The
-          card above is the way to answer them. */}
-      <details className="rounded-lg border border-border p-4">
-        <summary className="cursor-pointer text-sm font-semibold">See every post ({posts.length})</summary>
-        <div className="mt-3">
-          <PostBoard posts={posts} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
-        </div>
-      </details>
+      {answered ? (
+        <AnsweredPosts posts={answered} whose={whose} />
+      ) : (
+        <p className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+          Your answered posts couldn&apos;t load just now. Reload the page.
+        </p>
+      )}
     </div>
   );
 }

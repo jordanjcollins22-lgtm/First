@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { rankClosers, type CloserStanding, type SoldJobInput } from "@/lib/affiliate-closes";
+import { rankClosers, stageOf, type CloserStanding, type PostStage, type SoldJobInput } from "@/lib/affiliate-closes";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
 import { findPostUrl } from "@/lib/outreach-agent";
 import type { Platform } from "@/lib/social-finder";
@@ -196,60 +196,21 @@ export async function affiliateClosedBoard(organizationId: string, now: Date = n
   const admin = createAdminClient();
   const [
     { data: profiles, error: profilesError },
-    { data: jobs, error: jobsError },
+    all,
     { data: links, error: linksError },
     { data: answers },
   ] = await Promise.all([
     admin.from("profiles").select("id, full_name, email").eq("organization_id", organizationId),
-    admin
-      .from("jobs")
-      .select(
-        "id, status, declined_at, referral_code, referred_by_profile_id, assigned_to, project_start_date, " +
-          "property:properties!inner(customer:customers!inner(organization_id, account_manager_id)), job_proposals(status, total_cost, responded_at)"
-      )
-      .limit(5000),
+    orgJobs(organizationId),
     admin.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId).limit(10000),
     admin.from("outreach_post_answers").select("profile_id").eq("organization_id", organizationId).eq("status", "posted").limit(10000),
   ]);
 
   // A query that fails throws, so the page says the board didn't load
   // rather than showing an empty one.
-  const failed = profilesError ?? jobsError ?? linksError;
+  const failed = profilesError ?? linksError;
   if (failed) throw new Error(failed.message);
 
-  type JobRow = {
-    id: string;
-    status: string;
-    declined_at: string | null;
-    referral_code: string | null;
-    referred_by_profile_id: string | null;
-    assigned_to: string | null;
-    project_start_date: string | null;
-    property: { customer: { organization_id: string; account_manager_id: string | null } | null } | null;
-    job_proposals: ProposalRow[] | ProposalRow | null;
-  };
-  type ProposalRow = { status: string; total_cost: number | string | null; responded_at: string | null };
-  const all: SoldJobInput[] = ((jobs ?? []) as unknown as JobRow[])
-    .filter((j) => j.property?.customer?.organization_id === organizationId)
-    .map((j) => {
-      // A job has one proposal, so the database hands it back as one row
-      // rather than a list; take either.
-      const proposals = j.job_proposals == null ? [] : Array.isArray(j.job_proposals) ? j.job_proposals : [j.job_proposals];
-      const accepted = proposals.filter((p) => p.status === "accepted");
-      const best = accepted.sort((a, b) => Number(b.total_cost ?? 0) - Number(a.total_cost ?? 0))[0];
-      return {
-        id: j.id,
-        status: j.status,
-        declined: Boolean(j.declined_at),
-        soldFor: best?.total_cost != null ? Number(best.total_cost) : null,
-        proposalAccepted: Boolean(best),
-        referralCode: j.referral_code,
-        referredBy: j.referred_by_profile_id,
-        assignedTo: j.assigned_to,
-        accountManager: j.property?.customer?.account_manager_id ?? null,
-        closedAt: best?.responded_at ?? j.project_start_date,
-      };
-    });
   const posterByCode = new Map((links ?? []).map((l) => [l.code, l.profile_id]));
   const linksOut = new Map<string, number>();
   for (const l of links ?? []) linksOut.set(l.profile_id, (linksOut.get(l.profile_id) ?? 0) + 1);
@@ -262,4 +223,156 @@ export async function affiliateClosedBoard(organizationId: string, now: Date = n
     name: ((p.full_name?.trim().split(/\s+/)[0] || p.email?.split("@")[0] || "Somebody") as string).replace(/^\w/, (c) => c.toUpperCase()),
   }));
   return rankClosers(people, all, posterByCode, linksOut, comments, now);
+}
+
+type LinkedJob = SoldJobInput & { proposalStatus: string | null; proposalTotal: number | null; customerFirstName: string | null };
+
+/**
+ * Every job in the business that came in through a link, in the shape the
+ * leaderboard and the answered-posts list read. The service client, scoped
+ * to the business by hand: an affiliate cannot read jobs themselves.
+ */
+async function orgJobs(organizationId: string): Promise<LinkedJob[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("jobs")
+    .select(
+      "id, status, declined_at, referral_code, referred_by_profile_id, assigned_to, project_start_date, " +
+        "property:properties!inner(customer:customers!inner(organization_id, account_manager_id, name)), job_proposals(status, total_cost, responded_at)"
+    )
+    .or("referral_code.not.is.null,referred_by_profile_id.not.is.null")
+    .limit(5000);
+  if (error) throw new Error(error.message);
+
+  type ProposalRow = { status: string; total_cost: number | string | null; responded_at: string | null };
+  type JobRow = {
+    id: string;
+    status: string;
+    declined_at: string | null;
+    referral_code: string | null;
+    referred_by_profile_id: string | null;
+    assigned_to: string | null;
+    project_start_date: string | null;
+    property: { customer: { organization_id: string; account_manager_id: string | null; name: string | null } | null } | null;
+    // A job has one proposal, so the database hands it back as one row
+    // rather than a list; take either.
+    job_proposals: ProposalRow[] | ProposalRow | null;
+  };
+  return ((data ?? []) as unknown as JobRow[])
+    .filter((j) => j.property?.customer?.organization_id === organizationId)
+    .map((j) => {
+      const proposals = j.job_proposals == null ? [] : Array.isArray(j.job_proposals) ? j.job_proposals : [j.job_proposals];
+      const accepted = proposals.filter((p) => p.status === "accepted");
+      const best = accepted.sort((a, b) => Number(b.total_cost ?? 0) - Number(a.total_cost ?? 0))[0];
+      const latest = proposals[0] ?? null;
+      return {
+        id: j.id,
+        status: j.status,
+        declined: Boolean(j.declined_at),
+        soldFor: best?.total_cost != null ? Number(best.total_cost) : null,
+        proposalAccepted: Boolean(best),
+        referralCode: j.referral_code,
+        referredBy: j.referred_by_profile_id,
+        assignedTo: j.assigned_to,
+        accountManager: j.property?.customer?.account_manager_id ?? null,
+        closedAt: best?.responded_at ?? j.project_start_date,
+        proposalStatus: best ? "accepted" : latest?.status ?? null,
+        proposalTotal: (best ?? latest)?.total_cost != null ? Number((best ?? latest)!.total_cost) : null,
+        customerFirstName: j.property?.customer?.name?.trim().split(/\s+/)[0] || null,
+      };
+    });
+}
+
+export interface AnsweredPost {
+  /** The link's id, or the job's for one booked through a personal booking link. */
+  id: string;
+  /** What the post asked for, as it was noted when the link was made. */
+  about: string;
+  kind: string;
+  platform: string;
+  /** The post itself, where it is known. */
+  postUrl: string | null;
+  comment: string | null;
+  answeredAt: string;
+  clicks: number;
+  stage: PostStage;
+  /** The proposal's total, once there is one. */
+  amount: number | null;
+  /** The client's first name, once they have booked. */
+  client: string | null;
+}
+
+/**
+ * Everything one person has answered with a link, newest first, and where
+ * each has got to: clicked, booked an evaluation, got a proposal, bought or
+ * said no. Jobs booked through their personal booking link are on it too,
+ * since the leaderboard credits those to them.
+ */
+export async function answeredPostsFor(organizationId: string, profileId: string): Promise<AnsweredPost[]> {
+  const admin = createAdminClient();
+  const [{ data: links, error: linksError }, jobs, { data: answers }] = await Promise.all([
+    admin
+      .from("outreach_links")
+      .select("id, code, kind, platform, note, comment, posted_comment, post_url, click_count, created_at")
+      .eq("organization_id", organizationId)
+      .eq("profile_id", profileId)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+    orgJobs(organizationId),
+    admin
+      .from("outreach_post_answers")
+      .select("link_id, seen:outreach_seen_posts(url)")
+      .eq("organization_id", organizationId)
+      .eq("profile_id", profileId)
+      .not("link_id", "is", null),
+  ]);
+  if (linksError) throw new Error(linksError.message);
+
+  const jobByCode = new Map<string, LinkedJob>();
+  for (const j of jobs) if (j.referralCode && !jobByCode.has(j.referralCode)) jobByCode.set(j.referralCode, j);
+  type AnswerRow = { link_id: string; seen: { url: string | null } | { url: string | null }[] | null };
+  const urlByLink = new Map<string, string>();
+  for (const a of (answers ?? []) as unknown as AnswerRow[]) {
+    const seen = Array.isArray(a.seen) ? a.seen[0] : a.seen;
+    if (seen?.url && isPostLink(seen.url)) urlByLink.set(a.link_id, seen.url);
+  }
+
+  const codes = new Set<string>();
+  const rows: AnsweredPost[] = (links ?? []).map((l) => {
+    codes.add(l.code);
+    const job = jobByCode.get(l.code) ?? null;
+    const url = l.post_url && isPostLink(l.post_url) ? l.post_url : urlByLink.get(l.id) ?? null;
+    return {
+      id: l.id,
+      about: (l.note ?? "").trim() || "A post",
+      kind: l.kind,
+      platform: l.platform,
+      postUrl: url,
+      comment: l.posted_comment ?? l.comment,
+      answeredAt: l.created_at,
+      clicks: l.click_count ?? 0,
+      stage: stageOf(job, l.click_count ?? 0),
+      amount: job?.proposalTotal ?? null,
+      client: job?.customerFirstName ?? null,
+    };
+  });
+
+  // Booked through their own booking link rather than a tracked one.
+  for (const j of jobs) {
+    if (j.referredBy !== profileId || (j.referralCode && codes.has(j.referralCode))) continue;
+    rows.push({
+      id: j.id,
+      about: "Booked through your booking link",
+      kind: "booking",
+      platform: "other",
+      postUrl: null,
+      comment: null,
+      answeredAt: j.closedAt ?? "",
+      clicks: 0,
+      stage: stageOf(j, 0),
+      amount: j.proposalTotal,
+      client: j.customerFirstName,
+    });
+  }
+  return rows;
 }

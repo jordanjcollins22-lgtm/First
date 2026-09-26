@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { CloserStanding } from "@/lib/affiliate-closes";
 
 function money(n: number): string {
@@ -9,11 +11,25 @@ function money(n: number): string {
  * affiliate links out, and what those links brought in and closed. Nothing
  * that came in another way is counted.
  */
-export function AnsweringLeaderboard({ standings, meId }: { standings: CloserStanding[]; meId: string }) {
+export function AnsweringLeaderboard({
+  standings,
+  meId,
+  viewingId = meId,
+  linkNames = false,
+}: {
+  standings: CloserStanding[];
+  meId: string;
+  /** Whose answered posts are showing below. */
+  viewingId?: string;
+  /** The owner: each name opens that person's answered posts. */
+  linkNames?: boolean;
+}) {
   return (
     <section className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4">
       <h2 className="mb-1 text-sm font-semibold">Leaderboard</h2>
-      <p className="mb-2 text-xs text-muted-foreground">Only what came in through affiliate links.</p>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Only what came in through affiliate links.{linkNames ? " Tap a name to see their answered posts." : ""}
+      </p>
       {standings.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nobody has put an affiliate link out yet.</p>
       ) : (
@@ -34,7 +50,17 @@ export function AnsweringLeaderboard({ standings, meId }: { standings: CloserSta
                 <tr key={s.profileId} className={`border-t border-border/60 ${s.profileId === meId ? "font-semibold text-primary" : ""}`}>
                   <td className="py-1.5 tabular-nums text-muted-foreground">{i + 1}</td>
                   <td className="py-1.5">
-                    {s.name}
+                    {linkNames ? (
+                      <Link
+                        href={s.profileId === meId ? "/admin/outreach/posts#answered" : `/admin/outreach/posts?who=${s.profileId}#answered`}
+                        scroll={false}
+                        className={`hover:underline ${s.profileId === viewingId ? "underline" : ""}`}
+                      >
+                        {s.name}
+                      </Link>
+                    ) : (
+                      s.name
+                    )}
                     {s.profileId === meId ? " (you)" : ""}
                   </td>
                   <td className="py-1.5 text-right tabular-nums">{s.links}</td>

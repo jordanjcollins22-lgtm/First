@@ -89,3 +89,30 @@ export function rankClosers(
     (a, b) => b.closedValue - a.closedValue || b.closed - a.closed || b.booked - a.booked || b.links - a.links || a.name.localeCompare(b.name)
   );
 }
+
+/**
+ * Where one answered post has got to, for the person who answered it.
+ *
+ * waiting: nobody has clicked the link. clicked: somebody has, but not
+ * booked. evaluation: they booked, and the proposal is not in front of them
+ * yet. proposal: it is. closed: they bought. said_no: they turned it down,
+ * or the job was called off.
+ */
+export type PostStage = "waiting" | "clicked" | "evaluation" | "proposal" | "closed" | "said_no";
+
+export const POST_STAGES: { key: PostStage; label: string }[] = [
+  { key: "waiting", label: "No clicks yet" },
+  { key: "clicked", label: "Clicked" },
+  { key: "evaluation", label: "Evaluation booked" },
+  { key: "proposal", label: "Proposal sent" },
+  { key: "closed", label: "Closed" },
+  { key: "said_no", label: "Said no" },
+];
+
+export function stageOf(job: (SoldJobInput & { proposalStatus: string | null }) | null, clicks: number): PostStage {
+  if (!job) return clicks > 0 ? "clicked" : "waiting";
+  if (job.declined || job.status === "cancelled" || job.proposalStatus === "declined") return "said_no";
+  if (isSold(job)) return "closed";
+  if (job.proposalStatus === "sent") return "proposal";
+  return "evaluation";
+}

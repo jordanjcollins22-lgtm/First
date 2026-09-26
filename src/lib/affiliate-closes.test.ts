@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { creditFor, isSold, rankClosers, type SoldJobInput } from "./affiliate-closes";
+import { creditFor, isSold, rankClosers, stageOf, type SoldJobInput } from "./affiliate-closes";
 
 function job(over: Partial<SoldJobInput>): SoldJobInput {
   return {
@@ -60,5 +60,25 @@ describe("rankClosers", () => {
       ["Ava", 5, 2, 1, 2000],
       ["Max", 1, 0, 0, 0],
     ]);
+  });
+});
+
+describe("where an answered post has got to", () => {
+  const booked = (over: Partial<SoldJobInput> & { proposalStatus?: string | null }) =>
+    ({ ...job({ status: "estimating", proposalAccepted: false, soldFor: null }), proposalStatus: null, ...over });
+  it("before anybody books", () => {
+    expect(stageOf(null, 0)).toBe("waiting");
+    expect(stageOf(null, 3)).toBe("clicked");
+  });
+  it("through the evaluation and the proposal", () => {
+    expect(stageOf(booked({}), 2)).toBe("evaluation");
+    expect(stageOf(booked({ proposalStatus: "needs_approval" }), 2)).toBe("evaluation");
+    expect(stageOf(booked({ status: "quoted", proposalStatus: "sent" }), 2)).toBe("proposal");
+  });
+  it("to closed or said no", () => {
+    expect(stageOf(booked({ status: "approved", proposalAccepted: true, proposalStatus: "accepted" }), 1)).toBe("closed");
+    expect(stageOf(booked({ proposalStatus: "declined" }), 1)).toBe("said_no");
+    expect(stageOf(booked({ status: "cancelled" }), 1)).toBe("said_no");
+    expect(stageOf(booked({ declined: true, proposalStatus: "sent" }), 1)).toBe("said_no");
   });
 });
