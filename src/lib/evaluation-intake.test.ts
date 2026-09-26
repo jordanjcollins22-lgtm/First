@@ -55,7 +55,7 @@ describe("what the evaluator reads", () => {
 
   it("summarises every answered question with the labels, not the codes", () => {
     const lines = summarizeIntake(answers);
-    expect(lines.map((l) => l.label)).toEqual(["Wants", "Where", "Looks", "Would say no over", "Budget", "Decides"]);
+    expect(lines.map((l) => l.label)).toEqual(["Wants", "Where", "Looks", "Worried about", "Budget", "Decides"]);
     expect(lines[0].value).toBe("Beds: mulch, stone or plants");
     expect(lines[3].value).toBe("The price, Getting other quotes. Planted boxwoods, they died. Last quote was 9k");
     expect(answeredCount(answers)).toBe(6);
@@ -84,7 +84,8 @@ describe("what the evaluator reads", () => {
     expect(titles.some((t) => t.includes("colours"))).toBe(true);
     // Tried before is asked on the say-no page, in its box.
     expect(INTAKE_QUESTIONS.find((q) => q.key === "concerns")?.notesKey).toBe("tried");
-    expect(titles.some((t) => t.includes("say no"))).toBe(true);
+    expect(titles.some((t) => t.includes("worried about"))).toBe(true);
+    expect(titles.some((t) => t.includes("say no"))).toBe(false);
     expect(titles.some((t) => t.includes("ask us"))).toBe(true);
   });
 });
@@ -146,7 +147,7 @@ describe("the details that set the price", () => {
   });
 });
 
-describe("answering what would make them say no", () => {
+describe("answering what they are worried about", () => {
   it("has an answer for every worry but being ready", () => {
     const concerns = INTAKE_QUESTIONS.find((q) => q.key === "concerns")!.options!.map((o) => o.value);
     for (const c of concerns.filter((c) => c !== "nothing")) {

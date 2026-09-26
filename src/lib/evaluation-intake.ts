@@ -5,7 +5,7 @@
  * handful of facts about each kind of work that move its price (what is in
  * the beds now, how many shrubs are coming out, whether a machine fits through the
  * gate), plus photos. The second is to settle the questions that stop
- * people saying yes. They tell us what would make them say no, and the form
+ * people saying yes. They tell us what they are worried about, and the form
  * answers it on the spot, saying only what is known to be true; the
  * questions people usually ask before a visit are answered at the end.
  *
@@ -120,7 +120,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
   {
     key: "concerns",
     section: "decide",
-    title: "What would make you say no?",
+    title: "Is there anything you're worried about, or anything else?",
     help: "Honest answers get you a better proposal, not a harder sell. Tick any and we answer it right here.",
     kind: "multi",
     options: [
@@ -131,7 +131,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "hoa", label: "HOA or permit rules" },
       { value: "maintenance", label: "Worried about upkeep" },
       { value: "other_quotes", label: "Getting other quotes" },
-      { value: "nothing", label: "Nothing, I am ready" },
+      { value: "nothing", label: "Nothing, I'm ready" },
     ],
     // One box for what they have tried before and anything else on their
     // mind: asked on its own page it read as the same question again.
@@ -385,7 +385,7 @@ export function detailQuestionsFor(services: string[], details?: IntakeAnswers["
 export const MAX_INTAKE_PHOTOS = 8;
 
 // ---------------------------------------------------------------------------
-// Answering what would make them say no
+// Answering what they are worried about
 // ---------------------------------------------------------------------------
 
 export interface IntakeAnswer {
@@ -409,7 +409,7 @@ const PAYMENT_PLAN: IntakeAnswer = {
     "Yes. You can pay a deposit and split the rest into payments. You see the exact amounts and dates before you agree to anything.",
 };
 
-/** What the form says back when they tick a reason they might say no. */
+/** What the form says back when they tick something they are worried about. */
 export const CONCERN_ANSWERS: Record<string, IntakeAnswer[]> = {
   price: [
     {
@@ -647,7 +647,7 @@ const SHORT_LABEL: Partial<Record<keyof IntakeAnswers, string>> = {
   areas: "Where",
   looks: "Looks",
   tried: "Tried before",
-  concerns: "Would say no over",
+  concerns: "Worried about",
   budget: "Budget",
   timing: "When",
   decision: "Decides",
