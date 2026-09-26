@@ -3223,6 +3223,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["booking_proof_dismissed"]["Row"]>;
         Relationships: [];
       };
+      booking_showcase: {
+        Row: {
+          id: string;
+          organization_id: string;
+          title: string;
+          image_url: string;
+          position: number;
+          shown: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_showcase"]["Row"]> & {
+          organization_id: string;
+          title: string;
+          image_url: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_showcase"]["Row"]>;
+        Relationships: [];
+      };
       outreach_post_answers: {
         Row: {
           id: string;

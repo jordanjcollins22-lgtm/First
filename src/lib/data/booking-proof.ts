@@ -62,34 +62,58 @@ export function proofFromRows(rows: ProofRow[]): BookingProof {
 
 /** A before-and-after as the owner's editor lists it. */
 export interface ShowcaseRow extends ShowcaseItem {
+  /** Uploaded on the Booking Page, or approved in Before & After Posts. */
+  source: "upload" | "studio";
   shown: boolean;
 }
 
+/** The id a studio post goes by here, so one list can hold both. */
+const STUDIO = "studio:";
+
+export function isStudioShowcase(id: string): boolean {
+  return id.startsWith(STUDIO);
+}
+
+export function studioPostId(id: string): string {
+  return id.slice(STUDIO.length);
+}
+
 /**
- * Every before-and-after the landing card can show: the posts approved and
- * formatted in Before & After Posts, from the crew's own job photos. An
- * unapproved post is never here, and neither is anything from outside the
- * app.
+ * Every before-and-after the landing card can show: the ones uploaded on the
+ * Booking Page, then every post approved and formatted in Before & After
+ * Posts from job photos. An unapproved post is never here.
  */
 export async function listShowcase(organizationId: string, client?: Db): Promise<ShowcaseRow[]> {
   const db = client ?? (await createClient());
-  const { data: posts, error } = await db
-    .from("social_posts")
-    .select("id, image_path, caption, zone_name, on_booking_page, approved_at")
-    .eq("organization_id", organizationId)
-    .in("status", ["approved", "scheduled", "posted"])
-    .not("image_path", "is", null)
-    .order("approved_at", { ascending: false })
-    .limit(30);
+  const [{ data: uploads, error }, { data: posts }] = await Promise.all([
+    db
+      .from("booking_showcase")
+      .select("id, title, image_url, shown")
+      .eq("organization_id", organizationId)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
+    db
+      .from("social_posts")
+      .select("id, image_path, caption, zone_name, on_booking_page, approved_at")
+      .eq("organization_id", organizationId)
+      .in("status", ["approved", "scheduled", "posted"])
+      .not("image_path", "is", null)
+      .order("approved_at", { ascending: false })
+      .limit(30),
+  ]);
   if (error) throw new Error(error.message);
   const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
-  return (posts ?? []).map((p) => ({
-    id: p.id,
-    title: showcaseTitleFromCaption(p.caption, p.zone_name),
-    // The social bucket is public on purpose: only approved work lands there.
-    imageUrl: `${base}/storage/v1/object/public/social-posts/${p.image_path}`,
-    shown: p.on_booking_page,
-  }));
+  return [
+    ...(uploads ?? []).map((u) => ({ id: u.id, title: u.title, imageUrl: u.image_url, source: "upload" as const, shown: u.shown })),
+    ...(posts ?? []).map((p) => ({
+      id: `${STUDIO}${p.id}`,
+      title: showcaseTitleFromCaption(p.caption, p.zone_name),
+      // The social bucket is public on purpose: only approved work lands there.
+      imageUrl: `${base}/storage/v1/object/public/social-posts/${p.image_path}`,
+      source: "studio" as const,
+      shown: p.on_booking_page,
+    })),
+  ];
 }
 
 export function shownShowcase(rows: ShowcaseRow[]): ShowcaseItem[] {

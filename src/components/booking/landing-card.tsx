@@ -5,7 +5,7 @@ import { ArrowRight, Newspaper } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ShowcaseCarousel } from "@/components/booking/showcase-carousel";
-import { landingBadges, landingHeadline, REVIEW_EVERY_MS, type BookingProof } from "@/lib/booking-proof";
+import { landingBadges, landingHeadline, REVIEW_EVERY_MS, SHOWCASE_ASPECT, type BookingProof } from "@/lib/booking-proof";
 
 /**
  * The first page of the booking card: what the comment said, shown.
@@ -85,15 +85,16 @@ export function LandingCard({
 
 /** The page's own padding above and below the card, when it fills the screen. */
 const PAGE_PADDING_PX = 24;
-/** Smaller than this and a before-and-after says nothing. */
-const MIN_SIDE_PX = 120;
+/** Shorter than this and a before-and-after says nothing. */
+const MIN_SIDE_PX = 150;
 
 /**
- * How big the before-and-after square can be: the card's width, or the
- * height left on the screen once everything else on the card is counted,
- * whichever runs out first. Measured in the browser, because what else is on
- * the card (a two-line headline, a second row of badges) changes with the
- * phone, and worked out again whenever the card or the window changes size.
+ * How tall the before-and-after can be: as tall as the card's width allows
+ * for its shape, or the height left on the screen once everything else on
+ * the card is counted, whichever runs out first. Measured in the browser,
+ * because what else is on the card (a two-line headline, a second row of
+ * badges) changes with the phone, and worked out again whenever the card or
+ * the window changes size.
  */
 function useSquareSide(rootRef: React.RefObject<HTMLDivElement | null>, fitHeight: number | null): number | null {
   const [px, setPx] = useState<number | null>(null);
@@ -105,11 +106,11 @@ function useSquareSide(rootRef: React.RefObject<HTMLDivElement | null>, fitHeigh
     const measure = () => {
       const square = root.querySelector<HTMLElement>("[data-showcase-square]");
       if (!square?.parentElement) return;
-      const width = square.parentElement.clientWidth;
-      // Everything on the card that is not the square.
+      const tallest = square.parentElement.clientWidth / SHOWCASE_ASPECT;
+      // Everything on the card that is not the picture.
       const rest = card.getBoundingClientRect().height - square.getBoundingClientRect().height;
       const limit = fitHeight ?? window.innerHeight - PAGE_PADDING_PX;
-      const next = Math.max(MIN_SIDE_PX, Math.min(width, Math.floor(limit - rest)));
+      const next = Math.max(MIN_SIDE_PX, Math.floor(Math.min(tallest, limit - rest)));
       setPx((prev) => (prev === next ? prev : next));
     };
     measure();

@@ -46,6 +46,13 @@ export interface BookingProof {
 
 export const NO_PROOF: BookingProof = { reviews: [], news: [], showcase: [] };
 
+/**
+ * The shape of a before-and-after, width over height: 1080 by 1350, the
+ * size Before & After Posts makes them, and the size the ones made outside
+ * the app come in.
+ */
+export const SHOWCASE_ASPECT = 1080 / 1350;
+
 /** How long each before-and-after, and each review, stays up. */
 export const SHOWCASE_EVERY_MS = 4000;
 export const REVIEW_EVERY_MS = 7000;

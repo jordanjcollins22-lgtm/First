@@ -4,16 +4,16 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import { cn } from "@/lib/utils";
-import { SHOWCASE_EVERY_MS, type ShowcaseItem } from "@/lib/booking-proof";
+import { SHOWCASE_ASPECT, SHOWCASE_EVERY_MS, type ShowcaseItem } from "@/lib/booking-proof";
 
 /**
  * The business's work, one before-and-after at a time, changing on its own.
  *
- * Each is the square made in Before & After Posts, with its own Before and
- * After labels on it, so it is shown whole and square: never cropped, never
- * padded out with filler. The square is as big as the card allows and
- * shrinks on a short phone, so the landing card still fits one screen. The
- * job's name and the dots sit under it rather than over the picture.
+ * Each is a finished picture from Before & After Posts, 1080 by 1350 with
+ * its own Before and After labels on it, so it is shown whole and in its own
+ * shape: never cropped, never padded out with filler. It is as big as the
+ * card allows and shrinks on a short phone, so the landing card still fits
+ * one screen. The job's name and the dots sit under it, not over it.
  *
  * Only the one on show and its neighbours are loaded, resized for a phone.
  * A tap moves it on; somebody who asked for less motion gets no timer.
@@ -24,7 +24,7 @@ export function ShowcaseCarousel({
   className,
 }: {
   items: ShowcaseItem[];
-  /** The square's size in pixels, worked out by the card; full width until then. */
+  /** The picture's height in pixels, worked out by the card; full width until then. */
   side?: number | null;
   className?: string;
 }) {
@@ -51,8 +51,8 @@ export function ShowcaseCarousel({
           type="button"
           data-showcase-square
           onClick={() => setAt((i) => (i + 1) % count)}
-          style={side ? { width: side, height: side } : undefined}
-          className={cn("relative shrink-0 overflow-hidden rounded-xl bg-muted shadow-sm", !side && "aspect-square w-full")}
+          style={side ? { width: Math.round(side * SHOWCASE_ASPECT), height: side } : undefined}
+          className={cn("relative shrink-0 overflow-hidden rounded-xl bg-muted shadow-sm", !side && "aspect-[4/5] w-full")}
           aria-label={`Before and after: ${items[current].title}.${count > 1 ? " Tap for the next one." : ""}`}
         >
           {items.map((item, i) =>

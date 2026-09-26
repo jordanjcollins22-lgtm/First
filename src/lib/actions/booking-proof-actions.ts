@@ -7,6 +7,8 @@ import { isOwnerLevel } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { reviewSourceFrom } from "@/lib/review-import";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isStudioShowcase, studioPostId } from "@/lib/data/booking-proof";
 
 type ProofUpdate = Database["public"]["Tables"]["booking_proof"]["Update"];
 
@@ -228,18 +230,76 @@ export async function moveProof(id: string, direction: -1 | 1): Promise<Result> 
 }
 
 /**
- * Show or hide one before-and-after on the booking page. It stays approved
- * for social media either way.
+ * Show or hide one before-and-after on the booking page. A post from Before
+ * & After Posts stays approved for social media either way.
  */
 export async function setShowcaseShown(id: string, shown: boolean): Promise<Result> {
   const who = await owner();
   if ("error" in who) return { ok: false, error: who.error! };
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("social_posts")
-    .update({ on_booking_page: shown, updated_at: new Date().toISOString() })
-    .eq("id", id)
+  const now = new Date().toISOString();
+  const { error } = isStudioShowcase(id)
+    ? await supabase
+        .from("social_posts")
+        .update({ on_booking_page: shown, updated_at: now })
+        .eq("id", studioPostId(id))
+        .eq("organization_id", who.profile.organization_id)
+    : await supabase.from("booking_showcase").update({ shown, updated_at: now }).eq("id", id).eq("organization_id", who.profile.organization_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/booking-page");
+  return { ok: true };
+}
+
+/** Delete one uploaded here. One from Before & After Posts is hidden instead. */
+export async function deleteShowcase(id: string): Promise<Result> {
+  const who = await owner();
+  if ("error" in who) return { ok: false, error: who.error! };
+  if (isStudioShowcase(id)) return { ok: false, error: "That one is from Before & After Posts. Hide it instead." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("booking_showcase").delete().eq("id", id).eq("organization_id", who.profile.organization_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/booking-page");
+  return { ok: true };
+}
+
+/**
+ * A finished before-and-after picture, uploaded on the Booking Page. Shrunk
+ * in the browser first; kept in the public social bucket, where only
+ * approved work goes, since the owner uploading it is approving it.
+ */
+export async function addShowcase(form: FormData): Promise<Result> {
+  const who = await owner();
+  if ("error" in who) return { ok: false, error: who.error! };
+  const file = form.get("file");
+  const title = String(form.get("title") ?? "").trim().slice(0, 60);
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose the picture first." };
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return { ok: false, error: "That isn't a JPEG, PNG or WebP picture." };
+  // Shrunk in the browser before it is sent, so anything this big did not go
+  // through that.
+  if (file.size > 1024 * 1024) return { ok: false, error: "That picture is too big. Try again, or a smaller one." };
+  if (!title) return { ok: false, error: "Say what the job was, like \"Mulch & edging\"." };
+
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `${who.profile.organization_id}/booking/${crypto.randomUUID()}.${ext}`;
+  const admin = createAdminClient();
+  const { error: uploadError } = await admin.storage
+    .from("social-posts")
+    .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false });
+  if (uploadError) return { ok: false, error: uploadError.message };
+  const url = admin.storage.from("social-posts").getPublicUrl(path).data.publicUrl;
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("booking_showcase")
+    .select("id", { count: "exact", head: true })
     .eq("organization_id", who.profile.organization_id);
+  const { error } = await supabase.from("booking_showcase").insert({
+    organization_id: who.profile.organization_id,
+    title,
+    image_url: url,
+    position: count ?? 0,
+    created_by: who.profile.id,
+  });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/booking-page");
   return { ok: true };
