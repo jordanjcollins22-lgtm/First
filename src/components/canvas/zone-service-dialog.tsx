@@ -289,6 +289,8 @@ interface ZoneServiceDialogProps {
   zoneName: string;
   /** Storage prefix for uploaded zone photos — required to actually save them. */
   jobId?: string;
+  /** Trying the tool: photos are not kept, and it says so. */
+  practice?: boolean;
   catalog: CanvasCatalog;
   initialLocation: string;
   initialService: ZoneServiceData | null;
@@ -315,6 +317,7 @@ export function ZoneServiceDialog({
   open,
   zoneName,
   jobId,
+  practice = false,
   catalog,
   initialLocation,
   otherLocations,
@@ -554,7 +557,11 @@ export function ZoneServiceDialog({
     if (files.length === 0) return;
 
     if (!jobId) {
-      setPhotoError("This job hasn't finished saving yet, wait a moment and try again.");
+      setPhotoError(
+        practice
+          ? "Photos are not kept in practice. On a real job, the ones taken of this area go here."
+          : "This job hasn't finished saving yet, wait a moment and try again."
+      );
       return;
     }
 

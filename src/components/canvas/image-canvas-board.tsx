@@ -148,6 +148,11 @@ interface ImageCanvasBoardProps {
   initialEvaluationStatus?: EvaluationStatus;
   /** Who is doing the evaluation, so a note has somebody to ask about it. */
   evaluatorName?: string | null;
+  /**
+   * For trying the tool: nothing is saved anywhere, not even in this
+   * browser, and it opens blank every time.
+   */
+  practice?: boolean;
 }
 
 export function ImageCanvasBoard({
@@ -159,6 +164,7 @@ export function ImageCanvasBoard({
   initialLng,
   initialEvaluationStatus,
   evaluatorName,
+  practice = false,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -479,6 +485,11 @@ export function ImageCanvasBoard({
   // Only for the standalone /canvas page — job-scoped canvases use the effect above.
   useEffect(() => {
     if (jobId) return;
+    // Practice starts blank and stays in memory: nothing to restore.
+    if (practice) {
+      loadedRef.current = true;
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -522,13 +533,13 @@ export function ImageCanvasBoard({
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, practice]);
 
   // Debounced autosave to this browser's storage whenever the design changes.
   // Only for the standalone /canvas page — job-scoped canvases autosave to the
   // database instead (see the effect below).
   useEffect(() => {
-    if (jobId) return;
+    if (jobId || practice) return;
     if (!loadedRef.current) return;
     const timer = setTimeout(() => {
       saveDesign({
@@ -550,7 +561,7 @@ export function ImageCanvasBoard({
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed]);
+  }, [jobId, practice, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed]);
 
   // Debounced autosave to the database for job-scoped canvases. Zone photos
   // are uploaded to storage as soon as they're picked (see ZoneServiceDialog)
@@ -1165,7 +1176,7 @@ export function ImageCanvasBoard({
   }
 
   async function handleClearSavedDesign() {
-    if (!jobId) await clearDesign();
+    if (!jobId && !practice) await clearDesign();
     setImage(null);
     setLocked(false);
     setAddress(initialAddress ?? "");
@@ -1904,7 +1915,7 @@ export function ImageCanvasBoard({
           {(image || zones.length > 0) && (
             <Button type="button" variant="ghost" onClick={handleClearSavedDesign}>
               <Trash2 className="h-4 w-4" />
-              Clear Saved Design
+              {practice ? "Start over" : "Clear Saved Design"}
             </Button>
           )}
         </div>
@@ -1989,6 +2000,7 @@ export function ImageCanvasBoard({
         open={dialogZone !== null}
         zoneName={dialogZone?.name ?? ""}
         jobId={jobId}
+        practice={practice}
         catalog={catalog}
         initialLocation={dialogZone?.location ?? ""}
         // Every place named on this evaluation so far, so the next zone in

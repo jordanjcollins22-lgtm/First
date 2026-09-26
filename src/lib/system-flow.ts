@@ -28,7 +28,7 @@ export interface SystemSquare {
    * A panel on a real job to open instead, when there is one: the tool
    * itself rather than the list it is reached from. `href` is the fallback.
    */
-  onJob?: "map" | "proposal";
+  onJob?: "proposal";
   status: SystemStatus;
   /** What is missing, when it is not all live. */
   gap?: string;
@@ -124,8 +124,8 @@ export const SYSTEM_FLOW: SystemStage[] = [
         key: "evaluation",
         title: "Evaluation site map",
         line: "On site, the evaluator draws each area on the map with its photos and measurements.",
-        href: "/operations?tab=evaluations",
-        onJob: "map",
+        // The tool itself, to try, with how it is used. Nothing is saved.
+        href: "/practice/site-map",
         status: "live",
       },
       {

@@ -87,7 +87,7 @@ import { OpsPanel } from "@/components/ops/ops-panel";
 
 /** The system map, with the tool squares opening on real jobs. */
 async function SystemTab() {
-  const jobLinks = await systemJobLinks().catch(() => ({ map: null, proposal: null }));
+  const jobLinks = await systemJobLinks().catch(() => ({ proposal: null }));
   return <SystemFlow jobLinks={jobLinks} />;
 }
 
