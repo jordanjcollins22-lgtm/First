@@ -94,6 +94,7 @@ export function IntakeForm({
   together,
   businessPhone,
   greeting,
+  demo = false,
 }: {
   token: string;
   initial: IntakeAnswers;
@@ -103,6 +104,8 @@ export function IntakeForm({
   businessPhone: string | null;
   /** Said above the first question. */
   greeting?: string;
+  /** A look at the form with nothing saved anywhere: for the owner to try it. */
+  demo?: boolean;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswers>(initial);
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
@@ -128,7 +131,7 @@ export function IntakeForm({
     setAt(list[Math.min(Math.max(to, 0), list.length - 1)].key);
     window.scrollTo({ top: 0 });
     // Kept as they go. If this one fails, Send saves everything anyway.
-    void saveIntakeProgress({ token, answers: withAnswers }).catch(() => undefined);
+    if (!demo) void saveIntakeProgress({ token, answers: withAnswers }).catch(() => undefined);
   }
 
   function next(withAnswers: IntakeAnswers = answers) {
@@ -156,7 +159,7 @@ export function IntakeForm({
   function send() {
     setError(null);
     start(async () => {
-      const result = await submitEvaluationIntake({ token, answers, together });
+      const result = demo ? { ok: true as const, submittedAt: new Date().toISOString() } : await submitEvaluationIntake({ token, answers, together });
       if (!result.ok) return setError(result.error);
       setDone(result.submittedAt);
       setEditing(false);
@@ -258,7 +261,7 @@ export function IntakeForm({
           </Question>
         )}
 
-        {step.kind === "photos" && <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending} />}
+        {step.kind === "photos" && <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending || demo} />}
 
         {isLast && (
           <div className="flex flex-col gap-4">
