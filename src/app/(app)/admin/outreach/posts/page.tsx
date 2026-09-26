@@ -38,7 +38,12 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
     }),
     answeredToday(profile.organization_id, profile.id, now).catch(() => 0),
     getAgentSettings(profile.organization_id),
-    affiliateClosedBoard(profile.organization_id, now).catch(() => []),
+    affiliateClosedBoard(profile.organization_id, now).catch((err) => {
+      // Said, not swallowed: an empty board used to be indistinguishable
+      // from one that failed to load.
+      console.error("Affiliate leaderboard failed to load:", err);
+      return null;
+    }),
   ]);
 
   return (
@@ -63,7 +68,13 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
 
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
 
-      <AnsweringLeaderboard standings={leaderboard} meId={profile.id} />
+      {leaderboard ? (
+        <AnsweringLeaderboard standings={leaderboard} meId={profile.id} />
+      ) : (
+        <p className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+          The leaderboard couldn&apos;t load just now. Reload the page.
+        </p>
+      )}
 
       {/* Every post at once, for anybody who wants to see who has what. The
           card above is the way to answer them. */}

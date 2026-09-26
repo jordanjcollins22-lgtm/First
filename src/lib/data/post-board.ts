@@ -194,7 +194,12 @@ export async function answersToPost(organizationId: string, postId: string): Pro
  */
 export async function affiliateClosedBoard(organizationId: string, now: Date = new Date()): Promise<CloserStanding[]> {
   const admin = createAdminClient();
-  const [{ data: profiles }, { data: jobs }, { data: links }, { data: answers }] = await Promise.all([
+  const [
+    { data: profiles, error: profilesError },
+    { data: jobs, error: jobsError },
+    { data: links, error: linksError },
+    { data: answers },
+  ] = await Promise.all([
     admin.from("profiles").select("id, full_name, email").eq("organization_id", organizationId),
     admin
       .from("jobs")
@@ -206,6 +211,11 @@ export async function affiliateClosedBoard(organizationId: string, now: Date = n
     admin.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId).limit(10000),
     admin.from("outreach_post_answers").select("profile_id").eq("organization_id", organizationId).eq("status", "posted").limit(10000),
   ]);
+
+  // A query that fails throws, so the page says the board didn't load
+  // rather than showing an empty one.
+  const failed = profilesError ?? jobsError ?? linksError;
+  if (failed) throw new Error(failed.message);
 
   type JobRow = {
     id: string;
