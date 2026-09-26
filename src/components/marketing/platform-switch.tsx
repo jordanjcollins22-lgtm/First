@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { setRedditEnabled } from "@/lib/actions/outreach-agent-actions";
+import { pauseGroupAgent, resumeGroupAgent, setRedditEnabled } from "@/lib/actions/outreach-agent-actions";
 
 /** Reddit on or off, one press. */
 export function RedditSwitch({ enabled, owner }: { enabled: boolean; owner: boolean }) {
@@ -35,6 +35,47 @@ export function RedditSwitch({ enabled, owner }: { enabled: boolean; owner: bool
           {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
           {on ? "Turn off" : "Turn on"}
         </Button>
+      )}
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
+  );
+}
+
+/** The finder as a whole: resume it, or pause it for a day or until told. */
+export function FinderPower({ paused, owner }: { paused: boolean; owner: boolean }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  if (!owner) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {pending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      {paused ? (
+        <Button type="button" size="sm" disabled={pending} onClick={() => run(() => resumeGroupAgent())}>
+          Resume
+        </Button>
+      ) : (
+        <>
+          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => run(() => pauseGroupAgent({ hours: 24, reason: "Paused by hand." }))}>
+            Pause a day
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => run(() => pauseGroupAgent({ hours: null, reason: "Paused by hand." }))}>
+            Pause
+          </Button>
+        </>
       )}
       {error && <span className="text-xs text-destructive">{error}</span>}
     </span>

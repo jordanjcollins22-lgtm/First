@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { pauseGroupAgent, resumeGroupAgent, updateAgentSettings } from "@/lib/actions/outreach-agent-actions";
+import { updateAgentSettings } from "@/lib/actions/outreach-agent-actions";
 import type { AgentGroup, AgentSettings, AgentSources } from "@/lib/outreach-agent";
 
 /**
@@ -18,13 +18,12 @@ import type { AgentGroup, AgentSettings, AgentSources } from "@/lib/outreach-age
  * never posts: the team answers from their own accounts off the board.
  * Saved as one thing, because they only make sense together.
  */
-export function AgentSettingsForm({ settings, owner, paused }: { settings: AgentSettings; owner: boolean; paused: boolean }) {
+export function AgentSettingsForm({ settings, owner }: { settings: AgentSettings; owner: boolean }) {
   const [groups, setGroups] = useState<AgentGroup[]>(settings.groups.length > 0 ? settings.groups : [{ url: "", name: "" }]);
   const [sources, setSources] = useState<AgentSources>(settings.sources);
   const [searchPhrases, setSearchPhrases] = useState(settings.searchPhrases.join("\n"));
   const [areaWords, setAreaWords] = useState(settings.areaWords.join(", "));
   const [keywords, setKeywords] = useState(settings.keywords.join(", "));
-  const [redditEnabled, setRedditEnabled] = useState(settings.redditEnabled);
   const [redditSubreddits, setRedditSubreddits] = useState(settings.redditSubreddits.join("\n"));
   const [dailyCap, setDailyCap] = useState(String(settings.dailyCap));
   const [activeFrom, setActiveFrom] = useState(settings.activeFrom);
@@ -52,26 +51,11 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
         // board, and nothing is posted from here.
         autoPost: false,
         pickPosts: true,
-        redditEnabled,
+        // Turned on and off at the top of the page, not here.
+        redditEnabled: settings.redditEnabled,
         redditSubreddits,
       });
       setMessage(result.ok ? "Saved. The browser picks it up within a minute." : result.error);
-    });
-  }
-
-  function pause(hours: number | null) {
-    setMessage(null);
-    startTransition(async () => {
-      const result = await pauseGroupAgent({ hours, reason: "Paused by hand." });
-      setMessage(result.ok ? "Paused." : result.error);
-    });
-  }
-
-  function resume() {
-    setMessage(null);
-    startTransition(async () => {
-      const result = await resumeGroupAgent();
-      setMessage(result.ok ? "Running again." : result.error);
     });
   }
 
@@ -156,16 +140,10 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
       </div>
 
       <div className="space-y-2 rounded-lg border border-border p-3">
-        <SourceRow
-          checked={redditEnabled}
-          disabled={disabled}
-          onChange={setRedditEnabled}
-          label="Read Reddit"
-          blurb="The app reads these subreddits' newest posts every half hour on its own, no browser needed, and keeps the ones asking for the work. It only reads; it never posts, votes or messages."
-        />
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reddit</p>
         <label className="block space-y-1 text-xs">
           <span className="font-semibold uppercase tracking-wide text-muted-foreground">Subreddits, one per line</span>
-          <Textarea value={redditSubreddits} disabled={disabled || !redditEnabled} rows={3} onChange={(e) => setRedditSubreddits(e.target.value)} />
+          <Textarea value={redditSubreddits} disabled={disabled} rows={3} onChange={(e) => setRedditSubreddits(e.target.value)} />
         </label>
         <p className="text-xs text-muted-foreground">
           A post in a subreddit named after somewhere local (r/harfordcounty) only has to name the work. Anywhere
@@ -197,20 +175,6 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
           {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
-        {paused ? (
-          <Button type="button" variant="outline" onClick={resume} disabled={disabled}>
-            Resume
-          </Button>
-        ) : (
-          <>
-            <Button type="button" variant="outline" onClick={() => pause(24)} disabled={disabled}>
-              Pause for a day
-            </Button>
-            <Button type="button" variant="outline" onClick={() => pause(null)} disabled={disabled}>
-              Pause until I say
-            </Button>
-          </>
-        )}
         {message && <span className="text-sm text-muted-foreground">{message}</span>}
       </div>
       {!owner && <p className="text-xs text-muted-foreground">Only the owner can change these.</p>}

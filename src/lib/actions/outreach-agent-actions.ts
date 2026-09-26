@@ -326,7 +326,7 @@ export async function resumeGroupAgent(): Promise<Result> {
 }
 
 /**
- * Reddit on or off, in one press, from the top of the Group Agent page.
+ * Reddit on or off, in one press, from the top of Where Posts Come From.
  * The subreddit list is left as it is.
  */
 export async function setRedditEnabled(enabled: boolean): Promise<Result> {
