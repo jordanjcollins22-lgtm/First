@@ -56,14 +56,14 @@ export const OBJECTIONS: Objection[] = [
     id: "price_high",
     label: "How did you come up with this price?",
     answer:
-      "Fair question, and worth asking. The number covers the crew's time, the materials, hauling the waste away and the insurance, so there is nothing added at the end. If it is more than you had in mind right now, we have two honest ways around it: spread it over a few payments, or trim the work back to the parts that matter most to you. Either way the quality stays the same. It is the scale or the timing that changes.",
+      "Fair question, and worth asking. The number is a fixed price for the work written out on this page, area by area, so there is nothing added at the end. If it is more than you had in mind right now, we have two honest ways around it: spread it over a few payments, or trim the work back to the parts that matter most to you. Either way the quality stays the same. It is the scale or the timing that changes.",
     resolutions: ["payment_plan", "reduce_scope", "talk"],
   },
   {
     id: "cannot_pay_at_once",
     label: "Can I split this into payments?",
     answer:
-      "Yes. We can take a deposit to get you on the schedule and split the rest across monthly payments. You will see the exact amounts and dates before you agree to anything, and there is no interest on it. Most people pick three or four payments.",
+      "Yes. We can take a deposit to get you on the schedule and split the rest across payments. You will see the exact amounts and dates before you agree to anything.",
     resolutions: ["payment_plan", "talk"],
   },
   {
@@ -91,28 +91,21 @@ export const OBJECTIONS: Objection[] = [
     id: "weather_delay",
     label: "What happens if the weather is bad?",
     answer:
-      "We move you, and we tell you before you are standing at the window wondering. Heavy rain and frozen ground make some of this work either unsafe or bad for the lawn, so we would rather come back on a good day than do a poor job on a wet one. You keep your place at the front of the schedule, and you are not charged anything for a day that got moved.",
+      "We move you, and we tell you as soon as we know. Heavy rain and frozen ground make some of this work either unsafe or bad for the lawn, so we would rather come back on a good day than do a poor job on a wet one. You keep your place at the front of the schedule.",
     resolutions: ["explain", "talk"],
   },
   {
     id: "getting_other_quotes",
     label: "How do you compare with other quotes?",
     answer:
-      "You should get other quotes. It is your money and a good contractor will not mind. Two things worth checking on the others: whether they are licensed and insured in Maryland, and whether their price includes hauling the waste away, because that is the one that usually shows up later as an extra. Our price already includes it. If somebody comes in lower, tell us what is on their sheet and we will tell you straight whether we can match it or why we cannot.",
-    resolutions: ["explain", "talk"],
-  },
-  {
-    id: "havent_used_you",
-    label: "Are you licensed and insured?",
-    answer:
-      "Yes to both, and we will send you the certificate if you would like to see it. We are local to Harford County. If part of your plan is something we do not do in house, we hire a licensed and insured partner for that part rather than attempting it ourselves, and we check their paperwork before they set foot on your property. Every job gets before and after photos, and you get a walkthrough with us at the end before anybody asks you for the final payment.",
+      "You should get other quotes. It is your money and a good contractor will not mind. When you compare, check what each price includes, so you are comparing the same work. If somebody comes in lower, tell us what is on their sheet and we will tell you straight whether we can match it or why we cannot.",
     resolutions: ["explain", "talk"],
   },
   {
     id: "not_happy",
     label: "What if I am not happy with something?",
     answer:
-      "You tell us at the walkthrough and we come back. That walkthrough happens before we ask for the final payment, on purpose, so you are never in the position of having paid for something you are not happy with. If you spot something after we have gone, call us and we will come and look at it.",
+      "Tell us straight away, by phone or by replying here. Everything we agreed to do is written out on this page, so it is clear what was agreed and we can sort it out from there.",
     resolutions: ["explain", "talk"],
   },
   {
@@ -123,14 +116,14 @@ export const OBJECTIONS: Objection[] = [
     // fallback for a proposal with nothing priced on it yet.
     label: "Who will be at my property?",
     answer:
-      "Our own crew, in company shirts and a marked truck. You will know the day before who is coming and roughly what time. Anything in your plan that is not something we do in house, we do not have a go at. We hire a licensed and insured partner who does that work every day, and we stay responsible for it either way. If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.",
+      "Our own crew. Anything in your plan that is not something we do in house, we do not have a go at. We hire a partner business who does that work every day, and we stay responsible for it either way. If you would like to be home for it we will work around that, and if you would rather not be, that is fine too. We will send you photos when it is done.",
     resolutions: ["explain", "talk"],
   },
   {
     id: "how_to_pay",
     label: "How do I pay?",
     answer:
-      "Card, Apple Pay, Google Pay, check or bank transfer, whichever suits you. Accepting takes you straight to the payment screen, and once that is settled a team member reaches out to get your service booked in. If you would rather spread it out, you can pick that on the same screen.",
+      "Card, Apple Pay or Google Pay. Accepting takes you straight to the payment screen, and once that is settled a team member reaches out to get your service booked in. If you would rather spread it out, you can pick that on the same screen.",
     resolutions: ["payment_plan", "explain"],
   },
   {

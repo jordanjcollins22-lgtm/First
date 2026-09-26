@@ -3,7 +3,7 @@
  *
  * Two jobs. The first is to price: what they want done, where, and the
  * handful of facts about each kind of work that move its price (what is in
- * the beds now, how big the stumps are, whether a machine fits through the
+ * the beds now, how many shrubs are coming out, whether a machine fits through the
  * gate), plus photos. The second is to settle the questions that stop
  * people saying yes. They tell us what would make them say no, and the form
  * answers it on the spot, saying only what is known to be true; the
@@ -74,7 +74,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "beds", label: "Beds: mulch, stone or plants" },
       { value: "lawn", label: "Lawn: repair, sod, seed or mowing" },
       { value: "cleanup", label: "Cleanup and trimming" },
-      { value: "removal", label: "Shrub, tree or stump removal" },
+      { value: "removal", label: "Shrub or plant removal" },
       { value: "drainage", label: "Drainage or standing water" },
       { value: "hardscape", label: "Patio, walkway or wall" },
       { value: "washing", label: "Soft washing" },
@@ -276,7 +276,7 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
       ["trim", "Shrubs or hedges to trim"],
       ["tall", "Some over 6 ft tall"],
       ["vines", "Vines or ivy"],
-      ["saplings", "Small trees and saplings"],
+      ["saplings", "Saplings and seedlings"],
       ["debris", "Junk to haul away"]
     ),
   },
@@ -287,13 +287,9 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     title: "What is coming out?",
     short: "Removing",
     kind: "multi",
-    options: opts(
-      ["small", "Shrubs shorter than me"],
-      ["large", "Shrubs taller than me"],
-      ["trees", "Small trees"],
-      ["stumps_small", "Stumps under a foot across"],
-      ["stumps_big", "Stumps over a foot across"]
-    ),
+    // Shrubs and plants only. Trees and stumps are a licensed trade the
+    // business does not do itself, so the form does not offer them.
+    options: opts(["small", "Shrubs shorter than me"], ["large", "Shrubs taller than me"], ["bed", "A whole bed of plants"], ["roots", "Old roots to dig out"]),
   },
   {
     id: "water",
@@ -734,7 +730,7 @@ export function talkingPoints(answers: IntakeAnswers): string[] {
   }
   if (has2("yard", "street")) points.push("Materials get dropped at the street. Price the extra carrying.");
   if (has2("yard", "dog")) points.push("A dog uses the yard. Agree when it is kept in, and keep the gate shut.");
-  if (has2("remove_what", "stumps_big")) points.push("Big stumps. Check grinder access and whether the stump is near anything buried.");
+  if (has2("remove_what", "roots")) points.push("Old roots to dig out. Check how big they are and whether anything is buried near them.");
   if (has2("water", "basement")) points.push("Water reaches the basement. Look at the downspouts and the grade against the house first.");
   if (has2("beds_now", "stone")) points.push("There is stone in the beds now. Price taking it out if they want mulch instead.");
   if (answers.photos.length > 0) points.push(`They sent ${answers.photos.length} photo${answers.photos.length === 1 ? "" : "s"}. Look before you go, and draft the price from them if you can.`);

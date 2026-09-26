@@ -109,7 +109,7 @@ export function joinList(items: string[]): string {
  */
 export function whoAttendsAnswer(crewing: Crewing): string {
   const OURS =
-    "Our own crew, in company shirts and a marked truck. You will know the day before who is coming and roughly what time.";
+    "Our own crew.";
   // Said on every proposal, including the ones that are entirely ours. It is
   // how we work, not a caveat about this particular job, and a client is
   // owed it before they decide rather than after somebody turns up.
@@ -131,14 +131,14 @@ export function whoAttendsAnswer(crewing: Crewing): string {
 
   if (crewing.kind === "partner") {
     return (
-      `${joinList(partners)}. They are a local business we have worked alongside for years, ${HIRED}. ` +
+      `${joinList(partners)}. They are a local business we work with, ${HIRED}. ` +
       `We stay responsible for the job either way, so anything you need still comes through us. ` +
       EITHER_WAY
     );
   }
 
   return (
-    `Most of it is our own crew, in company shirts and a marked truck: the ${joinList(
+    `Most of it is our own crew: the ${joinList(
       crewing.ownServices
     ).toLowerCase()}. ${joinList(partners)}. They are a local business we work with, ${HIRED}. ` +
     `We stay responsible for the whole job, so anything you need still comes through us. ` +

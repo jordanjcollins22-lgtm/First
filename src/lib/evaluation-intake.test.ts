@@ -5,6 +5,7 @@ import {
   answersForConcerns,
   BEFORE_VISIT_QUESTIONS,
   CONCERN_ANSWERS,
+  DETAIL_QUESTIONS,
   detailQuestionsFor,
   notesShown,
   summarizeDetails,
@@ -111,17 +112,17 @@ describe("the details that set the price", () => {
   it("keeps offered answers only, and reads them back in words", () => {
     const answers = cleanAnswers({
       services: ["removal"],
-      details: { remove_what: ["stumps_big", "made_up"], yard: ["narrow_gate", "sprinklers"], yard_notes: " code 1234 ", cover: "purple" },
+      details: { remove_what: ["roots", "made_up"], yard: ["narrow_gate", "sprinklers"], yard_notes: " code 1234 ", cover: "purple" },
     });
-    expect(answers.details).toEqual({ remove_what: ["stumps_big"], yard: ["narrow_gate", "sprinklers"], yard_notes: "code 1234" });
+    expect(answers.details).toEqual({ remove_what: ["roots"], yard: ["narrow_gate", "sprinklers"], yard_notes: "code 1234" });
     expect(summarizeDetails(answers)).toEqual([
-      { label: "Removing", value: "Stumps over a foot across" },
+      { label: "Removing", value: "Old roots to dig out" },
       { label: "Yard", value: "Gate under 3 ft wide, Sprinklers. code 1234" },
     ]);
     const points = talkingPoints(answers);
     expect(points.some((p) => p.includes("hand work"))).toBe(true);
     expect(points.some((p) => p.includes("sprinkler heads"))).toBe(true);
-    expect(points.some((p) => p.includes("Big stumps"))).toBe(true);
+    expect(points.some((p) => p.includes("Old roots"))).toBe(true);
   });
 
   it("shows a notes box only once it is needed", () => {
@@ -129,6 +130,11 @@ describe("the details that set the price", () => {
     expect(notesShown(services, cleanAnswers({ services: ["beds"] }))).toBe(false);
     expect(notesShown(services, cleanAnswers({ services: ["other"] }))).toBe(true);
     expect(notesShown(services, cleanAnswers({ services: ["beds"], services_other: "a fire pit" }))).toBe(true);
+  });
+
+  it("never offers tree or stump work, which the business does not do itself", () => {
+    const words = [...INTAKE_QUESTIONS, ...DETAIL_QUESTIONS].flatMap((q) => [q.title, ...(q.options ?? []).map((o) => o.label)]).join(" ");
+    expect(words).not.toMatch(/stump|\btrees?\b/i);
   });
 
   it("keeps only photo paths the form could have made", () => {
