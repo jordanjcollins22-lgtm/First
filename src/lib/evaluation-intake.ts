@@ -121,7 +121,6 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     key: "concerns",
     section: "decide",
     title: "Is there anything you're worried about, or anything else?",
-    help: "Honest answers get you a better proposal, not a harder sell. Tick any and we answer it right here.",
     kind: "multi",
     options: [
       { value: "price", label: "The price" },
