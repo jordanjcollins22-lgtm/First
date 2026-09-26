@@ -75,6 +75,9 @@ export const env = {
   ghlApiKey: process.env.GHL_API_KEY ?? "",
   ghlLocationId: process.env.GHL_LOCATION_ID ?? "",
   ghlCalendarId: process.env.GHL_CALENDAR_ID ?? "",
+  /** A Reddit "script" app's id and secret. Optional: without them the finder reads Reddit's public pages. */
+  redditClientId: process.env.REDDIT_CLIENT_ID ?? "",
+  redditClientSecret: process.env.REDDIT_CLIENT_SECRET ?? "",
   /** "true" to let texts go out through GoHighLevel's number. Off unless set. */
   ghlTextsEnabled: process.env.GHL_TEXTS_ENABLED === "true",
   // Sends the evaluation emails from the business's own Gmail, so replies

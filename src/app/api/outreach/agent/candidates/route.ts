@@ -14,6 +14,7 @@ import {
   type ScanSource,
 } from "@/lib/outreach-agent";
 import { createClient } from "@/lib/supabase/server";
+import { matchReason, postedAtFromAge } from "@/lib/social-finder";
 import { sortReadPosts } from "@/lib/data/post-sorter";
 
 /**
@@ -139,20 +140,27 @@ export async function POST(request: NextRequest) {
       }
     }
     const anonymous = post.anonymous === true || isAnonymousAuthor(post.author);
-    const matched = matchesKeywords(text, settings.keywords);
+    // A post from search can be from anywhere in the country, so it has to
+    // name somewhere near here; the feed and listed groups are local already.
+    const verdict = matchReason({ text, keywords: settings.keywords, areaWords: settings.areaWords, needArea: source === "search" });
+    const matched = verdict.matched || matchesKeywords(text, settings.keywords);
+    const ageDays = ageDaysFromLabel(post.ageLabel, now);
     const id = await recordSeen(profile.organization_id, profile.id, {
       postKey: key,
       url,
       groupName: (post.group?.name ?? "").trim().slice(0, 120) || listedGroupName || null,
       author: anonymous ? null : post.author?.trim().slice(0, 80) || null,
       text,
-      ageDays: ageDaysFromLabel(post.ageLabel, now),
+      ageDays,
       decision: "read",
       reason: null,
       linkId: null,
       source,
       groupKey,
       matched,
+      platform: "facebook",
+      postedAt: postedAtFromAge(ageDays, now),
+      matchReason: verdict.reason,
     });
     if (id) kept += 1;
     else skipped += 1;

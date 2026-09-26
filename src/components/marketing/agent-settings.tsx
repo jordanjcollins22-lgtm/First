@@ -24,6 +24,8 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
   const [searchPhrases, setSearchPhrases] = useState(settings.searchPhrases.join("\n"));
   const [areaWords, setAreaWords] = useState(settings.areaWords.join(", "));
   const [keywords, setKeywords] = useState(settings.keywords.join(", "));
+  const [redditEnabled, setRedditEnabled] = useState(settings.redditEnabled);
+  const [redditSubreddits, setRedditSubreddits] = useState(settings.redditSubreddits.join("\n"));
   const [dailyCap, setDailyCap] = useState(String(settings.dailyCap));
   const [activeFrom, setActiveFrom] = useState(settings.activeFrom);
   const [activeTo, setActiveTo] = useState(settings.activeTo);
@@ -50,6 +52,8 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
         // board, and nothing is posted from here.
         autoPost: false,
         pickPosts: true,
+        redditEnabled,
+        redditSubreddits,
       });
       setMessage(result.ok ? "Saved. The browser picks it up within a minute." : result.error);
     });
@@ -149,6 +153,24 @@ export function AgentSettingsForm({ settings, owner, paused }: { settings: Agent
         <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setGroups((all) => [...all, { url: "", name: "" }])}>
           <Plus className="mr-1 h-4 w-4" /> Another group
         </Button>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border p-3">
+        <SourceRow
+          checked={redditEnabled}
+          disabled={disabled}
+          onChange={setRedditEnabled}
+          label="Read Reddit"
+          blurb="The app reads these subreddits' newest posts every half hour on its own, no browser needed, and keeps the ones asking for the work. It only reads; it never posts, votes or messages."
+        />
+        <label className="block space-y-1 text-xs">
+          <span className="font-semibold uppercase tracking-wide text-muted-foreground">Subreddits, one per line</span>
+          <Textarea value={redditSubreddits} disabled={disabled || !redditEnabled} rows={3} onChange={(e) => setRedditSubreddits(e.target.value)} />
+        </label>
+        <p className="text-xs text-muted-foreground">
+          A post in a subreddit named after somewhere local (r/harfordcounty) only has to name the work. Anywhere
+          else it also has to name a town from the area words.
+        </p>
       </div>
 
       <div className="space-y-1">

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { letPostGo, markAnswerPosted, removeFromBoard, takePost } from "@/lib/actions/post-board-actions";
 import type { BoardPost } from "@/lib/data/post-board";
 import { shortWhen } from "@/lib/time-zone";
+import { PLATFORM_LABEL } from "@/lib/social-finder";
 
 /**
  * The Posts to answer board.
@@ -129,12 +130,18 @@ export function PostBoard({ posts, owner, answeredToday, dailyLimit }: { posts: 
           <div key={post.id} className="space-y-2 rounded-lg border border-border p-3">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>
+                <span className="mr-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground">
+                  {PLATFORM_LABEL[post.platform] ?? "Facebook"}
+                </span>
                 <span className="font-medium text-foreground">{post.author ?? "Someone (anonymous)"}</span>
                 {post.groupName ? ` in ${post.groupName}` : ""}
-                {` · posted ${post.ageDays === 0 ? "today" : post.ageDays === 1 ? "yesterday" : `${post.ageDays} days ago`}`}
+                {` · posted ${post.postedAt ? shortWhen(post.postedAt) : post.ageDays === 0 ? "today" : post.ageDays === 1 ? "yesterday" : `${post.ageDays} days ago`}`}
               </span>
               <span>found {shortWhen(post.foundAt)}</span>
             </div>
+            {/* Why the finder kept it, so a post that does not belong is easy
+                to spot and the words can be tuned. */}
+            {post.matchReason && <p className="text-[11px] text-muted-foreground">Why it&apos;s here: {post.matchReason}</p>}
             <p className="whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-sm">
               {open || !long ? post.text : `${post.text.slice(0, 320)}…`}
               {long && (

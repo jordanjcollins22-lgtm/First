@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
 import { findPostUrl } from "@/lib/outreach-agent";
+import type { Platform } from "@/lib/social-finder";
 import {
   BOARD_MAX_AGE_DAYS,
   ageNow,
@@ -33,6 +34,11 @@ export interface BoardPost {
   mine: BoardAnswer | null;
   /** Everybody else holding a place on it: posted, or writing right now. */
   others: BoardAnswer[];
+  platform: Platform;
+  /** When it went up, where the platform said. */
+  postedAt: string | null;
+  /** Why the finder kept it. */
+  matchReason: string | null;
 }
 
 /** Midnight this morning, the business's time. */
@@ -47,7 +53,7 @@ async function freshRequests(organizationId: string, now: Date) {
   const since = new Date(now.getTime() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, author, text, age_days, created_at")
+    .select("id, url, group_name, author, text, age_days, created_at, platform, posted_at, match_reason")
     .eq("organization_id", organizationId)
     .eq("kind", "request")
     .eq("decision", "read")
@@ -55,7 +61,13 @@ async function freshRequests(organizationId: string, now: Date) {
     .order("created_at", { ascending: false })
     .limit(300);
   if (error) throw error;
-  return (data ?? []).filter((row) => stillFresh(row.age_days, row.created_at, now));
+  return (data ?? []).filter((row) => stillFresh(ageWhenRead(row), row.created_at, now));
+}
+
+/** How old the post was when it was read: from when it went up where known. */
+function ageWhenRead(row: { age_days: number | null; posted_at: string | null; created_at: string }): number | null {
+  if (row.posted_at) return Math.max(0, Math.floor((new Date(row.created_at).getTime() - new Date(row.posted_at).getTime()) / 86_400_000));
+  return row.age_days;
 }
 
 async function answersFor(organizationId: string, postIds: string[]): Promise<Map<string, BoardAnswer[]>> {
@@ -122,7 +134,10 @@ export async function getPostBoard(organizationId: string, profileId: string, no
       groupName: row.group_name,
       author: row.author,
       text,
-      ageDays: ageNow(row.age_days, row.created_at, now),
+      ageDays: ageNow(ageWhenRead(row), row.created_at, now),
+      platform: (row.platform ?? "facebook") as Platform,
+      postedAt: row.posted_at,
+      matchReason: row.match_reason,
       foundAt: row.created_at,
       pile: standing.pile,
       mine: standing.mine,

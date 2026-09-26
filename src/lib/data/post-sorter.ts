@@ -2,6 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 
 import { createClient } from "@/lib/supabase/server";
+import type { createAdminClient } from "@/lib/supabase/admin";
+
+type Db = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
 import {
@@ -37,9 +40,12 @@ interface Row {
   text: string | null;
 }
 
-export async function sortReadPosts(organizationId: string, options: { limit?: number } = {}): Promise<{ sorted: number; businesses: number }> {
+export async function sortReadPosts(
+  organizationId: string,
+  options: { limit?: number; client?: Db } = {}
+): Promise<{ sorted: number; businesses: number }> {
   if (!isAnthropicConfigured) return { sorted: 0, businesses: 0 };
-  const supabase = await createClient();
+  const supabase = options.client ?? (await createClient());
   const { data } = await supabase
     .from("outreach_seen_posts")
     .select("id, url, author, group_name, text")
@@ -64,7 +70,7 @@ export async function sortReadPosts(organizationId: string, options: { limit?: n
     if (!verdict) continue;
     let businessId: string | null = null;
     if (verdict.kind === "promotion") {
-      businessId = await keepBusiness(organizationId, tidyBusiness(verdict.business ?? emptyBusiness(), row.author), row);
+      businessId = await keepBusiness(organizationId, tidyBusiness(verdict.business ?? emptyBusiness(), row.author), row, supabase);
       if (businessId) businesses += 1;
     }
     await supabase
@@ -159,10 +165,10 @@ async function askModel(posts: PostToSort[], note?: string) {
  * the gaps; services are merged. A business with nothing to key it on is
  * not kept, because a row nobody can contact is not a subcontractor.
  */
-async function keepBusiness(organizationId: string, details: BusinessDetails, post: Row): Promise<string | null> {
+async function keepBusiness(organizationId: string, details: BusinessDetails, post: Row, client?: Db): Promise<string | null> {
   const key = businessKey(details);
   if (!key) return null;
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const now = new Date().toISOString();
   const { data: existing } = await supabase
     .from("outreach_businesses")

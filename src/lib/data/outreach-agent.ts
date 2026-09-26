@@ -1,4 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import type { createAdminClient } from "@/lib/supabase/admin";
+import type { Platform } from "@/lib/social-finder";
+import type { RedditLook } from "@/lib/data/reddit-finder";
+
+type SupabaseLike = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
 import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 import {
   DEFAULT_SETTINGS,
@@ -36,8 +41,8 @@ function sourcesFrom(raw: unknown): AgentSources {
   return { feed: on("feed"), search: on("search"), list: on("list") };
 }
 
-export async function getAgentSettings(organizationId: string): Promise<AgentSettings> {
-  const supabase = await createClient();
+export async function getAgentSettings(organizationId: string, client?: SupabaseLike): Promise<AgentSettings> {
+  const supabase = client ?? (await createClient());
   const { data } = await supabase
     .from("outreach_agent_settings")
     .select("*")
@@ -58,6 +63,8 @@ export async function getAgentSettings(organizationId: string): Promise<AgentSet
     maxAgeDays: data.max_age_days,
     autoPost: data.auto_post,
     pickPosts: data.pick_posts ?? true,
+    redditEnabled: data.reddit_enabled ?? true,
+    redditSubreddits: data.reddit_subreddits ?? DEFAULT_SETTINGS.redditSubreddits,
     pausedUntil: data.paused_until,
     pauseReason: data.pause_reason,
   };
@@ -85,6 +92,8 @@ export async function saveAgentSettings(
       max_age_days: settings.maxAgeDays,
       auto_post: settings.autoPost,
       pick_posts: settings.pickPosts,
+      reddit_enabled: settings.redditEnabled,
+      reddit_subreddits: settings.redditSubreddits,
       updated_at: new Date().toISOString(),
       updated_by: by,
     },
@@ -186,6 +195,12 @@ export interface SeenInput {
   groupKey?: string | null;
   /** Whether the post mentioned any of the work words. */
   matched?: boolean | null;
+  /** Where it was read. Facebook when not said. */
+  platform?: Platform;
+  /** When it went up, as near as the platform said. */
+  postedAt?: Date | null;
+  /** Why it was kept, said to a person. */
+  matchReason?: string | null;
 }
 
 /**
@@ -193,8 +208,14 @@ export interface SeenInput {
  * another request got there first: the unique key is what makes two
  * browsers scanning the same group safe.
  */
-export async function recordSeen(organizationId: string, by: string, input: SeenInput): Promise<string | null> {
-  const supabase = await createClient();
+export async function recordSeen(
+  organizationId: string,
+  by: string | null,
+  input: SeenInput,
+  /** The server's own timer has nobody signed in, so it passes the admin client. */
+  client?: SupabaseLike
+): Promise<string | null> {
+  const supabase = client ?? (await createClient());
   const { data, error } = await supabase
     .from("outreach_seen_posts")
     .insert({
@@ -212,6 +233,9 @@ export async function recordSeen(organizationId: string, by: string, input: Seen
       source: input.source ?? "group",
       group_key: input.groupKey ?? null,
       matched: input.matched ?? null,
+      platform: input.platform ?? "facebook",
+      posted_at: input.postedAt ? input.postedAt.toISOString() : null,
+      match_reason: input.matchReason?.slice(0, 300) ?? null,
     })
     .select("id")
     .single();
@@ -627,4 +651,15 @@ export async function recentAgentActivity(
       kindBy: row.kind_by,
     };
   });
+}
+
+/** The last Reddit look the server's timer wrote down, if there has been one. */
+export async function lastRedditLook(organizationId: string): Promise<RedditLook | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("outreach_agent_settings")
+    .select("last_reddit_look")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  return (data?.last_reddit_look as RedditLook | null) ?? null;
 }

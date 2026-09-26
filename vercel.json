@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/crew-checkin",
       "schedule": "30 12 * * 1-6"
+    },
+    {
+      "path": "/api/cron/social-finder",
+      "schedule": "0 16 * * *"
     }
   ]
 }

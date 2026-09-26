@@ -53,6 +53,10 @@ export interface AgentSettings {
    * written until they do. Off, and the model decides which to answer.
    */
   pickPosts: boolean;
+  /** Read Reddit on the server's timer. */
+  redditEnabled: boolean;
+  /** The subreddits to read, without the r/. */
+  redditSubreddits: string[];
   pausedUntil: string | null;
   pauseReason: string | null;
 }
@@ -101,6 +105,8 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   maxAgeDays: 5,
   autoPost: true,
   pickPosts: true,
+  redditEnabled: true,
+  redditSubreddits: ["harfordcounty", "baltimore", "maryland"],
   pausedUntil: null,
   pauseReason: null,
 };
@@ -473,6 +479,8 @@ export function settingsForBrowser(
     maxAgeDays: settings.maxAgeDays,
     autoPost: settings.autoPost,
     pickPosts: settings.pickPosts,
+    redditEnabled: settings.redditEnabled,
+    redditSubreddits: settings.redditSubreddits,
   };
 }
 

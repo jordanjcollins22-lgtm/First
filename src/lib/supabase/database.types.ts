@@ -3090,6 +3090,11 @@ export interface Database {
           last_look: Json | null;
           last_look_at: string | null;
           pick_posts: boolean;
+          reddit_enabled: boolean;
+          reddit_subreddits: string[];
+          last_reddit_look: Json | null;
+          last_reddit_look_at: string | null;
+          finder_token_hash: string | null;
           updated_at: string;
           updated_by: string | null;
         };
@@ -3194,6 +3199,9 @@ export interface Database {
           kind: string | null;
           kind_by: string | null;
           business_id: string | null;
+          platform: "facebook" | "reddit" | "nextdoor" | "instagram" | "x" | "other";
+          posted_at: string | null;
+          match_reason: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -5,7 +5,8 @@ import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
-import { agentCounts, getAgentSettings, groupsToJoin, lastLook, recentAgentActivity } from "@/lib/data/outreach-agent";
+import { agentCounts, getAgentSettings, groupsToJoin, lastLook, lastRedditLook, recentAgentActivity } from "@/lib/data/outreach-agent";
+import type { RedditLook } from "@/lib/data/reddit-finder";
 import { standing } from "@/lib/outreach-agent";
 import { BUSINESS_TIME_ZONE, shortWhen } from "@/lib/time-zone";
 import { AgentSettingsForm } from "@/components/marketing/agent-settings";
@@ -34,7 +35,7 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, activity, toJoin, look, toPick, businesses] = await Promise.all([
+  const [settings, counts, activity, toJoin, look, toPick, businesses, redditLook] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     recentAgentActivity(profile.organization_id, 80, "decided").catch(() => []),
@@ -42,6 +43,7 @@ export default async function GroupAgentPage() {
     lastLook(profile.organization_id).catch(() => null),
     recentAgentActivity(profile.organization_id, 200, "read").catch(() => []),
     listBusinesses(profile.organization_id).catch(() => []),
+    lastRedditLook(profile.organization_id).catch(() => null),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
   const because = state.active ? null : state.because;
@@ -84,6 +86,11 @@ export default async function GroupAgentPage() {
               (look.version ? ` Extension v${look.version}.` : "")
             : "No look recorded yet. Press Look now in the extension popup."}
         </p>
+        {settings.redditEnabled && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {redditLook ? describeRedditLook(redditLook) : "Reddit: no look yet. The first one runs within half an hour."}
+          </p>
+        )}
       </section>
 
       <section id="posts" className="scroll-mt-4 rounded-lg border border-border p-4">
@@ -139,5 +146,17 @@ export default async function GroupAgentPage() {
         </p>
       </section>
     </div>
+  );
+}
+
+/** The last Reddit look in one line: when, what it kept, and what would not answer. */
+function describeRedditLook(look: RedditLook): string {
+  const kept = look.subreddits.reduce((n, s) => n + s.kept, 0);
+  const matched = look.subreddits.reduce((n, s) => n + s.matched, 0);
+  const failed = look.subreddits.filter((s) => !s.ok);
+  return (
+    `Reddit, last look ${shortWhen(look.at)}: read ${look.subreddits.map((s) => `r/${s.name} (${s.read})`).join(", ")}; ` +
+    `${matched} mentioned the work, ${kept} new.` +
+    (failed.length > 0 ? ` Couldn't read ${failed.map((s) => `r/${s.name} (${s.error ?? "no answer"})`).join(", ")}.` : "")
   );
 }

@@ -8,12 +8,14 @@ import {
   approveReady,
   declineReady,
   dismissGroup,
+  getAgentSettings,
   getSeen,
   pauseAgent,
   saveAgentSettings,
   setGroupJoined,
   setPicked,
 } from "@/lib/data/outreach-agent";
+import { cleanSubreddit } from "@/lib/social-finder";
 import { mentionComment, normaliseGroupUrl, type AgentGroup, type AgentSources } from "@/lib/outreach-agent";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
@@ -41,6 +43,9 @@ export async function updateAgentSettings(input: {
   maxAgeDays: number;
   autoPost: boolean;
   pickPosts: boolean;
+  redditEnabled?: boolean;
+  /** One per line or comma-separated, with or without the r/. */
+  redditSubreddits?: string;
 }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -73,6 +78,18 @@ export async function updateAgentSettings(input: {
   const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
   if (!clock.test(input.activeFrom) || !clock.test(input.activeTo)) return { ok: false, error: "Hours need to look like 08:00." };
 
+  const current = await getAgentSettings(profile.organization_id);
+  let redditSubreddits = current.redditSubreddits;
+  if (input.redditSubreddits !== undefined) {
+    const named = input.redditSubreddits.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    const clean = named.map((s) => cleanSubreddit(s));
+    const bad = named.find((_, i) => !clean[i]);
+    if (bad) return { ok: false, error: `"${bad}" isn't a subreddit name.` };
+    redditSubreddits = Array.from(new Set(clean as string[])).slice(0, 12);
+  }
+  const redditEnabled = input.redditEnabled ?? current.redditEnabled;
+  if (redditEnabled && redditSubreddits.length === 0) return { ok: false, error: "Reddit is on but there are no subreddits to read." };
+
   const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, Math.round(Number(value) || 0)));
 
   try {
@@ -88,6 +105,8 @@ export async function updateAgentSettings(input: {
       activeTo: input.activeTo,
       scanEveryMinutes: clamp(input.scanEveryMinutes, 10, 240),
       maxAgeDays: clamp(input.maxAgeDays, 0, 30),
+      redditEnabled,
+      redditSubreddits,
       autoPost: Boolean(input.autoPost),
       pickPosts: Boolean(input.pickPosts),
     });

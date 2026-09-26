@@ -152,7 +152,10 @@ export function isPostLink(url: string | null | undefined): boolean {
   } catch {
     return false;
   }
-  if (parsed.protocol !== "https:" || !/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
+  if (parsed.protocol !== "https:") return false;
+  // A Reddit post: /r/<sub>/comments/<id>/...
+  if (/(^|\.)reddit\.com$/i.test(parsed.hostname)) return /^\/r\/[A-Za-z0-9_]+\/comments\/[a-z0-9]+/i.test(parsed.pathname);
+  if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
   const path = parsed.pathname;
   return (
     /\/groups\/[^/]+\/(posts|permalink)\/\d+/i.test(path) ||

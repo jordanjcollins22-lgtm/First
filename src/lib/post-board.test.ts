@@ -86,6 +86,7 @@ describe("isPostLink", () => {
     expect(isPostLink("https://www.facebook.com/share/p/1AbCdEfGh/")).toBe(true);
     expect(isPostLink("https://www.facebook.com/permalink.php?story_fbid=123&id=456")).toBe(true);
     expect(isPostLink("https://m.facebook.com/HarfordLawnCare/posts/pfbid02abc")).toBe(true);
+    expect(isPostLink("https://www.reddit.com/r/harfordcounty/comments/abc123/need_a_landscaper/")).toBe(true);
   });
   it("refuses no link, a search, a group's front page and somebody's profile", () => {
     expect(isPostLink("")).toBe(false);
@@ -94,5 +95,6 @@ describe("isPostLink", () => {
     expect(isPostLink("https://www.facebook.com/groups/harfordhappenings/")).toBe(false);
     expect(isPostLink("https://www.facebook.com/profile.php?id=100000")).toBe(false);
     expect(isPostLink("https://evil.example.com/groups/1/posts/2")).toBe(false);
+    expect(isPostLink("https://www.reddit.com/r/harfordcounty/")).toBe(false);
   });
 });
