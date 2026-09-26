@@ -155,6 +155,9 @@ export function isPostLink(url: string | null | undefined): boolean {
   if (parsed.protocol !== "https:") return false;
   // A Reddit post: /r/<sub>/comments/<id>/...
   if (/(^|\.)reddit\.com$/i.test(parsed.hostname)) return /^\/r\/[A-Za-z0-9_]+\/comments\/[a-z0-9]+/i.test(parsed.pathname);
+  if (/(^|\.)nextdoor\.com$/i.test(parsed.hostname)) return /^\/p\/[A-Za-z0-9_-]+/.test(parsed.pathname);
+  if (/(^|\.)instagram\.com$/i.test(parsed.hostname)) return /^\/(p|reel)\/[A-Za-z0-9_-]+/.test(parsed.pathname);
+  if (/(^|\.)(x|twitter)\.com$/i.test(parsed.hostname)) return /\/status\/\d+/.test(parsed.pathname);
   if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
   const path = parsed.pathname;
   return (

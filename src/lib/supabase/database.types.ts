@@ -3202,6 +3202,9 @@ export interface Database {
           platform: "facebook" | "reddit" | "nextdoor" | "instagram" | "x" | "other";
           posted_at: string | null;
           match_reason: string | null;
+          screenshot_path: string | null;
+          screenshot_hash: string | null;
+          added_by: string | null;
           created_at: string;
           updated_at: string;
         };

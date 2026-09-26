@@ -11,6 +11,10 @@ import { isPostLink, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import { createClient } from "@/lib/supabase/server";
+import { setPostKind } from "@/lib/data/post-sorter";
+import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
+import { standingFor } from "@/lib/post-board";
+import { cleanLink, platformOfLink, postKeyForLink, postedAtFromAge, PLATFORM_LABEL } from "@/lib/social-finder";
 
 /**
  * Answering a post off the board.
@@ -45,7 +49,9 @@ export async function takePost(seenId: string): Promise<TakeResult> {
   const row = await getSeen(org, seenId);
   if (!row || row.decision !== "read") return { ok: false, error: "That post isn't on the board any more." };
   if (!row.text) return { ok: false, error: "There are no words on that post to answer." };
-  if (!isPostLink(row.url)) return { ok: false, error: "That post has no working link yet, so it can't be answered from here." };
+  if (!isPostLink(row.url) && !row.screenshot_path) {
+    return { ok: false, error: "That post has no working link yet, so it can't be answered from here." };
+  }
 
   const now = new Date();
   const [answers, today, settings] = await Promise.all([answersToPost(org, seenId), answeredToday(org, profile.id, now), getAgentSettings(org)]);
@@ -88,7 +94,9 @@ export async function takePost(seenId: string): Promise<TakeResult> {
     return { ok: false, error };
   };
 
-  const read = await readAndDraft({ screenshotPath: null, pastedText: row.text, kind: "comment" });
+  // A post somebody added from a screenshot is written from the picture:
+  // the words kept for it are a summary, and the picture is the post.
+  const read = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment" });
   if (!read.ok) return letGo(read.error);
   if (!read.draft) return letGo(read.draftNote ?? "Couldn't write one for that post. Try again.");
 
@@ -180,4 +188,142 @@ export async function removeFromBoard(seenId: string): Promise<Result> {
   refresh();
   revalidatePath("/admin/outreach/agent");
   return { ok: true };
+}
+
+/**
+ * Not a job post, or an ad: said by whoever is looking at it.
+ *
+ * It leaves the board for everybody. An ad's business goes on the
+ * Businesses list, the same as when the sorter spots one.
+ */
+export async function markPostKind(seenId: string, kind: "other" | "promotion"): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const result = await setPostKind(profile.organization_id, seenId, kind);
+  if (!result.ok) return { ok: false, error: result.error ?? "Couldn't save that." };
+  refresh();
+  revalidatePath("/admin/outreach/agent");
+  return { ok: true };
+}
+
+export type FoundResult =
+  | { ok: true; status: "added"; seenId: string; message: string }
+  | { ok: true; status: "already"; seenId: string | null; message: string; canAnswer: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Somebody found a post the finder missed: a link, a screenshot, or both.
+ *
+ * Checked first against everything already kept -- the post's key, its
+ * link, and the screenshot's fingerprint -- and the person told what became
+ * of it if it is in: on the board, answered by whom, or set aside as an ad.
+ * If it is new it is kept as a post asking for work, since a person looked
+ * at it and said so, and it comes up next on their card.
+ */
+export async function submitFoundPost(input: {
+  url: string;
+  screenshotPath?: string | null;
+  screenshotHash?: string | null;
+  words?: string;
+}): Promise<FoundResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const org = profile.organization_id;
+
+  const url = input.url.trim() ? cleanLink(input.url) : null;
+  if (input.url.trim() && !url) return { ok: false, error: "That doesn't look like a link. Use Share → Copy link on the post." };
+  if (url && !isPostLink(url)) {
+    return { ok: false, error: "That link doesn't open a post. On the post, press Share → Copy link, and paste that." };
+  }
+  if (!url && !input.screenshotPath) return { ok: false, error: "Paste the post's link, add a screenshot, or both." };
+  const hash = input.screenshotHash && /^[a-f0-9]{64}$/i.test(input.screenshotHash) ? input.screenshotHash.toLowerCase() : null;
+
+  const supabase = await createClient();
+  const key = url ? postKeyForLink(url) : null;
+  const checks = [
+    key ? supabase.from("outreach_seen_posts").select("id, kind, decision").eq("organization_id", org).eq("post_key", key).limit(1) : null,
+    url ? supabase.from("outreach_seen_posts").select("id, kind, decision").eq("organization_id", org).eq("url", url).limit(1) : null,
+    hash ? supabase.from("outreach_seen_posts").select("id, kind, decision").eq("organization_id", org).eq("screenshot_hash", hash).limit(1) : null,
+  ];
+  for (const check of checks) {
+    if (!check) continue;
+    const { data } = await check;
+    const found = data?.[0];
+    if (found) return { ok: true, status: "already", seenId: found.id, ...(await describeKept(org, profile.id, found)) };
+  }
+
+  // Read the picture for who posted it, where, and what they want.
+  let reading: Awaited<ReturnType<typeof readPostFromScreenshot>> = null;
+  if (input.screenshotPath) {
+    const services = await activeServiceNames(org).catch(() => []);
+    reading = await readPostFromScreenshot({
+      screenshotPath: input.screenshotPath,
+      pastedText: input.words ?? "",
+      note: "",
+      groupName: "",
+      services,
+      blockWords: [],
+    }).catch(() => null);
+  }
+  const words = (input.words ?? "").trim();
+  const text = words || reading?.summary || "";
+  if (!text && !input.screenshotPath) {
+    return { ok: false, error: "Add a screenshot, or type what they asked for, so the comment can be written." };
+  }
+
+  const now = new Date();
+  const platform = url ? platformOfLink(url) : reading?.platform === "nextdoor" ? "nextdoor" : "facebook";
+  const who = profile.full_name || profile.email || "somebody on the team";
+  const { data: row, error } = await supabase
+    .from("outreach_seen_posts")
+    .insert({
+      organization_id: org,
+      post_key: key ?? `shot:${hash ?? crypto.randomUUID()}`,
+      url: url ?? "",
+      group_name: reading?.groupName ?? null,
+      author: reading?.author ?? null,
+      text: text || "Added from a screenshot.",
+      age_days: reading?.ageDays ?? null,
+      posted_at: postedAtFromAge(reading?.ageDays ?? null, now)?.toISOString() ?? null,
+      decision: "read",
+      kind: "request",
+      kind_by: "owner",
+      source: "group",
+      platform,
+      match_reason: `Added by ${who.split(" ")[0]}`,
+      screenshot_path: input.screenshotPath ?? null,
+      screenshot_hash: hash,
+      added_by: profile.id,
+      seen_by: profile.id,
+    })
+    .select("id")
+    .single();
+  if (error || !row) {
+    if (error && /duplicate|unique/i.test(error.message)) return { ok: true, status: "already", seenId: null, message: "Somebody added this one a moment ago.", canAnswer: false };
+    return { ok: false, error: error?.message ?? "Couldn't add that." };
+  }
+  refresh();
+  return {
+    ok: true,
+    status: "added",
+    seenId: row.id,
+    message: url ? `Added from ${PLATFORM_LABEL[platform]}. It's up next.` : "Added. It's up next. It has no link, so find the post yourself to comment.",
+  };
+}
+
+/** What became of a post that was already kept, in a sentence. */
+async function describeKept(
+  org: string,
+  profileId: string,
+  row: { id: string; kind: string | null; decision: string }
+): Promise<{ message: string; canAnswer: boolean }> {
+  if (row.kind === "promotion" || row.decision === "advert") return { message: "Already in: it was marked as an ad.", canAnswer: false };
+  if (row.kind === "other") return { message: "Already in: it was marked as not a job post.", canAnswer: false };
+  if (row.decision === "declined") return { message: "Already in: it was taken off the board.", canAnswer: false };
+  const answers = await answersToPost(org, row.id);
+  const standing = standingFor(answers, profileId, new Date());
+  if (standing.pile === "mine") return { message: "Already in, and it's yours: it's up next.", canAnswer: true };
+  const names = standing.others.map((a) => `${a.name}${a.status === "posted" ? " answered it" : " is answering it"}`).join(", ");
+  if (standing.pile === "full") return { message: `Already in: ${names}.`, canAnswer: false };
+  return { message: names ? `Already in: ${names}. There's room for yours; it's up next.` : "Already in and nobody has answered it yet. It's up next.", canAnswer: true };
 }

@@ -157,3 +157,80 @@ export function parseRedditListing(json: unknown): FoundPost[] {
   }
   return out;
 }
+
+/* ------------------------------------------------------ links pasted in */
+
+function parse(url: string): URL | null {
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Which platform a link is on, from its address. */
+export function platformOfLink(url: string): Platform {
+  const host = parse(url)?.hostname.toLowerCase() ?? "";
+  if (/(^|\.)(facebook\.com|fb\.com|fb\.me)$/.test(host)) return "facebook";
+  if (/(^|\.)reddit\.com$|(^|\.)redd\.it$/.test(host)) return "reddit";
+  if (/(^|\.)nextdoor\.com$/.test(host)) return "nextdoor";
+  if (/(^|\.)instagram\.com$/.test(host)) return "instagram";
+  if (/(^|\.)(x\.com|twitter\.com)$/.test(host)) return "x";
+  return "other";
+}
+
+/**
+ * The key a pasted link is kept under, the same however it was shared.
+ *
+ * Tracking bits on the end ("?mibextid=", "?utm_source=") differ every time
+ * a link is copied, so they are dropped: two people pasting the same post
+ * from two phones get the same key, and the second is told it is in. The
+ * finder's own Facebook keys (group/post) are used where the link carries
+ * them, so a pasted link meets the post the extension already read.
+ */
+export function postKeyForLink(url: string): string | null {
+  const parsed = parse(url);
+  if (!parsed) return null;
+  const platform = platformOfLink(url);
+  const path = parsed.pathname.replace(/\/+$/, "");
+  if (platform === "facebook") {
+    const groupPost = path.match(/\/groups\/([^/]+)\/(?:posts|permalink)\/([^/?#]+)/);
+    if (groupPost) return `${groupPost[1]}/${groupPost[2]}`;
+    const story = parsed.searchParams.get("story_fbid");
+    const owner = parsed.searchParams.get("id");
+    if (story && owner) return `${owner}/${story}`;
+    const share = path.match(/\/share\/(?:[a-z]\/)?([A-Za-z0-9]+)/);
+    if (share) return `fb-share:${share[1]}`;
+    const page = path.match(/^\/([^/]+)\/posts\/([^/?#]+)/);
+    if (page) return `${page[1]}/${page[2]}`;
+  }
+  if (platform === "reddit") {
+    const id = path.match(/\/comments\/([a-z0-9]+)/i) ?? (/(^|\.)redd\.it$/.test(parsed.hostname) ? path.match(/^\/([a-z0-9]+)/i) : null);
+    if (id) return `reddit:${id[1].toLowerCase()}`;
+  }
+  if (platform === "nextdoor") {
+    const id = path.match(/\/p\/([A-Za-z0-9_-]+)/);
+    if (id) return `nextdoor:${id[1]}`;
+  }
+  if (platform === "instagram") {
+    const id = path.match(/\/(?:p|reel)\/([A-Za-z0-9_-]+)/);
+    if (id) return `instagram:${id[1]}`;
+  }
+  if (platform === "x") {
+    const id = path.match(/\/status\/(\d+)/);
+    if (id) return `x:${id[1]}`;
+  }
+  return `${platform}:${parsed.hostname.replace(/^www\./, "")}${path}`.toLowerCase().slice(0, 300);
+}
+
+/** The link as it will be opened, with the tracking bits taken off. */
+export function cleanLink(url: string): string | null {
+  const parsed = parse(url);
+  if (!parsed) return null;
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (/^(utm_|mibextid|fbclid|rdid|share_url|s$|ref$|sfnsn|igsh)/i.test(key)) parsed.searchParams.delete(key);
+  }
+  parsed.hash = "";
+  return parsed.toString();
+}

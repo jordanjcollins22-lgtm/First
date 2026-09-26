@@ -39,6 +39,8 @@ export interface BoardPost {
   postedAt: string | null;
   /** Why the finder kept it. */
   matchReason: string | null;
+  /** Somebody on the team added it rather than the finder. */
+  addedByHand: boolean;
 }
 
 /** Midnight this morning, the business's time. */
@@ -53,7 +55,7 @@ async function freshRequests(organizationId: string, now: Date) {
   const since = new Date(now.getTime() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, author, text, age_days, created_at, platform, posted_at, match_reason")
+    .select("id, url, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, added_by")
     .eq("organization_id", organizationId)
     .eq("kind", "request")
     .eq("decision", "read")
@@ -122,7 +124,11 @@ export async function getPostBoard(organizationId: string, profileId: string, no
   // Only posts that can be opened. One without a working link stays off the
   // board until the finder brings its link back, unless somebody already
   // took it, who still needs to see what they took.
-  const shown = posts.filter((row) => isPostLink(row.url) || (answers.get(row.id) ?? []).some((a) => a.status !== "let_go"));
+  // A post somebody added by hand shows too, link or not: a person looked at
+  // it and said it is worth answering.
+  const shown = posts.filter(
+    (row) => isPostLink(row.url) || Boolean(row.added_by) || (answers.get(row.id) ?? []).some((a) => a.status !== "let_go")
+  );
   return shown.map((row) => {
     const list = answers.get(row.id) ?? [];
     const standing = standingFor(list, profileId, now);
@@ -138,6 +144,7 @@ export async function getPostBoard(organizationId: string, profileId: string, no
       platform: (row.platform ?? "facebook") as Platform,
       postedAt: row.posted_at,
       matchReason: row.match_reason,
+      addedByHand: Boolean(row.added_by),
       foundAt: row.created_at,
       pile: standing.pile,
       mine: standing.mine,
@@ -154,7 +161,7 @@ export async function getPostBoard(organizationId: string, profileId: string, no
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return posts.filter((p) => isPostLink(p.url) && standingFor(answers.get(p.id) ?? [], "", now).others.length === 0).length;
+  return posts.filter((p) => (isPostLink(p.url) || Boolean(p.added_by)) && standingFor(answers.get(p.id) ?? [], "", now).others.length === 0).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */

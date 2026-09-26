@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ageInDays, cleanSubreddit, matchReason, parseRedditListing, postedAtFromAge, redditNewPath, subredditIsLocal } from "./social-finder";
+import { ageInDays, cleanLink, platformOfLink, postKeyForLink, cleanSubreddit, matchReason, parseRedditListing, postedAtFromAge, redditNewPath, subredditIsLocal } from "./social-finder";
 
 const keywords = ["lawn", "mow", "landscap", "mulch"];
 const areaWords = ["bel air", "abingdon", "harford"];
@@ -80,5 +80,24 @@ describe("Reddit", () => {
     expect(posts[0].postedAt?.toISOString()).toBe(new Date(1790400000 * 1000).toISOString());
     expect(parseRedditListing(null)).toEqual([]);
     expect(parseRedditListing({ error: 403 })).toEqual([]);
+  });
+});
+
+describe("links pasted in", () => {
+  it("knows the platform", () => {
+    expect(platformOfLink("https://www.facebook.com/share/p/1Abc/")).toBe("facebook");
+    expect(platformOfLink("https://nextdoor.com/p/AbC123")).toBe("nextdoor");
+    expect(platformOfLink("https://www.reddit.com/r/harfordcounty/comments/abc123/x/")).toBe("reddit");
+  });
+  it("keys the same post the same however it was shared", () => {
+    expect(postKeyForLink("https://www.facebook.com/groups/harfordhappenings/posts/123/?mibextid=abc")).toBe("harfordhappenings/123");
+    expect(postKeyForLink("https://m.facebook.com/groups/harfordhappenings/permalink/123/")).toBe("harfordhappenings/123");
+    expect(postKeyForLink("https://www.facebook.com/share/p/1AbCdEf/?mibextid=wwXIfr")).toBe("fb-share:1AbCdEf");
+    expect(postKeyForLink("https://www.reddit.com/r/harfordcounty/comments/ABC123/need/")).toBe("reddit:abc123");
+    expect(postKeyForLink("https://nextdoor.com/p/AbC123?utm_source=share")).toBe("nextdoor:AbC123");
+    expect(postKeyForLink("not a link")).toBeNull();
+  });
+  it("takes the tracking off a link", () => {
+    expect(cleanLink("https://www.facebook.com/share/p/1Ab/?mibextid=wwXIfr&utm_source=x")).toBe("https://www.facebook.com/share/p/1Ab/");
   });
 });

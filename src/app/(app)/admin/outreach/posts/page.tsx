@@ -8,6 +8,7 @@ import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
 import { answeredToday, getPostBoard } from "@/lib/data/post-board";
 import { PostBoard } from "@/components/marketing/post-board";
+import { CommentCard } from "@/components/marketing/comment-card";
 
 /**
  * Posts to answer.
@@ -20,7 +21,8 @@ import { PostBoard } from "@/components/marketing/post-board";
  */
 export const dynamic = "force-dynamic";
 
-export default async function PostsToAnswerPage() {
+export default async function PostsToAnswerPage({ searchParams }: { searchParams?: Promise<{ post?: string }> } = {}) {
+  const pinned = ((await searchParams) ?? {}).post ?? null;
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("posts-to-answer", "/admin/outreach");
   const profile = await getCurrentProfile();
@@ -52,18 +54,21 @@ export default async function PostsToAnswerPage() {
         </div>
         <h1 className="mt-1 text-xl font-semibold">Posts to Answer</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          People in local Facebook groups asking for lawn and landscaping work, found for you. Pick one, press
-          &ldquo;Answer this one&rdquo; and a comment is written for you with your own link, so anything it books
-          counts for you. Copy it, open the post, comment from your own Facebook, then press &ldquo;I posted
-          it&rdquo;. Two of the team can answer each post; once two have it, it moves to &ldquo;Two answers
-          already&rdquo; so nobody piles on.
-          {owner && " As the owner you can add yours to any post, however many have answered it."}
+          One post at a time. Respond and a comment is written for you with your own link; copy it, go to the post,
+          paste it from your own account. Not a job, or an ad? Say so and the next one comes up.
         </p>
       </header>
 
-      <section className="rounded-lg border border-border p-4">
-        <PostBoard posts={posts} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
-      </section>
+      <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
+
+      {/* Every post at once, for anybody who wants to see who has what. The
+          card above is the way to answer them. */}
+      <details className="rounded-lg border border-border p-4">
+        <summary className="cursor-pointer text-sm font-semibold">See every post ({posts.length})</summary>
+        <div className="mt-3">
+          <PostBoard posts={posts} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
+        </div>
+      </details>
     </div>
   );
 }
