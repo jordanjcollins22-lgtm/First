@@ -228,37 +228,18 @@ export async function moveProof(id: string, direction: -1 | 1): Promise<Result> 
 }
 
 /**
- * Show or hide one before-and-after on the booking page. A studio post is
- * kept off the page without being un-approved for social media.
+ * Show or hide one before-and-after on the booking page. It stays approved
+ * for social media either way.
  */
 export async function setShowcaseShown(id: string, shown: boolean): Promise<Result> {
   const who = await owner();
   if ("error" in who) return { ok: false, error: who.error! };
   const supabase = await createClient();
-  const now = new Date().toISOString();
-  const { error } = id.startsWith("studio:")
-    ? await supabase
-        .from("social_posts")
-        .update({ on_booking_page: shown, updated_at: now })
-        .eq("id", id.slice("studio:".length))
-        .eq("organization_id", who.profile.organization_id)
-    : await supabase
-        .from("booking_showcase")
-        .update({ shown, updated_at: now })
-        .eq("id", id)
-        .eq("organization_id", who.profile.organization_id);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/admin/booking-page");
-  return { ok: true };
-}
-
-/** Delete one added here. A studio post is hidden instead, never deleted from here. */
-export async function deleteShowcase(id: string): Promise<Result> {
-  const who = await owner();
-  if ("error" in who) return { ok: false, error: who.error! };
-  if (id.startsWith("studio:")) return { ok: false, error: "That one is from Before & After Posts. Hide it instead." };
-  const supabase = await createClient();
-  const { error } = await supabase.from("booking_showcase").delete().eq("id", id).eq("organization_id", who.profile.organization_id);
+  const { error } = await supabase
+    .from("social_posts")
+    .update({ on_booking_page: shown, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("organization_id", who.profile.organization_id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/booking-page");
   return { ok: true };

@@ -28,15 +28,13 @@ export interface ProofNews {
 }
 
 /**
- * One before-and-after for the landing card: a pair shown side by side, or
- * one picture that already has both in it (a post from the social studio).
+ * One before-and-after for the landing card: a post approved and formatted
+ * in Before & After Posts, one picture with both in it.
  */
 export interface ShowcaseItem {
   id: string;
   title: string;
-  beforeUrl: string | null;
-  afterUrl: string | null;
-  imageUrl: string | null;
+  imageUrl: string;
 }
 
 export interface BookingProof {

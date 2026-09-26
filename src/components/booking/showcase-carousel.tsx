@@ -58,30 +58,13 @@ export function ShowcaseCarousel({ items, className }: { items: ShowcaseItem[]; 
 }
 
 function Slide({ item, shown, eager }: { item: ShowcaseItem; shown: boolean; eager: boolean }) {
-  const fade = cn("absolute inset-0 transition-opacity duration-700", shown ? "opacity-100" : "opacity-0");
-  if (item.beforeUrl && item.afterUrl) {
-    return (
-      <span className={cn(fade, "flex gap-0.5")}>
-        <Half src={item.beforeUrl} label="Before" alt={`${item.title}, before`} eager={eager} />
-        <Half src={item.afterUrl} label="After" alt={`${item.title}, after`} eager={eager} />
-      </span>
-    );
-  }
-  if (!item.imageUrl) return null;
   return (
-    <span className={fade}>
-      <Image src={item.imageUrl} alt={`${item.title}, before and after`} fill sizes="(max-width: 480px) 100vw, 448px" className="object-cover" priority={eager} />
-    </span>
-  );
-}
-
-function Half({ src, label, alt, eager }: { src: string; label: string; alt: string; eager: boolean }) {
-  return (
-    <span className="relative h-full w-1/2">
-      <Image src={src} alt={alt} fill sizes="(max-width: 480px) 50vw, 224px" className="object-cover" priority={eager} />
-      <span className="absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
-        {label}
-      </span>
+    <span className={cn("absolute inset-0 transition-opacity duration-700", shown ? "opacity-100" : "opacity-0")}>
+      {/* The studio's square has the before above the after, so it is shown
+          whole rather than cropped to the box, which would cut one of them
+          off. The same picture, blurred, fills the sides instead of grey. */}
+      <Image src={item.imageUrl} alt="" aria-hidden fill sizes="64px" className="scale-110 object-cover opacity-60 blur-xl" />
+      <Image src={item.imageUrl} alt={`${item.title}, before and after`} fill sizes="(max-width: 480px) 100vw, 448px" className="object-contain" priority={eager} />
     </span>
   );
 }

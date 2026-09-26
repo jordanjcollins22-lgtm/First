@@ -23,15 +23,12 @@ const DAY = 60 * 60 * 24;
 const WEEK = DAY * 7;
 
 /**
- * Where the booking page's before-and-after pictures come from: the
- * business's website, and the public bucket the social studio writes
- * approved work to. Listed so the pictures go through Next's resizing: the
- * website's are full-size PNGs, far too heavy for a phone on a booking link.
+ * Where the booking page's before-and-after pictures come from: the public
+ * bucket the social studio writes approved work to. Listed so the pictures
+ * go through Next's resizing, which a phone on a booking link needs.
  */
 function imageHosts(): { protocol: "https"; hostname: string; pathname: string }[] {
-  const hosts: { protocol: "https"; hostname: string; pathname: string }[] = [
-    { protocol: "https", hostname: "static.readdy.ai", pathname: "/image/**" },
-  ];
+  const hosts: { protocol: "https"; hostname: string; pathname: string }[] = [];
   try {
     const supabase = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
     hosts.push({ protocol: "https", hostname: supabase.hostname, pathname: "/storage/v1/object/public/**" });
