@@ -61,7 +61,7 @@ export default async function GroupsPage() {
         <h2 className="text-sm font-semibold">What Facebook lets an app do</h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
           Facebook discontinued the Groups API on 22 April 2024. Since then no app can read a
-          group&apos;s posts, publish to it, or approve and decline what is pending — being the owner
+          group&apos;s posts, publish to it, or approve and decline what is pending, being the owner
           of the group makes no difference, because the permissions no longer exist to grant. Cold
           messages are separately impossible: Messenger only opens once somebody has messaged the
           page first.

@@ -83,7 +83,7 @@ export async function recordCrewEvent(
     return { ok: true };
   } catch (err) {
     console.error("recordCrewEvent failed:", err);
-    return { ok: false, message: "Couldn't record that — try again." };
+    return { ok: false, message: "Couldn't record that, try again." };
   }
 }
 

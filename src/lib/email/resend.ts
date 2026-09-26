@@ -24,7 +24,7 @@ async function call<T>(
   init: { method: string; body?: unknown } = { method: "GET" }
 ): Promise<ResendResult<T>> {
   if (!env.resendApiKey) {
-    return { ok: false, message: "Email isn't connected yet — RESEND_API_KEY is not set." };
+    return { ok: false, message: "Email isn't connected yet, RESEND_API_KEY is not set." };
   }
 
   let response: Response;

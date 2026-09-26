@@ -57,7 +57,7 @@ export function OverheadPanel({ overhead }: { overhead: OverheadBreakdown }) {
                   <span className="truncate">
                     {line.label}
                     {line.variable && <span className="ml-1.5">(varies)</span>}
-                    {line.note && <span className="ml-1.5">— {line.note}</span>}
+                    {line.note && <span className="ml-1.5">· {line.note}</span>}
                   </span>
                   <span className="shrink-0 tabular-nums">{money(line.monthly)}</span>
                 </li>

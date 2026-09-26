@@ -73,7 +73,7 @@ export function FlyerBuilder({
           <div>
             <h1 className="text-2xl font-bold">Flyer ad spots</h1>
             <p className="text-sm text-muted-foreground">
-              Eight squares over two sides. The front top-right is ours — the other seven are for
+              Eight squares over two sides. The front top-right is ours, the other seven are for
               sale on a run that goes out anyway.
             </p>
           </div>
@@ -85,12 +85,12 @@ export function FlyerBuilder({
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <Stat label="Sold" value={`${sold} of ${SELLABLE_SLOT_COUNT}`} />
-          <Stat label="Booked" value={revenue > 0 ? `$${revenue.toFixed(0)}` : "—"} />
+          <Stat label="Booked" value={revenue > 0 ? `$${revenue.toFixed(0)}` : "-"} />
           <Stat label="Next open" value={next ? `#${next.slot}` : "Full"} />
         </div>
 
         <p className="mt-3 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm text-muted-foreground backdrop-blur-md">
-          Artwork is {AD_WIDTH_IN}&Prime; &times; {AD_HEIGHT_IN}&Prime; — send advertisers{" "}
+          Artwork is {AD_WIDTH_IN}&Prime; &times; {AD_HEIGHT_IN}&Prime;, send advertisers{" "}
           <span className="font-medium text-foreground">
             {AD_PIXEL_WIDTH} &times; {AD_PIXEL_HEIGHT}px
           </span>{" "}
@@ -150,7 +150,7 @@ function Sheet({
   return (
     <div>
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground print-hide">
-        {side === "front" ? "Front — the postage side" : "Back"}
+        {side === "front" ? "Front, the postage side" : "Back"}
       </p>
       <div
         className="print-sheet relative mx-auto w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"
@@ -290,7 +290,7 @@ function SlotDialog({
         <DialogHeader>
           <DialogTitle>
             Square #{slot}
-            {isHouse && ` — ${HOUSE_NAME}`}
+            {isHouse && `, ${HOUSE_NAME}`}
           </DialogTitle>
           <DialogDescription>
             {isHouse

@@ -58,7 +58,7 @@ const evaluatorJourney: JourneyTemplate = {
       nextSteps: ["on_my_way"],
       clicks: 1,
       estMinutes: 0.5,
-      notes: "My Schedule page — lists every evaluation assigned to this person.",
+      notes: "My Schedule page, lists every evaluation assigned to this person.",
     },
     {
       stepKey: "on_my_way",
@@ -93,7 +93,7 @@ const evaluatorJourney: JourneyTemplate = {
       nextSteps: ["location"],
       clicks: 1,
       estMinutes: 0.1,
-      notes: "A link, not a separate status — evaluation_status stays \"arrived\" until Submit.",
+      notes: "A link, not a separate status, evaluation_status stays \"arrived\" until Submit.",
     },
     {
       stepKey: "location",
@@ -121,7 +121,7 @@ const evaluatorJourney: JourneyTemplate = {
       clicks: 1,
       manualInputs: 2,
       estMinutes: 1,
-      notes: "Its own page — area/perimeter are computed, never typed directly.",
+      notes: "Its own page, area/perimeter are computed, never typed directly.",
     },
     {
       stepKey: "select_service",
@@ -147,7 +147,7 @@ const evaluatorJourney: JourneyTemplate = {
       nextSteps: ["checklist_detail"],
       clicks: 2,
       estMinutes: 0.5,
-      notes: "Its own page — only shown when the chosen service has checklist items; skipped straight to a Field Question or Materials otherwise.",
+      notes: "Its own page, only shown when the chosen service has checklist items; skipped straight to a Field Question or Materials otherwise.",
     },
     {
       stepKey: "checklist_detail",
@@ -161,7 +161,7 @@ const evaluatorJourney: JourneyTemplate = {
       clicks: 1,
       manualInputs: 1,
       estMinutes: 0.3,
-      notes: "One page per checklist item that was checked — a real loop, not one fixed page.",
+      notes: "One page per checklist item that was checked, a real loop, not one fixed page.",
     },
     {
       stepKey: "service_field",
@@ -175,7 +175,7 @@ const evaluatorJourney: JourneyTemplate = {
       clicks: 1,
       manualInputs: 1,
       estMinutes: 0.3,
-      notes: "One page per other field the service defines (e.g. size, condition) — count varies by service.",
+      notes: "One page per other field the service defines (e.g. size, condition), count varies by service.",
     },
     {
       stepKey: "materials",
@@ -189,7 +189,7 @@ const evaluatorJourney: JourneyTemplate = {
       nextSteps: ["photos"],
       clicks: 2,
       estMinutes: 1,
-      notes: "Its own page — skipped entirely if nothing on the service has type/color options.",
+      notes: "Its own page, skipped entirely if nothing on the service has type/color options.",
     },
     {
       stepKey: "photos",
@@ -239,7 +239,7 @@ const evaluatorJourney: JourneyTemplate = {
       nextSteps: [],
       clicks: 1,
       estMinutes: 0.1,
-      notes: "One click. No missing-info check before submit yet — a real gap worth automating.",
+      notes: "One click. No missing-info check before submit yet, a real gap worth automating.",
     },
   ],
 };
@@ -274,7 +274,7 @@ const clientJourney: JourneyTemplate = {
       clicks: 3,
       manualInputs: 2,
       estMinutes: 2,
-      notes: "Admin/AM-facing only — the customer never sees this form. Covers a lead phoned or referred in with no public link to click.",
+      notes: "Admin/AM-facing only, the customer never sees this form. Covers a lead phoned or referred in with no public link to click.",
     },
     {
       stepKey: "public_schedule",
@@ -283,7 +283,7 @@ const clientJourney: JourneyTemplate = {
       stepType: "customer_action",
       roleLabel: "Client",
       inputs: ["Date, then a time from the evaluator's real availability"],
-      outputs: ["Time slot picked (not booked yet — held until the rest of the form is done)"],
+      outputs: ["Time slot picked (not booked yet, held until the rest of the form is done)"],
       automations: [
         "Available times computed from weekly availability minus days off minus already-booked evaluations",
         "A specific evaluator's personal link narrows this to their calendar only; the org's general link or an account manager's link offers combined availability across every evaluator",
@@ -291,7 +291,7 @@ const clientJourney: JourneyTemplate = {
       nextSteps: ["public_landing_contact"],
       clicks: 2,
       estMinutes: 0.5,
-      notes: "The public /book page — reached by clicking an ad (the org's own link) or a specific evaluator/account manager's personal affiliate link. Calendar first, then a day's open times on the right — picking a time moves straight into the rest of the form.",
+      notes: "The public /book page, reached by clicking an ad (the org's own link) or a specific evaluator/account manager's personal affiliate link. Calendar first, then a day's open times on the right, picking a time moves straight into the rest of the form.",
     },
     {
       stepKey: "public_landing_contact",
@@ -339,11 +339,11 @@ const clientJourney: JourneyTemplate = {
       roleLabel: "Client",
       inputs: ["Budget bracket"],
       outputs: ["Customer + property + job created, evaluation booked at the time picked earlier"],
-      automations: ["Budget range attached to the lead — helps match the right materials"],
+      automations: ["Budget range attached to the lead, helps match the right materials"],
       nextSteps: ["lead_created"],
       clicks: 1,
       estMinutes: 0.2,
-      notes: "The submit step — this is where the held time slot is actually booked and the evaluator assigned, with no admin in the loop.",
+      notes: "The submit step, this is where the held time slot is actually booked and the evaluator assigned, with no admin in the loop.",
     },
     {
       stepKey: "lead_created",
@@ -378,7 +378,7 @@ const clientJourney: JourneyTemplate = {
       outputs: ["Zones, services, materials, photos, notes"],
       nextSteps: ["proposal_auto_generated"],
       estMinutes: null,
-      notes: "The full Evaluator Journey — see that tab for the step-by-step.",
+      notes: "The full Evaluator Journey, see that tab for the step-by-step.",
     },
     {
       stepKey: "proposal_auto_generated",
@@ -388,7 +388,7 @@ const clientJourney: JourneyTemplate = {
       roleLabel: "System",
       outputs: ["Scope + one total price snapshotted from the site map", "Shareable client link, not yet visible to the client"],
       automations: [
-        "Fires automatically the moment the evaluator submits the evaluation — no one clicks Generate",
+        "Fires automatically the moment the evaluator submits the evaluation, no one clicks Generate",
         "Scope text auto-written per service from the site map's zones/answers",
         "Price snapshotted at generate time so it can't silently change once approved",
       ],
@@ -403,7 +403,7 @@ const clientJourney: JourneyTemplate = {
       stepType: "human_approval",
       roleLabel: "Admin/AM",
       inputs: ["Edit the total price and/or per-zone scope wording, if needed", "Approve & send"],
-      outputs: ["Proposal status moves to \"sent\" — this is what actually makes the client link live"],
+      outputs: ["Proposal status moves to \"sent\", this is what actually makes the client link live"],
       automations: ["Regenerating from the site map resets an already-approved proposal back to needing approval"],
       nextSteps: ["proposal_view"],
       clicks: 1,
@@ -420,7 +420,7 @@ const clientJourney: JourneyTemplate = {
       outputs: ["Sees cover, scope of work with photos per area, and one total investment number"],
       nextSteps: ["proposal_response"],
       estMinutes: null,
-      notes: "No email/text sending is automated yet — the link is copied and sent manually.",
+      notes: "No email/text sending is automated yet, the link is copied and sent manually.",
     },
     {
       stepKey: "proposal_response",
@@ -430,7 +430,7 @@ const clientJourney: JourneyTemplate = {
       roleLabel: "Client",
       inputs: ["Accept, or Decline with an optional note"],
       outputs: ["Proposal marked accepted/declined"],
-      automations: ["Accepting sets the job status to \"approved\" automatically — the only automated status change today"],
+      automations: ["Accepting sets the job status to \"approved\" automatically, the only automated status change today"],
       nextSteps: ["job_status"],
       clicks: 1,
       estMinutes: 0.3,

@@ -86,7 +86,7 @@ export function RecommendedTimes({
       })}
 
       <button type="button" onClick={onSeeAll} className="self-start py-2 text-sm text-muted-foreground underline">
-        None of these work — see all times
+        None of these work, see all times
       </button>
     </div>
   );

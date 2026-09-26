@@ -23,7 +23,7 @@ export async function createTool(formData: FormData): Promise<CreateToolResult> 
   } catch (err) {
     console.error("createTool failed:", err);
     const message = err instanceof Error ? err.message : String(err ?? "");
-    return { ok: false, message: message || "Couldn't add that tool — try again." };
+    return { ok: false, message: message || "Couldn't add that tool, try again." };
   }
 }
 
@@ -64,7 +64,7 @@ async function createToolInner(formData: FormData): Promise<CreateToolResult> {
   const category = String(formData.get("category") ?? "tool").trim() === "gear" ? "gear" : "tool";
 
   if (stockMethod === "in_stock" && !storageLocation) {
-    return { ok: false, message: "Enter where it's stored — required for tools kept in stock." };
+    return { ok: false, message: "Enter where it's stored, required for tools kept in stock." };
   }
   if (!imagePath) {
     return { ok: false, message: "Add a photo of the tool." };
@@ -151,7 +151,7 @@ async function reviveTool(
 
   if (existing.active) {
     const where = existing.category === "gear" ? "Crew Gear" : "Tools";
-    return { ok: false, message: `"${name}" is already on the ${where} list — edit that one instead.` };
+    return { ok: false, message: `"${name}" is already on the ${where} list, edit that one instead.` };
   }
 
   const { data, error } = await supabase

@@ -92,7 +92,7 @@ function stockState(
     state: "required_unconfirmed",
     // Said plainly, because the person confirming needs to know the app is
     // showing them evidence rather than an answer.
-    source: `${rows.length} needed by the services sold — ${notes.join("; ")}. Stock cannot prove enough for this job, so somebody has to confirm it.`,
+    source: `${rows.length} needed by the services sold, ${notes.join("; ")}. Stock cannot prove enough for this job, so somebody has to confirm it.`,
   };
 }
 

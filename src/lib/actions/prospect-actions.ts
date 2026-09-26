@@ -213,7 +213,7 @@ export async function enrichProspects(limit = 20): Promise<SimpleResult> {
   try {
     if (!(await requireAdmin())) return { ok: false, message: "Only admins can manage prospects." };
     if (!isRentcastConfigured) {
-      return { ok: false, message: "RentCast isn't configured — add RENTCAST_API_KEY to enrich addresses." };
+      return { ok: false, message: "RentCast isn't configured, add RENTCAST_API_KEY to enrich addresses." };
     }
 
     const supabase = await createClient();

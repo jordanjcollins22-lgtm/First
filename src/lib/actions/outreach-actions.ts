@@ -59,7 +59,7 @@ export async function logTouch(
     return { ok: true };
   } catch (err) {
     console.error("logTouch failed:", err);
-    return { ok: false, message: "Couldn't log that — try again." };
+    return { ok: false, message: "Couldn't log that, try again." };
   }
 }
 
@@ -111,6 +111,6 @@ export async function updateChannel(
     return { ok: true };
   } catch (err) {
     console.error("updateChannel failed:", err);
-    return { ok: false, message: "Couldn't save that — try again." };
+    return { ok: false, message: "Couldn't save that, try again." };
   }
 }

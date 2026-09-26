@@ -111,7 +111,7 @@ export default async function MyPage() {
       })}
 
       <p className="text-xs text-muted-foreground">
-        Signed in as {client.email}. We never set a password — ask for a code whenever you want back in.
+        Signed in as {client.email}. We never set a password, ask for a code whenever you want back in.
       </p>
     </div>
   );

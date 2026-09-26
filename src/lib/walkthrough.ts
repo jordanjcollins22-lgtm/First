@@ -59,11 +59,11 @@ export function canRequestWalkthrough(
   walkthroughs: WalkthroughShape[]
 ): Verdict {
   if (!workStarted) {
-    return { ok: false, reason: "Start a visit first — there's nothing to walk yet." };
+    return { ok: false, reason: "Start a visit first, there's nothing to walk yet." };
   }
   const current = currentWalkthrough(walkthroughs);
   if (current?.status === "requested") {
-    return { ok: false, reason: "Already asked — the manager hasn't been out yet." };
+    return { ok: false, reason: "Already asked, the manager hasn't been out yet." };
   }
   if (current?.status === "approved") {
     return { ok: false, reason: "Already approved. Sign the job off." };

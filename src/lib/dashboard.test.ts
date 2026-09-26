@@ -291,7 +291,7 @@ describe("a job somebody moved to declined", () => {
     const moved = job({
       status: "approved",
       proposalStatus: "sent",
-      override: { ...declined, from: "Won — not scheduled" },
+      override: { ...declined, from: "Won, not scheduled" },
     });
     expect(jobBucket(moved, "2026-08-19")).toBe("declined");
   });

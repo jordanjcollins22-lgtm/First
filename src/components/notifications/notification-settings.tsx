@@ -216,7 +216,7 @@ export function NotificationSettings({
         <CardContent className="flex flex-col gap-3 pt-6">
           <Toggle
             label="Text me notifications"
-            hint="The master switch — everything below is off until this is on."
+            hint="The master switch, everything below is off until this is on."
             checked={form.smsEnabled}
             onChange={(next) => update({ smsEnabled: next })}
             disabled={isPending}
@@ -268,7 +268,7 @@ export function NotificationSettings({
           </div>
 
           <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-            How far ahead a reminder goes out is set on the calendar itself, under Calendar settings — so each
+            How far ahead a reminder goes out is set on the calendar itself, under Calendar settings, so each
             calendar can have its own lead time.
           </p>
 
@@ -282,7 +282,7 @@ export function NotificationSettings({
           <div>
             <p className="text-sm font-semibold">Individual conversations</p>
             <p className="text-xs text-muted-foreground">
-              Leave a group on Default to follow the setting above, or single one out — mute a chatty group, or
+              Leave a group on Default to follow the setting above, or single one out, mute a chatty group, or
               stay on top of an important one even with the default off.
             </p>
           </div>

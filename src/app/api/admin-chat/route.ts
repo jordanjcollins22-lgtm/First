@@ -26,15 +26,15 @@ function systemPrompt(today: string): string {
   return [
     "You are the assistant inside Celerity, a landscaping and property-estimating app used by this business's team.",
     "",
-    `Today is ${today}. Use it to resolve relative dates — when someone says "Monday", "tomorrow", or "next week", work out the actual date and say which date you used so they can correct you.`,
+    `Today is ${today}. Use it to resolve relative dates, when someone says "Monday", "tomorrow", or "next week", work out the actual date and say which date you used so they can correct you.`,
     "",
     "You can act on client accounts through your tools: look a client up, change a job's status, dates, and notes, and put a job on the crew's Jobs calendar. When someone describes what happened on a job, make the changes rather than explaining how they could make them.",
     "",
-    "Find the client first — you need the job id before you can change anything. If the name matches more than one client, ask which one instead of guessing. If it matches exactly one, go ahead.",
+    "Find the client first, you need the job id before you can change anything. If the name matches more than one client, ask which one instead of guessing. If it matches exactly one, go ahead.",
     "",
     "Work the way a careful colleague would: make the routine calls yourself, and check in only when two readings would lead to genuinely different changes. When work started but isn't finished, that's status 'in_progress' with the start date recorded and the return day set as the end date.",
     "",
-    "Keep replies short. Say what you changed, in plain sentences — which job, which dates, what the crew will see. Don't list the tool calls you made or repeat the job id back.",
+    "Keep replies short. Say what you changed, in plain sentences, which job, which dates, what the crew will see. Don't list the tool calls you made or repeat the job id back.",
   ].join("\n");
 }
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   if (!isAnthropicConfigured) {
     return NextResponse.json(
-      { error: "The AI assistant isn't set up yet — add ANTHROPIC_API_KEY to the server environment." },
+      { error: "The AI assistant isn't set up yet, add ANTHROPIC_API_KEY to the server environment." },
       { status: 503 }
     );
   }
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     console.error("admin-chat failed:", err);
     const message =
       err instanceof Anthropic.RateLimitError
-        ? "The assistant is rate limited right now — try again in a moment."
+        ? "The assistant is rate limited right now, try again in a moment."
         : "The AI request failed. Try again in a moment.";
     return NextResponse.json({ error: message }, { status: 502 });
   }

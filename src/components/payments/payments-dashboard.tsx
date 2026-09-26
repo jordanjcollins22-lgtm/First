@@ -366,7 +366,7 @@ function InternalPayments({
               onChange={(e) => setMarkPaid(e.target.checked)}
               className="h-3.5 w-3.5 cursor-pointer accent-primary"
             />
-            Already paid — record it as settled rather than owed
+            Already paid, record it as settled rather than owed
           </label>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -586,7 +586,7 @@ function RevenuePanel({
           </div>
         </dl>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Cash in and out, not accrual profit — outstanding invoices and unpaid team payments are listed above but
+          Cash in and out, not accrual profit, outstanding invoices and unpaid team payments are listed above but
           deliberately left out of this total until the money actually moves.
         </p>
       </section>

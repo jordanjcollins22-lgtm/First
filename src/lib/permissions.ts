@@ -110,14 +110,14 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
-  "/login": "Sign-in page — nobody is signed in yet, so there are no roles to check.",
+  "/login": "Sign-in page, nobody is signed in yet, so there are no roles to check.",
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +
-    "no pricing on the page — the token is the whole of their access.",
+    "no pricing on the page, the token is the whole of their access.",
   "/admin/permissions": "Redirects to Settings, where it is a tab.",
   "/admin/settings":
     "Permissions, database setup and organizations in one place. Gated on the admin role directly " +
-    "rather than on a tab — the tab list lives in the database these tabs exist to repair, and a " +
+    "rather than on a tab, the tab list lives in the database these tabs exist to repair, and a " +
     "page that could be locked away by the thing it fixes is a trap.",
   "/admin/database": "Redirects to Settings, where it is a tab.",
   "/admin/view-as":
@@ -126,10 +126,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/today": "Redirects to My Day, which shows a crew member their own stops.",
   "/routes/[playId]":
     "One door-hanger round, walked door by door on a phone. Reached from My Day by whoever the round " +
-    "was given to, and guarded on that — a tick somebody forgot to grant is the difference between a " +
+    "was given to, and guarded on that, a tick somebody forgot to grant is the difference between a " +
     "round getting walked and somebody standing on a kerb looking at a refusal.",
   "/my-day":
-    "Whoever is signed in, looking at their own work — stops for a crew member, clients and jobs " +
+    "Whoever is signed in, looking at their own work, stops for a crew member, clients and jobs " +
     "for anybody else. It shows one person their own day and nobody else's, so there is nothing to " +
     "withhold, and a tick could leave somebody with no screen to open.",
   "/my-day/route-orders/[orderId]":
@@ -140,11 +140,11 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The printed order package for one EDDM mailing, at its own URL so it can be opened in a tab and " +
     "printed. Guarded by requireAnyTab on Project Data, which is the only place a mailing can be made.",
   "/jobs/[jobId]/directions":
-    "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page — " +
+    "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page, " +
     "it shows a property address, which anybody who can open the job can already see.",
   "/admin/weeds/sheet":
     "The printed weed guide, at its own URL so it can be opened in a tab and printed. The crew's " +
-    "reference is guarded by the Weed Guide tab like the page it is reached from — it is the same " +
+    "reference is guarded by the Weed Guide tab like the page it is reached from, it is the same " +
     "sixty-three plants, laid out for paper. The client's sheet needs only a signed-in person: it is " +
     "plant photographs, plant names and a code that books us, and it names no client, no job and no " +
     "price. It is reached from the crew's own screen on a job, because handing it over is done at a " +
@@ -162,21 +162,21 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "holding it, and on a phone that meant the top of every page after the first was cut off.",
   "/jobs/[jobId]/work-order":
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
-    "looking at. Guarded by requireJobAccess like the job page itself — it shows the work in a job, " +
+    "looking at. Guarded by requireJobAccess like the job page itself, it shows the work in a job, " +
     "and whoever can open the job can see that.",
   "/jobs/[jobId]/record":
     "The job record: every proposal, message, change and payment on one job, on paper, for the day " +
-    "a client is upset or a callback is booked. Guarded by requireJobAccess like the job page — it " +
+    "a client is upset or a callback is booked. Guarded by requireJobAccess like the job page, it " +
     "is the same job's facts laid out for printing, and whoever can open the job can already read " +
     "every one of them there.",
   "/i/[code]":
     "What a sticker opens. Whoever is holding the thing is standing in front of it, so gating the " +
     "scan behind a tick is how somebody ends up unable to sign a saw back in. It still needs a " +
     "signed-in person to record a movement, and it shows one item and nothing else.",
-  "/admin/service-pricing": "Not a page — it redirects straight to Team & Services.",
-  "/admin/overhead": "Not a page — Overhead is a tab on Money now, and this redirects there.",
+  "/admin/service-pricing": "Not a page, it redirects straight to Team & Services.",
+  "/admin/overhead": "Not a page, Overhead is a tab on Money now, and this redirects there.",
   "/sales":
-    "One of the four departments. It holds no feature of its own — every subtab renders the page that " +
+    "One of the four departments. It holds no feature of its own, every subtab renders the page that " +
     "already existed, at the permission it already had, and a subtab the viewer cannot open is not " +
     "rendered. A tick here would be a second lock on doors that are already locked.",
   "/operations":

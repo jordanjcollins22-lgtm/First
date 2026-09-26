@@ -38,7 +38,7 @@ export function CreateTeamMemberForm({ roles }: { roles: CustomRole[] }) {
         setError(result.message);
         return;
       }
-      setSuccess(`Account created for ${email} — share that email and password with them directly.`);
+      setSuccess(`Account created for ${email}, share that email and password with them directly.`);
       formRef.current?.reset();
       setRole("crew");
       setPayType("hourly");

@@ -95,7 +95,7 @@ export function ContactImportPanel() {
     <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
       <h2 className="text-sm font-semibold">Import contacts</h2>
       <p className="mb-3 text-xs text-muted-foreground">
-        Export one group at a time from your CRM — filter by tag or smart list — and say what kind of
+        Export one group at a time from your CRM, filter by tag or smart list, and say what kind of
         contacts they are. Everything except clients and leads stays out of client pickers.
       </p>
 
@@ -190,7 +190,7 @@ export function ContactImportPanel() {
               preview.updating === 0 &&
               preview.creating === 0 && (
                 <p className="mt-0.5 text-xs font-medium text-amber-800">
-                  Nothing in this file is missing from what&apos;s already here — this import would change
+                  Nothing in this file is missing from what&apos;s already here, this import would change
                   nothing.
                 </p>
               )
@@ -218,7 +218,7 @@ export function ContactImportPanel() {
 
             {preview.optedOut > 0 && (
               <p className="mt-0.5 text-xs font-medium text-amber-800">
-                {preview.optedOut} marked do-not-contact — that flag comes across with them.
+                {preview.optedOut} marked do-not-contact, that flag comes across with them.
               </p>
             )}
 

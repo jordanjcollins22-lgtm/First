@@ -135,8 +135,8 @@ export function ScopeChangesPanel({
               {c.executableAt && (
                 <p className="rounded-md bg-emerald-500/10 p-2 text-xs text-emerald-900 dark:text-emerald-200">
                   Approved {when(c.executableAt)}
-                  {c.clientDecisionChannel ? ` — ${c.clientDecisionChannel.replace("_", " ")}` : ""}
-                  {c.approvalWaivedReason ? ` — no client approval needed: ${c.approvalWaivedReason}` : ""}. The crew
+                  {c.clientDecisionChannel ? `, ${c.clientDecisionChannel.replace("_", " ")}` : ""}
+                  {c.approvalWaivedReason ? `, no client approval needed: ${c.approvalWaivedReason}` : ""}. The crew
                   can do this.
                 </p>
               )}
@@ -147,7 +147,7 @@ export function ScopeChangesPanel({
 
               {!canReview && isScopeChangeOpen(c.status) && (
                 <p className="text-xs text-muted-foreground">
-                  Not approved yet — don&apos;t do this work until it is.
+                  Not approved yet, don&apos;t do this work until it is.
                 </p>
               )}
 
@@ -247,7 +247,7 @@ export function ScopeChangesPanel({
                 <input
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="A note for the record — required to reject or to skip the client"
+                  placeholder="A note for the record, required to reject or to skip the client"
                   className="min-h-11 w-full rounded-md border border-border bg-background px-2 text-sm"
                 />
               )}
@@ -255,7 +255,7 @@ export function ScopeChangesPanel({
               {canReview && editing && (
                 <div className="space-y-2 rounded-md border border-border p-2">
                   <label className="block text-xs font-medium">
-                    Price, in dollars — leave empty for no charge
+                    Price, in dollars, leave empty for no charge
                     <input
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}

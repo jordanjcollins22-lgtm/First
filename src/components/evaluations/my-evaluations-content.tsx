@@ -90,8 +90,8 @@ export async function MyEvaluationsContent({
           <h1 className="mb-1 text-2xl font-bold">{isAdmin ? "Team Calendar" : "My Calendar"}</h1>
           <p className="mb-6 text-muted-foreground">
             {isAdmin
-              ? "Every evaluation across the team — who, where, when, and status."
-              : "Evaluations assigned to you — where to go, when, and your progress on each one."}
+              ? "Every evaluation across the team, who, where, when, and status."
+              : "Evaluations assigned to you, where to go, when, and your progress on each one."}
           </p>
         </>
       )}

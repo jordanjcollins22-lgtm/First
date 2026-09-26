@@ -3,7 +3,7 @@ import { FlaskConical } from "lucide-react";
 import type { TestSummary } from "@/lib/booking-test";
 
 function pct(n: number | null): string {
-  return n == null ? "—" : `${Math.round(n * 100)}%`;
+  return n == null ? "-" : `${Math.round(n * 100)}%`;
 }
 
 /**
@@ -44,10 +44,10 @@ export function BookingTestCard({ test }: { test: TestSummary & { since: string 
                 <td className="p-2 text-right tabular-nums">{r.visits}</td>
                 <td className="p-2 text-right tabular-nums">{r.bookings}</td>
                 <td className="p-2 text-right font-semibold tabular-nums">{pct(r.rate)}</td>
-                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.tapped : "—"}</td>
-                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.accepted : "—"}</td>
-                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.declined : "—"}</td>
-                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.failed : "—"}</td>
+                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.tapped : "-"}</td>
+                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.accepted : "-"}</td>
+                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.declined : "-"}</td>
+                <td className="p-2 text-right tabular-nums text-muted-foreground">{r.variant === "tap" ? r.failed : "-"}</td>
               </tr>
             ))}
           </tbody>

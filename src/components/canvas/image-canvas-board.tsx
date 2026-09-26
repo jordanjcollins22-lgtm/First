@@ -1138,7 +1138,7 @@ export function ImageCanvasBoard({
         setEvalResult({
           tone: "ok",
           text: outcome.unchanged
-            ? "Submitted. The proposal already matched — nothing changed."
+            ? "Submitted. The proposal already matched, nothing changed."
             : `Proposal updated: ${outcome.changes.join(" · ")}`,
           note: outcome.note,
         });
@@ -1259,7 +1259,7 @@ export function ImageCanvasBoard({
             <p className="text-sm font-medium">Is the front of the house pointing down?</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {autoTurned != null
-                ? `Turned automatically — the street looked to be ${describeHeading(
+                ? `Turned automatically, the street looked to be ${describeHeading(
                     normalizeDegrees(autoTurned + 180)
                   )} of the house. Check it against the arrow and nudge it if that is wrong.`
                 : origin
@@ -1358,7 +1358,7 @@ export function ImageCanvasBoard({
             />
             <span>
               Keep the house in the middle
-              {!keepCentered && " — off, so you can drag the photo"}
+              {!keepCentered && ", off, so you can drag the photo"}
             </span>
           </label>
 
@@ -1379,7 +1379,7 @@ export function ImageCanvasBoard({
               }}
             >
               <Lock className="h-4 w-4" />
-              Front is down — lock it
+              Front is down, lock it
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setShowSatelliteSearch(true)}>
               Different address
@@ -1390,7 +1390,7 @@ export function ImageCanvasBoard({
 
       {guidedStep === "house" && !isDrawingNow && !houseNeedsConfirmation && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          <span>Mark the house — tap once on the map to drop a pin on it.</span>
+          <span>Mark the house, tap once on the map to drop a pin on it.</span>
           <Button type="button" size="sm" onClick={() => selectTool("house")}>
             <Home className="h-4 w-4" />
             Mark House
@@ -2049,7 +2049,7 @@ function MarkNoteDialog({
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl">
         <h2 className="text-lg font-semibold">Note on this spot</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          What the crew needs to know about here — the thing that is neither a zone nor a
+          What the crew needs to know about here, the thing that is neither a zone nor a
           measurement.
         </p>
 
@@ -2058,7 +2058,7 @@ function MarkNoteDialog({
           onChange={(event) => setNote(event.target.value)}
           rows={4}
           autoFocus
-          placeholder="Gate stays shut — dog in the back."
+          placeholder="Gate stays shut, dog in the back."
         />
 
         <div className="mt-3 flex gap-2">

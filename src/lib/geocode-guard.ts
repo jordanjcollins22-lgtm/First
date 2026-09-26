@@ -138,7 +138,7 @@ export function guardMatch(query: string, match: GeocodeMatch): GuardVerdict {
     return {
       accepted: false,
       code: "different_country",
-      reason: "The lookup landed in Canada — the address needs a town and state on it.",
+      reason: "The lookup landed in Canada, the address needs a town and state on it.",
     };
   }
 
@@ -166,7 +166,7 @@ export function guardMatch(query: string, match: GeocodeMatch): GuardVerdict {
     return {
       accepted: false,
       code: "outside_region",
-      reason: "The lookup landed a long way outside the area — check the address.",
+      reason: "The lookup landed a long way outside the area, check the address.",
     };
   }
 

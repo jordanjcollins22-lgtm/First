@@ -23,7 +23,7 @@ export type LeadReason =
 
 export const REASON_LABELS: Record<LeadReason, string> = {
   quote_pending: "Quoted, no answer yet",
-  quote_declined: "Declined — worth a second run",
+  quote_declined: "Declined, worth a second run",
   evaluated_no_quote: "Visited but never priced",
   past_client: "Past client, due a check-in",
   unworked_property: "On the books, never sold anything",
@@ -191,7 +191,7 @@ export function assessLead(input: LeadInput, calibration: TicketCalibration, tod
         why.push("Roughly a year since the last job");
       } else if (age < 90) {
         score -= 25;
-        why.push("Worked recently — leave it a while");
+        why.push("Worked recently, leave it a while");
       }
     } else if (age <= 30) {
       score += 15;

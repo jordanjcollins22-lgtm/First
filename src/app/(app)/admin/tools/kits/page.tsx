@@ -57,7 +57,7 @@ export default async function KitsPage() {
           <Link href="/admin/tools" className="text-primary hover:underline">
             Inventory
           </Link>{" "}
-          and tick a kit number on a tool — the kit exists the moment you do.
+          and tick a kit number on a tool, the kit exists the moment you do.
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -141,7 +141,7 @@ export default async function KitsPage() {
             {missingBin > 0 && (
               <li>
                 {missingBin} tool{missingBin === 1 ? " has" : "s have"} no bin set, so the sheet cannot say
-                where to put it back — which is half of what it is for.
+                where to put it back, which is half of what it is for.
               </li>
             )}
             {missingDescription > 0 && (

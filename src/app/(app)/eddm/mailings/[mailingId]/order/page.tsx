@@ -87,7 +87,7 @@ export default async function EddmOrderPage({ params }: { params: Promise<{ mail
                   <td className="py-1 pr-3 text-right tabular-nums">{(r.business ?? 0).toLocaleString()}</td>
                   <td className="py-1 pr-3 text-right font-semibold tabular-nums">{pieces.toLocaleString()}</td>
                   <td className="py-1 pr-3 text-right tabular-nums">{bundlesFor(pieces).length}</td>
-                  <td className="py-1">{r.facility ?? "—"}</td>
+                  <td className="py-1">{r.facility ?? "-"}</td>
                 </tr>
               );
             })}
@@ -115,7 +115,7 @@ export default async function EddmOrderPage({ params }: { params: Promise<{ mail
             <dd className="text-right">{dollars(mailing.printCostCents)}</dd>
             <dt className="font-semibold">Total</dt>
             <dd className="text-right font-semibold">
-              {mailing.postagePerPiece != null ? dollars(mailing.postageCents + mailing.printCostCents) : "—"}
+              {mailing.postagePerPiece != null ? dollars(mailing.postageCents + mailing.printCostCents) : "-"}
             </dd>
           </dl>
         </div>
@@ -147,7 +147,7 @@ export default async function EddmOrderPage({ params }: { params: Promise<{ mail
                 <p className="text-center text-[11px] uppercase text-muted-foreground">Every Door Direct Mail · Facing slip</p>
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                   <dt className="text-xs text-muted-foreground">Post office</dt>
-                  <dd className="font-semibold">{r.facility ?? "—"}</dd>
+                  <dd className="font-semibold">{r.facility ?? "-"}</dd>
                   <dt className="text-xs text-muted-foreground">ZIP Code</dt>
                   <dd className="font-mono text-lg font-bold">{r.zip}</dd>
                   <dt className="text-xs text-muted-foreground">Route</dt>

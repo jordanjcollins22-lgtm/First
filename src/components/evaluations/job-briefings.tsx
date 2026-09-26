@@ -118,7 +118,7 @@ export function JobBriefings({ briefings }: { briefings: JobBriefing[] }) {
                 <dd className="text-right">
                   {job.proposal?.zoneCount
                     ? `${job.proposal.zoneCount} zone${job.proposal.zoneCount === 1 ? "" : "s"}`
-                    : "—"}
+                    : "-"}
                 </dd>
               </div>
 

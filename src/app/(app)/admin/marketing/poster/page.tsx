@@ -92,7 +92,7 @@ export default async function PosterPage() {
           <li>Print it. Actual size, not &ldquo;fit to page&rdquo;, or the cutouts come out the wrong size for
             the frame.</li>
           <li>Cut along the dashed outlines. Several cutouts share a sheet, and they are arranged so every
-            cut is a straight line all the way across — a paper trimmer does the lot in a couple of minutes.</li>
+            cut is a straight line all the way across, a paper trimmer does the lot in a couple of minutes.</li>
           <li>Lay them on the board using the first two sheets: the map shows the whole sign with every piece
             numbered, and the list gives each one&apos;s size and how far down and across it goes.</li>
           <li>Tape or glue the backs once you are happy with where they sit. A piece an eighth of an inch out

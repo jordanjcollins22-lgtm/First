@@ -119,7 +119,7 @@ export function archiveLine(summary: ArchiveSummary): string {
   if (summary.lost > 0) parts.push(`${summary.lost} lost`);
   if (summary.disputed > 0) parts.push(`${summary.disputed} that went wrong`);
   const quotes = summary.total === 1 ? "1 older quote" : `${summary.total} older quotes`;
-  return parts.length > 0 ? `${quotes} — ${parts.join(", ")}.` : `${quotes}.`;
+  return parts.length > 0 ? `${quotes}, ${parts.join(", ")}.` : `${quotes}.`;
 }
 
 /** Newest job first, and anything undated last: a quote with no date on it is

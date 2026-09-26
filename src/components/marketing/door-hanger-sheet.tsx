@@ -69,10 +69,10 @@ export function DoorHangerSheet({ slots }: { slots: HangerSlot[] }) {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Stat label="Per sheet" value={perSheet === 0 ? "—" : String(perSheet)} />
+          <Stat label="Per sheet" value={perSheet === 0 ? "-" : String(perSheet)} />
           <Stat
             label={`Sheets for ${runSize || "0"}`}
-            value={sheets != null ? String(sheets) : "—"}
+            value={sheets != null ? String(sheets) : "-"}
           />
         </div>
 
@@ -89,12 +89,12 @@ export function DoorHangerSheet({ slots }: { slots: HangerSlot[] }) {
         {perSheet === 1 && (
           <p className="mt-2 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800">
             Only one half has artwork, so every sheet yields one hanger and one piece of scrap. Put
-            something on the other half — the same design is fine — to get two.
+            something on the other half, the same design is fine, to get two.
           </p>
         )}
 
         <p className="mt-2 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm text-muted-foreground backdrop-blur-md">
-          Artwork is {HANGER_WIDTH_IN}&Prime; &times; {HANGER_HEIGHT_IN}&Prime; —{" "}
+          Artwork is {HANGER_WIDTH_IN}&Prime; &times; {HANGER_HEIGHT_IN}&Prime;:{" "}
           <span className="font-medium text-foreground">
             {ARTWORK_PIXEL_WIDTH} &times; {ARTWORK_PIXEL_HEIGHT}px
           </span>
@@ -166,7 +166,7 @@ function Face({
   return (
     <div>
       <p className="print-hide mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {face === "front" ? "Front" : "Back — laid out for a long-edge flip"}
+        {face === "front" ? "Front" : "Back, laid out for a long-edge flip"}
       </p>
       <div
         className="print-sheet relative mx-auto flex w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"

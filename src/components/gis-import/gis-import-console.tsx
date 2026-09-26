@@ -130,7 +130,7 @@ export function GisImportConsole({ jobs, defaultUrl, environment }: Props) {
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{latestTest?.layer_url}</code>
             {" "}
             <span className="text-muted-foreground">
-              — the layer found by the test at {latestTest ? new Date(latestTest.created_at).toLocaleTimeString() : ""}. The
+              , the layer found by the test at {latestTest ? new Date(latestTest.created_at).toLocaleTimeString() : ""}. The
               URL box above is not used here.
             </span>
           </p>
@@ -361,7 +361,7 @@ function ConnectionResult({ job, zip, onPick }: { job: GisImportJob; zip: string
                 <div className="break-all">{p.url}</div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
                   <span>{p.ok ? "ok" : `failed: ${p.kind}`}</span>
-                  <span>HTTP {p.status ?? "—"}{p.statusText ? ` ${p.statusText}` : ""}</span>
+                  <span>HTTP {p.status ?? "-"}{p.statusText ? ` ${p.statusText}` : ""}</span>
                   {p.errorCode && <span>code {p.errorCode}</span>}
                   <span>{p.elapsedMs ?? "?"} ms</span>
                   <span>origin {p.origin?.platform ?? "?"}{p.origin?.region ? `/${p.origin.region}` : ""}</span>
@@ -439,7 +439,7 @@ function ConnectionResult({ job, zip, onPick }: { job: GisImportJob; zip: string
                         {mapping[role]}
                       </>
                     ) : (
-                      <span className="text-muted-foreground">— no such field on this layer</span>
+                      <span className="text-muted-foreground">, no such field on this layer</span>
                     )}
                   </td>
                 </tr>
@@ -594,7 +594,7 @@ function Totals({ before, after }: { before: Record<string, unknown> | null; aft
           return (
             <tr key={key} className="border-t border-border">
               <td className="py-1">{label}</td>
-              <td className="py-1 text-muted-foreground">{then == null ? "—" : then.toLocaleString()}</td>
+              <td className="py-1 text-muted-foreground">{then == null ? "-" : then.toLocaleString()}</td>
               <td className={`py-1 font-medium ${bad ? "text-destructive" : ""}`}>
                 {now.toLocaleString()}
                 {MUST_BE_ZERO.has(key) && !bad && <CheckCircle2 className="ml-1 inline h-3.5 w-3.5 text-green-600" />}

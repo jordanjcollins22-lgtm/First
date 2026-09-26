@@ -154,7 +154,7 @@ function ProposalBody({
         // already decided scroll back up and talk themselves out of it.
         if (response === "accepted") router.push(payPath(token));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
+        setError(err instanceof Error ? err.message : "Something went wrong, please try again.");
       }
     });
   }
@@ -172,7 +172,7 @@ function ProposalBody({
     <div className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-10">
       {preview && (
         <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-center text-xs font-semibold text-amber-700">
-          Internal preview — the client doesn&apos;t see this banner
+          Internal preview, the client doesn&apos;t see this banner
         </div>
       )}
 
@@ -180,7 +180,7 @@ function ProposalBody({
         <p className="text-sm font-semibold uppercase tracking-wide text-primary">{organizationName}</p>
         <h1 className="text-2xl font-bold">Your Property Proposal</h1>
         <p className="text-muted-foreground">
-          {customerName ? `Prepared for ${customerName}` : "Prepared for you"} — {propertyAddress}
+          {customerName ? `Prepared for ${customerName}` : "Prepared for you"} · {propertyAddress}
         </p>
         <p className="max-w-md text-sm text-muted-foreground">
           We walked your property and put together exactly what we&apos;d recommend. Here&apos;s the scope, and
@@ -332,7 +332,7 @@ function ProposalBody({
             <p className="text-sm text-muted-foreground line-through">{formatTotal(proposal.total_cost)}</p>
             <p className="text-sm font-medium text-muted-foreground">
               You save {formatTotal(proposal.discount_amount)}
-              {proposal.discount_reason && ` — ${proposal.discount_reason}`}
+              {proposal.discount_reason && `, ${proposal.discount_reason}`}
             </p>
             <p className="text-4xl font-bold text-primary">
               {formatTotal(Math.max(0, proposal.total_cost - proposal.discount_amount))}
@@ -422,7 +422,7 @@ function ProposalBody({
       <div className="flex flex-col items-center gap-3">
         {status === "needs_approval" ? (
           <p className="text-sm text-muted-foreground">
-            Not approved yet — the client can&apos;t see or act on this until it&apos;s sent.
+            Not approved yet, the client can&apos;t see or act on this until it&apos;s sent.
           </p>
         ) : status === "sent" && isExpired(proposal.expires_at, new Date()) ? (
           // Over, whether or not the morning run has closed it yet. The
@@ -579,7 +579,7 @@ function ProposalBody({
         nameValue={senderName}
         onNameChange={setSenderName}
         placeholder="Ask us anything about this proposal..."
-        emptyLabel="No messages yet — ask us anything."
+        emptyLabel="No messages yet, ask us anything."
       />
       </div>
       </Watched>

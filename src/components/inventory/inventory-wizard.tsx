@@ -141,7 +141,7 @@ export function InventoryWizard({
         const path = `${uuid()}/${file.name}`;
         const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file);
         if (uploadError) {
-          setProblem("Couldn't upload the photo — try again.");
+          setProblem("Couldn't upload the photo, try again.");
           return;
         }
 
@@ -170,7 +170,7 @@ export function InventoryWizard({
         setIndex(0);
         onOpenChange(false);
       } catch {
-        setProblem("Something went wrong — try again.");
+        setProblem("Something went wrong, try again.");
       }
     });
   }
@@ -276,7 +276,7 @@ export function InventoryWizard({
                   {option === "own" ? "We own it" : "We rent it"}
                 </span>
                 <span className="block text-[11px] text-muted-foreground">
-                  {option === "own" ? "Worth a tenth of cost if we sell it" : "No resale — not ours"}
+                  {option === "own" ? "Worth a tenth of cost if we sell it" : "No resale, not ours"}
                 </span>
               </button>
             ))}
@@ -548,29 +548,29 @@ function categoryFor(group: InventoryGroup, kind: "tool" | "material" | "other")
 function summaryOf(answers: WizardAnswers): [string, string][] {
   const rows: [string, string][] = [
     ["What", answers.kind === "other" ? "A cost" : answers.kind === "tool" ? "Tool" : "Material"],
-    ["Name", answers.name.trim() || "—"],
+    ["Name", answers.name.trim() || "-"],
   ];
 
   if (answers.kind === "tool") rows.push(["Ownership", answers.ownership === "rent" ? "Rented" : "Owned"]);
-  else rows.push(["One of it is", answers.unit.trim() || "—"]);
+  else rows.push(["One of it is", answers.unit.trim() || "-"]);
 
   const price =
     answers.packSize.trim() && answers.packCost.trim()
       ? `${answers.packCost} per ${answers.packSize}`
       : answers.unitCost.trim()
         ? answers.unitCost
-        : "—";
+        : "-";
   rows.push([answers.ownership === "rent" && answers.kind === "tool" ? "Per day" : "Cost", price]);
 
   if (answers.kind !== "other") {
     rows.push(["Stock", answers.stockMethod === "in_stock" ? "Kept in stock" : "Ordered as needed"]);
     if (answers.stockMethod === "in_stock") {
-      rows.push(["Kept at", answers.storageLocation.trim() || "—"]);
+      rows.push(["Kept at", answers.storageLocation.trim() || "-"]);
       rows.push(["On hand", answers.quantityOnHand.trim() || "0"]);
-      rows.push(["Reorder at", answers.reorderThreshold.trim() || "—"]);
+      rows.push(["Reorder at", answers.reorderThreshold.trim() || "-"]);
     }
   }
 
-  rows.push(["Photo", answers.photo ? "Added" : "—"]);
+  rows.push(["Photo", answers.photo ? "Added" : "-"]);
   return rows;
 }

@@ -268,7 +268,7 @@ export function MarketingTodo({
           <p className="text-xs">
             <span className="font-medium">{waiting} waiting for your approval.</span>{" "}
             <span className="text-muted-foreground">
-              Nothing goes out until you say so. Read the list below, and if the set looks right, approve it in one go rather than one at a time — after ten of a kind go through untouched the app approves that kind itself.
+              Nothing goes out until you say so. Read the list below, and if the set looks right, approve it in one go rather than one at a time, after ten of a kind go through untouched the app approves that kind itself.
             </span>
           </p>
           <Button

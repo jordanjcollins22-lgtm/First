@@ -103,7 +103,7 @@ export function WeeklyAvailabilityEditor({ myAvailability }: { myAvailability: W
     <div>
       <p className="mb-1 text-sm font-semibold text-muted-foreground">Set your weekly availability</p>
       <p className="mb-2 text-xs text-muted-foreground">
-        Which days do you work, and what hours? This is set once — you can edit it later, it won&apos;t change on
+        Which days do you work, and what hours? This is set once, you can edit it later, it won&apos;t change on
         its own.
       </p>
       <div className="flex flex-col gap-2 rounded-lg border border-border bg-card/60 p-3">

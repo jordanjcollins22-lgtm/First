@@ -60,7 +60,7 @@ export function RecentMergesPanel({ merges }: { merges: MergeRecord[] }) {
     <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
       <h2 className="text-sm font-semibold">Recently merged</h2>
       <p className="mb-3 text-xs text-muted-foreground">
-        Merging deletes one of the two. If the wrong pair went together, put it back here — the contact,
+        Merging deletes one of the two. If the wrong pair went together, put it back here, the contact,
         its properties, and anything the merge filled in on the one that stayed.
       </p>
 

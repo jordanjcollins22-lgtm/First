@@ -71,7 +71,7 @@ export function calculatePay(
     const rate = profile.pay_rate_per_hour;
     const hours = inputs.hours ?? 0;
     if (rate == null) {
-      warning = "No hourly rate on this person's account — set one on the Team page, or enter the amount by hand.";
+      warning = "No hourly rate on this person's account, set one on the Team page, or enter the amount by hand.";
     } else if (hours > 0) {
       hourlyAmount = round2(rate * hours);
       lines.push(`${hours} hr × $${rate}/hr = $${hourlyAmount.toFixed(2)}`);
@@ -82,7 +82,7 @@ export function calculatePay(
     const pct = profile.commission_pct;
     const basis = inputs.commissionBasis ?? 0;
     if (pct == null) {
-      warning = warning ?? "No commission % on this person's account — set one on the Team page, or enter the amount by hand.";
+      warning = warning ?? "No commission % on this person's account, set one on the Team page, or enter the amount by hand.";
     } else if (basis > 0) {
       commissionAmount = round2((pct / 100) * basis);
       lines.push(`${pct}% of $${basis.toFixed(2)} = $${commissionAmount.toFixed(2)}`);

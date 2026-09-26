@@ -112,7 +112,7 @@ export function CrewPanel({
               ))}
             </select>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Set on the client — this applies to all of their jobs.
+              Set on the client, this applies to all of their jobs.
             </p>
           </>
         )}
@@ -218,14 +218,14 @@ export function CrewPanel({
         <p className="text-[11px] text-muted-foreground">
           {anyCrewExists
             ? "Everybody with the crew role is already on this job."
-            : "Nobody has the crew role yet — give it to somebody under Team & Services and they'll show up here."}
+            : "Nobody has the crew role yet, give it to somebody under Team & Services and they'll show up here."}
         </p>
       )}
 
       {!setupNeeded && !editable && (
         <p className="text-[11px] text-muted-foreground">
           {status === "completed"
-            ? "This job is finished — its crew is part of the record now."
+            ? "This job is finished, its crew is part of the record now."
             : "This job is cancelled. Reopen it to change the crew."}
         </p>
       )}

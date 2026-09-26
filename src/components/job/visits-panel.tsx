@@ -177,7 +177,7 @@ function SessionList({
 
       {sessions.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No visits booked. Add one for each trip — the job&apos;s dates follow along.
+          No visits booked. Add one for each trip, the job&apos;s dates follow along.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -230,7 +230,7 @@ function SessionList({
                 onChange={(e) => setTicketId(e.target.value)}
                 className="min-h-11 rounded-lg border border-border bg-background px-3 text-base sm:text-sm"
               >
-                <option value="">No — regular work</option>
+                <option value="">No, regular work</option>
                 {bookable.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.title}
@@ -357,7 +357,7 @@ function SessionRow({
 
       {session.status === "paused" && session.pause_reason && (
         <p className="mt-0.5 text-[11px] font-medium text-amber-800">
-          Paused — {session.pause_reason}
+          Paused: {session.pause_reason}
         </p>
       )}
 

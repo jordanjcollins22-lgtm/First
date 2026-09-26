@@ -109,7 +109,7 @@ export function describeNet(
   if (taken === 0) {
     return `${mine.length} ${mine.length === 1 ? "payment" : "payments"} recorded on this job, none refunded or reversed`;
   }
-  return `${money(gross)} taken on this job, ${money(taken)} refunded or reversed since — ${money(gross - taken)} net`;
+  return `${money(gross)} taken on this job, ${money(taken)} refunded or reversed since, ${money(gross - taken)} net`;
 }
 
 function money(cents: number): string {

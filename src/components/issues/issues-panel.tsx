@@ -116,7 +116,7 @@ export function IssuesPanel({
                 {SEVERITIES.map((key) => (
                   <option key={key} value={key}>
                     {SEVERITY_LABEL[key]}
-                    {key === "blocking" || key === "critical" ? " — stops the job" : ""}
+                    {key === "blocking" || key === "critical" ? ", stops the job" : ""}
                   </option>
                 ))}
               </select>
@@ -180,7 +180,7 @@ export function IssuesPanel({
                     <p className="mt-1 flex items-start gap-1 text-xs text-emerald-700 dark:text-emerald-400">
                       <Check className="mt-0.5 h-3 w-3 shrink-0" />
                       {issue.resolution}
-                      {issue.resolvedByName ? ` — ${issue.resolvedByName}` : ""}
+                      {issue.resolvedByName ? `, ${issue.resolvedByName}` : ""}
                     </p>
                   )}
                 </div>

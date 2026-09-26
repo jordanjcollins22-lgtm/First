@@ -547,9 +547,9 @@ export async function addUnit(input: {
 
     const name = input.name.trim().toLowerCase();
     if (!name) return { ok: false, message: "Give the unit a name." };
-    if (name.length > 24) return { ok: false, message: "Keep it short — it has to fit on a row." };
+    if (name.length > 24) return { ok: false, message: "Keep it short, it has to fit on a row." };
     if (UNITS.some((u) => u.value === name)) {
-      return { ok: false, message: `"${name}" is already there — pick it from the list.` };
+      return { ok: false, message: `"${name}" is already there, pick it from the list.` };
     }
 
     const [supabase, organizationId] = await Promise.all([createClient(), getCurrentOrganizationId()]);

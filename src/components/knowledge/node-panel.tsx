@@ -589,7 +589,7 @@ export function NodePanel({
             <UnitSelect value={unit} units={units} onChange={setUnit} onAdded={onChanged} />
             <p className="text-[11px] text-muted-foreground">
               What a quantity of it means. An hour or a day makes it time rather than materials. The
-              price is not set here — it comes from Inventory, so there is only ever one of it.
+              price is not set here, it comes from Inventory, so there is only ever one of it.
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -702,7 +702,7 @@ export function NodePanel({
             />
             {node.materialId != null && (
               <p className="text-[11px] text-muted-foreground">
-                Comes from the linked material — change it in Inventory.
+                Comes from the linked material, change it in Inventory.
               </p>
             )}
           </div>
@@ -715,7 +715,7 @@ export function NodePanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Nothing — this node just describes</SelectItem>
+                <SelectItem value="none">Nothing, this node just describes</SelectItem>
                 {APP_DESTINATIONS.map((destination) => (
                   <SelectItem key={destination.route} value={destination.route}>
                     {destination.label}
@@ -798,7 +798,7 @@ export function NodePanel({
                 {short.map((item) => (
                   <li key={item.node.id} className="text-[11px] text-amber-800">
                     {item.node.title}: need {describeQuantity(item.needed, item.node.unit)}, have{" "}
-                    {item.onHand} — short {describeQuantity(item.short, item.node.unit)}
+                    {item.onHand}, short {describeQuantity(item.short, item.node.unit)}
                   </li>
                 ))}
               </ul>
@@ -822,7 +822,7 @@ export function NodePanel({
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Not scheduled. An idea with no date is a note — give it one and it starts pulling its
+              Not scheduled. An idea with no date is a note, give it one and it starts pulling its
               requirements along with it.
             </p>
           )}
@@ -950,7 +950,7 @@ export function NodePanel({
                     node.stockOnHand <= node.reorderThreshold &&
                     !node.onOrder && (
                       <p className="text-[11px] font-medium text-amber-700">
-                        Down to the reorder point — order before the next run needs it.
+                        Down to the reorder point, order before the next run needs it.
                       </p>
                     )}
                   <div className="flex flex-wrap gap-2">
@@ -981,7 +981,7 @@ export function NodePanel({
               ) : (
                 <>
                   <p className="text-[11px] text-muted-foreground">
-                    Not in Inventory, so it has no cost. Prices come from the real thing — link it and
+                    Not in Inventory, so it has no cost. Prices come from the real thing, link it and
                     every total that depends on it works itself out.
                   </p>
                   <Select
@@ -1116,7 +1116,7 @@ export function NodePanel({
                   <SelectContent>
                     {INVENTORY_GROUPS.map((group) => (
                       <SelectItem key={group.value} value={group.value}>
-                        Inventory — {group.label}
+                        Inventory: {group.label}
                       </SelectItem>
                     ))}
                     <SelectItem value="none">Not inventory (time, a permit, a process)</SelectItem>
@@ -1135,7 +1135,7 @@ export function NodePanel({
                   {suggestions.length > 0 && (
                     <div className="flex flex-col gap-1">
                       <p className="text-[11px] text-muted-foreground">
-                        Already in the graph — use one of these instead:
+                        Already in the graph, use one of these instead:
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {suggestions.map((s) => (
@@ -1186,7 +1186,7 @@ export function NodePanel({
                     </div>
                   ) : (
                     <p className="text-[11px] text-muted-foreground">
-                      It will have no cost until somebody links it to Inventory — hours included, if you
+                      It will have no cost until somebody links it to Inventory, hours included, if you
                       keep a rate in there.
                     </p>
                   )}
@@ -1296,13 +1296,12 @@ export function NodePanel({
             )}
             {cost.capital > 0 && (
               <p className="mt-2 text-[11px] text-muted-foreground">
-                Plus {money(cost.capital)} of kit — {cost.capitalItems.map((n) => n.title).join(", ")} —
-                bought once, not once per run.
+                Plus {money(cost.capital)} of kit: {cost.capitalItems.map((n) => n.title).join(", ")}, bought once, not once per run.
               </p>
             )}
             {cost.unpriced.length > 0 && (
               <p className="mt-2 text-[11px] text-amber-700">
-                No price yet on {cost.unpriced.map((n) => n.title).join(", ")} — the total is short by
+                No price yet on {cost.unpriced.map((n) => n.title).join(", ")}, the total is short by
                 whatever those cost.
               </p>
             )}
@@ -1333,7 +1332,7 @@ export function NodePanel({
                   {payback.lines.map((line) => (
                     <li key={line.node.id} className="text-[11px] text-muted-foreground">
                       {line.quantity} × {line.node.title}
-                      {line.unitValue > 0 ? ` at ${money(line.unitValue)} = ${money(line.amount)}` : " — no value on it yet"}
+                      {line.unitValue > 0 ? ` at ${money(line.unitValue)} = ${money(line.amount)}` : ", no value on it yet"}
                     </li>
                   ))}
                 </ul>
@@ -1343,7 +1342,7 @@ export function NodePanel({
               </>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                Nothing earns from this yet. A flyer is paper going through six hundred doors — and paper
+                Nothing earns from this yet. A flyer is paper going through six hundred doors, and paper
                 going through six hundred doors has advertising space on it. Worth asking before it goes
                 out.
               </p>
@@ -1589,7 +1588,7 @@ function ConnectionList({
       <p className="text-xs text-muted-foreground">
         {direction === "in"
           ? "Nothing goes into this yet. Break it down above and it stops being just an idea."
-          : "Nothing comes out of this yet — no revenue, nothing it produces."}
+          : "Nothing comes out of this yet, no revenue, nothing it produces."}
       </p>
     );
   }

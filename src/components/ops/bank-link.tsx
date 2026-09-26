@@ -18,7 +18,7 @@ import type { BankStatus } from "@/lib/data/ops";
  */
 
 function money(n: number | null): string {
-  return n == null ? "—" : n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return n == null ? "-" : n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
 export function BankLink({ bank, configured, mode }: { bank: BankStatus; configured: boolean; mode: "live" | "sandbox" }) {

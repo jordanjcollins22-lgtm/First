@@ -183,7 +183,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
             // why a corrected address never appeared on the map.
             geocode_error:
               verdict === "ambiguous"
-                ? "More than one property on this contact — move the address by hand."
+                ? "More than one property on this contact, move the address by hand."
                 : null,
           })
           .eq("id", contact.id);
@@ -326,7 +326,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
     if (outage && placed === 0 && failed === 0) {
       return {
         ok: false,
-        message: "Address lookup isn't answering right now. Nothing has been changed — try again in a minute.",
+        message: "Address lookup isn't answering right now. Nothing has been changed, try again in a minute.",
       };
     }
 
@@ -340,7 +340,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
         failed > 0 ? `${failed} couldn't be found` : null,
         // Why the run is short. Without this a run that stopped after nine of
         // forty looks like a run that decided nine was enough.
-        outage ? "stopped early — address lookup stopped answering" : null,
+        outage ? "stopped early, address lookup stopped answering" : null,
         remaining > 0 ? `${remaining} to go` : "all done",
       ]
         .filter(Boolean)
@@ -348,7 +348,7 @@ export async function geocodeImportedAddresses(): Promise<GeocodeResult> {
     };
   } catch (err) {
     console.error("geocodeImportedAddresses failed:", err);
-    return { ok: false, message: "Couldn't place those addresses — try again." };
+    return { ok: false, message: "Couldn't place those addresses, try again." };
   }
 }
 
@@ -451,7 +451,7 @@ export async function refreshStaleAddresses(): Promise<RefreshResult> {
         ambiguous,
         message:
           ambiguous > 0
-            ? `Every address matches its file and sits in the right part of the country, except ${ambiguous} on contacts with more than one property — those need moving by hand.`
+            ? `Every address matches its file and sits in the right part of the country, except ${ambiguous} on contacts with more than one property, those need moving by hand.`
             : "Every imported address already matches what the file says.",
       };
     }
@@ -471,10 +471,10 @@ export async function refreshStaleAddresses(): Promise<RefreshResult> {
       ok: true,
       queued: stale.length,
       ambiguous,
-      message: `${refreshLabel(stale.length).replace("Re-place", "Queued")} — press Place addresses to put them on the map.`,
+      message: `${refreshLabel(stale.length).replace("Re-place", "Queued")}, press Place addresses to put them on the map.`,
     };
   } catch (err) {
     console.error("refreshStaleAddresses failed:", err);
-    return { ok: false, message: "Couldn't check those addresses — try again." };
+    return { ok: false, message: "Couldn't check those addresses, try again." };
   }
 }

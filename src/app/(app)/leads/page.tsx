@@ -141,7 +141,7 @@ export default async function LeadsPage() {
                 <Tile
                   label="Booked today"
                   value={String(outreach.summary.booked)}
-                  hint="Evaluations — the only score that counts"
+                  hint="Evaluations, the only score that counts"
                 />
                 <Tile
                   label="Channels done"
@@ -189,7 +189,7 @@ export default async function LeadsPage() {
         <Tile label="Big jobs won" value={String(data.qualifiedWon)} hint={`At or above ${money(TARGET_TICKET)}`} />
         <Tile
           label="Average won job"
-          value={data.averageWonTicket ? money(data.averageWonTicket) : "—"}
+          value={data.averageWonTicket ? money(data.averageWonTicket) : "-"}
         />
       </div>
 
@@ -207,7 +207,7 @@ export default async function LeadsPage() {
             <>
               Not enough closed jobs with a lot size recorded yet, so estimates use a starting assumption of{" "}
               {money(data.calibration.perAcre)} per acre plus {money(data.calibration.base)} a job. It recalibrates
-              itself on your own numbers once five jobs have closed with both a total and a lot size — treat
+              itself on your own numbers once five jobs have closed with both a total and a lot size, treat
               estimates loosely until then.
             </>
           )}
@@ -242,7 +242,7 @@ export default async function LeadsPage() {
       <section className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
         <h2 className="mb-1 text-sm font-semibold">Best areas</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          Where the work has actually paid — worth weighting door-hangers and ad radius towards.
+          Where the work has actually paid, worth weighting door-hangers and ad radius towards.
         </p>
         {data.areas.length === 0 ? (
           <p className="text-xs text-muted-foreground">No jobs on the books yet.</p>
@@ -278,7 +278,7 @@ export default async function LeadsPage() {
             <p className="text-sm font-semibold">Before you call or text this list</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               These people never asked to hear from you, so cold calls and texts fall under the federal
-              Do-Not-Call rules and the TCPA — texting in particular needs consent you don&apos;t have from a
+              Do-Not-Call rules and the TCPA, texting in particular needs consent you don&apos;t have from a
               parcel record. Scrub against the national registry before dialling, keep to lawful hours, and use
               the <strong>Do not contact</strong> button the first time somebody asks. That flag survives a
               re-import; a status change can&apos;t undo it. Door-hangers and mail don&apos;t carry the same
@@ -297,7 +297,7 @@ export default async function LeadsPage() {
 
       <p className="mt-4 text-xs text-muted-foreground">
         These are properties the business has already visited, quoted, or worked on. Nothing here is a bought
-        list or a guessed homeowner — turning this into cold outreach would mean adding a data source, which is a
+        list or a guessed homeowner, turning this into cold outreach would mean adding a data source, which is a
         separate decision.
       </p>
     </div>
@@ -331,7 +331,7 @@ function LeadList({
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                   <span className="font-medium">{lead.contactName}</span>
                   <span className="text-sm font-semibold tabular-nums">
-                    {lead.ticket != null ? money(lead.ticket) : "—"}
+                    {lead.ticket != null ? money(lead.ticket) : "-"}
                     {lead.ticketIsEstimate && (
                       <span className="ml-1 text-[11px] font-normal text-muted-foreground">est.</span>
                     )}

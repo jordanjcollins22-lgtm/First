@@ -62,7 +62,7 @@ export function MigrationRunner({
             {pending.length} migration{pending.length === 1 ? "" : "s"} still to run
           </p>
           <p className="mt-1 text-xs text-amber-900">
-            Copy the SQL, open the editor, paste, and press Run. Safe to run more than once — nothing
+            Copy the SQL, open the editor, paste, and press Run. Safe to run more than once, nothing
             in it applies twice.
           </p>
 
@@ -146,7 +146,7 @@ export function MigrationRunner({
             )}
             {migration.creates.length === 0 && migration.adds.length === 0 && (
               <p className="mt-1 pl-8 text-[11px] text-muted-foreground">
-                Changes existing tables — status follows the migration before it.
+                Changes existing tables, status follows the migration before it.
               </p>
             )}
           </li>

@@ -132,7 +132,7 @@ export async function createPropertyAndJob(input: CreatePropertyInput) {
     .from("jobs")
     .insert({
       property_id: propertyId,
-      name: input.jobName || `${input.address} — Estimate`,
+      name: input.jobName || `${input.address}, Estimate`,
     })
     .select()
     .single();
@@ -371,7 +371,7 @@ export async function bookEvaluation(input: ManualEvaluationInput): Promise<Book
       .from("jobs")
       .insert({
         property_id: propertyId,
-        name: `${address} — Estimate`,
+        name: `${address}, Estimate`,
         assigned_to: input.evaluatorId || null,
         evaluation_date: start.toISOString(),
         evaluation_end_date: end.toISOString(),

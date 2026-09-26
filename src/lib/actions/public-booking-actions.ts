@@ -129,7 +129,7 @@ export async function submitPublicBooking(
     throw new Error("Select a date and time.");
   }
   if (input.candidateEvaluatorIds.length === 0) {
-    throw new Error("That time is no longer available — please pick another.");
+    throw new Error("That time is no longer available, please pick another.");
   }
 
   const admin = createAdminClient();
@@ -165,7 +165,7 @@ export async function submitPublicBooking(
   const blocks = await getBusyBlocksAsAdmin().catch(() => []);
 
   const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end });
-  if (stillFree.length === 0) throw new Error("That time was just booked — please pick another.");
+  if (stillFree.length === 0) throw new Error("That time was just booked, please pick another.");
 
   // Which of the free ones, rather than whichever the database named first.
   // That used to decide it, so one person collected the bookings and the rest
@@ -175,7 +175,7 @@ export async function submitPublicBooking(
     lat: input.lat,
     lng: input.lng,
   });
-  if (!choice) throw new Error("That time was just booked — please pick another.");
+  if (!choice) throw new Error("That time was just booked, please pick another.");
   const evaluatorId = choice.evaluatorId;
 
   const { data: activeServices, error: servicesError } = await admin
@@ -269,7 +269,7 @@ export async function submitPublicBooking(
     .from("jobs")
     .insert({
       property_id: propertyId,
-      name: `${address} — Estimate`,
+      name: `${address}, Estimate`,
       assigned_to: evaluatorId,
       evaluation_date: iso,
       evaluation_status: "scheduled",

@@ -75,7 +75,7 @@ export function DensityPanel({
             <p className="text-xs text-muted-foreground">
               {mode === "paid"
                 ? "No collected money against any address yet."
-                : "No addresses with a position yet — place them on the Contacts page first."}
+                : "No addresses with a position yet, place them on the Contacts page first."}
             </p>
           ) : (
             <ol className="flex flex-col gap-1">
@@ -108,7 +108,7 @@ export function DensityPanel({
           )}
 
           <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Areas are about half a mile across — roughly a morning of knocking. The numbers on the map
+            Areas are about half a mile across, roughly a morning of knocking. The numbers on the map
             match this list.
           </p>
         </>

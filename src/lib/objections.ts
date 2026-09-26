@@ -234,7 +234,7 @@ export function reduceScope(
   if (kept.length === 0) {
     return {
       ...base,
-      reviewReason: "Keep at least one area — if none of it works, decline instead and tell us why.",
+      reviewReason: "Keep at least one area, if none of it works, decline instead and tell us why.",
     };
   }
   if (dropped.length === 0) {
@@ -254,21 +254,21 @@ export function reduceScope(
     return {
       ...base,
       droppedCents,
-      reviewReason: "We'll confirm the new price by email — part of this quote was priced by hand.",
+      reviewReason: "We'll confirm the new price by email, part of this quote was priced by hand.",
     };
   }
   if (handEntered) {
     return {
       ...base,
       droppedCents,
-      reviewReason: "We'll confirm the new price by email — one of these areas was priced by hand.",
+      reviewReason: "We'll confirm the new price by email, one of these areas was priced by hand.",
     };
   }
   if (discounted) {
     return {
       ...base,
       droppedCents,
-      reviewReason: "We'll confirm the new price by email — this quote has a discount on it we'd need to re-apply.",
+      reviewReason: "We'll confirm the new price by email, this quote has a discount on it we'd need to re-apply.",
     };
   }
 

@@ -212,7 +212,7 @@ async function BusinessTab({
 
       <DashboardSections
         title="Jobs"
-        blurb="The work itself. Sold-but-unbooked and sign-off piles ignore the window — they matter whenever they exist."
+        blurb="The work itself. Sold-but-unbooked and sign-off piles ignore the window, they matter whenever they exist."
         sections={data.jobs}
       />
 
@@ -293,7 +293,7 @@ async function JourneysTab() {
     <div>
       <h1 className="mb-1 text-2xl font-bold">Journey Dashboard</h1>
       <p className="mb-6 text-muted-foreground">
-        How every role moves through {orgName}, step by step — where the clicks go, what&apos;s automated
+        How every role moves through {orgName}, step by step, where the clicks go, what&apos;s automated
         already, and what still needs a human.
       </p>
       <JourneyDashboard

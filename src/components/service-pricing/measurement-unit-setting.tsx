@@ -14,7 +14,7 @@ const ADD_NEW = "__add_new__";
 const BASIS_LABELS: Record<MeasurementBasis, string> = {
   area: "the zone's measured area",
   perimeter: "the zone's perimeter",
-  flat: "nothing — charged once per zone",
+  flat: "nothing, charged once per zone",
 };
 
 export function MeasurementUnitSetting({
@@ -111,7 +111,7 @@ export function MeasurementUnitSetting({
                 <SelectContent>
                   <SelectItem value="area">The zone&apos;s measured area</SelectItem>
                   <SelectItem value="perimeter">The zone&apos;s perimeter</SelectItem>
-                  <SelectItem value="flat">Nothing — charged once per zone</SelectItem>
+                  <SelectItem value="flat">Nothing, charged once per zone</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -94,7 +94,7 @@ export function RecordPaymentPanel({ onRecorded }: { onRecorded?: () => void }) 
       </div>
 
       <p className="mb-2 text-xs text-muted-foreground">
-        Cash, a cheque, a bank transfer — anything that did not come through the card processor.
+        Cash, a cheque, a bank transfer, anything that did not come through the card processor.
       </p>
 
       {contact ? (

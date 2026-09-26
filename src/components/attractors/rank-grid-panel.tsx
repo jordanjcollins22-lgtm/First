@@ -100,7 +100,7 @@ export function RankGridPanel({
 
       {keywords.length === 0 ? (
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur-md">
-          No phrases yet. Add the ones customers actually type — &ldquo;lawn care near me&rdquo;,
+          No phrases yet. Add the ones customers actually type, &ldquo;lawn care near me&rdquo;,
           &ldquo;mulch delivery Bel Air&rdquo;.
         </p>
       ) : (
@@ -208,7 +208,7 @@ function ScanSummary({ scan, previous }: { scan: Scan; previous: ScanPoint[] | u
       </div>
 
       <p className="text-2xl font-bold tabular-nums">
-        {average?.toFixed(1) ?? "—"}
+        {average?.toFixed(1) ?? "-"}
         <span className="ml-1 text-sm font-normal text-muted-foreground">average place</span>
       </p>
 

@@ -482,7 +482,7 @@ export function EvaluationCalendar({
                 {myDayOff.start_time && myDayOff.end_time
                   ? `You're off ${formatTimeOfDay(myDayOff.start_time)}–${formatTimeOfDay(myDayOff.end_time)} this day`
                   : "You're off all day"}
-                {myDayOff.reason && ` — ${myDayOff.reason}`}.
+                {myDayOff.reason && `, ${myDayOff.reason}`}.
               </p>
               <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleRemoveOff}>
                 Remove

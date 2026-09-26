@@ -75,7 +75,7 @@ export async function GET(request: Request) {
   const sheets = sheetsFor(tools, params.get("kit"), containers);
 
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`${organization.name} — kit checklist`);
+  pdf.setTitle(`${organization.name}, kit checklist`);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const plain = await pdf.embedFont(StandardFonts.Helvetica);
 

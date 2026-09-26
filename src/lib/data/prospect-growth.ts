@@ -49,7 +49,7 @@ export async function growProspects(
   budget: GrowthBudget
 ): Promise<GrowthReport> {
   if (!isRentcastConfigured) {
-    return { ...EMPTY, note: "RentCast isn't configured — add RENTCAST_API_KEY and the list can grow itself." };
+    return { ...EMPTY, note: "RentCast isn't configured, add RENTCAST_API_KEY and the list can grow itself." };
   }
 
   // Seeds: finished and won work first, business locations as a fallback.
@@ -92,7 +92,7 @@ export async function growProspects(
 
   const plan = planGrowth(jobSeeds, locationSeeds, TARGET_TICKET, budget);
   if (plan.seeds.length === 0) {
-    return { ...EMPTY, note: "Nothing to grow from yet — finish a job, or add a business location." };
+    return { ...EMPTY, note: "Nothing to grow from yet, finish a job, or add a business location." };
   }
 
   // Everything already known, so the same house is never added twice.

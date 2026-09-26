@@ -14,8 +14,8 @@ describe("wasSent", () => {
 
 describe("labels", () => {
   it("say approved until it goes", () => {
-    expect(proposalStatusLabel("sent", null)).toBe("Approved — not sent yet");
-    expect(proposalStatusLabel("sent", "2026-09-21T15:30:00Z")).toBe("Sent — awaiting response");
+    expect(proposalStatusLabel("sent", null)).toBe("Approved, not sent yet");
+    expect(proposalStatusLabel("sent", "2026-09-21T15:30:00Z")).toBe("Sent, awaiting response");
     expect(proposalShortLabel("sent", null)).toBe("Proposal approved, not sent");
     expect(proposalShortLabel("sent", "x")).toBe("Proposal sent");
   });

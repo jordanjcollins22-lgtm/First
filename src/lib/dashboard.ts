@@ -102,7 +102,7 @@ export const EVALUATION_BUCKETS: { key: EvaluationBucket; label: string; blurb: 
   { key: "arrived", label: "Happening now", blurb: "On site, evaluating." },
   { key: "on_way", label: "On the way", blurb: "Driving to it." },
   { key: "scheduled", label: "Scheduled", blurb: "Booked, nobody has set off yet." },
-  { key: "completed", label: "Evaluated", blurb: "Visit done — these are ready to price.", history: true },
+  { key: "completed", label: "Evaluated", blurb: "Visit done, these are ready to price.", history: true },
   { key: "cancelled", label: "Cancelled", blurb: "Called off.", history: true },
 ];
 
@@ -121,7 +121,7 @@ export const JOB_BUCKETS: { key: JobBucket; label: string; blurb: string; histor
   { key: "needs_signoff", label: "Needs sign-off", blurb: "The work window has passed and nobody closed it." },
   { key: "scheduled", label: "Booked in", blurb: "Sold, with days on the calendar." },
   { key: "unscheduled", label: "Sold, not booked", blurb: "Accepted with no days set. These are the ones that rot." },
-  { key: "quoting", label: "Out for a decision", blurb: "Priced and sent — waiting on the client." },
+  { key: "quoting", label: "Out for a decision", blurb: "Priced and sent, waiting on the client." },
   {
     key: "declined",
     label: "Declined",

@@ -49,7 +49,7 @@ export function InventoryValueSummary({
   if (total.rentals > 0) {
     caveats.push(
       `${total.rentals} rented, in neither total${
-        total.rentalBuyout > 0 ? ` — buying them outright would be about ${money(total.rentalBuyout)}` : ""
+        total.rentalBuyout > 0 ? `, buying them outright would be about ${money(total.rentalBuyout)}` : ""
       }.`
     );
   }

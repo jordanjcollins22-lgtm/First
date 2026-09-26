@@ -81,7 +81,7 @@ export function CommissionForecastPanel({
         {sales.jobsPerMonth} finished jobs a month at {money(sales.salesPerMonth)} collected, over{" "}
         {sales.months} months. The rate works out at {forecast.blendedPct}% of what comes in.
         {lumpy &&
-          ` The average month is ${money(forecast.averageMonthly)}, well above the middle one — the months are lumpy, so treat either as a guide rather than a budget.`}
+          ` The average month is ${money(forecast.averageMonthly)}, well above the middle one, the months are lumpy, so treat either as a guide rather than a budget.`}
       </p>
 
       <section className="rounded-lg border border-border">

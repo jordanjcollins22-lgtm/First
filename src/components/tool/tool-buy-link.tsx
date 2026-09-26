@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 
 export function ToolBuyLink({ url }: { url: string | null }) {
-  if (!url) return <span className="text-xs text-muted-foreground">—</span>;
+  if (!url) return <span className="text-xs text-muted-foreground">-</span>;
 
   return (
     <a

@@ -146,7 +146,7 @@ export function CompletionPanel({
           .from("job-photos")
           .upload(path, file, { contentType: file.type || undefined });
         if (uploadError) {
-          setError("Couldn't upload that photo — check your signal and try again.");
+          setError("Couldn't upload that photo, check your signal and try again.");
           continue;
         }
 
@@ -224,7 +224,7 @@ export function CompletionPanel({
 
       {zones.length === 0 && (
         <p className="mb-3 rounded-lg border border-amber-400/60 bg-amber-50/60 px-3 py-2 text-xs">
-          No zones drawn on this job yet. Draw them below — photos are per zone, and there is no
+          No zones drawn on this job yet. Draw them below, photos are per zone, and there is no
           photo of a whole job.
         </p>
       )}

@@ -143,7 +143,7 @@ export function LabelSheet({ items, places }: LabelSheetProps) {
             <Input
               value={placeName}
               onChange={(event) => setPlaceName(event.target.value)}
-              placeholder="Bay 3 — mulch"
+              placeholder="Bay 3, mulch"
             />
           </div>
           <div className="w-28">

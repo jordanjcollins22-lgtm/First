@@ -40,15 +40,15 @@ import {
 } from "@/lib/actions/invoice-actions";
 
 function money(amount: number | null): string {
-  if (amount == null) return "—";
+  if (amount == null) return "-";
   return amount.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
 function day(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(`${iso}T00:00:00`);
   return Number.isNaN(d.getTime())
-    ? "—"
+    ? "-"
     : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -864,7 +864,7 @@ function InvoiceDetail({ invoice }: { invoice: ClientInvoice }) {
         <Line label="Amount" value={money(invoice.amount)} />
         <Line
           label="Paid"
-          value={paid > 0 ? `${money(paid / 100)}${invoice.lastPaidOn ? ` · ${day(invoice.lastPaidOn)}` : ""}` : "—"}
+          value={paid > 0 ? `${money(paid / 100)}${invoice.lastPaidOn ? ` · ${day(invoice.lastPaidOn)}` : ""}` : "-"}
         />
         {left > 0 && paid > 0 && <Line label="Outstanding" value={money(left / 100)} strong />}
       </dl>

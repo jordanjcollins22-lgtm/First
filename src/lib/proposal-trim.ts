@@ -243,7 +243,7 @@ export function editHeadline(entry: {
       ? "Price changed"
       : "Note added";
   const via = sourceLabel(entry.requestedVia);
-  return via ? `${what} — ${via.toLowerCase()}` : what;
+  return via ? `${what}, ${via.toLowerCase()}` : what;
 }
 
 /** A signed dollar figure for the history row. */

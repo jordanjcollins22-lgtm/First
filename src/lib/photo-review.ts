@@ -104,7 +104,7 @@ export function describeStatus(status: ReviewStatus): string {
     case "changes_requested":
       return "Sent back to the crew with a punch list.";
     case "approved":
-      return "Photos approved — book the walkthrough.";
+      return "Photos approved, book the walkthrough.";
   }
 }
 

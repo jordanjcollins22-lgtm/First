@@ -93,11 +93,11 @@ export function JourneyDashboard({
               <MetricTile label="Calls" value={metrics.calls} />
               <MetricTile
                 label="Avg. min between steps"
-                value={metrics.avgMinutesBetweenSteps != null ? metrics.avgMinutesBetweenSteps.toFixed(1) : "—"}
+                value={metrics.avgMinutesBetweenSteps != null ? metrics.avgMinutesBetweenSteps.toFixed(1) : "-"}
               />
               <MetricTile
                 label="Total journey time"
-                value={metrics.totalMinutes != null ? `${metrics.totalMinutes.toFixed(1)} min` : "—"}
+                value={metrics.totalMinutes != null ? `${metrics.totalMinutes.toFixed(1)} min` : "-"}
               />
             </div>
 

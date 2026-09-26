@@ -36,7 +36,7 @@ export async function saveTargetMarket(
     if (zips.length === 0 && cities.length === 0 && counties.length === 0) {
       return {
         ok: false,
-        message: "Add at least one zip, town or county — otherwise it matches nothing.",
+        message: "Add at least one zip, town or county, otherwise it matches nothing.",
       };
     }
 
@@ -107,7 +107,7 @@ export async function markTargetMarkets(): Promise<MarkResult | { ok: false; mes
 
     const markets = (marketRows ?? []) as unknown as TargetMarket[];
     if (markets.filter((m) => m.active).length === 0) {
-      return { ok: false, message: "No active markets to check against — add one first." };
+      return { ok: false, message: "No active markets to check against, add one first." };
     }
 
     const [{ data: prospects }, { data: contacts }] = await Promise.all([

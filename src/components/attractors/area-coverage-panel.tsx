@@ -71,7 +71,7 @@ export function AreaCoveragePanel({
         </p>
         <p className="flex items-center gap-1.5 text-xl font-bold tabular-nums">
           {state === "counting" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          {coverage ? coverage.total.toLocaleString() : state === "error" ? "—" : "…"}
+          {coverage ? coverage.total.toLocaleString() : state === "error" ? "-" : "…"}
         </p>
       </div>
 
@@ -116,7 +116,7 @@ export function AreaCoveragePanel({
       {shortfall != null && shortfall !== 0 && (
         <p className="mt-1.5 text-xs font-medium">
           {shortfall > 0
-            ? `${shortfall.toLocaleString()} doors in this area got nothing — ${quantityDeployed} were put out.`
+            ? `${shortfall.toLocaleString()} doors in this area got nothing, ${quantityDeployed} were put out.`
             : `${Math.abs(shortfall).toLocaleString()} more were put out than there are doors here.`}
         </p>
       )}

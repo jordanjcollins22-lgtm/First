@@ -75,7 +75,7 @@ export function SuggestionsPanel({
         <p className="text-sm text-muted-foreground">
           Off. When it is on, it looks four weeks ahead and proposes a day and a crew for each sold job that has
           no date yet, and flags booked work the forecast is about to spoil. It never books anything and never
-          moves anything — every suggestion needs somebody to press a button.
+          moves anything, every suggestion needs somebody to press a button.
         </p>
         {canToggle && (
           <button

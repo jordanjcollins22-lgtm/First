@@ -29,7 +29,7 @@ export function JobHistory({ assignments, events }: { assignments: CrewAssignmen
             {current.map((a) => (
               <li key={a.id}>
                 {a.personName ?? "Somebody"}
-                {a.role === "lead" ? " — lead" : ""}
+                {a.role === "lead" ? ", lead" : ""}
                 <span className="text-muted-foreground"> since {when(a.assignedAt)}</span>
               </li>
             ))}
@@ -47,7 +47,7 @@ export function JobHistory({ assignments, events }: { assignments: CrewAssignmen
                 <span className="text-muted-foreground">
                   {" "}
                   until {when(a.unassignedAt!)}
-                  {a.unassignReason ? ` — ${a.unassignReason}` : ""}
+                  {a.unassignReason ? `, ${a.unassignReason}` : ""}
                   {a.replacedByName ? `, covered by ${a.replacedByName}` : ""}
                 </span>
               </li>

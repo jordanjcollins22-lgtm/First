@@ -213,7 +213,7 @@ export async function startSaltOrder(input: {
             currency: "usd",
             unit_amount: quote.perTreatmentCents,
             product_data: {
-              name: `Ice melt — ${SURFACE_LABEL[input.surface]}${input.petFriendly ? ", pet safe" : ""}`,
+              name: `Ice melt, ${SURFACE_LABEL[input.surface]}${input.petFriendly ? ", pet safe" : ""}`,
               description: `${quote.treatments} prepaid treatments at ${address}. Calcium chloride, never rock salt.`,
             },
           },
@@ -438,7 +438,7 @@ async function openJob(
     .from("jobs")
     .insert({
       property_id: propertyId,
-      name: `Ice melt — ${surface}${order.pet_friendly ? " (pet safe)" : ""} — ${order.treatments} prepaid`,
+      name: `Ice melt, ${surface}${order.pet_friendly ? " (pet safe)" : ""}, ${order.treatments} prepaid`,
       status: "approved",
       client_notes:
         `Prepaid ${order.treatments} ice melt treatments on ${surface.toLowerCase()}. ` +

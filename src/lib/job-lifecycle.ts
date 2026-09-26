@@ -56,7 +56,7 @@ export function canCancelEstimate(job: JobShape): Verdict {
   if (job.evaluationDate == null) return { ok: false, reason: "There's no estimate scheduled to cancel." };
   if (job.evaluationStatus === "cancelled") return { ok: false, reason: "That estimate is already cancelled." };
   if (job.evaluationStatus === "completed") {
-    return { ok: false, reason: "That estimate already happened — cancel the job instead." };
+    return { ok: false, reason: "That estimate already happened, cancel the job instead." };
   }
   return ALLOWED;
 }
@@ -65,7 +65,7 @@ export function canCancelEstimate(job: JobShape): Verdict {
 export function canRescheduleEstimate(job: JobShape): Verdict {
   if (job.status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
   if (job.evaluationStatus === "completed") {
-    return { ok: false, reason: "That estimate already happened — it can't be moved." };
+    return { ok: false, reason: "That estimate already happened, it can't be moved." };
   }
   return ALLOWED;
 }
@@ -282,7 +282,7 @@ export function canCompleteJob(
   if (zones.length === 0) {
     return {
       ok: false,
-      reason: "Draw the zones first — photos are per zone, and there's no photo of a whole job.",
+      reason: "Draw the zones first, photos are per zone, and there's no photo of a whole job.",
     };
   }
 

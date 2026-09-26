@@ -30,7 +30,7 @@ export async function deleteAttractorType(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("attractor_types").delete().eq("id", id);
   if (error) {
-    if (error.code === "23503") throw new Error("A wave is still using this type — change it first.");
+    if (error.code === "23503") throw new Error("A wave is still using this type, change it first.");
     throw error;
   }
   revalidatePath(PATH);
@@ -53,7 +53,7 @@ export async function deleteAttractorVariant(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("attractor_variants").delete().eq("id", id);
   if (error) {
-    if (error.code === "23503") throw new Error("A wave is still using this variant — change it first.");
+    if (error.code === "23503") throw new Error("A wave is still using this variant, change it first.");
     throw error;
   }
   revalidatePath(PATH);

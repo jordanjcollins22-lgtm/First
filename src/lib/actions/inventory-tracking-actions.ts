@@ -32,7 +32,7 @@ export async function issueCode(input: {
 
     const subjects = [input.toolId, input.materialId, input.storageLocation].filter(Boolean).length;
     if (subjects !== 1) {
-      return { ok: false, message: "A code points at one thing — a tool, a material, or a place." };
+      return { ok: false, message: "A code points at one thing, a tool, a material, or a place." };
     }
 
     const [supabase, organizationId] = await Promise.all([createClient(), getCurrentOrganizationId()]);
@@ -59,7 +59,7 @@ export async function issueCode(input: {
       if (error.code !== "23505") return { ok: false, message: describeDbError(error) };
     }
 
-    return { ok: false, message: "Couldn't find a free code — try again." };
+    return { ok: false, message: "Couldn't find a free code, try again." };
   } catch (err) {
     console.error("issueCode failed:", err);
     return { ok: false, message: "Couldn't make that code." };
@@ -83,7 +83,7 @@ export async function recordMovement(input: {
 }): Promise<TrackingResult> {
   try {
     const profile = await getCurrentProfile();
-    if (!profile) return { ok: false, message: "Sign in first — a movement needs a name on it." };
+    if (!profile) return { ok: false, message: "Sign in first, a movement needs a name on it." };
 
     if (!(input.quantity >= 0)) return { ok: false, message: "How many?" };
 
@@ -99,7 +99,7 @@ export async function recordMovement(input: {
     if (codeError) return { ok: false, message: describeDbError(codeError) };
     if (!codeRow) return { ok: false, message: "That code is not on anything." };
     if (!codeRow.tool_id && !codeRow.material_id) {
-      return { ok: false, message: "That label is on a place, not a thing — scan the item itself." };
+      return { ok: false, message: "That label is on a place, not a thing, scan the item itself." };
     }
 
     const { error } = await supabase.from("inventory_movements").insert({
@@ -125,7 +125,7 @@ export async function recordMovement(input: {
       ok: true,
       message:
         input.direction === "out"
-          ? "Taken out — it is against your name now."
+          ? "Taken out, it is against your name now."
           : input.direction === "in"
             ? "Back on the shelf."
             : "Counted.",

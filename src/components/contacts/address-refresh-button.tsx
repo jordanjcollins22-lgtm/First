@@ -37,7 +37,7 @@ export function AddressRefreshButton() {
     <div className="mb-3 flex flex-col gap-1.5">
       <Button type="button" size="sm" variant="outline" disabled={pending} onClick={run}>
         <RefreshCw className={`h-4 w-4 ${pending ? "animate-spin" : ""}`} />
-        {pending ? "Checking…" : "I already fixed these — re-check"}
+        {pending ? "Checking…" : "I already fixed these, re-check"}
       </Button>
       {status && <p className="text-xs text-amber-900">{status}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}

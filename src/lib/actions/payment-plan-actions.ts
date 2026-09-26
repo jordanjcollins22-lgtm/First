@@ -135,7 +135,7 @@ export async function startPlanPayment(planId: string, returnTo: string): Promis
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };
     if (!isStripeConfigured) {
-      return { ok: false, message: "Stripe isn't connected yet — add the keys and try again." };
+      return { ok: false, message: "Stripe isn't connected yet, add the keys and try again." };
     }
 
     const supabase = await createClient();
@@ -162,7 +162,7 @@ export async function startPlanPayment(planId: string, returnTo: string): Promis
             price_data: {
               currency: "usd",
               unit_amount: plan.total_cents,
-              product_data: { name: "Landscaping — recurring" },
+              product_data: { name: "Landscaping, recurring" },
               recurring: { interval: stripeInterval(days) },
             },
             quantity: 1,
@@ -197,7 +197,7 @@ export async function startPlanPayment(planId: string, returnTo: string): Promis
           price_data: {
             currency: "usd",
             unit_amount: first.amount_cents,
-            product_data: { name: `Landscaping — payment ${first.number}` },
+            product_data: { name: `Landscaping, payment ${first.number}` },
           },
           quantity: 1,
         },

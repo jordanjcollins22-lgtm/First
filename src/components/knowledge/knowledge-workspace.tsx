@@ -385,7 +385,7 @@ export function KnowledgeWorkspace({
         {duplicates.length > 0 && (
           <div className="mt-2">
             <p className="text-[11px] text-muted-foreground">
-              Already here — open one instead of making a second copy:
+              Already here, open one instead of making a second copy:
             </p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {duplicates.map((d) => (
@@ -539,7 +539,7 @@ export function KnowledgeWorkspace({
 
       <p className="mb-4 mt-1.5 text-[11px] text-muted-foreground">
         {view === "breakdown"
-          ? "Ideas across the top, what they need on the row beneath, what those need under that. Worked out from the connections each time, so moving something here is just for a look — the web is the board that remembers."
+          ? "Ideas across the top, what they need on the row beneath, what those need under that. Worked out from the connections each time, so moving something here is just for a look, the web is the board that remembers."
           : "Drag to move a node, drag the background to pan, pinch or scroll to zoom, tap a node to open it, double-tap empty space to add one there."}{" "}
         Size is how many things touch it; a ring means it is scheduled, and amber means it has gone by.
       </p>
@@ -659,7 +659,7 @@ export function KnowledgeWorkspace({
                   ) : totalAmount != null && totalQuantity != null ? (
                     <span className="mt-0.5 block text-xs font-medium">
                       {isTimeUnit(resource.unit)
-                        ? `${describeQuantity(totalQuantity, resource.unit)} in one sitting — ${money(totalAmount)}`
+                        ? `${describeQuantity(totalQuantity, resource.unit)} in one sitting, ${money(totalAmount)}`
                         : `${money(totalAmount)} in one order instead of ${uses.length}`}
                     </span>
                   ) : null}
@@ -684,7 +684,7 @@ export function KnowledgeWorkspace({
         <div className="mb-4 rounded-xl border border-white/60 bg-card/70 p-4 backdrop-blur-md">
           <h2 className="text-lg font-bold">Where paths cross</h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Every place two ideas end up needing the same thing — following the chain, not just the first
+            Every place two ideas end up needing the same thing, following the chain, not just the first
             step. The ones neither idea names directly come first, because those are the ones nobody could
             already see.
           </p>
@@ -745,13 +745,13 @@ export function KnowledgeWorkspace({
           <h2 className="text-lg font-bold">Making it pay</h2>
           <p className="mb-3 text-xs text-muted-foreground">
             {money(summary.spending)} going out, {money(summary.earning)} coming back across{" "}
-            {summary.totalIdeas} idea{summary.totalIdeas === 1 ? "" : "s"} —{" "}
+            {summary.totalIdeas} idea{summary.totalIdeas === 1 ? "" : "s"},{" "}
             {summary.earningIdeas} of them earning anything at all.
           </p>
 
           {suggestions.length > 0 && (
             <div className="mb-3">
-              <p className="mb-1.5 text-sm font-semibold">Already works here — would it work there?</p>
+              <p className="mb-1.5 text-sm font-semibold">Already works here, would it work there?</p>
               <ul className="flex flex-col gap-1.5">
                 {suggestions.map((s) => (
                   <li key={s.revenue.id} className="rounded-lg border border-emerald-300/60 bg-emerald-50/50 p-2">

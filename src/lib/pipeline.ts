@@ -20,7 +20,7 @@ export type PipelineStage = "evaluation" | "sales" | "operations" | "disputes" |
 export const STAGES: { key: PipelineStage; label: string; blurb: string }[] = [
   { key: "evaluation", label: "Evaluation", blurb: "Booked to go look at it." },
   { key: "sales", label: "Sales", blurb: "Priced, quoted, waiting on a yes." },
-  { key: "operations", label: "Operations", blurb: "Sold — scheduling and doing the work." },
+  { key: "operations", label: "Operations", blurb: "Sold, scheduling and doing the work." },
   // Last on the board on purpose: it should be the column somebody's eye
   // lands on when it is not empty, and invisible when it is.
   {
@@ -42,7 +42,7 @@ export const STAGE_STATUSES: Record<PipelineStage, string[]> = {
   // wants to see how many there were and ring them back.
   evaluation: ["Scheduled", "On the way", "Arrived", "Evaluated", "Cancelled"],
   sales: ["Needs pricing", "Needs approval", "Approved", "Sent"],
-  operations: ["Won — not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
+  operations: ["Won, not scheduled", "Scheduled", "In progress", "Needs sign-off", "Completed"],
   // The kind of trouble rather than a ladder of progress: a dispute does not
   // advance, it is either open or it is over, and what it is decides who
   // deals with it.
@@ -237,7 +237,7 @@ export function derivedPosition(input: PipelineInput, today: Date = new Date()):
     }
     return {
       stage: "operations",
-      status: scheduled ? "Scheduled" : "Won — not scheduled",
+      status: scheduled ? "Scheduled" : "Won, not scheduled",
       // An unscheduled won job is the one that quietly rots, so it's the
       // actionable one here.
       actionable: !scheduled,
@@ -320,7 +320,7 @@ export function movableTo(): { stage: PipelineStage; status: string; label: stri
   const out: { stage: PipelineStage; status: string; label: string }[] = [];
   for (const stage of STAGES) {
     for (const status of STAGE_STATUSES[stage.key]) {
-      out.push({ stage: stage.key, status, label: `${stage.label} — ${status}` });
+      out.push({ stage: stage.key, status, label: `${stage.label}, ${status}` });
     }
   }
   return out;

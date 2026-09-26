@@ -57,7 +57,7 @@ export function LockedPanel({ title, reason }: { title: string; reason: string }
     <div className="flex items-start gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3">
       <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <p className="text-xs text-muted-foreground">
-        <span className="font-semibold">{title}</span> — {reason}
+        <span className="font-semibold">{title}</span>: {reason}
       </p>
     </div>
   );

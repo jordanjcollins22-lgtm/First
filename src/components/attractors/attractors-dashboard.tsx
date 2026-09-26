@@ -632,7 +632,7 @@ export function AttractorsDashboard({
         <div>
           <h1 className="text-2xl font-bold">Project Data</h1>
           <p className="text-muted-foreground">
-            Contacts and the marketing waves that generate them — on the same map.
+            Contacts and the marketing waves that generate them, on the same map.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -872,7 +872,7 @@ export function AttractorsDashboard({
           )}
           {drawMode && (
             <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white shadow-lg">
-              Click points on the map to draw the {drawMode === "polygon" ? "area — click the first point again to close it." : "route — double-click to finish."}
+              Click points on the map to draw the {drawMode === "polygon" ? "area, click the first point again to close it." : "route, double-click to finish."}
             </div>
           )}
         </Card>

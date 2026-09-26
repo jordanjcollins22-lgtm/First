@@ -200,7 +200,7 @@ export function PhotoReviewPanel({
                 <span className="min-w-0 flex-1">
                   {mark.note}
                   {mark.authorName && (
-                    <span className="text-muted-foreground"> — {mark.authorName}</span>
+                    <span className="text-muted-foreground"> · {mark.authorName}</span>
                   )}
                 </span>
                 <Button
@@ -251,7 +251,7 @@ export function PhotoReviewPanel({
           onClick={() => run(() => setApproved(new Date().toISOString()), () => approvePhotos(jobId))}
         >
           <Check className="mr-2 h-4 w-4" />
-          Looks right — approve
+          Looks right, approve
         </Button>
       )}
 
@@ -354,7 +354,7 @@ function MarkDialog({
           onChange={(event) => setNote(event.target.value)}
           rows={3}
           autoFocus
-          placeholder="Bed edge collapsed at the corner — re-cut and pack it."
+          placeholder="Bed edge collapsed at the corner, re-cut and pack it."
         />
 
         {error && (

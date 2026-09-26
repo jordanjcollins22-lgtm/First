@@ -46,7 +46,7 @@ export const ASSISTANT_TOOLS = [
   {
     name: "find_client",
     description:
-      "Look up a client by name (partial names are fine) and get back their properties and jobs, with each job's id, status, and current dates. Call this first whenever the person names a client — you need the job id before you can change anything. If more than one client matches, ask which one they mean instead of guessing.",
+      "Look up a client by name (partial names are fine) and get back their properties and jobs, with each job's id, status, and current dates. Call this first whenever the person names a client, you need the job id before you can change anything. If more than one client matches, ask which one they mean instead of guessing.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -58,7 +58,7 @@ export const ASSISTANT_TOOLS = [
   {
     name: "update_job",
     description:
-      "Change a job's status, dates, or notes. Use this to record that work started, that it isn't finished, or when the crew is returning. Only pass the fields you actually want to change — anything you leave out keeps its current value. project_start_date is the day work began; project_end_date is the day the crew expects to finish, so a return visit means setting project_end_date to that day.",
+      "Change a job's status, dates, or notes. Use this to record that work started, that it isn't finished, or when the crew is returning. Only pass the fields you actually want to change, anything you leave out keeps its current value. project_start_date is the day work began; project_end_date is the day the crew expects to finish, so a return visit means setting project_end_date to that day.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -85,7 +85,7 @@ export const ASSISTANT_TOOLS = [
   {
     name: "schedule_job_on_calendar",
     description:
-      "Put a job on the crew's Jobs calendar for a given day, creating that calendar if the business doesn't have one yet. Call this after update_job when the person says the crew is going back out on a specific day. The date must be YYYY-MM-DD — resolve words like 'Monday' or 'tomorrow' into a real date yourself using today's date, and say which date you picked.",
+      "Put a job on the crew's Jobs calendar for a given day, creating that calendar if the business doesn't have one yet. Call this after update_job when the person says the crew is going back out on a specific day. The date must be YYYY-MM-DD, resolve words like 'Monday' or 'tomorrow' into a real date yourself using today's date, and say which date you picked.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -127,7 +127,7 @@ async function ensureJobsCalendar(
       organization_id: anyCalendar.organization_id,
       name: JOBS_CALENDAR_NAME,
       color: "#b45309",
-      description: "Scheduled job work days — what the crew works off.",
+      description: "Scheduled job work days, what the crew works off.",
     })
     .select("id")
     .single();
@@ -176,7 +176,7 @@ export async function runAssistantTool(name: string, input: Record<string, unkno
           patch.client_notes = job?.client_notes ? `${job.client_notes}\n${line}` : line;
         }
 
-        if (Object.keys(patch).length === 0) return fail("Nothing to change — pass at least one field.");
+        if (Object.keys(patch).length === 0) return fail("Nothing to change, pass at least one field.");
 
         const { data: updated, error } = await supabase
           .from("jobs")

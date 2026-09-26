@@ -57,7 +57,7 @@ export function TieBoard() {
     <div className="flex flex-col gap-4">
       {/* This week's two plays */}
       <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
-        <h2 className="mb-1 text-sm font-semibold">Week {CURRENT_WEEK} — this week&apos;s two plays</h2>
+        <h2 className="mb-1 text-sm font-semibold">Week {CURRENT_WEEK}, this week&apos;s two plays</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           The two best-priced tie markets on the slate, {money(STAKE)} each.
         </p>
@@ -251,7 +251,7 @@ export function TieBoard() {
             At the prices taken so far, the strategy has to hit{" "}
             <strong className="tabular-nums text-foreground">{pct(avgBreakEven)}</strong> of its bets just to break
             even. It is currently hitting{" "}
-            <strong className="tabular-nums text-foreground">{pct(hitRate)}</strong> across {betsPlaced} bets — far
+            <strong className="tabular-nums text-foreground">{pct(hitRate)}</strong> across {betsPlaced} bets, far
             too few to tell the two apart. NFL games sit level at the half somewhere around 8–9% of the time, which
             is close enough to the break-even rate that the margin in the price is doing most of the work. Track the
             gap between those two numbers over a full season; that gap, not the weekly net, is whether this works.

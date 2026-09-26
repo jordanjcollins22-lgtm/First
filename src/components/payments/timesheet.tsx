@@ -76,7 +76,7 @@ export function Timesheet({
       <div className="grid grid-cols-3 gap-2">
         <Stat label="On the clock" value={String(open.length)} />
         <Stat label="Hours today" value={describeHours(totalHours)} />
-        <Stat label="Wages today" value={wages > 0 ? money(wages) : "—"} />
+        <Stat label="Wages today" value={wages > 0 ? money(wages) : "-"} />
       </div>
 
       <div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ export function Timesheet({
       {clashes.size > 0 && (
         <p className="flex items-start gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          Somebody is logged in two places at once — usually a missed clock-out. The rows are marked
+          Somebody is logged in two places at once, usually a missed clock-out. The rows are marked
           below; correcting one fixes the totals.
         </p>
       )}
@@ -123,7 +123,7 @@ export function Timesheet({
                         {entry.jobName ?? "Job"}
                       </Link>
                     ) : (
-                      "No job — yard or shop"
+                      "No job, yard or shop"
                     )}{" "}
                     · in at {clock(entry.clockedInAt)}
                   </p>
@@ -169,7 +169,7 @@ export function Timesheet({
                   {personDay.pay != null
                     ? `${money(personDay.ratePerHour ?? 0)}/hr`
                     : personDay.payType === "commission"
-                      ? "On commission — not paid by the hour"
+                      ? "On commission, not paid by the hour"
                       : "No hourly rate on file"}
                 </p>
 
@@ -338,7 +338,7 @@ function EditEntry({
           </div>
           <div>
             <label htmlFor="out-at" className="text-xs text-muted-foreground">
-              Clocked out — leave blank to keep them on
+              Clocked out, leave blank to keep them on
             </label>
             <Input
               id="out-at"

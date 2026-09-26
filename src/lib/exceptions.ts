@@ -66,7 +66,7 @@ export const KIND_LABEL: Record<ExceptionKind, string> = {
 
 /** The line under the label, so nobody has to guess which one they mean. */
 export const KIND_MEANS: Record<ExceptionKind, string> = {
-  change_request: "They're asking for work that wasn't sold. Report it — don't do it yet.",
+  change_request: "They're asking for work that wasn't sold. Report it, don't do it yet.",
   cannot_perform: "The scoped work can't be done the way it's written. Say what's in the way.",
   partial_completion: "You did some of it. Record which parts and what stopped the rest.",
   material_discrepancy: "Wrong quantity, wrong product, or damaged on arrival.",
@@ -178,7 +178,7 @@ export const SCOPE_STATUS_LABEL: Record<ScopeChangeStatus, string> = {
   in_review: "With the account manager",
   priced: "Priced, not sent yet",
   sent_to_client: "With the client",
-  client_approved: "Approved — crew can do it",
+  client_approved: "Approved, crew can do it",
   client_declined: "Client said no",
   rejected: "Not offered",
   withdrawn: "Withdrawn",

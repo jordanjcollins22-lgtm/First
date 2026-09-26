@@ -94,7 +94,7 @@ export async function deleteTeamPayment(id: string): Promise<PaymentResult> {
     const supabase = await createClient();
     const { data: existing } = await supabase.from("team_payments").select("status").eq("id", id).maybeSingle();
     if (existing?.status === "paid") {
-      return { ok: false, message: "That one's already paid — record an adjusting payment instead of deleting it." };
+      return { ok: false, message: "That one's already paid, record an adjusting payment instead of deleting it." };
     }
 
     const { error } = await supabase.from("team_payments").delete().eq("id", id);

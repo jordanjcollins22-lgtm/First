@@ -268,7 +268,7 @@ export function TrimPanel({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Nothing is saved yet — the next screen shows what they will see.{" "}
+        Nothing is saved yet, the next screen shows what they will see.{" "}
         {saveLabel({
           removedZones: result.removedZones,
           removedLines: result.removedLines,

@@ -101,7 +101,7 @@ export function WalkthroughPanel({
       {!current && (
         <p className="mb-3 text-xs text-muted-foreground">
           Before the tools go away, the account manager walks the job. Anything they find now costs ten
-          minutes — the same thing found by the client next week costs a trip back.
+          minutes, the same thing found by the client next week costs a trip back.
         </p>
       )}
 
@@ -178,7 +178,7 @@ export function WalkthroughPanel({
             </>
           ) : (
             <>
-              <p className="mb-2 text-xs font-medium">Your call — the crew is waiting.</p>
+              <p className="mb-2 text-xs font-medium">Your call, the crew is waiting.</p>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -216,7 +216,7 @@ export function WalkthroughPanel({
             <Input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional — e.g. couldn't reach the far corner"
+              placeholder="Optional, e.g. couldn't reach the far corner"
             />
           </label>
           <Button
@@ -226,7 +226,7 @@ export function WalkthroughPanel({
             onClick={() => run(() => requestWalkthrough(jobId, note))}
           >
             {isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            {rejected ? "Fixed — walk it again" : "Ask the manager to walk it"}
+            {rejected ? "Fixed, walk it again" : "Ask the manager to walk it"}
           </Button>
         </>
       ) : (

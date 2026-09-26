@@ -5,7 +5,7 @@ import type { Invoice } from "@/types/domain";
 import { dateShort } from "@/lib/time-zone";
 
 const STATUS_LABEL: Record<string, string> = {
-  open: "Sent — awaiting payment",
+  open: "Sent, awaiting payment",
   paid: "Paid",
   void: "Voided",
   uncollectible: "Uncollectible",

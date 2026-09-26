@@ -67,7 +67,7 @@ async function ProposalsTab() {
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Proposals generate automatically once an evaluation is submitted — edit the price or scope,
+        Proposals generate automatically once an evaluation is submitted, edit the price or scope,
         then approve to send.
       </p>
       <ProposalsView proposals={proposals} timeZone={organization.reminder_time_zone ?? null} />

@@ -191,7 +191,7 @@ function allocate(cards: Card[], pot: number): Allocation[] {
       reasons.set(
         card.id,
         given < minimum
-          ? `Part of the minimum — there is not enough to cover it`
+          ? `Part of the minimum, there is not enough to cover it`
           : `The minimum, due ${ordinal(card.dueDay)}`
       );
     }
@@ -265,7 +265,7 @@ function warningsFor(
     const short = round(facts.minimums - facts.payableToday);
     out.push({
       level: "urgent",
-      message: `Card minimums come to ${money(facts.minimums)} and only ${money(facts.payableToday)} is free today — short by ${money(short)}.`,
+      message: `Card minimums come to ${money(facts.minimums)} and only ${money(facts.payableToday)} is free today, short by ${money(short)}.`,
     });
   }
 

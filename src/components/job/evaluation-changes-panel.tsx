@@ -234,7 +234,7 @@ export function EvaluationChangesPanel({
                         onClick={() => setEdit(zone.id, { linear: true, width: "" })}
                         className="self-start text-xs font-semibold text-primary"
                       >
-                        No width — this is a {edit.length || "0"} ft run
+                        No width, this is a {edit.length || "0"} ft run
                       </button>
                     )}
                     {edit.linear && (
@@ -325,7 +325,7 @@ export function EvaluationChangesPanel({
                   onClick={() => setAdd(area.id, { linear: true })}
                   className="self-start text-xs font-semibold text-primary"
                 >
-                  No width — this is a {area.length} ft run
+                  No width, this is a {area.length} ft run
                 </button>
               )}
 

@@ -95,7 +95,7 @@ export function chooseEvaluator(
     why:
       winner.load === 0
         ? "Nothing else booked that day."
-        : `The lightest day of the ${candidateIds.length} free — ${winner.load} already booked.`,
+        : `The lightest day of the ${candidateIds.length} free, ${winner.load} already booked.`,
   };
 }
 

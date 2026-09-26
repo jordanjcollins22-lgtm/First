@@ -64,7 +64,7 @@ export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; day
         .setLngLat([event.lng, event.lat])
         .setPopup(
           new mapboxgl.Popup({ offset: 14 }).setText(
-            `${event.customerName} — ${event.address} (${event.detail})`
+            `${event.customerName}, ${event.address} (${event.detail})`
           )
         )
         .addTo(map);

@@ -159,7 +159,7 @@ export function describeCoverage(summary: CoverageSummary): string {
   const left = summary.total - summary.touched;
   const percent = Math.round(summary.fraction * 100);
   if (left === 0) return "Every property on file has been contacted at least once.";
-  return `${percent}% contacted — ${left.toLocaleString()} ${left === 1 ? "property" : "properties"} nobody has tried yet.`;
+  return `${percent}% contacted, ${left.toLocaleString()} ${left === 1 ? "property" : "properties"} nobody has tried yet.`;
 }
 
 /** Whether the map should draw individual properties or ask somebody to zoom

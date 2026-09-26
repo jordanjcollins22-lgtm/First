@@ -23,7 +23,7 @@ export function CreateOrganizationForm() {
     startTransition(async () => {
       try {
         await createOrganization({ name, adminEmail, adminPassword });
-        setSuccess(`"${name}" created — share ${adminEmail} and the password with its admin directly.`);
+        setSuccess(`"${name}" created, share ${adminEmail} and the password with its admin directly.`);
         formRef.current?.reset();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");

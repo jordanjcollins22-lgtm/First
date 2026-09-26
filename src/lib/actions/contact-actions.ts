@@ -106,7 +106,7 @@ export async function mergeContacts(keepId: string, mergeId: string): Promise<Me
       return {
         ok: false,
         message: isMissingTable(recordError)
-          ? "Merging needs its database migration first — run supabase/migrations/0091_contact_merge_undo.sql. Nothing was changed."
+          ? "Merging needs its database migration first, run supabase/migrations/0091_contact_merge_undo.sql. Nothing was changed."
           : `Couldn't record the merge, so nothing was merged: ${recordError.message}`,
       };
     }
@@ -171,8 +171,8 @@ export async function createContact(input: ContactInput): Promise<ContactResult>
       return {
         ok: true,
         message: added
-          ? `${match.name} is already in the book — filled in what was missing and added the address.`
-          : `${match.name} is already in the book — filled in what was missing rather than adding a second.`,
+          ? `${match.name} is already in the book, filled in what was missing and added the address.`
+          : `${match.name} is already in the book, filled in what was missing rather than adding a second.`,
       };
     }
 

@@ -89,7 +89,7 @@ export function ContactsManager({ data, canMerge }: { data: ContactsData; canMer
         <section className="rounded-xl border border-amber-400/70 bg-amber-50/60 p-4">
           <h2 className="mb-1 text-sm font-semibold">Possible duplicates ({duplicates.length})</h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            These look like the same person entered twice. Nothing merges on its own — check each one, because
+            These look like the same person entered twice. Nothing merges on its own, check each one, because
             two people really can share a surname or a driveway.
           </p>
           <div className="flex flex-col gap-2">
@@ -618,7 +618,7 @@ function ManualMerge({ contacts, canMerge }: { contacts: ContactRow[]; canMerge:
       </Button>
 
       {message && <p className="mt-2 text-xs">{message}</p>}
-      <p className="mt-2 text-[11px] text-muted-foreground">There&apos;s no undo — check the names first.</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">There&apos;s no undo, check the names first.</p>
     </section>
   );
 }

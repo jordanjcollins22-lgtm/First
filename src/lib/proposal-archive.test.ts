@@ -118,11 +118,11 @@ describe("summariseArchive", () => {
 describe("archiveLine", () => {
   it("says what is there in one line", () => {
     const line = archiveLine(summariseArchive([row(), row({ id: "a2", outcome: "lost" })]));
-    expect(line).toBe("2 older quotes — 1 won, 1 lost.");
+    expect(line).toBe("2 older quotes, 1 won, 1 lost.");
   });
 
   it("is singular when it is one", () => {
-    expect(archiveLine(summariseArchive([row()]))).toBe("1 older quote — 1 won.");
+    expect(archiveLine(summariseArchive([row()]))).toBe("1 older quote, 1 won.");
   });
 
   it("says plainly when there is nothing", () => {

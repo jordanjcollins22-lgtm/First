@@ -150,7 +150,7 @@ export async function createBookingFromGhl(input: GhlBookingInput): Promise<GhlB
     .from("jobs")
     .insert({
       property_id: propertyId,
-      name: `${fullAddress} — Evaluation`,
+      name: `${fullAddress}, Evaluation`,
       status: "estimating",
       assigned_to: assignedTo,
       evaluation_date: input.startsAt,

@@ -73,7 +73,7 @@ describe("mayContactAutomatically", () => {
 
 describe("disputeLine", () => {
   it("says what is wrong without anybody opening the job", () => {
-    expect(disputeLine(open())).toBe("Legal — Solicitor's letter about the retaining wall.");
+    expect(disputeLine(open())).toBe("Legal, Solicitor's letter about the retaining wall.");
   });
 
   it("still names the kind when nobody wrote a reason", () => {
@@ -98,7 +98,7 @@ describe("historyLine", () => {
     );
   });
 
-  it("says nothing while it is still live — the card is already saying it", () => {
+  it("says nothing while it is still live, the card is already saying it", () => {
     expect(historyLine(open())).toBeNull();
   });
 

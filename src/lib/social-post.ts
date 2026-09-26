@@ -86,10 +86,10 @@ export function describeGap(photos: PhotoLike[]): { code: PhotoGap; label: strin
     return { code: "none", label: "No photos yet" };
   }
   if (afters.length === 0) {
-    return { code: "before_only", label: "Before only — needs an after" };
+    return { code: "before_only", label: "Before only, needs an after" };
   }
   if (befores.length === 0) {
-    return { code: "after_only", label: "After only — needs a before" };
+    return { code: "after_only", label: "After only, needs a before" };
   }
   // Both exist but never of the same patch of ground, which is the one that
   // looks fine on the job page and produces nothing here.
@@ -234,13 +234,13 @@ export interface CaptionInput {
 export function suggestCaption(input: CaptionInput): string {
   const work = input.services.length > 0 ? input.services.join(" and ") : "Yard work";
   const where = input.city ? ` in ${input.city}` : " in Harford County";
-  const zone = input.zoneName ? ` — ${input.zoneName}` : "";
+  const zone = input.zoneName ? `, ${input.zoneName}` : "";
 
   return [
     `${work}${where}${zone}. Swipe for the before.`,
     "",
     "Rated 5.0 on Google by our neighbors.",
-    `Free estimates — call or text ${input.phone}.`,
+    `Free estimates, call or text ${input.phone}.`,
   ].join("\n");
 }
 

@@ -5,7 +5,7 @@ export type InventoryKind = "tool" | "material" | "other";
 const KINDS: { value: InventoryKind; label: string; hint: string }[] = [
   { value: "tool", label: "Tool", hint: "Kept and used again" },
   { value: "material", label: "Material", hint: "Used up, reordered" },
-  { value: "other", label: "Other", hint: "A cost — a fee, a permit" },
+  { value: "other", label: "Other", hint: "A cost, a fee, a permit" },
 ];
 
 /**

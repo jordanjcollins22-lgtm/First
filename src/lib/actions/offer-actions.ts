@@ -75,7 +75,7 @@ export async function bookOffer(input: { code: string; timing: string; notes: st
     .from("jobs")
     .insert({
       property_id: property.id,
-      name: `${property.address} — ${row.campaign.service_label}`,
+      name: `${property.address}, ${row.campaign.service_label}`,
       status: "approved",
       evaluation_status: "completed",
       client_notes: [

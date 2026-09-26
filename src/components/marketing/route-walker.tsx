@@ -116,7 +116,7 @@ export function RouteWalker({
               </a>
             )}
             <Button type="button" variant="outline" className="min-h-12" onClick={() => setDone(done + 1)}>
-              Done — next
+              Done, next
             </Button>
           </div>
 

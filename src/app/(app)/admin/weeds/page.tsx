@@ -44,7 +44,7 @@ export default async function WeedGuidePage() {
           <h1 className="text-xl font-semibold">Weed Guide</h1>
           <p className="text-sm text-muted-foreground">
             One list of {weeds.length} weeds. The tick on each says whether it also goes on the sheet clients are
-            given — {onClientSheet} of them do. The client sheet shows the picture and the name; the crew sheet shows
+            given: {onClientSheet} of them do. The client sheet shows the picture and the name; the crew sheet shows
             the same weeds it is ticked for plus the scientific name and the prep note.
           </p>
         </div>
@@ -88,7 +88,7 @@ export default async function WeedGuidePage() {
           <CardContent className="py-3 text-sm">
             <p className="font-medium text-amber-900">
               {withoutPhoto} {withoutPhoto === 1 ? "weed has" : "weeds have"} no photo to print
-              {clientWithoutPhoto > 0 && ` — ${clientWithoutPhoto} of them on the client sheet`}.
+              {clientWithoutPhoto > 0 && `, ${clientWithoutPhoto} of them on the client sheet`}.
             </p>
             <p className="text-amber-800">
               They come out as empty squares. Press <strong>Add the photo</strong> on a weed below to put one in; the

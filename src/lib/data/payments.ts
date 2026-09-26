@@ -199,7 +199,7 @@ export async function getPaymentsData(): Promise<PaymentsData> {
 
   const jobOptions = (
     (jobsResult.data ?? []) as unknown as { id: string; name: string; properties: { address: string } | null }[]
-  ).map((j) => ({ id: j.id, label: j.properties?.address ? `${j.name} — ${j.properties.address}` : j.name }));
+  ).map((j) => ({ id: j.id, label: j.properties?.address ? `${j.name}, ${j.properties.address}` : j.name }));
 
   const collected = sum(external.filter((e) => e.status === "paid").map((e) => e.amount));
   const outstanding = sum(external.filter((e) => e.status === "open").map((e) => e.amount));

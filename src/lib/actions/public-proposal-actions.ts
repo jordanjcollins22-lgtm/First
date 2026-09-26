@@ -46,7 +46,7 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     .maybeSingle();
   if (error) throw error;
   if (!proposal) throw new Error("This proposal link isn't valid.");
-  if (proposal.status === "needs_approval") throw new Error("This proposal isn't ready yet — check back soon.");
+  if (proposal.status === "needs_approval") throw new Error("This proposal isn't ready yet, check back soon.");
   if (proposal.status !== "sent") throw new Error("This proposal has already been responded to.");
   // The price stood for a while and that while is over. The morning run
   // will close it; until then the button must not work either.
@@ -252,7 +252,7 @@ export async function requestScopeChange(input: {
     const change = reduceScope(lines, input.keepZones, { discountCents, statedTotalCents });
 
     if (change.droppedNames.length === 0) {
-      return { ok: false, message: "Nothing was removed — pick the areas you'd like to keep." };
+      return { ok: false, message: "Nothing was removed, pick the areas you'd like to keep." };
     }
     if (change.keptNames.length === 0) {
       return { ok: false, message: change.reviewReason ?? "Keep at least one area." };
@@ -290,7 +290,7 @@ export async function requestScopeChange(input: {
       proposal.job_id,
       "proposal_responses",
       change.auto
-        ? "A client trimmed their proposal — the price updated automatically."
+        ? "A client trimmed their proposal, the price updated automatically."
         : "A client asked to change their proposal scope. Needs a new price.",
       { dedupeKey: `${proposal.id}:scope` }
     ).catch(() => {});

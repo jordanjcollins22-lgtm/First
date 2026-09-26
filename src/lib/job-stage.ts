@@ -43,7 +43,7 @@ export const STAGE_BLURBS: Record<JobStage, string> = {
   evaluation: "Go look at it, measure it, and take your before photos.",
   pricing: "Price the zones and get the proposal in front of them.",
   scheduled: "Sold. Book the visits and get on site.",
-  working: "On site — document as you go, then sign it off.",
+  working: "On site, document as you go, then sign it off.",
   done: "Signed off. Invoice it, or raise a ticket if you have to go back.",
   cancelled: "This job is cancelled. Reopen it to do anything else.",
 };
@@ -165,13 +165,13 @@ export function capabilities(input: StageInput): Record<Capability, Availability
     measure: OK,
 
     scheduleEstimate: evaluated
-      ? { available: false, reason: "The evaluation is done — no visit left to book." }
+      ? { available: false, reason: "The evaluation is done, no visit left to book." }
       : OK,
 
     // The gate that matters: you cannot price what nobody has been to look at.
     proposal: evaluated
       ? OK
-      : { available: false, reason: "Finish the evaluation first — there's nothing measured to price." },
+      : { available: false, reason: "Finish the evaluation first, there's nothing measured to price." },
 
     visits: sold
       ? OK
@@ -183,15 +183,15 @@ export function capabilities(input: StageInput): Record<Capability, Availability
     // there is a visit to take them on.
     photoBefore: input.evaluationDate
       ? OK
-      : { available: false, reason: "Book the evaluation first — before photos get taken on that visit." },
+      : { available: false, reason: "Book the evaluation first, before photos get taken on that visit." },
 
     photoDuring: started
       ? OK
-      : { available: false, reason: "Start a visit first — there's no work in progress to photograph." },
+      : { available: false, reason: "Start a visit first, there's no work in progress to photograph." },
 
     photoAfter: started
       ? OK
-      : { available: false, reason: "Start a visit first — there's no finished work to photograph." },
+      : { available: false, reason: "Start a visit first, there's no finished work to photograph." },
 
     // Two separate gates, reported separately: "the manager hasn't been out"
     // and "the back patio has no after photo" are different problems with
@@ -210,12 +210,12 @@ export function capabilities(input: StageInput): Record<Capability, Availability
     invoice: sold
       ? OK
       : evaluated
-        ? { available: false, reason: "Get the proposal accepted first — there is nothing agreed to bill for." }
+        ? { available: false, reason: "Get the proposal accepted first, there is nothing agreed to bill for." }
         : { available: false, reason: "Finish the evaluation and get the proposal accepted first." },
 
     tickets: started
       ? OK
-      : { available: false, reason: "Nothing to go back for yet — no work has been done." },
+      : { available: false, reason: "Nothing to go back for yet, no work has been done." },
   };
 }
 
@@ -237,7 +237,7 @@ export function nextStep(input: StageInput): string {
       return "Book the crew's visits.";
     case "working": {
       const walk = walkthroughGate(input.walkthroughs ?? []);
-      if (walk.ok) return "Approved — sign the job off.";
+      if (walk.ok) return "Approved, sign the job off.";
       return input.walkthroughs?.some((w) => w.status === "requested")
         ? "Waiting on the account manager to walk the job. Keep the tools out."
         : "Document each zone, then get the manager out to approve it.";

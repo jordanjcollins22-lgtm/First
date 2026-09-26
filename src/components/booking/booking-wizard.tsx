@@ -467,7 +467,7 @@ export function BookingWizard({
           prepToken: result.prepToken ?? null,
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
+        setError(err instanceof Error ? err.message : "Something went wrong, please try again.");
       }
     });
   }
@@ -519,8 +519,8 @@ export function BookingWizard({
             <li>A confirmation is on its way to {doneEmail}.</li>
             <li>
               {booked.digital
-                ? "We walk the property with you over a video call — about an hour."
-                : "We walk the property with you — about an hour."}
+                ? "We walk the property with you over a video call, about an hour."
+                : "We walk the property with you, about an hour."}
             </li>
             <li>You get a written proposal with a fixed price. No obligation.</li>
           </ul>

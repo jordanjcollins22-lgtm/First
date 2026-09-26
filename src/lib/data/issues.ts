@@ -306,7 +306,7 @@ export const jobFacts = cache(async function jobFacts(jobId: string): Promise<Jo
     depositReceivedCents,
     depositSource:
       depositRequiredCents > 0
-        ? `The payment plan's deposit, against net money on this job — ${describeNet(receipts, adjustments, jobId)}`
+        ? `The payment plan's deposit, against net money on this job, ${describeNet(receipts, adjustments, jobId)}`
         : "No deposit is required by the payment plan",
 
     evaluationPhotos: inPhase("evaluation"),

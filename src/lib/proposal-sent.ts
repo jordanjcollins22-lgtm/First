@@ -23,7 +23,7 @@ export function proposalStatusLabel(status: string, sentAt: string | null | unde
     case "needs_approval":
       return "Needs approval";
     case "sent":
-      return sentAt === null ? "Approved — not sent yet" : "Sent — awaiting response";
+      return sentAt === null ? "Approved, not sent yet" : "Sent, awaiting response";
     case "accepted":
       return "Accepted";
     case "declined":

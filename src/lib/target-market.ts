@@ -132,5 +132,5 @@ export function describeTally(tally: MarketTally): string {
     return "Nothing has been checked against a market yet.";
   }
   if (tally.outOfMarket === 0) return "Everything checked is inside our market.";
-  return `${tally.outOfMarket.toLocaleString()} outside our market — still worth a call to ask who they know.`;
+  return `${tally.outOfMarket.toLocaleString()} outside our market, still worth a call to ask who they know.`;
 }

@@ -38,15 +38,15 @@ export function JourneyStepDetail({ step, allSteps, onGoToStep }: { step: Journe
       <div className="flex flex-wrap gap-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground">Inputs required</p>
-          <p>{step.inputs.length > 0 ? step.inputs.join(", ") : "—"}</p>
+          <p>{step.inputs.length > 0 ? step.inputs.join(", ") : "-"}</p>
         </div>
         <div>
           <p className="text-xs font-medium text-muted-foreground">Outputs created</p>
-          <p>{step.outputs.length > 0 ? step.outputs.join(", ") : "—"}</p>
+          <p>{step.outputs.length > 0 ? step.outputs.join(", ") : "-"}</p>
         </div>
         <div>
           <p className="text-xs font-medium text-muted-foreground">Automations triggered</p>
-          <p>{step.automations.length > 0 ? step.automations.join(", ") : "—"}</p>
+          <p>{step.automations.length > 0 ? step.automations.join(", ") : "-"}</p>
         </div>
       </div>
 
@@ -56,7 +56,7 @@ export function JourneyStepDetail({ step, allSteps, onGoToStep }: { step: Journe
           <p>
             {dependents.length > 0
               ? dependents.map((d) => d.label).join(", ")
-              : "Nothing points here yet — an entry point"}
+              : "Nothing points here yet, an entry point"}
           </p>
         </div>
         <div>
@@ -75,7 +75,7 @@ export function JourneyStepDetail({ step, allSteps, onGoToStep }: { step: Journe
               ))}
             </div>
           ) : (
-            <p>Terminal — nothing after this</p>
+            <p>Terminal, nothing after this</p>
           )}
         </div>
       </div>

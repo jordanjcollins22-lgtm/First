@@ -81,7 +81,7 @@ export function validateAppointment(startIso: string | null, endIso: string | nu
   // A day-long "evaluation" is nearly always a typo in the date, and it blocks
   // an evaluator's whole calendar if it isn't.
   const hours = (end.getTime() - start.getTime()) / 3_600_000;
-  if (hours > 12) return { ok: false, reason: "That's over 12 hours — check the dates." };
+  if (hours > 12) return { ok: false, reason: "That's over 12 hours, check the dates." };
   return { ok: true };
 }
 

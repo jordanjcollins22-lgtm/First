@@ -75,7 +75,7 @@ export function ObserversPanel({
       setCopied(token);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      setError("Couldn't copy — long-press the link to copy it by hand.");
+      setError("Couldn't copy, long-press the link to copy it by hand.");
     }
   }
 
@@ -94,7 +94,7 @@ export function ObserversPanel({
       </div>
       <p className="mb-3 text-xs text-muted-foreground">
         A management company, property manager or family member who wants to follow the work. They see
-        progress and photos — never the price, and nothing to approve.
+        progress and photos, never the price, and nothing to approve.
       </p>
 
       {setupNeeded ? (
@@ -146,7 +146,7 @@ export function ObserversPanel({
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Both optional — the link works either way, these are just so you know how to send it.
+                Both optional, the link works either way, these are just so you know how to send it.
               </p>
               <div className="flex gap-2">
                 <Button type="button" size="sm" onClick={submit} disabled={isPending}>

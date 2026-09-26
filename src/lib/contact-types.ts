@@ -24,12 +24,12 @@ export type ContactType =
 export const CONTACT_TYPES: { value: ContactType; label: string; blurb: string }[] = [
   { value: "client", label: "Client", blurb: "Somebody we have worked for, or are working for now." },
   { value: "lead", label: "Lead", blurb: "Somebody who has been in touch but hasn't bought yet." },
-  { value: "supplier", label: "Supplier", blurb: "Nurseries, stone yards, rental, fuel — people we buy from." },
-  { value: "subcontractor", label: "Subcontractor", blurb: "Tree crews, hardscape, irrigation — people we sub work to." },
+  { value: "supplier", label: "Supplier", blurb: "Nurseries, stone yards, rental, fuel, people we buy from." },
+  { value: "subcontractor", label: "Subcontractor", blurb: "Tree crews, hardscape, irrigation, people we sub work to." },
   {
     value: "referral_partner",
     label: "Referral partner",
-    blurb: "Realtors, property managers, builders — people who send us work.",
+    blurb: "Realtors, property managers, builders, people who send us work.",
   },
   {
     value: "business",

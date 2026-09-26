@@ -396,7 +396,7 @@ function CalendarSettingsBody({
 
       {calendars.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No calendars yet — add one above, then tap team members to assign them to it.
+          No calendars yet, add one above, then tap team members to assign them to it.
         </p>
       ) : (
         <div className="flex flex-col gap-4">

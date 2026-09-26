@@ -179,7 +179,7 @@ export function BookingLinksPanel({
       <div className="flex flex-col gap-2">
         <p className="text-sm font-semibold">General booking link</p>
         <p className="text-xs text-muted-foreground">
-          For ads and marketing — not tied to any one person.
+          For ads and marketing, not tied to any one person.
         </p>
         {generalLink ? (
           <>
@@ -187,7 +187,7 @@ export function BookingLinksPanel({
             <EmbedWidget link={generalLink} />
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">Your organization&apos;s link is being set up — refresh in a moment.</p>
+          <p className="text-sm text-muted-foreground">Your organization&apos;s link is being set up, refresh in a moment.</p>
         )}
       </div>
 

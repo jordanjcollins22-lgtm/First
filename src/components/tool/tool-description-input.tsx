@@ -40,7 +40,7 @@ export function ToolDescriptionInput({
       }}
       disabled={isPending}
       maxLength={160}
-      placeholder="What it's for — one line, for the kit sheet"
+      placeholder="What it's for, one line, for the kit sheet"
       className="h-8 text-xs"
     />
   );

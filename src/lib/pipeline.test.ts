@@ -54,7 +54,7 @@ describe("pipelinePosition", () => {
   it("moves an accepted proposal into Operations even before the status catches up", () => {
     const p = pipelinePosition(job({ status: "quoted", proposalStatus: "accepted" }));
     expect(p.stage).toBe("operations");
-    expect(p.status).toBe("Won — not scheduled");
+    expect(p.status).toBe("Won, not scheduled");
     expect(p.actionable).toBe(true);
   });
 
@@ -162,7 +162,7 @@ describe("needs sign-off", () => {
   });
 
   it("leaves unscheduled won work where it was", () => {
-    expect(pipelinePosition(job({ status: "approved" }), TODAY).status).toBe("Won — not scheduled");
+    expect(pipelinePosition(job({ status: "approved" }), TODAY).status).toBe("Won, not scheduled");
   });
 
   it("is a status the board knows how to show", () => {
@@ -186,12 +186,12 @@ describe("moving a job by hand", () => {
     const position = pipelinePosition(
       {
         ...base,
-        override: { stage: "operations", status: "Won — not scheduled", from: "Sent" },
+        override: { stage: "operations", status: "Won, not scheduled", from: "Sent" },
       },
       today
     );
     expect(position.stage).toBe("operations");
-    expect(position.status).toBe("Won — not scheduled");
+    expect(position.status).toBe("Won, not scheduled");
     expect(position.overridden).toBe(true);
     expect(overrideNote(position)).toMatch(/by hand/i);
   });
@@ -202,7 +202,7 @@ describe("moving a job by hand", () => {
     const input: PipelineInput = {
       ...base,
       proposalStatus: "accepted",
-      override: { stage: "operations", status: "Won — not scheduled", from: "Sent" },
+      override: { stage: "operations", status: "Won, not scheduled", from: "Sent" },
     };
     const position = pipelinePosition(input, today);
     expect(position.overridden).toBeFalsy();
@@ -248,8 +248,8 @@ describe("moving a job by hand", () => {
     expect(places).toHaveLength(
       STAGES.reduce((sum, stage) => sum + STAGE_STATUSES[stage.key].length, 0)
     );
-    expect(places[0].label).toBe("Evaluation — Scheduled");
-    expect(places.some((p) => p.label === "Operations — Completed")).toBe(true);
+    expect(places[0].label).toBe("Evaluation, Scheduled");
+    expect(places.some((p) => p.label === "Operations, Completed")).toBe(true);
   });
 });
 
@@ -301,7 +301,7 @@ describe("a job in dispute", () => {
     );
   });
 
-  it("stays on the board — it is a job that needs somebody, not an absence", () => {
+  it("stays on the board, it is a job that needs somebody, not an absence", () => {
     // Cancelled comes off the board. A dispute must not, or it disappears.
     expect(isOnPipeline({ ...sold, dispute })).toBe(true);
   });

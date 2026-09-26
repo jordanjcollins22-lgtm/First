@@ -100,7 +100,7 @@ export default async function PaymentsPage({
       <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
         <h1 className="mb-1 text-2xl font-bold">Money</h1>
         <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
-          Couldn&apos;t load payments. If this is a fresh setup, the team_payments table may not exist yet — run{" "}
+          Couldn&apos;t load payments. If this is a fresh setup, the team_payments table may not exist yet, run{" "}
           <code>supabase/migrations/0074_team_payments.sql</code>.
         </p>
       </div>
@@ -111,7 +111,7 @@ export default async function PaymentsPage({
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Money</h1>
       <p className="mb-4 text-sm text-muted-foreground sm:mb-6 sm:text-base">
-        Everything in and out — cash jobs, team pay, materials and overhead. Invoices live on
+        Everything in and out, cash jobs, team pay, materials and overhead. Invoices live on
         Proposals &amp; Invoices.
       </p>
       <PaymentsHealthBanner

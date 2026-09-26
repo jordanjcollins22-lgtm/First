@@ -255,7 +255,7 @@ async function PipelineTab() {
 
       <p className="mt-4 text-xs text-muted-foreground">
         A job&apos;s stage is read from its own status, its evaluation, and its proposal rather than stored
-        separately — so it can never disagree with the job itself. Highlighted cards are waiting on us; plain
+        separately, so it can never disagree with the job itself. Highlighted cards are waiting on us; plain
         ones are waiting on the client.
       </p>
     </div>

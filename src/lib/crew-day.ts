@@ -210,7 +210,7 @@ export function canRecord(
   if (!action) return { ok: false, reason: "Your day is already finished." };
 
   if (action.kind !== kind) {
-    return { ok: false, reason: `You can't do that yet — ${describe(action)}.` };
+    return { ok: false, reason: `You can't do that yet, ${describe(action)}.` };
   }
 
   // The action names its own job, so "on the way to the second house" cannot
@@ -241,7 +241,7 @@ function describe(action: NextAction): string {
     case "finished_job":
       return "finish the stop you're on first";
     case "returned_shop":
-      return "you're done — head back to the shop";
+      return "you're done, head back to the shop";
   }
 }
 

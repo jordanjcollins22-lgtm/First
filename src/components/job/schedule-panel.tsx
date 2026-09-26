@@ -166,7 +166,7 @@ export function SchedulePanel({
           <p className="font-semibold text-destructive">This job is cancelled.</p>
           {cancellationReason && <p className="mt-0.5 text-muted-foreground">{cancellationReason}</p>}
           <p className="mt-1 text-muted-foreground">
-            Nothing was deleted — the proposal, messages and estimate history are all still here.
+            Nothing was deleted, the proposal, messages and estimate history are all still here.
           </p>
         </div>
       )}
@@ -291,7 +291,7 @@ export function SchedulePanel({
                 <p className="text-sm text-muted-foreground">Not on the calendar yet.</p>
               )}
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Set by the {sessionCount === 1 ? "visit" : "visits"} booked below — book, move or cancel
+                Set by the {sessionCount === 1 ? "visit" : "visits"} booked below, book, move or cancel
                 a visit in Visits &amp; tickets and these follow.
               </p>
             </>

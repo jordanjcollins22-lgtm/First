@@ -333,7 +333,7 @@ async function OfficeDay() {
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="text-2xl font-bold">My Day</h1>
       <p className="mb-4 text-muted-foreground">
-        {profile.full_name || profile.email} — your clients and your jobs.
+        {profile.full_name || profile.email}, your clients and your jobs.
       </p>
 
       {/* Emails the app wrote and is holding for a person to read. First,
@@ -624,7 +624,7 @@ async function TilesBlock({ profile }: { profile: Profile }) {
       {nothing ? (
         <p className="mb-6 rounded-xl border border-white/60 bg-card/60 p-4 text-sm text-muted-foreground backdrop-blur-md">
           Nothing on your plate today. Anything overdue would show here, so a quiet screen means a quiet
-          day — check{" "}
+          day, check{" "}
           <Link href="/operations?tab=evaluations" className="underline">
             the evaluations
           </Link>{" "}
@@ -639,7 +639,7 @@ async function TilesBlock({ profile }: { profile: Profile }) {
           />
           <DashboardSections
             title="Today's jobs"
-            blurb="Your work. Sold-but-unbooked and sign-off piles ignore the date — they matter whenever they exist."
+            blurb="Your work. Sold-but-unbooked and sign-off piles ignore the date, they matter whenever they exist."
             sections={jobs}
           />
         </>
@@ -935,7 +935,7 @@ async function AlertsTab() {
     <div className="max-w-2xl">
       <h1 className="mb-1 text-2xl font-bold">Alerts</h1>
       <p className="mb-6 text-muted-foreground">
-        Choose what you want texted to you. These are your settings — nobody else&apos;s.
+        Choose what you want texted to you. These are your settings, nobody else&apos;s.
       </p>
       <NotificationSettings
         preferences={settings.preferences}

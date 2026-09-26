@@ -75,11 +75,11 @@ export function EvaluationBoardView({ board }: { board: EvaluationBoard }) {
               .map((owner) => (
                 <li key={owner.assignedToId ?? "none"} className="text-xs">
                   <span className="font-medium">{owner.name}</span>
-                  {" — "}
+                  {", "}
                   {owner.owed} to submit
                   {owner.oldestDays != null && `, the oldest ${owner.oldestDays} days ago`}
                   {owner.upcoming > 0 && `, and ${owner.upcoming} coming up`}
-                  {owner.doesEvaluations === false && " — doesn't do evaluations"}
+                  {owner.doesEvaluations === false && ", doesn't do evaluations"}
                 </li>
               ))}
           </ul>

@@ -44,7 +44,7 @@ export async function askForTip(jobId: string): Promise<TipActionResult> {
     .maybeSingle();
   if (!job) return { ok: false, message: "That job isn't there." };
   if (job.status !== "completed") {
-    return { ok: false, message: "Finish the job first — a tip link on running work reads as a demand." };
+    return { ok: false, message: "Finish the job first, a tip link on running work reads as a demand." };
   }
 
   // Already asked. Handed back rather than refused: somebody pressing this

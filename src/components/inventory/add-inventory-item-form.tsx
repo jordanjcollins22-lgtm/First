@@ -60,7 +60,7 @@ export function AddInventoryItemForm({
       return;
     }
     if (locationRequired && !storageLocation.trim()) {
-      setError("Enter where it's stored — required for items kept in stock.");
+      setError("Enter where it's stored, required for items kept in stock.");
       return;
     }
     if (!file) {
@@ -75,7 +75,7 @@ export function AddInventoryItemForm({
       const bucket = kind === "tool" ? "tool-images" : "material-images";
       const path = `${uuid()}/${file.name}`;
       const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
-      if (uploadError) throw new Error("Couldn't upload the photo — try again.");
+      if (uploadError) throw new Error("Couldn't upload the photo, try again.");
 
       const formData = new FormData();
       formData.set("name", name.trim());

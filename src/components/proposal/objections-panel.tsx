@@ -338,7 +338,7 @@ function ScopePicker({
           {preview.auto && preview.newTotalCents != null ? (
             <p className="text-sm">
               New total: <span className="font-bold">{money(preview.newTotalCents)}</span>
-              <span className="text-muted-foreground"> — saving {money(preview.droppedCents)}</span>
+              <span className="text-muted-foreground">, saving {money(preview.droppedCents)}</span>
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -368,9 +368,9 @@ function ScopePicker({
               }
               onDone(
                 result.applied && result.newTotalCents != null
-                  ? `Done — your quote is now ${money(result.newTotalCents)}. Refresh to see the updated scope.`
+                  ? `Done, your quote is now ${money(result.newTotalCents)}. Refresh to see the updated scope.`
                   : result.reviewReason ??
-                      "Thanks — we'll confirm the new price with you shortly."
+                      "Thanks, we'll confirm the new price with you shortly."
               );
             });
           }}

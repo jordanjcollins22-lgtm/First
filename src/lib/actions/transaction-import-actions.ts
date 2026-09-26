@@ -456,7 +456,7 @@ function describeImportError(error: { message: string; code?: string; details?: 
     return `This needs its database migration. Run supabase/migrations/0139_payment_import.sql through 0141_payment_payer.sql, then try again. (${error.message})`;
   }
 
-  return [error.message, error.details].filter(Boolean).join(" — ");
+  return [error.message, error.details].filter(Boolean).join(", ");
 }
 
 /** Every contact, to match payers against. Bounded by the size of the book

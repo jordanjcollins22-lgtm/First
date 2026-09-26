@@ -51,7 +51,7 @@ describe("buildActivity", () => {
     const rejected = milestone({ kind: "walkthrough_reviewed", outcome: "rejected", detail: "Redo the edge" });
     const approved = milestone({ id: "m2", kind: "walkthrough_reviewed", outcome: "approved" });
     expect(buildActivity([], [], [rejected], NAMES, JOBS)[0]).toMatchObject({
-      text: "Walk rejected — punch list",
+      text: "Walk rejected, punch list",
       attention: true,
     });
     expect(buildActivity([], [], [approved], NAMES, JOBS)[0]).toMatchObject({
@@ -65,7 +65,7 @@ describe("buildActivity", () => {
     expect(buildActivity([crew({ kind: "teleported" })], [], [], NAMES, JOBS)).toEqual([]);
   });
 
-  it("leaves a scheduled session out — booking a visit is not doing one", () => {
+  it("leaves a scheduled session out, booking a visit is not doing one", () => {
     expect(buildActivity([], [session({ status: "scheduled" })], [], NAMES, JOBS)).toEqual([]);
   });
 

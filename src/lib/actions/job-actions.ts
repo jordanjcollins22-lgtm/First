@@ -549,7 +549,7 @@ export async function setJobWorkDates(
     if ((count ?? 0) > 0) {
       return {
         ok: false,
-        message: "This job has visits booked — change the dates there and these follow automatically.",
+        message: "This job has visits booked, change the dates there and these follow automatically.",
       };
     }
 

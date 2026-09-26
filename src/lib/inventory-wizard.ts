@@ -108,7 +108,7 @@ export function stepsFor(answers: WizardAnswers): WizardStep[] {
     steps.push({
       id: "ownership",
       title: "Do we own it, or rent it?",
-      hint: "A rental has no resale value — it was never ours to sell.",
+      hint: "A rental has no resale value, it was never ours to sell.",
     });
   }
 
@@ -199,7 +199,7 @@ export function problemWith(step: StepId, answers: WizardAnswers): string | null
     case "photo":
       return answers.photo ? null : "A photo is how the crew knows it on sight.";
     case "unit":
-      return answers.unit.trim() ? null : "Say what one of it is — a bag, a sheet, a yard.";
+      return answers.unit.trim() ? null : "Say what one of it is, a bag, a sheet, a yard.";
     case "cost": {
       const priced =
         answers.unitCost.trim() !== "" ||
@@ -212,7 +212,7 @@ export function problemWith(step: StepId, answers: WizardAnswers): string | null
     case "where":
       return answers.storageLocation.trim()
         ? null
-        : "Say where it lives — this is the one that costs an hour when it is missing.";
+        : "Say where it lives, this is the one that costs an hour when it is missing.";
     default:
       return null;
   }

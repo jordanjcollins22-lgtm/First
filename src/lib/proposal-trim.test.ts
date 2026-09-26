@@ -271,7 +271,7 @@ describe("editHeadline", () => {
         removedLines: [],
         requestedVia: "text",
       })
-    ).toBe("Removed Back bed (Mulch) — they texted");
+    ).toBe("Removed Back bed (Mulch), they texted");
   });
 
   it("reads as a price change when nothing came off", () => {
@@ -283,7 +283,7 @@ describe("editHeadline", () => {
         previousTotalCents: 100000,
         newTotalCents: 120000,
       })
-    ).toBe("Price changed — they called");
+    ).toBe("Price changed, they called");
   });
 
   it("reads as a note when neither moved", () => {

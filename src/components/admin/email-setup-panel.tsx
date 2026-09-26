@@ -23,7 +23,7 @@ const STREAM_LABEL: Record<MailStream, string> = {
 };
 
 const STREAM_BLURB: Record<MailStream, string> = {
-  transactional: "Mail somebody asked for — a proposal, an invoice, a receipt.",
+  transactional: "Mail somebody asked for, a proposal, an invoice, a receipt.",
   marketing: "Anything sent to a list. Kept on its own domain so a bad campaign can't touch the mail above.",
 };
 
@@ -56,7 +56,7 @@ export function EmailSetupPanel({ setup }: { setup: EmailSetup }) {
       <div>
         <p className="text-sm text-muted-foreground">
           Two subdomains, kept apart on purpose. Reputation follows whichever domain signs the
-          mail — so campaigns go from their own, and your main domain sends nothing at all, which
+          mail, so campaigns go from their own, and your main domain sends nothing at all, which
           is what keeps it clean.
         </p>
       </div>
@@ -379,7 +379,7 @@ function SenderList({ domain }: { domain: SendingDomain }) {
           <input
             value={replyTo}
             onChange={(e) => setReplyTo(e.target.value)}
-            placeholder="Replies go to (optional — your real inbox)"
+            placeholder="Replies go to (optional, your real inbox)"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}

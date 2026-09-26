@@ -99,7 +99,7 @@ export function canRequestEarlyStart(options: {
   const existing = options.existing;
   if (existing && existing.sessionId === options.visit.sessionId) {
     if (existing.status === "pending") {
-      return { ok: false, reason: "Asked — waiting on the account manager." };
+      return { ok: false, reason: "Asked, waiting on the account manager." };
     }
     if (existing.status === "approved") {
       return { ok: false, reason: "Approved. It's on your list now." };
@@ -115,7 +115,7 @@ export function canRequestEarlyStart(options: {
 export function describeRequest(request: EarlyStartRequest | null): string | null {
   if (!request) return null;
   if (request.status === "pending") return "Waiting on the account manager.";
-  if (request.status === "approved") return "Approved — go ahead.";
+  if (request.status === "approved") return "Approved, go ahead.";
   return request.declineReason
     ? `Not this time: ${request.declineReason}`
     : "Not this time.";

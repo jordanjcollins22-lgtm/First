@@ -42,7 +42,7 @@ function NotActive() {
     <div className="mx-auto flex max-w-md flex-col items-center gap-2 px-4 py-20 text-center">
       <p className="text-lg font-semibold">This link isn&apos;t active.</p>
       <p className="text-sm text-muted-foreground">
-        If you meant to leave something for the crew, tell them directly — they would rather hear it
+        If you meant to leave something for the crew, tell them directly, they would rather hear it
         anyway.
       </p>
     </div>

@@ -260,7 +260,7 @@ export default async function TeamServicesPage() {
                               disabled={profile.id === currentProfile?.id}
                             />
                           ) : (
-                            <span className="capitalize">{profile.roles.join(", ") || "—"}</span>
+                            <span className="capitalize">{profile.roles.join(", ") || "-"}</span>
                           )}
                           {/* Under the roles because it is the exception to
                               them, and next to them because that is where
@@ -314,7 +314,7 @@ export default async function TeamServicesPage() {
 
             {isAdmin && (
               <p className="mt-3 text-xs text-muted-foreground">
-                You can&apos;t change your own role here — ask another admin, or update it directly in
+                You can&apos;t change your own role here, ask another admin, or update it directly in
                 Supabase.
               </p>
             )}
@@ -324,7 +324,7 @@ export default async function TeamServicesPage() {
           <>
             <p className="mb-4 text-sm text-muted-foreground">
               Every service you quote, with its cost and time estimate. Team members can propose a new one
-              mid-quote — it shows up below as Pending until you price it or decline it.
+              mid-quote, it shows up below as Pending until you price it or decline it.
             </p>
 
             <div className="mb-6 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
@@ -336,13 +336,13 @@ export default async function TeamServicesPage() {
                   Crew cost per hour: <span className="font-semibold">${crewCostPerHour.toFixed(2)}</span>
                   <span className="text-xs text-muted-foreground">
                     {" "}
-                    — the average of the hourly pay rates set on the Team side (commission-based people
+                    , the average of the hourly pay rates set on the Team side (commission-based people
                     aren&apos;t counted). Update pay there and this follows.
                   </span>
                 </p>
               ) : (
                 <p className="text-xs text-destructive">
-                  No crew cost per hour yet — set hourly pay for your crew on the Team side so labor cost can
+                  No crew cost per hour yet, set hourly pay for your crew on the Team side so labor cost can
                   be calculated.
                 </p>
               )}
@@ -417,7 +417,7 @@ export default async function TeamServicesPage() {
                 ))}
                 {activeServices.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No services yet — add one above, or wait for a team member to propose one.
+                    No services yet, add one above, or wait for a team member to propose one.
                   </p>
                 )}
               </CardContent>
@@ -431,7 +431,7 @@ export default async function TeamServicesPage() {
                 <CardContent className="flex flex-col gap-1">
                   {deniedServices.map((s) => (
                     <p key={s.service_type_id} className="text-sm text-muted-foreground">
-                      {s.name} — outside our scope of work
+                      {s.name}, outside our scope of work
                     </p>
                   ))}
                 </CardContent>

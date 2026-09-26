@@ -76,7 +76,7 @@ export async function approveSocialPost(input: {
     return {
       ok: true,
       scheduledFor: slot.toISOString(),
-      message: `Approved — goes out ${describeSlot(slot)}.`,
+      message: `Approved, goes out ${describeSlot(slot)}.`,
     };
   } catch (err) {
     console.error("approveSocialPost failed:", err);

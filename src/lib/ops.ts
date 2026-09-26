@@ -335,7 +335,7 @@ export function signalsOf(pulse: OpsPulse, targets: OpsTargets): Signal[] {
   signals.push({
     key: "closeRate",
     label: "Proposals closing",
-    value: close.rate == null ? "—" : `${Math.round(close.rate * 100)}%`,
+    value: close.rate == null ? "-" : `${Math.round(close.rate * 100)}%`,
     target: `${Math.round(targets.closeRate * 100)}%`,
     status: closeRatio == null ? "unknown" : closeRatio >= 1 ? "ok" : closeRatio >= 0.6 ? "watch" : "bad",
     trend: close.rate == null ? null : trendOf(wonRecent, wonBefore),
@@ -377,7 +377,7 @@ export function signalsOf(pulse: OpsPulse, targets: OpsTargets): Signal[] {
   signals.push({
     key: "cash",
     label: "Cash",
-    value: cash == null ? "—" : money(cash),
+    value: cash == null ? "-" : money(cash),
     target: `${money(floor)} floor`,
     status: cashStatus,
     trend: cash == null ? null : trendOf(avg(recent.map((w) => w.cashIn - w.cashOut)), avg(before.map((w) => w.cashIn - w.cashOut))),

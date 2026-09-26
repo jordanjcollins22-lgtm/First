@@ -57,7 +57,7 @@ export function GeocodePanel({ pending, failed }: { pending: number; failed: num
       )}
       {failed > 0 && (
         <p className="mt-1 text-xs text-amber-800">
-          {failed} couldn&apos;t be found — usually a partial address like &ldquo;Bel Air, MD&rdquo; with no
+          {failed} couldn&apos;t be found, usually a partial address like &ldquo;Bel Air, MD&rdquo; with no
           street. Those need editing by hand.
         </p>
       )}

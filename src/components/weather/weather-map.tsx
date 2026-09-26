@@ -84,7 +84,7 @@ export function WeatherMap({ locations }: { locations: LocationForecast[] }) {
         .setPopup(
           new mapboxgl.Popup({ offset: 12 }).setText(
             location.current
-              ? `${location.name} — ${location.current.temp}°, wind ${location.current.wind} mph`
+              ? `${location.name}, ${location.current.temp}°, wind ${location.current.wind} mph`
               : location.name
           )
         )

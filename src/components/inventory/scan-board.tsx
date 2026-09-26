@@ -80,7 +80,7 @@ export function ScanBoard({
       <div className="mt-4 rounded-xl border border-white/60 bg-card/60 px-4 py-4 backdrop-blur-md">
         <p className="text-sm text-muted-foreground">On hand</p>
         <p className="text-4xl font-bold tabular-nums">
-          {onHand ?? "—"}
+          {onHand ?? "-"}
           <span className="ml-2 text-base font-normal text-muted-foreground">{unit}</span>
         </p>
         {expectedQuantity != null && (
@@ -158,7 +158,7 @@ export function ScanBoard({
 
           {!signedIn && (
             <p className="mt-2 text-sm text-muted-foreground">
-              Sign in first — a movement needs a name on it.
+              Sign in first, a movement needs a name on it.
             </p>
           )}
           {message && (

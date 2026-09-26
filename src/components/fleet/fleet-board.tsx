@@ -26,7 +26,7 @@ export function FleetBoardView({ board }: { board: FleetBoard }) {
       <div className="grid grid-cols-2 divide-x divide-border rounded-lg border border-border">
         <Figure
           label="Chance of a breakdown"
-          value={worst ? percent(1 - board.risks.reduce((p, r) => p * (1 - r.in30Days), 1)) : "—"}
+          value={worst ? percent(1 - board.risks.reduce((p, r) => p * (1 - r.in30Days), 1)) : "-"}
           detail="Somewhere in the fleet, in the next 30 days"
         />
         <Figure
@@ -131,7 +131,7 @@ function Plan({ board }: { board: FleetBoard }) {
             <p className="mt-1 text-sm">
               {when.affordableNow ? (
                 <span className="font-medium text-primary">
-                  Affordable now — {money(when.needCents / 100)} to collect it.
+                  Affordable now: {money(when.needCents / 100)} to collect it.
                 </span>
               ) : when.on ? (
                 <>
@@ -205,8 +205,8 @@ function MonthlyLine({ board }: { board: FleetBoard }) {
       {differenceCents === 0
         ? "."
         : differenceCents > 0
-          ? ` — ${money(differenceCents / 100)} a month more.`
-          : ` — ${money(-differenceCents / 100)} a month less.`}
+          ? `, ${money(differenceCents / 100)} a month more.`
+          : `, ${money(-differenceCents / 100)} a month less.`}
     </p>
   );
 }

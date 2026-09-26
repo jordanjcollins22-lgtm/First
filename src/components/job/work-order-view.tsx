@@ -174,7 +174,7 @@ export function WorkOrderView({
           was added, and the record of what was sold never changes. */}
       {approvedAdditions.length > 0 && (
         <section className="rounded-xl border border-emerald-500/50 bg-emerald-50/60 p-4 dark:bg-emerald-500/5">
-          <h2 className="mb-2 text-sm font-semibold">Added since — approved</h2>
+          <h2 className="mb-2 text-sm font-semibold">Added since, approved</h2>
           <ol className="flex flex-col gap-2">
             {approvedAdditions.map((change) => (
               <li key={change.id} className="text-sm">
@@ -201,7 +201,7 @@ export function WorkOrderView({
                 <span className="min-w-0 flex-1">
                   {mark.note}
                   {mark.authorName && (
-                    <span className="text-muted-foreground"> — {mark.authorName}</span>
+                    <span className="text-muted-foreground"> · {mark.authorName}</span>
                   )}
                 </span>
               </li>

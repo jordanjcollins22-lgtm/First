@@ -215,7 +215,7 @@ export async function readRecommendationScreenshot(input: {
 
   // The service where the post named one, because that is the word a proposal
   // gets built from, and the sentence otherwise.
-  const note = [read.service, read.summary].filter(Boolean).join(" — ");
+  const note = [read.service, read.summary].filter(Boolean).join(", ");
 
   return {
     ok: true,
@@ -444,7 +444,7 @@ export async function readAndDraft(input: {
       platform: reading.platform,
       groupName: reading.groupName,
       askedBy: reading.author,
-      note: [reading.service, reading.summary].filter(Boolean).join(" — "),
+      note: [reading.service, reading.summary].filter(Boolean).join(", "),
       ageDays: reading.ageDays,
       worthAnswering: reading.kind === "request",
       kind: reading.kind,

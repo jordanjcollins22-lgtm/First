@@ -74,7 +74,7 @@ export function checkPlan(input: PlanInput): { ok: true } | { ok: false; reason:
       return { ok: false, reason: "That is more payments than anybody wants to chase." };
     }
     if (deposit === input.totalCents) {
-      return { ok: false, reason: "The deposit covers it — that is a one-off, not a plan." };
+      return { ok: false, reason: "The deposit covers it, that is a one-off, not a plan." };
     }
     if (!input.interval) return { ok: false, reason: "How often?" };
   }
@@ -82,7 +82,7 @@ export function checkPlan(input: PlanInput): { ok: true } | { ok: false; reason:
   if (input.kind === "subscription") {
     if (!input.interval) return { ok: false, reason: "How often?" };
     if (deposit > 0) {
-      return { ok: false, reason: "A subscription bills the same amount each time — no deposit." };
+      return { ok: false, reason: "A subscription bills the same amount each time, no deposit." };
     }
   }
 

@@ -116,7 +116,7 @@ export function SocialStudio({
           <>
             <p className="mb-2 text-xs text-muted-foreground">
               Worked jobs with no usable pair. A job with plenty of photos still lands here if the
-              before and the after are of different zones — that one looks finished from the job
+              before and the after are of different zones, that one looks finished from the job
               page and produces nothing.
             </p>
             <div className="space-y-2">

@@ -61,7 +61,7 @@ export function PendingServiceRow({
           <p className="font-medium">{name}</p>
           <p className="text-xs text-muted-foreground">
             Proposed by {requestedByEmail ?? "a team member"}
-            {requestedNote && ` — ${requestedNote}`}
+            {requestedNote && `, ${requestedNote}`}
           </p>
         </div>
         {!showAccept && (

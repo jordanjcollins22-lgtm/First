@@ -15,7 +15,7 @@ export function CallClientButton({ jobId }: { jobId: string }) {
     startTransition(async () => {
       try {
         await startCall(jobId);
-        setStatus("Calling your phone now — answer to connect.");
+        setStatus("Calling your phone now, answer to connect.");
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Couldn't start the call.");
       }

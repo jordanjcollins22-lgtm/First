@@ -113,11 +113,11 @@ export function EvaluationLeaderboard({ boards, showMoney, meId }: { boards: Eva
                       </span>
                     )}
                   </td>
-                  <td className="p-2 text-right tabular-nums text-muted-foreground">{s.daysToProposal == null ? "—" : s.daysToProposal}</td>
+                  <td className="p-2 text-right tabular-nums text-muted-foreground">{s.daysToProposal == null ? "-" : s.daysToProposal}</td>
                   <td className={cn("p-2 text-right font-semibold tabular-nums", s.closed > 0 && "text-emerald-700")}>{s.closed}</td>
-                  <td className="p-2 text-right tabular-nums text-muted-foreground">{s.closeRate == null ? "—" : `${Math.round(s.closeRate * 100)}%`}</td>
-                  {showMoney && <td className="p-2 text-right tabular-nums">{s.sold > 0 ? money(s.sold) : "—"}</td>}
-                  {showMoney && <td className="p-2 text-right tabular-nums">{s.collected > 0 ? money(s.collected) : "—"}</td>}
+                  <td className="p-2 text-right tabular-nums text-muted-foreground">{s.closeRate == null ? "-" : `${Math.round(s.closeRate * 100)}%`}</td>
+                  {showMoney && <td className="p-2 text-right tabular-nums">{s.sold > 0 ? money(s.sold) : "-"}</td>}
+                  {showMoney && <td className="p-2 text-right tabular-nums">{s.collected > 0 ? money(s.collected) : "-"}</td>}
                 </tr>
                 {open === s.profileId && (
                   <tr className="border-b border-border bg-muted/20">

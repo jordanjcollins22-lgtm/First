@@ -331,7 +331,7 @@ function Communications({ record }: { record: JobRecord }) {
               <li key={index} className="[break-inside:avoid]">
                 <span className="text-xs text-[#5b6660]">{whenLine(objection.at)} · </span>
                 <span className="font-medium">{objection.question}</span>
-                {objection.note && <span> — they wrote: &ldquo;{objection.note}&rdquo;</span>}
+                {objection.note && <span>, they wrote: &ldquo;{objection.note}&rdquo;</span>}
                 {objection.resolution && (
                   <span className="text-[#5b6660]"> · we offered: {objection.resolution.replace(/_/g, " ")}{objection.resolved === true ? " (settled)" : objection.resolved === false ? " (not settled)" : ""}</span>
                 )}

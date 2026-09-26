@@ -23,7 +23,7 @@ export async function getCallToken(channelId: string): Promise<CallTokenResult> 
     if (!isLivekitConfigured) {
       return {
         ok: false,
-        message: "Video calling isn't set up on the server yet — add the LiveKit keys to enable it.",
+        message: "Video calling isn't set up on the server yet, add the LiveKit keys to enable it.",
       };
     }
 

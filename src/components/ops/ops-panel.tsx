@@ -323,9 +323,9 @@ function LeverRow({ lever }: { lever: LeverRank }) {
     <tr className="border-t border-border/60">
       <td className="py-1 pr-2 font-medium">{lever.label}</td>
       <td className="py-1 pr-2 tabular-nums">{lever.free ? "time" : `$${lever.unitCost.toFixed(2)}`}</td>
-      <td className="py-1 pr-2 tabular-nums">{lever.costPerEvaluation == null ? "—" : money(lever.costPerEvaluation)}</td>
-      <td className="py-1 pr-2 tabular-nums">{lever.costPerJob == null ? "—" : money(lever.costPerJob)}</td>
-      <td className="py-1 pr-2 tabular-nums">{lever.returnPerDollar == null ? "—" : `$${lever.returnPerDollar.toFixed(1)}`}</td>
+      <td className="py-1 pr-2 tabular-nums">{lever.costPerEvaluation == null ? "-" : money(lever.costPerEvaluation)}</td>
+      <td className="py-1 pr-2 tabular-nums">{lever.costPerJob == null ? "-" : money(lever.costPerJob)}</td>
+      <td className="py-1 pr-2 tabular-nums">{lever.returnPerDollar == null ? "-" : `$${lever.returnPerDollar.toFixed(1)}`}</td>
       <td className="py-1 text-muted-foreground">{from}</td>
     </tr>
   );

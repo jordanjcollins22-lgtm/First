@@ -199,7 +199,7 @@ function EntryForm({ jobOptions }: { jobOptions: PaymentsData["jobOptions"] }) {
             onChange={(e) => setMethod(e.target.value)}
             className="min-h-11 rounded-lg border border-border bg-background px-3 text-base sm:text-sm"
           >
-            <option value="">—</option>
+            <option value="">-</option>
             {PAYMENT_METHODS.map((m) => (
               <option key={m} value={m}>
                 {m[0].toUpperCase() + m.slice(1)}

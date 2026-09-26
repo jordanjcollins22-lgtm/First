@@ -144,7 +144,7 @@ export async function startTip(input: {
             unit_amount: checked.cents,
             product_data: {
               name: `Tip for the ${org?.name ?? "crew"} team`,
-              description: "Thank you — this goes to the people who did the work.",
+              description: "Thank you, this goes to the people who did the work.",
             },
           },
           quantity: 1,

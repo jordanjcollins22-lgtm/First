@@ -35,7 +35,7 @@ export function CoveragePanel({
       </div>
       <p className="mb-2 text-xs text-muted-foreground">
         A marker on every property, and whether anybody has spoken to it. Somebody out of our market is
-        still worth a call — they know the neighbour who is not.
+        still worth a call, they know the neighbour who is not.
       </p>
 
       <div className="mb-2 h-2 overflow-hidden rounded-full bg-muted">

@@ -162,7 +162,7 @@ export async function WeatherTab() {
           ? locations[0].name
           : summary.uniform
             ? `Same across all ${locations.length} locations${spread >= 1 ? `, ${Math.round(spread)} miles apart at the widest` : ""}.`
-            : `Different across your ${locations.length} locations — broken out below.`}
+            : `Different across your ${locations.length} locations, broken out below.`}
       </p>
 
       {/* One forecast when they agree, which is the usual case. */}

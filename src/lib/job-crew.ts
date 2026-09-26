@@ -91,7 +91,7 @@ export function canAssign(
 ): Verdict {
   if (status === "cancelled") return { ok: false, reason: "This job is cancelled. Reopen it first." };
   if (status === "completed") {
-    return { ok: false, reason: "This job is finished — changing the crew now would rewrite who did it." };
+    return { ok: false, reason: "This job is finished, changing the crew now would rewrite who did it." };
   }
   if (crew.some((c) => c.profile_id === profileId)) {
     return { ok: false, reason: "They're already on this job." };
@@ -113,7 +113,7 @@ export function canAssign(
  */
 export function canUnassign(status: JobStatus, crew: JobCrewMember[], profileId: string): Verdict {
   if (status === "completed") {
-    return { ok: false, reason: "This job is finished — its crew is part of the record now." };
+    return { ok: false, reason: "This job is finished, its crew is part of the record now." };
   }
   if (!crew.some((c) => c.profile_id === profileId)) {
     return { ok: false, reason: "They're not on this job." };

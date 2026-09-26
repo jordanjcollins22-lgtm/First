@@ -48,7 +48,7 @@ export async function saveContainer(input: {
   if (!profile) return fail("Not signed in.");
 
   const name = input.name.trim();
-  if (!name) return fail("Give it a name — the thing you would say out loud.");
+  if (!name) return fail("Give it a name, the thing you would say out loud.");
   if (!CONTAINER_KINDS.some((k) => k.key === input.kind)) return fail("Say whether it was bought or built.");
 
   const quantity = numberOrNull(input.quantity);

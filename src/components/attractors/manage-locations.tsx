@@ -21,7 +21,7 @@ import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 const AREA_GEOMETRY_OPTIONS: { value: LocationAreaGeometryType; label: string; hint: string }[] = [
   { value: "point_radius", label: "Address + radius", hint: "Service radius around a single point" },
   { value: "polygon", label: "Area (polygon)", hint: "A drawn service region" },
-  { value: "zip_list", label: "Zip codes", hint: "Zip codes served — not plotted on the map" },
+  { value: "zip_list", label: "Zip codes", hint: "Zip codes served, not plotted on the map" },
 ];
 
 function NewLocationForm({ onAdded }: { onAdded: () => void }) {
@@ -248,7 +248,7 @@ export function ManageLocations({
   return (
     <div className="flex flex-col gap-4">
       {locations.length === 0 && (
-        <p className="text-sm text-muted-foreground">No business locations yet — add your first one below.</p>
+        <p className="text-sm text-muted-foreground">No business locations yet, add your first one below.</p>
       )}
 
       {locations.map((location) => {

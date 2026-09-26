@@ -188,7 +188,7 @@ function describeImportError(error: { message: string; code?: string; details?: 
   if (MIGRATION_CODES.has(error.code ?? "") || missing) {
     return `This needs its database migration. Run supabase/migrations/0142_client_invoices.sql through 0144_invoice_import.sql, then try again. (${error.message})`;
   }
-  return [error.message, error.details].filter(Boolean).join(" — ");
+  return [error.message, error.details].filter(Boolean).join(", ");
 }
 
 /** Every contact, to match invoices against. Paged, so a book over a thousand

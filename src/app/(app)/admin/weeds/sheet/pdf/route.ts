@@ -86,7 +86,7 @@ export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
 
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`${organization.name} — ${view === "client" ? "Common lawn weeds" : "Weed reference"}`);
+  pdf.setTitle(`${organization.name}, ${view === "client" ? "Common lawn weeds" : "Weed reference"}`);
   pdf.setCreator(organization.name);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -435,7 +435,7 @@ function drawOffer(
 
   const body = latin1(
     "Some of these spread if they are not taken out properly. Leave a piece of root behind and one " +
-    "plant can come back as several — and a few of them are easier to make worse than to fix."
+    "plant can come back as several, and a few of them are easier to make worse than to fix."
   );
   for (const line of wrapText(body, textWidth, 3, (l) => fonts.regular.widthOfTextAtSize(l, FONT_SIZES.ctaBody))) {
     page.drawText(line, {

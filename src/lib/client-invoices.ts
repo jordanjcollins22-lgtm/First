@@ -273,7 +273,7 @@ export function invoiceLine(summary: InvoiceSummary): string {
   if (summary.paid > 0) parts.push(`${summary.paid} paid`);
 
   const invoices = summary.total === 1 ? "1 invoice" : `${summary.total} invoices`;
-  return parts.length > 0 ? `${invoices} — ${parts.join(", ")}.` : `${invoices}.`;
+  return parts.length > 0 ? `${invoices}, ${parts.join(", ")}.` : `${invoices}.`;
 }
 
 /**

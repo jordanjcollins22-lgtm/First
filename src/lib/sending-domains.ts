@@ -110,7 +110,7 @@ export function checkSendingDomain(
     const suggested = suggestSubdomain(parsed.root, stream);
     return {
       ok: false,
-      reason: `Don't send from ${parsed.root} itself — a bad campaign would take your main domain's reputation down with it, and that includes your invoices. Use ${suggested} instead.`,
+      reason: `Don't send from ${parsed.root} itself, a bad campaign would take your main domain's reputation down with it, and that includes your invoices. Use ${suggested} instead.`,
     };
   }
 
@@ -120,7 +120,7 @@ export function checkSendingDomain(
       ? { ok: false, reason: "That one is already set up." }
       : {
           ok: false,
-          reason: `${parsed.hostname} is already sending ${already.stream} mail. Keep the two apart — that separation is the whole point.`,
+          reason: `${parsed.hostname} is already sending ${already.stream} mail. Keep the two apart, that separation is the whole point.`,
         };
   }
 
@@ -170,7 +170,7 @@ export function checkSenderAddress(address: string, domainHostname: string): Dom
   if (host !== domainHostname.toLowerCase()) {
     return {
       ok: false,
-      reason: `This address has to be @${domainHostname} — that's the domain we've verified. Anything else fails its signature check on every send.`,
+      reason: `This address has to be @${domainHostname}, that's the domain we've verified. Anything else fails its signature check on every send.`,
     };
   }
 
@@ -207,7 +207,7 @@ export type DomainStatus = "pending" | "verified" | "failed";
  * our provider's state machine instead of answering the question.
  */
 export function describeStatus(status: DomainStatus, records: DnsRecord[]): string {
-  if (status === "verified") return "Verified — you can send from this domain.";
+  if (status === "verified") return "Verified, you can send from this domain.";
   if (status === "failed") {
     return "Verification failed. Check the records below match exactly, then check again.";
   }

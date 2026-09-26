@@ -25,7 +25,7 @@ const GEOMETRY_OPTIONS: { value: AttractorGeometryType; label: string; hint: str
   { value: "point_radius", label: "Address + radius", hint: "Yard sign, billboard, single location" },
   { value: "polygon", label: "Area (polygon)", hint: "Neighborhood, door-hanger route area" },
   { value: "route", label: "Route (line)", hint: "Vehicle route, driving path" },
-  { value: "zip_list", label: "Zip codes", hint: "Digital ads targeted by zip — not plotted on the map" },
+  { value: "zip_list", label: "Zip codes", hint: "Digital ads targeted by zip, not plotted on the map" },
 ];
 
 export function CreateWavePanel({
@@ -154,7 +154,7 @@ export function CreateWavePanel({
           id="wave-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Spring door hangers — Oakwood"
+          placeholder="Spring door hangers, Oakwood"
         />
       </div>
 

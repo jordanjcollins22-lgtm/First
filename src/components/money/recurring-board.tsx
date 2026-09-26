@@ -190,7 +190,7 @@ function Reconciliation({ review }: { review: SpendReview }) {
         <Split
           label="Everything else"
           value={review.uncountedPerMonth}
-          note="Materials, crew and one-offs. Job costs, not overhead — but worth a look for anything that belongs above."
+          note="Materials, crew and one-offs. Job costs, not overhead, but worth a look for anything that belongs above."
         />
         <Split
           label="Cards and transfers"

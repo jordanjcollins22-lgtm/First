@@ -68,7 +68,7 @@ export function AdminChatWidget() {
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
         {messages.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            Ask a question — this is a conversation only, it can&apos;t make changes to the app or see your data.
+            Ask a question, this is a conversation only, it can&apos;t make changes to the app or see your data.
           </p>
         )}
         {messages.map((m, i) => (

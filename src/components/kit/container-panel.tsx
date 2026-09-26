@@ -166,7 +166,7 @@ function ContainerCard({
       <p className="mt-0.5 text-xs text-muted-foreground">
         {have} of them{cost != null ? `, ${money(cost)} each` : ", no price on it yet"}
         {container.kind === "built" ? ", built from parts" : ""}
-        {container.notes ? ` — ${container.notes}` : ""}
+        {container.notes ? `, ${container.notes}` : ""}
       </p>
 
       {/* The whole container, for one bought off a shelf. A built rig breaks a
@@ -423,7 +423,7 @@ function OrderToggle({
       }
       className="ml-auto underline"
     >
-      {onOrder ? "Ordered — undo" : "Mark ordered"}
+      {onOrder ? "Ordered, undo" : "Mark ordered"}
     </button>
   );
 }

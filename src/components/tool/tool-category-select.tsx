@@ -23,7 +23,7 @@ export function ToolCategorySelect({ toolId, category }: { toolId: string; categ
         await updateToolCategory(toolId, category);
       } catch {
         setValue(value);
-        setError("Couldn't move that — try again.");
+        setError("Couldn't move that, try again.");
       }
     });
   }

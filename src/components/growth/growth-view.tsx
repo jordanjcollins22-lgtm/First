@@ -134,7 +134,7 @@ export function GrowthView({
                 </div>
                 <span className="text-[10px] leading-none text-muted-foreground">{weekLabel(week.weekStart)}</span>
                 <span className="text-[10px] leading-none tabular-nums">
-                  {week.entries === 0 ? "—" : (week.loggedMinutes / 60).toFixed(1)}
+                  {week.entries === 0 ? "-" : (week.loggedMinutes / 60).toFixed(1)}
                 </span>
               </li>
             );
@@ -188,7 +188,7 @@ export function GrowthView({
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional — what it was"
+              placeholder="Optional, what it was"
               className="min-h-11 w-full rounded-md border border-border bg-background px-2 text-sm"
             />
             <div className="flex gap-2">

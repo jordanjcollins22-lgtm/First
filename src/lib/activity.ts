@@ -165,7 +165,7 @@ export function buildActivity(
         : row.kind === "walkthrough_reviewed"
           ? row.outcome === "approved"
             ? "Walk approved"
-            : "Walk rejected — punch list"
+            : "Walk rejected, punch list"
           : "Job signed off";
 
     items.push({

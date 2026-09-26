@@ -71,7 +71,7 @@ export function MoveJob({
   function raise() {
     if (!raising) return;
     setRaising(null);
-    send(`Moving to Disputes — ${kindLabel(raising)}`, async () => {
+    send(`Moving to Disputes, ${kindLabel(raising)}`, async () => {
       const result = await openDispute(jobId, raising, reason);
       if (result.ok) setReason("");
       return result;

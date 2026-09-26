@@ -51,7 +51,7 @@ export function ClientSignIn() {
       <div>
         <h1 className="text-2xl font-bold">Your projects</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Your quotes, your visits and where the work has got to. No password — we email you a code.
+          Your quotes, your visits and where the work has got to. No password, we email you a code.
         </p>
       </div>
 

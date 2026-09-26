@@ -259,7 +259,7 @@ export function ServicePricingRow({
           <p className="text-[10px] text-muted-foreground">
             {minutesValue > 0
               ? `≈ ${Math.round(60 / minutesValue).toLocaleString()} ${measurementUnit}/crew-hr`
-              : "No time set — no labour charged"}
+              : "No time set, no labour charged"}
           </p>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -333,7 +333,7 @@ export function ServicePricingRow({
       {showCalculator && (
         <div className="mt-2 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Tool checklist — what the crew grabs for this service:</p>
+            <p className="text-xs text-muted-foreground">Tool checklist, what the crew grabs for this service:</p>
             {linkedTools.length > 0 ? (
               <ul className="mt-1 flex flex-col gap-1.5">
                 {linkedTools.map((tool) => (
@@ -428,7 +428,7 @@ export function ServicePricingRow({
                 actually reads, and the one that was silently empty for every
                 service this business added itself. */}
             <p className="text-xs text-muted-foreground">
-              What the client is told — the scope wording on their proposal:
+              What the client is told, the scope wording on their proposal:
             </p>
             <Textarea
               placeholder="e.g. Pull and treat weeds growing through cracks and joints, then clear the debris away."
@@ -444,7 +444,7 @@ export function ServicePricingRow({
           </div>
 
           <div className="flex flex-col gap-1">
-            <p className="text-xs text-muted-foreground">How we do it — general steps the crew follows:</p>
+            <p className="text-xs text-muted-foreground">How we do it, general steps the crew follows:</p>
             <Textarea
               placeholder="e.g. Edge the bed first, clear debris, lay fabric, spread material 2–3 in deep, water in..."
               value={howTo}
@@ -466,8 +466,8 @@ export function ServicePricingRow({
                   >
                     {material.name}
                     {material.cost_per_unit != null && material.coverage_per_unit_sqft
-                      ? ` — $${((material.cost_per_unit / material.coverage_per_unit_sqft) * (1 + material.waste_factor_pct / 100)).toFixed(2)}/${measurementUnit}`
-                      : " — no cost/coverage set"}
+                      ? `, $${((material.cost_per_unit / material.coverage_per_unit_sqft) * (1 + material.waste_factor_pct / 100)).toFixed(2)}/${measurementUnit}`
+                      : ", no cost/coverage set"}
                     <button type="button" onClick={() => handleRemoveMaterial(rule.id)} disabled={isPending}>
                       <X className="h-3 w-3" />
                     </button>

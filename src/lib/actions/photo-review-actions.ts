@@ -31,7 +31,7 @@ export async function addPhotoMark(input: {
     if (!profile) return { ok: false, message: "Sign in first." };
 
     if (!markIsUsable(input.note)) {
-      return { ok: false, message: "Say what needs doing — the crew can't act on a pin alone." };
+      return { ok: false, message: "Say what needs doing, the crew can't act on a pin alone." };
     }
 
     const [supabase, organizationId] = await Promise.all([
@@ -128,7 +128,7 @@ export async function approvePhotos(jobId: string): Promise<ReviewResult> {
     if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
-    return { ok: true, message: "Approved — book the walkthrough." };
+    return { ok: true, message: "Approved, book the walkthrough." };
   } catch (err) {
     console.error("approvePhotos failed:", err);
     return { ok: false, message: "Couldn't approve those." };

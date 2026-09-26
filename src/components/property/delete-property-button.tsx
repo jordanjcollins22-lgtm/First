@@ -10,7 +10,7 @@ export function DeletePropertyButton({ id, address }: { id: string; address: str
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
-    if (!window.confirm(`Delete "${address}"? This removes the property and all its jobs — this can't be undone.`)) {
+    if (!window.confirm(`Delete "${address}"? This removes the property and all its jobs, this can't be undone.`)) {
       return;
     }
     startTransition(() => deleteProperty(id));

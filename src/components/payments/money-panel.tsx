@@ -75,7 +75,7 @@ export function MoneyPanel({ result }: { result: Reconciliation }) {
         {view === "owed"
           ? "Billed more than they have paid. Biggest gap first."
           : view === "credit"
-            ? "Paid more than we billed them here — usually work invoiced somewhere else, sometimes a payment on the wrong contact."
+            ? "Paid more than we billed them here, usually work invoiced somewhere else, sometimes a payment on the wrong contact."
             : "Paid us and were never billed through this app at all. The back catalogue."}
       </p>
 

@@ -99,7 +99,7 @@ function InternalConversations({
       <div className="flex flex-col gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Groups</p>
         {channels.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No groups yet — create one to start a team thread.</p>
+          <p className="text-sm text-muted-foreground">No groups yet, create one to start a team thread.</p>
         ) : (
           channels.map((channel) => {
             const isMember = channel.memberIds.includes(currentProfileId);

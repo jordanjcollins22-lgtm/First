@@ -39,7 +39,7 @@ export function ActivityFeed({ items, showDays }: { items: ActivityItem[]; showD
         <span className="text-xs text-muted-foreground">{activityHeadline(items)}</span>
       </div>
       <p className="mb-2 text-xs text-muted-foreground">
-        Every tap the crew makes — leaving the shop, arriving, starting, pausing, finishing — plus walks and
+        Every tap the crew makes, leaving the shop, arriving, starting, pausing, finishing, plus walks and
         sign-offs.
       </p>
 
@@ -67,7 +67,7 @@ export function ActivityFeed({ items, showDays }: { items: ActivityItem[]; showD
                         </span>
                       </div>
                       <p className="truncate text-xs text-muted-foreground">
-                        {[item.personName, item.jobLabel].filter(Boolean).join(" · ") || "—"}
+                        {[item.personName, item.jobLabel].filter(Boolean).join(" · ") || "-"}
                       </p>
                       {item.detail && <p className="mt-0.5 text-xs italic">{item.detail}</p>}
                     </>

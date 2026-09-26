@@ -23,7 +23,7 @@ export function ResaleCell({
   if (value == null) {
     return (
       <span className="text-xs text-muted-foreground" title={resaleReason({ cost, isRental, isOther }) ?? ""}>
-        —
+        -
       </span>
     );
   }

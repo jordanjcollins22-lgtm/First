@@ -201,7 +201,7 @@ function ChannelCard({
             <p className="mt-3 text-[11px] text-muted-foreground">
               Last {windowDays} days: {result.attempts} attempts, {result.reached} reached,{" "}
               {result.booked} booked, {result.referrals} names given
-              {result.closeRate != null && ` — ${result.closeRate}% of people spoken to`}
+              {result.closeRate != null && `, ${result.closeRate}% of people spoken to`}
             </p>
           )}
 
@@ -257,7 +257,7 @@ function ChannelEditor({
   return (
     <div className="mt-3 flex flex-col gap-2">
       <label className="text-xs font-medium">
-        Steps — one per line
+        Steps, one per line
         <Textarea
           value={playbook}
           onChange={(e) => setPlaybook(e.target.value)}
@@ -266,7 +266,7 @@ function ChannelEditor({
         />
       </label>
       <label className="text-xs font-medium">
-        How many a day — blank for no daily target
+        How many a day, blank for no daily target
         <Input
           type="number"
           inputMode="numeric"

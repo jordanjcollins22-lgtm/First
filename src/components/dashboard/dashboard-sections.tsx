@@ -55,7 +55,7 @@ export function DashboardSections<K extends string>({
                 key={section.key}
                 className="rounded-xl border border-white/60 bg-card/40 px-3 py-2 text-sm text-muted-foreground backdrop-blur-md"
               >
-                {section.label} — none
+                {section.label}, none
               </p>
             );
           }

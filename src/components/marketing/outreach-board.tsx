@@ -259,7 +259,7 @@ function Table({
                   <td className="p-2 text-right tabular-nums text-muted-foreground">
                     {/* Withheld below a handful. A rate on one link is not a
                         rate, and a made-up 100% is the number somebody acts on. */}
-                    {books == null ? "—" : `${Math.round(books * 100)}%`}
+                    {books == null ? "-" : `${Math.round(books * 100)}%`}
                   </td>
                 </tr>
               );
@@ -351,7 +351,7 @@ export function AffiliateLeaderboard({
                   <td className="p-2 text-right tabular-nums">{p.replied}</td>
                   <td className="p-2 text-right tabular-nums">{p.bookings}</td>
                   <td className={cn("p-2 text-right font-semibold tabular-nums", p.closed > 0 && "text-emerald-700")}>{p.closed}</td>
-                  {showMoney && <td className="p-2 text-right tabular-nums">{p.collected > 0 ? money(p.collected) : "—"}</td>}
+                  {showMoney && <td className="p-2 text-right tabular-nums">{p.collected > 0 ? money(p.collected) : "-"}</td>}
                   {showMoney && <td className="p-2 text-right tabular-nums">
                     {p.commissionEarned > 0 ? (
                       <>
@@ -361,7 +361,7 @@ export function AffiliateLeaderboard({
                         </span>
                       </>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </td>}
                 </tr>

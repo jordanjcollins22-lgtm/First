@@ -234,7 +234,7 @@ function ProposalRow({
                   newTotalCents: edit.newTotalCents,
                 })}
               </span>
-              {" — "}
+              {", "}
               {priceMoveLabel(edit.previousTotalCents ?? 0, edit.newTotalCents ?? 0)}
               {edit.editedByName ? `, by ${edit.editedByName}` : ""} on {formatDate(edit.createdAt)}
               {/* What they said, which is the part somebody wants in six

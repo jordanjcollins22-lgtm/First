@@ -104,7 +104,7 @@ export function InvoiceImportPanel() {
       </div>
 
       <p className="mb-2 text-xs text-muted-foreground">
-        An invoice list exported as CSV. Contacts have to be in the book already — an invoice for
+        An invoice list exported as CSV. Contacts have to be in the book already, an invoice for
         somebody who is not gets named rather than making a contact up.
       </p>
 
@@ -170,7 +170,7 @@ export function InvoiceImportPanel() {
           )}
           {done.unmatched && done.unmatched.length > 0 && (
             <p className="text-[11px] text-muted-foreground">
-              Nobody in the book for: {done.unmatched.join(", ")}. Add them and run it again — the
+              Nobody in the book for: {done.unmatched.join(", ")}. Add them and run it again, the
               invoices already in will update rather than double.
             </p>
           )}

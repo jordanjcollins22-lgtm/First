@@ -89,7 +89,7 @@ export function disputeLine(state: DisputeState): string | null {
   if (!inDispute(state)) return null;
   const kind = kindLabel(state.kind);
   const reason = (state.reason ?? "").trim();
-  return reason ? `${kind} — ${reason}` : kind;
+  return reason ? `${kind}, ${reason}` : kind;
 }
 
 /** What a resolved-and-closed job says afterwards, for the job page. */

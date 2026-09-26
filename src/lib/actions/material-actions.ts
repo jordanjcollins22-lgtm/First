@@ -26,7 +26,7 @@ export async function createMaterial(formData: FormData): Promise<CreateMaterial
   } catch (err) {
     console.error("createMaterial failed:", err);
     const message = err instanceof Error ? err.message : String(err ?? "");
-    return { ok: false, message: message || "Couldn't add that — try again." };
+    return { ok: false, message: message || "Couldn't add that, try again." };
   }
 }
 
@@ -37,7 +37,7 @@ async function createMaterialInner(formData: FormData): Promise<CreateMaterialRe
   const name = String(formData.get("name") ?? "").trim();
   const unit = String(formData.get("unit") ?? "").trim();
   if (!name) return { ok: false, message: "Give it a name." };
-  if (!unit) return { ok: false, message: "Say what one of it is — a bag, a sheet, a yard." };
+  if (!unit) return { ok: false, message: "Say what one of it is, a bag, a sheet, a yard." };
 
   const coverageRaw = String(formData.get("coverage_per_unit_sqft") ?? "").trim();
   const costRaw = String(formData.get("cost_per_unit") ?? "").trim();
@@ -66,7 +66,7 @@ async function createMaterialInner(formData: FormData): Promise<CreateMaterialRe
   const kind = String(formData.get("kind") ?? "material") === "other" ? "other" : "material";
 
   if (stockMethod === "in_stock" && !storageLocation) {
-    return { ok: false, message: "Enter where it's stored — required for anything kept in stock." };
+    return { ok: false, message: "Enter where it's stored, required for anything kept in stock." };
   }
   if (!imagePath) {
     return { ok: false, message: "Add a photo of it." };
@@ -181,7 +181,7 @@ async function reviveMaterial(
 
   if (existing.active) {
     const where = existing.category === "marketing" ? "Marketing" : "Materials";
-    return { ok: false, message: `"${name}" is already on the ${where} list — edit that one instead.` };
+    return { ok: false, message: `"${name}" is already on the ${where} list, edit that one instead.` };
   }
 
   const { data, error } = await supabase

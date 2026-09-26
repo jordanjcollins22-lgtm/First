@@ -76,7 +76,7 @@ export function TargetMarketPanel({
       </div>
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Where we actually work. Anybody outside it gets marked — not dropped. Somebody on the wrong side of
+        Where we actually work. Anybody outside it gets marked, not dropped. Somebody on the wrong side of
         the county line still knows a neighbour on the right side, and that call is free.
       </p>
 

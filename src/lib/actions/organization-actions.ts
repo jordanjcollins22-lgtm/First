@@ -28,7 +28,7 @@ export async function createOrganization(input: { name: string; adminEmail: stri
 
   if (!isSupabaseAdminConfigured) {
     throw new Error(
-      "The server isn't set up to create accounts yet — add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart."
+      "The server isn't set up to create accounts yet, add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart."
     );
   }
 
@@ -80,7 +80,7 @@ export async function updateMeasurementUnit(unit: string, basis: "area" | "perim
 
   const trimmed = unit.trim();
   if (!trimmed) throw new Error("Enter a unit name.");
-  if (trimmed.length > 24) throw new Error("Keep the unit name short — 24 characters or less.");
+  if (trimmed.length > 24) throw new Error("Keep the unit name short, 24 characters or less.");
 
   const supabase = await createClient();
   const { error } = await supabase

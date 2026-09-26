@@ -83,7 +83,7 @@ export function ZoneApprovalPanel({ state, onFocusZone }: { state: ZoneApprovalS
           <p className="text-xs">
             <span className="font-medium">{queue.length} waiting.</span>{" "}
             <span className="text-muted-foreground">
-              None of them are on the map yet. Look down the list, and if they are right, approve them together rather than one at a time — the first ten are what teach the app, and after that it approves the ordinary ones itself.
+              None of them are on the map yet. Look down the list, and if they are right, approve them together rather than one at a time, the first ten are what teach the app, and after that it approves the ordinary ones itself.
             </span>
           </p>
           <div className="mt-1.5 flex flex-wrap gap-2">

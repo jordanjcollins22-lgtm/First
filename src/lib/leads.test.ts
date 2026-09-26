@@ -125,7 +125,7 @@ describe("assessLead", () => {
       TODAY
     );
     expect(ayearOn.score).toBeGreaterThan(justDone.score);
-    expect(justDone.why).toContain("Worked recently — leave it a while");
+    expect(justDone.why).toContain("Worked recently, leave it a while");
   });
 
   it("recognises a visit that never got priced", () => {

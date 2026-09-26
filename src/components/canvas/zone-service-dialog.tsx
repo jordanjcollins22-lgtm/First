@@ -554,7 +554,7 @@ export function ZoneServiceDialog({
     if (files.length === 0) return;
 
     if (!jobId) {
-      setPhotoError("This job hasn't finished saving yet — wait a moment and try again.");
+      setPhotoError("This job hasn't finished saving yet, wait a moment and try again.");
       return;
     }
 
@@ -575,7 +575,7 @@ export function ZoneServiceDialog({
       setPhotos((prev) => [...prev, ...uploaded]);
       setMarkPromptQueue((prev) => [...prev, ...uploaded]);
     } catch {
-      setPhotoError("Couldn't upload one or more photos — check your connection and try again.");
+      setPhotoError("Couldn't upload one or more photos, check your connection and try again.");
     } finally {
       setPhotoUploading(false);
     }
@@ -810,13 +810,13 @@ export function ZoneServiceDialog({
     if (field.checklistItem) {
       if (!isChecklistChecked(values, field.key)) return "";
       const qty = values[`${field.key}__qty`];
-      return qty ? `${field.checklistItem.question} — Qty: ${qty}` : field.checklistItem.question;
+      return qty ? `${field.checklistItem.question}, Qty: ${qty}` : field.checklistItem.question;
     }
     const value = values[field.key];
     if (!value) return "";
     if (value === "Other") {
       const explanation = values[`${field.key}__other`];
-      return explanation ? `${field.label}: Other — ${explanation}` : `${field.label}: Other`;
+      return explanation ? `${field.label}: Other, ${explanation}` : `${field.label}: Other`;
     }
     return `${field.label}: ${value}`;
   }
@@ -927,7 +927,7 @@ export function ZoneServiceDialog({
           {measurement.needsConfirmation && (
             <div className="rounded-lg border border-amber-300/70 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
               <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                No width — is this a length only?
+                No width, is this a length only?
               </p>
               <p className="mt-0.5 text-xs text-amber-900/80 dark:text-amber-200/80">
                 Like weeds out of driveway cracks, or edging: {measurement.lengthFt} linear ft, priced
@@ -935,7 +935,7 @@ export function ZoneServiceDialog({
               </p>
               <div className="mt-2 flex gap-2">
                 <Button type="button" size="sm" onClick={() => setLinearConfirmed(true)}>
-                  Yes — length only
+                  Yes, length only
                 </Button>
                 <Button
                   type="button"
@@ -943,7 +943,7 @@ export function ZoneServiceDialog({
                   variant="outline"
                   onClick={() => widthInputRef.current?.focus()}
                 >
-                  No — add a width
+                  No, add a width
                 </Button>
               </div>
             </div>
@@ -968,11 +968,11 @@ export function ZoneServiceDialog({
     );
   } else if (currentStep === "service") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What service is getting done in this area?" subtitle="Tap Next to skip — you can save with just a location.">
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What service is getting done in this area?" subtitle="Tap Next to skip, you can save with just a location.">
         <div className="flex flex-col gap-2">
           {activeServices.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              No services set up yet —{" "}
+              No services set up yet:{" "}
               <Link href="/admin/service-pricing" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
                 add one
               </Link>{" "}
@@ -1026,11 +1026,11 @@ export function ZoneServiceDialog({
         </div>
 
         {selectedServiceRow?.status === "pending" && (
-          <p className="mt-2 text-xs text-amber-600">⏳ Pending pricing review — an admin needs to price this before it&apos;s final.</p>
+          <p className="mt-2 text-xs text-amber-600">⏳ Pending pricing review, an admin needs to price this before it&apos;s final.</p>
         )}
         {selectedServiceRow?.status === "denied" && (
           <p className="mt-2 text-xs text-destructive">
-            🚫 We don&apos;t offer this service — it&apos;ll show as outside our scope of work.
+            🚫 We don&apos;t offer this service, it&apos;ll show as outside our scope of work.
           </p>
         )}
 
@@ -1084,7 +1084,7 @@ export function ZoneServiceDialog({
     const key = currentStep.slice("detail:".length);
     const field = checklistFields.find((f) => f.key === key);
     body = field ? (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title={`${field.checklistItem?.question} — how many ${field.checklistItem?.unit}?`}>
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title={`${field.checklistItem?.question}, how many ${field.checklistItem?.unit}?`}>
         <Input
           type="number"
           min={0}
@@ -1134,11 +1134,11 @@ export function ZoneServiceDialog({
         <div className="flex flex-col gap-3">
           {zoneMaterialNames.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No materials on this service yet — search below to add one for this zone.
+              No materials on this service yet, search below to add one for this zone.
             </p>
           ) : materialsToAsk.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              Nothing to choose — {zoneMaterialNames.join(", ")} only come one way. Add the types or colors a
+              Nothing to choose: {zoneMaterialNames.join(", ")} only come one way. Add the types or colors a
               material comes in on its Inventory row if that&apos;s not right.
             </p>
           ) : null}
@@ -1319,7 +1319,7 @@ export function ZoneServiceDialog({
           </div>
           {photoError && <p className="text-xs text-destructive">{photoError}</p>}
           <p className="text-[10px] text-muted-foreground">
-            Photos already on your phone work too — no signal needed until you&apos;re back online to save. At a
+            Photos already on your phone work too, no signal needed until you&apos;re back online to save. At a
             desk, copy a picture from anywhere and press Paste, or Ctrl+V (Cmd+V on a Mac). Copying it out of
             a document works too.
           </p>
@@ -1368,7 +1368,7 @@ export function ZoneServiceDialog({
 
         <div className="flex flex-col gap-2 text-sm">
           <ReviewRow label="Location" onEdit={() => setStepKey("location")}>
-            <p>{location || "—"}</p>
+            <p>{location || "-"}</p>
           </ReviewRow>
 
           <ReviewRow label="Measurements" onEdit={() => setStepKey("measurements")}>
@@ -1388,13 +1388,13 @@ export function ZoneServiceDialog({
               </p>
             ) : derivedAreaSqFt != null || derivedPerimeterFt != null ? (
               <p>
-                {derivedAreaSqFt != null ? `${Math.round(derivedAreaSqFt).toLocaleString()} sq ft` : "—"} ·{" "}
+                {derivedAreaSqFt != null ? `${Math.round(derivedAreaSqFt).toLocaleString()} sq ft` : "-"} ·{" "}
                 {derivedPerimeterFt != null
                   ? `${Math.round(derivedPerimeterFt).toLocaleString()} ft perimeter`
-                  : "—"}
+                  : "-"}
               </p>
             ) : (
-              <p>—</p>
+              <p>-</p>
             )}
           </ReviewRow>
 
@@ -1425,7 +1425,7 @@ export function ZoneServiceDialog({
                     return (
                       <li key={name}>
                         {name}
-                        {detail && <span className="text-xs text-muted-foreground"> — {detail}</span>}
+                        {detail && <span className="text-xs text-muted-foreground">, {detail}</span>}
                       </li>
                     );
                   })}
@@ -1435,7 +1435,7 @@ export function ZoneServiceDialog({
               )}
               {autoTools.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Usually needs: {autoTools.map((t) => t.name).join(", ")} — picked per zone on the job
+                  Usually needs: {autoTools.map((t) => t.name).join(", ")}, picked per zone on the job
                   page, not here.
                 </p>
               )}

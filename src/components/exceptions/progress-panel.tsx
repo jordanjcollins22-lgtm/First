@@ -81,7 +81,7 @@ export function ProgressPanel({
       {summary.sentence && <p className="text-sm font-medium">{summary.sentence}</p>}
       {summary.accountedFor && !summary.fullyDone && (
         <p className="text-xs text-muted-foreground">
-          Everything is accounted for — the parts that were not done have a reason against them.
+          Everything is accounted for, the parts that were not done have a reason against them.
         </p>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}

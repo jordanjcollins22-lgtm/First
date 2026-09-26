@@ -61,7 +61,7 @@ function GrowthPanel({ rentcastReady }: { rentcastReady: boolean }) {
         Growing itself
       </h2>
       <p className="mb-3 text-xs text-muted-foreground">
-        Every night the list grows around your finished work — the houses near a job you just completed become
+        Every night the list grows around your finished work, the houses near a job you just completed become
         candidates, biggest and most recent jobs first. Anything already a client, already listed, or on too
         small a lot is dropped. Nothing to upload.
       </p>
@@ -132,7 +132,7 @@ function ImportForm({ batches, rentcastReady }: { batches: string[]; rentcastRea
         Import a list
       </h2>
       <p className="mb-3 text-xs text-muted-foreground">
-        Any CSV with an address column — a Harford County or Maryland SDAT parcel export, or a list from a
+        Any CSV with an address column, a Harford County or Maryland SDAT parcel export, or a list from a
         vendor. Columns are matched by name, and anything already a client is skipped.
       </p>
 
@@ -313,7 +313,7 @@ function ProspectRowItem({ prospect }: { prospect: ProspectRow }) {
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <span className="font-medium">{prospect.ownerName ?? "Owner unknown"}</span>
         <span className="text-sm font-semibold tabular-nums">
-          {prospect.estimatedTicket != null ? `${money(prospect.estimatedTicket)} est.` : "—"}
+          {prospect.estimatedTicket != null ? `${money(prospect.estimatedTicket)} est.` : "-"}
         </span>
       </div>
       <p className="truncate text-xs text-muted-foreground">
@@ -334,7 +334,7 @@ function ProspectRowItem({ prospect }: { prospect: ProspectRow }) {
       ) : status === "converted" ? (
         <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
           <UserCheck className="h-3.5 w-3.5" />
-          Already a client — off the call list
+          Already a client, off the call list
         </p>
       ) : (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">

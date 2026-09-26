@@ -36,7 +36,7 @@ export const SUBMIT_LABELS: Record<SubmitReason, string> = {
 };
 
 export const SUBMIT_BLURBS: Record<SubmitReason, string> = {
-  close_out: "You went out, but the visit was never marked complete — so nothing downstream has unlocked.",
+  close_out: "You went out, but the visit was never marked complete, so nothing downstream has unlocked.",
   price_it: "Evaluated, and nobody has priced it yet.",
   send_it: "Priced and sitting there. The client hasn't seen it.",
 };

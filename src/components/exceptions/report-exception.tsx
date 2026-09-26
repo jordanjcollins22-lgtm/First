@@ -99,7 +99,7 @@ export function ReportException({
       {OPENS_A_CHANGE_REQUEST.includes(kind) && (
         <p className="rounded-md bg-amber-500/10 p-2 text-xs text-amber-900 dark:text-amber-200">
           This goes to the account manager as a change request. Don&apos;t start the extra work until it comes
-          back approved — you&apos;ll see it on this job when it does.
+          back approved, you&apos;ll see it on this job when it does.
         </p>
       )}
 

@@ -106,7 +106,7 @@ export default async function InventoryPage() {
         <div>
           <h1 className="mb-1 text-2xl font-bold">Inventory</h1>
           <p className="text-muted-foreground">
-            Tools, crew gear, and materials — what it is all worth, stock on hand, where it&apos;s stored,
+            Tools, crew gear, and materials, what it is all worth, stock on hand, where it&apos;s stored,
             and reorder status.
           </p>
         </div>
@@ -131,7 +131,7 @@ export default async function InventoryPage() {
         <Card className="mb-6 border-primary/40 bg-primary/5">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
             <p className="text-sm">
-              Starting fresh? Use quick setup to rapid-add your current tools and materials — anything new gets
+              Starting fresh? Use quick setup to rapid-add your current tools and materials, anything new gets
               added automatically the first time you quote it.
             </p>
             <Link
@@ -211,7 +211,7 @@ export default async function InventoryPage() {
                 </table>
               </div>
               {equipment.length === 0 && (
-                <p className="p-4 text-sm text-muted-foreground">No tools yet — add one above.</p>
+                <p className="p-4 text-sm text-muted-foreground">No tools yet, add one above.</p>
               )}
             </Card>
           </>
@@ -272,7 +272,7 @@ export default async function InventoryPage() {
               </div>
               {gear.length === 0 && (
                 <p className="p-4 text-sm text-muted-foreground">
-                  No crew gear yet — add gloves, masks, tarps, plywood, water, electrolytes above. Already entered
+                  No crew gear yet, add gloves, masks, tarps, plywood, water, electrolytes above. Already entered
                   something as a tool? Expand its row on the Tools tab and switch &ldquo;Tracked as&rdquo; to Crew gear.
                 </p>
               )}
@@ -325,7 +325,7 @@ export default async function InventoryPage() {
                 </table>
               </div>
               {materials.length === 0 && (
-                <p className="p-4 text-sm text-muted-foreground">No materials yet — add one above.</p>
+                <p className="p-4 text-sm text-muted-foreground">No materials yet, add one above.</p>
               )}
             </Card>
           </>
@@ -339,7 +339,7 @@ export default async function InventoryPage() {
               <CardContent>
                 <p className="mb-3 text-sm text-muted-foreground">
                   Door hangers, flyers, yard signs, business cards. Same stock levels and reorder alerts as
-                  job materials — kept on its own list so nobody is offered a business card while pricing a
+                  job materials, kept on its own list so nobody is offered a business card while pricing a
                   patio. Link these to ideas on the{" "}
                   <Link href="/knowledge-graph" className="underline">
                     Knowledge Graph
@@ -392,7 +392,7 @@ export default async function InventoryPage() {
               </div>
               {marketing.length === 0 && (
                 <p className="p-4 text-sm text-muted-foreground">
-                  Nothing here yet — add the first door hanger or flyer above.
+                  Nothing here yet, add the first door hanger or flyer above.
                 </p>
               )}
             </Card>

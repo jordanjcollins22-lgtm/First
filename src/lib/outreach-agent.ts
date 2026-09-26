@@ -396,7 +396,7 @@ export function mentionComment(comment: string, author: string | null | undefine
   const body = comment.trim();
   if (!first) return { text: body, mention: null };
   if (new RegExp(`^@${escapeRegExp(first)}\\b`, "i").test(body)) return { text: body, mention: first };
-  const greeting = new RegExp(`^(?:hi|hey|hello|hi there|hey there)\\s+${escapeRegExp(first)}\\s*[,!.\\-–—]*\\s*`, "i");
+  const greeting = new RegExp(`^(?:hi|hey|hello|hi there|hey there)\\s+${escapeRegExp(first)}\\s*[,!.\\-–\u2014]*\\s*`, "i");
   const rest = body.replace(greeting, "").trim();
   const opened = rest ? rest[0].toUpperCase() + rest.slice(1) : "";
   return { text: `@${first} ${opened}`.trim(), mention: first };

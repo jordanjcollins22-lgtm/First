@@ -46,7 +46,7 @@ export function TipAskPanel({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("Couldn't copy — long-press the link to copy it by hand.");
+      setError("Couldn't copy, long-press the link to copy it by hand.");
     }
   }
 

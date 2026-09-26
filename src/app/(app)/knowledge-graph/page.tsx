@@ -60,7 +60,7 @@ export default async function KnowledgeGraphPage() {
       <p className="mb-4 text-muted-foreground">
         The whole company on one board: clients, their properties, the jobs on them, the services
         those jobs sell, the inventory those services eat, and the money in and out. Put a thought
-        down beside it and break it into what it actually needs — anything two scheduled ideas both
+        down beside it and break it into what it actually needs, anything two scheduled ideas both
         need surfaces as one job instead of two.
       </p>
 
@@ -71,11 +71,11 @@ export default async function KnowledgeGraphPage() {
       ) : data.setupNeeded ? (
         <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">
           This needs its database migration. In Supabase&apos;s SQL Editor, run{" "}
-          <code>supabase/migrations/0093_knowledge_graph.sql</code> — or open{" "}
+          <code>supabase/migrations/0093_knowledge_graph.sql</code>, or open{" "}
           <a href="/admin/database" className="underline">
             Database setup
           </a>{" "}
-          to copy it — then reload.
+          to copy it, then reload.
         </p>
       ) : (
         <KnowledgeWorkspace

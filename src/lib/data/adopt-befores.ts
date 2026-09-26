@@ -94,7 +94,7 @@ export async function adoptEvaluationPhotosAsBefores(jobId: string): Promise<Ado
         kind: "before",
         zone_id: candidate.zoneId,
         zone_name: candidate.zoneName,
-        caption: `From the evaluation — ${candidate.zoneName}`,
+        caption: `From the evaluation, ${candidate.zoneName}`,
         uploaded_by: profile?.id ?? null,
       });
       if (insertError) {

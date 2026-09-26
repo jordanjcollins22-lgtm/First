@@ -66,7 +66,7 @@ export async function renderSign(input: SignInput): Promise<RenderedSign> {
   const board: Board = { width: input.width, height: input.height };
 
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`${input.businessName} — neighbourhood sign, ${board.width} by ${board.height} inches`);
+  pdf.setTitle(`${input.businessName}, neighbourhood sign, ${board.width} by ${board.height} inches`);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const oblique = await pdf.embedFont(StandardFonts.HelveticaBoldOblique);
   const plain = await pdf.embedFont(StandardFonts.Helvetica);
@@ -233,7 +233,7 @@ function drawChecklist(
     const fromRight = plan.board.width - piece.x - piece.width;
     return {
       number: i + 1,
-      sheet: String(sheetOf.get(piece.id) ?? "—"),
+      sheet: String(sheetOf.get(piece.id) ?? "-"),
       what: piece.kind === "qr" ? "The code" : piece.text,
       size: `${inchesAndSixteenths(piece.width)} × ${inchesAndSixteenths(piece.height)}`,
       down: inchesAndSixteenths(piece.y),

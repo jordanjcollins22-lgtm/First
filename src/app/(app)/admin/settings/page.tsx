@@ -89,13 +89,13 @@ async function PermissionsTab() {
   return (
     <div>
       <p className="mb-6 text-muted-foreground">
-        Which pages each role can see, including Admin — uncheck anything to see what a restricted
+        Which pages each role can see, including Admin, uncheck anything to see what a restricted
         view looks like. Settings itself always stays reachable to Admins no matter what&apos;s
         checked here, so you can&apos;t lock yourself out.
       </p>
       <p className="mb-6 text-sm text-muted-foreground">
         New pages show up here on their own, marked <strong>undecided</strong> until somebody ticks a
-        box for them. Nothing is open to the team on its own — an undecided page is visible to Admins
+        box for them. Nothing is open to the team on its own, an undecided page is visible to Admins
         only, so it stays reachable by whoever has to make the call without being handed to everyone.
         Use <strong>Open to all</strong> to give a page to every role in one tap.
       </p>
@@ -158,13 +158,13 @@ async function OrganizationsTab() {
     organizations = await listOrganizations();
   } catch {
     loadError =
-      "Couldn't load businesses — the database migration for this feature hasn't been run yet. Paste supabase/migrations/0034_multi_tenant_organizations.sql into Supabase's SQL editor and run it, then reload this page.";
+      "Couldn't load businesses, the database migration for this feature hasn't been run yet. Paste supabase/migrations/0034_multi_tenant_organizations.sql into Supabase's SQL editor and run it, then reload this page.";
   }
 
   return (
     <div className="max-w-3xl">
       <p className="mb-6 text-muted-foreground">
-        Every separate business running on this app. Each one is fully isolated — its own customers,
+        Every separate business running on this app. Each one is fully isolated, its own customers,
         jobs, tools, pricing, and overhead, with no connection to any other.
       </p>
 

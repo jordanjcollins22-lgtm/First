@@ -264,7 +264,7 @@ export async function transcribeVoiceMemo(messageId: string): Promise<Transcribe
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       console.error("transcribeVoiceMemo: OpenAI returned", res.status, detail);
-      return { ok: false, message: "Transcription failed — the memo is still playable." };
+      return { ok: false, message: "Transcription failed, the memo is still playable." };
     }
 
     const json = (await res.json()) as { text?: string };

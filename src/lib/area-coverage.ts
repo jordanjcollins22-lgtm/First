@@ -138,7 +138,7 @@ export function describeCoverage(coverage: AreaCoverage): string {
     return "No addresses on file inside this area yet. Import the parcels for it on the Leads page to get a real count.";
   }
   if (coverage.countIsFloor) {
-    return "These are only properties we have already worked at — the real number of doors will be higher. Import the parcels for this area to count them.";
+    return "These are only properties we have already worked at, the real number of doors will be higher. Import the parcels for this area to count them.";
   }
   const skipping =
     coverage.doNotContact > 0

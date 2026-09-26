@@ -102,7 +102,7 @@ export async function requestWalkthrough(jobId: string, note: string | null): Pr
       ok: true,
       message: managerId
         ? "Manager notified. Keep the tools out until they've walked it."
-        : "Requested — but this client has no account manager assigned, so nobody was texted.",
+        : "Requested, but this client has no account manager assigned, so nobody was texted.",
     };
   } catch (err) {
     console.error("requestWalkthrough failed:", err);
@@ -127,7 +127,7 @@ export async function reviewWalkthrough(
     if (!profile) return { ok: false, message: "Sign in first." };
 
     if (!approved && !notes?.trim()) {
-      return { ok: false, message: "Say what needs fixing — the crew is still on site." };
+      return { ok: false, message: "Say what needs fixing, the crew is still on site." };
     }
 
     const supabase = await createClient();
@@ -163,7 +163,7 @@ export async function reviewWalkthrough(
         pending.requested_by,
         "walkthrough_requests",
         approved
-          ? "Walkthrough approved — you're clear to pack up."
+          ? "Walkthrough approved, you're clear to pack up."
           : `Walkthrough: changes needed before you leave. ${notes?.trim() ?? ""}`.trim()
       ).catch(() => null);
     }

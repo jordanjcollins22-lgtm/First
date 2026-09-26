@@ -149,7 +149,7 @@ export function canSolve(issue: GraphNode, solution: GraphNode): SolveVerdict {
 
 /** A short line for the panel: what state, and what is linked. */
 export function describeIssue(summary: IssueSummary): string {
-  if (summary.state === "open") return "Unsolved — nothing linked as the fix yet.";
+  if (summary.state === "open") return "Unsolved, nothing linked as the fix yet.";
   const names = summary.solutions.map((s) => s.title).join(", ");
   return summary.state === "solved" ? `Solved by ${names}.` : `Solution planned: ${names}.`;
 }

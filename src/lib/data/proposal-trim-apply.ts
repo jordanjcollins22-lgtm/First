@@ -111,7 +111,7 @@ export async function applyProposalTrim(input: {
     return {
       ok: false,
       reason: "nothing",
-      message: "Nothing to save yet — remove something, change the price, or write a note.",
+      message: "Nothing to save yet, remove something, change the price, or write a note.",
     };
   }
 

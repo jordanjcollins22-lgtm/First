@@ -176,7 +176,7 @@ export function scoreDay(job: SchedulableJob, day: DayCapacity, today: string): 
   } else {
     const free = crew.reduce((sum, c) => sum + c.freeHours, 0);
     score += 10;
-    because.push(`${free.toFixed(1)} of the ${hours.toFixed(1)} hours are free — it would run over or need a second visit.`);
+    because.push(`${free.toFixed(1)} of the ${hours.toFixed(1)} hours are free, it would run over or need a second visit.`);
   }
 
   // The client picked a day on their own proposal. That outranks everything
@@ -214,8 +214,8 @@ export function scoreDay(job: SchedulableJob, day: DayCapacity, today: string): 
     score -= 25;
     because.push(
       job.blockingIssues > 0
-        ? `Not ready yet — ${job.blockingIssues} blocking ${job.blockingIssues === 1 ? "issue" : "issues"} open.`
-        : "Not ready yet — pre-start checks are still failing."
+        ? `Not ready yet, ${job.blockingIssues} blocking ${job.blockingIssues === 1 ? "issue" : "issues"} open.`
+        : "Not ready yet, pre-start checks are still failing."
     );
     unknowns.push("Whether it will be ready by then.");
   }

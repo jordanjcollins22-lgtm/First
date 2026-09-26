@@ -37,7 +37,7 @@ export async function getDrivingRoute(
     // confidently wrong one. A minute is enough to cover a double tap.
     const response = await fetch(url, { next: { revalidate: 60 } });
     if (!response.ok) {
-      return { ok: false, message: "Couldn't get directions right now — try again in a moment." };
+      return { ok: false, message: "Couldn't get directions right now, try again in a moment." };
     }
 
     const route = parseRoute((await response.json()) as MapboxDirectionsResponse);

@@ -189,7 +189,7 @@ export function draftPosts(boasts: Boasts, link: string): PostDraft[] {
   const short = [
     `We use ${name} and they've been great.`,
     reviews ? `${sentenceCase(reviews)}.` : null,
-    `They'll come out and give you a free quote — you can book straight in here: ${link}`,
+    `They'll come out and give you a free quote, you can book straight in here: ${link}`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -199,13 +199,13 @@ export function draftPosts(boasts: Boasts, link: string): PostDraft[] {
     `They did our place and the crew turned up when they said they would, which is half the battle.`,
     news ? `They were ${news}.` : null,
     reviews ? `${sentenceCase(reviews)}.` : null,
-    `Free evaluation, no pressure — here's the link: ${link}`,
+    `Free evaluation, no pressure, here's the link: ${link}`,
   ]
     .filter(Boolean)
     .join(" ");
 
   const plain = [
-    `${name} — ${link}`,
+    `${name}, ${link}`,
     news ? `${sentenceCase(news)}.` : null,
     reviews ? `${sentenceCase(reviews)}.` : null,
     `They do a free walkthrough and give you a written price.`,
@@ -313,7 +313,7 @@ export interface GroupTally extends Funnel {
 
 /** The room a row belongs to, and how it is written. Case does not split a room. */
 export function groupOf(row: Pick<OutreachRow, "platform" | "audience">): { key: string; audience: string } {
-  const audience = (row.audience ?? "").trim() || `${platformLabel(row.platform)} — nothing named`;
+  const audience = (row.audience ?? "").trim() || `${platformLabel(row.platform)}, nothing named`;
   return { key: `${row.platform}::${audience.toLowerCase()}`, audience };
 }
 

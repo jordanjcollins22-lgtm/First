@@ -52,7 +52,7 @@ export function regenDecision(existing: ExistingProposal | null): RegenDecision 
     return {
       allowed: false,
       confirm:
-        "This client has already accepted this proposal. Sending a new one clears that acceptance — they will have to accept the new scope and price. Carry on?",
+        "This client has already accepted this proposal. Sending a new one clears that acceptance, they will have to accept the new scope and price. Carry on?",
       note: null,
     };
   }

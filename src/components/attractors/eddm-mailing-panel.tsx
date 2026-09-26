@@ -165,11 +165,11 @@ export function EddmMailingPanel({
               <dt>Printing (in-house)</dt>
               <dd className="text-right">{dollars(summary.printCents)}</dd>
               <dt className="font-semibold">Total</dt>
-              <dd className="text-right font-semibold">{summary.totalCents != null ? dollars(summary.totalCents) : "—"}</dd>
+              <dd className="text-right font-semibold">{summary.totalCents != null ? dollars(summary.totalCents) : "-"}</dd>
               <dt>Bundles</dt>
               <dd className="text-right">{summary.bundles}</dd>
               <dt>Drop at</dt>
-              <dd className="text-right">{summary.facilities.join(", ") || "—"}</dd>
+              <dd className="text-right">{summary.facilities.join(", ") || "-"}</dd>
             </dl>
             {summary.perZip.filter((z) => !z.ok).map((z) => (
               <p key={z.zip} className="mt-1 text-xs font-medium text-amber-800">

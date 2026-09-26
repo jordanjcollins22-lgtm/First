@@ -131,7 +131,7 @@ export function FieldScreen({
           </ul>
         )}
         <p className="mt-1 text-xs text-muted-foreground">
-          Something different on site? Report it below rather than changing the scope — it gets recorded as a change.
+          Something different on site? Report it below rather than changing the scope, it gets recorded as a change.
         </p>
       </section>
 

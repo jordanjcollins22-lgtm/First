@@ -215,7 +215,7 @@ export function TeamChannelThread({
       .from("message-attachments")
       .upload(path, file, { contentType: file.type || undefined });
     if (uploadError) {
-      setError("Couldn't upload that — check your connection and try again.");
+      setError("Couldn't upload that, check your connection and try again.");
       return null;
     }
     return { path, kind, name: file.name };
@@ -263,7 +263,7 @@ export function TeamChannelThread({
     setError(null);
     const format = pickAudioFormat();
     if (!format) {
-      setError("This browser can't record audio — try Chrome or Safari.");
+      setError("This browser can't record audio, try Chrome or Safari.");
       return;
     }
 
@@ -320,7 +320,7 @@ export function TeamChannelThread({
       recorder.start();
       setRecording(true);
     } catch {
-      setError("Couldn't reach your microphone — check the browser's permission.");
+      setError("Couldn't reach your microphone, check the browser's permission.");
     }
   }
 
@@ -410,7 +410,7 @@ export function TeamChannelThread({
         <div ref={scrollRef} className="flex max-h-96 flex-col gap-2 overflow-y-auto">
           {messages.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {isMember ? "No messages yet — say something." : "Add yourself as a member to see and post messages."}
+              {isMember ? "No messages yet, say something." : "Add yourself as a member to see and post messages."}
             </p>
           ) : (
             messages.map((m) => (
@@ -534,8 +534,8 @@ export function TeamChannelThread({
 
           <p className="text-[10px] text-muted-foreground">
             {recording
-              ? "Recording — press Stop when you're done."
-              : "Team only — the client never sees this. Voice memos are transcribed automatically."}
+              ? "Recording, press Stop when you're done."
+              : "Team only, the client never sees this. Voice memos are transcribed automatically."}
           </p>
         </div>
       </div>

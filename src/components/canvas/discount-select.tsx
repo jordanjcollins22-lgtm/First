@@ -12,7 +12,7 @@ const NONE = "none";
 const ADD_NEW = "__add_new__";
 
 function discountLabel(d: Discount): string {
-  return d.kind === "percentage" ? `${d.name} — ${d.value}% off` : `${d.name} — $${d.value.toLocaleString()} off`;
+  return d.kind === "percentage" ? `${d.name}, ${d.value}% off` : `${d.name}, $${d.value.toLocaleString()} off`;
 }
 
 /** Picks a discount from the org's reusable catalog instead of typing an

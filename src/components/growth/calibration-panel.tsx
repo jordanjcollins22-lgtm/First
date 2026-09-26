@@ -70,7 +70,7 @@ export function CalibrationPanel({
       <p className="text-sm font-medium">{headline}</p>
       {crewCostPerHourCents == null && (
         <p className="text-xs text-muted-foreground">
-          No crew cost per hour is set, so what the mis-quoting costs cannot be worked out — only how far off it is.
+          No crew cost per hour is set, so what the mis-quoting costs cannot be worked out, only how far off it is.
         </p>
       )}
       {jobsWithoutTime > 0 && (

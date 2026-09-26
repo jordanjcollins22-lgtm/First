@@ -114,7 +114,7 @@ export default async function WeedSheetPage({
             {view === "client"
               ? "This is the one to leave with the client: the weeds they will point at, and an offer at the bottom to take the job on. "
               : ""}
-            Every row carries its own code —
+            Every row carries its own code,
             scanning it opens that weed with all its photos.
           </p>
           {/* Printing this page hands the layout to whichever browser is
@@ -139,8 +139,8 @@ export default async function WeedSheetPage({
           <p className="mt-1 text-sm text-muted-foreground">
             Printing double-sided? Set the printer to flip on the{" "}
             <strong className="font-medium text-foreground">long edge</strong> (some drivers call it
-            &ldquo;book&rdquo; binding). Flipping on the short edge — &ldquo;calendar&rdquo; or
-            &ldquo;tablet&rdquo; — turns the back of every sheet upside down.
+            &ldquo;book&rdquo; binding). Flipping on the short edge, &ldquo;calendar&rdquo; or
+            &ldquo;tablet&rdquo;, turns the back of every sheet upside down.
           </p>
           {/* Only for whoever can do something about it. A crew member about to
               hand this over cannot add a photo, and telling them one is missing
@@ -277,7 +277,7 @@ export default async function WeedSheetPage({
                 <h3 className="text-[12px] font-bold leading-tight">Careful pulling these</h3>
                 <p className="mt-1 text-[10px] leading-snug text-black/80">
                   Some of these spread if they are not taken out properly. Leave a piece of root behind and one
-                  plant can come back as several — and a few of them are easier to make worse than to fix.
+                  plant can come back as several, and a few of them are easier to make worse than to fix.
                 </p>
                 <p className="mt-1.5 text-[11px] font-semibold leading-snug">
                   Would you like a hand? Scan to book us.

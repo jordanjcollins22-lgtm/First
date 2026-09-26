@@ -40,7 +40,7 @@ export function AttributionPanel({
 
       <p className="text-sm text-muted-foreground">
         {traced} of {totals.totalJobs} sold jobs can be traced to something. The money is what was actually
-        received, net of refunds — not what was invoiced.
+        received, net of refunds, not what was invoiced.
       </p>
 
       {totals.channels.length === 0 ? (
@@ -75,7 +75,7 @@ export function AttributionPanel({
           <p className="text-lg font-semibold tabular-nums">{money(totals.unknown.revenueCents)}</p>
           <p className="text-xs text-muted-foreground">
             {totals.unknown.jobs} {totals.unknown.jobs === 1 ? "job" : "jobs"}. More than one campaign reached the
-            address in range, and nothing recorded which one worked. Not a recording problem — campaigns overlapped.
+            address in range, and nothing recorded which one worked. Not a recording problem, campaigns overlapped.
           </p>
         </div>
         <div className="rounded-lg border border-dashed border-border p-3">
@@ -95,7 +95,7 @@ export function AttributionPanel({
             <li key={job.jobId} className="text-sm">
               <span className="font-medium">{job.label}</span>{" "}
               <span className="text-muted-foreground">
-                — {job.attribution.channel ? CHANNEL_LABEL[job.attribution.channel] : CONFIDENCE_LABEL[job.attribution.confidence]}
+                · {job.attribution.channel ? CHANNEL_LABEL[job.attribution.channel] : CONFIDENCE_LABEL[job.attribution.confidence]}
                 {job.revenueCents > 0 ? ` · ${money(job.revenueCents)}` : " · nothing received yet"}
               </span>
               <span className="block text-xs text-muted-foreground">{job.attribution.because}</span>

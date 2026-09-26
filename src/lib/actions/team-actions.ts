@@ -63,7 +63,7 @@ async function createTeamMemberInner(formData: FormData): Promise<CreateTeamMemb
     return {
       ok: false,
       message:
-        "The server isn't set up to create accounts yet — add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart.",
+        "The server isn't set up to create accounts yet, add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart.",
     };
   }
 
@@ -203,7 +203,7 @@ export async function setTeamMemberPassword(profileId: string, password: string)
   }
   if (!isSupabaseAdminConfigured) {
     throw new Error(
-      "The server isn't set up to change passwords yet — add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart."
+      "The server isn't set up to change passwords yet, add SUPABASE_SERVICE_ROLE_KEY to .env.local and restart."
     );
   }
   if (password.length < 6) {
@@ -226,7 +226,7 @@ export async function addRole(name: string) {
   const trimmed = name.trim().toLowerCase();
   if (!trimmed) throw new Error("Enter a role name.");
   if (!/^[a-z][a-z0-9 _-]*$/.test(trimmed)) {
-    throw new Error("Start with a letter — letters, numbers, spaces, - and _ only.");
+    throw new Error("Start with a letter, letters, numbers, spaces, - and _ only.");
   }
 
   const supabase = await createClient();
@@ -253,7 +253,7 @@ export async function renameRole(currentName: string, nextName: string) {
   const trimmed = nextName.trim().toLowerCase();
   if (!trimmed) throw new Error("Enter a role name.");
   if (!/^[a-z][a-z0-9 _-]*$/.test(trimmed)) {
-    throw new Error("Start with a letter — letters, numbers, spaces, - and _ only.");
+    throw new Error("Start with a letter, letters, numbers, spaces, - and _ only.");
   }
   if (trimmed === currentName) return;
 
@@ -285,7 +285,7 @@ export async function deleteRole(name: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("roles").delete().eq("name", name);
   if (error) {
-    if (error.code === "23503") throw new Error("Someone still has this role — change their role first.");
+    if (error.code === "23503") throw new Error("Someone still has this role, change their role first.");
     throw error;
   }
   revalidatePath("/admin/team");

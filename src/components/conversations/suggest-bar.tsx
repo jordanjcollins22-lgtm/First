@@ -59,7 +59,7 @@ export function SuggestBar({
     <div className="mb-2 flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Tap one to edit it — nothing sends until you do
+          Tap one to edit it, nothing sends until you do
         </span>
         <button
           type="button"

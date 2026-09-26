@@ -211,7 +211,7 @@ export function ProposalPanel({
         if (outcome.ok) {
           setNotice(
             outcome.unchanged
-              ? "Rebuilt — the site map already matched this proposal."
+              ? "Rebuilt, the site map already matched this proposal."
               : `Rebuilt: ${outcome.changes.join(" · ")}`
           );
         } else if (outcome.reason === "needs_confirmation") {
@@ -433,7 +433,7 @@ export function ProposalPanel({
                       {group.serviceLabel}
                       {group.zones.length > 1 && (
                         <span className="ml-1.5 font-normal">
-                          — {together.length} of {group.zones.length} area{group.zones.length === 1 ? "" : "s"}
+                          · {together.length} of {group.zones.length} area{group.zones.length === 1 ? "" : "s"}
                         </span>
                       )}
                     </label>
@@ -514,7 +514,7 @@ export function ProposalPanel({
                     {[...apart].sort((a, b) => a - b).map((j) => (
                       <div key={j} className="flex flex-col gap-1.5 border-l-2 border-primary/30 pl-2">
                         <label className="text-[11px] font-medium text-muted-foreground">
-                          {draftZones[j].zoneName} — written for this area only
+                          {draftZones[j].zoneName}, written for this area only
                         </label>
                         <Textarea
                           value={draftZones[j].scopeText}
@@ -562,7 +562,7 @@ export function ProposalPanel({
                 {proposal.discount_amount > 0 ? (
                   <>
                     <p className="text-xs text-muted-foreground">
-                      Subtotal ${Math.round(proposal.total_cost ?? 0).toLocaleString()} — discount $
+                      Subtotal ${Math.round(proposal.total_cost ?? 0).toLocaleString()}, discount $
                       {Math.round(proposal.discount_amount).toLocaleString()}
                       {proposal.discount_reason && ` (${proposal.discount_reason})`}
                     </p>
@@ -646,7 +646,7 @@ export function ProposalPanel({
           {showBreakdown && !editing && (
             <div className="flex flex-col gap-3 rounded-lg border border-dashed border-border p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Internal only — the client never sees this
+                Internal only, the client never sees this
               </p>
               {/* What it costs us, then what turns that into the price. The
                   account manager is approving the last line, and the only way

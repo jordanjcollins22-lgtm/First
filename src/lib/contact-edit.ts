@@ -112,7 +112,7 @@ export function canDeleteContact(attachments: ContactAttachments): Verdict {
       ok: false,
       reason: `This contact has ${attachments.jobCount} job${
         attachments.jobCount === 1 ? "" : "s"
-      } on file. Merge them into the right contact instead — deleting would take the jobs with them.`,
+      } on file. Merge them into the right contact instead, deleting would take the jobs with them.`,
     };
   }
   if (attachments.propertyCount > 0) {
