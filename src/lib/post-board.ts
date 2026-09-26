@@ -1,3 +1,5 @@
+import { postKeyForLink } from "@/lib/social-finder";
+
 /**
  * The rules of the Posts to answer board.
  *
@@ -185,3 +187,75 @@ export const CANT_RESPOND_REASONS = [
 ] as const;
 
 export type CantRespondReason = (typeof CANT_RESPOND_REASONS)[number]["key"];
+
+/**
+ * The ways one post can be recognised, however it reached the board.
+ *
+ * The same post can be kept twice: read in the groups feed and again in a
+ * search, added by hand from a share link, or read before its link was
+ * found. Its link says it is the same post; failing a link, the same person
+ * writing the same words does. Any key in common and two rows are one post.
+ */
+export function postIdentityKeys(row: { url?: string | null; postKey?: string | null; author?: string | null; text?: string | null }): string[] {
+  const keys: string[] = [];
+  if (row.postKey) keys.push(`key:${row.postKey}`);
+  const fromLink = row.url && isPostLink(row.url) ? postKeyForLink(row.url) : null;
+  if (fromLink) keys.push(`key:${fromLink}`);
+  const words = (row.text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 120);
+  const who = (row.author ?? "").toLowerCase().replace(/[^a-z]+/g, " ").trim();
+  // Too few words and too common a post to tell apart by its words alone.
+  if (words.length >= 40) keys.push(`words:${who}|${words}`);
+  return keys;
+}
+
+/**
+ * Rows that are the same post, grouped: each row's id to the id of the
+ * group it belongs to (the first row of that group in the order given).
+ */
+export function groupSamePosts<T extends { id: string }>(rows: T[], keysOf: (row: T) => string[]): Map<string, string> {
+  const groupOfKey = new Map<string, string>();
+  const groupOfRow = new Map<string, string>();
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    let at = id;
+    while (parent.get(at) !== at) at = parent.get(at)!;
+    return at;
+  };
+  for (const row of rows) {
+    parent.set(row.id, row.id);
+    for (const key of keysOf(row)) {
+      const other = groupOfKey.get(key);
+      if (other) {
+        const a = find(other);
+        const b = find(row.id);
+        if (a !== b) parent.set(b, a);
+      } else groupOfKey.set(key, row.id);
+    }
+  }
+  for (const row of rows) groupOfRow.set(row.id, find(row.id));
+  return groupOfRow;
+}
+
+/**
+ * Everybody's answers to one post, once each: the same person answering two
+ * copies of it counts once, posted over written.
+ */
+export function onePerPerson(answers: BoardAnswer[]): BoardAnswer[] {
+  const best = new Map<string, BoardAnswer>();
+  const rank = (a: BoardAnswer) => (a.status === "posted" ? 2 : a.status === "written" ? 1 : 0);
+  for (const answer of answers) {
+    const held = best.get(answer.profileId);
+    if (!held || rank(answer) > rank(held)) best.set(answer.profileId, answer);
+  }
+  return [...best.values()];
+}
+
+/** Why this person may not answer a post they have already answered, or null. */
+export function alreadyAnswered(answers: BoardAnswer[], profileId: string, onPostId: string, answerPostIds: Map<string, string>): string | null {
+  const mine = answers.filter((a) => a.profileId === profileId && a.status !== "let_go");
+  if (mine.some((a) => a.status === "posted")) return "You've already answered this post. One comment each, so it doesn't look like a campaign.";
+  if (mine.some((a) => answerPostIds.get(a.id) !== onPostId)) {
+    return "You're already answering this post from another copy of it on the board. Finish that one.";
+  }
+  return null;
+}

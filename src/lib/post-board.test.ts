@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ageNow, isPostLink, standingFor, stillFresh, whyNotTake, type BoardAnswer } from "./post-board";
+import { ageNow, alreadyAnswered, groupSamePosts, isPostLink, onePerPerson, postIdentityKeys, standingFor, stillFresh, whyNotTake, type BoardAnswer } from "./post-board";
 
 const now = new Date("2026-09-24T18:00:00Z");
 
@@ -96,5 +96,53 @@ describe("isPostLink", () => {
     expect(isPostLink("https://www.facebook.com/profile.php?id=100000")).toBe(false);
     expect(isPostLink("https://evil.example.com/groups/1/posts/2")).toBe(false);
     expect(isPostLink("https://www.reddit.com/r/harfordcounty/")).toBe(false);
+  });
+});
+
+describe("one comment per person per post", () => {
+  const long = "Looking for someone to mulch our front beds and trim the bushes before the party next weekend in Bel Air";
+  it("knows two copies of a post as one", () => {
+    const rows = [
+      { id: "a", url: "https://www.facebook.com/groups/harford/posts/123/", postKey: null, author: "Jane Doe", text: long },
+      { id: "b", url: "", postKey: null, author: "Jane Doe", text: long },
+      { id: "c", url: "https://www.facebook.com/groups/harford/permalink/123/?ref=search", postKey: null, author: "J", text: "short" },
+      { id: "d", url: "", postKey: null, author: "Someone Else", text: long.replace("Bel Air", "Aberdeen") + " please" },
+    ];
+    const groups = groupSamePosts(rows, postIdentityKeys);
+    expect(groups.get("b")).toBe(groups.get("a"));
+    expect(groups.get("c")).toBe(groups.get("a"));
+    expect(groups.get("d")).not.toBe(groups.get("a"));
+  });
+
+  const answer = (id: string, profileId: string, status: "written" | "posted" | "let_go") => ({
+    id,
+    profileId,
+    name: profileId,
+    status,
+    comment: "x",
+    code: null,
+    clicks: 0,
+    createdAt: "2026-09-26T10:00:00Z",
+    updatedAt: "2026-09-26T10:00:00Z",
+    postedAt: null,
+  });
+
+  it("counts a person once across copies", () => {
+    expect(onePerPerson([answer("1", "jace", "written"), answer("2", "jace", "posted"), answer("3", "max", "written")]).map((a) => `${a.profileId}:${a.status}`)).toEqual([
+      "jace:posted",
+      "max:written",
+    ]);
+  });
+
+  it("stops the same person answering twice, even the owner", () => {
+    const onPost = new Map([
+      ["1", "copy-a"],
+      ["2", "copy-b"],
+    ]);
+    expect(alreadyAnswered([answer("1", "jordan", "posted")], "jordan", "copy-a", onPost)).toMatch(/already answered/);
+    expect(alreadyAnswered([answer("2", "jordan", "written")], "jordan", "copy-a", onPost)).toMatch(/another copy/);
+    expect(alreadyAnswered([answer("1", "jordan", "written")], "jordan", "copy-a", onPost)).toBeNull();
+    expect(alreadyAnswered([answer("1", "jordan", "let_go")], "jordan", "copy-a", onPost)).toBeNull();
+    expect(alreadyAnswered([answer("1", "jace", "posted")], "jordan", "copy-a", onPost)).toBeNull();
   });
 });

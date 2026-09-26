@@ -5,9 +5,9 @@ import { revalidatePath } from "next/cache";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings, getSeen, setPicked } from "@/lib/data/outreach-agent";
-import { answeredToday, answersToPost } from "@/lib/data/post-board";
+import { answeredToday, answersToPost, answersToSamePost } from "@/lib/data/post-board";
 import { mentionComment } from "@/lib/outreach-agent";
-import { isPostLink, whyNotTake } from "@/lib/post-board";
+import { alreadyAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import { daysOld, fitOpenerToAge } from "@/lib/post-age";
@@ -55,9 +55,31 @@ export async function takePost(seenId: string): Promise<TakeResult> {
   }
 
   const now = new Date();
-  const [answers, today, settings] = await Promise.all([answersToPost(org, seenId), answeredToday(org, profile.id, now), getAgentSettings(org)]);
+  const supabase = await createClient();
+  // Every copy of this post, and every answer to any of them: one comment
+  // per person per post, however many times the post was kept.
+  const [same, today, settings] = await Promise.all([answersToSamePost(org, row), answeredToday(org, profile.id, now), getAgentSettings(org)]);
+  const answers = same.answers.filter((a) => same.postOf.get(a.id) === seenId);
+  // Not even the owner answers the same post twice.
+  const twice = alreadyAnswered(same.answers, profile.id, seenId, same.postOf);
+  if (twice) return { ok: false, error: twice };
+  // A link handed out by hand for this post, before the board, counts too.
+  if (same.urls.length > 0) {
+    const { data: links } = await supabase
+      .from("outreach_links")
+      .select("code")
+      .eq("organization_id", org)
+      .eq("profile_id", profile.id)
+      .in("post_url", same.urls)
+      .limit(20);
+    // The board's own answers make links too; only one made some other way counts here.
+    const fromBoard = new Set(same.answers.filter((x) => x.profileId === profile.id && x.code).map((x) => x.code));
+    if ((links ?? []).some((l) => !fromBoard.has(l.code))) {
+      return { ok: false, error: "You've already answered this post. One comment each, so it doesn't look like a campaign." };
+    }
+  }
   const refusal = whyNotTake({
-    answers,
+    answers: onePerPerson(same.answers),
     profileId: profile.id,
     now,
     answeredToday: today,
@@ -66,7 +88,6 @@ export async function takePost(seenId: string): Promise<TakeResult> {
   });
   if (refusal) return { ok: false, error: refusal };
 
-  const supabase = await createClient();
   const mine = answers.find((a) => a.profileId === profile.id);
   if (mine?.comment) {
     const { error } = await supabase
@@ -338,6 +359,7 @@ async function describeKept(
   if (row.decision === "declined") return { message: "Already in: it was taken off the board.", canAnswer: false };
   const answers = await answersToPost(org, row.id);
   const standing = standingFor(answers, profileId, new Date());
+  if (standing.mine?.status === "posted") return { message: "Already in, and you've already answered it. One comment each.", canAnswer: false };
   if (standing.pile === "mine") return { message: "Already in, and it's yours: it's up next.", canAnswer: true };
   const names = standing.others.map((a) => `${a.name}${a.status === "posted" ? " answered it" : " is answering it"}`).join(", ");
   if (standing.pile === "full") return { message: `Already in: ${names}.`, canAnswer: false };

@@ -8,7 +8,10 @@ import type { Platform } from "@/lib/social-finder";
 import {
   BOARD_MAX_AGE_DAYS,
   ageNow,
+  groupSamePosts,
   isPostLink,
+  onePerPerson,
+  postIdentityKeys,
   standingFor,
   stillFresh,
   type AnswerStatus,
@@ -63,7 +66,7 @@ async function freshRequests(organizationId: string, now: Date) {
   const since = new Date(now.getTime() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by")
+    .select("id, url, post_key, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by")
     .eq("organization_id", organizationId)
     .eq("kind", "request")
     .eq("decision", "read")
@@ -125,6 +128,33 @@ async function answersFor(organizationId: string, postIds: string[]): Promise<Ma
   return byPost;
 }
 
+/**
+ * The same post kept more than once, as one: the copy to show (one with a
+ * working link, then one somebody answered, then the newest) and every
+ * answer to any copy, each person once.
+ */
+function oneRowPerPost<T extends { id: string; url: string; post_key?: string | null; author: string | null; text: string | null; created_at: string }>(
+  rows: T[],
+  answers: Map<string, BoardAnswer[]>
+): { row: T; answers: BoardAnswer[] }[] {
+  const groups = groupSamePosts(rows, (r) => postIdentityKeys({ url: r.url, postKey: r.post_key, author: r.author, text: r.text }));
+  const byGroup = new Map<string, T[]>();
+  for (const row of rows) {
+    const g = groups.get(row.id) ?? row.id;
+    byGroup.set(g, [...(byGroup.get(g) ?? []), row]);
+  }
+  return [...byGroup.values()].map((copies) => {
+    const all = copies.flatMap((c) => answers.get(c.id) ?? []);
+    const pick = [...copies].sort(
+      (a, b) =>
+        Number(isPostLink(b.url)) - Number(isPostLink(a.url)) ||
+        (answers.get(b.id)?.length ?? 0) - (answers.get(a.id)?.length ?? 0) ||
+        b.created_at.localeCompare(a.created_at)
+    )[0];
+    return { row: pick, answers: onePerPerson(all) };
+  });
+}
+
 /** The board as one person sees it, newest first. */
 export async function getPostBoard(organizationId: string, profileId: string, now: Date = new Date()): Promise<BoardPost[]> {
   const posts = await freshRequests(organizationId, now);
@@ -134,11 +164,21 @@ export async function getPostBoard(organizationId: string, profileId: string, no
   // took it, who still needs to see what they took.
   // A post somebody added by hand shows too, link or not: a person looked at
   // it and said it is worth answering.
-  const shown = posts.filter(
-    (row) => isPostLink(row.url) || Boolean(row.added_by) || (answers.get(row.id) ?? []).some((a) => a.status !== "let_go")
+  // The same post kept twice shows once, with everybody's answers to either.
+  const shown = oneRowPerPost(posts, answers).filter(
+    ({ row, answers: list }) => isPostLink(row.url) || Boolean(row.added_by) || list.some((a) => a.status !== "let_go")
   );
-  return shown.map((row) => {
-    const list = answers.get(row.id) ?? [];
+  return shown
+    .sort((a, b) => b.row.created_at.localeCompare(a.row.created_at))
+    .map(({ row, answers: list }) => boardPost(row, list, profileId, now));
+}
+
+function boardPost(
+  row: Awaited<ReturnType<typeof freshRequests>>[number],
+  list: BoardAnswer[],
+  profileId: string,
+  now: Date
+): BoardPost {
     const standing = standingFor(list, profileId, now);
     const text = row.text ?? "";
     return {
@@ -163,7 +203,6 @@ export async function getPostBoard(organizationId: string, profileId: string, no
       mine: standing.mine,
       others: standing.others,
     };
-  });
 }
 
 /**
@@ -174,7 +213,9 @@ export async function getPostBoard(organizationId: string, profileId: string, no
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return posts.filter((p) => (isPostLink(p.url) || Boolean(p.added_by)) && standingFor(answers.get(p.id) ?? [], "", now).others.length === 0).length;
+  return oneRowPerPost(posts, answers).filter(
+    ({ row, answers: list }) => (isPostLink(row.url) || Boolean(row.added_by)) && standingFor(list, "", now).others.length === 0
+  ).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */
@@ -193,6 +234,51 @@ export async function answeredToday(organizationId: string, profileId: string, n
 /** Every answer to one post, for deciding whether somebody may take it. */
 export async function answersToPost(organizationId: string, postId: string): Promise<BoardAnswer[]> {
   return (await answersFor(organizationId, [postId])).get(postId) ?? [];
+}
+
+/**
+ * Every copy of one post kept in the business, and every answer to any of
+ * them, with which copy each answer is on. For stopping the same person
+ * answering the same post twice through two copies of it.
+ */
+export async function answersToSamePost(
+  organizationId: string,
+  post: { id: string; url: string | null; post_key?: string | null; author: string | null; text: string | null }
+): Promise<{ ids: string[]; urls: string[]; answers: BoardAnswer[]; postOf: Map<string, string> }> {
+  const supabase = await createClient();
+  // Anything that could be the same post: the same key, the same link, or
+  // the same person. Which of them really are is decided below.
+  const base = () =>
+    supabase.from("outreach_seen_posts").select("id, url, post_key, author, text, created_at").eq("organization_id", organizationId).limit(200);
+  const empty = Promise.resolve({ data: [] as { id: string; url: string; post_key: string | null; author: string | null; text: string | null; created_at: string }[] });
+  const found = await Promise.all([
+    post.post_key ? base().eq("post_key", post.post_key) : empty,
+    post.url && isPostLink(post.url) ? base().eq("url", post.url) : empty,
+    post.author ? base().eq("author", post.author) : empty,
+  ]);
+  const seen = new Set([post.id]);
+  const rows: { id: string; url: string | null; post_key?: string | null; author: string | null; text: string | null }[] = [post];
+  for (const { data } of found) {
+    for (const r of data ?? []) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      rows.push(r);
+    }
+  }
+  const groups = groupSamePosts(rows, (r) => postIdentityKeys({ url: r.url, postKey: r.post_key ?? null, author: r.author, text: r.text }));
+  const group = groups.get(post.id);
+  const same = rows.filter((r) => groups.get(r.id) === group);
+  const ids = same.map((r) => r.id);
+  const byPost = await answersFor(organizationId, ids);
+  const postOf = new Map<string, string>();
+  const answers: BoardAnswer[] = [];
+  for (const [postId, list] of byPost) {
+    for (const a of list) {
+      postOf.set(a.id, postId);
+      answers.push(a);
+    }
+  }
+  return { ids, urls: same.map((r) => r.url ?? "").filter((u) => isPostLink(u)), answers, postOf };
 }
 
 /**

@@ -547,7 +547,7 @@ export async function getSeen(organizationId: string, id: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, group_key, author, text, age_days, posted_at, created_at, decision, source, link_id, screenshot_path")
+    .select("id, url, post_key, group_name, group_key, author, text, age_days, posted_at, created_at, decision, source, link_id, screenshot_path")
     .eq("organization_id", organizationId)
     .eq("id", id)
     .maybeSingle();
