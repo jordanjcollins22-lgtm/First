@@ -8,8 +8,9 @@ type Db = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdm
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
 import {
-  SORT_SYSTEM_PROMPT,
   SortResultSchema,
+  kindFor,
+  sortSystemPrompt,
   businessKey,
   matchSorted,
   sortBrief,
@@ -17,7 +18,9 @@ import {
   type BusinessDetails,
   type PostKind,
   type PostToSort,
+  type SortContext,
 } from "@/lib/post-sorting";
+import { getAgentSettings } from "@/lib/data/outreach-agent";
 
 /**
  * Sort the posts waiting in the pile, and keep the businesses among them.
@@ -58,7 +61,8 @@ export async function sortReadPosts(
   if (rows.length === 0) return { sorted: 0, businesses: 0 };
 
   const asked: PostToSort[] = rows.map((row) => ({ id: row.id, author: row.author, group: row.group_name, text: row.text ?? "" }));
-  const answer = await askModel(asked);
+  const context = await sortContext(organizationId, supabase);
+  const answer = await askModel(asked, context);
   if (!answer) return { sorted: 0, businesses: 0 };
 
   const matched = matchSorted(asked, answer);
@@ -69,17 +73,24 @@ export async function sortReadPosts(
     const verdict = matched.get(row.id);
     if (!verdict) continue;
     let businessId: string | null = null;
-    if (verdict.kind === "promotion") {
+    const kind = kindFor(verdict);
+    if (kind === "promotion") {
       businessId = await keepBusiness(organizationId, tidyBusiness(verdict.business ?? emptyBusiness(), row.author), row, supabase);
       if (businessId) businesses += 1;
     }
     await supabase
       .from("outreach_seen_posts")
       .update({
-        kind: verdict.kind,
+        // On the board only when it is for us; everything else is kept as
+        // data, labelled with what it is, what it is about and where.
+        kind,
         kind_by: "model",
+        category: verdict.category,
+        service: verdict.service?.trim().slice(0, 60) || null,
+        town: verdict.town?.trim().slice(0, 60) || null,
+        sort_reason: verdict.reason.trim().slice(0, 160) || null,
         business_id: businessId,
-        decision: verdict.kind === "promotion" ? "advert" : "read",
+        decision: kind === "promotion" ? "advert" : "read",
         updated_at: now,
       })
       .eq("organization_id", organizationId)
@@ -99,7 +110,7 @@ export async function setPostKind(organizationId: string, seenId: string, kind: 
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, author, group_name, text, decision")
+    .select("id, url, author, group_name, text, decision, category")
     .eq("organization_id", organizationId)
     .eq("id", seenId)
     .maybeSingle();
@@ -109,7 +120,11 @@ export async function setPostKind(organizationId: string, seenId: string, kind: 
   let businessId: string | null = null;
   if (kind === "promotion") {
     const asked: PostToSort[] = [{ id: row.id, author: row.author, group: row.group_name, text: row.text ?? "" }];
-    const answer = await askModel(asked, "The owner has already said this post is a promotion. Treat it as one and fill in the business.");
+    const answer = await askModel(
+      asked,
+      await sortContext(organizationId, supabase),
+      "The owner has already said this post is a business-ad. Treat it as one and fill in the business."
+    );
     const found = answer ? matchSorted(asked, answer).get(row.id) : undefined;
     businessId = await keepBusiness(organizationId, tidyBusiness(found?.business ?? emptyBusiness(), row.author), row);
   }
@@ -118,6 +133,9 @@ export async function setPostKind(organizationId: string, seenId: string, kind: 
     .update({
       kind,
       kind_by: "owner",
+      // The person's call is the label too, so the data and the examples
+      // the sorter learns from say what they said.
+      category: kind === "request" ? "for-us" : kind === "promotion" ? "business-ad" : row.category && row.category !== "for-us" ? row.category : "community",
       business_id: businessId,
       decision: kind === "promotion" ? "advert" : "read",
       updated_at: new Date().toISOString(),
@@ -131,7 +149,39 @@ function emptyBusiness(): BusinessDetails {
   return { name: null, person: null, phone: null, email: null, website: null, services: [], area: null };
 }
 
-async function askModel(posts: PostToSort[], note?: string) {
+/**
+ * What the sorter is told about this business: what the crew does, what is
+ * arranged through partners, where it works, and the team's own recent
+ * calls on posts, to sort the way they would.
+ */
+async function sortContext(organizationId: string, supabase: Db): Promise<SortContext> {
+  const [{ data: services }, settings, { data: calls }] = await Promise.all([
+    supabase.from("services").select("name, status, performed_by").eq("organization_id", organizationId),
+    getAgentSettings(organizationId, supabase).catch(() => null),
+    supabase
+      .from("outreach_seen_posts")
+      .select("text, kind, reason")
+      .eq("organization_id", organizationId)
+      .eq("kind_by", "owner")
+      .not("text", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(20),
+  ]);
+  const live = (services ?? []).filter((row) => row.status === "active" && row.name);
+  return {
+    ownServices: live.filter((row) => row.performed_by !== "partner").map((row) => row.name as string),
+    partnerServices: live.filter((row) => row.performed_by === "partner").map((row) => row.name as string),
+    areaWords: settings?.areaWords ?? [],
+    examples: (calls ?? []).map((row) => ({
+      text: row.text ?? "",
+      forUs: row.kind === "request",
+      // "Not related to our work (Jace)": the reason, without who said it.
+      why: row.reason ? row.reason.replace(/\s*\([^)]*\)\s*$/, "").slice(0, 80) : null,
+    })),
+  };
+}
+
+async function askModel(posts: PostToSort[], context: SortContext, note?: string) {
   try {
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.beta.messages.parse({
@@ -142,7 +192,7 @@ async function askModel(posts: PostToSort[], note?: string) {
       output_config: { effort: "low", format: betaZodOutputFormat(SortResultSchema) },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: SORT_SYSTEM_PROMPT,
+      system: sortSystemPrompt(context),
       messages: [{ role: "user", content: note ? `${note}\n\n${sortBrief(posts)}` : sortBrief(posts) }],
     });
     if (response.stop_reason === "refusal") {

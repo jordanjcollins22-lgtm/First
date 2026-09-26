@@ -15,6 +15,8 @@ import { AgentPicker } from "@/components/marketing/agent-picker";
 import { FinderPower, RedditSwitch } from "@/components/marketing/platform-switch";
 import { AgentBusinesses } from "@/components/marketing/agent-businesses";
 import { listBusinesses } from "@/lib/data/post-sorter";
+import { postInsights } from "@/lib/data/post-board";
+import { PostInsightsCard } from "@/components/marketing/post-insights";
 import { Download } from "lucide-react";
 import extension from "../../../../../../extension/manifest.json";
 
@@ -37,7 +39,7 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, toJoin, look, toPick, businesses, redditLook] = await Promise.all([
+  const [settings, counts, toJoin, look, toPick, businesses, redditLook, insights] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     groupsToJoin(profile.organization_id).catch(() => []),
@@ -45,6 +47,10 @@ export default async function GroupAgentPage() {
     recentAgentActivity(profile.organization_id, 200, "read").catch(() => []),
     listBusinesses(profile.organization_id).catch(() => []),
     lastRedditLook(profile.organization_id).catch(() => null),
+    postInsights(profile.organization_id, 30, now).catch((err) => {
+      console.error("Post insights failed to load:", err);
+      return null;
+    }),
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
   const because = state.active ? null : state.because;
@@ -111,10 +117,12 @@ export default async function GroupAgentPage() {
         </ul>
       </section>
 
+      {insights && <PostInsightsCard insights={insights} />}
+
       <Fold title="Posts it read" count={toPick.length}>
         <p className="mb-3 text-xs text-muted-foreground">
-          Sorted as they arrive: people asking for work go on Posts to Answer, ads go to Businesses. If one landed in
-          the wrong pile, move it.
+          Sorted as they arrive: people near here asking for work we do go on Posts to Answer; ads go to Businesses; the
+          rest is kept as data. If one landed in the wrong pile, move it, and the sorter learns from it.
         </p>
         <AgentPicker rows={toPick} />
       </Fold>

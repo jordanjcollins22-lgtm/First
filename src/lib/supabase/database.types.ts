@@ -3291,6 +3291,10 @@ export interface Database {
           match_reason: string | null;
           screenshot_path: string | null;
           screenshot_hash: string | null;
+          category: string | null;
+          service: string | null;
+          town: string | null;
+          sort_reason: string | null;
           added_by: string | null;
           created_at: string;
           updated_at: string;

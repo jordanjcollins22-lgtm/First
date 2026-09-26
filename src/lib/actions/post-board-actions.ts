@@ -303,6 +303,7 @@ export async function submitFoundPost(input: {
       decision: "read",
       kind: "request",
       kind_by: "owner",
+      category: "for-us",
       source: "group",
       platform,
       match_reason: `Added by ${who.split(" ")[0]}`,

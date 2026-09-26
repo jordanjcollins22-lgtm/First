@@ -63,7 +63,7 @@ async function freshRequests(organizationId: string, now: Date) {
   const since = new Date(now.getTime() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, added_by")
+    .select("id, url, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by")
     .eq("organization_id", organizationId)
     .eq("kind", "request")
     .eq("decision", "read")
@@ -151,7 +151,8 @@ export async function getPostBoard(organizationId: string, profileId: string, no
       ageDays: ageNow(ageWhenRead(row), row.created_at, now),
       platform: (row.platform ?? "facebook") as Platform,
       postedAt: row.posted_at,
-      matchReason: row.match_reason,
+      // The sorter's own words on why it is for us, when it gave them.
+      matchReason: row.sort_reason ?? row.match_reason,
       addedByHand: Boolean(row.added_by),
       foundAt: row.created_at,
       ...(() => {
@@ -385,4 +386,87 @@ export async function answeredPostsFor(organizationId: string, profileId: string
     });
   }
   return rows;
+}
+
+export interface PostInsights {
+  days: number;
+  total: number;
+  byCategory: { category: string; count: number }[];
+  /** What people asked to have done, most asked first. */
+  services: { service: string; count: number; ours: boolean; answered: number; booked: number }[];
+  towns: { town: string; count: number }[];
+}
+
+/**
+ * What the posts say about the area: how many of each kind, what people ask
+ * to have done and where, and, for the work that is ours, how much of it was
+ * answered and booked. The data half of the sorting: everything that is not
+ * for the affiliates still says something about what does well here.
+ */
+export async function postInsights(organizationId: string, days = 30, now: Date = new Date()): Promise<PostInsights> {
+  const supabase = await createClient();
+  const since = new Date(now.getTime() - days * 86_400_000).toISOString();
+  const { data: rows, error } = await supabase
+    .from("outreach_seen_posts")
+    .select("id, category, service, town")
+    .eq("organization_id", organizationId)
+    .gte("created_at", since)
+    .not("category", "is", null)
+    .limit(5000);
+  if (error) throw new Error(error.message);
+  const posts = rows ?? [];
+
+  const ours = posts.filter((p) => p.category === "for-us").map((p) => p.id);
+  const { data: answers } = ours.length
+    ? await supabase.from("outreach_post_answers").select("seen_post_id, link_id, status").eq("organization_id", organizationId).in("seen_post_id", ours)
+    : { data: [] as { seen_post_id: string; link_id: string | null; status: string }[] };
+  const answeredIds = new Set((answers ?? []).filter((a) => a.status === "posted").map((a) => a.seen_post_id));
+  const linkIds = (answers ?? []).map((a) => a.link_id).filter((id): id is string => Boolean(id));
+  const { data: links } = linkIds.length
+    ? await supabase.from("outreach_links").select("id, code").in("id", linkIds)
+    : { data: [] as { id: string; code: string }[] };
+  const codes = (links ?? []).map((l) => l.code);
+  const { data: jobs } = codes.length
+    ? await supabase.from("jobs").select("referral_code").in("referral_code", codes)
+    : { data: [] as { referral_code: string | null }[] };
+  const bookedCodes = new Set((jobs ?? []).map((j) => j.referral_code));
+  const codeByLink = new Map((links ?? []).map((l) => [l.id, l.code]));
+  const bookedIds = new Set(
+    (answers ?? []).filter((a) => a.link_id && bookedCodes.has(codeByLink.get(a.link_id) ?? "")).map((a) => a.seen_post_id)
+  );
+
+  const count = <T extends string>(values: T[]) => {
+    const m = new Map<T, number>();
+    for (const v of values) m.set(v, (m.get(v) ?? 0) + 1);
+    return m;
+  };
+  const byCategory = [...count(posts.map((p) => p.category as string)).entries()]
+    .map(([category, n]) => ({ category, count: n }))
+    .sort((a, b) => b.count - a.count);
+
+  const serviceRows = new Map<string, { service: string; count: number; ours: boolean; answered: number; booked: number }>();
+  for (const p of posts) {
+    if (!p.service || !["for-us", "other-trade", "yard-question"].includes(p.category ?? "")) continue;
+    const key = p.service.toLowerCase();
+    const row = serviceRows.get(key) ?? { service: p.service, count: 0, ours: false, answered: 0, booked: 0 };
+    row.count += 1;
+    if (p.category === "for-us") {
+      row.ours = true;
+      if (answeredIds.has(p.id)) row.answered += 1;
+      if (bookedIds.has(p.id)) row.booked += 1;
+    }
+    serviceRows.set(key, row);
+  }
+  const towns = [...count(posts.map((p) => (p.town ?? "").trim()).filter(Boolean)).entries()]
+    .map(([town, n]) => ({ town, count: n }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  return {
+    days,
+    total: posts.length,
+    byCategory,
+    services: [...serviceRows.values()].sort((a, b) => b.count - a.count).slice(0, 12),
+    towns,
+  };
 }
