@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ModuleShell, holdsAny } from "@/components/module-shell";
+import { Deferred } from "@/components/deferred";
 
 // Each of these keeps its own address, data loading and permission guard.
 import AttractorsPage from "@/app/(app)/attractors/page";
@@ -65,7 +66,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
               ),
             }
           : {}),
-        ...(map || leads ? { attribution: await AttributionTab() } : {}),
+        ...(map || leads ? { attribution: <Deferred load={AttributionTab} /> } : {}),
       }}
     />
   );

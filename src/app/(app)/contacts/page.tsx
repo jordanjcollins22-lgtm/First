@@ -1,4 +1,5 @@
 import { isSupabaseConfigured } from "@/lib/env";
+import { Deferred } from "@/components/deferred";
 import { requireTab } from "@/lib/data/access";
 import { getCurrentProfile } from "@/lib/data/team";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -34,7 +35,7 @@ export default async function ContactsPage() {
       </p>
       <PageTabs
         tabs={[
-          { key: "book", label: "The book", content: await BookTab() },
+          { key: "book", label: "The book", content: <Deferred load={BookTab} /> },
           { key: "import", label: "Import", content: <ImportTab /> },
         ]}
       />

@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadBookingOptions } from "@/lib/data/booking-options";
 import { listProofRows, proofFromRows } from "@/lib/data/booking-proof";
 import { BOOKING_PAGES, promisesKept } from "@/lib/booking-proof";
-import { BookingWizard } from "@/components/booking/booking-wizard";
+import { BookingPreview } from "@/components/booking/booking-preview";
 import { ProofEditor } from "@/components/booking/proof-editor";
 
 /**
@@ -23,12 +23,11 @@ import { ProofEditor } from "@/components/booking/proof-editor";
  */
 export const dynamic = "force-dynamic";
 
-export default async function BookingPagePage({ searchParams }: { searchParams?: Promise<{ as?: string }> } = {}) {
+export default async function BookingPagePage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("booking-page", "/marketing");
   const profile = await getCurrentProfile();
   if (!profile) return null;
-  const as = ((await searchParams) ?? {}).as?.trim().slice(0, 40) || null;
 
   const supabase = await createClient();
   const { data: org } = await supabase.from("organizations").select("slug").eq("id", profile.organization_id).maybeSingle();
@@ -61,27 +60,9 @@ export default async function BookingPagePage({ searchParams }: { searchParams?:
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
         <div>
-          {serviceNames.length > 0 && (
-            <div className="mb-1 flex flex-wrap items-center gap-1.5 px-4 text-xs">
-              <span className="text-muted-foreground">As somebody asking about</span>
-              <Link href="/admin/booking-page" className={`rounded-full border px-2 py-0.5 ${!as ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
-                Anything
-              </Link>
-              {serviceNames.slice(0, 8).map((name) => (
-                <Link
-                  key={name}
-                  href={`/admin/booking-page?as=${encodeURIComponent(name)}`}
-                  className={`rounded-full border px-2 py-0.5 ${as === name ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
-                >
-                  {name}
-                </Link>
-              ))}
-            </div>
-          )}
           {options?.status === "ok" ? (
-            <BookingWizard
-              key={as ?? "any"}
-              preview
+            <BookingPreview
+              serviceNames={serviceNames}
               organizationId={options.organizationId}
               organizationName={options.organizationName}
               referredByProfileId={null}
@@ -92,7 +73,6 @@ export default async function BookingPagePage({ searchParams }: { searchParams?:
               linkOrg={slug}
               referralCode={null}
               proof={proof}
-              service={as}
             />
           ) : (
             <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">

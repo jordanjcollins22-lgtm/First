@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Deferred } from "@/components/deferred";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { getPaymentsData } from "@/lib/data/payments";
@@ -139,7 +140,7 @@ export default async function PaymentsPage({
           {
             key: "received",
             label: "Received",
-            content: await ReceivedTab(),
+            content: <Deferred load={ReceivedTab} />,
           },
           // What is owed and what to pay, in one place. Card debt, wages and
           // unpaid invoices lived on three screens that never met, which is
@@ -148,7 +149,7 @@ export default async function PaymentsPage({
           {
             key: "debt",
             label: "Debt & plan",
-            content: await DebtTab(isAdmin || !!profile?.roles.includes("overhead")),
+            content: <Deferred load={() => DebtTab(isAdmin || !!profile?.roles.includes("overhead"))} />,
           },
           // Hours are money: this is what the day cost in wages, and the only
           // honest input to what a job cost. Admin only — correcting a logged
@@ -156,7 +157,7 @@ export default async function PaymentsPage({
           {
             key: "time",
             label: "Time & pay",
-            content: isAdmin ? await TimeTab(searchParams) : null,
+            content: isAdmin ? <Deferred load={() => TimeTab(searchParams)} /> : null,
             visible: isAdmin,
           },
         ]}

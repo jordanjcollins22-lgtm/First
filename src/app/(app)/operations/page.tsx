@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ModuleShell } from "@/components/module-shell";
+import { Deferred } from "@/components/deferred";
 import { CalendarTab, WeatherTab } from "@/app/(app)/evaluations/page";
 import SaltPage from "@/app/(app)/admin/salt/page";
 import { SuggestionsPanel } from "@/components/schedule/suggestions-panel";
@@ -44,42 +45,51 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
   const shown = new Set(subtabsFor("operations", [...allowed], roleView).map((s) => s.key));
   const onlyTheirs = roleView === "evaluator" || roleView === "account-manager";
 
+  // Each tab loads alongside the others and arrives on its own, so the page
+  // is not the sum of every tab's wait -- the weather service used to hold up
+  // the calendar.
   const content: Record<string, React.ReactNode> = {};
-  if (shown.has("calendar")) content.calendar = await CalendarTab({ section: "calendar" });
-  if (shown.has("evaluations")) {
-    const canReassign = Boolean(profile && canRunJobs(profile.roles));
-    const [evaluations, team] = await Promise.all([
-      listSalesEvaluations().catch(() => []),
-      canReassign ? listProfiles().catch(() => []) : Promise.resolve([]),
-    ]);
-    content.evaluations = (
-      <EvaluationBuckets
-        evaluations={onlyTheirs && profile ? evaluations.filter((e) => isTheirs(e, profile.id)) : evaluations}
-        now={new Date().toISOString()}
-        evaluators={canReassign ? evaluatorOptions(team, null) : undefined}
-        canReassign={canReassign}
-      />
-    );
-  }
-  if (shown.has("jobs")) content.jobs = await JobsTab({ profile, onlyTheirs, initial: jobView ?? null });
-  if (shown.has("crew")) {
-    content.crew = (
-      <CrewLeaderboard
-        boards={await getCrewBoards().catch((err) => {
-          console.error("Crew leaderboard failed to load:", err);
-          return { recent: [], allTime: [] };
-        })}
-        meId={profile?.id ?? null}
-        canOpenAll={Boolean(profile && (profile.roles.includes("admin") || profile.roles.includes("owner")))}
-      />
-    );
-  }
-  if (shown.has("weather")) content.weather = await WeatherTab();
-  if (shown.has("booking")) content.booking = await CalendarTab({ section: "booking" });
+  if (shown.has("calendar")) content.calendar = <Deferred load={() => CalendarTab({ section: "calendar" })} />;
+  if (shown.has("evaluations")) content.evaluations = <Deferred load={() => EvaluationsTab({ profile, onlyTheirs })} />;
+  if (shown.has("jobs")) content.jobs = <Deferred load={() => JobsTab({ profile, onlyTheirs, initial: jobView ?? null })} />;
+  if (shown.has("crew")) content.crew = <Deferred load={() => CrewTab(profile)} />;
+  if (shown.has("weather")) content.weather = <Deferred load={() => WeatherTab()} />;
+  if (shown.has("booking")) content.booking = <Deferred load={() => CalendarTab({ section: "booking" })} />;
   if (shown.has("salt")) content.salt = <SaltPage />;
-  if (shown.has("suggestions")) content.suggestions = await SuggestionsTab(profile);
+  if (shown.has("suggestions")) content.suggestions = <Deferred load={() => SuggestionsTab(profile)} />;
 
   return <ModuleShell module="operations" asked={tab} content={content} />;
+}
+
+/** Every evaluation, bucketed; only their own for an evaluator or account manager. */
+async function EvaluationsTab({ profile, onlyTheirs }: { profile: Profile | null; onlyTheirs: boolean }) {
+  const canReassign = Boolean(profile && canRunJobs(profile.roles));
+  const [evaluations, team] = await Promise.all([
+    listSalesEvaluations().catch(() => []),
+    canReassign ? listProfiles().catch(() => []) : Promise.resolve([]),
+  ]);
+  return (
+    <EvaluationBuckets
+      evaluations={onlyTheirs && profile ? evaluations.filter((e) => isTheirs(e, profile.id)) : evaluations}
+      now={new Date().toISOString()}
+      evaluators={canReassign ? evaluatorOptions(team, null) : undefined}
+      canReassign={canReassign}
+    />
+  );
+}
+
+async function CrewTab(profile: Profile | null) {
+  const boards = await getCrewBoards().catch((err) => {
+    console.error("Crew leaderboard failed to load:", err);
+    return { recent: [], allTime: [] };
+  });
+  return (
+    <CrewLeaderboard
+      boards={boards}
+      meId={profile?.id ?? null}
+      canOpenAll={Boolean(profile && (profile.roles.includes("admin") || profile.roles.includes("owner")))}
+    />
+  );
 }
 
 /** The job board: one list, five views as chips. */

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Deferred } from "@/components/deferred";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listRoles } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
@@ -50,14 +51,14 @@ export default async function SettingsPage() {
 
       <PageTabs
         tabs={[
-          { key: "permissions", label: "Permissions", content: await PermissionsTab() },
-          { key: "business", label: "Business", content: await BusinessTab() },
-          { key: "email", label: "Email", content: await EmailTab() },
-          { key: "database", label: "Database", content: await DatabaseTab() },
+          { key: "permissions", label: "Permissions", content: <Deferred load={PermissionsTab} /> },
+          { key: "business", label: "Business", content: <Deferred load={BusinessTab} /> },
+          { key: "email", label: "Email", content: <Deferred load={EmailTab} /> },
+          { key: "database", label: "Database", content: <Deferred load={DatabaseTab} /> },
           {
             key: "organizations",
             label: "Organizations",
-            content: isSuperadmin ? await OrganizationsTab() : null,
+            content: isSuperadmin ? <Deferred load={OrganizationsTab} /> : null,
             visible: isSuperadmin,
           },
         ]}

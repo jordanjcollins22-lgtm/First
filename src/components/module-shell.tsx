@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { checkTabAccess } from "@/lib/data/access";
@@ -7,6 +8,7 @@ import { tabsAllowedForRoles } from "@/lib/permissions";
 import { moduleFor, openingSubtab, subtabsFor, type ModuleKey } from "@/lib/modules";
 import { roleViewFor } from "@/lib/affiliate-roles";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
+import { TabLoading } from "@/components/deferred";
 
 /**
  * One module: its name, the question it answers, and its subtabs.
@@ -50,7 +52,9 @@ export async function ModuleShell({
     key: subtab.key,
     label: subtab.label,
     blurb: subtab.blurb,
-    content: content[subtab.key],
+    // Each behind its own boundary, so the header and the tab bar go out at
+    // once and a slow tab holds up only itself.
+    content: <Suspense fallback={<TabLoading />}>{content[subtab.key]}</Suspense>,
   }));
 
   return (
