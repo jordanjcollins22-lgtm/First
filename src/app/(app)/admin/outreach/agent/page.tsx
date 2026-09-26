@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 
 export default async function GroupAgentPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("group-agent", "/admin/outreach");
+  await requireTab("group-agent", "/admin/outreach/posts");
   const profile = await getCurrentProfile();
   const owner = isOwnerLevel(profile?.roles ?? []);
   if (!profile) return null;
@@ -52,8 +52,8 @@ export default async function GroupAgentPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
       <header>
-        <Link href="/admin/outreach" className="text-xs text-muted-foreground hover:underline">
-          ← Link Tracking
+        <Link href="/admin/outreach/posts" className="text-xs text-muted-foreground hover:underline">
+          ← Posts to Answer
         </Link>
         <h1 className="mt-1 text-xl font-semibold">Group Agent</h1>
         <p className="text-sm font-medium text-muted-foreground">The post finder: Facebook and Reddit</p>

@@ -54,9 +54,8 @@ import { nextRouteToApprove } from "@/lib/data/route-approval";
 import { RouteApprovalWizard } from "@/components/marketing/route-approval-wizard";
 import { CallListPanel } from "@/components/sales/call-list";
 import { CollectPanel } from "@/components/sales/collect-panel";
-import { OutreachForm } from "@/components/marketing/outreach-form";
-import { OutreachBoardView } from "@/components/marketing/outreach-board";
 import { getOutreachBoard } from "@/lib/data/outreach-links";
+import PostsToAnswerPage from "@/app/(app)/admin/outreach/posts/page";
 import { listPaymentsToCollect, type PaymentToCollect } from "@/lib/data/collections";
 import type { CallList } from "@/lib/call-list";
 import { isAccountManager } from "@/lib/affiliate-roles";
@@ -131,7 +130,7 @@ export default async function MyDayPage() {
     viewer && isFieldOnly(viewer.roles) ? (
       <CrewDay profile={viewer} />
     ) : viewer && isGrowthOnly(viewer.roles) ? (
-      await GrowthDay(viewer)
+      await GrowthDay()
     ) : (
       <OfficeDay />
     );
@@ -291,39 +290,10 @@ function isGrowthOnly(roles: string[]): boolean {
   return held.includes("office") && held.every((r) => r === "office");
 }
 
-async function GrowthDay(profile: Profile) {
-  const board = await getOutreachBoard({ onlyProfileId: profile.id }).catch((err) => {
-    console.error("Outreach board failed to load:", err);
-    return null;
-  });
-  const first = (profile.first_name || profile.full_name || "").split(" ")[0];
-  return (
-    <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
-      <h1 className="text-2xl font-bold">My Day</h1>
-      <p className="mb-4 text-muted-foreground">
-        {first ? `${first}, ` : ""}someone asked for a landscaper? Screenshot it, get the reply, paste it with your link.
-      </p>
-
-      <section className="mb-5 rounded-xl border border-primary/40 bg-primary/5 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <MessageSquarePlus className="h-4 w-4 text-primary" />
-          Answer a comment or message
-        </h2>
-        <OutreachForm />
-      </section>
-
-      {board && board.total.posts > 0 ? (
-        <section>
-          <h2 className="mb-2 text-sm font-semibold">Your links, and what came of them</h2>
-          <OutreachBoardView board={board} scope="mine" />
-        </section>
-      ) : (
-        <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-          Nothing answered yet. The first screenshot you upload starts your list.
-        </p>
-      )}
-    </div>
-  );
+async function GrowthDay() {
+  // Their day is Posts to Answer: the next post, the leaderboard, and what
+  // came of every post they answered.
+  return <PostsToAnswerPage />;
 }
 
 /** A section still on its way. Small, so the page never jumps when it lands. */
@@ -430,14 +400,14 @@ async function OfficeDay() {
       {/* The cheapest lead in the business, and it only happens if somebody
           remembers it exists. */}
       <Link
-        href="/admin/outreach"
+        href="/admin/outreach/posts"
         className="mb-6 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3 transition-colors hover:bg-primary/10"
       >
         <MessageSquarePlus className="h-5 w-5 shrink-0 text-primary" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">Someone asked for a landscaper?</span>
           <span className="block text-xs text-muted-foreground">
-            Upload the screenshot and get a comment to paste, with your own link in it.
+            Answer the next post, or add one you found. The comment is written for you, with your own link in it.
           </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
           (me.week.score.perOpenHour != null ? `, ${me.week.score.perOpenHour} an open hour` : "") +
           `, ${me.week.counts.bookings} booked from your links. ${verdictLabel(me.week.score.verdict)}.`
       );
-      lines.push("", `Start here: ${base}/admin/outreach`, "", org.name);
+      lines.push("", `Start here: ${base}/admin/outreach/posts`, "", org.name);
 
       const sent = await sendOutbound({
         organizationId: org.id,

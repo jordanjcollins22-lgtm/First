@@ -8,9 +8,13 @@ import LeadsPage from "@/app/(app)/leads/page";
 import DoorHangersPage from "@/app/(app)/admin/door-hangers/page";
 import FlyerPage from "@/app/(app)/admin/flyer/page";
 import SocialPage from "@/app/(app)/admin/social/page";
-import OutreachPage from "@/app/(app)/admin/outreach/page";
+import PostsToAnswerPage from "@/app/(app)/admin/outreach/posts/page";
 import { AttributionPanel } from "@/components/marketing/attribution-panel";
+import { BookingTestCard } from "@/components/marketing/booking-test-card";
 import { attributionReport } from "@/lib/data/attribution";
+import { getBookingTest } from "@/lib/data/booking-test";
+import { getCurrentProfile } from "@/lib/data/team";
+import { isOwnerLevel } from "@/lib/roles";
 
 /**
  * Where the next customer comes from.
@@ -25,13 +29,13 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab } = await searchParams;
 
-  const [map, leads, hangers, flyer, content, recommendations] = await Promise.all([
+  const [map, leads, hangers, flyer, content, posts] = await Promise.all([
     holdsAny(["project-data"]),
     holdsAny(["leads"]),
     holdsAny(["door-hangers"]),
     holdsAny(["flyer"]),
     holdsAny(["social"]),
-    holdsAny(["recommendations"]),
+    holdsAny(["posts-to-answer"]),
   ]);
 
   return (
@@ -51,11 +55,11 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
               ),
             }
           : {}),
-        ...(content || recommendations
+        ...(content || posts
           ? {
               content: (
                 <div className="space-y-8">
-                  {recommendations && <OutreachPage />}
+                  {posts && <PostsToAnswerPage />}
                   {content && <SocialPage />}
                 </div>
               ),
@@ -74,12 +78,29 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
  * nothing else on the module.
  */
 async function AttributionTab() {
-  const report = await attributionReport().catch((err) => {
-    console.error("Attribution failed to load:", err);
-    return null;
-  });
+  const profile = await getCurrentProfile();
+  const owner = isOwnerLevel(profile?.roles ?? []);
+  const [report, bookingTest] = await Promise.all([
+    attributionReport().catch((err) => {
+      console.error("Attribution failed to load:", err);
+      return null;
+    }),
+    // The booking page's own test, the owner's to read.
+    owner ? getBookingTest().catch(() => null) : Promise.resolve(null),
+  ]);
+  const test = bookingTest ? <BookingTestCard test={bookingTest} /> : null;
   if (!report) {
-    return <p className="text-sm text-muted-foreground">The attribution could not be worked out just now.</p>;
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-muted-foreground">The attribution could not be worked out just now.</p>
+        {test}
+      </div>
+    );
   }
-  return <AttributionPanel totals={report.totals} health={report.health} jobs={report.jobs} />;
+  return (
+    <div className="space-y-6">
+      <AttributionPanel totals={report.totals} health={report.health} jobs={report.jobs} />
+      {test}
+    </div>
+  );
 }

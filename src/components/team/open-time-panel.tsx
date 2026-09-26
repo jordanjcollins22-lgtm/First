@@ -59,11 +59,11 @@ export function OpenTimePanel({ me }: { me: PersonOpenTime }) {
       </p>
 
       <Link
-        href="/admin/outreach"
+        href="/admin/outreach/posts"
         className="mt-3 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium hover:bg-primary/10"
       >
         <MessageSquarePlus className="h-4 w-4 text-primary" />
-        Start with a screenshot
+        Answer the next post
       </Link>
     </section>
   );

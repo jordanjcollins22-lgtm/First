@@ -26,7 +26,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
   const params = (await searchParams) ?? {};
   const pinned = params.post ?? null;
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
-  await requireTab("posts-to-answer", "/admin/outreach");
+  await requireTab("posts-to-answer", "/my-day");
   const profile = await getCurrentProfile();
   if (!profile) return null;
   const owner = isOwnerLevel(profile.roles);
@@ -59,9 +59,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
       <header>
         <div className="flex items-baseline justify-between gap-3">
-          <Link href="/admin/outreach" className="text-xs text-muted-foreground hover:underline">
-            ← Link Tracking
-          </Link>
+          <span />
           {owner && (
             <Link href="/admin/outreach/agent" className="text-xs font-medium hover:underline">
               Where posts come from →
