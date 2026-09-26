@@ -65,8 +65,8 @@ export default async function OutreachPage({
               Posts to answer →
             </Link>
             {owner && (
-              <Link href="/admin/outreach/agent" className="text-xs text-muted-foreground hover:underline">
-                Group Agent →
+              <Link href="/admin/outreach/agent" className="text-xs font-medium hover:underline">
+                Post finder (Facebook &amp; Reddit) →
               </Link>
             )}
           </span>

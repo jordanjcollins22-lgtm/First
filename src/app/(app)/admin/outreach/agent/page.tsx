@@ -13,6 +13,7 @@ import { AgentSettingsForm } from "@/components/marketing/agent-settings";
 import { AgentActivity } from "@/components/marketing/agent-activity";
 import { GroupsToJoin } from "@/components/marketing/groups-to-join";
 import { AgentPicker } from "@/components/marketing/agent-picker";
+import { RedditSwitch } from "@/components/marketing/platform-switch";
 import { AgentBusinesses } from "@/components/marketing/agent-businesses";
 import { listBusinesses } from "@/lib/data/post-sorter";
 
@@ -55,6 +56,7 @@ export default async function GroupAgentPage() {
           ← Link Tracking
         </Link>
         <h1 className="mt-1 text-xl font-semibold">Group Agent</h1>
+        <p className="text-sm font-medium text-muted-foreground">The post finder: Facebook and Reddit</p>
         <p className="mt-1 text-sm text-muted-foreground">
           The finder. With the extension installed and Chrome open, it reads your groups feed, searches
           Facebook for people asking, and looks at any groups listed below. It never comments: every post it
@@ -66,6 +68,36 @@ export default async function GroupAgentPage() {
           their own tracked link.
         </p>
       </header>
+
+      {/* Every platform the finder reads, with its switch, first on the page:
+          the Reddit setting used to be halfway down the settings form. */}
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="mb-2 text-sm font-semibold">Where it looks</h2>
+        <ul className="divide-y divide-border/60 text-sm">
+          <li className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <span>
+              <span className="font-medium">Facebook</span>
+              <span className="block text-xs text-muted-foreground">
+                Your groups feed, post search and listed groups, read by the Chrome extension while Chrome is open.
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground">Runs from the extension</span>
+          </li>
+          <li className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <span>
+              <span className="font-medium">Reddit</span>
+              <span className="block text-xs text-muted-foreground">
+                {settings.redditSubreddits.map((s) => `r/${s}`).join(", ") || "No subreddits listed"}, read by the app every half
+                hour. Change the list under Settings below.
+              </span>
+            </span>
+            <RedditSwitch enabled={settings.redditEnabled} owner={owner} />
+          </li>
+        </ul>
+        {because === "paused" && (
+          <p className="mt-2 text-xs text-amber-700">Paused: nothing is read on any platform until you press Resume under Settings.</p>
+        )}
+      </section>
 
       <section className="rounded-lg border border-border p-4">
         <p className="text-sm">

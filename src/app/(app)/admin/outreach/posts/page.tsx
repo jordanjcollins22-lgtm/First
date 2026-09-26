@@ -40,9 +40,16 @@ export default async function PostsToAnswerPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
       <header>
-        <Link href="/admin/outreach" className="text-xs text-muted-foreground hover:underline">
-          ← Link Tracking
-        </Link>
+        <div className="flex items-baseline justify-between gap-3">
+          <Link href="/admin/outreach" className="text-xs text-muted-foreground hover:underline">
+            ← Link Tracking
+          </Link>
+          {owner && (
+            <Link href="/admin/outreach/agent" className="text-xs font-medium hover:underline">
+              Where posts come from →
+            </Link>
+          )}
+        </div>
         <h1 className="mt-1 text-xl font-semibold">Posts to Answer</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           People in local Facebook groups asking for lawn and landscaping work, found for you. Pick one, press

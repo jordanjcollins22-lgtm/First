@@ -324,3 +324,21 @@ export async function resumeGroupAgent(): Promise<Result> {
   revalidatePath("/admin/outreach/agent");
   return { ok: true };
 }
+
+/**
+ * Reddit on or off, in one press, from the top of the Group Agent page.
+ * The subreddit list is left as it is.
+ */
+export async function setRedditEnabled(enabled: boolean): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can change this." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("outreach_agent_settings")
+    .update({ reddit_enabled: enabled, updated_at: new Date().toISOString(), updated_by: profile.id })
+    .eq("organization_id", profile.organization_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/outreach/agent");
+  return { ok: true };
+}
