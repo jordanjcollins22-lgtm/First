@@ -956,6 +956,7 @@ export default async function JobPage({
                           submittedAt={intake.submittedAt}
                           submittedBy={intake.submittedBy}
                           token={intake.token}
+                          photos={intake.photoUrls}
                         />
                       )}
                       {requestedServiceNames.length > 0 && (

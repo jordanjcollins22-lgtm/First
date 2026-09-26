@@ -50,6 +50,7 @@ export default async function PrepPage({
         <IntakeForm
           token={intake.token}
           initial={intake.answers}
+          initialPhotos={intake.photoUrls}
           submittedAt={intake.submittedAt}
           together={together === "1"}
           businessPhone={intake.businessPhone}

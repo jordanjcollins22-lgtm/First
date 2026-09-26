@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { intakeHeadline, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { intakeHeadline, summarizeDetails, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { intakePath } from "@/lib/data/evaluation-intake";
 import { dateShort } from "@/lib/time-zone";
 
@@ -16,11 +16,13 @@ export function IntakeSummary({
   submittedAt,
   submittedBy,
   token,
+  photos = [],
 }: {
   answers: IntakeAnswers;
   submittedAt: string | null;
   submittedBy: "client" | "together" | null;
   token: string;
+  photos?: { path: string; url: string }[];
 }) {
   if (!submittedAt) {
     return (
@@ -38,6 +40,7 @@ export function IntakeSummary({
   }
 
   const lines = summarizeIntake(answers);
+  const details = summarizeDetails(answers);
   const points = talkingPoints(answers);
 
   return (
@@ -57,6 +60,30 @@ export function IntakeSummary({
           </div>
         ))}
       </dl>
+      {details.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">For the price</p>
+          <dl className="mt-1 grid gap-1.5 sm:grid-cols-[9rem_1fr]">
+            {details.map((line) => (
+              <div key={line.label} className="contents">
+                <dt className="text-muted-foreground">{line.label}</dt>
+                <dd className="m-0">{line.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+      {photos.length > 0 && (
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+          {photos.map((p) => (
+            <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-lg bg-muted">
+              {/* Signed links to a private bucket. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt="Their photo of the property" className="h-full w-full object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
       {points.length > 0 && (
         <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">On the walk</p>

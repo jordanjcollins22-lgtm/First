@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cleanAnswers, type IntakeAnswers } from "@/lib/evaluation-intake";
@@ -10,6 +11,8 @@ export interface Intake {
   answers: IntakeAnswers;
   submittedAt: string | null;
   submittedBy: "client" | "together" | null;
+  /** The photos they sent, signed for an hour. */
+  photoUrls: { path: string; url: string }[];
 }
 
 /** What the public page shows around the form. */
@@ -21,6 +24,20 @@ export interface PublicIntake extends Intake {
   /** The visit, as an instant. */
   evaluationAt: string | null;
   cancelled: boolean;
+}
+
+/** An hour: long enough to read the form, short enough not to travel. */
+const PHOTO_URL_SECONDS = 60 * 60;
+
+/** Signed links for the photos, in the order they were sent. */
+async function signPhotos(
+  storage: SupabaseClient["storage"],
+  paths: string[]
+): Promise<{ path: string; url: string }[]> {
+  if (paths.length === 0) return [];
+  const { data } = await storage.from("job-photos").createSignedUrls(paths, PHOTO_URL_SECONDS);
+  const byPath = new Map((data ?? []).map((s) => [s.path, s.signedUrl]));
+  return paths.flatMap((path) => (byPath.get(path) ? [{ path, url: byPath.get(path)! }] : []));
 }
 
 /**
@@ -58,11 +75,13 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
     } | null;
   };
 
+  const answers = cleanAnswers(row.answers);
   return {
     id: row.id,
     jobId: row.job_id,
     token: row.token,
-    answers: cleanAnswers(row.answers),
+    answers,
+    photoUrls: await signPhotos(admin.storage, answers.photos),
     submittedAt: row.submitted_at,
     submittedBy: row.submitted_by,
     businessName: row.organization?.name ?? "",
@@ -83,11 +102,13 @@ export async function getIntakeForJob(jobId: string): Promise<Intake | null> {
     .eq("job_id", jobId)
     .maybeSingle();
   if (!data) return null;
+  const answers = cleanAnswers(data.answers);
   return {
     id: data.id,
     jobId: data.job_id,
     token: data.token,
-    answers: cleanAnswers(data.answers),
+    answers,
+    photoUrls: await signPhotos(supabase.storage, answers.photos),
     submittedAt: data.submitted_at,
     submittedBy: (data.submitted_by as Intake["submittedBy"]) ?? null,
   };

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   answeredCount,
+  answersForConcerns,
+  BEFORE_VISIT_QUESTIONS,
+  CONCERN_ANSWERS,
+  detailQuestionsFor,
+  summarizeDetails,
   cleanAnswers,
   emptyAnswers,
   INTAKE_QUESTIONS,
@@ -76,5 +81,62 @@ describe("what the evaluator reads", () => {
     expect(titles.some((t) => t.includes("tried"))).toBe(true);
     expect(titles.some((t) => t.includes("say no"))).toBe(true);
     expect(titles.some((t) => t.includes("ask us"))).toBe(true);
+  });
+});
+
+describe("the details that set the price", () => {
+  it("asks only about the work they ticked, then about the property", () => {
+    const ids = detailQuestionsFor(["removal"]).map((q) => q.id);
+    expect(ids).toContain("stumps");
+    expect(ids).not.toContain("cover");
+    expect(ids).toContain("gate");
+    expect(detailQuestionsFor([]).every((q) => q.services === null)).toBe(true);
+  });
+
+  it("keeps offered answers only, and reads them back in words", () => {
+    const answers = cleanAnswers({
+      services: ["removal"],
+      details: { stumps: "12_24", gate: "narrow", buried: ["sprinklers", "made_up"], cover: "purple", nonsense: "x" },
+    });
+    expect(answers.details).toEqual({ stumps: "12_24", gate: "narrow", buried: ["sprinklers"] });
+    expect(summarizeDetails(answers)).toEqual([
+      { label: "Stumps", value: "1 to 2 feet across" },
+      { label: "Way in", value: "Under 3 ft" },
+      { label: "Buried", value: "Sprinklers" },
+    ]);
+    const points = talkingPoints(answers);
+    expect(points.some((p) => p.includes("hand work"))).toBe(true);
+    expect(points.some((p) => p.includes("sprinkler heads"))).toBe(true);
+    expect(points.some((p) => p.includes("Big stumps"))).toBe(true);
+  });
+
+  it("keeps only photo paths the form could have made", () => {
+    const answers = cleanAnswers({
+      photos: ["0b9c-11/intake-4f2a.jpg", "0b9c-11/intake-4f2a.jpg", "../other/secret.jpg", "0b9c-11/photo.jpg", 7],
+    });
+    expect(answers.photos).toEqual(["0b9c-11/intake-4f2a.jpg"]);
+  });
+});
+
+describe("answering what would make them say no", () => {
+  it("has an answer for every worry but being ready", () => {
+    const concerns = INTAKE_QUESTIONS.find((q) => q.key === "concerns")!.options!.map((o) => o.value);
+    for (const c of concerns.filter((c) => c !== "nothing")) {
+      expect(CONCERN_ANSWERS[c]?.length, c).toBeGreaterThan(0);
+      expect(answersForConcerns([c]).every((a) => a.body.length > 40), c).toBe(true);
+    }
+    expect(answersForConcerns(["nothing"])).toEqual([]);
+  });
+
+  it("says each answer once however many worries share it", () => {
+    const headings = answersForConcerns(["price", "bad_experience", "price"]).map((a) => a.heading);
+    expect(new Set(headings).size).toBe(headings.length);
+  });
+
+  it("answers the usual questions in plain words, with no dashes", () => {
+    expect(BEFORE_VISIT_QUESTIONS.length).toBeGreaterThanOrEqual(6);
+    for (const a of [...BEFORE_VISIT_QUESTIONS, ...Object.values(CONCERN_ANSWERS).flat()]) {
+      expect(a.body).not.toMatch(/[\u2013\u2014]/);
+    }
   });
 });
