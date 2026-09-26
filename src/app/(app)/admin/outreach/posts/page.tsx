@@ -61,9 +61,14 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
         <div className="flex items-baseline justify-between gap-3">
           <span />
           {owner && (
-            <Link href="/admin/outreach/agent" className="text-xs font-medium hover:underline">
-              Where posts come from →
-            </Link>
+            <span className="flex gap-3">
+              <Link href="/admin/booking-page" className="text-xs font-medium hover:underline">
+                Booking page →
+              </Link>
+              <Link href="/admin/outreach/agent" className="text-xs font-medium hover:underline">
+                Where posts come from →
+              </Link>
+            </span>
           )}
         </div>
         <h1 className="mt-1 text-xl font-semibold">Posts to Answer</h1>

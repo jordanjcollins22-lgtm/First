@@ -1,15 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { computeAvailableSlots } from "@/lib/booking-availability";
-import { describeNotice, firstBookableDate, minLeadMinutes } from "@/lib/booking-notice";
-import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
-import {
-  getBookingNotice,
-  listAvailabilityData,
-  listOrgEvaluatorIds,
-  listPublicServices,
-  resolveBookingContext,
-} from "@/lib/data/public-booking";
+import { loadBookingOptions } from "@/lib/data/booking-options";
 import { isSupabaseConfigured } from "@/lib/env";
 
 import type { BookingOptions } from "../booking-options";
@@ -43,49 +34,5 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingOpt
   // working after whatever else they named has gone.
   const rec = request.nextUrl.searchParams.get("rec") ?? undefined;
 
-  const context = await resolveBookingContext({ ref, org, rec });
-  if (!context) {
-    return answer({ status: "unknown-link" });
-  }
-
-  const evaluatorIds = context.dedicatedEvaluatorId
-    ? [context.dedicatedEvaluatorId]
-    : await listOrgEvaluatorIds(context.organizationId);
-
-  if (evaluatorIds.length === 0) {
-    return answer({ status: "closed" });
-  }
-
-  const [services, availability, busy, notice] = await Promise.all([
-    listPublicServices(context.organizationId),
-    listAvailabilityData(evaluatorIds),
-    // Every other calendar these people are on. Without this a client could be
-    // offered ten o'clock with somebody who has been on an install since eight.
-    getBusyBlocksAsAdmin().catch(() => []),
-    getBookingNotice(context.organizationId),
-  ]);
-
-  const now = new Date();
-  const slots = computeAvailableSlots({
-    evaluatorIds,
-    weeklyAvailability: availability.weeklyAvailability,
-    daysOff: availability.daysOff,
-    bookedTimes: availability.bookedTimes,
-    busy,
-    from: now,
-    // The business's notice rule: no same-day visits unless allowed, and
-    // never inside its hours of notice.
-    firstDate: firstBookableDate(notice, now),
-    minLeadMinutes: minLeadMinutes(notice),
-  });
-
-  return answer({
-    status: "ok",
-    organizationId: context.organizationId,
-    organizationName: context.organizationName,
-    referredByProfileId: context.referredByProfileId,
-    services,
-    slots,
-    noticeText: describeNotice(notice),
-  });
+  return answer(await loadBookingOptions({ ref, org, rec }));
 }

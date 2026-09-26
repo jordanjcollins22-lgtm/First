@@ -1,5 +1,6 @@
 import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
+import type { BookingProof } from "@/lib/booking-proof";
 
 /**
  * Everything the booking form needs that the database has to answer for.
@@ -30,4 +31,8 @@ export type BookingOptions =
       slots: AvailableSlotGroup[];
       /** The notice rule in the client's words, or empty when there is none to state. */
       noticeText: string;
+      /** The reviews and news story that back up what the comment said. */
+      proof: BookingProof;
+      /** The work the person asked about, when the link says. */
+      service: string | null;
     };

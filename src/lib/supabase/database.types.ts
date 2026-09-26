@@ -3156,6 +3156,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["outreach_groups"]["Row"]>;
         Relationships: [];
       };
+      booking_proof: {
+        Row: {
+          id: string;
+          organization_id: string;
+          kind: "review" | "news";
+          author: string | null;
+          body: string | null;
+          stars: number | null;
+          source: string | null;
+          written_on: string | null;
+          outlet: string | null;
+          headline: string | null;
+          url: string | null;
+          position: number;
+          shown: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_proof"]["Row"]> & {
+          organization_id: string;
+          kind: "review" | "news";
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_proof"]["Row"]>;
+        Relationships: [];
+      };
       outreach_post_answers: {
         Row: {
           id: string;

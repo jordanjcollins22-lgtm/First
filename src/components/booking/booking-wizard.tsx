@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { CheckCircle2, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
 import type { BookingTimes, OfferedTime } from "@/app/book/times/route";
 import { RecommendedTimes } from "@/components/booking/recommended-times";
+import { LandingCard } from "@/components/booking/landing-card";
+import { BOOKING_PAGES, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
 import { modeForAddress } from "@/lib/evaluation-mode";
 import {
   MEMORY_KEY,
@@ -52,7 +54,6 @@ import {
  * click. "Not sure yet" is now an answer.
  */
 
-const STEP_LABELS = ["Your place", "What you need", "When", "Your details"];
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
 function toDateKey(d: Date): string {
@@ -138,6 +139,9 @@ export function BookingWizard({
   linkRef,
   linkOrg,
   referralCode,
+  proof = NO_PROOF,
+  service = null,
+  preview = false,
 }: {
   organizationId: string;
   organizationName: string;
@@ -156,8 +160,20 @@ export function BookingWizard({
    * it is a code we issued. A stranger can put anything in a URL.
    */
   referralCode: string | null;
+  /** The reviews and news story the landing card shows. */
+  proof?: BookingProof;
+  /** The work the person asked about, from the link they came through. */
+  service?: string | null;
+  /**
+   * The owner looking, not a client booking. Every page can be clicked to
+   * straight from the arrows, nothing is recorded, and nothing books.
+   */
+  preview?: boolean;
 }) {
-  const [step, setStep] = useState(1);
+  // 0 is the landing card; 1 to 4 are the booking itself.
+  const [step, setStep] = useState(0);
+  // The preview can show the page a client sees once they have booked.
+  const [previewDone, setPreviewDone] = useState(false);
   const [booked, setBooked] = useState<{
     date: string;
     time: string;
@@ -172,7 +188,8 @@ export function BookingWizard({
   const [monthCursor, setMonthCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlotGroup | null>(null);
-  const [showAllTimes, setShowAllTimes] = useState(false);
+  // A preview has no address, so no suggested times: straight to the calendar.
+  const [showAllTimes, setShowAllTimes] = useState(preview);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -190,14 +207,14 @@ export function BookingWizard({
   const visitIdRef = useRef<string | null>(null);
   const visitRecordedRef = useRef(false);
   useEffect(() => {
-    if (visitRecordedRef.current) return;
+    if (visitRecordedRef.current || preview) return;
     visitRecordedRef.current = true;
     recordBookingVisit({ organizationId, variant, referralCode, linkRef })
       .then((r) => {
         visitIdRef.current = r.visitId;
       })
       .catch(() => {});
-  }, [organizationId, variant, referralCode, linkRef]);
+  }, [organizationId, variant, referralCode, linkRef, preview]);
 
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -373,6 +390,7 @@ export function BookingWizard({
 
   function handleSubmit() {
     setError(null);
+    if (preview) return setError("This is a preview, so nothing is booked.");
     if (!firstName.trim() || !lastName.trim()) return setError("Enter your first and last name.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Enter a valid email address.");
     if (!phone.trim()) return setError("Enter a phone number.");
@@ -429,9 +447,25 @@ export function BookingWizard({
     });
   }
 
-  if (booked) {
+  // What a client sees once they have booked. The preview shows it with a
+  // made-up time, so the owner can see the last page too.
+  const done =
+    booked ??
+    (preview && previewDone
+      ? {
+          date: toDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2)),
+          time: "10:00",
+          address: "123 Example Rd, Bel Air, MD",
+          digital: false,
+          prepToken: null,
+        }
+      : null);
+  const doneEmail = booked ? email : "you@example.com";
+
+  // Shadows the state on purpose: the preview's made-up booking reads the same.
+  function renderDone(booked: NonNullable<typeof done>) {
     return (
-      <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-4 py-16 text-center">
+      <div className="flex flex-col items-center gap-4 py-4 text-center">
         <CheckCircle2 className="h-12 w-12 text-primary" />
         <h1 className="text-2xl font-bold">You&apos;re booked</h1>
         <p className="text-muted-foreground">
@@ -440,7 +474,7 @@ export function BookingWizard({
         <div className="w-full rounded-xl border border-border bg-card p-4 text-left text-sm">
           <p className="font-medium">What happens next</p>
           <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
-            <li>A confirmation is on its way to {email}.</li>
+            <li>A confirmation is on its way to {doneEmail}.</li>
             <li>
               {booked.digital
                 ? "We walk the property with you over a video call — about an hour."
@@ -519,30 +553,83 @@ export function BookingWizard({
     setStep(4);
   }
 
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      {/* The offer, said plainly and specifically. "Free consultation" is a
-          category; this is a thing somebody can picture happening. Every claim
-          in it is one the rest of the app actually delivers. */}
-      <div>
-        <p className="text-sm font-medium text-primary">{organizationName}</p>
-        <h1 className="mt-0.5 text-2xl font-bold leading-tight">Book your free property evaluation</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          We walk your property with you, measure what needs doing, and leave you with a written proposal and a
-          fixed price. Takes about an hour. It&apos;s free, and there&apos;s no obligation.
-        </p>
-      </div>
+  const pageCount = BOOKING_PAGES.length;
+  // Where the preview arrows can go: every page, then the booked page.
+  const previewPages = [...BOOKING_PAGES, "After booking"];
+  const previewAt = previewDone ? pageCount : step;
+  function previewGo(index: number) {
+    setError(null);
+    if (index >= pageCount) {
+      setPreviewDone(true);
+      return;
+    }
+    setPreviewDone(false);
+    setStep(Math.max(0, index));
+  }
 
-      <div className="flex items-center gap-1">
-        {STEP_LABELS.map((label, i) => (
-          <div key={label} className="flex flex-1 flex-col items-center gap-1">
-            <div className={cn("h-1.5 w-full rounded-full", i + 1 <= step ? "bg-primary" : "bg-muted")} />
-            <span className={cn("text-[10px]", i + 1 === step ? "font-semibold text-primary" : "text-muted-foreground")}>
-              {label}
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 py-6 sm:py-10">
+      {preview && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-primary/50 bg-primary/5 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+              <Eye className="h-3.5 w-3.5" /> Preview · {pageCount} pages, then the booked page
+            </p>
+            <span className="flex gap-1">
+              <Button type="button" size="icon" variant="outline" className="h-8 w-8" disabled={previewAt === 0} onClick={() => previewGo(previewAt - 1)} aria-label="Previous page">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                disabled={previewAt >= previewPages.length - 1}
+                onClick={() => previewGo(previewAt + 1)}
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </span>
           </div>
-        ))}
+          <div className="flex flex-wrap gap-1">
+            {previewPages.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => previewGo(i)}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[11px]",
+                  i === previewAt ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"
+                )}
+              >
+                {i < pageCount ? `${i + 1}. ` : ""}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+      {done ? (
+        renderDone(done)
+      ) : (
+      <>
+      {/* Which page of how many, so nobody wonders how long this goes on. */}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          Page {step + 1} of {pageCount}
+          {step > 0 ? ` · ${BOOKING_PAGES[step]}` : ""}
+        </span>
+        <span className="flex gap-1" aria-hidden>
+          {BOOKING_PAGES.map((label, i) => (
+            <span key={label} className={cn("h-1.5 w-5 rounded-full", i <= step ? "bg-primary" : "bg-muted")} />
+          ))}
+        </span>
       </div>
+
+      {step === 0 && <LandingCard organizationName={organizationName} service={service} proof={proof} onStart={() => setStep(1)} />}
 
       {/* ------------------------------------ 0. we have been here before */}
       {step === 1 && remembered && !dismissedMemory && (
@@ -673,6 +760,9 @@ export function BookingWizard({
           )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="button" variant="outline" className="self-start" onClick={() => setStep(0)}>
+            Back
+          </Button>
         </div>
       )}
 
@@ -768,8 +858,8 @@ export function BookingWizard({
               onSeeAll={() => setShowAllTimes(true)}
             />
           ) : (
-            <div className="flex flex-col gap-4 sm:flex-row">
-              <div className="sm:w-64 sm:shrink-0">
+            <div className="flex flex-col gap-4">
+              <div>
                 <div className="mb-2 flex items-center justify-between">
                   <button
                     type="button"
@@ -922,7 +1012,7 @@ export function BookingWizard({
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button type="button" className="h-12 w-full text-base" disabled={isPending} onClick={handleSubmit}>
+          <Button type="button" className="h-12 w-full text-base" disabled={isPending || preview} onClick={handleSubmit}>
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Booking…
@@ -939,6 +1029,9 @@ export function BookingWizard({
           </Button>
         </div>
       )}
+      </>
+      )}
+      </div>
     </div>
   );
 }

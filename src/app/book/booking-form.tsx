@@ -25,27 +25,31 @@ import type { BookingOptions } from "./booking-options";
 /**
  * The chrome the wizard draws around itself, with nothing in it yet.
  *
- * It is the same wrapper, heading block and four-step bar, so the form does
- * not jump when the real thing replaces it. This is what gets baked into the
- * prerendered HTML — so the count here has to match the wizard's steps, or the
- * bar visibly resizes the moment the options land.
+ * It is the same card, page counter and five dots, so the form does not jump
+ * when the real thing replaces it. This is what gets baked into the
+ * prerendered HTML — so the count here has to match BOOKING_PAGES, or the
+ * dots visibly change the moment the options land.
  */
 export function BookingFormSkeleton() {
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10" aria-hidden>
-      <div className="flex flex-col gap-2">
-        <div className="h-6 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-64 animate-pulse rounded bg-muted" />
-      </div>
-      <div className="flex items-center gap-1">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex flex-1 flex-col items-center gap-1">
-            <div className="h-1.5 w-full rounded-full bg-muted" />
-            <div className="h-2 w-10 rounded bg-muted" />
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 py-6 sm:py-10" aria-hidden>
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-20 rounded bg-muted" />
+          <div className="flex gap-1">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-1.5 w-5 rounded-full bg-muted" />
+            ))}
           </div>
-        ))}
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+          <div className="h-7 w-64 animate-pulse rounded bg-muted" />
+          <div className="h-12 w-full animate-pulse rounded bg-muted" />
+        </div>
+        <div className="h-12 w-full animate-pulse rounded-lg bg-muted" />
+        <div className="h-40 w-full animate-pulse rounded-xl bg-muted" />
       </div>
-      <div className="h-64 w-full animate-pulse rounded-lg bg-muted" />
     </div>
   );
 }
@@ -142,6 +146,8 @@ export function BookingForm() {
       linkRef={ref}
       linkOrg={org}
       referralCode={rec}
+      proof={options.proof}
+      service={options.service}
     />
   );
 }
