@@ -78,6 +78,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "drainage", label: "Drainage or standing water" },
       { value: "hardscape", label: "Patio, walkway or wall" },
       { value: "washing", label: "Soft washing" },
+      { value: "holiday", label: "Holiday decorations" },
       { value: "other", label: "Something else" },
     ],
     notesKey: "services_other",
@@ -336,6 +337,24 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     short: "Stories",
     kind: "single",
     options: opts(["1", "1"], ["2", "2"], ["3", "3 or more"]),
+  },
+  {
+    id: "holiday_what",
+    services: ["holiday"],
+    group: "Holiday decorations",
+    title: "What would you like decorated?",
+    short: "Decorate",
+    kind: "multi",
+    options: opts(["roofline", "Roofline lights"], ["trees", "Trees and bushes"], ["path", "Walkway or driveway"], ["wreaths", "Wreaths and garland"], ["display", "A yard display"]),
+  },
+  {
+    id: "holiday_lights",
+    services: ["holiday"],
+    group: "Holiday decorations",
+    title: "Whose decorations?",
+    short: "Decorations",
+    kind: "single",
+    options: opts(["ours", "You bring them"], ["mine", "Use mine"], ["both", "Some of each"]),
   },
   // The property, whatever the work: only what is out of the ordinary.
   {

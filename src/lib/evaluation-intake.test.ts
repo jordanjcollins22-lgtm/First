@@ -135,7 +135,9 @@ describe("the details that set the price", () => {
   });
 
   it("never offers tree or stump work, which the business does not do itself", () => {
-    const words = [...INTAKE_QUESTIONS, ...DETAIL_QUESTIONS].flatMap((q) => [q.title, ...(q.options ?? []).map((o) => o.label)]).join(" ");
+    // Lights on a tree are decorating, not tree work, so that group is left out.
+    const work = DETAIL_QUESTIONS.filter((q) => q.group !== "Holiday decorations");
+    const words = [...INTAKE_QUESTIONS, ...work].flatMap((q) => [q.title, ...(q.options ?? []).map((o) => o.label)]).join(" ");
     expect(words).not.toMatch(/stump|\btrees?\b/i);
   });
 
