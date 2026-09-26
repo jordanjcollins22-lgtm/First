@@ -1,23 +1,20 @@
-// The popup: one switch to start and stop the finder, what it is doing, the
-// posts waiting for the team, and a word when the app has a newer copy.
+// The popup: what the finder is doing, the posts waiting for the team, and
+// a word when the app has a newer copy. It has no switch of its own: the
+// finder is started and stopped by the one button in the app, on Where
+// Posts Come From, and this extension hears it at once.
 const APP = "https://app.jslandscapingmd.com";
+document.getElementById("switch").href = `${APP}/admin/outreach/agent`;
 
 function render(snap) {
-  const power = document.getElementById("power");
   const status = document.getElementById("status");
   const waiting = document.getElementById("waiting");
   const update = document.getElementById("update");
   document.getElementById("version").textContent = snap?.version ? `v${snap.version}` : "";
 
   const config = snap?.config ?? null;
-  const on = Boolean(config) && config.because !== "paused";
-  power.disabled = false;
-  power.dataset.on = on ? "true" : "false";
-  power.textContent = on ? "Turn off" : "Turn on";
-  power.className = on ? "power off" : "power";
 
   const lines = [];
-  if (!config) lines.push("Sign in to the app in this Chrome, then press Turn on.");
+  if (!config) lines.push("Sign in to the app in this Chrome.");
   else if (config.because === "paused") lines.push("Off. Nothing is being read.");
   else if (config.because === "outside hours") lines.push("On, but outside its hours. The window opens again when they start.");
   else lines.push(snap.windowOpen ? "On. Scrolling Facebook in its own window." : "On. Opening its window…");
@@ -48,11 +45,3 @@ function ask(message) {
 
 // Asked fresh each time the popup opens, so the switch is right straight away.
 ask({ type: "status", fresh: true }).then(render);
-
-document.getElementById("power").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const turningOn = button.dataset.on !== "true";
-  button.disabled = true;
-  button.textContent = turningOn ? "Turning on…" : "Turning off…";
-  render(await ask({ type: "power", on: turningOn }));
-});

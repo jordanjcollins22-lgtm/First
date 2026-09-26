@@ -64,10 +64,10 @@ function useExtensionHere(): string | null {
 }
 
 /**
- * The finder's one switch: Start finding posts, Stop finding posts. The same
- * switch as Turn on and Turn off in the extension's popup. Pressed here, the
- * extension in this Chrome is told at once, so its window opens or closes
- * straight away rather than at its next check.
+ * The finder's one switch: Start finding posts, Stop finding posts. It is the
+ * only one; the extension has none of its own. Pressed here, the extension
+ * in this Chrome is told at once, so its window opens or closes straight
+ * away rather than at its next check.
  */
 export function FinderPower({ paused, owner }: { paused: boolean; owner: boolean }) {
   const router = useRouter();

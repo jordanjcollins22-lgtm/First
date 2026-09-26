@@ -8,14 +8,14 @@ It runs as you, in your Chrome, on your Facebook account, with your app sign-in.
 
 ## What it does
 
-One switch starts and stops it: **Start finding posts** on **app → Marketing → Where Posts Come From**, or **Turn on** in the popup. They are the same switch; press either one. Pressed in the app, the extension in that Chrome hears it at once and opens one window of its own, to the right of yours, and keeps it open.
+One button starts and stops it: **Start finding posts** on **app → Marketing → Where Posts Come From**. The extension in your Chrome hears it at once and opens one window of its own, to the right of yours, and keeps it open. The button works from any device; the finding happens in the Chrome where the extension is installed.
 
 1. Once a minute it asks the app whether it is still on, then scrolls further down the page in that window and sends every post it read to the app. The app keeps the new ones and sorts them. The same post is never sent twice.
 2. After about ten minutes on your groups feed it moves on to a search or a listed group for a few minutes, then back to the top of the feed for whatever is new.
 3. When more posts are waiting for the team than last time, it shows a notification; click it to open the board.
 4. When the app lists one of the business's own review pages as due (a Facebook page or a Google Maps listing, set on **app → Marketing → Booking Page**), it reads those reviews in a separate small window, and the app keeps only the five-star ones with something written. This happens even while the finder is off, because the owner asked for it, and again every week.
 
-Press **Stop finding posts** in the app, or **Turn off** in the popup, and the window closes straight away. Outside the looking hours set in the app, the window closes too and opens again when they start. If you close the window yourself while it is on, it opens again within a minute; use Turn off to stop it.
+Press **Stop finding posts** and the window closes straight away. Outside the looking hours set in the app, the window closes too and opens again when they start. If you close the window yourself while it is on, it opens again within a minute; use Stop finding posts to stop it.
 
 The window has to stay on screen, not minimized: Chrome only loads a Facebook page it is drawing. It never takes focus from what you're doing.
 
@@ -30,7 +30,7 @@ A post found by search in a group you haven't joined still goes on the board. Th
 5. Sign in to the app in this Chrome, and stay signed in to Facebook.
 6. In the app, check where it looks (app → Marketing → Where Posts Come From) and press Save.
 
-The popup is the **Turn on / Turn off** switch, what it is doing, and how many posts are waiting for the team.
+The popup shows what it is doing, how many posts are waiting for the team, and a link to the button in the app.
 
 ## Keeping the account safe
 

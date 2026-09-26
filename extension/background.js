@@ -70,9 +70,6 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       // Turned on or off in the app: act on it now rather than at the next minute.
       await tick({ force: true });
       reply(await snapshot());
-    } else if (message?.type === "power") {
-      await power(Boolean(message.on));
-      reply(await snapshot());
     } else reply({ ok: false });
   })().catch((err) => reply({ error: String(err?.message ?? err) }));
   return true;
@@ -87,28 +84,6 @@ async function snapshot() {
     scans: store.scans ?? {},
     windowOpen: Boolean(store[FINDER]),
   };
-}
-
-/** On or off, from the popup: the same switch as Resume and Pause in the app. */
-async function power(on) {
-  try {
-    const res = await fetch(`${API}/power`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ on }),
-    });
-    if (!res.ok) {
-      const answer = await res.json().catch(() => null);
-      await setStatus(answer?.error ?? `The app answered ${res.status}.`);
-      return;
-    }
-  } catch (err) {
-    await setStatus(`Couldn't reach the app: ${err?.message ?? err}`);
-    return;
-  }
-  // Straight away, not at the next minute: open the window, or close it.
-  await tick({ force: true });
 }
 
 // ---------------------------------------------------------------------------

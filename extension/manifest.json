@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "JS Landscaping: post finder",
   "description": "Reads your Facebook groups for neighbours asking for lawn and landscaping work and brings each post into the app for the team to answer. It never comments.",
-  "version": "2.9.1",
+  "version": "2.9.2",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

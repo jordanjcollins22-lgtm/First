@@ -8,10 +8,8 @@
       header { padding: 10px 12px; background: #2f6d3c; color: #fff; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
       header small { font-weight: 400; opacity: 0.8; }
       main { padding: 12px; display: grid; gap: 10px; }
-      .power { width: 100%; padding: 12px; font: inherit; font-weight: 700; font-size: 15px; border: none; border-radius: 8px; color: #fff; background: #2f6d3c; cursor: pointer; }
-      .power.off { background: #9b2c2c; }
-      .power:disabled { opacity: 0.6; cursor: default; }
-      .status { color: #333; }
+      .status { color: #333; font-weight: 600; }
+      .switch { display: block; padding: 10px; border-radius: 8px; border: 1px solid #2f6d3c; text-align: center; font-weight: 600; text-decoration: none; }
       .muted { color: #666; font-size: 12px; }
       .update { background: #fff7e0; border: 1px solid #f0d58c; border-radius: 6px; padding: 8px; font-size: 12px; }
       .update a { display: inline-block; margin-top: 4px; font-weight: 600; }
@@ -22,8 +20,8 @@
   <body>
     <header>JS Landscaping post finder <small id="version"></small></header>
     <main>
-      <button class="power" id="power" disabled>Checking…</button>
-      <div class="status" id="status"></div>
+      <div class="status" id="status">Checking…</div>
+      <a id="switch" class="switch" href="#" target="_blank">Start or stop it in the app</a>
       <a id="waiting" class="waiting" href="#" target="_blank" hidden></a>
       <div class="update" id="update" hidden>
         <span></span>
