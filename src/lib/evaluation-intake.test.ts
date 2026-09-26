@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   answeredCount,
   answersForConcerns,
+  asksForPeople,
   BEFORE_VISIT_QUESTIONS,
   CONCERN_ANSWERS,
   DETAIL_QUESTIONS,
@@ -84,7 +85,7 @@ describe("what the evaluator reads", () => {
     expect(titles.some((t) => t.includes("colours"))).toBe(true);
     // Tried before is asked on the say-no page, in its box.
     expect(INTAKE_QUESTIONS.find((q) => q.key === "concerns")?.notesKey).toBe("tried");
-    expect(titles.some((t) => t.includes("worried about"))).toBe(true);
+    expect(titles.some((t) => t.includes("concerned about"))).toBe(true);
     expect(titles.some((t) => t.includes("say no"))).toBe(false);
     expect(titles.some((t) => t.includes("ask us"))).toBe(true);
   });
@@ -159,6 +160,30 @@ describe("the details that set the price", () => {
   });
 });
 
+describe("who else is in the decision", () => {
+  it("has just me, me and others, and an HOA, and reads older answers as one of them", () => {
+    expect(INTAKE_QUESTIONS.find((q) => q.key === "decision")!.options!.map((o) => o.label)).toEqual(["Just me", "Me and others", "An HOA"]);
+    expect(cleanAnswers({ decision: "partner" }).decision).toBe("others");
+    expect(cleanAnswers({ decision: "family" }).decision).toBe("others");
+  });
+
+  it("asks who and how to reach them only when somebody else has a say", () => {
+    expect(asksForPeople("me")).toBe(false);
+    expect(asksForPeople("others")).toBe(true);
+    expect(asksForPeople("hoa")).toBe(true);
+  });
+
+  it("keeps each person's name, who they are and contact, and drops empty rows", () => {
+    const answers = cleanAnswers({
+      decision: "others",
+      people: [{ name: " Mike ", role: "Husband", contact: "410 555 0100" }, { name: "", role: "Mom", contact: "" }, "junk"],
+    });
+    expect(answers.people).toEqual([{ name: "Mike", role: "Husband", contact: "410 555 0100" }]);
+    expect(summarizeIntake(answers)).toContainEqual({ label: "Husband", value: "Mike, 410 555 0100" });
+    expect(talkingPoints(answers).some((p) => p.includes("Mike (Husband) also has a say"))).toBe(true);
+  });
+});
+
 describe("answering what they are worried about", () => {
   it("has an answer for every worry but being ready", () => {
     const concerns = INTAKE_QUESTIONS.find((q) => q.key === "concerns")!.options!.map((o) => o.value);
@@ -172,6 +197,13 @@ describe("answering what they are worried about", () => {
   it("says each answer once however many worries share it", () => {
     const headings = answersForConcerns(["price", "bad_experience", "price"]).map((a) => a.heading);
     expect(new Set(headings).size).toBe(headings.length);
+  });
+
+  it("says what the owner asked it to say", () => {
+    const faq = (h: string) => BEFORE_VISIT_QUESTIONS.find((a) => a.heading === h)!.body;
+    expect(faq("Can I add something later?")).toMatch(/^As long as it is added before we start the work/);
+    expect(faq("What happens if the weather is bad?")).toMatch(/^Any weather can push the schedule back/);
+    expect(CONCERN_ANSWERS.hoa[0].body).toMatch(/request their approval in advance/);
   });
 
   it("answers the usual questions in plain words, with no dashes", () => {

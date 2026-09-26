@@ -32,14 +32,14 @@ export interface IntakeOption {
 export type IntakeSection = "work" | "style" | "decide" | "ask";
 
 export interface IntakeQuestion {
-  key: Exclude<keyof IntakeAnswers, "details" | "photos">;
+  key: Exclude<keyof IntakeAnswers, "details" | "photos" | "people">;
   section: IntakeSection;
   title: string;
   help?: string;
   kind: IntakeKind;
   options?: IntakeOption[];
   /** For a chip question, the free-text field that goes with it. */
-  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos">;
+  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos" | "people">;
   /**
    * When the notes box shows: once any chip is picked, or once one of these
    * is. Always, when not given. A box nobody needs is one more thing to skip.
@@ -65,6 +65,25 @@ export interface IntakeAnswers {
   details: Record<string, string | string[]>;
   /** Storage paths of the photos they sent, in the job-photos bucket. */
   photos: string[];
+  /** Everybody else in the decision, with how to reach them. */
+  people: IntakePerson[];
+}
+
+/** Somebody else in the decision: a spouse, a parent, the HOA. */
+export interface IntakePerson {
+  name: string;
+  /** Who they are to the client, e.g. "Wife", "HOA". */
+  role: string;
+  /** A phone number or an email, as they wrote it. */
+  contact: string;
+}
+
+/** Most people one form keeps. */
+export const MAX_INTAKE_PEOPLE = 6;
+
+/** Whether the decision answer means asking who else is in it. */
+export function asksForPeople(decision: string): boolean {
+  return decision === "others" || decision === "hoa";
 }
 
 export const INTAKE_QUESTIONS: IntakeQuestion[] = [
@@ -125,7 +144,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
   {
     key: "concerns",
     section: "decide",
-    title: "Is there anything you're worried about, or anything else?",
+    title: "Is there anything you're concerned about?",
     kind: "multi",
     options: [
       { value: "price", label: "The price" },
@@ -172,13 +191,12 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
   {
     key: "decision",
     section: "decide",
-    title: "Who else is part of the decision?",
+    title: "Who is part of the decision?",
     kind: "single",
     options: [
       { value: "me", label: "Just me" },
-      { value: "partner", label: "My partner or spouse" },
-      { value: "family", label: "Family or a landlord" },
-      { value: "hoa", label: "An HOA or board" },
+      { value: "others", label: "Me and others" },
+      { value: "hoa", label: "An HOA" },
     ],
   },
   {
@@ -480,7 +498,7 @@ export const CONCERN_ANSWERS: Record<string, IntakeAnswer[]> = {
     {
       heading: "When we could start",
       body:
-        "Tell us the date you are aiming at and we will tell you honestly whether we can make it. We work outdoors, so heavy rain or frozen ground can push a day back. If yours has to move, we let you know as soon as we do and you keep your place at the front of the schedule.",
+        "Tell us the date you are aiming at and we will tell you honestly whether we can make it. We work outdoors, so any weather can push the schedule back. If yours has to move, we let you know as soon as we do and you keep your place at the front of the schedule.",
     },
   ],
   unsure_want: [
@@ -500,7 +518,8 @@ export const CONCERN_ANSWERS: Record<string, IntakeAnswer[]> = {
   hoa: [
     {
       heading: "HOA and permit rules",
-      body: "Send us the rules or have them handy on the visit, and we will plan the work around them.",
+      body:
+        "If you have an HOA, request their approval in advance, since most need to approve changes before work starts. Send us their rules or have them handy on the visit, and we will plan the work around them.",
     },
   ],
   maintenance: [
@@ -548,7 +567,7 @@ export const BEFORE_VISIT_QUESTIONS: IntakeAnswer[] = [
   {
     heading: "What happens if the weather is bad?",
     body:
-      "Heavy rain and frozen ground can push a day back. If yours has to move, we let you know as soon as we do, and you keep your place at the front of the schedule rather than going to the end of it.",
+      "Any weather can push the schedule back. If yours has to move, we let you know as soon as we do, and you keep your place at the front of the schedule rather than going to the end of it.",
   },
   {
     heading: "Can I do just part of it?",
@@ -558,7 +577,7 @@ export const BEFORE_VISIT_QUESTIONS: IntakeAnswer[] = [
   {
     heading: "Can I add something later?",
     body:
-      "Yes. Tell us before you accept and we update the proposal with the new price. After that, anything new is written up and priced as its own visit, so you always know what you are paying for.",
+      "As long as it is added before we start the work. Tell us and we update your proposal with the new price. Once the work has started, anything new is written up and priced as its own visit, so you always know what you are paying for.",
   },
 ];
 
@@ -582,6 +601,7 @@ export function emptyAnswers(): IntakeAnswers {
     questions: "",
     details: {},
     photos: [],
+    people: [],
   };
 }
 
@@ -617,6 +637,17 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
     out[question.key] = pick(question.kind, question.options, raw[question.key]) as never;
     if (question.notesKey) out[question.notesKey] = text(raw[question.notesKey]) as never;
   }
+  // Forms sent before the decision question had three answers.
+  if (raw.decision === "partner" || raw.decision === "family") out.decision = "others";
+  out.people = Array.isArray(raw.people)
+    ? raw.people
+        .map((p) => {
+          const o = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+          return { name: text(o.name).slice(0, 120), role: text(o.role).slice(0, 60), contact: text(o.contact).slice(0, 160) };
+        })
+        .filter((p) => p.name || p.contact)
+        .slice(0, MAX_INTAKE_PEOPLE)
+    : [];
   // Written in its own box on forms sent before it shared one with "tried".
   out.concerns_notes = text(raw.concerns_notes);
   // Services from before some were merged count as the one they became.
@@ -641,6 +672,10 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, TEXT_LIMIT) : "";
+}
+
+function joinWords(items: string[]): string {
+  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
 /** How many of the questions have anything in them, photos counting as one. */
@@ -683,8 +718,14 @@ export function summarizeIntake(answers: IntakeAnswers): { label: string; value:
     const older = q.key === "concerns" ? answers.concerns_notes : "";
     for (const extra of [notes, older]) if (extra) shown = shown ? `${shown}. ${extra}` : extra;
     if (shown) lines.push({ label: SHORT_LABEL[q.key] ?? q.title, value: shown });
+    if (q.key === "decision") for (const person of answers.people) lines.push({ label: person.role || "Also decides", value: describePerson(person) });
   }
   return lines;
+}
+
+/** "Sarah Smith, 410 555 0100", or whichever of the two they gave. */
+export function describePerson(person: IntakePerson): string {
+  return [person.name, person.contact].filter(Boolean).join(", ");
 }
 
 /** The pricing answers, for the evaluator, one line each. */
@@ -760,8 +801,14 @@ export function talkingPoints(answers: IntakeAnswers): string[] {
     points.push("Timing is a concern. Tell them the real start window and what happens if the weather slips it.");
   }
   if (answers.decision && answers.decision !== "me") {
-    points.push("Somebody else has a say. If they are not there, ask what that person will want to know and answer it in the proposal.");
+    const who = answers.people.map((p) => (p.role ? `${p.name || "someone"} (${p.role})` : p.name)).filter(Boolean);
+    points.push(
+      who.length
+        ? `${joinWords(who)} also ${who.length === 1 ? "has" : "have"} a say. Contact details are above. If they are not there, ask what they will want to know and answer it in the proposal.`
+        : "Somebody else has a say. If they are not there, ask who, how to reach them, and what they will want to know."
+    );
   }
+  if (answers.decision === "hoa" && !answers.concerns.includes("hoa")) points.push("An HOA has a say. Ask whether they have requested approval yet, and get the rules before you draw anything.");
   if (answers.tried) {
     points.push(`They wrote: "${answers.tried.slice(0, 140)}". Answer it, and say why this time is different, before they ask.`);
   }

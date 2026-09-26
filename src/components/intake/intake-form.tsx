@@ -6,6 +6,7 @@ import { ArrowLeft, Camera, CheckCircle2, ChevronDown, Loader2, MessageCircleQue
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   answersForConcerns,
@@ -13,11 +14,14 @@ import {
   DETAIL_QUESTIONS,
   detailQuestionsFor,
   INTAKE_QUESTIONS,
+  MAX_INTAKE_PEOPLE,
   MAX_INTAKE_PHOTOS,
+  asksForPeople,
   notesShown,
   type DetailQuestion,
   type IntakeAnswers,
   type IntakeOption,
+  type IntakePerson,
   type IntakeQuestion,
 } from "@/lib/evaluation-intake";
 import { addIntakePhoto, removeIntakePhoto, saveIntakeProgress, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
@@ -30,6 +34,7 @@ type Step =
   | { key: string; kind: "main"; question: IntakeQuestion }
   | { key: string; kind: "detail"; question: DetailQuestion }
   | { key: "photos"; kind: "photos" }
+  | { key: "people"; kind: "people" }
   | { key: "last"; kind: "last" };
 
 const main = (key: IntakeQuestion["key"]): Step => {
@@ -57,6 +62,8 @@ function stepsFor(answers: IntakeAnswers): Step[] {
     main("budget"),
     main("timing"),
     main("decision"),
+    // Anybody else in it: only asked once they say there is somebody.
+    ...(asksForPeople(answers.decision) ? [{ key: "people", kind: "people" } as Step] : []),
     { key: "last", kind: "last" },
   ];
 }
@@ -69,6 +76,7 @@ function answered(step: Step, answers: IntakeAnswers, photos: Photo[]): boolean 
   if (step.kind === "main") return filled(answers[step.question.key]);
   if (step.kind === "detail") return filled(answers.details[step.question.id]);
   if (step.kind === "photos") return photos.length > 0 || filled(answers.details.yard);
+  if (step.kind === "people") return answers.people.some((p) => p.name || p.contact);
   return false;
 }
 
@@ -266,9 +274,18 @@ export function IntakeForm({
 
         {step.kind === "photos" && (
           <>
-            <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending || demo} />
+            <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending} demo={demo} />
             <YardNotes answers={answers} setAnswers={setAnswers} disabled={pending} />
           </>
+        )}
+
+        {step.kind === "people" && (
+          <People
+            people={answers.people}
+            hoa={answers.decision === "hoa"}
+            disabled={pending}
+            onChange={(people) => setAnswers((a) => ({ ...a, people }))}
+          />
         )}
 
         {isLast && (
@@ -366,6 +383,76 @@ function YardNotes({
         placeholder={question.placeholder}
         className="text-base"
       />
+    </div>
+  );
+}
+
+/**
+ * Who else is in the decision and how to reach them: a spouse, a parent, the
+ * HOA. One row each, with a blank one ready; an HOA answer starts it with
+ * the HOA filled in as who they are.
+ */
+function People({
+  people,
+  hoa,
+  disabled,
+  onChange,
+}: {
+  people: IntakePerson[];
+  hoa: boolean;
+  disabled: boolean;
+  onChange: (people: IntakePerson[]) => void;
+}) {
+  const blank = (role = ""): IntakePerson => ({ name: "", role, contact: "" });
+  const rows = people.length > 0 ? people : [blank(hoa ? "HOA" : "")];
+  const set = (i: number, patch: Partial<IntakePerson>) => onChange(rows.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+
+  return (
+    <div className="flex flex-col gap-3">
+      <h2 className="text-xl font-semibold leading-snug">Who else is involved?</h2>
+      <p className="-mt-1 text-sm text-muted-foreground">
+        Their name, who they are to you, and a phone number or email, so the proposal reaches everyone who has a say.
+      </p>
+      {rows.map((person, i) => (
+        <div key={i} className="flex flex-col gap-2 rounded-xl border border-border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Person {i + 1}</p>
+            {rows.length > 1 && (
+              <button
+                type="button"
+                aria-label={`Remove person ${i + 1}`}
+                disabled={disabled}
+                onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                className="text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Input value={person.name} onChange={(e) => set(i, { name: e.target.value })} disabled={disabled} placeholder="Name" autoComplete="off" className="text-base" />
+          <Input
+            value={person.role}
+            onChange={(e) => set(i, { role: e.target.value })}
+            disabled={disabled}
+            placeholder="Who they are, e.g. husband, mom, HOA"
+            className="text-base"
+          />
+          <Input
+            value={person.contact}
+            onChange={(e) => set(i, { contact: e.target.value })}
+            disabled={disabled}
+            placeholder="Phone or email"
+            inputMode="email"
+            autoComplete="off"
+            className="text-base"
+          />
+        </div>
+      ))}
+      {rows.length < MAX_INTAKE_PEOPLE && (
+        <Button type="button" variant="outline" disabled={disabled} onClick={() => onChange([...rows, blank()])}>
+          Add another person
+        </Button>
+      )}
     </div>
   );
 }
@@ -598,11 +685,14 @@ function Photos({
   photos,
   setPhotos,
   disabled,
+  demo = false,
 }: {
   token: string;
   photos: Photo[];
   setPhotos: React.Dispatch<React.SetStateAction<Photo[]>>;
   disabled: boolean;
+  /** Shown on the phone only, never uploaded. */
+  demo?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -615,6 +705,11 @@ function Photos({
     setBusy(true);
     try {
       for (const file of Array.from(files).slice(0, room)) {
+        if (demo) {
+          const url = URL.createObjectURL(file);
+          setPhotos((all) => [...all, { path: url, url }]);
+          continue;
+        }
         const small = await shrinkImage(file, 1600, 0.8);
         const form = new FormData();
         form.set("token", token);
@@ -634,6 +729,7 @@ function Photos({
 
   async function remove(path: string) {
     setError(null);
+    if (demo) return setPhotos((all) => all.filter((p) => p.path !== path));
     const result = await removeIntakePhoto({ token, path });
     if (!result.ok) return setError(result.error);
     setPhotos((all) => all.filter((p) => p.path !== path));
