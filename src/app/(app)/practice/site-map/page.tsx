@@ -6,16 +6,42 @@ import { requireTab } from "@/lib/data/access";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
+import { JobSections } from "@/components/job/job-sections";
+import { IntakeSummary } from "@/components/intake/intake-summary";
+import { cleanAnswers, intakeHeadline } from "@/lib/evaluation-intake";
 
 /**
- * The site map tool with no job behind it, to see it and try it.
+ * The evaluator's screen on an evaluation, with no job behind it.
  *
- * The same tool the evaluator uses on the property, with the same services
- * and materials to pick from, but nothing is saved: not to a job, not to the
- * database, not even in this browser. Leave the page and it is gone. Above
- * it, how it is used, in the order the tool itself asks for things.
+ * Laid out the way the evaluator sees a real one: the address at the top,
+ * then the job's panels, one open at a time. What the client asked for, with
+ * a sample client's pre-evaluation answers and the notes for the walk; the
+ * site map tool, open, with the business's own services and materials; and
+ * the proposal, waiting on Submit. Nothing is saved: not to a job, not to the
+ * database, not even in this browser. Above it, how the tool is used.
  */
 export const dynamic = "force-dynamic";
+
+/** A made-up client's answers, so the panel reads the way a real one does. */
+const SAMPLE_ANSWERS = cleanAnswers({
+  services: ["beds", "removal"],
+  areas: ["front", "foundation"],
+  details: {
+    beds_now: ["old_mulch", "weeds"],
+    beds_add: ["mulch", "plants"],
+    mulch_color: "black",
+    remove_what: ["large"],
+    yard: ["sprinklers"],
+  },
+  looks: ["low"],
+  concerns: ["price"],
+  tried: "Planted boxwoods two years ago and half of them died.",
+  budget: "2500_5000",
+  timing: "season",
+  decision: "others",
+  people: [{ name: "Mike", role: "Husband", contact: "410 555 0100" }],
+});
+const SAMPLE_SENT_AT = "2026-09-24T14:00:00Z";
 
 const STEPS: { title: string; body: string }[] = [
   {
@@ -54,20 +80,25 @@ export default async function SiteMapPracticePage() {
   const catalog = await getCanvasCatalog();
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6">
+    <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:gap-6 sm:py-10">
+      <Link href="/my-day?tab=system" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline">
+        <ChevronLeft className="h-3.5 w-3.5" /> The system
+      </Link>
+
+      <p className="rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-2 text-sm dark:border-amber-500/40 dark:bg-amber-950/30">
+        <span className="font-semibold">Practice.</span> This is the evaluator&apos;s screen on an evaluation, with a sample client. Nothing
+        here is saved, and leaving the page clears it.
+      </p>
+
+      {/* The job's own header, as the evaluator sees it. */}
       <div>
-        <Link href="/my-day?tab=system" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline">
-          <ChevronLeft className="h-3.5 w-3.5" /> The system
-        </Link>
-        <h1 className="mt-1 text-xl font-semibold">Site map: practice</h1>
-        <p className="text-sm text-muted-foreground">
-          The tool the evaluator uses on the property. Try anything: nothing here is saved, and leaving the page clears it.
-        </p>
+        <h1 className="text-xl font-bold sm:text-2xl">12 Example Court, Bel Air, Maryland 21014</h1>
+        <p className="text-sm text-muted-foreground sm:text-base">Sample client · Evaluation</p>
       </div>
 
-      <details className="group rounded-xl border border-border bg-card p-4" open>
+      <details className="rounded-xl border border-border bg-card/60 px-4 py-3">
         <summary className="cursor-pointer list-none text-sm font-semibold [&::-webkit-details-marker]:hidden">
-          How it is used <span className="font-normal text-muted-foreground">(tap to hide)</span>
+          How the site map is used <span className="font-normal text-muted-foreground">(tap to open)</span>
         </summary>
         <ol className="mt-3 grid gap-3 sm:grid-cols-2">
           {STEPS.map((step, i) => (
@@ -84,7 +115,31 @@ export default async function SiteMapPracticePage() {
         </ol>
       </details>
 
-      <ImageCanvasBoard catalog={catalog} practice />
+      <JobSections
+        defaultOpen="map"
+        sections={[
+          {
+            id: "request",
+            title: "What the client asked for",
+            hint: intakeHeadline(SAMPLE_ANSWERS, SAMPLE_SENT_AT),
+            // "demo" makes its Change an answer link the form's demo page.
+            body: <IntakeSummary answers={SAMPLE_ANSWERS} submittedAt={SAMPLE_SENT_AT} submittedBy="client" token="demo" />,
+          },
+          {
+            id: "map",
+            title: "Site map and measurements",
+            hint: "Practice: closing this clears the drawing",
+            body: <ImageCanvasBoard catalog={catalog} practice />,
+          },
+          {
+            id: "proposal",
+            title: "Proposal",
+            hint: null,
+            lockedReason: "Built from the site map when the evaluator submits it",
+            body: null,
+          },
+        ]}
+      />
     </div>
   );
 }

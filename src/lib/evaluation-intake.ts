@@ -674,6 +674,12 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, TEXT_LIMIT) : "";
 }
 
+/** Their words in quotes, cut short if long, ending a sentence once. */
+function quoted(text: string): string {
+  const cut = text.length > 140 ? `${text.slice(0, 140).trimEnd()}...` : text.trim();
+  return /[.!?]$/.test(cut) ? `"${cut}"` : `"${cut}."`;
+}
+
 function joinWords(items: string[]): string {
   return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
@@ -810,13 +816,13 @@ export function talkingPoints(answers: IntakeAnswers): string[] {
   }
   if (answers.decision === "hoa" && !answers.concerns.includes("hoa")) points.push("An HOA has a say. Ask whether they have requested approval yet, and get the rules before you draw anything.");
   if (answers.tried) {
-    points.push(`They wrote: "${answers.tried.slice(0, 140)}". Answer it, and say why this time is different, before they ask.`);
+    points.push(`They wrote: ${quoted(answers.tried)} Answer it, and say why this time is different, before they ask.`);
   }
   if (answers.looks.includes("unsure")) {
     points.push("No colour preference yet. Show three planting palettes and note which one they warm to.");
   }
   if (answers.questions) {
-    points.push(`They asked: "${answers.questions.slice(0, 140)}". Answer it in the first minute.`);
+    points.push(`They asked: ${quoted(answers.questions)} Answer it in the first minute.`);
   }
 
   // What the property and the work change about the price.
