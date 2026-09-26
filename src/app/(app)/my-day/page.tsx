@@ -71,6 +71,7 @@ import { Suspense, cache } from "react";
 
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
+import { SystemFlow } from "@/components/system/system-flow";
 import { growthView } from "@/lib/data/growth";
 import { isOwnerLevel } from "@/lib/roles";
 import { isTwilioConfigured } from "@/lib/env";
@@ -159,6 +160,15 @@ export default async function MyDayPage() {
                 <GrowthTab />
               </Suspense>
             ) : null,
+          },
+          // The whole business in the order a customer meets it, one square
+          // per system, each opening where it is run. The owner's map.
+          {
+            key: "system",
+            label: "The system",
+            visible: isOwnerLevel(viewer?.roles ?? []),
+            blurb: "Every system, in the order a customer moves through them.",
+            content: isOwnerLevel(viewer?.roles ?? []) ? <SystemFlow /> : null,
           },
           // Everybody's standing, on everybody's screen: the person who
           // wants to know where they rank is the person on the board.
