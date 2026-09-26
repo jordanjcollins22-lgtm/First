@@ -6,8 +6,8 @@
  * the beds now, how big the stumps are, whether a machine fits through the
  * gate), plus photos. The second is to settle the questions that stop
  * people saying yes. They tell us what would make them say no, and the form
- * answers it on the spot, in the same words the proposal page uses later;
- * the questions people usually ask before a visit are answered at the end.
+ * answers it on the spot, saying only what is known to be true; the
+ * questions people usually ask before a visit are answered at the end.
  *
  * Five minutes on a phone. If they never open it, the evaluator goes through
  * the same questions with them at the door, on the same page, so the answers
@@ -16,8 +16,6 @@
  * The questions are data so the form, the evaluator's summary and the
  * talking points all read from one list. Nothing here touches the database.
  */
-
-import { objectionById } from "@/lib/objections";
 
 export type IntakeKind = "multi" | "single" | "text";
 
@@ -405,59 +403,73 @@ export interface IntakeAnswer {
   body: string;
 }
 
-function fromCatalogue(id: string, heading: string): IntakeAnswer {
-  return { heading, body: objectionById(id)?.answer ?? "" };
-}
-
-/**
- * What the form says back when they tick a reason they might say no.
- *
- * Where the proposal page already has an answer, it is that answer word for
- * word, so the client never hears one thing before the visit and another
- * after it. The rest are what the evaluator would say on the walk.
+/*
+ * Every answer below says only what the business is known to do: the visit
+ * is free, the proposal is a fixed price area by area, payment is by card,
+ * Apple Pay or Google Pay when they accept, a payment plan is offered, and
+ * the terms on the proposal (weather moves a day, new work is its own
+ * visit, the crew cannot add work). Nothing about licences, insurance,
+ * uniforms, guarantees or what a competitor leaves out: if it is not known
+ * to be true, a client does not read it here.
  */
+
+const PAYMENT_PLAN: IntakeAnswer = {
+  heading: "Can I split it into payments?",
+  body:
+    "Yes. You can pay a deposit and split the rest into payments. You see the exact amounts and dates before you agree to anything.",
+};
+
+/** What the form says back when they tick a reason they might say no. */
 export const CONCERN_ANSWERS: Record<string, IntakeAnswer[]> = {
   price: [
     {
-      heading: "How the price is worked out",
+      heading: "How the price works",
       body:
-        "You get one fixed price, area by area, after the visit. It covers the crew's time, the materials, hauling the waste away and the insurance, so there is nothing added at the end. If it is more than you had in mind, there are two honest ways around it: spread it over a few payments, or keep the parts that matter most now and leave the rest for later. The budget question below helps us design to your number from the start.",
+        "After the visit you get one fixed price, written out area by area, so nothing is added at the end. If it is more than you had in mind, you can keep the parts that matter most now and leave the rest for later. The budget question coming up helps us design to your number from the start.",
     },
-    fromCatalogue("cannot_pay_at_once", "Can I split it into payments?"),
+    PAYMENT_PLAN,
   ],
   timing: [
     {
       heading: "When we could start",
       body:
-        "Tell us the date you are aiming at, below or on the visit, and we will say honestly whether we can hit it rather than promise it and slip. We work outdoors, so heavy rain or frozen ground can move a day. If that happens we tell you as soon as we know and you keep your place at the front of the schedule.",
+        "Tell us the date you are aiming at and we will tell you honestly whether we can make it. We work outdoors, so heavy rain or frozen ground can push a day back. If yours has to move, we let you know as soon as we do and you keep your place at the front of the schedule.",
     },
   ],
   unsure_want: [
     {
       heading: "Not knowing yet is normal",
       body:
-        "That is what the visit is for. You do not have to design anything. We bring two or three looks that suit your yard and you tell us what you like. Ticking a few colours or styles below helps, and so does Not sure.",
+        "That is what the visit is for. You do not have to design anything. We will talk through options that suit your yard and you tell us what you like. The style question coming up helps, and Not sure is a fine answer.",
     },
   ],
   bad_experience: [
-    fromCatalogue("havent_used_you", "Who you are dealing with"),
-    fromCatalogue("not_happy", "If you are not happy with something"),
+    {
+      heading: "No surprises",
+      body:
+        "Tell us what happened, in the box below or on the visit, so we know what to do differently. You get a fixed price in writing before any work starts. Nothing is added on the day: anything new is written up and priced as its own visit, and you decide.",
+    },
   ],
   hoa: [
     {
       heading: "HOA and permit rules",
-      body:
-        "Send us the rules or have them handy on the visit. We design within them, and the approval step goes into the proposal, so nothing starts until it is approved.",
+      body: "Send us the rules or have them handy on the visit, and we will plan the work around them.",
     },
   ],
   maintenance: [
     {
       heading: "Keeping it looking good",
       body:
-        "Tell us how much time you want to spend on it. We can plan around low-maintenance plants and tell you, in hours a year, what the yard will need once it is done.",
+        "Tell us how much time you want to spend on it. We can plan around low-maintenance choices and tell you what the yard will need once it is done.",
     },
   ],
-  other_quotes: [fromCatalogue("getting_other_quotes", "Comparing quotes")],
+  other_quotes: [
+    {
+      heading: "Comparing quotes",
+      body:
+        "You should get other quotes. When you compare, check what each price includes, so you are comparing the same work. If somebody comes in lower, tell us what is on their sheet and we will tell you straight whether we can match it or why not.",
+    },
+  ],
 };
 
 /** Every answer for what they ticked, each once, in the order they ticked. */
@@ -474,33 +486,34 @@ export function answersForConcerns(concerns: string[]): IntakeAnswer[] {
   return out;
 }
 
-/**
- * The questions people ask before a visit, answered before they have to ask.
- * The same catalogue as the proposal page wherever the wording fits a visit
- * that has not happened yet.
- */
+/** The questions people ask before a visit, answered before they have to ask. */
 export const BEFORE_VISIT_QUESTIONS: IntakeAnswer[] = [
   {
     heading: "Is the visit really free?",
     body:
-      "Yes. There is nothing to pay and nothing to sign. We walk the property with you, measure, take photos, and send you a fixed-price proposal afterwards. If it is not for you, that is the end of it.",
+      "Yes. We look at the property with you, measure and take photos, and send you a fixed-price proposal afterwards. There is nothing to pay unless you accept it.",
   },
-  fromCatalogue("havent_used_you", "Are you licensed and insured?"),
-  fromCatalogue("who_comes", "Who will be at my property?"),
-  fromCatalogue("cannot_pay_at_once", "Can I split it into payments?"),
+  PAYMENT_PLAN,
   {
     heading: "How do I pay?",
-    body:
-      "Card, Apple Pay, Google Pay, check or bank transfer, whichever suits you. Nothing is due until you accept the proposal.",
+    body: "By card, Apple Pay or Google Pay, right from the proposal when you accept it. Nothing is due before then.",
   },
-  fromCatalogue("weather_delay", "What happens if the weather is bad?"),
-  fromCatalogue("not_happy", "What if I am not happy with something?"),
+  {
+    heading: "What happens if the weather is bad?",
+    body:
+      "Heavy rain and frozen ground can push a day back. If yours has to move, we let you know as soon as we do, and you keep your place at the front of the schedule rather than going to the end of it.",
+  },
   {
     heading: "Can I do just part of it?",
     body:
-      "Of course. The proposal is priced area by area, so you can keep the parts that are bothering you now and leave the rest for later. Anything you leave off stays on file for whenever you are ready.",
+      "Yes. The proposal is priced area by area, so you can keep the parts that are bothering you now and leave the rest for later.",
   },
-].filter((a) => a.body);
+  {
+    heading: "Can I add something later?",
+    body:
+      "Yes. Tell us before you accept and we update the proposal with the new price. After that, anything new is written up and priced as its own visit, so you always know what you are paying for.",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Cleaning and reading the answers
@@ -679,7 +692,7 @@ export function talkingPoints(answers: IntakeAnswers): string[] {
     );
   }
   if (has("other_quotes")) {
-    points.push("They are getting other quotes. Say what is included that a cheaper quote usually leaves out: prep, soil, plant warranty, cleanup.");
+    points.push("They are getting other quotes. Go through what the price includes line by line, so they compare the same work.");
   }
   if (has("bad_experience")) {
     points.push("A contractor let them down before. Ask what happened and say plainly how we do that part differently. Do not skip it.");

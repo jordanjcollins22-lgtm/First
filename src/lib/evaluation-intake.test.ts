@@ -158,6 +158,8 @@ describe("answering what would make them say no", () => {
     expect(BEFORE_VISIT_QUESTIONS.length).toBeGreaterThanOrEqual(6);
     for (const a of [...BEFORE_VISIT_QUESTIONS, ...Object.values(CONCERN_ANSWERS).flat()]) {
       expect(a.body).not.toMatch(/[\u2013\u2014]/);
+      // Only what is known to be true: no claims about licences, insurance or guarantees.
+      expect(`${a.heading} ${a.body}`).not.toMatch(/licen[cs]|insur|warrant|guarantee/i);
     }
   });
 });
