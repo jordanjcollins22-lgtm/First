@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowRight, Newspaper, Star } from "lucide-react";
+import { ArrowRight, Newspaper } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ShowcaseCarousel } from "@/components/booking/showcase-carousel";
@@ -125,37 +125,61 @@ function useSquareSide(rootRef: React.RefObject<HTMLDivElement | null>, fitHeigh
   return px;
 }
 
-/** One review at a time, changing on its own, in a box that never changes size. */
+/** One review at a time, fading from one to the next, in a box that never changes size. */
 function RotatingReview({ reviews }: { reviews: BookingProof["reviews"] }) {
   const [at, setAt] = useState(0);
+  const [visible, setVisible] = useState(true);
   useEffect(() => {
     if (reviews.length < 2) return;
     if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = setInterval(() => setAt((i) => (i + 1) % reviews.length), REVIEW_EVERY_MS);
-    return () => clearInterval(timer);
+    let swap: ReturnType<typeof setTimeout> | undefined;
+    const timer = setInterval(() => {
+      // Out, change, back in.
+      setVisible(false);
+      swap = setTimeout(() => {
+        setAt((i) => (i + 1) % reviews.length);
+        setVisible(true);
+      }, 300);
+    }, REVIEW_EVERY_MS);
+    return () => {
+      clearInterval(timer);
+      if (swap) clearTimeout(swap);
+    };
   }, [reviews.length]);
   const r = reviews[at % reviews.length];
+  const initial = r.author.trim().charAt(0).toUpperCase() || "?";
 
   return (
-    <figure className="shrink-0 rounded-xl border border-border bg-background px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        {r.stars === 5 ? (
-          <span className="flex gap-0.5" aria-label="5 out of 5 stars">
-            {Array.from({ length: 5 }, (_, i) => (
-              <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-            ))}
+    // Left off the very shortest screens, where it would leave the
+    // before-and-after too small to see.
+    <figure className="relative shrink-0 overflow-hidden rounded-xl bg-primary/5 px-4 pb-3 pt-3 [@media(max-height:600px)]:hidden">
+      {/* A large quote mark, set behind the words. */}
+      <span aria-hidden className="pointer-events-none absolute -top-3 left-2 font-serif text-6xl leading-none text-primary/15">
+        &ldquo;
+      </span>
+      <div className={`relative transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
+        {/* Two lines, always, so the card never moves when the review changes. */}
+        <blockquote className="line-clamp-2 min-h-[2.5rem] text-sm italic leading-5 text-foreground/90">{r.body}</blockquote>
+        <figcaption className="mt-2 flex items-center gap-2">
+          <span
+            aria-hidden
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground"
+          >
+            {initial}
           </span>
-        ) : (
-          // A Facebook recommendation has no stars; it says so instead.
-          <span className="text-[11px] font-semibold text-primary">Recommends</span>
-        )}
-        <figcaption className="truncate text-[11px] text-muted-foreground">
-          {r.author}
-          {r.source ? `, ${r.source}` : ""}
+          <span className="min-w-0 truncate pr-10 text-xs">
+            <span className="font-semibold">{r.author}</span>
+            {r.source && <span className="text-muted-foreground"> · {r.source} review</span>}
+          </span>
         </figcaption>
       </div>
-      {/* Two lines, always, so the card never moves when the review changes. */}
-      <blockquote className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-5">&ldquo;{r.body}&rdquo;</blockquote>
+      {reviews.length > 1 && (
+        <span className="absolute bottom-[22px] right-4 flex gap-1" aria-hidden>
+          {reviews.map((review, i) => (
+            <span key={review.id} className={`h-1 w-1 rounded-full ${i === at % reviews.length ? "bg-primary" : "bg-primary/25"}`} />
+          ))}
+        </span>
+      )}
     </figure>
   );
 }
