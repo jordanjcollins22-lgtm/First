@@ -14,7 +14,10 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-11 items-center justify-center rounded-md bg-secondary p-1 text-secondary-foreground",
+      // Scrolls rather than overflowing: on a phone a five-tab row is wider
+      // than the screen, and a tab you cannot reach is a tab that does not
+      // exist. no-scrollbar keeps it from looking broken on desktop.
+      "flex h-11 max-w-full items-center overflow-x-auto overscroll-x-contain rounded-lg bg-secondary/70 p-1 text-secondary-foreground backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       className
     )}
     {...props}
@@ -29,7 +32,10 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+      // shrink-0 so triggers keep their width inside the scroller instead of
+      // being squeezed into unreadable slivers. min-h-9 keeps the tap target
+      // usable with a thumb.
+      "inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm",
       className
     )}
     {...props}

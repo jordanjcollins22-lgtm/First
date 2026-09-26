@@ -1,0 +1,829 @@
+// The group agent, in the browser: the finder.
+//
+// Turned on, it opens one window of its own and keeps it open, scrolling
+// down the groups feed and sending every post it reads to the app, which
+// sorts it and puts the people asking for work on the team's Posts to
+// answer board. Once a minute it scrolls further down the page it is on.
+// After a while it moves on to a search or a listed group, and then back
+// to the top of the feed for what is new. Turned off, the window closes.
+//
+// It never comments, likes, shares or messages. One account answering
+// every lead in the county is what gets an account banned, so the
+// answering is done by people, each from their own account, off the board.
+// The only thing it presses on Facebook is a post's "Copy link", to bring
+// back a link for a post the page showed without one.
+//
+// Nothing here knows what a Facebook page looks like. Every selector and
+// every wait comes from the app in the "recipe", asked for each minute
+// alongside the settings, so a layout change is fixed in the app and this
+// copy has it within a minute with nothing to download. When the app wants
+// newer extension code it says so, and the popup shows a download link.
+//
+// Three places it looks. The account's own groups feed, which is every
+// group it is in on one page. Facebook's post search, for the phrases set
+// in the app, which reaches public groups it is not in yet. And any group
+// listed by hand in the app.
+//
+// It also reads the business's own reviews: when the app lists a Facebook
+// page or Google listing as due, it opens the reviews there and sends the
+// page's text back, and the app keeps the five-star ones for the booking
+// page. That is asked for by the owner, so it happens even while the
+// finder is paused.
+//
+// It runs as you, in your Chrome, on your account. Nothing here logs in
+// anywhere: the app is reached with the app's own cookies, and Facebook
+// with Facebook's. Close Chrome and it stops.
+
+const APP = "https://app.jslandscapingmd.com";
+const BOARD = `${APP}/admin/outreach/posts`;
+const API = `${APP}/api/outreach/agent`;
+const TICK = "agent-tick";
+const LOCK_MS = 3 * 60 * 1000;
+const VERSION = chrome.runtime.getManifest().version;
+
+chrome.runtime.onInstalled.addListener(() => arm());
+chrome.runtime.onStartup.addListener(() => arm());
+
+async function arm() {
+  const existing = await chrome.alarms.get(TICK);
+  if (!existing) await chrome.alarms.create(TICK, { periodInMinutes: 1 });
+}
+
+chrome.notifications.onClicked.addListener((id) => {
+  if (id === "to-answer") chrome.tabs.create({ url: BOARD });
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === TICK) tick().catch((err) => setStatus(`Stopped on an error: ${err?.message ?? err}`));
+});
+
+// The popup talks to this. Every answer is the current state, so the popup
+// has one thing to render.
+chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+  (async () => {
+    if (message?.type === "status") {
+      // The popup asks fresh when it opens, so its switch is right at once
+      // rather than after the next once-a-minute check.
+      if (message.fresh) await fetchConfig();
+      reply(await snapshot());
+    } else if (message?.type === "app-power") {
+      // Turned on or off in the app: act on it now rather than at the next minute.
+      await tick({ force: true });
+      reply(await snapshot());
+    } else reply({ ok: false });
+  })().catch((err) => reply({ error: String(err?.message ?? err) }));
+  return true;
+});
+
+async function snapshot() {
+  const store = await chrome.storage.local.get(["config", "status", "scans", FINDER]);
+  return {
+    version: VERSION,
+    config: store.config ?? null,
+    status: store.status ?? null,
+    scans: store.scans ?? {},
+    windowOpen: Boolean(store[FINDER]),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The finder's own window: opened when it is turned on, kept open while it
+// looks, closed when it is turned off.
+// ---------------------------------------------------------------------------
+
+const FINDER = "finderWindow";
+
+/** The window and the tab in it, when they are still open. */
+async function finderState() {
+  const { [FINDER]: state } = await chrome.storage.local.get(FINDER);
+  if (!state) return null;
+  try {
+    const tab = await chrome.tabs.get(state.tabId);
+    if (tab && tab.windowId === state.windowId) return state;
+  } catch {
+    // Closed by hand. It opens again on the next look while it is on.
+  }
+  await chrome.storage.local.remove(FINDER);
+  return null;
+}
+
+async function saveFinder(state) {
+  await chrome.storage.local.set({ [FINDER]: state });
+}
+
+async function closeFinder() {
+  const state = await finderState();
+  if (state) {
+    try {
+      await chrome.windows.remove(state.windowId);
+    } catch {
+      // Already gone.
+    }
+  }
+  await chrome.storage.local.remove(FINDER);
+}
+
+/** Go to a page in the finder's window, opening the window if it is not open. */
+async function finderGo(url, loadTimeoutMs) {
+  let state = await finderState();
+  if (!state) {
+    const bounds = await windowBounds();
+    const win = await chrome.windows.create({ url, type: "popup", focused: false, ...bounds });
+    const tab = win.tabs && win.tabs[0];
+    if (!tab) throw new Error("Couldn't open the finder's window.");
+    state = { windowId: win.id, tabId: tab.id, key: null, since: 0, scrolls: 0 };
+    await saveFinder(state);
+    await waitForLoad(tab.id, loadTimeoutMs);
+    return state;
+  }
+  const loaded = waitForLoad(state.tabId, loadTimeoutMs);
+  await chrome.tabs.update(state.tabId, { url });
+  await loaded;
+  return state;
+}
+
+async function setStatus(text) {
+  await chrome.storage.local.set({ status: { text, at: Date.now() } });
+}
+
+/** What the app says right now. Null when not signed in or unreachable. */
+async function fetchConfig() {
+  try {
+    const res = await fetch(`${API}/config?v=${encodeURIComponent(VERSION)}`, { credentials: "include", cache: "no-store" });
+    if (res.status === 401) {
+      await setStatus("Not signed in to the app. Open it and sign in, then this carries on.");
+      return null;
+    }
+    if (!res.ok) {
+      await setStatus(`The app answered ${res.status}. Trying again next minute.`);
+      return null;
+    }
+    const config = await res.json();
+    await chrome.storage.local.set({ config, configAt: Date.now() });
+    return config;
+  } catch (err) {
+    await setStatus(`Couldn't reach the app: ${err?.message ?? err}`);
+    return null;
+  }
+}
+
+/** The recipe the app sent, or the last one it sent, or nothing usable. */
+function recipeOf(config) {
+  return config?.recipe && config.recipe.scan && config.recipe.pacing ? config.recipe : null;
+}
+
+/**
+ * Everything there is to look at, in the order it is due.
+ *
+ * The feed every scan interval; each search phrase every two, since search
+ * moves slower and there are several; each listed group every interval.
+ */
+function scanTargets(settings, scans, force) {
+  const every = (settings.scanEveryMinutes ?? 30) * 60 * 1000;
+  const sources = settings.sources ?? { feed: true, search: true, list: true };
+  const targets = [];
+  if (sources.feed !== false) {
+    targets.push({ key: "feed", source: "feed", url: settings.feedUrl || "https://www.facebook.com/groups/feed/", name: "your groups feed", every });
+  }
+  if (sources.search !== false) {
+    for (const s of settings.searches ?? []) {
+      targets.push({ key: `search:${s.phrase}`, source: "search", url: s.url, name: `search for "${s.phrase}"`, phrase: s.phrase, every: every * 2 });
+    }
+  }
+  if (sources.list !== false) {
+    for (const g of settings.groups ?? []) {
+      targets.push({ key: g.url, source: "group", url: g.url, name: g.name || g.url, groupUrl: g.url, groupName: g.name, every });
+    }
+  }
+  return targets
+    .map((t) => ({ ...t, last: scans[t.key] ?? 0 }))
+    .filter((t) => force || Date.now() - t.last >= t.every)
+    .sort((a, b) => a.last - b.last);
+}
+
+async function tick(options = {}) {
+  const store = await chrome.storage.local.get(["lock", "scans"]);
+  if (!options.force && store.lock && Date.now() - store.lock < LOCK_MS) return;
+  await chrome.storage.local.set({ lock: Date.now() });
+  try {
+    const config = await fetchConfig();
+    if (!config) return;
+    const recipe = recipeOf(config);
+    if (!recipe) {
+      await setStatus("The app didn't send the page recipe. It may be mid-deploy; trying again next minute.");
+      return;
+    }
+
+    // Posts waiting for the team, said once each time the number grows,
+    // so whoever runs the finder knows there is answering to do.
+    const toAnswer = config.counts?.toAnswer ?? 0;
+    const noticed = (await chrome.storage.local.get("noticedToAnswer")).noticedToAnswer ?? 0;
+    if (toAnswer > noticed) {
+      chrome.notifications.create("to-answer", {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "People asking for work",
+        message: `${toAnswer} post${toAnswer === 1 ? "" : "s"} waiting on the Posts to answer board. Click to open it.`,
+      });
+    }
+    await chrome.storage.local.set({ noticedToAnswer: toAnswer });
+
+    // The business's own review pages, one a minute, before anything else:
+    // the owner asked for these, so a paused finder does not hold them up.
+    const due = Array.isArray(config.reviews) ? config.reviews : [];
+    if (due.length > 0) {
+      await pullReviews(due[0]);
+      return;
+    }
+
+    if (!config.active && config.because === "paused") {
+      await closeFinder();
+      await setStatus(`Off. ${config.pauseReason ?? ""}`.trim());
+      return;
+    }
+    if (!config.active && config.because === "outside hours") {
+      await closeFinder();
+      await setStatus(`Outside looking hours (${config.settings.activeFrom}–${config.settings.activeTo}). The window opens again then.`);
+      return;
+    }
+
+    // On: keep looking in the finder's own window.
+    const watch = { scrollsPerLook: 14, feedMinutes: 10, otherMinutes: 3, reloadAfterScrolls: 140, ...(recipe.watch ?? {}) };
+    const scans = store.scans ?? {};
+    // Every place it looks, the one looked at longest ago first.
+    const targets = scanTargets(config.settings, scans, true);
+    if (targets.length === 0) {
+      await closeFinder();
+      await setStatus("Nothing to look at. Turn on the groups feed, search or a group in the app.");
+      return;
+    }
+
+    let finder = await finderState();
+    const current = finder?.key ? targets.find((t) => t.key === finder.key) : null;
+    const stay = ((current?.source === "feed" ? watch.feedMinutes : watch.otherMinutes) || 3) * 60 * 1000;
+    const moveOn = options.force || !current || Date.now() - finder.since >= stay || finder.scrolls >= watch.reloadAfterScrolls;
+
+    let target = current;
+    if (moveOn) {
+      // The place looked at longest ago, other than this one. With only the
+      // feed to look at, that is the feed again, from the top.
+      target = targets.find((t) => t.key !== finder?.key) ?? targets[0];
+      await setStatus(`Opening ${target.name}…`);
+      try {
+        finder = await finderGo(target.url, recipe.pacing.tabLoadTimeoutMs);
+      } catch (err) {
+        await setStatus(`Couldn't open ${target.name}: ${err?.message ?? err}`);
+        return;
+      }
+      await sleep(target.source === "search" ? recipe.scan.searchSettleMs : recipe.scan.settleMs);
+      finder = { ...finder, key: target.key, since: Date.now(), scrolls: 0 };
+      await saveFinder(finder);
+      scans[target.key] = Date.now();
+      await chrome.storage.local.set({ scans });
+    }
+
+    await setStatus(`Scrolling ${target.name}…`);
+    // Posts it has already asked the Share menu about, by their opening
+    // words, so the same post is not opened again on every look.
+    const asked = (await chrome.storage.local.get("sharedAsked")).sharedAsked ?? [];
+    let found = null;
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: finder.tabId },
+        func: scanPosts,
+        args: [config.settings.keywords ?? [], { ...recipe.scan, scrollTimes: watch.scrollsPerLook }, asked],
+        world: "MAIN",
+      });
+      found = result?.result ?? null;
+    } catch (err) {
+      await setStatus(`Couldn't read ${target.name}: ${err?.message ?? err}`);
+    }
+    finder = { ...finder, scrolls: (finder.scrolls ?? 0) + watch.scrollsPerLook };
+    await saveFinder(finder);
+    if (found?.askedNow?.length) {
+      await chrome.storage.local.set({ sharedAsked: [...asked, ...found.askedNow].slice(-600) });
+    }
+    if (!found) return;
+
+    // Sent even when nothing new turned up: the app keeps what the page
+    // looked like, so a look that found nothing can be diagnosed from it.
+    const answer = await sendCandidates(target, found);
+    if (!answer) return;
+    const stats = found.stats ?? {};
+    await setStatus(
+      `Scrolling ${target.name}: ${stats.posts ?? 0} more posts read, ${answer.kept ?? 0} new` +
+        ((answer.businesses ?? 0) > 0 ? `, ${answer.businesses} businesses saved` : "") +
+        ". The ones asking for work are on the board."
+    );
+  } finally {
+    await chrome.storage.local.set({ lock: 0 });
+  }
+}
+
+/** Read one review page and hand it to the app, which keeps the five-star ones. */
+async function pullReviews(source) {
+  const label = source.platform === "google" ? "Google" : "Facebook";
+  await setStatus(`Reading your ${label} reviews…`);
+  let page = null;
+  try {
+    page = await inTab(source.reviewsUrl, readReviewsPage, [source.platform], 6000, 45000);
+  } catch (err) {
+    await setStatus(`Couldn't open your ${label} reviews: ${err?.message ?? err}`);
+  }
+  try {
+    const res = await fetch(`${API}/reviews`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      // Sent even when nothing was read, so the app marks the page looked at
+      // and says so, rather than asking again every minute.
+      body: JSON.stringify({ sourceId: source.id, text: page?.text ?? "", stats: page?.stats ?? null }),
+    });
+    const answer = await res.json().catch(() => null);
+    await setStatus(res.ok && answer?.said ? `${label} reviews: ${answer.said}` : `The app couldn't take the ${label} reviews (${res.status}).`);
+  } catch (err) {
+    await setStatus(`Couldn't send the ${label} reviews: ${err?.message ?? err}`);
+  }
+}
+
+async function sendCandidates(target, found) {
+  try {
+    const res = await fetch(`${API}/candidates`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: target.source,
+        phrase: target.phrase ?? null,
+        groupUrl: target.groupUrl ?? null,
+        groupName: target.groupName || found.group || null,
+        posts: found.posts,
+        look: { name: target.name, source: target.source, stats: found.stats ?? null, version: VERSION },
+      }),
+    });
+    if (!res.ok) {
+      await setStatus(`The app couldn't take the posts (${res.status}).`);
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    await setStatus(`Couldn't send the posts: ${err?.message ?? err}`);
+    return null;
+  }
+}
+
+/**
+ * Open a page in its own small window, wait for it, run something in it,
+ * close it.
+ *
+ * Not a background tab: Chrome does not draw a tab you are not looking at,
+ * and Facebook only loads the feed into a page that is being drawn, so a
+ * background tab scrolled through an empty shell and found nothing. A
+ * window of its own, off to the side and never given focus, is drawn and
+ * loads, and goes away when the look is done. Used for the weekly read of
+ * the business's own reviews; the finder keeps a window of its own open.
+ */
+// `world` is where the function runs. "MAIN" is the page's own JavaScript,
+// which the scan needs so it can catch the link Facebook copies when its
+// "Copy link" is pressed. Posting stays in the extension's own world.
+async function inTab(url, func, args, settleMs, loadTimeoutMs, world) {
+  const bounds = await windowBounds();
+  const win = await chrome.windows.create({ url, type: "popup", focused: false, ...bounds });
+  const tab = win.tabs && win.tabs[0];
+  if (!tab) {
+    try {
+      await chrome.windows.remove(win.id);
+    } catch {
+      // Already gone.
+    }
+    throw new Error("Couldn't open a window for the page.");
+  }
+  try {
+    await waitForLoad(tab.id, loadTimeoutMs ?? 30000);
+    await sleep(settleMs);
+    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func, args, ...(world ? { world } : {}) });
+    return result?.result ?? null;
+  } finally {
+    try {
+      await chrome.windows.remove(win.id);
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+/** A desktop-sized window tucked to the right of the one you are using. */
+async function windowBounds() {
+  const width = 1100;
+  const height = 900;
+  try {
+    const current = await chrome.windows.getLastFocused();
+    const left = Math.max(0, (current.left ?? 0) + (current.width ?? width) - width);
+    const top = Math.max(0, current.top ?? 0);
+    return { width, height, left, top };
+  } catch {
+    return { width, height };
+  }
+}
+
+function waitForLoad(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, timeoutMs);
+    function listener(id, info) {
+      if (id === tabId && info.status === "complete") done();
+    }
+    function done() {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// What runs inside a Facebook page. It is self-contained: it
+// is copied into the page by name, so nothing outside it exists there. Every
+// selector and wait they use arrives in the recipe.
+// ---------------------------------------------------------------------------
+
+/**
+ * On a feed, a search, or a group page: the posts on the next few screens
+ * down from wherever it got to last time, each with who posted it and which
+ * group it is in.
+ */
+async function scanPosts(keywords, r, asked) {
+  const askedBefore = new Set(asked || []);
+  const askedNow = [];
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const clean = (s) => (s || "").replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  const re = (p) => new RegExp(p, "i");
+  const seeMore = re(r.seeMoreText);
+  const postLink = re(r.postLink);
+  const groupLink = re(r.groupLink);
+  const notGroupLink = re(r.notGroupLink);
+  const profileLink = re(r.profileLink);
+  const anonymousRe = re(r.anonymous);
+  const isGroupLink = (href) => groupLink.test(href) && !notGroupLink.test(href);
+  const mentionsWork = (text) => {
+    const low = text.toLowerCase();
+    return keywords.some((word) => word && low.includes(String(word).toLowerCase()));
+  };
+
+  // Facebook fills in a post's real link only when the pointer passes over
+  // it: until then the time stamp that carries it points at "#". Only those
+  // unfilled links are hovered. Hovering a name or a group opens its card,
+  // which is what looked like it was clicking on people's accounts.
+  const unfilled = (a) => {
+    const href = a.getAttribute("href");
+    return !href || href === "#" || href.startsWith("#") || /^javascript:/i.test(href);
+  };
+  const reveal = (el) => {
+    for (const a of el.querySelectorAll("a")) {
+      if (!unfilled(a)) continue;
+      const init = { bubbles: true, cancelable: true, view: window, relatedTarget: document.body };
+      for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter", "mousemove"]) {
+        a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+      }
+      a.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      for (const type of ["pointerout", "pointerleave", "mouseout", "mouseleave"]) {
+        a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+      }
+    }
+  };
+  // Facebook scatters the letters of "Facebook" through a post's time stamp
+  // so it cannot be read off the page. Those lines, and one- and two-letter
+  // lines, come out.
+  const tidy = (text) =>
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 2 && !/^facebook$/i.test(line))
+      .join("\n");
+  const expand = () => {
+    for (const button of document.querySelectorAll('div[role="button"]')) {
+      if (seeMore.test((button.innerText || "").trim())) {
+        try {
+          button.click();
+        } catch {
+          // Nothing to expand.
+        }
+      }
+    }
+  };
+  // A post is the outermost box of its kind: comments are boxes too, nested
+  // in the post they answer.
+  const outermost = () =>
+    Array.from(document.querySelectorAll(r.article)).filter((el) => !(el.parentElement && el.parentElement.closest(r.article)));
+
+  const textOf = (post) => {
+    const body = post.querySelector(r.messageBody);
+    let text = body ? body.innerText : "";
+    if (!text) {
+      text = (post.innerText || "")
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .slice(2)
+        .join("\n");
+    }
+    return clean(tidy(text)).slice(0, r.maxTextChars ?? 3000);
+  };
+
+  // Read as it scrolls, not after. Facebook takes posts that have scrolled
+  // well out of view back off the page, so a read at the end only ever saw
+  // the last screen or two.
+  // Kept on the page between looks: the window stays open and each look
+  // carries on down the same page, so a post read or sent in an earlier
+  // look is neither read nor sent again. A new page starts afresh.
+  const memory = (window.__jsFinder = window.__jsFinder || { done: new WeakSet(), tries: new WeakMap(), sent: new Set() });
+  const done = memory.done;
+  const tries = memory.tries;
+  const byUrl = new Map();
+  const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, shared: 0, samples: [] };
+
+  // Catch what Facebook copies. Pressing "Copy link" makes the page write
+  // the post's link to the clipboard; the write is caught here instead, so
+  // the link is read without touching what is on your own clipboard.
+  const grab = { text: null };
+  try {
+    const board = navigator.clipboard;
+    if (board) {
+      board.writeText = async (text) => {
+        grab.text = String(text);
+      };
+      board.write = async (items) => {
+        try {
+          for (const item of items) {
+            if (item.types.includes("text/plain")) grab.text = await (await item.getType("text/plain")).text();
+          }
+        } catch {
+          // Not text.
+        }
+      };
+    }
+    const setData = DataTransfer.prototype.setData;
+    DataTransfer.prototype.setData = function (type, data) {
+      if (/text/i.test(type)) grab.text = String(data);
+      return setData.call(this, type, data);
+    };
+  } catch {
+    // The page would not let the clipboard be watched; posts go without links.
+  }
+  const shareRe = re(r.shareButton ?? "^share$");
+  const copyRe = re(r.copyLinkText ?? "^copy link$");
+  const labelOf = (el) => (el.getAttribute("aria-label") || el.innerText || "").trim();
+  const escape = () => {
+    for (const type of ["keydown", "keyup"]) {
+      document.dispatchEvent(new KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true }));
+    }
+  };
+  const isFacebookLink = (text) => /^https?:\/\/(www\.|m\.)?facebook\.com\/\S+$/i.test((text || "").trim());
+
+  // A post with no link on the page: open its Share menu, press "Copy link",
+  // and take the link Facebook copies. Nothing is shared; the menu is closed
+  // straight after, and nothing but "Copy link" is ever pressed.
+  const shareLink = async (box) => {
+    const button = Array.from(box.querySelectorAll('[role="button"]')).find((el) => shareRe.test(labelOf(el)));
+    if (!button) return null;
+    grab.text = null;
+    button.click();
+    await sleep(r.shareMenuWaitMs ?? 1200);
+    const item = Array.from(document.querySelectorAll('[role="menuitem"], [role="button"], [role="dialog"] span')).find(
+      (el) => copyRe.test(labelOf(el)) && el.getBoundingClientRect().height > 0
+    );
+    if (item) {
+      (item.closest('[role="menuitem"], [role="button"]') || item).click();
+      await sleep(r.copyWaitMs ?? 700);
+    }
+    escape();
+    await sleep(300);
+    return isFacebookLink(grab.text) ? grab.text.trim() : null;
+  };
+
+  // When a post went up. Facebook scrambles the short "2h" with hidden
+  // letters, so only the letters actually drawn inside the link are kept.
+  const visibleLabel = (a) => {
+    const box = a.getBoundingClientRect();
+    if (!box.width) return "";
+    const parts = [];
+    const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        if (rect.top < box.top - 2 || rect.bottom > box.bottom + 2 || rect.left < box.left - 2 || rect.right > box.right + 2) continue;
+        parts.push({ left: rect.left, text: node.textContent });
+        break;
+      }
+    }
+    return parts
+      .sort((x, y) => x.left - y.left)
+      .map((p) => p.text)
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+  };
+  // The full date is in the tooltip Facebook shows while the time is
+  // hovered. Only for posts about the work, and only so many a look: each
+  // one is a short wait.
+  let hovered = 0;
+  const hoverForDate = async (a) => {
+    if (hovered >= (r.timeHoverMax ?? 12)) return "";
+    hovered += 1;
+    const init = { bubbles: true, cancelable: true, view: window };
+    for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter", "mousemove"]) {
+      a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+    }
+    await sleep(r.timeHoverWaitMs ?? 900);
+    const tips = Array.from(document.querySelectorAll(r.timeTooltip ?? '[role="tooltip"]'))
+      .map((t) => (t.innerText || "").replace(/\s+/g, " ").trim())
+      .filter((t) => /\d/.test(t) && t.length < 80);
+    for (const type of ["pointerout", "pointerleave", "mouseout", "mouseleave"]) {
+      a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+    }
+    return tips.length ? tips[tips.length - 1] : "";
+  };
+
+  const readVisible = async () => {
+    expand();
+    const boxes = outermost().filter((el) => !done.has(el));
+    for (const box of boxes) reveal(box);
+    await sleep(r.revealWaitMs ?? 500);
+    for (const box of boxes) {
+      const text = textOf(box);
+      // Not drawn yet: come back to it on the next pass.
+      if (!text || text.length < 12) continue;
+      const links = Array.from(box.querySelectorAll("a[href]"));
+      const permalink = links.find((a) => postLink.test(a.href));
+      const attempt = (tries.get(box) ?? 0) + 1;
+      tries.set(box, attempt);
+      // No link yet: one more hover on the next pass before giving up on it.
+      if (!permalink && attempt < 2) continue;
+      done.add(box);
+      stats.posts += 1;
+      stats.withText += 1;
+      const matched = mentionsWork(text);
+      // Still no link: ask the Share menu for one, for posts about the work.
+      let url = permalink ? permalink.href : null;
+      const opening = text.slice(0, 80);
+      if (!url && matched && r.shareForLink !== false && stats.shared < (r.shareMax ?? 15) && !askedBefore.has(opening)) {
+        url = await shareLink(box);
+        askedNow.push(opening);
+        askedBefore.add(opening);
+        if (url) stats.shared += 1;
+      }
+      if (url) stats.withLink += 1;
+      if (matched) stats.mentioned += 1;
+      if (matched && !url) stats.mentionedNoLink += 1;
+      if (stats.samples.length < 8) {
+        stats.samples.push({ text: text.slice(0, 120), link: Boolean(url), matched });
+      }
+      // Every post read is sent, link or no link, words or no words: the
+      // owner picks from all of them in the app. Only the model's own
+      // answering needs a link and a match, and the app sorts that out.
+      const key = url ?? `text:${text.slice(0, 200)}`;
+      if (byUrl.has(key) || memory.sent.has(key)) continue;
+      memory.sent.add(key);
+
+      const ageLabel = permalink
+        ? (visibleLabel(permalink) || permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40)
+        : "";
+      const postedLabel = permalink && matched ? await hoverForDate(permalink) : "";
+      // The header: the group's name, then the poster's. On a group's own
+      // page the group is the page, so the first named link is the poster.
+      const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
+      const group = gl ? { url: gl.href, name: clean(gl.innerText).slice(0, 120) } : null;
+      const header = clean(box.innerText).split("\n").slice(0, 4).join(" ");
+      const anonymous = anonymousRe.test(header);
+      let author = "";
+      if (!anonymous) {
+        const profile = links.find(
+          (a) => profileLink.test(a.href) && !isGroupLink(a.href) && (a.innerText || "").trim().length > 1 && (a.innerText || "").trim().length < 60
+        );
+        author = clean(profile ? profile.innerText : "");
+        if (!author) {
+          const strong = box.querySelector(r.authorFallback);
+          const candidate = clean(strong ? strong.innerText : "");
+          if (candidate && (!group || candidate !== group.name)) author = candidate;
+        }
+      }
+      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, group, matched });
+    }
+  };
+
+  await readVisible();
+  for (let i = 0; i < (r.scrollTimes ?? 3); i += 1) {
+    window.scrollBy(0, Math.round(window.innerHeight * (r.scrollScreens ?? 0.9)));
+    await sleep(r.scrollWaitMs ?? 1500);
+    await readVisible();
+  }
+
+  const pageGroup = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
+  return {
+    group: pageGroup,
+    posts: Array.from(byUrl.values()).slice(0, r.maxPosts ?? 25),
+    askedNow,
+    // What the page looked like, so a look that found nothing can say why.
+    stats: { ...stats, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// What runs inside a review page. Self-contained, like scanPosts.
+// ---------------------------------------------------------------------------
+
+/**
+ * The reviews on a Facebook page's Reviews tab or a Google Maps listing, as
+ * text. On Google it presses the listing's Reviews tab first. It scrolls to
+ * load more, opens every "More" so long reviews are whole, and writes each
+ * star rating into the text as [5 stars] so the app can read it. It only
+ * reads: nothing is liked, answered or reported.
+ */
+async function readReviewsPage(platform) {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const labelOf = (el) => `${el.getAttribute("aria-label") || ""} ${(el.textContent || "").trim()}`.trim();
+  const press = (test) => {
+    const el = [...document.querySelectorAll('button, [role="tab"], [role="button"], a')].find((b) => test(labelOf(b)));
+    if (!el) return false;
+    el.click();
+    return true;
+  };
+
+  if (platform === "google") {
+    for (let i = 0; i < 4; i += 1) {
+      if (press((t) => /^reviews\b/i.test(t) || /^reviews for /i.test(t))) break;
+      await wait(1500);
+    }
+    await wait(2500);
+  }
+
+  // Everything that scrolls on its own, plus the page itself.
+  const scrollers = () =>
+    [...document.querySelectorAll("div")].filter((el) => {
+      if (el.scrollHeight <= el.clientHeight + 80) return false;
+      const overflow = getComputedStyle(el).overflowY;
+      return overflow === "auto" || overflow === "scroll";
+    });
+  for (let i = 0; i < 14; i += 1) {
+    for (const el of scrollers()) el.scrollTop = el.scrollHeight;
+    window.scrollTo(0, document.body.scrollHeight);
+    await wait(1300);
+  }
+
+  // Long reviews are cut off behind "More" / "See more".
+  const more = [...document.querySelectorAll('button, [role="button"]')].filter((b) => {
+    const text = (b.textContent || "").trim();
+    const aria = b.getAttribute("aria-label") || "";
+    return /^(more|see more|read more)$/i.test(text) || /^see more$/i.test(aria);
+  });
+  for (const b of more.slice(0, 300)) {
+    try {
+      b.click();
+    } catch {
+      // A button that went away is one fewer to press.
+    }
+  }
+  await wait(1200);
+
+  const root = document.querySelector('[role="main"]') || document.body;
+  const out = [];
+  let stars = 0;
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = node.textContent.replace(/\s+/g, " ").trim();
+      if (t) out.push(t);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node;
+    if (["SCRIPT", "STYLE", "NOSCRIPT", "svg", "SVG", "IMG", "PATH"].includes(el.tagName)) {
+      const label = el.getAttribute("aria-label");
+      if (label && /star|rated/i.test(label)) {
+        out.push(`[${label}]`);
+        stars += 1;
+      }
+      return;
+    }
+    const label = el.getAttribute("aria-label");
+    if (label && (el.getAttribute("role") === "img" || /\bstars?\b|rated/i.test(label))) {
+      out.push(`[${label}]`);
+      stars += 1;
+    }
+    for (const child of el.childNodes) walk(child);
+    if (/^(DIV|P|LI|ARTICLE|SECTION|H[1-6])$/.test(el.tagName)) out.push("\n");
+  };
+  walk(root);
+
+  const text = out
+    .join(" ")
+    .replace(/ *\n[ \n]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .slice(0, 140000);
+  return { text, stats: { url: location.href, title: document.title.slice(0, 80), chars: text.length, stars, more: more.length } };
+}

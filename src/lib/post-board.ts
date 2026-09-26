@@ -1,0 +1,261 @@
+import { postKeyForLink } from "@/lib/social-finder";
+
+/**
+ * The rules of the Posts to answer board.
+ *
+ * The browser finds the posts; the team answers them, each from their own
+ * account. Two comments from us under one neighbour's post reads as two
+ * people who can vouch for the business; a third starts to look like a
+ * campaign. So a post takes two answers. A place is held by whoever took
+ * it: for good once they say it is posted, and for a couple of hours while
+ * they are writing it. After that the place is free again, because somebody
+ * who took a post and went to lunch should not leave the neighbour waiting.
+ *
+ * The owner is never turned away. It is their business and their call,
+ * so they can take a post however many have answered it, and however many
+ * they have answered today.
+ *
+ * Pure functions, so the rules are tested without a database.
+ */
+
+/** How many of the team may answer one post. The owner can always add one more. */
+export const ANSWERS_PER_POST = 2;
+
+/** How long taking a post holds it before somebody else may. */
+export const HOLD_HOURS = 2;
+
+/** Older than this and the neighbour has found somebody: off the board. */
+export const BOARD_MAX_AGE_DAYS = 14;
+
+/**
+ * How many one person may answer in a day, from their own account. Kept
+ * low on purpose: the point of spreading the answering across the team is
+ * that no one account looks like it does nothing else.
+ */
+export const DEFAULT_DAILY_PER_PERSON = 6;
+
+export type AnswerStatus = "written" | "posted" | "let_go";
+
+export interface BoardAnswer {
+  id: string;
+  profileId: string;
+  name: string;
+  status: AnswerStatus;
+  comment: string | null;
+  code: string | null;
+  clicks: number;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+}
+
+/**
+ * Where a post stands for the person looking at it.
+ *
+ * mine: they took it. open: there is still a place on it. full: both
+ * places are taken by others.
+ */
+export type BoardPile = "open" | "mine" | "full";
+
+export interface BoardStanding {
+  pile: BoardPile;
+  /** This person's own answer, when they took it. */
+  mine: BoardAnswer | null;
+  /** Everybody else holding a place on it: posted, or writing right now. */
+  others: BoardAnswer[];
+}
+
+function holds(answer: BoardAnswer, now: Date): boolean {
+  if (answer.status === "posted") return true;
+  if (answer.status !== "written") return false;
+  return now.getTime() - new Date(answer.updatedAt).getTime() < HOLD_HOURS * 3_600_000;
+}
+
+/**
+ * Which pile a post is in for one person.
+ *
+ * Mine first: a post somebody took stays in front of them however many
+ * others answered it since. Otherwise it is open while fewer than two of
+ * the others hold it, and full once two do.
+ */
+export function standingFor(answers: BoardAnswer[], profileId: string, now: Date): BoardStanding {
+  const mine = answers.find((a) => a.profileId === profileId && a.status !== "let_go") ?? null;
+  const others = answers
+    .filter((a) => a.profileId !== profileId && holds(a, now))
+    // Posted before writing, then earliest first, so the names read in order.
+    .sort((a, b) => (a.status === b.status ? a.createdAt.localeCompare(b.createdAt) : a.status === "posted" ? -1 : 1));
+  if (mine) return { pile: "mine", mine, others };
+  return { pile: others.length >= ANSWERS_PER_POST ? "full" : "open", mine: null, others };
+}
+
+/** "Jace and Andrew", for saying who has a post. */
+export function namesOf(answers: BoardAnswer[]): string {
+  const names = answers.map((a) => a.name);
+  if (names.length <= 1) return names[0] ?? "Somebody";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Why this person may not take this post, or null when they may.
+ *
+ * `override` is the owner: never turned away, by a full post or by the
+ * day's limit.
+ */
+export function whyNotTake(input: {
+  answers: BoardAnswer[];
+  profileId: string;
+  now: Date;
+  answeredToday: number;
+  dailyLimit: number;
+  override?: boolean;
+}): string | null {
+  const standing = standingFor(input.answers, input.profileId, input.now);
+  if (standing.pile === "mine" || input.override) return null;
+  if (standing.pile === "full") {
+    return `${namesOf(standing.others)} already have this one. Two answers a post is the most, so leave it to them.`;
+  }
+  if (input.answeredToday >= input.dailyLimit) {
+    return `That's ${input.answeredToday} from your account today. More than that in a day and Facebook starts to notice, so leave the rest for tomorrow or for somebody else.`;
+  }
+  return null;
+}
+
+/**
+ * How old the post is now, in days.
+ *
+ * The age was read off the post when it was found; the days since then are
+ * added, so a post found "2d" ago last week is not still two days old.
+ */
+export function ageNow(ageDaysWhenRead: number | null, readAt: string, now: Date): number {
+  const since = Math.max(0, Math.floor((now.getTime() - new Date(readAt).getTime()) / 86_400_000));
+  return (ageDaysWhenRead ?? 0) + since;
+}
+
+/** Whether the post is still worth answering at all. */
+export function stillFresh(ageDaysWhenRead: number | null, readAt: string, now: Date): boolean {
+  return ageNow(ageDaysWhenRead, readAt, now) <= BOARD_MAX_AGE_DAYS;
+}
+
+/**
+ * Whether a link opens the post itself.
+ *
+ * A post the page showed without a link used to go on the board with a
+ * Facebook search for its words instead, and the search almost never found
+ * it: the person pressing "Open the post" landed on a page of other people's
+ * posts. Only a link to the post counts -- a group post, a permalink, a page
+ * post, or the short link Facebook's Share menu copies. A group's front page
+ * or somebody's profile is not the post.
+ */
+export function isPostLink(url: string | null | undefined): boolean {
+  if (!url) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  // A Reddit post: /r/<sub>/comments/<id>/...
+  if (/(^|\.)reddit\.com$/i.test(parsed.hostname)) return /^\/r\/[A-Za-z0-9_]+\/comments\/[a-z0-9]+/i.test(parsed.pathname);
+  if (/(^|\.)nextdoor\.com$/i.test(parsed.hostname)) return /^\/p\/[A-Za-z0-9_-]+/.test(parsed.pathname);
+  if (/(^|\.)instagram\.com$/i.test(parsed.hostname)) return /^\/(p|reel)\/[A-Za-z0-9_-]+/.test(parsed.pathname);
+  if (/(^|\.)(x|twitter)\.com$/i.test(parsed.hostname)) return /\/status\/\d+/.test(parsed.pathname);
+  if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
+  const path = parsed.pathname;
+  return (
+    /\/groups\/[^/]+\/(posts|permalink)\/\d+/i.test(path) ||
+    /\/share\/(p|r|v)?\/?[A-Za-z0-9]+/i.test(path) ||
+    /\/[^/]+\/posts\/[A-Za-z0-9]+/i.test(path) ||
+    (/\/permalink\.php$|\/story\.php$/i.test(path) && parsed.searchParams.has("story_fbid"))
+  );
+}
+
+/**
+ * Why somebody couldn't respond to a post, as the card asks it.
+ *
+ * An ad goes to the Businesses list; everything else leaves the board as
+ * not a job post. The reason is kept either way, because "random post" and
+ * "too far away" tune the finder differently.
+ */
+export const CANT_RESPOND_REASONS = [
+  { key: "ad", label: "It's an ad", kind: "promotion" },
+  { key: "unrelated", label: "Not related to our work", kind: "other" },
+  { key: "random", label: "Random post, not asking for anything", kind: "other" },
+  { key: "far", label: "Too far away", kind: "other" },
+  { key: "found", label: "They already found someone", kind: "other" },
+  { key: "other", label: "Something else", kind: "other" },
+] as const;
+
+export type CantRespondReason = (typeof CANT_RESPOND_REASONS)[number]["key"];
+
+/**
+ * The ways one post can be recognised, however it reached the board.
+ *
+ * The same post can be kept twice: read in the groups feed and again in a
+ * search, added by hand from a share link, or read before its link was
+ * found. Its link says it is the same post; failing a link, the same person
+ * writing the same words does. Any key in common and two rows are one post.
+ */
+export function postIdentityKeys(row: { url?: string | null; postKey?: string | null; author?: string | null; text?: string | null }): string[] {
+  const keys: string[] = [];
+  if (row.postKey) keys.push(`key:${row.postKey}`);
+  const fromLink = row.url && isPostLink(row.url) ? postKeyForLink(row.url) : null;
+  if (fromLink) keys.push(`key:${fromLink}`);
+  const words = (row.text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 120);
+  const who = (row.author ?? "").toLowerCase().replace(/[^a-z]+/g, " ").trim();
+  // Too few words and too common a post to tell apart by its words alone.
+  if (words.length >= 40) keys.push(`words:${who}|${words}`);
+  return keys;
+}
+
+/**
+ * Rows that are the same post, grouped: each row's id to the id of the
+ * group it belongs to (the first row of that group in the order given).
+ */
+export function groupSamePosts<T extends { id: string }>(rows: T[], keysOf: (row: T) => string[]): Map<string, string> {
+  const groupOfKey = new Map<string, string>();
+  const groupOfRow = new Map<string, string>();
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    let at = id;
+    while (parent.get(at) !== at) at = parent.get(at)!;
+    return at;
+  };
+  for (const row of rows) {
+    parent.set(row.id, row.id);
+    for (const key of keysOf(row)) {
+      const other = groupOfKey.get(key);
+      if (other) {
+        const a = find(other);
+        const b = find(row.id);
+        if (a !== b) parent.set(b, a);
+      } else groupOfKey.set(key, row.id);
+    }
+  }
+  for (const row of rows) groupOfRow.set(row.id, find(row.id));
+  return groupOfRow;
+}
+
+/**
+ * Everybody's answers to one post, once each: the same person answering two
+ * copies of it counts once, posted over written.
+ */
+export function onePerPerson(answers: BoardAnswer[]): BoardAnswer[] {
+  const best = new Map<string, BoardAnswer>();
+  const rank = (a: BoardAnswer) => (a.status === "posted" ? 2 : a.status === "written" ? 1 : 0);
+  for (const answer of answers) {
+    const held = best.get(answer.profileId);
+    if (!held || rank(answer) > rank(held)) best.set(answer.profileId, answer);
+  }
+  return [...best.values()];
+}
+
+/** Why this person may not answer a post they have already answered, or null. */
+export function alreadyAnswered(answers: BoardAnswer[], profileId: string, onPostId: string, answerPostIds: Map<string, string>): string | null {
+  const mine = answers.filter((a) => a.profileId === profileId && a.status !== "let_go");
+  if (mine.some((a) => a.status === "posted")) return "You've already answered this post. One comment each, so it doesn't look like a campaign.";
+  if (mine.some((a) => answerPostIds.get(a.id) !== onPostId)) {
+    return "You're already answering this post from another copy of it on the board. Finish that one.";
+  }
+  return null;
+}

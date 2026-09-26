@@ -1,0 +1,168 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { parseAsBusinessTime } from "@/lib/time-zone";
+import { log } from "@/lib/log";
+import { createBookingFromGhl } from "@/lib/ghl/inbound";
+import { firstAcceptable } from "@/lib/geocode-guard";
+import { searchAddress } from "@/lib/mapbox-geocoding";
+import { isSupabaseAdminConfigured } from "@/lib/env";
+
+/**
+ * GoHighLevel webhook — call this from a GHL workflow on "Appointment
+ * Booked" (evaluation booked) to auto-create the customer/property/job
+ * here, with the appointment time saved as the job's evaluation date.
+ *
+ * Payload field names are matched loosely since GHL's webhook shape varies
+ * by workflow/trigger config — send whichever of these you have:
+ *   name / full_name / first_name+last_name / contact.name
+ *   email / contact.email
+ *   phone / contact.phone
+ *   address / full_address / contact.address1 / contact.full_address
+ *   startTime / appointment.startTime / calendar.startTime / date
+ *
+ * NOTE: "location" in a GHL payload is your own business/sub-account, not
+ * the customer — location.address is deliberately never used as a
+ * customer-address fallback here.
+ *
+ * Optional shared-secret check: set GHL_WEBHOOK_SECRET in the environment,
+ * then send it back as the "x-webhook-secret" header on the GHL side.
+ */
+export async function POST(request: NextRequest) {
+  if (!isSupabaseAdminConfigured) {
+    return NextResponse.json({ error: "Supabase admin not configured on the server." }, { status: 500 });
+  }
+
+  const expectedSecret = process.env.GHL_WEBHOOK_SECRET;
+  if (expectedSecret && request.headers.get("x-webhook-secret") !== expectedSecret) {
+    log.warn("ghl.webhook.rejected", { reason: "bad shared secret" });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!expectedSecret) {
+    // Still accepted, because bookings come through here today, but said
+    // every time: this endpoint creates clients and jobs for anybody who
+    // posts to it until GHL_WEBHOOK_SECRET is set on both sides.
+    log.warn("ghl.webhook.unverified", { fix: "Set GHL_WEBHOOK_SECRET and send it as x-webhook-secret from GoHighLevel." });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const contact = (body.contact as Record<string, unknown>) ?? {};
+  const appointment = (body.appointment as Record<string, unknown>) ?? {};
+  const calendar = (body.calendar as Record<string, unknown>) ?? {};
+
+  const name =
+    (contact.name as string) ||
+    (body.full_name as string) ||
+    [body.first_name, body.last_name].filter(Boolean).join(" ") ||
+    (body.name as string) ||
+    "GHL Lead";
+  const email = (contact.email as string) || (body.email as string) || null;
+  const phone = (contact.phone as string) || (body.phone as string) || null;
+  // Deliberately does NOT fall back to location.address — in a GHL payload
+  // "location" is your own business/sub-account, not the customer, and
+  // using it here previously created properties at the company's own
+  // address instead of the customer's.
+  const address =
+    (body.address as string) ||
+    (body.full_address as string) ||
+    (contact.address1 as string) ||
+    (contact.full_address as string) ||
+    (contact.address as string) ||
+    null;
+  const startTimeRaw =
+    (body.startTime as string) ||
+    (appointment.startTime as string) ||
+    (calendar.startTime as string) ||
+    (body.date as string) ||
+    null;
+
+  if (!address || !address.trim()) {
+    return NextResponse.json(
+      {
+        error: "No customer address found in the payload. Add the contact's address field to the GHL workflow.",
+        receivedKeys: Object.keys(body),
+        receivedContactKeys: Object.keys(contact),
+      },
+      { status: 400 }
+    );
+  }
+
+  // Checked rather than taken. A thin address matches a real street in the
+  // wrong state, and this path writes a property with nobody looking — which
+  // is how pins for a Harford County business ended up across the continent.
+  const matches = await searchAddress(address, undefined, { autocomplete: false });
+  const checked = firstAcceptable(address, matches);
+  if (!checked.match) {
+    return NextResponse.json(
+      { error: `Couldn't place that address: ${address}. ${checked.reason ?? ""}`.trim() },
+      { status: 400 }
+    );
+  }
+
+  // A start time with no offset on it is the business's wall clock, not UTC.
+  const parsedStart = startTimeRaw ? parseAsBusinessTime(startTimeRaw) : null;
+  const evaluationDate = parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart.toISOString() : null;
+
+  const supabase = createAdminClient();
+  const { data: orgRow } = await supabase.from("organizations").select("id").order("created_at").limit(1).maybeSingle();
+  const ORGANIZATION_ID = orgRow?.id ?? "";
+
+  // Our own booking coming back round. An evaluation booked in the app is
+  // put on the GoHighLevel calendar, and GoHighLevel then tells us about
+  // it as if it were new. Known by the appointment id we were given, or by
+  // the same client at the same time when the id is not in the payload.
+  const appointmentId =
+    (appointment.id as string) || (body.appointment_id as string) || (body.appointmentId as string) || (calendar.id as string) || null;
+  if (appointmentId) {
+    const { data: known } = await supabase.from("jobs").select("id").eq("ghl_appointment_id", appointmentId).maybeSingle();
+    if (known) {
+      log.info("ghl.webhook.echo", { jobId: known.id, appointmentId });
+      return NextResponse.json({ ok: true, jobId: known.id, echoed: true });
+    }
+  }
+  if (evaluationDate && (email || phone)) {
+    const { data: same } = await supabase
+      .from("jobs")
+      .select("id, properties!inner(customers!inner(email, phone))")
+      .eq("evaluation_date", evaluationDate)
+      .limit(5);
+    const echo = ((same ?? []) as unknown as { id: string; properties: { customers: { email: string | null; phone: string | null } } }[]).find(
+      (j) =>
+        (email && j.properties.customers.email && j.properties.customers.email.toLowerCase() === email.toLowerCase()) ||
+        (phone && j.properties.customers.phone && j.properties.customers.phone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))
+    );
+    if (echo) {
+      if (appointmentId) await supabase.from("jobs").update({ ghl_appointment_id: appointmentId }).eq("id", echo.id);
+      log.info("ghl.webhook.echo", { jobId: echo.id, appointmentId });
+      return NextResponse.json({ ok: true, jobId: echo.id, echoed: true });
+    }
+  }
+
+  const made = await createBookingFromGhl({
+    organizationId: ORGANIZATION_ID,
+    name,
+    email,
+    phone,
+    address,
+    startsAt: evaluationDate ?? new Date().toISOString(),
+    endsAt: null,
+    appointmentId,
+    contactId: (contact.id as string) || null,
+  });
+  if (!made.ok) {
+    log.error("ghl.booking.failed", new Error(made.error), { appointmentId });
+    return NextResponse.json({ error: made.error }, { status: 400 });
+  }
+  const job = { id: made.jobId };
+  const customerId = made.customerId;
+  const property = { id: made.propertyId };
+
+  log.info("ghl.booking.created", { jobId: job.id, customerId, propertyId: property.id, at: evaluationDate });
+  return NextResponse.json({ ok: true, customerId, propertyId: property.id, jobId: job.id });
+}
