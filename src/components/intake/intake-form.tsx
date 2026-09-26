@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   answersForConcerns,
   BEFORE_VISIT_QUESTIONS,
+  DETAIL_QUESTIONS,
   detailQuestionsFor,
   INTAKE_QUESTIONS,
   MAX_INTAKE_PHOTOS,
@@ -42,14 +43,15 @@ const main = (key: IntakeQuestion["key"]): Step => {
  * out again after every answer.
  */
 function stepsFor(answers: IntakeAnswers): Step[] {
-  const details = detailQuestionsFor(answers.services, answers.details);
+  // The questions about the work get a page each. The one about the
+  // property sits on the photos page, where they are already looking at it.
+  const details = detailQuestionsFor(answers.services, answers.details).filter((q) => q.services !== null);
   return [
     main("services"),
     main("areas"),
     ...details.map((question): Step => ({ key: `d:${question.id}`, kind: "detail", question })),
     { key: "photos", kind: "photos" },
     main("looks"),
-    main("tried"),
     main("concerns"),
     main("budget"),
     main("timing"),
@@ -65,7 +67,7 @@ function filled(value: string | string[] | undefined): boolean {
 function answered(step: Step, answers: IntakeAnswers, photos: Photo[]): boolean {
   if (step.kind === "main") return filled(answers[step.question.key]);
   if (step.kind === "detail") return filled(answers.details[step.question.id]);
-  if (step.kind === "photos") return photos.length > 0;
+  if (step.kind === "photos") return photos.length > 0 || filled(answers.details.yard);
   return false;
 }
 
@@ -261,7 +263,12 @@ export function IntakeForm({
           </Question>
         )}
 
-        {step.kind === "photos" && <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending || demo} />}
+        {step.kind === "photos" && (
+          <>
+            <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending || demo} />
+            <YardNotes answers={answers} setAnswers={setAnswers} disabled={pending} />
+          </>
+        )}
 
         {isLast && (
           <div className="flex flex-col gap-4">
@@ -305,6 +312,59 @@ export function IntakeForm({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * What a photo does not show about the yard, as small chips under the
+ * photos: most yards have none of it, so it takes one glance to skip.
+ */
+function YardNotes({
+  answers,
+  setAnswers,
+  disabled,
+}: {
+  answers: IntakeAnswers;
+  setAnswers: React.Dispatch<React.SetStateAction<IntakeAnswers>>;
+  disabled: boolean;
+}) {
+  const question = DETAIL_QUESTIONS.find((q) => q.id === "yard")!;
+  const value = answers.details.yard;
+  const picked = Array.isArray(value) ? value : [];
+  const toggle = (v: string) =>
+    setAnswers((a) => {
+      const now = Array.isArray(a.details.yard) ? a.details.yard : [];
+      return { ...a, details: { ...a.details, yard: now.includes(v) ? now.filter((x) => x !== v) : [...now, v] } };
+    });
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <p className="text-sm font-semibold">{question.title}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {(question.options ?? []).map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={picked.includes(o.value)}
+            onClick={() => toggle(o.value)}
+            className={cn(
+              "min-h-9 rounded-full border px-3 text-sm",
+              picked.includes(o.value) ? "border-primary bg-primary/10 font-medium text-primary" : "border-border bg-background"
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <Textarea
+        value={String(answers.details.yard_notes ?? "")}
+        onChange={(e) => setAnswers((a) => ({ ...a, details: { ...a.details, yard_notes: e.target.value } }))}
+        disabled={disabled}
+        rows={2}
+        placeholder={question.placeholder}
+        className="text-base"
+      />
     </div>
   );
 }
@@ -505,10 +565,9 @@ function Photos({
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-xl font-semibold leading-snug">Can you add a few photos?</h2>
+      <h2 className="text-xl font-semibold leading-snug">Show us the yard</h2>
       <p className="-mt-1 text-sm text-muted-foreground">
-        One of each area, from where you would stand to show someone. It lets us price it properly, often before we arrive. Up to{" "}
-        {MAX_INTAKE_PHOTOS}.
+        A photo of each area lets us price it properly, often before we arrive. Up to {MAX_INTAKE_PHOTOS}.
       </p>
       <div className="grid grid-cols-3 gap-2">
         {photos.map((p) => (

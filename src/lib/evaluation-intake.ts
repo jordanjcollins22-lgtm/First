@@ -118,17 +118,10 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     notesPlaceholder: "A neighbour's yard you like, a colour you hate, anything that helps",
   },
   {
-    key: "tried",
-    section: "decide",
-    title: "Have you tried anything before? What happened?",
-    help: "Plants that died, a company that did not work out, a drainage fix that did not take. It saves us repeating it.",
-    kind: "text",
-  },
-  {
     key: "concerns",
     section: "decide",
     title: "What would make you say no?",
-    help: "Honest answers here get you a better proposal, not a harder sell. Tick one and we answer it right here.",
+    help: "Honest answers get you a better proposal, not a harder sell. Tick any and we answer it right here.",
     kind: "multi",
     options: [
       { value: "price", label: "The price" },
@@ -140,9 +133,10 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "other_quotes", label: "Getting other quotes" },
       { value: "nothing", label: "Nothing, I am ready" },
     ],
-    notesKey: "concerns_notes",
-    notesPlaceholder: "Anything you want to say about that",
-    notesWhen: ["price", "timing", "unsure_want", "bad_experience", "hoa", "maintenance", "other_quotes"],
+    // One box for what they have tried before and anything else on their
+    // mind: asked on its own page it read as the same question again.
+    notesKey: "tried",
+    notesPlaceholder: "Tried something before that did not work, like plants that died or a company that let you down? Tell us here.",
   },
   {
     key: "budget",
@@ -349,7 +343,7 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     id: "yard",
     services: null,
     group: "The property",
-    title: "Tick anything that is true of the yard",
+    title: "Anything we should know?",
     short: "Yard",
     kind: "multi",
     options: opts(
@@ -358,9 +352,9 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
       ["sprinklers", "Sprinklers"],
       ["dog_fence", "Invisible dog fence"],
       ["dog", "A dog in the yard"],
-      ["street", "No driveway parking for a truck"]
+      ["street", "No driveway parking"]
     ),
-    placeholder: "Gate code, where to park, anything else about getting in",
+    placeholder: "Gate code, where to park, anything else",
   },
 ];
 
@@ -566,6 +560,8 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
     out[question.key] = pick(question.kind, question.options, raw[question.key]) as never;
     if (question.notesKey) out[question.notesKey] = text(raw[question.notesKey]) as never;
   }
+  // Written in its own box on forms sent before it shared one with "tried".
+  out.concerns_notes = text(raw.concerns_notes);
   // Services from before some were merged count as the one they became.
   if (Array.isArray(raw.services)) {
     const merged = raw.services.map((v) => (typeof v === "string" ? SERVICE_MERGED[v] ?? v : v));
@@ -627,7 +623,8 @@ export function summarizeIntake(answers: IntakeAnswers): { label: string; value:
   for (const q of INTAKE_QUESTIONS) {
     const notes = q.notesKey ? String(answers[q.notesKey] ?? "") : "";
     let shown = shownValue(q, answers[q.key]);
-    if (notes) shown = shown ? `${shown}. ${notes}` : notes;
+    const older = q.key === "concerns" ? answers.concerns_notes : "";
+    for (const extra of [notes, older]) if (extra) shown = shown ? `${shown}. ${extra}` : extra;
     if (shown) lines.push({ label: SHORT_LABEL[q.key] ?? q.title, value: shown });
   }
   return lines;
@@ -709,7 +706,7 @@ export function talkingPoints(answers: IntakeAnswers): string[] {
     points.push("Somebody else has a say. If they are not there, ask what that person will want to know and answer it in the proposal.");
   }
   if (answers.tried) {
-    points.push(`They have tried before: "${answers.tried.slice(0, 140)}". Say why this time is different before they ask.`);
+    points.push(`They wrote: "${answers.tried.slice(0, 140)}". Answer it, and say why this time is different, before they ask.`);
   }
   if (answers.looks.includes("unsure")) {
     points.push("No colour preference yet. Show three planting palettes and note which one they warm to.");

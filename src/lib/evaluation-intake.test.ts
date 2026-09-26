@@ -55,10 +55,10 @@ describe("what the evaluator reads", () => {
 
   it("summarises every answered question with the labels, not the codes", () => {
     const lines = summarizeIntake(answers);
-    expect(lines.map((l) => l.label)).toEqual(["Wants", "Where", "Looks", "Tried before", "Would say no over", "Budget", "Decides"]);
+    expect(lines.map((l) => l.label)).toEqual(["Wants", "Where", "Looks", "Would say no over", "Budget", "Decides"]);
     expect(lines[0].value).toBe("Beds: mulch, stone or plants");
-    expect(lines[4].value).toBe("The price, Getting other quotes. Last quote was 9k");
-    expect(answeredCount(answers)).toBe(7);
+    expect(lines[3].value).toBe("The price, Getting other quotes. Planted boxwoods, they died. Last quote was 9k");
+    expect(answeredCount(answers)).toBe(6);
   });
 
   it("turns each concern into something to do on the walk", () => {
@@ -73,7 +73,7 @@ describe("what the evaluator reads", () => {
   it("says what to do when nothing came back", () => {
     expect(intakeHeadline(null, null)).toMatch(/first 5 to 10 minutes/);
     expect(intakeHeadline(emptyAnswers(), null)).toMatch(/first 5 to 10 minutes/);
-    expect(intakeHeadline(answers, null)).toBe("Started, not sent: 7 answered. Finish it together at the door.");
+    expect(intakeHeadline(answers, null)).toBe("Started, not sent: 6 answered. Finish it together at the door.");
     expect(intakeHeadline(answers, "2026-09-14T10:00:00Z")).toBe(
       "Beds: mulch, stone or plants · $2,500 to $5,000"
     );
@@ -82,7 +82,8 @@ describe("what the evaluator reads", () => {
   it("asks the things the owner asked for", () => {
     const titles = INTAKE_QUESTIONS.map((q) => q.title.toLowerCase());
     expect(titles.some((t) => t.includes("colours"))).toBe(true);
-    expect(titles.some((t) => t.includes("tried"))).toBe(true);
+    // Tried before is asked on the say-no page, in its box.
+    expect(INTAKE_QUESTIONS.find((q) => q.key === "concerns")?.notesKey).toBe("tried");
     expect(titles.some((t) => t.includes("say no"))).toBe(true);
     expect(titles.some((t) => t.includes("ask us"))).toBe(true);
   });
