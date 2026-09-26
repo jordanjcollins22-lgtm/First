@@ -6,7 +6,7 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
-import { answeredToday, answeringLeaderboard, getPostBoard } from "@/lib/data/post-board";
+import { affiliateClosedBoard, answeredToday, getPostBoard } from "@/lib/data/post-board";
 import { AnsweringLeaderboard } from "@/components/marketing/answering-leaderboard";
 import { PostBoard } from "@/components/marketing/post-board";
 import { CommentCard } from "@/components/marketing/comment-card";
@@ -38,7 +38,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
     }),
     answeredToday(profile.organization_id, profile.id, now).catch(() => 0),
     getAgentSettings(profile.organization_id),
-    answeringLeaderboard(profile.organization_id, now).catch(() => []),
+    affiliateClosedBoard(profile.organization_id, now).catch(() => ({ standings: [], unclaimed: { closed: 0, value: 0 } })),
   ]);
 
   return (
@@ -63,7 +63,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
 
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
 
-      <AnsweringLeaderboard standings={leaderboard} meId={profile.id} />
+      <AnsweringLeaderboard standings={leaderboard.standings} unclaimed={leaderboard.unclaimed} meId={profile.id} owner={owner} />
 
       {/* Every post at once, for anybody who wants to see who has what. The
           card above is the way to answer them. */}

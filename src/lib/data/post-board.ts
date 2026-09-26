@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { creditFor, isSold, rankClosers, type CloserStanding, type SoldJobInput } from "@/lib/affiliate-closes";
+import { qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
 import { findPostUrl } from "@/lib/outreach-agent";
 import type { Platform } from "@/lib/social-finder";
@@ -183,88 +185,80 @@ export async function answersToPost(organizationId: string, postId: string): Pro
   return (await answersFor(organizationId, [postId])).get(postId) ?? [];
 }
 
-export interface AnswererStanding {
-  profileId: string;
-  name: string;
-  /** Comments posted in the last seven days. */
-  week: number;
-  allTime: number;
-  /** Opens of the links in their comments. */
-  clicks: number;
-  /** Evaluations booked through those links. */
-  booked: number;
-  /** Posts they found themselves and added. */
-  found: number;
-}
-
 /**
- * Who is answering posts, best first.
+ * The affiliate leaderboard: every affiliate, and what each has closed.
  *
- * Counted from what happened, not from what anybody typed: comments marked
- * posted, the opens their links got, the evaluations booked through them,
- * and the posts they found and added. Names and counts only, so it is the
- * same board on everybody's screen.
+ * Everybody who is an affiliate is listed, sold anything or not, and so is
+ * anybody else a sale is credited to, so the totals add up. Credit follows
+ * `creditFor`: the link that brought the client in, then who the job is
+ * assigned to, then the account manager. Read with the service client and
+ * scoped to the business by hand, because an affiliate cannot see other
+ * people's jobs and the board has to read the same on every screen.
  */
-export async function answeringLeaderboard(organizationId: string, now: Date = new Date()): Promise<AnswererStanding[]> {
-  // Read with the service client, scoped to the business by hand: an
-  // affiliate may not see other people's links or jobs, and the board has to
-  // read the same on every screen. Only names and counts leave here.
-  const supabase = createAdminClient();
-  const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
-  const [{ data: answers }, { data: added }] = await Promise.all([
-    supabase
-      .from("outreach_post_answers")
-      .select("profile_id, link_id, posted_at")
-      .eq("organization_id", organizationId)
-      .eq("status", "posted")
+export async function affiliateClosedBoard(
+  organizationId: string,
+  now: Date = new Date()
+): Promise<{ standings: CloserStanding[]; unclaimed: { closed: number; value: number } }> {
+  const admin = createAdminClient();
+  const [{ data: profiles }, { data: roles }, { data: jobs }, { data: links }, { data: answers }] = await Promise.all([
+    admin.from("profiles").select("id, full_name, email, is_affiliate, does_evaluations").eq("organization_id", organizationId),
+    admin.from("profile_roles").select("profile_id, role_name"),
+    admin
+      .from("jobs")
+      .select(
+        "id, status, declined_at, referral_code, referred_by_profile_id, assigned_to, project_start_date, " +
+          "property:properties!inner(customer:customers!inner(organization_id, account_manager_id)), job_proposals(status, total_cost, responded_at)"
+      )
       .limit(5000),
-    supabase.from("outreach_seen_posts").select("added_by").eq("organization_id", organizationId).not("added_by", "is", null).limit(5000),
+    admin.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId).limit(10000),
+    admin.from("outreach_post_answers").select("profile_id").eq("organization_id", organizationId).eq("status", "posted").limit(10000),
   ]);
-  const rows = answers ?? [];
-  const linkIds = rows.map((r) => r.link_id).filter((id): id is string => Boolean(id));
-  const { data: links } = linkIds.length
-    ? await supabase.from("outreach_links").select("id, code, click_count").eq("organization_id", organizationId).in("id", linkIds)
-    : { data: [] as { id: string; code: string; click_count: number }[] };
-  const codes = (links ?? []).map((l) => l.code);
-  const { data: jobs } = codes.length
-    ? // The codes are this business's own links, so the jobs they booked are its own.
-      await supabase.from("jobs").select("referral_code").in("referral_code", codes)
-    : { data: [] as { referral_code: string | null }[] };
-  const linkById = new Map((links ?? []).map((l) => [l.id, l]));
-  const bookedCodes = new Map<string, number>();
-  for (const job of jobs ?? []) {
-    if (job.referral_code) bookedCodes.set(job.referral_code, (bookedCodes.get(job.referral_code) ?? 0) + 1);
-  }
 
-  const by = new Map<string, AnswererStanding>();
-  const get = (id: string) => {
-    let s = by.get(id);
-    if (!s) {
-      s = { profileId: id, name: "", week: 0, allTime: 0, clicks: 0, booked: 0, found: 0 };
-      by.set(id, s);
-    }
-    return s;
+  const rolesOf = new Map<string, string[]>();
+  for (const r of roles ?? []) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  type JobRow = {
+    id: string;
+    status: string;
+    declined_at: string | null;
+    referral_code: string | null;
+    referred_by_profile_id: string | null;
+    assigned_to: string | null;
+    project_start_date: string | null;
+    property: { customer: { organization_id: string; account_manager_id: string | null } | null } | null;
+    job_proposals: { status: string; total_cost: number | string | null; responded_at: string | null }[] | null;
   };
-  for (const r of rows) {
-    const s = get(r.profile_id);
-    s.allTime += 1;
-    if (r.posted_at && r.posted_at >= weekAgo) s.week += 1;
-    const link = r.link_id ? linkById.get(r.link_id) : undefined;
-    if (link) {
-      s.clicks += link.click_count ?? 0;
-      s.booked += bookedCodes.get(link.code) ?? 0;
-    }
-  }
-  for (const r of added ?? []) if (r.added_by) get(r.added_by).found += 1;
+  const sold: SoldJobInput[] = ((jobs ?? []) as unknown as JobRow[])
+    .filter((j) => j.property?.customer?.organization_id === organizationId)
+    .map((j) => {
+      const accepted = (j.job_proposals ?? []).filter((p) => p.status === "accepted");
+      const best = accepted.sort((a, b) => Number(b.total_cost ?? 0) - Number(a.total_cost ?? 0))[0];
+      return {
+        id: j.id,
+        status: j.status,
+        declined: Boolean(j.declined_at),
+        soldFor: best?.total_cost != null ? Number(best.total_cost) : null,
+        proposalAccepted: Boolean(best),
+        referralCode: j.referral_code,
+        referredBy: j.referred_by_profile_id,
+        assignedTo: j.assigned_to,
+        accountManager: j.property?.customer?.account_manager_id ?? null,
+        closedAt: best?.responded_at ?? j.project_start_date,
+      };
+    });
+  const posterByCode = new Map((links ?? []).map((l) => [l.code, l.profile_id]));
+  const comments = new Map<string, number>();
+  for (const a of answers ?? []) comments.set(a.profile_id, (comments.get(a.profile_id) ?? 0) + 1);
 
-  const ids = [...by.keys()];
-  if (ids.length === 0) return [];
-  const { data: people } = await supabase.from("profiles").select("id, full_name, email").eq("organization_id", organizationId).in("id", ids);
-  for (const p of people ?? []) {
-    const s = by.get(p.id);
-    if (s) s.name = (p.full_name || p.email || "Somebody").split(" ")[0];
-  }
-  return [...by.values()]
-    .map((s) => ({ ...s, name: s.name || "Somebody" }))
-    .sort((a, b) => b.booked - a.booked || b.week - a.week || b.allTime - a.allTime || b.found - a.found);
+  const credited = new Set(sold.filter(isSold).map((j) => creditFor(j, posterByCode)).filter((id): id is string => Boolean(id)));
+  const people = (profiles ?? [])
+    .filter((p) => {
+      const r = rolesOf.get(p.id) ?? [];
+      return p.is_affiliate || qualifiesForAffiliateLink(r) || credited.has(p.id) || comments.has(p.id);
+    })
+    .map((p) => ({
+      id: p.id,
+      // First name, or the front of their email when no name is set.
+      name: ((p.full_name?.trim().split(/\s+/)[0] || p.email?.split("@")[0] || "Somebody") as string).replace(/^\w/, (c) => c.toUpperCase()),
+    }));
+  return rankClosers(people, sold, posterByCode, comments, now);
 }
