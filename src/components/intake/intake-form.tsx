@@ -12,6 +12,7 @@ import {
   detailQuestionsFor,
   INTAKE_QUESTIONS,
   MAX_INTAKE_PHOTOS,
+  notesShown,
   type DetailQuestion,
   type IntakeAnswer,
   type IntakeAnswers,
@@ -116,13 +117,13 @@ export function IntakeForm({
       disabled={pending}
       onToggle={(value) => set(q.key, toggleIn(answers[q.key], value, q.kind === "single") as never)}
       onText={(value) => set(q.key, value as never)}
-      notes={q.notesKey ? { value: answers[q.notesKey] as string, placeholder: q.notesPlaceholder, onChange: (v) => set(q.notesKey!, v as never) } : undefined}
+      notes={q.notesKey && notesShown(q, answers) ? { value: answers[q.notesKey] as string, placeholder: q.notesPlaceholder, onChange: (v) => set(q.notesKey!, v as never) } : undefined}
     >
       {q.key === "concerns" && <ConcernAnswers answers={answersForConcerns(answers.concerns)} />}
     </Question>
   );
   const inSection = (section: IntakeSection) => INTAKE_QUESTIONS.filter((q) => q.section === section).map(question);
-  const details = detailQuestionsFor(answers.services);
+  const details = detailQuestionsFor(answers.services, answers.details);
   const forWork = details.filter((q) => q.services !== null);
   const forProperty = details.filter((q) => q.services === null);
   const detail = (q: DetailQuestion) => (
@@ -137,6 +138,11 @@ export function IntakeForm({
       disabled={pending}
       onToggle={(value) => setDetail(q.id, toggleIn(answers.details[q.id], value, q.kind === "single"))}
       onText={(value) => setDetail(q.id, value)}
+      notes={
+        q.placeholder && q.kind !== "text"
+          ? { value: String(answers.details[`${q.id}_notes`] ?? ""), placeholder: q.placeholder, onChange: (v) => setDetail(`${q.id}_notes`, v) }
+          : undefined
+      }
     />
   );
 

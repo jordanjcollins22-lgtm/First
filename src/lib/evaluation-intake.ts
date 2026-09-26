@@ -38,6 +38,11 @@ export interface IntakeQuestion {
   options?: IntakeOption[];
   /** For a chip question, the free-text field that goes with it. */
   notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos">;
+  /**
+   * When the notes box shows: once any chip is picked, or once one of these
+   * is. Always, when not given. A box nobody needs is one more thing to skip.
+   */
+  notesWhen?: "any" | string[];
   notesPlaceholder?: string;
 }
 
@@ -68,20 +73,18 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     help: "Tick everything that applies. We price each area separately, so more is fine.",
     kind: "multi",
     options: [
-      { value: "beds", label: "Landscape beds and plantings" },
-      { value: "mulch", label: "Mulch or stone in the beds" },
-      { value: "lawn", label: "Lawn: sod, seeding or repair" },
-      { value: "lawn_care", label: "Mowing and lawn care" },
-      { value: "cleanup", label: "Cleanup and overgrowth" },
-      { value: "trimming", label: "Shrub and hedge trimming" },
-      { value: "removal", label: "Shrub, plant or stump removal" },
-      { value: "drainage", label: "Grading, drainage or standing water" },
+      { value: "beds", label: "Beds: mulch, stone or plants" },
+      { value: "lawn", label: "Lawn: repair, sod, seed or mowing" },
+      { value: "cleanup", label: "Cleanup and trimming" },
+      { value: "removal", label: "Shrub, tree or stump removal" },
+      { value: "drainage", label: "Drainage or standing water" },
       { value: "hardscape", label: "Patio, walkway or wall" },
       { value: "washing", label: "Soft washing" },
       { value: "other", label: "Something else" },
     ],
     notesKey: "services_other",
-    notesPlaceholder: "Anything else, or more detail on the above",
+    notesPlaceholder: "What else would you like done?",
+    notesWhen: ["other"],
   },
   {
     key: "areas",
@@ -113,6 +116,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "unsure", label: "Not sure, show me options" },
     ],
     notesKey: "looks_notes",
+    notesWhen: "any",
     notesPlaceholder: "A neighbour's yard you like, a colour you hate, anything that helps",
   },
   {
@@ -140,6 +144,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     ],
     notesKey: "concerns_notes",
     notesPlaceholder: "Anything you want to say about that",
+    notesWhen: ["price", "timing", "unsure_want", "bad_experience", "hoa", "maintenance", "other_quotes"],
   },
   {
     key: "budget",
@@ -200,6 +205,8 @@ export interface DetailQuestion {
   id: string;
   /** The services it is asked for. Null: asked of every property. */
   services: string[] | null;
+  /** Asked only once another answer says it matters. */
+  showIf?: { id: string; values: string[] };
   title: string;
   /** How the evaluator's summary names it. */
   short: string;
@@ -214,171 +221,97 @@ const opts = (...labels: [string, string][]): IntakeOption[] => labels.map(([val
 
 /**
  * What moves the price of each kind of work, asked in words a homeowner can
- * answer from the kitchen window. The evaluator still measures; these are
- * the things a measurement does not show.
+ * answer from the kitchen window, and no more of it than changes a number.
+ * The evaluator still measures and counts; these are the things a tape
+ * measure and a satellite picture do not show. Two questions at most for any
+ * one kind of work, and the property is one question of exceptions rather
+ * than one question per fact, because most yards have none of them.
  */
 export const DETAIL_QUESTIONS: DetailQuestion[] = [
   {
     id: "beds_now",
-    services: ["beds", "mulch"],
-    group: "Beds and mulch",
+    services: ["beds"],
+    group: "Beds",
     title: "What is in the beds now?",
     short: "Beds now",
     kind: "multi",
-    options: opts(["old_mulch", "Old mulch"], ["weeds", "Weeds and grass"], ["stone", "Stone or rock"], ["bare", "Bare soil"], ["lawn", "Nothing yet, it is lawn (a new bed)"]),
+    options: opts(["old_mulch", "Old mulch"], ["stone", "Stone or rock"], ["weeds", "Weeds and grass"], ["bare", "Bare soil"], ["lawn", "Lawn (a new bed)"]),
   },
   {
-    id: "beds_count",
-    services: ["beds", "mulch"],
-    group: "Beds and mulch",
-    title: "Roughly how many beds?",
-    short: "How many beds",
-    kind: "single",
-    options: opts(["1", "1"], ["2_3", "2 to 3"], ["4_6", "4 to 6"], ["7_plus", "7 or more"]),
-  },
-  {
-    id: "cover",
-    services: ["beds", "mulch"],
-    group: "Beds and mulch",
-    title: "What would you like on top?",
-    short: "Cover",
-    kind: "single",
-    options: opts(["brown", "Brown mulch"], ["black", "Black mulch"], ["red", "Red mulch"], ["stone", "River rock or stone"], ["unsure", "Not sure"]),
-  },
-  {
-    id: "plants",
+    id: "beds_add",
     services: ["beds"],
-    group: "Beds and mulch",
-    title: "New plants?",
-    short: "Plants",
-    kind: "single",
-    options: opts(["fill", "Yes, fill the beds"], ["gaps", "A few to fill gaps"], ["keep", "No, keep what is there"], ["unsure", "Not sure"]),
-  },
-  {
-    id: "lawn_problem",
-    services: ["lawn"],
-    group: "The lawn",
-    title: "What is wrong with the lawn?",
-    short: "Lawn problem",
+    group: "Beds",
+    title: "What should go in?",
+    short: "Beds get",
     kind: "multi",
-    options: opts(["thin", "Bare or thin patches"], ["weeds", "Mostly weeds"], ["dead", "Brown or dead"], ["bumpy", "Bumpy or uneven"], ["construction", "Torn up after construction"]),
+    options: opts(["mulch", "Mulch"], ["stone", "Stone or rock"], ["plants", "New plants"], ["edging", "Edging"], ["unsure", "Not sure"]),
   },
   {
-    id: "lawn_extent",
+    id: "lawn_need",
     services: ["lawn"],
-    group: "The lawn",
-    title: "How much of the lawn?",
-    short: "How much lawn",
-    kind: "single",
-    options: opts(["patches", "A few patches"], ["half", "About half"], ["all", "The whole lawn"]),
+    group: "Lawn",
+    title: "What does the lawn need?",
+    short: "Lawn needs",
+    kind: "multi",
+    options: opts(["patch", "Fix bare or thin spots"], ["redo", "Redo the whole lawn"], ["weeds", "Get rid of weeds"], ["level", "Level bumps and dips"], ["mowing", "Regular mowing"]),
   },
   {
     id: "lawn_method",
     services: ["lawn"],
-    group: "The lawn",
+    showIf: { id: "lawn_need", values: ["patch", "redo"] },
+    group: "Lawn",
     title: "Sod or seed?",
     short: "Sod or seed",
     kind: "single",
     options: opts(["sod", "Sod, green right away"], ["seed", "Seed, costs less and fills in over a season"], ["unsure", "Not sure, advise me"]),
   },
   {
-    id: "care_often",
-    services: ["lawn_care"],
-    group: "Mowing",
-    title: "How often would you like it cut?",
-    short: "Mowing",
-    kind: "single",
-    options: opts(["weekly", "Every week"], ["biweekly", "Every two weeks"], ["once", "Just once"]),
-  },
-  {
-    id: "cleanup_since",
-    services: ["cleanup"],
-    group: "Cleanup",
-    title: "When was it last kept up?",
-    short: "Last kept up",
-    kind: "single",
-    options: opts(["season", "This season"], ["year", "About a year ago"], ["years", "Several years ago"]),
-  },
-  {
     id: "cleanup_what",
     services: ["cleanup"],
-    group: "Cleanup",
-    title: "What needs clearing?",
-    short: "To clear",
+    group: "Cleanup and trimming",
+    title: "What needs doing?",
+    short: "Cleanup",
     kind: "multi",
-    options: opts(["leaves", "Leaves"], ["weeds", "Weeds"], ["shrubs", "Overgrown shrubs"], ["vines", "Vines or ivy"], ["saplings", "Small trees and saplings"], ["debris", "Junk or debris to haul away"]),
+    options: opts(
+      ["leaves", "Leaves"],
+      ["weeds", "Weeds"],
+      ["trim", "Shrubs or hedges to trim"],
+      ["tall", "Some over 6 ft tall"],
+      ["vines", "Vines or ivy"],
+      ["saplings", "Small trees and saplings"],
+      ["debris", "Junk to haul away"]
+    ),
   },
   {
-    id: "trim_count",
-    services: ["trimming"],
-    group: "Trimming",
-    title: "How much trimming?",
-    short: "Trimming",
-    kind: "single",
-    options: opts(["few", "A few shrubs"], ["hedge", "A hedge or a row"], ["lots", "Lots, all around the house"]),
-  },
-  {
-    id: "trim_height",
-    services: ["trimming"],
-    group: "Trimming",
-    title: "How tall is the tallest one?",
-    short: "Tallest",
-    kind: "single",
-    options: opts(["under_6", "Under 6 ft"], ["6_10", "6 to 10 ft"], ["over_10", "Over 10 ft"]),
-  },
-  {
-    id: "remove_count",
+    id: "remove_what",
     services: ["removal"],
     group: "Removal",
-    title: "How many are coming out?",
+    title: "What is coming out?",
     short: "Removing",
-    kind: "single",
-    options: opts(["1_3", "1 to 3"], ["4_10", "4 to 10"], ["over_10", "More than 10"]),
-  },
-  {
-    id: "remove_size",
-    services: ["removal"],
-    group: "Removal",
-    title: "How big is the biggest one?",
-    short: "Biggest",
-    kind: "single",
-    options: opts(["small", "Shorter than me"], ["tall", "Taller than me"], ["tree", "A small tree"]),
-  },
-  {
-    id: "stumps",
-    services: ["removal"],
-    group: "Removal",
-    title: "Any stumps to grind out?",
-    short: "Stumps",
-    kind: "single",
-    options: opts(["none", "No stumps"], ["under_12", "Under a foot across"], ["12_24", "1 to 2 feet across"], ["over_24", "Over 2 feet across"]),
-  },
-  {
-    id: "water_where",
-    services: ["drainage"],
-    group: "Drainage",
-    title: "Where does the water sit?",
-    short: "Water sits",
     kind: "multi",
-    options: opts(["house", "Against the house"], ["middle", "Middle of the yard"], ["fence", "Along a fence"], ["low", "Bottom of a slope"], ["paving", "On the driveway or a path"]),
+    options: opts(
+      ["small", "Shrubs shorter than me"],
+      ["large", "Shrubs taller than me"],
+      ["trees", "Small trees"],
+      ["stumps_small", "Stumps under a foot across"],
+      ["stumps_big", "Stumps over a foot across"]
+    ),
   },
   {
-    id: "water_when",
+    id: "water",
     services: ["drainage"],
     group: "Drainage",
-    title: "When?",
-    short: "When wet",
-    kind: "single",
-    options: opts(["every", "After every rain"], ["heavy", "Only after heavy rain"], ["always", "It is nearly always wet"]),
-  },
-  {
-    id: "basement",
-    services: ["drainage"],
-    group: "Drainage",
-    title: "Does water get into the basement?",
-    short: "Basement",
-    kind: "single",
-    options: opts(["yes", "Yes"], ["no", "No"], ["none", "No basement"]),
+    title: "What is the water doing?",
+    short: "Water",
+    kind: "multi",
+    options: opts(
+      ["house", "Sitting against the house"],
+      ["pools", "Pooling in the yard"],
+      ["basement", "Getting into the basement"],
+      ["washout", "Washing out beds or mulch"],
+      ["every_rain", "After every rain"],
+      ["heavy_rain", "Only after heavy rain"]
+    ),
   },
   {
     id: "hard_what",
@@ -393,19 +326,10 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     id: "hard_material",
     services: ["hardscape"],
     group: "Patio, walkway or wall",
-    title: "What material?",
+    title: "In what?",
     short: "Material",
     kind: "single",
     options: opts(["pavers", "Pavers"], ["stone", "Natural stone"], ["concrete", "Concrete"], ["gravel", "Gravel"], ["unsure", "Not sure"]),
-  },
-  {
-    id: "hard_size",
-    services: ["hardscape"],
-    group: "Patio, walkway or wall",
-    title: "Rough size, if you know it",
-    short: "Size",
-    kind: "text",
-    placeholder: "For example, a 12 by 16 ft patio or a 30 ft walkway",
   },
   {
     id: "wash_what",
@@ -414,69 +338,59 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     title: "What needs washing?",
     short: "Washing",
     kind: "multi",
-    options: opts(["siding", "House siding"], ["deck", "Deck"], ["fence", "Fence"], ["paving", "Patio or walkway"], ["roof", "Roof"]),
+    options: opts(["siding", "House siding"], ["roof", "Roof"], ["deck", "Deck"], ["fence", "Fence"], ["paving", "Patio or walkway"]),
   },
   {
     id: "stories",
     services: ["washing"],
+    showIf: { id: "wash_what", values: ["siding", "roof"] },
     group: "Soft washing",
     title: "How many stories is the house?",
     short: "Stories",
     kind: "single",
     options: opts(["1", "1"], ["2", "2"], ["3", "3 or more"]),
   },
-  // The property, whatever the work.
+  // The property, whatever the work: only what is out of the ordinary.
   {
-    id: "gate",
+    id: "yard",
     services: null,
     group: "The property",
-    title: "How wide is the narrowest way into the work area?",
-    short: "Way in",
-    kind: "single",
-    options: opts(["open", "Open, no gate"], ["wide", "Gate wider than 4 ft"], ["standard", "Gate 3 to 4 ft"], ["narrow", "Under 3 ft"], ["unsure", "Not sure"]),
-  },
-  {
-    id: "slope",
-    services: null,
-    group: "The property",
-    title: "Is the ground flat?",
-    short: "Ground",
-    kind: "single",
-    options: opts(["flat", "Flat"], ["gentle", "A gentle slope"], ["steep", "Steep"]),
-  },
-  {
-    id: "buried",
-    services: null,
-    group: "The property",
-    title: "Anything buried in the yard?",
-    short: "Buried",
+    title: "Tick anything that is true of the yard",
+    short: "Yard",
     kind: "multi",
-    options: opts(["sprinklers", "Sprinklers"], ["dog_fence", "Invisible dog fence"], ["wires", "Lighting wires"], ["none", "Nothing I know of"]),
-  },
-  {
-    id: "truck",
-    services: null,
-    group: "The property",
-    title: "Can a truck park in the driveway to drop off materials?",
-    short: "Truck",
-    kind: "single",
-    options: opts(["yes", "Yes"], ["street", "Street only"], ["unsure", "Not sure"]),
-  },
-  {
-    id: "access_notes",
-    services: null,
-    group: "The property",
-    title: "Anything we should know about getting in?",
-    short: "Getting in",
-    kind: "text",
-    placeholder: "A gate code, a dog in the yard, where to park",
+    options: opts(
+      ["narrow_gate", "Gate under 3 ft wide"],
+      ["steep", "Steep slope"],
+      ["sprinklers", "Sprinklers"],
+      ["dog_fence", "Invisible dog fence"],
+      ["dog", "A dog in the yard"],
+      ["street", "No driveway parking for a truck"]
+    ),
+    placeholder: "Gate code, where to park, anything else about getting in",
   },
 ];
 
-/** The pricing questions for what they ticked, in order, then the property's. */
-export function detailQuestionsFor(services: string[]): DetailQuestion[] {
+/** Old answers from before services were merged, read as today's. */
+const SERVICE_MERGED: Record<string, string> = { mulch: "beds", trimming: "cleanup", lawn_care: "lawn", lighting: "other" };
+
+/** Whether a question's condition on another answer is met. */
+export function detailShown(question: DetailQuestion, details: IntakeAnswers["details"]): boolean {
+  if (!question.showIf) return true;
+  const value = details[question.showIf.id];
+  const picked = Array.isArray(value) ? value : value ? [value] : [];
+  return picked.some((v) => question.showIf!.values.includes(v));
+}
+
+/**
+ * The pricing questions for what they ticked, in order, then the property's.
+ * With their answers so far, a question that depends on another is left
+ * out until that answer says it matters.
+ */
+export function detailQuestionsFor(services: string[], details?: IntakeAnswers["details"]): DetailQuestion[] {
   const picked = new Set(services);
-  return DETAIL_QUESTIONS.filter((q) => q.services === null || q.services.some((s) => picked.has(s)));
+  return DETAIL_QUESTIONS.filter(
+    (q) => (q.services === null || q.services.some((s) => picked.has(s))) && (!details || detailShown(q, details))
+  );
 }
 
 /** Most photos one form keeps. Enough for every side of a house. */
@@ -643,10 +557,19 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
     out[question.key] = pick(question.kind, question.options, raw[question.key]) as never;
     if (question.notesKey) out[question.notesKey] = text(raw[question.notesKey]) as never;
   }
+  // Services from before some were merged count as the one they became.
+  if (Array.isArray(raw.services)) {
+    const merged = raw.services.map((v) => (typeof v === "string" ? SERVICE_MERGED[v] ?? v : v));
+    out.services = pick("multi", INTAKE_QUESTIONS[0].options, merged) as string[];
+  }
   const details = (raw.details && typeof raw.details === "object" ? raw.details : {}) as Record<string, unknown>;
   for (const question of DETAIL_QUESTIONS) {
     const value = pick(question.kind, question.options, details[question.id]);
     if (filled(value)) out.details[question.id] = value;
+    if (question.placeholder && question.kind !== "text") {
+      const notes = text(details[`${question.id}_notes`]);
+      if (notes) out.details[`${question.id}_notes`] = notes;
+    }
   }
   out.photos = Array.isArray(raw.photos)
     ? [...new Set(raw.photos.filter((p): p is string => typeof p === "string" && /^[\w-]+\/intake-[\w-]+\.(jpg|png|webp)$/.test(p)))].slice(0, MAX_INTAKE_PHOTOS)
@@ -666,6 +589,17 @@ export function answeredCount(answers: IntakeAnswers): number {
   }).length;
   const details = DETAIL_QUESTIONS.filter((q) => filled(answers.details[q.id])).length;
   return main + details + (answers.photos.length > 0 ? 1 : 0);
+}
+
+/** Whether a question's notes box is showing, given what is picked. */
+export function notesShown(question: IntakeQuestion, answers: IntakeAnswers): boolean {
+  if (!question.notesKey) return false;
+  // Something already written stays in view, whatever is picked.
+  if (answers[question.notesKey]) return true;
+  if (!question.notesWhen) return true;
+  const value = answers[question.key];
+  const picked = Array.isArray(value) ? value : value ? [value] : [];
+  return question.notesWhen === "any" ? picked.length > 0 : picked.some((v) => question.notesWhen!.includes(v));
 }
 
 export function labelOf(question: { options?: IntakeOption[] }, value: string): string {
@@ -692,7 +626,14 @@ export function summarizeIntake(answers: IntakeAnswers): { label: string; value:
 
 /** The pricing answers, for the evaluator, one line each. */
 export function summarizeDetails(answers: IntakeAnswers): { label: string; value: string }[] {
-  return DETAIL_QUESTIONS.filter((q) => filled(answers.details[q.id])).map((q) => ({ label: q.short, value: shownValue(q, answers.details[q.id]) }));
+  const lines: { label: string; value: string }[] = [];
+  for (const q of DETAIL_QUESTIONS) {
+    const notes = answers.details[`${q.id}_notes`];
+    let shown = shownValue(q, answers.details[q.id]);
+    if (typeof notes === "string" && notes) shown = shown ? `${shown}. ${notes}` : notes;
+    if (shown) lines.push({ label: q.short, value: shown });
+  }
+  return lines;
 }
 
 const SHORT_LABEL: Partial<Record<keyof IntakeAnswers, string>> = {
@@ -767,17 +708,21 @@ export function talkingPoints(answers: IntakeAnswers): string[] {
     points.push(`They asked: "${answers.questions.slice(0, 140)}". Answer it in the first minute.`);
   }
 
-  // What the property changes about the price.
-  if (detail("gate") === "narrow") points.push("The way in is under 3 ft. No machine gets through: price it as hand work and wheelbarrow runs.");
-  if (detail("slope") === "steep") points.push("Steep ground. Allow for slower work and for holding mulch or soil on the slope.");
-  const buried = detail("buried");
-  if (Array.isArray(buried) && buried.some((b) => b !== "none")) {
-    points.push("Something is buried in the yard. Find the sprinkler heads, dog fence or wires before anyone digs, and note them on the map.");
+  // What the property and the work change about the price.
+  const has2 = (id: string, value: string) => {
+    const v = detail(id);
+    return Array.isArray(v) ? v.includes(value) : v === value;
+  };
+  if (has2("yard", "narrow_gate")) points.push("The way in is under 3 ft. No machine gets through: price it as hand work and wheelbarrow runs.");
+  if (has2("yard", "steep")) points.push("Steep ground. Allow for slower work and for holding mulch or soil on the slope.");
+  if (has2("yard", "sprinklers") || has2("yard", "dog_fence")) {
+    points.push("Something is buried in the yard. Find the sprinkler heads or dog fence wire before anyone digs, and note them on the map.");
   }
-  if (detail("truck") === "street") points.push("Materials get dropped at the street. Price the extra carrying.");
-  const stumps = detail("stumps");
-  if (stumps === "12_24" || stumps === "over_24") points.push("Big stumps. Check grinder access and whether the stump is near anything buried.");
-  if (detail("basement") === "yes") points.push("Water reaches the basement. Look at the downspouts and the grade against the house first.");
+  if (has2("yard", "street")) points.push("Materials get dropped at the street. Price the extra carrying.");
+  if (has2("yard", "dog")) points.push("A dog uses the yard. Agree when it is kept in, and keep the gate shut.");
+  if (has2("remove_what", "stumps_big")) points.push("Big stumps. Check grinder access and whether the stump is near anything buried.");
+  if (has2("water", "basement")) points.push("Water reaches the basement. Look at the downspouts and the grade against the house first.");
+  if (has2("beds_now", "stone")) points.push("There is stone in the beds now. Price taking it out if they want mulch instead.");
   if (answers.photos.length > 0) points.push(`They sent ${answers.photos.length} photo${answers.photos.length === 1 ? "" : "s"}. Look before you go, and draft the price from them if you can.`);
   return points;
 }

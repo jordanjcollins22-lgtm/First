@@ -6,6 +6,7 @@ import {
   BEFORE_VISIT_QUESTIONS,
   CONCERN_ANSWERS,
   detailQuestionsFor,
+  notesShown,
   summarizeDetails,
   cleanAnswers,
   emptyAnswers,
@@ -54,7 +55,7 @@ describe("what the evaluator reads", () => {
   it("summarises every answered question with the labels, not the codes", () => {
     const lines = summarizeIntake(answers);
     expect(lines.map((l) => l.label)).toEqual(["Wants", "Where", "Looks", "Tried before", "Would say no over", "Budget", "Decides"]);
-    expect(lines[0].value).toBe("Landscape beds and plantings, Mulch or stone in the beds");
+    expect(lines[0].value).toBe("Beds: mulch, stone or plants");
     expect(lines[4].value).toBe("The price, Getting other quotes. Last quote was 9k");
     expect(answeredCount(answers)).toBe(7);
   });
@@ -71,7 +72,7 @@ describe("what the evaluator reads", () => {
   it("says what to do when nothing came back", () => {
     expect(intakeHeadline(null, null)).toMatch(/first 5 to 10 minutes/);
     expect(intakeHeadline(answers, "2026-09-14T10:00:00Z")).toBe(
-      "Landscape beds and plantings, Mulch or stone in the beds · $2,500 to $5,000"
+      "Beds: mulch, stone or plants · $2,500 to $5,000"
     );
   });
 
@@ -87,27 +88,45 @@ describe("what the evaluator reads", () => {
 describe("the details that set the price", () => {
   it("asks only about the work they ticked, then about the property", () => {
     const ids = detailQuestionsFor(["removal"]).map((q) => q.id);
-    expect(ids).toContain("stumps");
-    expect(ids).not.toContain("cover");
-    expect(ids).toContain("gate");
-    expect(detailQuestionsFor([]).every((q) => q.services === null)).toBe(true);
+    expect(ids).toEqual(["remove_what", "yard"]);
+    expect(detailQuestionsFor([]).map((q) => q.id)).toEqual(["yard"]);
+  });
+
+  it("asks no more than two things about any one kind of work", () => {
+    const services = INTAKE_QUESTIONS[0].options!.map((o) => o.value);
+    for (const s of services) expect(detailQuestionsFor([s]).filter((q) => q.services !== null).length, s).toBeLessThanOrEqual(2);
+  });
+
+  it("asks sod or seed only when the lawn is being repaired", () => {
+    expect(detailQuestionsFor(["lawn"], { lawn_need: ["mowing"] }).map((q) => q.id)).not.toContain("lawn_method");
+    expect(detailQuestionsFor(["lawn"], { lawn_need: ["patch"] }).map((q) => q.id)).toContain("lawn_method");
+  });
+
+  it("reads old answers from before the services were merged", () => {
+    expect(cleanAnswers({ services: ["mulch", "beds", "trimming", "lawn_care", "lighting"] }).services).toEqual(["beds", "cleanup", "lawn", "other"]);
   });
 
   it("keeps offered answers only, and reads them back in words", () => {
     const answers = cleanAnswers({
       services: ["removal"],
-      details: { stumps: "12_24", gate: "narrow", buried: ["sprinklers", "made_up"], cover: "purple", nonsense: "x" },
+      details: { remove_what: ["stumps_big", "made_up"], yard: ["narrow_gate", "sprinklers"], yard_notes: " code 1234 ", cover: "purple" },
     });
-    expect(answers.details).toEqual({ stumps: "12_24", gate: "narrow", buried: ["sprinklers"] });
+    expect(answers.details).toEqual({ remove_what: ["stumps_big"], yard: ["narrow_gate", "sprinklers"], yard_notes: "code 1234" });
     expect(summarizeDetails(answers)).toEqual([
-      { label: "Stumps", value: "1 to 2 feet across" },
-      { label: "Way in", value: "Under 3 ft" },
-      { label: "Buried", value: "Sprinklers" },
+      { label: "Removing", value: "Stumps over a foot across" },
+      { label: "Yard", value: "Gate under 3 ft wide, Sprinklers. code 1234" },
     ]);
     const points = talkingPoints(answers);
     expect(points.some((p) => p.includes("hand work"))).toBe(true);
     expect(points.some((p) => p.includes("sprinkler heads"))).toBe(true);
     expect(points.some((p) => p.includes("Big stumps"))).toBe(true);
+  });
+
+  it("shows a notes box only once it is needed", () => {
+    const services = INTAKE_QUESTIONS[0];
+    expect(notesShown(services, cleanAnswers({ services: ["beds"] }))).toBe(false);
+    expect(notesShown(services, cleanAnswers({ services: ["other"] }))).toBe(true);
+    expect(notesShown(services, cleanAnswers({ services: ["beds"], services_other: "a fire pit" }))).toBe(true);
   });
 
   it("keeps only photo paths the form could have made", () => {
