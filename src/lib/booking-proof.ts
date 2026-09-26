@@ -132,6 +132,7 @@ export function landingBadges(proof: BookingProof): string[] {
     proof.news.length > 0 ? "Featured in the news" : null,
     proof.reviews.length >= REVIEWS_TO_CLAIM ? "Amazing reviews" : null,
     "Free evaluation",
+    "Fixed-price proposal",
     "Book in under 5 minutes",
   ].filter((b): b is string => Boolean(b));
 }

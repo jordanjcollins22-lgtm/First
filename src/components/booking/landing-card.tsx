@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowRight, Newspaper, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -17,34 +17,35 @@ import { landingBadges, landingHeadline, REVIEW_EVERY_MS, type BookingProof } fr
  * news it was in, and one review at a time. Anything with nothing entered
  * behind it is left off rather than claimed.
  *
- * All of it fits one screen. The before-and-afters take whatever height is
- * left, so on a short phone they shrink rather than push anything off the
- * bottom, and nobody has to scroll to see the rest.
+ * All of it fits one screen. The card is as tall as what is on it, and on a
+ * short phone the before-and-after square shrinks rather than push anything
+ * off the bottom, so nobody has to scroll to see the rest.
  */
 export function LandingCard({
   organizationName,
   service,
   proof,
   onStart,
+  fitHeight = null,
 }: {
   organizationName: string;
   service: string | null;
   proof: BookingProof;
   onStart: () => void;
+  /** The most the card may be, in pixels. The screen's height when not given. */
+  fitHeight?: number | null;
 }) {
   const badges = landingBadges(proof);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const side = useSquareSide(rootRef, fitHeight);
   const outlets = Array.from(new Set(proof.news.map((n) => n.outlet)));
   const story = proof.news[0] ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div ref={rootRef} className="flex min-h-0 flex-col gap-3">
       <div className="shrink-0">
         <p className="text-xs font-medium text-primary">{organizationName}</p>
         <h1 className="mt-0.5 text-xl font-bold leading-tight sm:text-2xl">{landingHeadline(service)}</h1>
-        <p className="mt-1 text-sm leading-snug text-muted-foreground">
-          A free evaluation, then a written proposal with a fixed price. Booking takes under 5 minutes and shows every open
-          time.
-        </p>
       </div>
 
       <ul className="flex shrink-0 flex-wrap gap-1">
@@ -59,11 +60,8 @@ export function LandingCard({
         See open times <ArrowRight className="ml-1.5 h-4 w-4" />
       </Button>
 
-      {proof.showcase.length > 0 ? (
-        <ShowcaseCarousel items={proof.showcase} className="min-h-[7rem] flex-1" />
-      ) : (
-        <div className="flex-1" />
-      )}
+      {/* The one part that gives way on a short phone. */}
+      {proof.showcase.length > 0 && <ShowcaseCarousel items={proof.showcase} side={side} />}
 
       {story && (
         <a
@@ -83,6 +81,48 @@ export function LandingCard({
       {proof.reviews.length > 0 && <RotatingReview reviews={proof.reviews} />}
     </div>
   );
+}
+
+/** The page's own padding above and below the card, when it fills the screen. */
+const PAGE_PADDING_PX = 24;
+/** Smaller than this and a before-and-after says nothing. */
+const MIN_SIDE_PX = 120;
+
+/**
+ * How big the before-and-after square can be: the card's width, or the
+ * height left on the screen once everything else on the card is counted,
+ * whichever runs out first. Measured in the browser, because what else is on
+ * the card (a two-line headline, a second row of badges) changes with the
+ * phone, and worked out again whenever the card or the window changes size.
+ */
+function useSquareSide(rootRef: React.RefObject<HTMLDivElement | null>, fitHeight: number | null): number | null {
+  const [px, setPx] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const card = root?.closest<HTMLElement>("[data-booking-card]");
+    if (!root || !card) return;
+    const measure = () => {
+      const square = root.querySelector<HTMLElement>("[data-showcase-square]");
+      if (!square?.parentElement) return;
+      const width = square.parentElement.clientWidth;
+      // Everything on the card that is not the square.
+      const rest = card.getBoundingClientRect().height - square.getBoundingClientRect().height;
+      const limit = fitHeight ?? window.innerHeight - PAGE_PADDING_PX;
+      const next = Math.max(MIN_SIDE_PX, Math.min(width, Math.floor(limit - rest)));
+      setPx((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(card);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [rootRef, fitHeight]);
+
+  return px;
 }
 
 /** One review at a time, changing on its own, in a box that never changes size. */

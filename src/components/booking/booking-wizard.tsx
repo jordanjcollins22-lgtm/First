@@ -55,6 +55,8 @@ import {
  */
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+/** The phone the owner's preview of the landing card stands in for. */
+const PREVIEW_SCREEN_PX = 680;
 
 function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -568,8 +570,7 @@ export function BookingWizard({
   }
 
   // The landing card is one screen, nothing to scroll: the page is exactly
-  // the height of the phone and the card fills it. In the owner's preview it
-  // is a phone-sized frame instead.
+  // the height of the phone, and the card sizes its before-and-after to fit.
   const landing = !done && step === 0;
 
   return (
@@ -622,9 +623,13 @@ export function BookingWizard({
       )}
 
       <div
+        data-booking-card
         className={cn(
           "flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5",
-          landing && (preview ? "h-[680px] gap-3 overflow-hidden" : "min-h-0 flex-1 gap-3 overflow-hidden")
+          // As tall as what is on it, never taller than the screen.
+          // Its own height, never squeezed by the page: the landing card works
+          // out how big its before-and-after can be from that.
+          landing && "shrink-0 gap-3"
         )}
       >
       {done ? (
@@ -644,7 +649,16 @@ export function BookingWizard({
         </span>
       </div>
 
-      {step === 0 && <LandingCard organizationName={organizationName} service={service} proof={proof} onStart={() => setStep(1)} />}
+      {step === 0 && (
+        <LandingCard
+          organizationName={organizationName}
+          service={service}
+          proof={proof}
+          onStart={() => setStep(1)}
+          // The owner's preview stands in for a phone of this height.
+          fitHeight={preview ? PREVIEW_SCREEN_PX : null}
+        />
+      )}
 
       {/* ------------------------------------ 0. we have been here before */}
       {step === 1 && remembered && !dismissedMemory && (
