@@ -1,11 +1,11 @@
 /**
  * Who closed what: the affiliate leaderboard's rule.
  *
- * A sold job is credited to one person. Whoever's tracked link brought it
- * in, first: that is the affiliate who found the client. Then whoever the
- * job is assigned to, the person who went out and sold it. Then the client's
- * account manager. A sold job with none of the three is nobody's, and the
- * board says so rather than hiding it.
+ * Only what came from an affiliate link counts. A job is credited to the
+ * affiliate whose tracked link the client booked through, or whose own
+ * booking link they used; a job that came in any other way is not on this
+ * board at all, however it was sold. And only people who have put links out
+ * are on it.
  *
  * Pure, so the rule is tested without a database.
  */
@@ -29,14 +29,19 @@ export function isSold(job: SoldJobInput): boolean {
   return job.status === "approved" || job.status === "in_progress" || job.status === "completed" || job.proposalAccepted;
 }
 
+/** The affiliate whose link brought this job in, or null when no link did. */
 export function creditFor(job: SoldJobInput, posterByCode: ReadonlyMap<string, string>): string | null {
   const poster = job.referralCode ? posterByCode.get(job.referralCode) : undefined;
-  return poster ?? job.referredBy ?? job.assignedTo ?? job.accountManager ?? null;
+  return poster ?? job.referredBy ?? null;
 }
 
 export interface CloserStanding {
   profileId: string;
   name: string;
+  /** Links they have put out. */
+  links: number;
+  /** Jobs booked through their links, sold or not yet. */
+  booked: number;
   /** Jobs sold. */
   closed: number;
   /** What they sold for. */
@@ -47,35 +52,40 @@ export interface CloserStanding {
   comments: number;
 }
 
-/** Everybody listed, sold or not, best first: money sold, then jobs, then comments. */
+/**
+ * Everybody who has put a link out, best first: money closed, then jobs
+ * closed, then booked, then links out. Nobody else is listed.
+ */
 export function rankClosers(
   people: { id: string; name: string }[],
   jobs: SoldJobInput[],
   posterByCode: ReadonlyMap<string, string>,
+  linksOut: ReadonlyMap<string, number>,
   comments: ReadonlyMap<string, number>,
   now: Date
-): { standings: CloserStanding[]; unclaimed: { closed: number; value: number } } {
+): CloserStanding[] {
   const monthAgo = new Date(now.getTime() - 30 * 86_400_000).toISOString();
-  const by = new Map<string, CloserStanding>(
-    people.map((p) => [p.id, { profileId: p.id, name: p.name, closed: 0, closedValue: 0, monthValue: 0, comments: comments.get(p.id) ?? 0 }])
-  );
-  const unclaimed = { closed: 0, value: 0 };
+  const by = new Map<string, CloserStanding>();
+  // Somebody whose own booking link a client used has put a link out too,
+  // even with no tracked links on the board.
+  const brought = new Set(jobs.map((j) => creditFor(j, posterByCode)).filter((id): id is string => Boolean(id)));
+  for (const p of people) {
+    const links = linksOut.get(p.id) ?? 0;
+    if (links === 0 && !brought.has(p.id)) continue;
+    by.set(p.id, { profileId: p.id, name: p.name, links, booked: 0, closed: 0, closedValue: 0, monthValue: 0, comments: comments.get(p.id) ?? 0 });
+  }
   for (const job of jobs) {
-    if (!isSold(job)) continue;
     const who = creditFor(job, posterByCode);
-    const value = job.soldFor ?? 0;
     const row = who ? by.get(who) : undefined;
-    if (!row) {
-      unclaimed.closed += 1;
-      unclaimed.value += value;
-      continue;
-    }
+    if (!row || job.declined || job.status === "cancelled") continue;
+    row.booked += 1;
+    if (!isSold(job)) continue;
+    const value = job.soldFor ?? 0;
     row.closed += 1;
     row.closedValue += value;
     if (job.closedAt && job.closedAt >= monthAgo) row.monthValue += value;
   }
-  const standings = [...by.values()].sort(
-    (a, b) => b.closedValue - a.closedValue || b.closed - a.closed || b.comments - a.comments || a.name.localeCompare(b.name)
+  return [...by.values()].sort(
+    (a, b) => b.closedValue - a.closedValue || b.closed - a.closed || b.booked - a.booked || b.links - a.links || a.name.localeCompare(b.name)
   );
-  return { standings, unclaimed };
 }

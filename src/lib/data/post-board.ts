@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { creditFor, isSold, rankClosers, type CloserStanding, type SoldJobInput } from "@/lib/affiliate-closes";
-import { qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
+import { rankClosers, type CloserStanding, type SoldJobInput } from "@/lib/affiliate-closes";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
 import { findPostUrl } from "@/lib/outreach-agent";
 import type { Platform } from "@/lib/social-finder";
@@ -186,23 +185,17 @@ export async function answersToPost(organizationId: string, postId: string): Pro
 }
 
 /**
- * The affiliate leaderboard: every affiliate, and what each has closed.
- *
- * Everybody who is an affiliate is listed, sold anything or not, and so is
- * anybody else a sale is credited to, so the totals add up. Credit follows
- * `creditFor`: the link that brought the client in, then who the job is
- * assigned to, then the account manager. Read with the service client and
- * scoped to the business by hand, because an affiliate cannot see other
- * people's jobs and the board has to read the same on every screen.
+ * The affiliate leaderboard: everybody who has put affiliate links out, and
+ * what those links brought in and closed. Work that came in any other way
+ * is not counted, and nobody who has not put a link out is listed. Read
+ * with the service client and scoped to the business by hand, because an
+ * affiliate cannot see other people's jobs and the board has to read the
+ * same on every screen.
  */
-export async function affiliateClosedBoard(
-  organizationId: string,
-  now: Date = new Date()
-): Promise<{ standings: CloserStanding[]; unclaimed: { closed: number; value: number } }> {
+export async function affiliateClosedBoard(organizationId: string, now: Date = new Date()): Promise<CloserStanding[]> {
   const admin = createAdminClient();
-  const [{ data: profiles }, { data: roles }, { data: jobs }, { data: links }, { data: answers }] = await Promise.all([
-    admin.from("profiles").select("id, full_name, email, is_affiliate, does_evaluations").eq("organization_id", organizationId),
-    admin.from("profile_roles").select("profile_id, role_name"),
+  const [{ data: profiles }, { data: jobs }, { data: links }, { data: answers }] = await Promise.all([
+    admin.from("profiles").select("id, full_name, email").eq("organization_id", organizationId),
     admin
       .from("jobs")
       .select(
@@ -214,8 +207,6 @@ export async function affiliateClosedBoard(
     admin.from("outreach_post_answers").select("profile_id").eq("organization_id", organizationId).eq("status", "posted").limit(10000),
   ]);
 
-  const rolesOf = new Map<string, string[]>();
-  for (const r of roles ?? []) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
   type JobRow = {
     id: string;
     status: string;
@@ -227,7 +218,7 @@ export async function affiliateClosedBoard(
     property: { customer: { organization_id: string; account_manager_id: string | null } | null } | null;
     job_proposals: { status: string; total_cost: number | string | null; responded_at: string | null }[] | null;
   };
-  const sold: SoldJobInput[] = ((jobs ?? []) as unknown as JobRow[])
+  const all: SoldJobInput[] = ((jobs ?? []) as unknown as JobRow[])
     .filter((j) => j.property?.customer?.organization_id === organizationId)
     .map((j) => {
       const accepted = (j.job_proposals ?? []).filter((p) => p.status === "accepted");
@@ -246,19 +237,15 @@ export async function affiliateClosedBoard(
       };
     });
   const posterByCode = new Map((links ?? []).map((l) => [l.code, l.profile_id]));
+  const linksOut = new Map<string, number>();
+  for (const l of links ?? []) linksOut.set(l.profile_id, (linksOut.get(l.profile_id) ?? 0) + 1);
   const comments = new Map<string, number>();
   for (const a of answers ?? []) comments.set(a.profile_id, (comments.get(a.profile_id) ?? 0) + 1);
 
-  const credited = new Set(sold.filter(isSold).map((j) => creditFor(j, posterByCode)).filter((id): id is string => Boolean(id)));
-  const people = (profiles ?? [])
-    .filter((p) => {
-      const r = rolesOf.get(p.id) ?? [];
-      return p.is_affiliate || qualifiesForAffiliateLink(r) || credited.has(p.id) || comments.has(p.id);
-    })
-    .map((p) => ({
-      id: p.id,
-      // First name, or the front of their email when no name is set.
-      name: ((p.full_name?.trim().split(/\s+/)[0] || p.email?.split("@")[0] || "Somebody") as string).replace(/^\w/, (c) => c.toUpperCase()),
-    }));
-  return rankClosers(people, sold, posterByCode, comments, now);
+  const people = (profiles ?? []).map((p) => ({
+    id: p.id,
+    // First name, or the front of their email when no name is set.
+    name: ((p.full_name?.trim().split(/\s+/)[0] || p.email?.split("@")[0] || "Somebody") as string).replace(/^\w/, (c) => c.toUpperCase()),
+  }));
+  return rankClosers(people, all, posterByCode, linksOut, comments, now);
 }

@@ -21,15 +21,16 @@ function job(over: Partial<SoldJobInput>): SoldJobInput {
 const posters = new Map([["abc1234", "affiliate"]]);
 
 describe("who closed a job", () => {
-  it("credits the affiliate whose link brought it in, before anybody else", () => {
+  it("credits the affiliate whose tracked link brought it in", () => {
     expect(creditFor(job({ referralCode: "abc1234", assignedTo: "jace", accountManager: "jace" }), posters)).toBe("affiliate");
   });
-  it("then whoever it is assigned to, then the account manager", () => {
-    expect(creditFor(job({ assignedTo: "jordan", accountManager: "jace" }), posters)).toBe("jordan");
-    expect(creditFor(job({ accountManager: "jace" }), posters)).toBe("jace");
-    expect(creditFor(job({}), posters)).toBeNull();
+  it("or whose own booking link the client used", () => {
+    expect(creditFor(job({ referredBy: "cheyenne" }), posters)).toBe("cheyenne");
   });
-  it("counts only sold work", () => {
+  it("credits nobody for work that did not come from a link, however it was sold", () => {
+    expect(creditFor(job({ assignedTo: "jordan", accountManager: "jace" }), posters)).toBeNull();
+  });
+  it("counts only sold work as closed", () => {
     expect(isSold(job({ status: "estimating", proposalAccepted: false }))).toBe(false);
     expect(isSold(job({ declined: true }))).toBe(false);
     expect(isSold(job({ status: "estimating", proposalAccepted: true }))).toBe(true);
@@ -37,28 +38,27 @@ describe("who closed a job", () => {
 });
 
 describe("rankClosers", () => {
-  it("lists everybody, sold or not, and counts what nobody is credited with", () => {
+  it("lists only people who put links out, with what their links booked and closed", () => {
     const people = [
+      { id: "affiliate", name: "Ava" },
       { id: "jace", name: "Jace" },
-      { id: "jordan", name: "Jordan" },
       { id: "max", name: "Max" },
     ];
-    const { standings, unclaimed } = rankClosers(
+    const standings = rankClosers(
       people,
       [
-        job({ id: "1", assignedTo: "jace", soldFor: 2000 }),
-        job({ id: "2", assignedTo: "jordan", soldFor: 5000, closedAt: "2026-06-01T00:00:00Z" }),
-        job({ id: "3", soldFor: 650 }),
+        job({ id: "1", referralCode: "abc1234", soldFor: 2000 }),
+        job({ id: "2", referralCode: "abc1234", status: "estimating", proposalAccepted: false }),
+        job({ id: "3", assignedTo: "jace", soldFor: 9000 }),
       ],
       posters,
-      new Map([["max", 4]]),
+      new Map([["affiliate", 5], ["max", 1]]),
+      new Map(),
       new Date("2026-09-26T00:00:00Z")
     );
-    expect(standings.map((s) => [s.name, s.closed, s.closedValue, s.monthValue])).toEqual([
-      ["Jordan", 1, 5000, 0],
-      ["Jace", 1, 2000, 2000],
-      ["Max", 0, 0, 0],
+    expect(standings.map((s) => [s.name, s.links, s.booked, s.closed, s.closedValue])).toEqual([
+      ["Ava", 5, 2, 1, 2000],
+      ["Max", 1, 0, 0, 0],
     ]);
-    expect(unclaimed).toEqual({ closed: 1, value: 650 });
   });
 });

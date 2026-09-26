@@ -38,7 +38,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
     }),
     answeredToday(profile.organization_id, profile.id, now).catch(() => 0),
     getAgentSettings(profile.organization_id),
-    affiliateClosedBoard(profile.organization_id, now).catch(() => ({ standings: [], unclaimed: { closed: 0, value: 0 } })),
+    affiliateClosedBoard(profile.organization_id, now).catch(() => []),
   ]);
 
   return (
@@ -63,7 +63,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
 
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
 
-      <AnsweringLeaderboard standings={leaderboard.standings} unclaimed={leaderboard.unclaimed} meId={profile.id} owner={owner} />
+      <AnsweringLeaderboard standings={leaderboard} meId={profile.id} />
 
       {/* Every post at once, for anybody who wants to see who has what. The
           card above is the way to answer them. */}
