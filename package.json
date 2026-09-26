@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/zip-extension.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/zip-extension.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

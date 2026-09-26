@@ -15,6 +15,8 @@ import { AgentPicker } from "@/components/marketing/agent-picker";
 import { FinderPower, RedditSwitch } from "@/components/marketing/platform-switch";
 import { AgentBusinesses } from "@/components/marketing/agent-businesses";
 import { listBusinesses } from "@/lib/data/post-sorter";
+import { Download } from "lucide-react";
+import extension from "../../../../../../extension/manifest.json";
 
 /**
  * Where posts come from: the finder.
@@ -80,7 +82,12 @@ export default async function GroupAgentPage() {
           <li className="py-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium">Facebook</span>
-              <span className="text-xs text-muted-foreground">{look?.version ? `Extension v${look.version}` : "Chrome extension"}</span>
+              <span className="text-xs text-muted-foreground">
+                {look?.version ? `Extension v${look.version}` : "Chrome extension"}
+                {look?.version && look.version !== extension.version && (
+                  <span className="ml-1 font-medium text-amber-700">· v{extension.version} is out, download it below</span>
+                )}
+              </span>
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {look
@@ -131,11 +138,26 @@ export default async function GroupAgentPage() {
         <AgentSettingsForm settings={settings} owner={owner} />
       </Fold>
 
-      <Fold title="Install the extension">
-        <p className="text-sm text-muted-foreground">
-          Load the <code>extension</code> folder from the repository in Chrome at <code>chrome://extensions</code> with
-          Developer mode on. Sign in to this app in the same Chrome and stay signed in to Facebook. It only runs while
-          Chrome is open.
+      <Fold title="Install the extension" note={`Version ${extension.version}`}>
+        <a
+          href="/downloads/js-post-finder.zip"
+          download
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <Download className="h-4 w-4" />
+          Download the extension
+        </a>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>Unzip it. You get a folder called js-post-finder.</li>
+          <li>
+            In Chrome, go to <code>chrome://extensions</code> and turn on Developer mode, top right.
+          </li>
+          <li>Press Load unpacked and pick the js-post-finder folder.</li>
+          <li>Stay signed in to this app and to Facebook in that Chrome. It only reads while Chrome is open.</li>
+        </ol>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Updating: download again, unzip over the old folder, then press the reload arrow on the extension in{" "}
+          <code>chrome://extensions</code>.
         </p>
       </Fold>
     </div>
@@ -143,7 +165,7 @@ export default async function GroupAgentPage() {
 }
 
 /** A section folded shut until somebody opens it. */
-function Fold({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function Fold({ title, count, note, children }: { title: string; count?: number; note?: string; children: React.ReactNode }) {
   return (
     <details className="group rounded-2xl border border-border bg-card p-4">
       <summary className="cursor-pointer list-none text-sm font-semibold">
@@ -151,6 +173,7 @@ function Fold({ title, count, children }: { title: string; count?: number; child
           <span>
             {title}
             {count != null && <span className="ml-1 font-normal text-muted-foreground">({count})</span>}
+            {note && <span className="ml-2 text-xs font-normal text-muted-foreground">{note}</span>}
           </span>
           <span className="text-xs font-normal text-muted-foreground group-open:hidden">Show</span>
           <span className="hidden text-xs font-normal text-muted-foreground group-open:inline">Hide</span>
