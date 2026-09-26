@@ -947,7 +947,7 @@ export default async function JobPage({
                 {
                   id: "request",
                   title: "What the client asked for",
-                  hint: intake ? intakeHeadline(intake.submittedAt ? intake.answers : null, intake.submittedAt) : requestedServiceNames.join(", ") || null,
+                  hint: intake ? intakeHeadline(intake.answers, intake.submittedAt) : requestedServiceNames.join(", ") || null,
                   body: (
                     <div className="flex flex-col gap-3 text-sm">
                       {intake && (

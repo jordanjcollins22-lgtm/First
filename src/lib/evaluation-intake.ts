@@ -70,7 +70,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     key: "services",
     section: "work",
     title: "What are you hoping to have done?",
-    help: "Tick everything that applies. We price each area separately, so more is fine.",
+    help: "Tick all that apply. Each part is priced on its own, so more is fine.",
     kind: "multi",
     options: [
       { value: "beds", label: "Beds: mulch, stone or plants" },
@@ -650,7 +650,8 @@ const SHORT_LABEL: Partial<Record<keyof IntakeAnswers, string>> = {
 
 /** The one line under the section title. */
 export function intakeHeadline(answers: IntakeAnswers | null, submittedAt: string | null): string {
-  if (!answers || !submittedAt) return "Not filled in yet. Go through it together in the first 5 to 10 minutes.";
+  if (!answers || (!submittedAt && answeredCount(answers) === 0)) return "Not filled in yet. Go through it together in the first 5 to 10 minutes.";
+  if (!submittedAt) return `Started, not sent: ${answeredCount(answers)} answered. Finish it together at the door.`;
   const q = INTAKE_QUESTIONS[0];
   const wants = answers.services.map((v) => labelOf(q, v));
   const budget = answers.budget ? labelOf(INTAKE_QUESTIONS.find((x) => x.key === "budget")!, answers.budget) : "";

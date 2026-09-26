@@ -29,33 +29,31 @@ export default async function PrepPage({
   if (!intake) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 py-6">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{intake.businessName}</p>
-      <h1 className="mt-0.5 text-2xl font-semibold">Before we come out</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {intake.clientFirstName ? `${intake.clientFirstName}, a` : "A"} few questions so we arrive with ideas instead
-        of guesses. About five minutes. Nothing here is binding.
-      </p>
-      {intake.address && <p className="mt-2 text-sm">{intake.address}</p>}
-      {intake.evaluationAt && !intake.cancelled && (
-        <p className="text-sm text-muted-foreground">{sayWhen(intake.evaluationAt)}</p>
-      )}
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pt-4">
+      <header className="mb-4">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{intake.businessName}</p>
+        <h1 className="text-lg font-semibold">Before we come out</h1>
+        {(intake.address || (intake.evaluationAt && !intake.cancelled)) && (
+          <p className="truncate text-xs text-muted-foreground">
+            {[intake.address, intake.evaluationAt && !intake.cancelled ? sayWhen(intake.evaluationAt) : null].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </header>
       {intake.cancelled && (
-        <p className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+        <p className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
           This visit was cancelled. If that is a surprise, call or text {intake.businessPhone ?? "us"}.
         </p>
       )}
 
-      <div className="mt-6">
-        <IntakeForm
-          token={intake.token}
-          initial={intake.answers}
-          initialPhotos={intake.photoUrls}
-          submittedAt={intake.submittedAt}
-          together={together === "1"}
-          businessPhone={intake.businessPhone}
-        />
-      </div>
+      <IntakeForm
+        token={intake.token}
+        initial={intake.answers}
+        initialPhotos={intake.photoUrls}
+        submittedAt={intake.submittedAt}
+        together={together === "1"}
+        businessPhone={intake.businessPhone}
+        greeting={`${intake.clientFirstName ? `${intake.clientFirstName}, a` : "A"} few quick questions, one at a time, so we arrive with ideas instead of guesses. Nothing here is binding.`}
+      />
     </main>
   );
 }

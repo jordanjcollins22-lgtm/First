@@ -102,3 +102,16 @@ export async function removeIntakePhoto(input: { token: string; path: string }):
   revalidatePath(`/jobs/${form.jobId}`);
   return { ok: true };
 }
+
+/**
+ * The answers so far, kept as they go, one question at a time. Does not
+ * mark the form sent: that is Send's job. Half a form is still worth having
+ * if they close it partway, so nothing waits for the end to be saved.
+ */
+export async function saveIntakeProgress(input: { token: string; answers: unknown }): Promise<{ ok: boolean }> {
+  const form = await formFor(input.token);
+  if (!form) return { ok: false };
+  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos };
+  const { error } = await form.admin.from("evaluation_intakes").update({ answers, updated_at: new Date().toISOString() }).eq("id", form.id);
+  return { ok: !error };
+}

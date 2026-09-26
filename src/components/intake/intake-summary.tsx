@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { intakeHeadline, summarizeDetails, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { answeredCount, intakeHeadline, summarizeDetails, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { intakePath } from "@/lib/data/evaluation-intake";
 import { dateShort } from "@/lib/time-zone";
 
@@ -24,7 +24,7 @@ export function IntakeSummary({
   token: string;
   photos?: { path: string; url: string }[];
 }) {
-  if (!submittedAt) {
+  if (!submittedAt && answeredCount(answers) === 0) {
     return (
       <div className="flex flex-col gap-2 text-sm">
         <p className="text-muted-foreground">{intakeHeadline(null, null)}</p>
@@ -46,10 +46,11 @@ export function IntakeSummary({
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-xs text-muted-foreground">
-        {submittedBy === "together" ? "Gathered at the door" : "Sent ahead by the client"} on{" "}
-        {dateShort(submittedAt)}.{" "}
+        {!submittedAt
+          ? "Started by the client, not sent yet."
+          : `${submittedBy === "together" ? "Gathered at the door" : "Sent ahead by the client"} on ${dateShort(submittedAt)}.`}{" "}
         <Link href={intakePath(token, true)} className="text-primary underline underline-offset-2">
-          Change an answer
+          {submittedAt ? "Change an answer" : "Finish it together"}
         </Link>
       </p>
       <dl className="grid gap-1.5 sm:grid-cols-[9rem_1fr]">

@@ -71,6 +71,8 @@ describe("what the evaluator reads", () => {
 
   it("says what to do when nothing came back", () => {
     expect(intakeHeadline(null, null)).toMatch(/first 5 to 10 minutes/);
+    expect(intakeHeadline(emptyAnswers(), null)).toMatch(/first 5 to 10 minutes/);
+    expect(intakeHeadline(answers, null)).toBe("Started, not sent: 7 answered. Finish it together at the door.");
     expect(intakeHeadline(answers, "2026-09-14T10:00:00Z")).toBe(
       "Beds: mulch, stone or plants · $2,500 to $5,000"
     );
