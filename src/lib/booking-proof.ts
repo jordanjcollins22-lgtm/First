@@ -27,12 +27,41 @@ export interface ProofNews {
   url: string | null;
 }
 
+/**
+ * One before-and-after for the landing card: a pair shown side by side, or
+ * one picture that already has both in it (a post from the social studio).
+ */
+export interface ShowcaseItem {
+  id: string;
+  title: string;
+  beforeUrl: string | null;
+  afterUrl: string | null;
+  imageUrl: string | null;
+}
+
 export interface BookingProof {
   reviews: ProofReview[];
   news: ProofNews[];
+  /** Approved before-and-afters, cycled under "See open times". */
+  showcase: ShowcaseItem[];
 }
 
-export const NO_PROOF: BookingProof = { reviews: [], news: [] };
+export const NO_PROOF: BookingProof = { reviews: [], news: [], showcase: [] };
+
+/** How long each before-and-after, and each review, stays up. */
+export const SHOWCASE_EVERY_MS = 4000;
+export const REVIEW_EVERY_MS = 7000;
+
+/**
+ * The title for a studio post on the card: the first line of its caption,
+ * up to the dash, "Mulching in Maryland 21009 —" reads as "Mulching".
+ */
+export function showcaseTitleFromCaption(caption: string | null | undefined, zoneName: string | null | undefined): string {
+  const first = (caption ?? "").split("\n")[0].split(/\s+[—–-]\s*/)[0].trim();
+  const work = first.replace(/\s+in\s+(maryland|md)\b.*$/i, "").trim();
+  if (work && work.length <= 40) return work;
+  return zoneName?.trim() || "A recent job";
+}
 
 /**
  * The pages a client clicks through, in order. The landing card is first, so

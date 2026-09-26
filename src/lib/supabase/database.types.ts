@@ -296,6 +296,7 @@ export interface Database {
           channel: string | null;
           approved_by: string | null;
           approved_at: string | null;
+          on_booking_page: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -3220,6 +3221,27 @@ export interface Database {
           external_key: string;
         };
         Update: Partial<Database["public"]["Tables"]["booking_proof_dismissed"]["Row"]>;
+        Relationships: [];
+      };
+      booking_showcase: {
+        Row: {
+          id: string;
+          organization_id: string;
+          title: string;
+          before_url: string | null;
+          after_url: string | null;
+          image_url: string | null;
+          source: "owner" | "website";
+          position: number;
+          shown: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_showcase"]["Row"]> & {
+          organization_id: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_showcase"]["Row"]>;
         Relationships: [];
       };
       outreach_post_answers: {

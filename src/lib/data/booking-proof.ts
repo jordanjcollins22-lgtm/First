@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { serviceFromLink, type BookingProof, type ProofNews, type ProofReview } from "@/lib/booking-proof";
+import { serviceFromLink, showcaseTitleFromCaption, type BookingProof, type ProofNews, type ProofReview, type ShowcaseItem } from "@/lib/booking-proof";
 
 type Db = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>;
 
@@ -57,7 +57,68 @@ export function proofFromRows(rows: ProofRow[]): BookingProof {
   const news: ProofNews[] = rows
     .filter((r) => r.kind === "news" && r.shown && r.outlet?.trim() && r.headline?.trim())
     .map((r) => ({ id: r.id, outlet: r.outlet!.trim(), headline: r.headline!.trim(), url: r.url?.trim() || null }));
-  return { reviews, news };
+  return { reviews, news, showcase: [] };
+}
+
+/** A before-and-after as the owner's editor lists it. */
+export interface ShowcaseRow extends ShowcaseItem {
+  /** Where it came from: added here, the website, or the social studio. */
+  source: "owner" | "website" | "studio";
+  shown: boolean;
+}
+
+/**
+ * Every before-and-after the landing card can show: the ones added here
+ * (the website's included), then every post approved in the social studio.
+ * An unapproved studio post is never here.
+ */
+export async function listShowcase(organizationId: string, client?: Db): Promise<ShowcaseRow[]> {
+  const db = client ?? (await createClient());
+  const [{ data: own, error }, { data: posts }] = await Promise.all([
+    db
+      .from("booking_showcase")
+      .select("id, title, before_url, after_url, image_url, source, shown")
+      .eq("organization_id", organizationId)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
+    db
+      .from("social_posts")
+      .select("id, image_path, caption, zone_name, on_booking_page, approved_at")
+      .eq("organization_id", organizationId)
+      .in("status", ["approved", "scheduled", "posted"])
+      .not("image_path", "is", null)
+      .order("approved_at", { ascending: false })
+      .limit(30),
+  ]);
+  if (error) throw new Error(error.message);
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+  return [
+    ...(own ?? []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      beforeUrl: r.before_url,
+      afterUrl: r.after_url,
+      imageUrl: r.image_url,
+      source: r.source,
+      shown: r.shown,
+    })),
+    ...(posts ?? []).map((p) => ({
+      id: `studio:${p.id}`,
+      title: showcaseTitleFromCaption(p.caption, p.zone_name),
+      beforeUrl: null,
+      afterUrl: null,
+      // The social bucket is public on purpose: only approved work lands there.
+      imageUrl: `${base}/storage/v1/object/public/social-posts/${p.image_path}`,
+      source: "studio" as const,
+      shown: p.on_booking_page,
+    })),
+  ];
+}
+
+export function shownShowcase(rows: ShowcaseRow[]): ShowcaseItem[] {
+  return rows
+    .filter((r) => r.shown)
+    .map(({ id, title, beforeUrl, afterUrl, imageUrl }) => ({ id, title, beforeUrl, afterUrl, imageUrl }));
 }
 
 /**
@@ -65,7 +126,14 @@ export function proofFromRows(rows: ProofRow[]): BookingProof {
  * person booking is not signed in; scoped to the business by hand.
  */
 export async function publicProof(organizationId: string): Promise<BookingProof> {
-  return proofFromRows(await listProofRows(organizationId, createAdminClient()));
+  const admin = createAdminClient();
+  const [rows, showcase] = await Promise.all([
+    listProofRows(organizationId, admin),
+    // The pictures never take the page down: a card with no before-and-afters
+    // still books.
+    listShowcase(organizationId, admin).catch(() => []),
+  ]);
+  return { ...proofFromRows(rows), showcase: shownShowcase(showcase) };
 }
 
 /** The work the person asked about, from the tracked link they came through. */

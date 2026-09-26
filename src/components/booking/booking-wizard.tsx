@@ -567,8 +567,18 @@ export function BookingWizard({
     setStep(Math.max(0, index));
   }
 
+  // The landing card is one screen, nothing to scroll: the page is exactly
+  // the height of the phone and the card fills it. In the owner's preview it
+  // is a phone-sized frame instead.
+  const landing = !done && step === 0;
+
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 py-6 sm:py-10">
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-md flex-col gap-3 px-4",
+        landing && !preview ? "h-[100dvh] py-3" : "py-6 sm:py-10"
+      )}
+    >
       {preview && (
         <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-primary/50 bg-primary/5 p-3">
           <div className="flex items-center justify-between gap-2">
@@ -611,7 +621,12 @@ export function BookingWizard({
         </div>
       )}
 
-      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div
+        className={cn(
+          "flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5",
+          landing && (preview ? "h-[680px] gap-3 overflow-hidden" : "min-h-0 flex-1 gap-3 overflow-hidden")
+        )}
+      >
       {done ? (
         renderDone(done)
       ) : (
