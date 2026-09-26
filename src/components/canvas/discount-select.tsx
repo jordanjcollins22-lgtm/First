@@ -23,7 +23,10 @@ export function DiscountSelect({
   selectedId,
   onChange,
   onCreated,
+  practice = false,
 }: {
+  /** Trying it: a new discount lives in the page only, not the business's list. */
+  practice?: boolean;
   discounts: Discount[];
   selectedId: string | null;
   onChange: (id: string | null) => void;
@@ -48,7 +51,17 @@ export function DiscountSelect({
     setError(null);
     startTransition(async () => {
       try {
-        const created = await createDiscount(name, kind, Number(value) || 0);
+        const created = practice
+          ? ({
+              id: `practice-${Date.now()}`,
+              organization_id: "practice",
+              name: name.trim() || "Discount",
+              kind,
+              value: Number(value) || 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            } satisfies Discount)
+          : await createDiscount(name, kind, Number(value) || 0);
         onCreated(created);
         onChange(created.id);
         setAdding(false);

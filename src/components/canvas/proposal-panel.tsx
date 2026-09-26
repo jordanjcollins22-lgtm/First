@@ -54,7 +54,7 @@ const TONE_STYLE: Record<ReturnType<typeof proposalStatusTone>, string> = {
  * never sees. Never rendered on the public /proposal page. */
 export function ProposalPanel({
   jobId,
-  proposal,
+  proposal: savedProposal,
   baseUrl,
   labourCost,
   materialsCost,
@@ -64,6 +64,7 @@ export function ProposalPanel({
   viewLabel = null,
   viewsWarm = false,
   respondedLabel = null,
+  practice = false,
 }: {
   jobId: string;
   proposal: JobProposal | null;
@@ -80,8 +81,15 @@ export function ProposalPanel({
   viewsWarm?: boolean;
   /** "Accepted Tue, Sep 8, 2026 at 9:14 PM EDT". Null until they answer. */
   respondedLabel?: string | null;
+  /**
+   * For trying it: every button works on a copy held in the page, built
+   * from `zones`, and nothing reaches the database. Leave and it is gone.
+   */
+  practice?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [practiceProposal, setPracticeProposal] = useState<JobProposal | null>(null);
+  const proposal = practice ? practiceProposal : savedProposal;
   const [error, setError] = useState<string | null>(null);
   const [approvedNote, setApprovedNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -128,6 +136,7 @@ export function ProposalPanel({
   function handleTidy(index: number, applyTo: number[] = [index]) {
     const zone = draftZones[index];
     if (!zone) return;
+    if (practice) return setSuggestError({ index, message: "On a real job this lays out the wording under its headings. Not run in practice." });
     setSuggestError(null);
     setSuggesting(index);
     startTransition(async () => {
@@ -149,6 +158,7 @@ export function ProposalPanel({
   function handleSuggest(index: number, applyTo: number[] = [index]) {
     const zone = draftZones[index];
     if (!zone) return;
+    if (practice) return setSuggestError({ index, message: "On a real job this drafts the wording from the evaluator's notes. Not run in practice." });
     // Matched by name rather than by position: the breakdown comes from the
     // job's live zones and the draft from the proposal's snapshot, and a
     // proposal taken before a zone was added has the two out of step.
@@ -205,6 +215,13 @@ export function ProposalPanel({
     setNotice(null);
     setConfirm(null);
     setEditing(false);
+    if (practice) {
+      const rebuilt = practiceFromZones(zones, practiceProposal);
+      if (!rebuilt) return setError("No zone on the site map has a service on it yet.");
+      setPracticeProposal(rebuilt);
+      setNotice(practiceProposal ? "Rebuilt from the site map." : null);
+      return;
+    }
     startTransition(async () => {
       try {
         const outcome = await generateProposal(jobId, { force });
@@ -243,6 +260,22 @@ export function ProposalPanel({
 
   function handleSaveDraft() {
     setError(null);
+    if (practice && practiceProposal) {
+      const selected = localDiscounts.find((d) => d.id === draftDiscountId) ?? null;
+      const subtotal = Number(draftTotal) || 0;
+      setPracticeProposal({
+        ...practiceProposal,
+        total_cost: subtotal,
+        scope_snapshot: draftZones,
+        discount_id: selected?.id ?? null,
+        discount_kind: selected?.kind ?? null,
+        discount_value: selected?.value ?? null,
+        discount_amount: !selected ? 0 : selected.kind === "percentage" ? (subtotal * selected.value) / 100 : selected.value,
+        discount_reason: selected?.name ?? null,
+      });
+      setEditing(false);
+      return;
+    }
     startTransition(async () => {
       try {
         await updateProposalDraft(jobId, {
@@ -259,6 +292,7 @@ export function ProposalPanel({
 
   function handleValidity(days: number) {
     setError(null);
+    if (practice) return setPracticeProposal((p) => (p ? { ...p, valid_days: days } : p));
     startTransition(async () => {
       try {
         await setProposalValidity(jobId, days);
@@ -271,6 +305,21 @@ export function ProposalPanel({
   function handleApprove() {
     setError(null);
     setApprovedNote(null);
+    if (practice) {
+      const now = new Date();
+      setPracticeProposal((p) =>
+        p
+          ? {
+              ...p,
+              status: "sent",
+              approved_at: now.toISOString(),
+              expires_at: new Date(now.getTime() + (p.valid_days ?? DEFAULT_VALID_DAYS) * 86_400_000).toISOString(),
+            }
+          : p
+      );
+      setApprovedNote("Approved. On a real job the email to the client now waits on My Day for you to confirm and send.");
+      return;
+    }
     startTransition(async () => {
       try {
         const outcome = await approveProposal(jobId);
@@ -287,6 +336,10 @@ export function ProposalPanel({
 
   function handleMarkSent() {
     setError(null);
+    if (practice) {
+      setPracticeProposal((p) => (p ? { ...p, sent_at: new Date().toISOString() } : p));
+      return setApprovedNote("Marked as sent.");
+    }
     startTransition(async () => {
       try {
         await markProposalSent(jobId);
@@ -355,6 +408,11 @@ export function ProposalPanel({
 
       {proposal && (
         <>
+          {practice ? (
+            <p className="rounded-lg border border-border bg-background/60 p-2.5 text-xs text-muted-foreground">
+              On a real job this row has the client&apos;s link, with Preview to see what they see and Copy link.
+            </p>
+          ) : (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background/60 p-2.5">
             <p className="min-w-0 truncate text-xs text-muted-foreground">{link}</p>
             <div className="flex shrink-0 gap-2">
@@ -375,6 +433,7 @@ export function ProposalPanel({
               </Button>
             </div>
           </div>
+          )}
           {viewLabel && (
             <div className="flex items-center justify-between gap-2">
               <ViewCount label={viewLabel} warm={viewsWarm} />
@@ -403,6 +462,7 @@ export function ProposalPanel({
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Discount</label>
                 <DiscountSelect
+                  practice={practice}
                   discounts={localDiscounts}
                   selectedId={draftDiscountId}
                   onChange={setDraftDiscountId}
@@ -600,7 +660,7 @@ export function ProposalPanel({
 
           {proposal.status === "needs_approval" && !editing && (
             <>
-              <ScopeReviewPanel key={proposal.generated_at ?? proposal.id} jobId={jobId} onSettled={setReviewSettled} />
+              {!practice && <ScopeReviewPanel key={proposal.generated_at ?? proposal.id} jobId={jobId} onSettled={setReviewSettled} />}
               {zeroPriceBlocker(proposal) && (
                 <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive">
                   {zeroPriceBlocker(proposal)}
@@ -735,4 +795,56 @@ export function ProposalPanel({
       )}
     </div>
   );
+}
+
+/**
+ * A practice proposal from the zones, the way generating one on a job does:
+ * one line per zone with a service, priced from its breakdown, waiting on
+ * approval. Keeps what was already chosen (how long it stands) on a rebuild.
+ */
+function practiceFromZones(zones: InternalZoneBreakdown[], previous: JobProposal | null): JobProposal | null {
+  const priced = zones.filter((z) => z.serviceLabel);
+  if (priced.length === 0) return null;
+  const now = new Date().toISOString();
+  return {
+    id: "practice",
+    job_id: "practice",
+    organization_id: "practice",
+    token: "practice",
+    status: "needs_approval",
+    total_cost: Math.round(priced.reduce((sum, z) => sum + z.priceCents, 0) / 100),
+    discount_id: null,
+    discount_kind: null,
+    discount_value: null,
+    discount_amount: 0,
+    discount_reason: null,
+    scope_snapshot: priced.map((z) => ({
+      zoneName: z.zoneName,
+      serviceLabel: z.serviceLabel,
+      scopeText: z.notes,
+      photoPaths: [],
+      points: [],
+      color: "#2f6d3c",
+      priceCents: z.priceCents,
+      priceDerived: true,
+    })),
+    site_image_path: null,
+    site_image_transform: null,
+    recommended_scope: null,
+    generated_at: now,
+    approved_at: null,
+    sent_at: null,
+    responded_at: null,
+    client_response_note: null,
+    valid_days: previous?.valid_days ?? DEFAULT_VALID_DAYS,
+    expires_at: null,
+    payment_path: null,
+    payment_path_at: null,
+    client_chosen_day: null,
+    client_chosen_day_at: null,
+    checkout_session_id: null,
+    paid_at: null,
+    created_at: now,
+    updated_at: now,
+  } as JobProposal;
 }

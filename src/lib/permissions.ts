@@ -110,6 +110,9 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/practice/proposal":
+    "Making a proposal from a sample site map, to try it. Saves nothing and emails nobody, and checks the " +
+    "evaluations tab itself, like the site map practice.",
   "/practice/site-map":
     "The site map tool with no job behind it, to try it. Saves nothing, and checks the evaluations tab " +
     "itself, since it is the same tool the evaluator uses on a job.",
