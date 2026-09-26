@@ -30,7 +30,7 @@ A post found by search in a group you haven't joined still goes on the board. Th
 5. Sign in to the app in this Chrome, and stay signed in to Facebook.
 6. In the app, check where it looks (app → Marketing → Where Posts Come From) and press Save.
 
-The popup has the **Turn on / Turn off** switch, shows what it is doing and how many posts are waiting for the team. **Look somewhere else now** moves the window on to the next place to look; **Answer this post by hand** opens the app with the post you are looking at.
+The popup is the **Turn on / Turn off** switch, what it is doing, and how many posts are waiting for the team.
 
 ## Keeping the account safe
 

@@ -3,41 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      body { font: 13px/1.4 system-ui, sans-serif; margin: 0; width: 300px; color: #1a1a1a; }
+      [hidden] { display: none !important; }
+      body { font: 13px/1.4 system-ui, sans-serif; margin: 0; width: 280px; color: #1a1a1a; }
       header { padding: 10px 12px; background: #2f6d3c; color: #fff; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
       header small { font-weight: 400; opacity: 0.8; }
-      main { padding: 10px 12px; display: grid; gap: 8px; }
-      .status { min-height: 2.6em; color: #333; }
+      main { padding: 12px; display: grid; gap: 10px; }
+      .power { width: 100%; padding: 12px; font: inherit; font-weight: 700; font-size: 15px; border: none; border-radius: 8px; color: #fff; background: #2f6d3c; cursor: pointer; }
+      .power.off { background: #9b2c2c; }
+      .power:disabled { opacity: 0.6; cursor: default; }
+      .status { color: #333; }
       .muted { color: #666; font-size: 12px; }
       .update { background: #fff7e0; border: 1px solid #f0d58c; border-radius: 6px; padding: 8px; font-size: 12px; }
       .update a { display: inline-block; margin-top: 4px; font-weight: 600; }
-      .review { display: block; padding: 8px 10px; border-radius: 6px; background: #e8f3ea; font-weight: 600; text-decoration: none; }
-      button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
-      button.primary { background: #2f6d3c; border-color: #2f6d3c; color: #fff; }
-      .row { display: flex; gap: 6px; flex-wrap: wrap; }
-      .power { width: 100%; padding: 10px; font-weight: 700; font-size: 14px; border: none; color: #fff; background: #2f6d3c; }
-      .power.off { background: #9b2c2c; }
+      .waiting { display: block; padding: 8px 10px; border-radius: 6px; background: #e8f3ea; font-weight: 600; text-decoration: none; }
       a { color: #2f6d3c; }
     </style>
   </head>
   <body>
     <header>JS Landscaping post finder <small id="version"></small></header>
     <main>
+      <button class="power" id="power" disabled>Checking…</button>
+      <div class="status" id="status"></div>
+      <a id="waiting" class="waiting" href="#" target="_blank" hidden></a>
       <div class="update" id="update" hidden>
         <span></span>
         <a href="#" target="_blank">Download the new version</a>
       </div>
-      <button class="power" id="power" hidden>Turn on</button>
-      <div class="status" id="status">Checking…</div>
-      <div class="muted" id="counts"></div>
-      <a id="review" class="review" href="#" target="_blank" hidden>Posts waiting for an answer</a>
-      <div class="row">
-        <button id="look">Look somewhere else now</button>
-      </div>
-      <div class="row">
-        <button class="primary" id="hand">Answer this post by hand</button>
-      </div>
-      <div class="muted"><a id="settings" href="#" target="_blank">Where it looks and its hours are in the app.</a></div>
+      <div class="muted" id="who"></div>
     </main>
     <script src="popup.js"></script>
   </body>

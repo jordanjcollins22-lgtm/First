@@ -61,10 +61,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // has one thing to render.
 chrome.runtime.onMessage.addListener((message, _sender, reply) => {
   (async () => {
-    if (message?.type === "status") reply(await snapshot());
-    else if (message?.type === "look-now") {
-      await chrome.storage.local.set({ scans: {} });
-      await tick({ force: true });
+    if (message?.type === "status") {
+      // The popup asks fresh when it opens, so its switch is right at once
+      // rather than after the next once-a-minute check.
+      if (message.fresh) await fetchConfig();
       reply(await snapshot());
     } else if (message?.type === "app-power") {
       // Turned on or off in the app: act on it now rather than at the next minute.
@@ -73,9 +73,6 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     } else if (message?.type === "power") {
       await power(Boolean(message.on));
       reply(await snapshot());
-    } else if (message?.type === "answer-by-hand") {
-      await answerByHand(message.tabId);
-      reply({ ok: true });
     } else reply({ ok: false });
   })().catch((err) => reply({ error: String(err?.message ?? err) }));
   return true;
@@ -760,70 +757,6 @@ async function scanPosts(keywords, r, asked) {
     // What the page looked like, so a look that found nothing can say why.
     stats: { ...stats, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
   };
-}
-
-// ---------------------------------------------------------------------------
-// The old button, kept: answer the post in front of you, by hand, in the app.
-// ---------------------------------------------------------------------------
-
-async function answerByHand(tabId) {
-  const tab = await chrome.tabs.get(tabId);
-  if (!tab?.url || !/^https?:/.test(tab.url)) return;
-  let captured = null;
-  try {
-    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: capture });
-    captured = result?.result ?? null;
-  } catch (err) {
-    console.warn("Could not read the page:", err);
-  }
-  const params = new URLSearchParams();
-  if (captured?.text) params.set("text", captured.text.slice(0, 4000));
-  if (captured?.group) params.set("group", captured.group.slice(0, 120));
-  params.set("platform", platformOf(tab.url));
-  await chrome.tabs.create({ url: `${APP}/admin/outreach?${params.toString()}` });
-}
-
-function platformOf(url) {
-  const host = new URL(url).hostname;
-  if (/facebook\.com$/.test(host)) return "facebook";
-  if (/nextdoor\.com$/.test(host)) return "nextdoor";
-  if (/instagram\.com$/.test(host)) return "instagram";
-  if (/reddit\.com$/.test(host)) return "reddit";
-  return "other";
-}
-
-// Runs inside the page. What you have selected wins; failing that, the post
-// nearest the middle of the screen; failing that, nothing, and the form asks.
-function capture() {
-  const selected = (window.getSelection()?.toString() ?? "").trim();
-  const clean = (s) => s.replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-
-  let group = "";
-  const path = location.pathname;
-  const sub = path.match(/^\/r\/([^/]+)/);
-  if (sub) group = `r/${sub[1]}`;
-  else {
-    const title = (document.title || "").split(/\s[|\-–—]\s/)[0].trim();
-    if (title && !/^facebook$|^nextdoor$|^log in/i.test(title)) group = title;
-  }
-
-  if (selected.length > 20) return { text: clean(selected), group };
-
-  const middle = window.innerHeight / 2;
-  const candidates = Array.from(document.querySelectorAll('[role="article"], article, shreddit-post, [data-testid="post-container"]'));
-  let best = null;
-  let bestDistance = Infinity;
-  for (const el of candidates) {
-    const box = el.getBoundingClientRect();
-    if (box.height < 60 || box.bottom < 0 || box.top > window.innerHeight) continue;
-    const distance = Math.abs((box.top + box.bottom) / 2 - middle);
-    if (distance < bestDistance) {
-      best = el;
-      bestDistance = distance;
-    }
-  }
-  const text = best ? clean(best.innerText || "") : "";
-  return { text: text.slice(0, 4000), group };
 }
 
 // ---------------------------------------------------------------------------
