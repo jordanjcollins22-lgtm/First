@@ -8,6 +8,7 @@ import { effectiveMultiplier } from "@/lib/job-costing";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { JobSections } from "@/components/job/job-sections";
 import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/proposal-panel";
+import { PRACTICE_ADDRESS, PRACTICE_ZONES as SAMPLE_ZONES } from "@/lib/practice-sample";
 
 /**
  * Making a proposal from a site map, with no job behind it.
@@ -22,34 +23,6 @@ import { ProposalPanel, type InternalZoneBreakdown } from "@/components/canvas/p
  */
 export const dynamic = "force-dynamic";
 
-/** The sample evaluation's zones: what the evaluator drew and recorded. */
-const SAMPLE_ZONES: { zoneName: string; serviceLabel: string; notes: string; crewHours: number; materials: { material: string; quantityLabel: string; cost: number }[] }[] = [
-  {
-    zoneName: "Front beds",
-    serviceLabel: "Landscape Bed",
-    notes: "Pull the old mulch and weeds, edge the beds, and lay fresh black mulch. Plant three low shrubs by the steps.",
-    crewHours: 6,
-    materials: [
-      { material: "Black mulch", quantityLabel: "3 cubic yards", cost: 126 },
-      { material: "Shrubs", quantityLabel: "3 plants", cost: 90 },
-    ],
-  },
-  {
-    zoneName: "Around the house",
-    serviceLabel: "Landscape Bed",
-    notes: "Weed and edge the bed along the foundation and top it with black mulch to match the front.",
-    crewHours: 4,
-    materials: [{ material: "Black mulch", quantityLabel: "2 cubic yards", cost: 84 }],
-  },
-  {
-    zoneName: "Side yard",
-    serviceLabel: "Plant / Bush Removal",
-    notes: "Take out two overgrown shrubs taller than the fence, dig out the roots and haul them away.",
-    crewHours: 3,
-    materials: [],
-  },
-];
-
 /** Crew time, for the sample only, when the business has not set its own rate. */
 const SAMPLE_CREW_HOUR_CENTS = 4500;
 
@@ -59,6 +32,7 @@ const STEPS: { title: string; body: string }[] = [
   { title: "Edit if needed", body: "Change the wording of any zone, the price, or add a discount. The total the client sees updates as you type." },
   { title: "Choose how long it stands", body: "7 or 14 days from when it goes out." },
   { title: "Approve it", body: "On a real job, approving puts the email to the client on My Day for you to confirm and send, and the link goes live." },
+  { title: "Then the crew sheet", body: "Once the client accepts, the same site map becomes the crew sheet. See the crew sheet practice." },
 ];
 
 export default async function ProposalPracticePage() {
@@ -73,8 +47,8 @@ export default async function ProposalPracticePage() {
     const labourCents = Math.round(z.crewHours * hourCents);
     const directCostCents = materialsCents + labourCents;
     return {
-      zoneName: z.zoneName,
-      serviceLabel: z.serviceLabel,
+      zoneName: z.name,
+      serviceLabel: z.service,
       notes: z.notes,
       checklistAnswers: [],
       materialLineItems: z.materials,
@@ -103,7 +77,7 @@ export default async function ProposalPracticePage() {
       </p>
 
       <div>
-        <h1 className="text-xl font-bold sm:text-2xl">12 Example Court, Bel Air, Maryland 21014</h1>
+        <h1 className="text-xl font-bold sm:text-2xl">{PRACTICE_ADDRESS}</h1>
         <p className="text-sm text-muted-foreground sm:text-base">Sample client · Evaluation submitted</p>
       </div>
 
@@ -144,9 +118,9 @@ export default async function ProposalPracticePage() {
                 </p>
                 <ul className="flex flex-col gap-2">
                   {SAMPLE_ZONES.map((z) => (
-                    <li key={z.zoneName} className="rounded-lg border border-border p-2.5">
+                    <li key={z.id} className="rounded-lg border border-border p-2.5">
                       <p className="font-semibold">
-                        {z.zoneName} <span className="font-normal text-muted-foreground">· {z.serviceLabel}</span>
+                        {z.name} <span className="font-normal text-muted-foreground">· {z.service}</span>
                       </p>
                       <p className="text-muted-foreground">{z.notes}</p>
                     </li>

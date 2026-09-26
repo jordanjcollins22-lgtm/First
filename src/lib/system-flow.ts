@@ -141,7 +141,8 @@ export const SYSTEM_FLOW: SystemStage[] = [
         key: "crew-sheet",
         title: "Crew sheet",
         line: "What was sold, area by area, for the crew on the day.",
-        href: "/operations?tab=jobs",
+        // How the site map and proposal become the sheet, on the sample job.
+        href: "/practice/crew-sheet",
         status: "live",
       },
       {

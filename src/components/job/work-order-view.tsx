@@ -59,6 +59,7 @@ export function WorkOrderView({
   back,
   bare = false,
   arrived = false,
+  practice = false,
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -98,6 +99,8 @@ export function WorkOrderView({
   bare?: boolean;
   /** They have tapped Arrived on My Day: the sheet walks them through one area at a time. */
   arrived?: boolean;
+  /** A sample sheet with no job behind it: the links that need a job say so instead. */
+  practice?: boolean;
 }) {
   // Worked out here rather than stored: zones get edited and a zone's service
   // can change, and a stored grouping goes wrong the first time somebody
@@ -124,13 +127,20 @@ export function WorkOrderView({
           {jobName && ` · ${jobName}`}
           {formatJobNumber(jobNumber) && ` · ${formatJobNumber(jobNumber)}`}
         </p>
-        <Link
-          href={`/jobs/${jobId}/directions`}
-          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground"
-        >
-          <Navigation className="h-5 w-5" />
-          Directions
-        </Link>
+        {practice ? (
+          <p className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary/60 text-base font-semibold text-primary-foreground" title="On a real job this opens the route in maps.">
+            <Navigation className="h-5 w-5" />
+            Directions
+          </p>
+        ) : (
+          <Link
+            href={`/jobs/${jobId}/directions`}
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground"
+          >
+            <Navigation className="h-5 w-5" />
+            Directions
+          </Link>
+        )}
       </header>
 
       {accountManager && !bare && (
