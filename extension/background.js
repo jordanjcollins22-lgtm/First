@@ -628,6 +628,52 @@ async function scanPosts(keywords, r, asked) {
     return isFacebookLink(grab.text) ? grab.text.trim() : null;
   };
 
+  // When a post went up. Facebook scrambles the short "2h" with hidden
+  // letters, so only the letters actually drawn inside the link are kept.
+  const visibleLabel = (a) => {
+    const box = a.getBoundingClientRect();
+    if (!box.width) return "";
+    const parts = [];
+    const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        if (rect.top < box.top - 2 || rect.bottom > box.bottom + 2 || rect.left < box.left - 2 || rect.right > box.right + 2) continue;
+        parts.push({ left: rect.left, text: node.textContent });
+        break;
+      }
+    }
+    return parts
+      .sort((x, y) => x.left - y.left)
+      .map((p) => p.text)
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+  };
+  // The full date is in the tooltip Facebook shows while the time is
+  // hovered. Only for posts about the work, and only so many a look: each
+  // one is a short wait.
+  let hovered = 0;
+  const hoverForDate = async (a) => {
+    if (hovered >= (r.timeHoverMax ?? 12)) return "";
+    hovered += 1;
+    const init = { bubbles: true, cancelable: true, view: window };
+    for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter", "mousemove"]) {
+      a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+    }
+    await sleep(r.timeHoverWaitMs ?? 900);
+    const tips = Array.from(document.querySelectorAll(r.timeTooltip ?? '[role="tooltip"]'))
+      .map((t) => (t.innerText || "").replace(/\s+/g, " ").trim())
+      .filter((t) => /\d/.test(t) && t.length < 80);
+    for (const type of ["pointerout", "pointerleave", "mouseout", "mouseleave"]) {
+      a.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
+    }
+    return tips.length ? tips[tips.length - 1] : "";
+  };
+
   const readVisible = async () => {
     expand();
     const boxes = outermost().filter((el) => !done.has(el));
@@ -669,7 +715,10 @@ async function scanPosts(keywords, r, asked) {
       if (byUrl.has(key) || memory.sent.has(key)) continue;
       memory.sent.add(key);
 
-      const ageLabel = permalink ? (permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40) : "";
+      const ageLabel = permalink
+        ? (visibleLabel(permalink) || permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40)
+        : "";
+      const postedLabel = permalink && matched ? await hoverForDate(permalink) : "";
       // The header: the group's name, then the poster's. On a group's own
       // page the group is the page, so the first named link is the poster.
       const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
@@ -688,7 +737,7 @@ async function scanPosts(keywords, r, asked) {
           if (candidate && (!group || candidate !== group.name)) author = candidate;
         }
       }
-      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, group, matched });
+      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, group, matched });
     }
   };
 

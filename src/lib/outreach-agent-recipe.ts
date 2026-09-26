@@ -16,7 +16,7 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.7.0";
+export const EXTENSION_VERSION = "2.8.0";
 /** Packed from the extension folder on every build; see scripts/zip-extension.mjs. */
 export const EXTENSION_DOWNLOAD_URL = "https://app.jslandscapingmd.com/downloads/js-post-finder.zip";
 
@@ -54,6 +54,12 @@ export interface AgentRecipe {
     searchSettleMs: number;
     maxPosts: number;
     maxTextChars: number;
+    /** Where Facebook puts the full date while a post's time is hovered. */
+    timeTooltip: string;
+    /** How long to hover the time before reading the tooltip. */
+    timeHoverWaitMs: number;
+    /** How many posts' times are hovered in one look. */
+    timeHoverMax: number;
   };
   post: {
     commentBox: string;
@@ -125,6 +131,9 @@ export const DEFAULT_RECIPE: AgentRecipe = {
     searchSettleMs: 6000,
     maxPosts: 40,
     maxTextChars: 3000,
+    timeTooltip: '[role="tooltip"]',
+    timeHoverWaitMs: 900,
+    timeHoverMax: 12,
   },
   post: {
     commentBox: '[contenteditable="true"][role="textbox"]',

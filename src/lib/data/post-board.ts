@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { rankClosers, stageOf, type CloserStanding, type PostStage, type SoldJobInput } from "@/lib/affiliate-closes";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
 import { findPostUrl } from "@/lib/outreach-agent";
+import { describeAge, type Freshness } from "@/lib/post-age";
 import type { Platform } from "@/lib/social-finder";
 import {
   BOARD_MAX_AGE_DAYS,
@@ -43,6 +44,11 @@ export interface BoardPost {
   matchReason: string | null;
   /** Somebody on the team added it rather than the finder. */
   addedByHand: boolean;
+  /** "Posted 3 hours ago", or "Found 2 hours ago" when the post showed no time. */
+  ageLabel: string;
+  freshness: Freshness;
+  /** What its age means for answering it. */
+  ageHint: string;
 }
 
 /** Midnight this morning, the business's time. */
@@ -148,6 +154,10 @@ export async function getPostBoard(organizationId: string, profileId: string, no
       matchReason: row.match_reason,
       addedByHand: Boolean(row.added_by),
       foundAt: row.created_at,
+      ...(() => {
+        const age = describeAge(row.posted_at, row.created_at, now);
+        return { ageLabel: age.label, freshness: age.freshness, ageHint: age.hint };
+      })(),
       pile: standing.pile,
       mine: standing.mine,
       others: standing.others,

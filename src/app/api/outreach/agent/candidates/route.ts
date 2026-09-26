@@ -15,6 +15,7 @@ import {
 } from "@/lib/outreach-agent";
 import { createClient } from "@/lib/supabase/server";
 import { matchReason, postedAtFromAge } from "@/lib/social-finder";
+import { daysOld, postedAtFromLabel } from "@/lib/post-age";
 import { sortReadPosts } from "@/lib/data/post-sorter";
 
 /**
@@ -41,6 +42,12 @@ interface IncomingPost {
   author?: string | null;
   anonymous?: boolean;
   ageLabel?: string | null;
+  /**
+   * The full date Facebook shows when the post's time is hovered, "Friday,
+   * September 26, 2026 at 1:04 PM". The short label is scrambled on the
+   * page; this is not.
+   */
+  postedLabel?: string | null;
   group?: { url?: string | null; name?: string | null } | null;
 }
 
@@ -144,7 +151,10 @@ export async function POST(request: NextRequest) {
     // name somewhere near here; the feed and listed groups are local already.
     const verdict = matchReason({ text, keywords: settings.keywords, areaWords: settings.areaWords, needArea: source === "search" });
     const matched = verdict.matched || matchesKeywords(text, settings.keywords);
-    const ageDays = ageDaysFromLabel(post.ageLabel, now);
+    // The hovered full date first, then the short label, then nothing:
+    // a post with no time says so on the card rather than guess.
+    const postedAt = postedAtFromLabel(post.postedLabel, now) ?? postedAtFromLabel(post.ageLabel, now);
+    const ageDays = postedAt ? daysOld(postedAt.toISOString(), null, now.toISOString(), now) : ageDaysFromLabel(post.ageLabel, now);
     const id = await recordSeen(profile.organization_id, profile.id, {
       postKey: key,
       url,
@@ -159,11 +169,22 @@ export async function POST(request: NextRequest) {
       groupKey,
       matched,
       platform: "facebook",
-      postedAt: postedAtFromAge(ageDays, now),
+      postedAt: postedAt ?? postedAtFromAge(ageDays, now),
       matchReason: verdict.reason,
     });
     if (id) kept += 1;
-    else skipped += 1;
+    else {
+      skipped += 1;
+      // Seen before without a time; this look could read one.
+      if (postedAt) {
+        await (await createClient())
+          .from("outreach_seen_posts")
+          .update({ posted_at: postedAt.toISOString(), age_days: ageDays, updated_at: now.toISOString() })
+          .eq("organization_id", profile.organization_id)
+          .eq("post_key", key)
+          .is("posted_at", null);
+      }
+    }
   }
   // Sorted before the answer goes back: who wants work done, who is
   // selling it, and the businesses among the second kept. Anything left

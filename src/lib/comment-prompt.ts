@@ -211,12 +211,11 @@ export function commentBrief(brief: CommentBrief): string {
 
   const age = brief.ageDays;
   if (typeof age === "number") {
+    // A day old or more and they may have somebody already, so it asks.
     lines.push(
       age <= 0
         ? "It was posted today, so use the plain opener."
-        : age === 1
-          ? "It was posted yesterday, so use the plain opener."
-          : `It was posted ${age} days ago, so open with "If you haven't gotten this taken care of yet".`
+        : `It was posted ${age === 1 ? "yesterday" : `${age} days ago`}, so open with "If you haven't gotten this taken care of yet".`
     );
   }
 

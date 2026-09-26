@@ -362,6 +362,8 @@ export async function readAndDraft(input: {
   /** The post's own words, when there is text rather than a picture. */
   pastedText?: string;
   kind: OutreachKind;
+  /** How many days ago the post went up, when that is known; it decides the comment's opening. */
+  ageDays?: number | null;
 }): Promise<ReadAndDraftResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -395,7 +397,7 @@ export async function readAndDraft(input: {
         "",
         isMessage
           ? replyBrief({ note: "", ownServices, partnerServices })
-          : commentBrief({ businessName: organization.name, note: "", where: "", ageDays: null, ownServices, partnerServices }),
+          : commentBrief({ businessName: organization.name, note: "", where: "", ageDays: input.ageDays ?? null, ownServices, partnerServices }),
       ].join("\n"),
     });
 

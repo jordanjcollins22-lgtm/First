@@ -45,6 +45,14 @@ function mentionOf(post: BoardPost, comment: string): string | null {
   return comment.startsWith(`@${first}`) ? first : null;
 }
 
+
+const FRESHNESS_STYLE: Record<BoardPost["freshness"], string> = {
+  fresh: "bg-emerald-50 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200",
+  aging: "bg-amber-50 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200",
+  old: "bg-orange-50 text-orange-900 dark:bg-orange-500/15 dark:text-orange-200",
+  unknown: "bg-muted text-muted-foreground",
+};
+
 export function CommentCard({
   posts,
   pinned: pinnedAtLoad,
@@ -161,7 +169,14 @@ export function CommentCard({
               </span>
               <span className="font-medium text-foreground">{post.author ?? "Someone"}</span>
               {post.groupName ? ` in ${post.groupName}` : ""}
-              {` · ${post.postedAt ? shortWhen(post.postedAt) : post.ageDays === 0 ? "today" : `${post.ageDays}d ago`}`}
+            </div>
+            {/* When it went up, said plainly, and what that means for answering it. */}
+            <div className={`rounded-lg px-3 py-2 text-xs ${FRESHNESS_STYLE[post.freshness]}`}>
+              <p className="font-semibold">
+                {post.ageLabel}
+                {post.postedAt ? <span className="font-normal opacity-80"> · {shortWhen(post.postedAt)}</span> : null}
+              </p>
+              <p className="opacity-90">{post.ageHint}</p>
             </div>
             <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm">{post.text}</p>
             <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">

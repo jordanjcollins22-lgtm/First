@@ -10,6 +10,7 @@ import { mentionComment } from "@/lib/outreach-agent";
 import { isPostLink, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
+import { daysOld, fitOpenerToAge } from "@/lib/post-age";
 import { createClient } from "@/lib/supabase/server";
 import { setPostKind } from "@/lib/data/post-sorter";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
@@ -96,7 +97,10 @@ export async function takePost(seenId: string): Promise<TakeResult> {
 
   // A post somebody added from a screenshot is written from the picture:
   // the words kept for it are a summary, and the picture is the post.
-  const read = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment" });
+  // How old the post really is decides how the comment opens: from
+  // yesterday or before, it asks whether they still need someone.
+  const days = daysOld(row.posted_at ?? null, row.age_days ?? null, row.created_at, new Date());
+  const read = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment", ageDays: days });
   if (!read.ok) return letGo(read.error);
   if (!read.draft) return letGo(read.draftNote ?? "Couldn't write one for that post. Try again.");
 
@@ -113,7 +117,7 @@ export async function takePost(seenId: string): Promise<TakeResult> {
   });
   if (!recorded.ok) return letGo(recorded.error);
 
-  const written = finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link);
+  const written = fitOpenerToAge(finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link), days);
   if (!looksUsable(written, recorded.link)) return letGo("The comment came back too thin. Try again.");
   const { text: comment } = mentionComment(written, askedBy);
 
