@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { POST_STAGES, type PostStage } from "@/lib/affiliate-closes";
 import type { AnsweredPost } from "@/lib/data/post-board";
@@ -36,10 +37,31 @@ export function AnsweredPosts({ posts, whose }: { posts: AnsweredPost[]; whose: 
   const counts = new Map<PostStage, number>();
   for (const p of posts) counts.set(p.stage, (counts.get(p.stage) ?? 0) + 1);
   const shown = only ? posts.filter((p) => p.stage === only) : posts;
+  // The headline numbers, so the closed drop-down still says how it is going.
+  const summary = [
+    `${posts.length} answered`,
+    // Booked counts everything that got as far as an evaluation, closed or not.
+    (() => {
+      const booked = (counts.get("evaluation") ?? 0) + (counts.get("proposal") ?? 0) + (counts.get("closed") ?? 0) + (counts.get("said_no") ?? 0);
+      return booked ? `${booked} booked` : null;
+    })(),
+    counts.get("closed") ? `${counts.get("closed")} closed` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <section id="answered" className="mx-auto w-full max-w-md scroll-mt-4 rounded-2xl border border-border bg-card p-4">
-      <h2 className="text-sm font-semibold">{whose ? `${whose}'s answered posts` : "Your answered posts"}</h2>
+    // Closed until opened, so the card above stays the first thing on the
+    // page. Somebody else's list, opened from the leaderboard, starts open.
+    <details id="answered" open={Boolean(whose)} className="group mx-auto w-full max-w-md scroll-mt-4 rounded-2xl border border-border bg-card p-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold">{whose ? `${whose}'s answered posts` : "Your answered posts"}</span>
+          <span className="block truncate text-xs text-muted-foreground">{posts.length > 0 ? summary : "Nothing answered yet"}</span>
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="mt-3">
       <p className="mb-3 text-xs text-muted-foreground">Every post answered with a link, and where it got to.</p>
 
       {posts.length === 0 ? (
@@ -104,6 +126,7 @@ export function AnsweredPosts({ posts, whose }: { posts: AnsweredPost[]; whose: 
           </ul>
         </>
       )}
-    </section>
+      </div>
+    </details>
   );
 }
