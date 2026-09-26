@@ -66,6 +66,10 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       await chrome.storage.local.set({ scans: {} });
       await tick({ force: true });
       reply(await snapshot());
+    } else if (message?.type === "app-power") {
+      // Turned on or off in the app: act on it now rather than at the next minute.
+      await tick({ force: true });
+      reply(await snapshot());
     } else if (message?.type === "power") {
       await power(Boolean(message.on));
       reply(await snapshot());

@@ -67,11 +67,11 @@ export default async function GroupAgentPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm">
             {paused ? (
-              <span className="font-semibold text-amber-700">Paused. Nothing is being read.</span>
+              <span className="font-semibold text-amber-700">Off. Nothing is being read.</span>
             ) : because === "outside hours" ? (
-              <span className="font-semibold text-amber-700">Resting. It looks again from {settings.activeFrom}.</span>
+              <span className="font-semibold text-amber-700">On, but outside its hours. It starts again at {settings.activeFrom}.</span>
             ) : (
-              <span className="font-semibold text-emerald-700">On. Looking every {settings.scanEveryMinutes} minutes.</span>
+              <span className="font-semibold text-emerald-700">On. Scrolling Facebook in its own window until you stop it.</span>
             )}
             {paused && settings.pauseReason && <span className="block text-xs text-muted-foreground">{settings.pauseReason}</span>}
           </p>

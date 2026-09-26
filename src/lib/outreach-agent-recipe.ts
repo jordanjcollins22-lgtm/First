@@ -16,7 +16,7 @@
  * The extension builds them with the "i" flag.
  */
 
-export const EXTENSION_VERSION = "2.8.0";
+export const EXTENSION_VERSION = "2.9.0";
 /** Packed from the extension folder on every build; see scripts/zip-extension.mjs. */
 export const EXTENSION_DOWNLOAD_URL = "https://app.jslandscapingmd.com/downloads/js-post-finder.zip";
 

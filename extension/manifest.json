@@ -2,19 +2,53 @@
   "manifest_version": 3,
   "name": "JS Landscaping: post finder",
   "description": "Reads your Facebook groups for neighbours asking for lawn and landscaping work and brings each post into the app for the team to answer. It never comments.",
-  "version": "2.8.0",
-  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "version": "2.9.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
     "default_title": "JS Landscaping post finder",
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" }
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
   },
-  "permissions": ["activeTab", "scripting", "alarms", "tabs", "storage", "notifications"],
-  "host_permissions": ["https://www.facebook.com/*", "https://www.google.com/*", "https://maps.google.com/*", "https://app.jslandscapingmd.com/*"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "alarms",
+    "tabs",
+    "storage",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://www.google.com/*",
+    "https://maps.google.com/*",
+    "https://app.jslandscapingmd.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.jslandscapingmd.com/*"
+      ],
+      "js": [
+        "app-bridge.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+J" },
+      "suggested_key": {
+        "default": "Alt+Shift+J"
+      },
       "description": "Open the agent"
     }
   }
