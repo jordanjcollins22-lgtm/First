@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowRight, Newspaper } from "lucide-react";
+import { Newspaper } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { ShowcaseCarousel } from "@/components/booking/showcase-carousel";
 import { landingBadges, landingHeadline, REVIEW_EVERY_MS, SHOWCASE_ASPECT, type BookingProof } from "@/lib/booking-proof";
 
@@ -25,13 +24,14 @@ export function LandingCard({
   organizationName,
   service,
   proof,
-  onStart,
+  start,
   fitHeight = null,
 }: {
   organizationName: string;
   service: string | null;
   proof: BookingProof;
-  onStart: () => void;
+  /** Where the booking starts, right under the headline: the address search. */
+  start: React.ReactNode;
   /** The most the card may be, in pixels. The screen's height when not given. */
   fitHeight?: number | null;
 }) {
@@ -56,9 +56,7 @@ export function LandingCard({
         ))}
       </ul>
 
-      <Button type="button" className="h-12 w-full shrink-0 text-base" onClick={onStart}>
-        See open times <ArrowRight className="ml-1.5 h-4 w-4" />
-      </Button>
+      <div className="shrink-0">{start}</div>
 
       {/* The one part that gives way on a short phone. */}
       {proof.showcase.length > 0 && <ShowcaseCarousel items={proof.showcase} side={side} />}

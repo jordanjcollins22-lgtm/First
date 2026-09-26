@@ -25,7 +25,7 @@ import type { BookingOptions } from "./booking-options";
 /**
  * The chrome the wizard draws around itself, with nothing in it yet.
  *
- * It is the same card, page counter and five dots, so the form does not jump
+ * It is the same card, page counter and four dots, so the form does not jump
  * when the real thing replaces it. This is what gets baked into the
  * prerendered HTML — so the count here has to match BOOKING_PAGES, or the
  * dots visibly change the moment the options land.
@@ -37,7 +37,7 @@ export function BookingFormSkeleton() {
         <div className="flex items-center justify-between">
           <div className="h-3 w-20 rounded bg-muted" />
           <div className="flex gap-1">
-            {[0, 1, 2, 3, 4].map((i) => (
+            {[0, 1, 2, 3].map((i) => (
               <div key={i} className="h-1.5 w-5 rounded-full bg-muted" />
             ))}
           </div>

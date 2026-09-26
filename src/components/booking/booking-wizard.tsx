@@ -6,14 +6,11 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, Map
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
 import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { recordBookingVisit, recordLocateResult, submitPublicBooking } from "@/lib/actions/public-booking-actions";
 import { assignedVariant, type AddressEntry, type AddressVariant } from "@/lib/booking-test";
-import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
 import type { BookingTimes, OfferedTime } from "@/app/book/times/route";
@@ -44,14 +41,14 @@ import {
  * already booked nearby and offer those. The client gets a shorter wait, we get
  * a tighter round, and neither of us had to think about it.
  *
- * **Contact details come last.** By then somebody has picked a property, told
- * us what they want doing and chosen a time. Asking for a phone number at that
- * point is the last small step of something already begun, rather than the
- * price of starting.
+ * **Then who they are, then when.** Four pages: the landing card asks where
+ * the property is, the next asks for a name, email and phone, the next for a
+ * time, and the last says they are booked. What they want done is not asked
+ * at all: the pre-evaluation form after booking asks it properly, and asking
+ * twice is a page somebody gives up on.
  *
- * **Nothing dead-ends.** The budget question used to refuse to submit without a
- * bracket, so anybody who genuinely did not know lost the booking on the final
- * click. "Not sure yet" is now an answer.
+ * **A time is picked, then confirmed.** Tapping a time only chooses it, so a
+ * slip of the thumb on a phone is not a booking.
  */
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -172,7 +169,9 @@ export function BookingWizard({
    */
   preview?: boolean;
 }) {
-  // 0 is the landing card; 1 to 4 are the booking itself.
+  // 0 is the landing card with the address; 1 is who they are; 2 is when.
+  // Booked is the fourth page. What they want done is asked afterwards, on
+  // the pre-evaluation form, so it is not asked here.
   const [step, setStep] = useState(0);
   // The preview can show the page a client sees once they have booked.
   const [previewDone, setPreviewDone] = useState(false);
@@ -221,9 +220,9 @@ export function BookingWizard({
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [selectedServiceIds, setSelectedServiceIds] = useState<Set<string>>(new Set());
-  const [notes, setNotes] = useState("");
-  const [budgetRange, setBudgetRange] = useState("");
+  // What the comment was about, carried to the booking so the evaluator
+  // knows before the pre-evaluation form is back.
+  const askedAbout = service ? services.find((s) => s.name.toLowerCase() === service.toLowerCase()) ?? null : null;
 
   // The ranked times, worked out on the server once it knows the address.
   const [times, setTimes] = useState<BookingTimes | null>(null);
@@ -308,6 +307,8 @@ export function BookingWizard({
           setSuggestions([]);
           setAddressEntry("located");
           void loadTimes(found.lat, found.lng);
+          // Straight on; the next page shows the address with a way to change it.
+          setStep(1);
         } catch {
           noteLocate("failed");
           setError("Address lookup is unavailable right now. Type it instead.");
@@ -381,22 +382,45 @@ export function BookingWizard({
     forgetMemory();
   }
 
-  function toggleService(id: string) {
-    setSelectedServiceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  /** An address picked from the search: straight on to who they are. */
+  function pickAddress(found: GeocodeSuggestion) {
+    setSelectedAddress(found);
+    setAddressQuery(found.fullAddress);
+    setSuggestions([]);
+    setError(null);
+    void loadTimes(found.lat, found.lng);
+    setStep(1);
+  }
+
+  /** Back to the first page to pick another address. */
+  function changeAddress() {
+    if (addressEntry === "located") noteLocate("declined");
+    setSelectedAddress(null);
+    setAddressQuery("");
+    setAddressEntry("typed");
+    setTimes(null);
+    setSelectedSlot(null);
+    setStep(0);
+  }
+
+  /** Who they are, checked before the times. */
+  function detailsProblem(): string | null {
+    if (!firstName.trim() || !lastName.trim()) return "Enter your first and last name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email address.";
+    if (!phone.trim()) return "Enter a phone number.";
+    return null;
   }
 
   function handleSubmit() {
     setError(null);
     if (preview) return setError("This is a preview, so nothing is booked.");
-    if (!firstName.trim() || !lastName.trim()) return setError("Enter your first and last name.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Enter a valid email address.");
-    if (!phone.trim()) return setError("Enter a phone number.");
-    if (!selectedAddress || !selectedSlot) return setError("Pick an address and a time first.");
+    const problem = detailsProblem();
+    if (problem) {
+      setStep(1);
+      return setError(problem);
+    }
+    if (!selectedAddress || !selectedSlot) return setError("Pick a time first.");
+    if (addressEntry === "located") noteLocate("accepted");
 
     startTransition(async () => {
       try {
@@ -413,15 +437,14 @@ export function BookingWizard({
           address: selectedAddress.fullAddress,
           lat: selectedAddress.lat,
           lng: selectedAddress.lng,
-          requestedServiceTypeIds: Array.from(selectedServiceIds),
+          requestedServiceTypeIds: askedAbout ? [askedAbout.service_type_id] : [],
           referralCode,
           bookingVariant: variant,
           addressEntry,
           visitId: visitIdRef.current,
-          notes,
-          // Never blocks the booking. Somebody who has not thought about money
-          // yet is still somebody who wants us to come and look.
-          budgetRange: budgetRange || "Not sure yet",
+          notes: service ? `Asked about ${service} in the post we answered.` : "",
+          // Not asked any more: the pre-evaluation form covers what they want.
+          budgetRange: "Not sure yet",
         });
         // Kept in their own browser so a second booking is a tap rather than
         // the same four fields typed again on a phone.
@@ -467,12 +490,29 @@ export function BookingWizard({
   // Shadows the state on purpose: the preview's made-up booking reads the same.
   function renderDone(booked: NonNullable<typeof done>) {
     return (
-      <div className="flex flex-col items-center gap-4 py-4 text-center">
+      <div className="flex flex-col items-center gap-4 text-center">
+        {pageCounter(BOOKING_PAGES.length - 1)}
         <CheckCircle2 className="h-12 w-12 text-primary" />
         <h1 className="text-2xl font-bold">You&apos;re booked</h1>
         <p className="text-muted-foreground">
           {formatDateHeader(booked.date)} at {formatTimeLabel(booked.time)}, at {booked.address}.
         </p>
+        {/* The one thing left to do, and the reason the booking asked so little. */}
+        {(booked.prepToken || preview) && (
+          <div className="w-full rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-left text-sm">
+            <p className="font-semibold">Next: tell us what you&apos;d like done</p>
+            <p className="mt-1 text-muted-foreground">
+              A short pre-evaluation form: what you want done, the looks you like and anything that would give you pause.
+              About five minutes, and we come with ideas.
+            </p>
+            <a
+              href={booked.prepToken ? `/prep/${booked.prepToken}` : undefined}
+              className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
+            >
+              Fill in the pre-evaluation form
+            </a>
+          </div>
+        )}
         <div className="w-full rounded-xl border border-border bg-card p-4 text-left text-sm">
           <p className="font-medium">What happens next</p>
           <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
@@ -485,22 +525,6 @@ export function BookingWizard({
             <li>You get a written proposal with a fixed price. No obligation.</li>
           </ul>
         </div>
-        {booked.prepToken && (
-          <div className="w-full rounded-xl border border-primary/40 bg-primary/5 p-4 text-left text-sm">
-            <p className="font-medium">While it is fresh: tell us what you are looking for</p>
-            <p className="mt-1 text-muted-foreground">
-              Five minutes on what you want done, the looks you like and anything that would give you pause. It
-              lets us come with ideas. If you skip it, we go through it together in the first 5 to 10 minutes of
-              the visit.
-            </p>
-            <a
-              href={`/prep/${booked.prepToken}`}
-              className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-            >
-              Fill it in now
-            </a>
-          </div>
-        )}
         <p className="text-xs text-muted-foreground">
           Need to change it? Reply to the confirmation and we&apos;ll move it.
         </p>
@@ -548,20 +572,20 @@ export function BookingWizard({
   const canGoNext = monthStart < new Date(latestSlotMonth.getFullYear(), latestSlotMonth.getMonth(), 1);
   const timesForSelectedDate = selectedDate ? slotsByDate.get(selectedDate) ?? [] : [];
 
+  // Picking a time only chooses it; the confirm button books it, so a
+  // mis-tap on a phone is not a booking.
   function pickOffered(offer: OfferedTime) {
     setSelectedSlot({ date: offer.date, time: offer.time, evaluatorIds: offer.evaluatorIds });
     setSelectedDate(offer.date);
     setError(null);
-    setStep(4);
   }
 
   const pageCount = BOOKING_PAGES.length;
-  // Where the preview arrows can go: every page, then the booked page.
-  const previewPages = [...BOOKING_PAGES, "After booking"];
-  const previewAt = previewDone ? pageCount : step;
+  // Where the preview arrows can go: every page, the booked one last.
+  const previewAt = previewDone ? pageCount - 1 : step;
   function previewGo(index: number) {
     setError(null);
-    if (index >= pageCount) {
+    if (index >= pageCount - 1) {
       setPreviewDone(true);
       return;
     }
@@ -569,9 +593,93 @@ export function BookingWizard({
     setStep(Math.max(0, index));
   }
 
+  /** "Page 2 of 4 · Your details", and the dots. */
+  function pageCounter(at: number) {
+    return (
+      <div className="flex w-full items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          Page {at + 1} of {pageCount}
+          {at > 0 ? ` · ${BOOKING_PAGES[at]}` : ""}
+        </span>
+        <span className="flex gap-1" aria-hidden>
+          {BOOKING_PAGES.map((label, i) => (
+            <span key={label} className={cn("h-1.5 w-5 rounded-full", i <= at ? "bg-primary" : "bg-muted")} />
+          ))}
+        </span>
+      </div>
+    );
+  }
+
   // The landing card is one screen, nothing to scroll: the page is exactly
   // the height of the phone, and the card sizes its before-and-after to fit.
   const landing = !done && step === 0;
+
+  // Where the booking starts, on the landing card: the address search. The
+  // suggestions drop down over the card rather than push it, so it stays one
+  // screen.
+  const addressSearch = (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="address" className="text-sm font-semibold">
+        Where is the property?
+      </label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          id="address"
+          value={addressQuery}
+          onChange={(e) => handleAddressQueryChange(e.target.value)}
+          placeholder="Start typing your address"
+          disabled={!isMapboxConfigured}
+          className="h-12 border-primary/50 pl-10 pr-10 text-base"
+          autoComplete="off"
+        />
+        {searching ? (
+          <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-muted-foreground" />
+        ) : (
+          variant === "tap" &&
+          isMapboxConfigured && (
+            <button
+              type="button"
+              onClick={useMyLocation}
+              disabled={locating}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-2 text-primary hover:bg-accent"
+              aria-label="Use my location"
+              title="Use my location"
+            >
+              {locating ? <Loader2 className="h-5 w-5 animate-spin" /> : <LocateFixed className="h-5 w-5" />}
+            </button>
+          )
+        )}
+        {suggestions.length > 0 && !selectedAddress && (
+          <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+            {suggestions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => pickAddress(s)}
+                className="flex min-h-12 w-full items-center gap-2 px-3 py-3 text-left text-sm hover:bg-accent"
+              >
+                <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {s.fullAddress}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {remembered && !dismissedMemory && !selectedAddress && (
+        <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          <UserCheck className="h-3.5 w-3.5 text-primary" />
+          <button type="button" className="font-medium text-primary underline" onClick={() => applyRemembered(remembered)}>
+            Book again at {summarise(remembered).address}
+          </button>
+          <button type="button" className="underline" onClick={forgetRemembered}>
+            Not me
+          </button>
+        </p>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
 
   return (
     <div
@@ -584,7 +692,7 @@ export function BookingWizard({
         <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-primary/50 bg-primary/5 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-              <Eye className="h-3.5 w-3.5" /> Preview · {pageCount} pages, then the booked page
+              <Eye className="h-3.5 w-3.5" /> Preview · {pageCount} pages
             </p>
             <span className="flex gap-1">
               <Button type="button" size="icon" variant="outline" className="h-8 w-8" disabled={previewAt === 0} onClick={() => previewGo(previewAt - 1)} aria-label="Previous page">
@@ -595,7 +703,7 @@ export function BookingWizard({
                 size="icon"
                 variant="outline"
                 className="h-8 w-8"
-                disabled={previewAt >= previewPages.length - 1}
+                disabled={previewAt >= pageCount - 1}
                 onClick={() => previewGo(previewAt + 1)}
                 aria-label="Next page"
               >
@@ -604,7 +712,7 @@ export function BookingWizard({
             </span>
           </div>
           <div className="flex flex-wrap gap-1">
-            {previewPages.map((label, i) => (
+            {BOOKING_PAGES.map((label, i) => (
               <button
                 key={label}
                 type="button"
@@ -614,8 +722,7 @@ export function BookingWizard({
                   i === previewAt ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"
                 )}
               >
-                {i < pageCount ? `${i + 1}. ` : ""}
-                {label}
+                {i + 1}. {label}
               </button>
             ))}
           </div>
@@ -626,7 +733,6 @@ export function BookingWizard({
         data-booking-card
         className={cn(
           "flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5",
-          // As tall as what is on it, never taller than the screen.
           // Its own height, never squeezed by the page: the landing card works
           // out how big its before-and-after can be from that.
           landing && "shrink-0 gap-3"
@@ -637,226 +743,80 @@ export function BookingWizard({
       ) : (
       <>
       {/* Which page of how many, so nobody wonders how long this goes on. */}
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-muted-foreground">
-          Page {step + 1} of {pageCount}
-          {step > 0 ? ` · ${BOOKING_PAGES[step]}` : ""}
-        </span>
-        <span className="flex gap-1" aria-hidden>
-          {BOOKING_PAGES.map((label, i) => (
-            <span key={label} className={cn("h-1.5 w-5 rounded-full", i <= step ? "bg-primary" : "bg-muted")} />
-          ))}
-        </span>
-      </div>
+      {pageCounter(step)}
 
+      {/* ------------------------------------------- 1. welcome, and where */}
       {step === 0 && (
         <LandingCard
           organizationName={organizationName}
           service={service}
           proof={proof}
-          onStart={() => setStep(1)}
+          start={addressSearch}
           // The owner's preview stands in for a phone of this height.
           fitHeight={preview ? PREVIEW_SCREEN_PX : null}
         />
       )}
 
-      {/* ------------------------------------ 0. we have been here before */}
-      {step === 1 && remembered && !dismissedMemory && (
-        <div className="flex flex-col gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
-          <div className="flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold">Welcome back — shall we use these?</p>
-          </div>
-          <div className="text-sm">
-            <p className="font-medium">{summarise(remembered).name}</p>
-            <p className="text-muted-foreground">{summarise(remembered).address}</p>
-            <p className="text-xs text-muted-foreground">{summarise(remembered).contact}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" className="h-11" onClick={() => applyRemembered(remembered)}>
-              Use these details
-            </Button>
-            <Button type="button" variant="outline" className="h-11" onClick={forgetRemembered}>
-              Somewhere else
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Saved on this device from your last booking. We never see it until you book.
-          </p>
-        </div>
-      )}
-
-      {/* ---------------------------------------------------- 1. the address */}
+      {/* ------------------------------------------------- 2. who they are */}
       {step === 1 && (
         <div className="flex flex-col gap-4">
-          <div>
-            <p className="font-medium">Where is the property?</p>
-            <p className="text-sm text-muted-foreground">
-              So we can check we cover you and find the soonest we can get there.
-            </p>
-          </div>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="address"
-              value={addressQuery}
-              onChange={(e) => handleAddressQueryChange(e.target.value)}
-              placeholder="Start typing your address"
-              disabled={!isMapboxConfigured}
-              className="h-14 pl-10 text-base"
-              autoComplete="off"
-              autoFocus
-            />
-            {searching && (
-              <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-muted-foreground" />
+          <div className="flex items-start gap-3 rounded-xl border border-border p-2">
+            {imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={imageUrl} alt="Satellite view with a pin on the property" className="h-16 w-20 shrink-0 rounded-lg object-cover" />
+            ) : (
+              <MapPin className="m-2 h-5 w-5 shrink-0 text-primary" />
             )}
-          </div>
-
-          {variant === "tap" && !selectedAddress && isMapboxConfigured && (
-            <Button type="button" variant="outline" className="h-12 w-full" disabled={locating} onClick={useMyLocation}>
-              {locating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
-              {locating ? "Finding you…" : "Use my location"}
-            </Button>
-          )}
-
-          {suggestions.length > 0 && !selectedAddress && (
-            <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-              {suggestions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedAddress(s);
-                    setAddressQuery(s.fullAddress);
-                    setSuggestions([]);
-                    void loadTimes(s.lat, s.lng);
-                  }}
-                  className="flex min-h-12 w-full items-center gap-2 px-3 py-3 text-left text-sm hover:bg-accent"
-                >
-                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  {s.fullAddress}
-                </button>
-              ))}
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="font-medium">{selectedAddress?.fullAddress ?? "No address yet"}</p>
+              <button type="button" onClick={changeAddress} className="text-xs text-primary underline">
+                Not this one? Change it
+              </button>
             </div>
-          )}
-
-          {/* Confirming the pin and picking the address are one step now. It
-              was two, and the second one asked a person to agree with a
-              decision they had just made thirty seconds earlier. */}
-          {selectedAddress && (
-            <div className="flex flex-col gap-3">
-              {imageUrl && (
-                <div className="overflow-hidden rounded-xl border border-border bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageUrl}
-                    alt="Satellite view with a pin on the property"
-                    className="h-56 w-full object-cover"
-                  />
-                </div>
-              )}
-              <p className="flex items-start gap-1.5 text-sm">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span>{selectedAddress.fullAddress}</span>
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => {
-                    if (addressEntry === "located") noteLocate("declined");
-                    setSelectedAddress(null);
-                    setAddressQuery("");
-                    setAddressEntry("typed");
-                    setTimes(null);
-                  }}
-                >
-                  Not this one
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1"
-                  onClick={() => {
-                    if (addressEntry === "located") noteLocate("accepted");
-                    setStep(2);
-                  }}
-                >
-                  That&apos;s it — continue
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="button" variant="outline" className="self-start" onClick={() => setStep(0)}>
-            Back
-          </Button>
-        </div>
-      )}
-
-      {/* ------------------------------------------------- 2. what they want */}
-      {step === 2 && (
-        <div className="flex flex-col gap-4">
-          <div>
-            <p className="font-medium">What would you like done?</p>
-            <p className="text-sm text-muted-foreground">Pick anything that applies — we&apos;ll talk it through on the day.</p>
           </div>
-          <div className="flex flex-col gap-2">
-            {services.map((service) => (
-              <label
-                key={service.service_type_id}
-                className={cn(
-                  "flex min-h-12 items-center gap-3 rounded-lg border p-3 text-sm",
-                  selectedServiceIds.has(service.service_type_id)
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:bg-accent/50"
-                )}
-              >
-                <Checkbox
-                  checked={selectedServiceIds.has(service.service_type_id)}
-                  onCheckedChange={() => toggleService(service.service_type_id)}
-                />
-                {service.name}
-              </label>
-            ))}
-            {services.length === 0 && <p className="text-sm text-muted-foreground">Tell us what you need below.</p>}
+          <p className="font-medium">Where do we send the confirmation?</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="firstName">First name</Label>
+              <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="h-12 text-base" autoComplete="given-name" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lastName">Last name</Label>
+              <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} className="h-12 text-base" autoComplete="family-name" />
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="notes">Anything else we should know?</Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              placeholder="Dogs in the garden, a gate code, the bit that floods…"
-            />
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" autoComplete="email" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="phone">Phone</Label>
+            <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 text-base" autoComplete="tel" />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(0)}>
               Back
             </Button>
             <Button
               type="button"
               className="flex-1"
               onClick={() => {
-                if (selectedServiceIds.size === 0 && !notes.trim()) {
-                  setError("Pick at least one, or tell us what you need.");
-                  return;
-                }
+                const problem = preview ? null : detailsProblem();
+                if (problem) return setError(problem);
                 setError(null);
-                setStep(3);
+                setStep(2);
               }}
             >
-              Next
+              See open times
             </Button>
           </div>
+          <p className="text-center text-xs text-muted-foreground">We won&apos;t pass your details to anyone.</p>
         </div>
       )}
 
       {/* ------------------------------------------------------- 3. the time */}
-      {step === 3 && (
+      {step === 2 && (
         <div className="flex flex-col gap-4">
           {/* Which kind of evaluation this address gets, said before they pick
               a time rather than after they have booked one. Somebody two hours
@@ -949,20 +909,25 @@ export function BookingWizard({
                   {selectedDate ? formatDateHeader(selectedDate) : "Pick a day with open times"}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {timesForSelectedDate.map((slot) => (
-                    <button
-                      key={`${slot.date}T${slot.time}`}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSlot(slot);
-                        setError(null);
-                        setStep(4);
-                      }}
-                      className="min-h-11 rounded-lg border border-border bg-card px-3 text-sm font-medium hover:border-primary hover:bg-accent"
-                    >
-                      {formatTimeLabel(slot.time)}
-                    </button>
-                  ))}
+                  {timesForSelectedDate.map((slot) => {
+                    const chosen = selectedSlot?.date === slot.date && selectedSlot?.time === slot.time;
+                    return (
+                      <button
+                        key={`${slot.date}T${slot.time}`}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSlot(slot);
+                          setError(null);
+                        }}
+                        className={cn(
+                          "min-h-11 rounded-lg border px-3 text-sm font-medium",
+                          chosen ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary hover:bg-accent"
+                        )}
+                      >
+                        {formatTimeLabel(slot.time)}
+                      </button>
+                    );
+                  })}
                 </div>
                 <button
                   type="button"
@@ -976,84 +941,20 @@ export function BookingWizard({
           )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="button" variant="outline" className="self-start" onClick={() => setStep(2)}>
-            Back
-          </Button>
-        </div>
-      )}
 
-      {/* ------------------------------------------------- 4. who they are */}
-      {step === 4 && (
-        <div className="flex flex-col gap-4">
-          {selectedSlot && (
-            <button
-              type="button"
-              onClick={() => setStep(3)}
-              className="self-start rounded-lg bg-primary/10 px-3 py-2 text-left text-sm text-primary"
-            >
-              <span className="font-semibold">
-                {formatDateHeader(selectedSlot.date)} at {formatTimeLabel(selectedSlot.time)}
-              </span>{" "}
-              — change
-            </button>
-          )}
-          <p className="font-medium">Last bit — where do we send the confirmation?</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="firstName">First name</Label>
-              <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="h-12 text-base" autoComplete="given-name" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="lastName">Last name</Label>
-              <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} className="h-12 text-base" autoComplete="family-name" />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" autoComplete="email" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="phone">Phone</Label>
-            <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 text-base" autoComplete="tel" />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label>
-              Roughly what were you thinking of spending?{" "}
-              <span className="font-normal text-muted-foreground">Optional — it just helps us come prepared.</span>
-            </Label>
-            <div className="flex flex-wrap gap-1.5">
-              {BUDGET_RANGES.map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  onClick={() => setBudgetRange(budgetRange === range ? "" : range)}
-                  className={cn(
-                    "min-h-11 rounded-lg border px-3 text-sm",
-                    budgetRange === range ? "border-primary bg-primary/10 font-medium text-primary" : "border-border hover:bg-accent/50"
-                  )}
-                >
-                  {range}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <Button type="button" className="h-12 w-full text-base" disabled={isPending || preview} onClick={handleSubmit}>
+          <Button type="button" className="h-12 w-full text-base" disabled={isPending || preview || !selectedSlot} onClick={handleSubmit}>
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Booking…
               </>
+            ) : selectedSlot ? (
+              `Confirm ${formatDateHeader(selectedSlot.date)} at ${formatTimeLabel(selectedSlot.time)}`
             ) : (
-              "Confirm my free evaluation"
+              "Pick a time above"
             )}
           </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            No charge, no obligation, and we won&apos;t pass your details to anyone.
-          </p>
-          <Button type="button" variant="outline" className="self-start" onClick={() => setStep(3)} disabled={isPending}>
+          <p className="text-center text-xs text-muted-foreground">Free, and no obligation.</p>
+          <Button type="button" variant="outline" className="self-start" onClick={() => setStep(1)} disabled={isPending}>
             Back
           </Button>
         </div>
