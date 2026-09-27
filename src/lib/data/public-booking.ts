@@ -28,6 +28,11 @@ export interface BookingContext {
  * posted it, so a link carrying nothing else is still answerable -- including
  * every link that went out before the org slug was put on them, which are in
  * strangers' Facebook threads and cannot be edited.
+ *
+ * And when nothing on the link answers, it is the home business's booking
+ * page rather than "this link isn't valid". A bare /book, a code mistyped off
+ * a flyer, a slug that was changed: each is somebody who came to book, and
+ * every one of them gets the same four-page booking form as everybody else.
  */
 export async function resolveBookingContext(params: {
   ref?: string;
@@ -73,7 +78,7 @@ export async function resolveBookingContext(params: {
   return fallback(admin, params);
 }
 
-/** The organisation, then the recommendation code, then nothing. */
+/** The organisation, then the recommendation code, then the home business. */
 async function fallback(
   admin: ReturnType<typeof createAdminClient>,
   params: { org?: string; rec?: string }
@@ -82,8 +87,32 @@ async function fallback(
     const byOrg = await resolveByOrg(admin, params.org);
     if (byOrg) return byOrg;
   }
-  if (params.rec) return resolveByRecommendation(admin, params.rec);
-  return null;
+  if (params.rec) {
+    const byRec = await resolveByRecommendation(admin, params.rec);
+    if (byRec) return byRec;
+  }
+  return resolveHomeBusiness(admin);
+}
+
+/**
+ * The business this app was set up for: the first one made. Nobody is
+ * credited, because nothing on the link said who sent them.
+ */
+async function resolveHomeBusiness(admin: ReturnType<typeof createAdminClient>): Promise<BookingContext | null> {
+  const { data: org, error } = await admin
+    .from("organizations")
+    .select("id, name")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!org) return null;
+  return {
+    organizationId: org.id,
+    organizationName: org.name,
+    referredByProfileId: null,
+    dedicatedEvaluatorId: null,
+  };
 }
 
 /**
