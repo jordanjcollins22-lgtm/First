@@ -18,6 +18,8 @@ import { groupByService, groupHeading, worthGrouping } from "@/lib/service-group
 import type { ProposalSiteImageTransform } from "@/types/domain";
 import { CrewChecklistCard } from "@/components/job/crew-checklist-card";
 import type { CrewChecklist } from "@/lib/crew-checklist";
+import { AreaBoard } from "@/components/job/area-board";
+import type { AreaBoardData } from "@/lib/data/area-board";
 
 /**
  * The crew's sheet for one job.
@@ -63,6 +65,7 @@ export function WorkOrderView({
   arrived = false,
   practice = false,
   checklist,
+  areaBoard,
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -106,7 +109,12 @@ export function WorkOrderView({
   practice?: boolean;
   /** What to load and what to do, at the top of the sheet. */
   checklist?: CrewChecklist;
+  /** Who is in which area, and each area's steps: the job on site. */
+  areaBoard?: AreaBoardData;
 }) {
+  // On a job being worked, the areas are worked from the board: pick one,
+  // tick it off, photograph it. Before and after that, the sheet is a list.
+  const onSite = Boolean(areaBoard) && !bare && !practice && (jobStatus === "approved" || jobStatus === "in_progress");
   // Worked out here rather than stored: zones get edited and a zone's service
   // can change, and a stored grouping goes wrong the first time somebody
   // moves an area from mowing to mulching.
@@ -164,7 +172,7 @@ export function WorkOrderView({
         </p>
       )}
 
-      {checklist && <CrewChecklistCard checklist={checklist} />}
+      {checklist && <CrewChecklistCard checklist={onSite ? { ...checklist, areas: [] } : checklist} />}
 
       {/* ------------------------------------------------------- the site map */}
       {order.zones.length > 0 && siteImagePath && imageTransform && (
@@ -185,6 +193,8 @@ export function WorkOrderView({
           }))}
         />
       )}
+
+      {onSite && areaBoard && <AreaBoard jobId={jobId} zones={order.zones} board={areaBoard} accountManager={accountManager} />}
 
       {/* Agreed after the job was sold, and kept apart from it. The crew has
           to be able to tell the difference between what was bought and what
@@ -237,7 +247,7 @@ export function WorkOrderView({
           When you get there, tap <span className="font-semibold">Arrived</span> on My Day. This sheet will then show you one area at a time.
         </p>
       ) : null}
-      {bare && arrived ? null : order.zones.length === 0 ? (
+      {(bare && arrived) || onSite ? null : order.zones.length === 0 ? (
         <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">
           No zones have been marked up on this job yet. Check with the office before you start.
         </p>

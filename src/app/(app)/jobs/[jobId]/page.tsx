@@ -120,6 +120,8 @@ import { CloseoutCard } from "@/components/job/closeout-card";
 import { closeoutInputFor } from "@/lib/data/client-review";
 import { beforeAfterEmail, canSendForApproval, canSignOffProject, clientReviewPath, closeoutSteps, projectTimeline } from "@/lib/project-closeout";
 import { proposalPath } from "@/lib/proposal-flow";
+import { AreaProgress } from "@/components/job/area-progress";
+import { loadAreaBoard } from "@/lib/data/area-board";
 
 export default async function JobPage({
   params,
@@ -604,6 +606,11 @@ export default async function JobPage({
       })
     : null;
   const openedFor = Boolean(openSection || view);
+  // While the job is being worked: who is in which area, and at what stage.
+  const areaBoard =
+    (job.status === "approved" || job.status === "in_progress") && zones.length > 0
+      ? await loadAreaBoard(jobId, { zones, catalog, photos }).catch(() => null)
+      : null;
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:gap-6 sm:py-10">
@@ -659,6 +666,10 @@ export default async function JobPage({
       />
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
+
+      {areaBoard && areaBoard.states.some((st) => st.status !== "open" || st.stepsDone > 0) && (
+        <AreaProgress jobId={jobId} zones={photoZones} board={areaBoard} />
+      )}
 
       {closing && closeout && (
         <CloseoutCard

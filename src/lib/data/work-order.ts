@@ -19,6 +19,7 @@ import type { EvaluationStatus, JobStatus, ProposalSiteImageTransform } from "@/
 import { executableAdditions, type ScopeChange } from "@/lib/data/exceptions";
 import { buildCrewChecklist, type CrewChecklist } from "@/lib/crew-checklist";
 import { allMaterialLineItems } from "@/lib/proposal-pricing";
+import { loadAreaBoard, type AreaBoardData } from "@/lib/data/area-board";
 
 export interface WorkOrderPageData {
   /**
@@ -64,7 +65,10 @@ export interface WorkOrderPageData {
   imageTransform: ProposalSiteImageTransform | null;
   /** What to load and what to do, ticked off as each area gets its after. */
   checklist: CrewChecklist;
+  /** Who is in which area, what stage each is at, and which kits are where. */
+  areaBoard: AreaBoardData;
 }
+
 
 /**
  * Everything the crew sheet needs, for one job.
@@ -171,7 +175,10 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     finishedZoneIds: new Set(photos.filter((photo) => photo.kind === "after" && photo.zone_id).map((photo) => photo.zone_id!)),
   });
 
+  const areaBoard = await loadAreaBoard(jobId, { zones, catalog, photos });
+
   return {
+    areaBoard,
     checklist,
     approvedAdditions,
     photos,

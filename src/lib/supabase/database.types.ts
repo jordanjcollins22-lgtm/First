@@ -3696,6 +3696,44 @@ export interface Database {
           },
         ];
       };
+      job_area_work: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          zone_id: string;
+          profile_id: string;
+          kits: number[];
+          started_at: string;
+          left_at: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_area_work"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          zone_id: string;
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_area_work"]["Row"]>;
+        Relationships: [];
+      };
+      job_area_steps: {
+        Row: {
+          organization_id: string;
+          job_id: string;
+          zone_id: string;
+          step_key: string;
+          done_by: string | null;
+          done_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_area_steps"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          zone_id: string;
+          step_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_area_steps"]["Row"]>;
+        Relationships: [];
+      };
       job_client_reviews: {
         Row: {
           id: string;
