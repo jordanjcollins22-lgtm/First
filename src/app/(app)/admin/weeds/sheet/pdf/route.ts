@@ -36,6 +36,7 @@ import {
   type Block,
   type Geometry,
 } from "@/lib/weed-sheet-layout";
+import { outboundBaseUrl } from "@/lib/base-url";
 
 /**
  * The weed sheet as a file, rather than as a page somebody's browser prints.
@@ -83,7 +84,8 @@ export async function GET(request: Request) {
   const [weeds, organization] = await Promise.all([listWeeds(), getCurrentOrganization()]);
   const shown = weedsFor(weeds, view);
   const geometry = geometryFor(view);
-  const origin = new URL(request.url).origin;
+  // The business's own domain, so a printed QR code never carries a deployment address.
+  const origin = (await outboundBaseUrl()) || new URL(request.url).origin;
 
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${organization.name}, ${view === "client" ? "Common lawn weeds" : "Weed reference"}`);

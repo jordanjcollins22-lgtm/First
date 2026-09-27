@@ -18,6 +18,7 @@ import {
   type Weed,
 } from "@/lib/weeds";
 import { qrSvg } from "@/lib/qr";
+import { outboundBaseUrl } from "@/lib/base-url";
 import Link from "next/link";
 
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -73,8 +74,9 @@ export default async function WeedSheetPage({
 
   // A QR holds a whole address: a phone camera opens a link, it does not
   // know what a bare code means.
+  // The business's own domain, so a printed code never carries a deployment address.
   const host = headerList.get("host") ?? "localhost:3000";
-  const origin = `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
+  const origin = (await outboundBaseUrl()) || `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
 
   const shown = weedsFor(weeds, view);
   const cells: Cell[] = await Promise.all(

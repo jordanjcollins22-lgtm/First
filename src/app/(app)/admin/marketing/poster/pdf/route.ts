@@ -2,6 +2,7 @@ import { checkTabAccess } from "@/lib/data/access";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { posterBookingPath } from "@/lib/neighborhood-poster";
 import { renderSign } from "@/lib/poster-render";
+import { outboundBaseUrl } from "@/lib/base-url";
 
 /**
  * The neighbourhood sign, as sheets the office printer can take.
@@ -30,7 +31,8 @@ export async function GET(request: Request) {
   const download = params.get("download") === "1";
 
   const organization = await getCurrentOrganization();
-  const origin = new URL(request.url).origin;
+  // The business's own domain, so a printed QR code never carries a deployment address.
+  const origin = (await outboundBaseUrl()) || new URL(request.url).origin;
 
   const { bytes } = await renderSign({
     width,

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { log } from "@/lib/log";
+import { outboundBaseUrl } from "@/lib/base-url";
 import { ensureSendingReady } from "@/lib/email/ready";
 import { bookedSequenceKey } from "@/lib/data/evaluation-sequence-send";
 import { expireStaleApprovals, notifyApprovers } from "@/lib/data/outbound-approvals";
@@ -64,7 +65,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sent: 0, note: "No business has client reminders switched on." });
   }
 
-  const origin = new URL(request.url).origin;
+  // The business's own domain, not whichever deployment address the timer
+  // happened to call. Built from the request, this put a
+  // first-xxxx.vercel.app link into every client's reminder.
+  const origin = (await outboundBaseUrl()) || new URL(request.url).origin;
   let sent = 0;
   let skipped = 0;
   let held = 0;
