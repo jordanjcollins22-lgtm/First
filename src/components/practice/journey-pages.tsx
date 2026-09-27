@@ -27,6 +27,7 @@ export function JourneyPages({ steps, missed }: { steps: JourneyStep[]; missed: 
 
   return (
     <>
+      {missed.length > 0 && (
       <section className="sticky top-14 z-10 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm font-semibold">Add the pages for something not done beforehand</p>
@@ -60,6 +61,7 @@ export function JourneyPages({ steps, missed }: { steps: JourneyStep[]; missed: 
           })}
         </div>
       </section>
+      )}
 
       {/* The same frames as the pre-evaluation form's pages: one phone
           screen each, all one size, scrolled inside. */}

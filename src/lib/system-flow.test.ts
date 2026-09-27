@@ -20,6 +20,7 @@ describe("the system map", () => {
       "booking",
       "prep",
       "evaluation",
+      "pricing",
       "proposal",
       "crew-sheet",
       "field",

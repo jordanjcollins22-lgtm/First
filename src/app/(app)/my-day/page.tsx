@@ -7,6 +7,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { isCommenterOnly, isFieldOnly, roleViewFor } from "@/lib/affiliate-roles";
 import { getEvaluatorDay } from "@/lib/data/evaluator-day";
 import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
+import { getPriceApprovals } from "@/lib/data/price-approvals";
+import { PriceApprovals } from "@/components/proposal/price-approvals";
 import { getCrewDay } from "@/lib/data/crew-day";
 import { owedToProfile } from "@/lib/data/owed-to-me";
 import { getLoadout } from "@/lib/data/loadout";
@@ -133,6 +135,8 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
   // An evaluator's day is their visits: the same screen as /evaluate.
   const evaluatorOnly = viewer ? roleViewFor(viewer.roles) === "evaluator" : false;
   const visits = viewer && !isFieldOnly(viewer.roles) ? await getEvaluatorDay().catch(() => null) : null;
+  // Walkthroughs waiting on a price, for whoever prices them.
+  const approvals = viewer && !isFieldOnly(viewer.roles) && !evaluatorOnly ? await getPriceApprovals().catch(() => null) : null;
 
   const day =
     viewer && isFieldOnly(viewer.roles) ? (
@@ -143,6 +147,11 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
       <EvaluatorDayView data={visits} />
     ) : (
       <>
+        {approvals && (
+          <div className="mb-6">
+            <PriceApprovals items={approvals} />
+          </div>
+        )}
         {/* Anybody else with a visit today gets one tap to it. */}
         {visits && visits.today.length > 0 && (
           <Link

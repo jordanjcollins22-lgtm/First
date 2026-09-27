@@ -19,7 +19,7 @@ import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
 import { StartEvaluation } from "@/components/evaluations/start-evaluation";
-import { JourneyPages, type JourneyStep } from "./journey-pages";
+import { JourneyPages, type JourneyStep } from "@/components/practice/journey-pages";
 import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
 import { IntakeForm } from "@/components/intake/intake-form";
 
