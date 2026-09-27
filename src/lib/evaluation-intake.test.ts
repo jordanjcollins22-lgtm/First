@@ -253,3 +253,20 @@ describe("the cleaned-up core pages", () => {
     expect(answers.people.map((p) => p.sees)).toEqual(["all", "scope"]);
   });
 });
+
+describe("photos by part of the yard", () => {
+  it("asks for each part they picked, in the form's order, and the whole property as front, back and sides", async () => {
+    const { photoAreasFor } = await import("./evaluation-intake");
+    expect(photoAreasFor(["back", "front"])).toEqual(["front", "back"]);
+    expect(photoAreasFor(["whole", "foundation"])).toEqual(["front", "back", "sides", "foundation"]);
+    expect(photoAreasFor([])).toEqual(["whole"]);
+  });
+
+  it("keeps which part each photo is of, only for photos it holds", () => {
+    const answers = cleanAnswers({
+      photos: ["job/intake-a.jpg", "job/intake-b.jpg"],
+      photo_areas: { "job/intake-a.jpg": "front", "job/intake-b.jpg": "nowhere", "job/intake-c.jpg": "back" },
+    });
+    expect(answers.photo_areas).toEqual({ "job/intake-a.jpg": "front" });
+  });
+});

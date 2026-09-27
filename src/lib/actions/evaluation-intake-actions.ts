@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { answeredCount, cleanAnswers, MAX_INTAKE_PHOTOS } from "@/lib/evaluation-intake";
+import { answeredCount, cleanAnswers, MAX_INTAKE_PHOTOS, PHOTO_AREAS, PHOTOS_PER_AREA } from "@/lib/evaluation-intake";
 import { log } from "@/lib/log";
 
 type Result = { ok: true; submittedAt: string } | { ok: false; error: string };
@@ -36,7 +36,7 @@ export async function submitEvaluationIntake(input: {
   const form = await formFor(input.token);
   if (!form) return { ok: false, error: "That link has expired or was never ours." };
 
-  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos };
+  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos, photo_areas: form.answers.photo_areas };
   const submittedAt = new Date().toISOString();
 
   const { error } = await form.admin
@@ -70,7 +70,11 @@ export async function addIntakePhoto(formData: FormData): Promise<PhotoResult> {
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a photo first." };
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return { ok: false, error: "That isn't a photo we can open. Try a JPEG or PNG." };
   if (file.size > 950 * 1024) return { ok: false, error: "That photo is too big. Try again, or a smaller one." };
-  if (form.answers.photos.length >= MAX_INTAKE_PHOTOS) return { ok: false, error: `${MAX_INTAKE_PHOTOS} photos is plenty. Remove one to add another.` };
+  const area = String(formData.get("area") ?? "whole");
+  if (!PHOTO_AREAS.some((a) => a.value === area)) return { ok: false, error: "Which part of the yard is that of?" };
+  const inArea = form.answers.photos.filter((p) => (form.answers.photo_areas[p] ?? "whole") === area).length;
+  if (inArea >= PHOTOS_PER_AREA) return { ok: false, error: `${PHOTOS_PER_AREA} photos of this part is plenty. Remove one to add another.` };
+  if (form.answers.photos.length >= MAX_INTAKE_PHOTOS) return { ok: false, error: "That's plenty of photos. Remove one to add another." };
 
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const path = `${form.jobId}/intake-${crypto.randomUUID()}.${ext}`;
@@ -79,7 +83,7 @@ export async function addIntakePhoto(formData: FormData): Promise<PhotoResult> {
     .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false });
   if (uploadError) return { ok: false, error: "Couldn't upload that photo. Check your signal and try again." };
 
-  const answers = { ...form.answers, photos: [...form.answers.photos, path] };
+  const answers = { ...form.answers, photos: [...form.answers.photos, path], photo_areas: { ...form.answers.photo_areas, [path]: area } };
   const { error } = await form.admin.from("evaluation_intakes").update({ answers, updated_at: new Date().toISOString() }).eq("id", form.id);
   if (error) {
     await form.admin.storage.from("job-photos").remove([path]);
@@ -95,7 +99,9 @@ export async function removeIntakePhoto(input: { token: string; path: string }):
   const form = await formFor(input.token);
   if (!form) return { ok: false, error: "That link has expired or was never ours." };
   if (!form.answers.photos.includes(input.path)) return { ok: true };
-  const answers = { ...form.answers, photos: form.answers.photos.filter((p) => p !== input.path) };
+  const { [input.path]: _removed, ...photo_areas } = form.answers.photo_areas;
+  void _removed;
+  const answers = { ...form.answers, photos: form.answers.photos.filter((p) => p !== input.path), photo_areas };
   const { error } = await form.admin.from("evaluation_intakes").update({ answers, updated_at: new Date().toISOString() }).eq("id", form.id);
   if (error) return { ok: false, error: "Couldn't remove that photo. Try again in a moment." };
   await form.admin.storage.from("job-photos").remove([input.path]);
@@ -111,7 +117,7 @@ export async function removeIntakePhoto(input: { token: string; path: string }):
 export async function saveIntakeProgress(input: { token: string; answers: unknown }): Promise<{ ok: boolean }> {
   const form = await formFor(input.token);
   if (!form) return { ok: false };
-  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos };
+  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos, photo_areas: form.answers.photo_areas };
   const { error } = await form.admin.from("evaluation_intakes").update({ answers, updated_at: new Date().toISOString() }).eq("id", form.id);
   return { ok: !error };
 }

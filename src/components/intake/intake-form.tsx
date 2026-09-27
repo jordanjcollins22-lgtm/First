@@ -15,7 +15,6 @@ import {
   detailQuestionsFor,
   INTAKE_QUESTIONS,
   MAX_INTAKE_PEOPLE,
-  MAX_INTAKE_PHOTOS,
   asksForPeople,
   notesShown,
   type DetailQuestion,
@@ -27,6 +26,9 @@ import {
   PERSON_SEES,
   servicesBySeason,
   SEASON_LABEL,
+  photoAreasFor,
+  PHOTO_AREAS,
+  PHOTOS_PER_AREA,
 } from "@/lib/evaluation-intake";
 import { addIntakePhoto, removeIntakePhoto, saveIntakeProgress, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
 import { shrinkImage } from "@/lib/shrink-image";
@@ -40,7 +42,7 @@ type Photo = { path: string; url: string };
 export type Step =
   | { key: string; kind: "main"; question: IntakeQuestion }
   | { key: string; kind: "detail"; question: DetailQuestion }
-  | { key: "photos"; kind: "photos" }
+  | { key: string; kind: "photos"; area: string; first: boolean; last: boolean }
   | { key: "people"; kind: "people" }
   | { key: "last"; kind: "last" };
 
@@ -63,7 +65,10 @@ export function stepsFor(answers: IntakeAnswers): Step[] {
     main("services"),
     main("areas"),
     ...details.map((question): Step => ({ key: `d:${question.id}`, kind: "detail", question })),
-    { key: "photos", kind: "photos" },
+    // A page of photos for each part of the yard they picked, one at a time.
+    ...photoAreasFor(answers.areas).map(
+      (area, i, all): Step => ({ key: `photos:${area}`, kind: "photos", area, first: i === 0, last: i === all.length - 1 })
+    ),
     main("looks"),
     main("concerns"),
     main("budget"),
@@ -82,7 +87,10 @@ function filled(value: string | string[] | undefined): boolean {
 function answered(step: Step, answers: IntakeAnswers, photos: Photo[]): boolean {
   if (step.kind === "main") return filled(answers[step.question.key]);
   if (step.kind === "detail") return filled(answers.details[step.question.id]);
-  if (step.kind === "photos") return photos.length > 0 || filled(answers.details.yard);
+  if (step.kind === "photos") {
+    const here = photos.some((p) => (answers.photo_areas[p.path] ?? "whole") === step.area);
+    return here || (step.last && filled(answers.details.yard));
+  }
   if (step.kind === "people") return answers.people.some((p) => p.name || p.contact);
   return false;
 }
@@ -294,8 +302,26 @@ export function IntakeForm({
 
         {step.kind === "photos" && (
           <>
-            <Photos token={token} photos={photos} setPhotos={setPhotos} disabled={pending} demo={demo} />
-            <YardNotes answers={answers} setAnswers={setAnswers} disabled={pending} />
+            <Photos
+              token={token}
+              area={step.area}
+              picked={step.first ? photoAreasFor(answers.areas) : null}
+              photos={photos}
+              photoAreas={answers.photo_areas}
+              setPhotos={setPhotos}
+              onArea={(path, area) =>
+                setAnswers((a) => {
+                  const photo_areas = { ...a.photo_areas };
+                  if (area) photo_areas[path] = area;
+                  else delete photo_areas[path];
+                  return { ...a, photo_areas };
+                })
+              }
+              disabled={pending}
+              demo={demo}
+            />
+            {/* Asked once, after the last part of the yard. */}
+            {step.last && <YardNotes answers={answers} setAnswers={setAnswers} disabled={pending} />}
           </>
         )}
 
@@ -779,14 +805,25 @@ function FrequentQuestions() {
  */
 function Photos({
   token,
+  area,
+  picked,
   photos,
+  photoAreas,
   setPhotos,
+  onArea,
   disabled,
   demo = false,
 }: {
   token: string;
+  /** The part of the yard this page is for. */
+  area: string;
+  /** Every part they picked, said on the first photo page. Null on the others. */
+  picked: string[] | null;
   photos: Photo[];
+  photoAreas: Record<string, string>;
   setPhotos: React.Dispatch<React.SetStateAction<Photo[]>>;
+  /** Records which part of the yard a photo is of, or forgets it. */
+  onArea: (path: string, area: string | null) => void;
   disabled: boolean;
   /** Shown on the phone only, never uploaded. */
   demo?: boolean;
@@ -795,7 +832,9 @@ function Photos({
   const camera = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const room = MAX_INTAKE_PHOTOS - photos.length;
+  const here = photos.filter((p) => (photoAreas[p.path] ?? "whole") === area);
+  const room = PHOTOS_PER_AREA - here.length;
+  const place = PHOTO_AREAS.find((a) => a.value === area) ?? PHOTO_AREAS[PHOTO_AREAS.length - 1];
 
   async function add(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -806,11 +845,13 @@ function Photos({
         if (demo) {
           const url = URL.createObjectURL(file);
           setPhotos((all) => [...all, { path: url, url }]);
+          onArea(url, area);
           continue;
         }
         const small = await shrinkImage(file, 1600, 0.8);
         const form = new FormData();
         form.set("token", token);
+        form.set("area", area);
         form.set("file", small);
         const result = await addIntakePhoto(form);
         if (!result.ok) {
@@ -818,6 +859,7 @@ function Photos({
           break;
         }
         setPhotos((all) => [...all, { path: result.path, url: result.url }]);
+        onArea(result.path, area);
       }
     } finally {
       setBusy(false);
@@ -828,45 +870,55 @@ function Photos({
 
   async function remove(path: string) {
     setError(null);
-    if (demo) return setPhotos((all) => all.filter((p) => p.path !== path));
-    const result = await removeIntakePhoto({ token, path });
-    if (!result.ok) return setError(result.error);
+    if (!demo) {
+      const result = await removeIntakePhoto({ token, path });
+      if (!result.ok) return setError(result.error);
+    }
     setPhotos((all) => all.filter((p) => p.path !== path));
+    onArea(path, null);
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-xl font-semibold leading-snug">Show us the yard</h2>
+      {picked && picked.length > 1 && (
+        <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm">
+          You picked {picked.map((v) => PHOTO_AREAS.find((a) => a.value === v)?.label.toLowerCase() ?? v).join(", ").replace(/, ([^,]*)$/, " and $1")}.
+          We&apos;ll go through them one at a time.
+        </p>
+      )}
+      <h2 className="text-xl font-semibold leading-snug">Show us {place.ask}</h2>
       <p className="-mt-1 text-sm text-muted-foreground">
-        A photo of each area lets us price it properly, often before we arrive. Up to {MAX_INTAKE_PHOTOS}.
+        Take or upload up to {PHOTOS_PER_AREA} photos of {place.ask}. It lets us price it properly, often before we arrive.
       </p>
-      <div className="grid grid-cols-3 gap-2">
-        {photos.map((p) => (
-          <div key={p.path} className="relative aspect-square overflow-hidden rounded-lg bg-muted">
-            {/* Signed links to a private bucket, so a plain img rather than the image optimiser. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={p.url} alt="" className="h-full w-full object-cover" />
-            <button
-              type="button"
-              aria-label="Remove this photo"
-              disabled={disabled || busy}
-              onClick={() => remove(p.path)}
-              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ))}
-        {busy && (
-          <div className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            Adding
-          </div>
-        )}
-      </div>
+      {(here.length > 0 || busy) && (
+        <div className="grid grid-cols-3 gap-2">
+          {here.map((p) => (
+            <div key={p.path} className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+              {/* Signed links to a private bucket, so a plain img rather than the image optimiser. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                aria-label="Remove this photo"
+                disabled={disabled || busy}
+                onClick={() => remove(p.path)}
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {busy && (
+            <div className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              Adding
+            </div>
+          )}
+        </div>
+      )}
       {/* Two ways in: the camera, for standing in the yard now, and the
           photo library, for pictures they already have. */}
-      {room > 0 && (
+      {room > 0 ? (
         <div className="grid grid-cols-2 gap-2">
           <Button type="button" variant="outline" className="h-12" disabled={disabled || busy} onClick={() => camera.current?.click()}>
             <Camera className="mr-1.5 h-4 w-4" /> Take a photo
@@ -875,6 +927,8 @@ function Photos({
             <ImagePlus className="mr-1.5 h-4 w-4" /> Choose photos
           </Button>
         </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">That&apos;s {PHOTOS_PER_AREA} of {place.ask}. Tap Next for the next part.</p>
       )}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => add(e.target.files)} />
       <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => add(e.target.files)} />

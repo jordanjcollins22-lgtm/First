@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { answeredCount, intakeHeadline, summarizeDetails, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { answeredCount, intakeHeadline, PHOTO_AREAS, summarizeDetails, summarizeIntake, talkingPoints, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { intakePath } from "@/lib/data/evaluation-intake";
 import { dateShort } from "@/lib/time-zone";
 
@@ -75,14 +75,26 @@ export function IntakeSummary({
         </div>
       )}
       {photos.length > 0 && (
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-          {photos.map((p) => (
-            <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-lg bg-muted">
-              {/* Signed links to a private bucket. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt="Their photo of the property" className="h-full w-full object-cover" />
-            </a>
-          ))}
+        // By the part of the yard they were taken of, the way the form asked.
+        <div className="flex flex-col gap-2">
+          {PHOTO_AREAS.map((area) => {
+            const here = photos.filter((p) => (answers.photo_areas?.[p.path] ?? "whole") === area.value);
+            if (here.length === 0) return null;
+            return (
+              <div key={area.value}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{area.label}</p>
+                <div className="mt-1 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {here.map((p) => (
+                    <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-lg bg-muted">
+                      {/* Signed links to a private bucket. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt={`Their photo of the ${area.label.toLowerCase()}`} className="h-full w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       {points.length > 0 && (

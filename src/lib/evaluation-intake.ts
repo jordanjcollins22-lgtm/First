@@ -36,14 +36,14 @@ export interface IntakeOption {
 export type IntakeSection = "work" | "style" | "decide" | "ask";
 
 export interface IntakeQuestion {
-  key: Exclude<keyof IntakeAnswers, "details" | "photos" | "people">;
+  key: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people">;
   section: IntakeSection;
   title: string;
   help?: string;
   kind: IntakeKind;
   options?: IntakeOption[];
   /** For a chip question, the free-text field that goes with it. */
-  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos" | "people">;
+  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people">;
   /**
    * When the notes box shows: once any chip is picked, or once one of these
    * is. Always, when not given. A box nobody needs is one more thing to skip.
@@ -69,6 +69,8 @@ export interface IntakeAnswers {
   details: Record<string, string | string[]>;
   /** Storage paths of the photos they sent, in the job-photos bucket. */
   photos: string[];
+  /** Which part of the yard each photo is of, by its path: front, back, sides, foundation or whole. */
+  photo_areas: Record<string, string>;
   /** Everybody else in the decision, with how to reach them. */
   people: IntakePerson[];
 }
@@ -532,8 +534,32 @@ export function detailQuestionsFor(services: string[], details?: IntakeAnswers["
   );
 }
 
-/** Most photos one form keeps. Enough for every side of a house. */
-export const MAX_INTAKE_PHOTOS = 8;
+/** Photos for each part of the yard. Enough to see it from a couple of angles. */
+export const PHOTOS_PER_AREA = 3;
+
+/** The parts of the yard a photo can be of, as the photo pages ask for them. */
+export const PHOTO_AREAS: { value: string; label: string; ask: string }[] = [
+  { value: "front", label: "Front yard", ask: "the front yard" },
+  { value: "back", label: "Back yard", ask: "the back yard" },
+  { value: "sides", label: "Side yards", ask: "the side yards" },
+  { value: "foundation", label: "Around the house", ask: "the beds and ground around the house" },
+  { value: "whole", label: "The property", ask: "the property" },
+];
+
+/**
+ * The parts of the yard to ask photos of, one page each, from what they
+ * picked on "Which parts of the property?". The whole property means the
+ * front, the back and the sides. Nothing picked asks for the property as a
+ * whole.
+ */
+export function photoAreasFor(areas: string[]): string[] {
+  const wanted = new Set(areas.includes("whole") ? [...areas.filter((a) => a !== "whole"), "front", "back", "sides"] : areas);
+  const ordered = PHOTO_AREAS.map((a) => a.value).filter((v) => v !== "whole" && wanted.has(v));
+  return ordered.length > 0 ? ordered : ["whole"];
+}
+
+/** Most photos one form keeps: every part of the yard, full. */
+export const MAX_INTAKE_PHOTOS = PHOTOS_PER_AREA * (PHOTO_AREAS.length - 1);
 
 // ---------------------------------------------------------------------------
 // Answering what they are worried about
@@ -677,6 +703,7 @@ export function emptyAnswers(): IntakeAnswers {
     questions: "",
     details: {},
     photos: [],
+    photo_areas: {},
     people: [],
   };
 }
@@ -744,6 +771,12 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
   out.photos = Array.isArray(raw.photos)
     ? [...new Set(raw.photos.filter((p): p is string => typeof p === "string" && /^[\w-]+\/intake-[\w-]+\.(jpg|png|webp)$/.test(p)))].slice(0, MAX_INTAKE_PHOTOS)
     : [];
+  const areaOf = (raw.photo_areas && typeof raw.photo_areas === "object" ? raw.photo_areas : {}) as Record<string, unknown>;
+  const known = new Set(PHOTO_AREAS.map((a) => a.value));
+  for (const path of out.photos) {
+    const area = areaOf[path];
+    if (typeof area === "string" && known.has(area)) out.photo_areas[path] = area;
+  }
   return out;
 }
 
