@@ -229,12 +229,6 @@ export default async function EvaluatorJourneyPage() {
       what: "Just the site map, set up from their pre-eval. Walk it, add anything more and the details, then Walkthrough complete.",
       screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
     },
-    {
-      key: "submitted",
-      title: "Walkthrough complete",
-      what: "The site map goes to the account manager to price and send. Nothing goes to the client yet.",
-      screen: <EvaluatorDayView data={dayWith("submitted")} preview />,
-    },
   ];
 
   return (

@@ -62,7 +62,7 @@ import { updateEvaluationStatus } from "@/lib/actions/job-actions";
 import { ExpectationsCard } from "@/components/canvas/expectations-card";
 import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
-import { groundRegions, groundToBoard, type ImageGeo, type LotData } from "@/lib/lot-map";
+import { centroidOf, groundRegions, groundToBoard, viewBearing, type ImageGeo, type LotData } from "@/lib/lot-map";
 import { isSeededZone, type ZoneSeed } from "@/lib/evaluation-visit";
 import { countyLotForJob } from "@/lib/actions/lot-actions";
 
@@ -541,12 +541,16 @@ export function ImageCanvasBoard({
           // by the debounced database autosave below, instead of being ignored.
           if (initialLat != null && initialLng != null) {
             loadedRef.current = true;
-            await handleSelectSatelliteLocation({
-              id: "confirmed-property",
-              fullAddress: initialAddress ?? "",
-              lat: initialLat,
-              lng: initialLng,
-            });
+            const lot = await countyLotForJob(jobId).catch(() => null);
+            await handleSelectSatelliteLocation(
+              {
+                id: "confirmed-property",
+                fullAddress: initialAddress ?? "",
+                lat: initialLat,
+                lng: initialLng,
+              },
+              lot
+            );
           }
         }
       } catch {
@@ -572,7 +576,7 @@ export function ImageCanvasBoard({
       loadedRef.current = true;
       if (initialLat == null || initialLng == null) return;
       const timer = setTimeout(() => {
-        void handleSelectSatelliteLocation({ id: "practice", fullAddress: initialAddress ?? "", lat: initialLat, lng: initialLng });
+        void handleSelectSatelliteLocation({ id: "practice", fullAddress: initialAddress ?? "", lat: initialLat, lng: initialLng }, demoLot);
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -752,6 +756,24 @@ export function ImageCanvasBoard({
     }, 800);
     return () => clearTimeout(timer);
   }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed, imageGeo]);
+
+  // The house and the property line from the county, on a satellite photo
+  // that has none yet: nobody needs to tap the house or trace the lot when
+  // the county already has both.
+  useEffect(() => {
+    if (!countyLot || !imageGeo || !image || propertyLine.length > 0) return;
+    const onBoard = { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width };
+    const ring = countyLot.ring.slice(0, -1).map((p) => groundToBoard(p, imageGeo, onBoard));
+    if (ring.length < 3) return;
+    const house = countyLot.footprint ? groundToBoard(centroidOf(countyLot.footprint), imageGeo, onBoard) : null;
+    const timer = setTimeout(() => {
+      setPropertyLine(ring);
+      if (house) setHouseOutline([house]);
+      setHouseNeedsConfirmation(false);
+      setOrientConfirmed(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [countyLot, imageGeo, image, propertyLine.length]);
 
   // The on-site set-up, as zones. Waits for the photo and the county, so a
   // part of the yard is drawn where it is on the ground; with no county lot
@@ -1010,7 +1032,7 @@ export function ImageCanvasBoard({
     });
   }
 
-  async function handleSelectSatelliteLocation(suggestion: GeocodeSuggestion) {
+  async function handleSelectSatelliteLocation(suggestion: GeocodeSuggestion, lot: LotData | null = null) {
     setSatelliteError(null);
     setSatelliteLoading(true);
     try {
@@ -1018,16 +1040,23 @@ export function ImageCanvasBoard({
 
       // Turn the map before fetching rather than turning the photo after.
       // A photo requested at a bearing fills its frame; a photo rotated on
-      // the canvas has white corners where the yard should be.
+      // the canvas has white corners where the yard should be. With the
+      // county's lot the street side is known, the same way the client's
+      // pre-eval map is turned, so nobody is asked which way is the front.
       let turned = 0;
-      try {
-        const guess = autoBearing(point, await nearbyRoads(point));
-        if (guess != null) turned = guess;
-        setAutoTurned(guess);
-      } catch {
-        // No street data is not a failure — it just means the evaluator
-        // turns it themselves, which is the next thing they are asked to do.
-        setAutoTurned(null);
+      if (lot) {
+        turned = viewBearing(lot);
+        setAutoTurned(turned);
+      } else {
+        try {
+          const guess = autoBearing(point, await nearbyRoads(point));
+          if (guess != null) turned = guess;
+          setAutoTurned(guess);
+        } catch {
+          // No street data is not a failure — it just means the evaluator
+          // turns it themselves, which is the next thing they are asked to do.
+          setAutoTurned(null);
+        }
       }
 
       const { blob, realWidthFeet, geo } = await fetchSatelliteImageBlob(
@@ -1041,16 +1070,24 @@ export function ImageCanvasBoard({
       setMapZoom(BASE_SATELLITE_ZOOM);
       setOrigin(point);
       setBearing(turned);
-      setOrientConfirmed(false);
       setKeepCentered(true);
       setAddress(suggestion.fullAddress);
       setShowSatelliteSearch(false);
-      // The satellite photo is centered on the geocoded address, which for a
-      // residential lookup is almost always the house itself — pre-mark it
-      // there and just ask the evaluator to confirm instead of making them
-      // tap it manually every time.
-      setHouseOutline([{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }]);
-      setHouseNeedsConfirmation(true);
+      if (lot) {
+        // Front down, background locked. The house and the property line
+        // are put on from the county once the photo is drawn (see below).
+        setOrientConfirmed(true);
+        setLocked(true);
+        setHouseNeedsConfirmation(false);
+      } else {
+        setOrientConfirmed(false);
+        // The satellite photo is centered on the geocoded address, which for a
+        // residential lookup is almost always the house itself — pre-mark it
+        // there and just ask the evaluator to confirm instead of making them
+        // tap it manually every time.
+        setHouseOutline([{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }]);
+        setHouseNeedsConfirmation(true);
+      }
     } catch (err) {
       setSatelliteError(err instanceof Error ? err.message : "Couldn't load a satellite photo.");
     } finally {
