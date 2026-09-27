@@ -26,7 +26,7 @@ const FOLLOW_UPS = { beds_add: ["mulch", "stone", "plants"], lawn_need: ["patch"
  * shown; the pages a service adds appear when that service is picked at the
  * top, each marked with what added it.
  */
-export function AllPages({ lot: shopLot }: { lot: LotData | null }) {
+export function AllPages({ lot: shopLot, businessPhone = null }: { lot: LotData | null; businessPhone?: string | null }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [someoneElse, setSomeoneElse] = useState(false);
   const [demo, setDemo] = useState<DemoAddress | null>(null);
@@ -129,6 +129,27 @@ export function AllPages({ lot: shopLot }: { lot: LotData | null }) {
             </li>
           );
         })}
+        {/* What they see once they press Send. */}
+        <li className="flex flex-col gap-1.5">
+          <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            After they send
+            <span className="rounded-full bg-muted px-2 py-0.5 normal-case tracking-normal">Everyone</span>
+          </p>
+          <div className="relative flex h-[640px] flex-col overflow-y-auto rounded-2xl border border-border bg-background px-4 pt-4 shadow-sm">
+            <IntakeForm
+              key={`sent:${signature}`}
+              token={"0".repeat(24)}
+              initial={answers}
+              initialPhotos={[]}
+              submittedAt={new Date(0).toISOString()}
+              together={false}
+              businessPhone={businessPhone}
+              demo
+              lot={lot}
+              showStaffPrice={false}
+            />
+          </div>
+        </li>
       </ol>
     </>
   );

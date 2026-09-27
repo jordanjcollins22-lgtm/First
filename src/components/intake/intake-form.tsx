@@ -132,6 +132,7 @@ export function IntakeForm({
   demo = false,
   lot = null,
   startAt,
+  showStaffPrice = true,
 }: {
   token: string;
   initial: IntakeAnswers;
@@ -147,6 +148,8 @@ export function IntakeForm({
   lot?: LotData | null;
   /** Open on this page, by its key: for the owner's page-by-page preview. */
   startAt?: string;
+  /** The demo's staff-only phone quote under the sent page. Off in the page-by-page preview. */
+  showStaffPrice?: boolean;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswers>(initial);
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
@@ -210,19 +213,46 @@ export function IntakeForm({
   }
 
   if (done && !editing) {
+    if (together) {
+      return (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 text-center">
+          <CheckCircle2 className="h-10 w-10 text-primary" />
+          <p className="text-lg font-semibold">Saved</p>
+          <p className="text-sm text-muted-foreground">We can get on with the walk.</p>
+        </div>
+      );
+    }
     return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 text-center">
-        <CheckCircle2 className="h-10 w-10 text-primary" />
-        <p className="text-lg font-semibold">Got it, thank you</p>
-        <p className="text-sm text-muted-foreground">
-          {together
-            ? "Saved. We can get on with the walk."
-            : "We have read it and will come ready. If anything changes before the visit, reply to your booking email."}
-        </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 text-center">
+          <CheckCircle2 className="h-10 w-10 text-primary" />
+          <p className="text-lg font-semibold">We&apos;ve received your pre-evaluation form</p>
+          <p className="text-sm text-muted-foreground">Thank you. We&apos;ll go through your answers and photos before your evaluation.</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-left text-sm">
+          <p className="font-semibold">What happens next</p>
+          <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
+            <li>
+              We may call you before your evaluation to go over your price and proposal, if we&apos;re able to put one together from
+              what you sent.
+            </li>
+            <li>Either way, we&apos;ll still walk the property with you at your evaluation, and you&apos;ll get a written proposal with the exact price.</li>
+            <li>If anything changes before then, tap Change an answer below, or reply to your booking email.</li>
+            {businessPhone && (
+              <li>
+                Questions before your visit? Call us at{" "}
+                <a href={`tel:${businessPhone}`} className="font-medium text-foreground underline-offset-2 hover:underline">
+                  {businessPhone}
+                </a>
+                .
+              </li>
+            )}
+          </ul>
+        </div>
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
+          variant="outline"
+          className="self-center"
           onClick={() => {
             setAt(steps[0].key);
             setEditing(true);
@@ -230,7 +260,7 @@ export function IntakeForm({
         >
           Change an answer
         </Button>
-        {demo && <InstantPriceCard answers={answers} lot={lot} />}
+        {demo && showStaffPrice && <InstantPriceCard answers={answers} lot={lot} />}
       </div>
     );
   }

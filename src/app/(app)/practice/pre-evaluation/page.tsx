@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { listBusinessLocations } from "@/lib/data/locations";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 import { fetchLotFromCounty } from "@/lib/data/lot-map";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { AllPages } from "./all-pages";
@@ -22,7 +23,7 @@ export default async function PreEvaluationPreviewPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("evaluations", "/my-day");
 
-  const places = await listBusinessLocations().catch(() => []);
+  const [places, organization] = await Promise.all([listBusinessLocations().catch(() => []), getCurrentOrganization().catch(() => null)]);
   const shop = places.find((p) => /shop/i.test(p.name) && p.lat != null && p.lng != null);
   const lot = shop ? await fetchLotFromCounty(shop.lat, shop.lng, shop.address ?? "").catch(() => null) : null;
 
@@ -42,7 +43,7 @@ export default async function PreEvaluationPreviewPage() {
           .
         </p>
       </header>
-      <AllPages lot={lot} />
+      <AllPages lot={lot} businessPhone={organization?.business_phone ?? null} />
     </div>
   );
 }
