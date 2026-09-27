@@ -154,6 +154,15 @@ export const SYSTEM_FLOW: SystemStage[] = [
         href: null,
         status: "live",
       },
+      {
+        key: "client-messages",
+        title: "Emails and texts to the client",
+        line: "Everything a client gets without anybody typing it, in order: booking, the visit, the proposal, the job, the invoice. Each as it arrives.",
+        // The business's own wording and switches, with a sample client.
+        href: "/practice/messages",
+        status: "partly",
+        gap: "Invoice reminders are switched on but nothing sends them yet, and no texts are switched on.",
+      },
     ],
   },
 ];
