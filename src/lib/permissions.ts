@@ -122,6 +122,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/practice/pre-evaluation":
     "Every page of the pre-evaluation form side by side, with sample answers and nothing saved. Checks " +
     "the evaluations tab itself, like the other practice pages.",
+  "/practice/proposal/client":
+    "The client's proposal page for the sample job, as a client sees it, in preview. What Review proposal opens " +
+    "in the account manager's preview. Records and sends nothing, and checks the evaluations tab itself.",
   "/practice/proposal":
     "Making a proposal from a sample site map, to try it. Saves nothing and emails nobody, and checks the " +
     "evaluations tab itself, like the site map practice.",

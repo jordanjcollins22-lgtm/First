@@ -58,8 +58,8 @@ export default async function AccountManagerJourneyPage() {
     stage: "price",
     // The rate card's figure, or a round sample one when the rate card has nothing to go on.
     totalCents: breakdown.priceCents > 0 ? breakdown.priceCents : 245000,
-    // The sample proposal, made from a sample site map, for Review proposal.
-    proposalHref: "/practice/proposal",
+    // The sample job's proposal as the client sees it, for Review proposal.
+    proposalHref: "/practice/proposal/client",
     breakdown,
     crewRateCents: catalog.crewCostPerHourCents,
     markup:

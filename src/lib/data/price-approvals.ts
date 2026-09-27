@@ -90,7 +90,9 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
     submittedAt: r.job.evaluation_submitted_at ?? r.generated_at,
     stage: r.status === "needs_approval" ? "price" : "send",
     totalCents: Math.round((Number(r.total_cost ?? 0) - Number(r.discount_amount ?? 0)) * 100),
-    proposalHref: r.token ? proposalPath(r.token) : null,
+    // The client's own page, in preview: it shows before it is sent, with a
+    // banner saying so, and the office opening it is not counted as the client.
+    proposalHref: r.token ? `${proposalPath(r.token)}?preview=1` : null,
     breakdown: priceBreakdown(zonesByJob.get(r.job_id) ?? [], catalog),
     crewRateCents: catalog.crewCostPerHourCents,
     markup,
