@@ -563,6 +563,8 @@ export interface CanvasDesignRow {
   image_real_width_feet: number | null;
   /** Whether the image was uploaded by the user (vs. fetched from satellite). */
   image_uploaded?: boolean;
+  /** Where the satellite photo was taken from: {lng, lat, zoom, bearing, request, kept}. */
+  image_geo?: unknown;
   /** Notes pinned to points on the picture. */
   marks?: CanvasMark[];
   locked: boolean;

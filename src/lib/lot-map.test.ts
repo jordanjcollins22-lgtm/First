@@ -92,3 +92,34 @@ describe("drawing it", () => {
     expect(layout.regions.front[0]).toHaveLength(4);
   });
 });
+
+describe("onto the site map", () => {
+  const geo = { lng: LNG, lat: LAT, zoom: 19, bearing: 0, request: 1280, kept: 1060 };
+  const image = { x: 500, y: 350, scale: 0.5, rotation: 0, elementWidth: 2560 };
+
+  it("puts the photo's centre at the photo's middle on the board", async () => {
+    const { groundToBoard } = await import("./lot-map");
+    expect(groundToBoard([LNG, LAT], geo, image)).toEqual({ x: 500, y: 350 });
+  });
+
+  it("puts north up, and turns with the map's bearing and the photo's rotation", async () => {
+    const { groundToBoard } = await import("./lot-map");
+    const north = groundToBoard(at(0, 20), geo, image);
+    expect(north.y).toBeLessThan(350);
+    expect(Math.abs(north.x - 500)).toBeLessThan(0.01);
+    // A map fetched with east at the top: a point to the east is above.
+    const east = groundToBoard(at(20, 0), { ...geo, bearing: 90 }, image);
+    expect(east.y).toBeLessThan(350);
+    expect(Math.abs(east.x - 500)).toBeLessThan(0.01);
+    // Turning the photo a quarter clockwise takes north round to the right.
+    const turned = groundToBoard(at(0, 20), geo, { ...image, rotation: 90 });
+    expect(turned.x).toBeGreaterThan(500);
+  });
+
+  it("scales with the photo", async () => {
+    const { groundToBoard } = await import("./lot-map");
+    const small = groundToBoard(at(0, 20), geo, image);
+    const big = groundToBoard(at(0, 20), geo, { ...image, scale: 1 });
+    expect(350 - big.y).toBeCloseTo(2 * (350 - small.y), 5);
+  });
+});

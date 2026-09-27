@@ -4,6 +4,7 @@ import { revalidateJobViews } from "@/lib/revalidate-job";
 
 import { createClient } from "@/lib/supabase/server";
 import type { CanvasMark } from "@/lib/canvas-marks";
+import type { ImageGeo } from "@/lib/lot-map";
 import { isEmptyDesign, wouldBlank, type DesignShape } from "@/lib/design-safety";
 
 /** How many things are in a jsonb column that should hold a list. */
@@ -21,6 +22,8 @@ export interface SaveCanvasDesignInput {
   imageRealWidthFeet: number | null;
   /** Compass degrees at the top of the satellite photo. */
   imageBearing: number;
+  /** Where the satellite photo was taken from, for drawing the county line. Null for an upload. */
+  imageGeo?: ImageGeo | null;
   /** Whether a person has said the house is the right way round. */
   orientationConfirmed: boolean;
   /** Whether the image was uploaded by the user (vs. fetched from satellite). */
@@ -96,6 +99,7 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
       image_rotation: input.imageRotation,
       image_real_width_feet: input.imageRealWidthFeet,
       image_bearing: input.imageBearing,
+      ...(input.imageGeo !== undefined ? { image_geo: input.imageGeo } : {}),
       orientation_confirmed: input.orientationConfirmed,
       image_uploaded: input.imageUploaded,
       locked: input.locked,

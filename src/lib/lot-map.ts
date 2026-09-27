@@ -271,3 +271,53 @@ export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "width"
 export function pathOf(points: Px[]): string {
   return points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + " Z";
 }
+
+/* ------------------------------------------------ onto the site map board */
+
+/** Where a site map's satellite photo was taken from. */
+export interface ImageGeo {
+  lng: number;
+  lat: number;
+  /** The Mapbox zoom the photo was fetched at. */
+  zoom: number;
+  /** Compass degrees at the top of the photo. */
+  bearing: number;
+  /** The square size asked for, in map pixels. */
+  request: number;
+  /** The height kept after the attribution strip was trimmed, split top and bottom. */
+  kept: number;
+}
+
+/** How the photo sits on the board: its middle, its scale and its turn. */
+export interface BoardImage {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  /** The photo's own width in pixels (a 2x fetch is twice the request). */
+  elementWidth: number;
+}
+
+/**
+ * A point on the ground to a point on the board. The photo's pixels come
+ * from the map (Web Mercator at the zoom and bearing it was fetched at), and
+ * the board draws the photo moved, scaled and turned; this undoes both, so
+ * the county's line stays on the ground whatever the evaluator does to the
+ * photo.
+ */
+export function groundToBoard(point: LngLat, geo: ImageGeo, image: BoardImage): { x: number; y: number } {
+  const a = worldPx(point, geo.zoom);
+  const c = worldPx([geo.lng, geo.lat], geo.zoom);
+  const dx = a[0] - c[0];
+  const dy = a[1] - c[1];
+  // The map was turned so the bearing is at the top.
+  const b = (-geo.bearing * Math.PI) / 180;
+  const mx = dx * Math.cos(b) - dy * Math.sin(b);
+  const my = dx * Math.sin(b) + dy * Math.cos(b);
+  // Map pixels to the photo's pixels, then onto the board.
+  const ratio = image.elementWidth / geo.request;
+  const ex = mx * ratio * image.scale;
+  const ey = my * ratio * image.scale;
+  const r = (image.rotation * Math.PI) / 180;
+  return { x: image.x + ex * Math.cos(r) - ey * Math.sin(r), y: image.y + ex * Math.sin(r) + ey * Math.cos(r) };
+}

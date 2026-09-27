@@ -2542,6 +2542,7 @@ export interface Database {
           orientation_confirmed: boolean;
           image_real_width_feet: number | null;
           image_uploaded: boolean;
+          image_geo: Json | null;
           locked: boolean;
           property_line: Json;
           marks: Json;

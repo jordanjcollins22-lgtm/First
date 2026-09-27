@@ -62,6 +62,8 @@ import { updateEvaluationStatus } from "@/lib/actions/job-actions";
 import { ExpectationsCard } from "@/components/canvas/expectations-card";
 import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
+import { groundToBoard, type ImageGeo, type LotData } from "@/lib/lot-map";
+import { countyLotForJob } from "@/lib/actions/lot-actions";
 
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
 const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
@@ -69,6 +71,9 @@ const EARTH_METERS_PER_TILE_PIXEL_AT_EQUATOR_Z0 = 156543.03392;
 /** Mapbox's limit on a static image's side, and what we ask for. Square, so
  * there is photo under the corners whichever way it is turned. */
 const SATELLITE_REQUEST_SIZE = 1280;
+
+/** The strip trimmed off for Mapbox's attribution, split top and bottom. */
+const SATELLITE_PADDING = 220;
 
 /** How close in the photo was before it had to be scaled up to cover the
  * corners. The fetch backs off from here by exactly that scaling, so the
@@ -203,6 +208,10 @@ export function ImageCanvasBoard({
    * genuinely wider picture, which is the only way to see past its edge. */
   const [mapZoom, setMapZoom] = useState(BASE_SATELLITE_ZOOM);
   const [bearing, setBearing] = useState(0);
+  // Where the satellite photo was taken from, so the county's property line
+  // and the house can be drawn on the ground. Null for an uploaded photo.
+  const [imageGeo, setImageGeo] = useState<ImageGeo | null>(null);
+  const [countyLot, setCountyLot] = useState<LotData | null>(null);
   const [orientConfirmed, setOrientConfirmed] = useState(true);
   const [keepCentered, setKeepCentered] = useState(true);
   const [autoTurned, setAutoTurned] = useState<number | null>(null);
@@ -264,6 +273,38 @@ export function ImageCanvasBoard({
       ctx.rotate((rotation * Math.PI) / 180);
       ctx.drawImage(element, -w / 2, -h / 2, w, h);
       ctx.restore();
+
+      // The county's property line and the house, on the ground. Worked out
+      // from the photo every time it is drawn, so they stay put however the
+      // photo is moved, turned or zoomed.
+      if (countyLot && imageGeo) {
+        const onBoard = { x, y, scale, rotation, elementWidth: element.width };
+        const trace = (ring: [number, number][]) => {
+          ctx.beginPath();
+          ring.forEach((p, i) => {
+            const b = groundToBoard(p, imageGeo, onBoard);
+            if (i === 0) ctx.moveTo(b.x, b.y);
+            else ctx.lineTo(b.x, b.y);
+          });
+          ctx.closePath();
+        };
+        ctx.save();
+        trace(countyLot.ring);
+        ctx.setLineDash([10, 6]);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#facc15";
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = 3;
+        ctx.stroke();
+        if (countyLot.footprint) {
+          trace(countyLot.footprint);
+          ctx.setLineDash([]);
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
 
     // While the house is being pointed the right way, a target at the bottom
@@ -375,7 +416,7 @@ export function ImageCanvasBoard({
         ctx.fill();
       }
     }
-  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget]);
+  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget, countyLot, imageGeo]);
 
   useEffect(() => {
     draw();
@@ -449,6 +490,22 @@ export function ImageCanvasBoard({
                 rotation: initialDesign.image_rotation,
                 realWidthFeet: initialDesign.image_real_width_feet,
               });
+              // Where the photo was taken. Maps saved before this was kept
+              // were fetched at the property's pin at the standard zoom,
+              // so that is the best answer for them.
+              setImageGeo(
+                (initialDesign.image_geo as ImageGeo | null | undefined) ??
+                  (!initialDesign.image_uploaded && initialLat != null && initialLng != null
+                    ? {
+                        lng: initialLng,
+                        lat: initialLat,
+                        zoom: BASE_SATELLITE_ZOOM - zoomAdjustmentFor(coverScale(SATELLITE_REQUEST_SIZE, SATELLITE_REQUEST_SIZE - SATELLITE_PADDING, CANVAS_WIDTH, CANVAS_HEIGHT)),
+                        bearing: initialDesign.image_bearing ?? 0,
+                        request: SATELLITE_REQUEST_SIZE,
+                        kept: SATELLITE_REQUEST_SIZE - SATELLITE_PADDING,
+                      }
+                    : null)
+              );
             }
           }
         } else {
@@ -535,6 +592,21 @@ export function ImageCanvasBoard({
     };
   }, [jobId, practice]);
 
+  // The county's property line and house for this job, drawn on the photo.
+  // Fetched after the board is up; the board never waits on the county.
+  useEffect(() => {
+    if (!jobId || practice) return;
+    let cancelled = false;
+    countyLotForJob(jobId)
+      .then((lot) => {
+        if (!cancelled) setCountyLot(lot);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, practice]);
+
   // Debounced autosave to this browser's storage whenever the design changes.
   // Only for the standalone /canvas page — job-scoped canvases autosave to the
   // database instead (see the effect below).
@@ -594,6 +666,7 @@ export function ImageCanvasBoard({
             imageRotation: image?.rotation ?? 0,
             imageRealWidthFeet: image?.realWidthFeet ?? null,
             imageBearing: bearing,
+            imageGeo,
             orientationConfirmed: orientConfirmed,
             imageUploaded: image?.uploaded ?? false,
             locked,
@@ -609,7 +682,7 @@ export function ImageCanvasBoard({
       })();
     }, 800);
     return () => clearTimeout(timer);
-  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed]);
+  }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed, imageGeo]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
@@ -718,7 +791,10 @@ export function ImageCanvasBoard({
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) loadImageBlob(file, null, true);
+    if (file) {
+      setImageGeo(null);
+      loadImageBlob(file, null, true);
+    }
     e.target.value = "";
   }
 
@@ -731,7 +807,7 @@ export function ImageCanvasBoard({
      * against a cached copy would answer "no change" every time, which is
      * the one answer the check must never invent. */
     fresh = false
-  ): Promise<{ blob: Blob; realWidthFeet: number }> {
+  ): Promise<{ blob: Blob; realWidthFeet: number; geo: ImageGeo }> {
     // Mapbox requires its logo/attribution on static images, anchored to the
     // bottom edge. Fetch extra vertical padding, split evenly so the requested
     // lat/lng stays vertically centered in the final crop (cropping only from
@@ -740,7 +816,7 @@ export function ImageCanvasBoard({
     //
     // A square is requested rather than a board-shaped rectangle so there is
     // photo under the corners when it turns. 1280 a side is Mapbox's limit.
-    const padding = 220;
+    const padding = SATELLITE_PADDING;
     const request = SATELLITE_REQUEST_SIZE;
     const keptHeight = request - padding;
 
@@ -797,7 +873,7 @@ export function ImageCanvasBoard({
     return new Promise((resolve, reject) => {
       cropCanvas.toBlob((blob) => {
         if (!blob) reject(new Error("Couldn't process the satellite photo."));
-        else resolve({ blob, realWidthFeet });
+        else resolve({ blob, realWidthFeet, geo: { lng, lat, zoom, bearing: mapBearing, request, kept: keptHeight } });
       }, "image/png");
     });
   }
@@ -822,13 +898,14 @@ export function ImageCanvasBoard({
         setAutoTurned(null);
       }
 
-      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
+      const { blob, realWidthFeet, geo } = await fetchSatelliteImageBlob(
         suggestion.lng,
         suggestion.lat,
         turned,
         BASE_SATELLITE_ZOOM
       );
       await loadImageBlob(blob, realWidthFeet);
+      setImageGeo(geo);
       setMapZoom(BASE_SATELLITE_ZOOM);
       setOrigin(point);
       setBearing(turned);
@@ -869,13 +946,14 @@ export function ImageCanvasBoard({
       // out quietly undoes the aiming they just did.
       const aimed = normalizeDegrees(bearing + (image?.rotation ?? 0));
 
-      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
+      const { blob, realWidthFeet, geo } = await fetchSatelliteImageBlob(
         origin.lng,
         origin.lat,
         aimed,
         nextZoom
       );
       await loadImageBlob(blob, realWidthFeet);
+      setImageGeo(geo);
       setBearing(aimed);
       setMapZoom(nextZoom);
       // Straight back to the middle: the new photo is centred on the same
@@ -912,7 +990,7 @@ export function ImageCanvasBoard({
 
     try {
       const aimed = normalizeDegrees(bearing + image.rotation);
-      const { blob, realWidthFeet } = await fetchSatelliteImageBlob(
+      const { blob, realWidthFeet, geo } = await fetchSatelliteImageBlob(
         origin.lng,
         origin.lat,
         aimed,
@@ -927,6 +1005,7 @@ export function ImageCanvasBoard({
       // an identical photo would reset the aiming for no reason.
       if (verdict === "changed") {
         await loadImageBlob(blob, realWidthFeet);
+        setImageGeo(geo);
         setBearing(aimed);
         recenterImage();
       }
@@ -1122,6 +1201,7 @@ export function ImageCanvasBoard({
 
   function handleRemoveImage() {
     setImage(null);
+    setImageGeo(null);
     setLocked(false);
     uploadedImagePathRef.current = null;
     imageDirtyRef.current = true;
@@ -1178,6 +1258,7 @@ export function ImageCanvasBoard({
   async function handleClearSavedDesign() {
     if (!jobId && !practice) await clearDesign();
     setImage(null);
+    setImageGeo(null);
     setLocked(false);
     setAddress(initialAddress ?? "");
     setZones([]);
@@ -1462,6 +1543,12 @@ export function ImageCanvasBoard({
               <Route className="h-4 w-4" />
               {propertyLine.length > 0 ? "Redraw Property Line" : "Draw Property Line"}
             </Button>
+            {countyLot && imageGeo && (
+              <span className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground" title="From Harford County's parcel map">
+                <span className="inline-block h-0 w-5 border-t-[3px] border-dashed border-yellow-400" />
+                County property line
+              </span>
+            )}
             <Button
               type="button"
               size="sm"
