@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import { ArrowLeft, Camera, CheckCircle2, ChevronDown, Loader2, MessageCircleQuestion, X } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, ChevronDown, ImagePlus, Loader2, MessageCircleQuestion, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,15 @@ import {
   type IntakeOption,
   type IntakePerson,
   type IntakeQuestion,
+  hasHoa,
+  PERSON_SEES,
+  servicesBySeason,
+  SEASON_LABEL,
 } from "@/lib/evaluation-intake";
 import { addIntakePhoto, removeIntakePhoto, saveIntakeProgress, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
 import { shrinkImage } from "@/lib/shrink-image";
 import { LotPicker } from "@/components/intake/lot-picker";
+import { InstantPriceCard } from "@/components/intake/instant-price-card";
 import type { LotData } from "@/lib/lot-map";
 
 type Photo = { path: string; url: string };
@@ -65,7 +70,7 @@ export function stepsFor(answers: IntakeAnswers): Step[] {
     main("timing"),
     main("decision"),
     // Anybody else in it: only asked once they say there is somebody.
-    ...(asksForPeople(answers.decision) ? [{ key: "people", kind: "people" } as Step] : []),
+    ...(asksForPeople(answers.decision, answers.details) ? [{ key: "people", kind: "people" } as Step] : []),
     { key: "last", kind: "last" },
   ];
 }
@@ -208,6 +213,7 @@ export function IntakeForm({
         >
           Change an answer
         </Button>
+        {demo && <InstantPriceCard answers={answers} lot={lot} />}
       </div>
     );
   }
@@ -239,6 +245,7 @@ export function IntakeForm({
             help={step.question.help}
             kind={step.question.kind}
             options={step.question.options}
+            groups={step.question.key === "services" ? seasonGroups(answers.services) : undefined}
             value={answers[step.question.key]}
             disabled={pending}
             onChoose={choose}
@@ -295,7 +302,7 @@ export function IntakeForm({
         {step.kind === "people" && (
           <People
             people={answers.people}
-            hoa={answers.decision === "hoa"}
+            hoa={hasHoa(answers.decision, answers.details)}
             disabled={pending}
             onChange={(people) => setAnswers((a) => ({ ...a, people }))}
           />
@@ -372,7 +379,7 @@ function YardNotes({
     <div className="mt-2 flex flex-col gap-2">
       <p className="text-sm font-semibold">{question.title}</p>
       <div className="flex flex-wrap gap-1.5">
-        {(question.options ?? []).map((o) => (
+        {(question.options ?? []).filter((o) => !o.hidden || picked.includes(o.value)).map((o) => (
           <button
             key={o.value}
             type="button"
@@ -416,7 +423,7 @@ function People({
   disabled: boolean;
   onChange: (people: IntakePerson[]) => void;
 }) {
-  const blank = (role = ""): IntakePerson => ({ name: "", role, contact: "" });
+  const blank = (role = ""): IntakePerson => ({ name: "", role, contact: "", sees: "scope" });
   const rows = people.length > 0 ? people : [blank(hoa ? "HOA" : "")];
   const set = (i: number, patch: Partial<IntakePerson>) => onChange(rows.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
@@ -424,7 +431,9 @@ function People({
     <div className="flex flex-col gap-3">
       <h2 className="text-xl font-semibold leading-snug">Who else is involved?</h2>
       <p className="-mt-1 text-sm text-muted-foreground">
-        Their name, who they are to you, and a phone number or email, so the proposal reaches everyone who has a say.
+        {hoa
+          ? "Your HOA usually wants to see the plan before work starts. Add who to send it to, and anyone else with a say."
+          : "Their name, who they are to you, and a phone number or email, so the proposal reaches everyone who has a say."}
       </p>
       {rows.map((person, i) => (
         <div key={i} className="flex flex-col gap-2 rounded-xl border border-border p-3">
@@ -459,6 +468,26 @@ function People({
             autoComplete="off"
             className="text-base"
           />
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-muted-foreground">What should they see?</p>
+            <div className="grid grid-cols-3 gap-1">
+              {PERSON_SEES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={person.sees === option.value}
+                  onClick={() => set(i, { sees: option.value })}
+                  className={cn(
+                    "min-h-10 rounded-lg border px-1.5 text-xs leading-tight",
+                    person.sees === option.value ? "border-primary bg-primary/10 font-medium text-primary" : "border-border bg-background"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ))}
       {rows.length < MAX_INTAKE_PEOPLE && (
@@ -489,6 +518,7 @@ function Question({
   help,
   kind,
   options,
+  groups,
   placeholder,
   value,
   disabled,
@@ -502,6 +532,8 @@ function Question({
   help?: string;
   kind: "multi" | "single" | "text";
   options?: IntakeOption[];
+  /** The options under headings, by value. Anything not in a group comes after them. */
+  groups?: { title: string; values: string[] }[];
   placeholder?: string;
   value: string | string[] | undefined;
   disabled: boolean;
@@ -543,28 +575,80 @@ function Question({
         (options ?? []).some((o) => o.image) ? (
           <PhotoChoices options={options ?? []} picked={picked} disabled={disabled} onChoose={(v) => onChoose(v, kind === "single")} />
         ) : (
-        <div className="flex flex-col gap-1.5">
-          {(options ?? []).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              disabled={disabled}
-              aria-pressed={picked(option.value)}
-              onClick={() => onChoose(option.value, kind === "single")}
-              className={cn(
-                "flex min-h-11 items-center justify-between gap-3 rounded-xl border px-4 py-2 text-left text-base transition-colors",
-                picked(option.value) ? "border-primary bg-primary/10 font-medium text-primary" : "border-border bg-background hover:bg-accent/50"
-              )}
-            >
-              {option.label}
-              {picked(option.value) && <CheckCircle2 className="h-5 w-5 shrink-0" />}
-            </button>
-          ))}
-        </div>
+        <OptionList options={options ?? []} groups={groups} picked={picked} disabled={disabled} onChoose={(v) => onChoose(v, kind === "single")} />
         )
       )}
 
       {children}
+    </div>
+  );
+}
+
+/** This season's services, then next season's, for the first page. */
+function seasonGroups(picked: string[]): { title: string; values: string[] }[] {
+  const [first, second] = servicesBySeason(new Date(), picked);
+  return [
+    ...(first ? [{ title: `This ${SEASON_LABEL[first.season]}`, values: first.values }] : []),
+    ...(second ? [{ title: `Coming up this ${SEASON_LABEL[second.season]}`, values: second.values }] : []),
+  ];
+}
+
+/**
+ * The choices as big buttons. Colours show as swatches beside the words.
+ * With groups, each group gets a heading and anything not in one comes
+ * last. An option no longer offered only shows when it was already picked.
+ */
+function OptionList({
+  options,
+  groups,
+  picked,
+  disabled,
+  onChoose,
+}: {
+  options: IntakeOption[];
+  groups?: { title: string; values: string[] }[];
+  picked: (value: string) => boolean;
+  disabled: boolean;
+  onChoose: (value: string) => void;
+}) {
+  const shown = options.filter((o) => !o.hidden || picked(o.value));
+  const button = (option: IntakeOption) => (
+    <button
+      key={option.value}
+      type="button"
+      disabled={disabled}
+      aria-pressed={picked(option.value)}
+      onClick={() => onChoose(option.value)}
+      className={cn(
+        "flex min-h-11 items-center justify-between gap-3 rounded-xl border px-4 py-2 text-left text-base transition-colors",
+        picked(option.value) ? "border-primary bg-primary/10 font-medium text-primary" : "border-border bg-background hover:bg-accent/50"
+      )}
+    >
+      <span className="flex min-w-0 flex-col gap-1.5">
+        {option.label}
+        {option.swatches && (
+          <span className="flex gap-1" aria-hidden>
+            {option.swatches.map((colour) => (
+              <span key={colour} className="h-5 w-7 rounded-md border border-black/10" style={{ backgroundColor: colour }} />
+            ))}
+          </span>
+        )}
+      </span>
+      {picked(option.value) && <CheckCircle2 className="h-5 w-5 shrink-0" />}
+    </button>
+  );
+  if (!groups || groups.length === 0) return <div className="flex flex-col gap-1.5">{shown.map(button)}</div>;
+  const grouped = new Set(groups.flatMap((g) => g.values));
+  const rest = shown.filter((o) => !grouped.has(o.value));
+  return (
+    <div className="flex flex-col gap-3">
+      {groups.map((group) => (
+        <div key={group.title} className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">{group.title}</p>
+          {group.values.map((value) => shown.find((o) => o.value === value)).filter((o): o is IntakeOption => Boolean(o)).map(button)}
+        </div>
+      ))}
+      {rest.length > 0 && <div className="flex flex-col gap-1.5">{rest.map(button)}</div>}
     </div>
   );
 }
@@ -708,6 +792,7 @@ function Photos({
   demo?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const room = MAX_INTAKE_PHOTOS - photos.length;
@@ -737,6 +822,7 @@ function Photos({
     } finally {
       setBusy(false);
       if (input.current) input.current.value = "";
+      if (camera.current) camera.current.value = "";
     }
   }
 
@@ -771,18 +857,26 @@ function Photos({
             </button>
           </div>
         ))}
-        {room > 0 && (
-          <button
-            type="button"
-            disabled={disabled || busy}
-            onClick={() => input.current?.click()}
-            className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:bg-accent/50"
-          >
-            {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Camera className="h-6 w-6" />}
-            {busy ? "Adding" : "Add photos"}
-          </button>
+        {busy && (
+          <div className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            Adding
+          </div>
         )}
       </div>
+      {/* Two ways in: the camera, for standing in the yard now, and the
+          photo library, for pictures they already have. */}
+      {room > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="outline" className="h-12" disabled={disabled || busy} onClick={() => camera.current?.click()}>
+            <Camera className="mr-1.5 h-4 w-4" /> Take a photo
+          </Button>
+          <Button type="button" variant="outline" className="h-12" disabled={disabled || busy} onClick={() => input.current?.click()}>
+            <ImagePlus className="mr-1.5 h-4 w-4" /> Choose photos
+          </Button>
+        </div>
+      )}
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => add(e.target.files)} />
       <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => add(e.target.files)} />
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>

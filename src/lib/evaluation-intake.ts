@@ -26,6 +26,10 @@ export interface IntakeOption {
   image?: string;
   /** A line under the label, e.g. the size. */
   note?: string;
+  /** The colours it means, as swatches beside the words. */
+  swatches?: string[];
+  /** Kept so old answers still read, but no longer offered. */
+  hidden?: boolean;
 }
 
 /** Where a question sits on the form. */
@@ -76,14 +80,80 @@ export interface IntakePerson {
   role: string;
   /** A phone number or an email, as they wrote it. */
   contact: string;
+  /** What they should be sent: the plan only, the plan and the price, or everything as it happens. */
+  sees: PersonSees;
 }
+
+export type PersonSees = "scope" | "price" | "all";
+
+export const PERSON_SEES: { value: PersonSees; label: string }[] = [
+  { value: "scope", label: "The plan only" },
+  { value: "price", label: "The plan and the price" },
+  { value: "all", label: "Everything, with updates" },
+];
 
 /** Most people one form keeps. */
 export const MAX_INTAKE_PEOPLE = 6;
 
-/** Whether the decision answer means asking who else is in it. */
-export function asksForPeople(decision: string): boolean {
-  return decision === "others" || decision === "hoa";
+/**
+ * Whether to ask who else is in it: they said somebody else decides, or
+ * they said earlier that they have an HOA, which will want to see the plan.
+ */
+export function asksForPeople(decision: string, details?: IntakeAnswers["details"]): boolean {
+  return decision === "others" || decision === "hoa" || hasHoa(decision, details);
+}
+
+/** An HOA is involved, from the decision or from "Anything we should know?". */
+export function hasHoa(decision: string, details?: IntakeAnswers["details"]): boolean {
+  const yard = details?.yard;
+  return decision === "hoa" || (Array.isArray(yard) ? yard.includes("hoa") : yard === "hoa");
+}
+
+/* ------------------------------------------------------------- seasons */
+
+export type Season = "spring" | "summer" | "fall" | "winter";
+
+export const SEASON_LABEL: Record<Season, string> = { spring: "spring", summer: "summer", fall: "fall", winter: "winter" };
+
+/** When each service is done here. Something else is always offered. */
+export const SERVICE_SEASONS: Record<string, Season[]> = {
+  beds: ["spring", "summer", "fall"],
+  lawn: ["spring", "summer", "fall"],
+  cleanup: ["spring", "summer", "fall"],
+  removal: ["spring", "summer", "fall", "winter"],
+  drainage: ["spring", "summer", "fall"],
+  hardscape: ["spring", "summer", "fall"],
+  washing: ["spring", "summer", "fall"],
+  holiday: ["fall", "winter"],
+  snow: ["winter"],
+};
+
+/** Maryland seasons by month: spring March to May, and so on. */
+export function seasonOf(date: Date): Season {
+  const month = date.getMonth();
+  if (month >= 2 && month <= 4) return "spring";
+  if (month >= 5 && month <= 7) return "summer";
+  if (month >= 8 && month <= 10) return "fall";
+  return "winter";
+}
+
+const NEXT_SEASON: Record<Season, Season> = { spring: "summer", summer: "fall", fall: "winter", winter: "spring" };
+
+/**
+ * The first page's services, in two groups: this season's, then next
+ * season's, each service once, in the order the form lists them. Anything
+ * already picked stays on the page even out of season.
+ */
+export function servicesBySeason(now: Date, picked: string[] = []): { season: Season; values: string[] }[] {
+  const current = seasonOf(now);
+  const next = NEXT_SEASON[current];
+  const all = (INTAKE_QUESTIONS[0].options ?? []).filter((o) => !o.hidden && o.value !== "other").map((o) => o.value);
+  const thisSeason = all.filter((v) => SERVICE_SEASONS[v]?.includes(current));
+  const nextSeason = all.filter((v) => !thisSeason.includes(v) && (SERVICE_SEASONS[v]?.includes(next) || picked.includes(v)));
+  return [
+    { season: current, values: thisSeason },
+    { season: next, values: nextSeason },
+  ].filter((group) => group.values.length > 0);
 }
 
 export const INTAKE_QUESTIONS: IntakeQuestion[] = [
@@ -102,6 +172,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "hardscape", label: "Patio, walkway or wall" },
       { value: "washing", label: "Soft washing" },
       { value: "holiday", label: "Holiday decorations" },
+      { value: "snow", label: "Snow removal" },
       { value: "other", label: "Something else" },
     ],
     notesKey: "services_other",
@@ -128,12 +199,12 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     help: "There is no wrong answer. Not sure is a real answer and we will bring options.",
     kind: "multi",
     options: [
-      { value: "classic", label: "Greens and whites, classic" },
-      { value: "cool", label: "Purples and blues" },
-      { value: "warm", label: "Reds, oranges and yellows" },
-      { value: "native", label: "Natural, native plants" },
-      { value: "modern", label: "Modern, clean lines" },
-      { value: "cottage", label: "Full and flowery" },
+      { value: "classic", label: "Greens and whites, classic", swatches: ["#2f6d3c", "#7fae6a", "#e9efe4", "#ffffff"] },
+      { value: "cool", label: "Purples and blues", swatches: ["#4b2e83", "#8b6fc9", "#3a6fb5", "#a9cbea"] },
+      { value: "warm", label: "Reds, oranges and yellows", swatches: ["#b3261e", "#e0662a", "#f2a33a", "#f6d65a"] },
+      { value: "native", label: "Natural, native plants", swatches: ["#6f7f3f", "#b99a4a", "#8a5a3b", "#d8c9a0"] },
+      { value: "modern", label: "Modern, clean lines", swatches: ["#262626", "#7d8388", "#d9d9d4", "#4f6b3a"] },
+      { value: "cottage", label: "Full and flowery", swatches: ["#e79bbd", "#f5cfdc", "#b19cd9", "#fff1a8"] },
       { value: "low", label: "Low maintenance above all" },
       { value: "unsure", label: "Not sure, show me options" },
     ],
@@ -150,8 +221,8 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
       { value: "price", label: "The price" },
       { value: "timing", label: "The timing" },
       { value: "unsure_want", label: "Not sure what I want yet" },
-      { value: "bad_experience", label: "A bad experience with a contractor" },
-      { value: "hoa", label: "HOA or permit rules" },
+      { value: "bad_experience", label: "A bad experience with a contractor", hidden: true },
+      { value: "hoa", label: "HOA or permit rules", hidden: true },
       { value: "maintenance", label: "Worried about upkeep" },
       { value: "other_quotes", label: "Getting other quotes" },
       { value: "nothing", label: "Nothing, I'm ready" },
@@ -421,14 +492,19 @@ export const DETAIL_QUESTIONS: DetailQuestion[] = [
     title: "Anything we should know?",
     short: "Yard",
     kind: "multi",
-    options: opts(
-      ["narrow_gate", "Gate under 3 ft wide"],
-      ["steep", "Steep slope"],
-      ["sprinklers", "Sprinklers"],
-      ["dog_fence", "Invisible dog fence"],
-      ["dog", "A dog in the yard"],
-      ["street", "No driveway parking"]
-    ),
+    options: [
+      ...opts(
+        ["narrow_gate", "Gate under 3 ft wide"],
+        ["sprinklers", "Sprinklers"],
+        ["dog", "We have a dog, or dogs"],
+        ["hoa", "We have an HOA"],
+        ["prior_contractor", "Another company has worked on it before"],
+        ["street", "No driveway parking"]
+      ),
+      // No longer asked; kept so forms already sent still read.
+      { value: "steep", label: "Steep slope", hidden: true },
+      { value: "dog_fence", label: "Invisible dog fence", hidden: true },
+    ],
     placeholder: "Gate code, where to park, anything else",
   },
 ];
@@ -643,7 +719,8 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
     ? raw.people
         .map((p) => {
           const o = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
-          return { name: text(o.name).slice(0, 120), role: text(o.role).slice(0, 60), contact: text(o.contact).slice(0, 160) };
+          const sees: PersonSees = o.sees === "price" || o.sees === "all" ? o.sees : "scope";
+          return { name: text(o.name).slice(0, 120), role: text(o.role).slice(0, 60), contact: text(o.contact).slice(0, 160), sees };
         })
         .filter((p) => p.name || p.contact)
         .slice(0, MAX_INTAKE_PEOPLE)
@@ -731,7 +808,8 @@ export function summarizeIntake(answers: IntakeAnswers): { label: string; value:
 
 /** "Sarah Smith, 410 555 0100", or whichever of the two they gave. */
 export function describePerson(person: IntakePerson): string {
-  return [person.name, person.contact].filter(Boolean).join(", ");
+  const sees = PERSON_SEES.find((o) => o.value === person.sees)?.label.toLowerCase();
+  return [person.name, person.contact, sees ? `send ${sees}` : null].filter(Boolean).join(", ");
 }
 
 /** The pricing answers, for the evaluator, one line each. */

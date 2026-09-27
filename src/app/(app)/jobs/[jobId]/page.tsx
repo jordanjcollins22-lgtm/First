@@ -121,6 +121,8 @@ import { closeoutInputFor } from "@/lib/data/client-review";
 import { beforeAfterEmail, canSendForApproval, canSignOffProject, clientReviewPath, closeoutSteps, projectTimeline } from "@/lib/project-closeout";
 import { proposalPath } from "@/lib/proposal-flow";
 import { AreaProgress } from "@/components/job/area-progress";
+import { UpsellCard } from "@/components/job/upsell-card";
+import { compareUpsell } from "@/lib/instant-price";
 import { loadAreaBoard } from "@/lib/data/area-board";
 
 export default async function JobPage({
@@ -606,6 +608,19 @@ export default async function JobPage({
       })
     : null;
   const openedFor = Boolean(openSection || view);
+  // What they asked for on the form beside what the evaluator drew, once
+  // there is both a sent form and a submitted site map.
+  const upsell =
+    intake?.submittedAt && job.evaluation_status === "completed" && zones.length > 0
+      ? compareUpsell(
+          intake.answers.services,
+          zones.map((zone, i) => ({
+            typeId: zone.service!.typeId,
+            label: zoneBreakdowns[i]?.serviceLabel ?? zone.service!.typeId,
+            priceCents: zoneBreakdowns[i]?.priceCents ?? 0,
+          }))
+        )
+      : null;
   // While the job is being worked: who is in which area, and at what stage.
   const areaBoard =
     (job.status === "approved" || job.status === "in_progress") && zones.length > 0
@@ -666,6 +681,8 @@ export default async function JobPage({
       />
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
+
+      {upsell && <UpsellCard comparison={upsell} showMoney={seen.jobMoney} />}
 
       {areaBoard && areaBoard.states.some((st) => st.status !== "open" || st.stepsDone > 0) && (
         <AreaProgress jobId={jobId} zones={photoZones} board={areaBoard} />

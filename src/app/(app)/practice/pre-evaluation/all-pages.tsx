@@ -81,14 +81,14 @@ export function AllPages({ lot: shopLot }: { lot: LotData | null }) {
           })}
           <button type="button" aria-pressed={someoneElse} className={chip(someoneElse)} onClick={() => setSomeoneElse((v) => !v)}>
             {someoneElse ? <CheckCircle2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            Somebody else decides too
+            Somebody else decides, or an HOA
           </button>
         </div>
       </section>
 
       <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map((step, i) => {
-          const addedBy = step.kind === "detail" ? step.question.group : step.kind === "people" ? "Somebody else decides too" : null;
+          const addedBy = step.kind === "detail" ? step.question.group : step.kind === "people" ? "Somebody else decides, or an HOA" : null;
           return (
             <li key={step.key} className="flex flex-col gap-1.5">
               <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

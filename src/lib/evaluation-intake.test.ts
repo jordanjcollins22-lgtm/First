@@ -178,8 +178,9 @@ describe("who else is in the decision", () => {
       decision: "others",
       people: [{ name: " Mike ", role: "Husband", contact: "410 555 0100" }, { name: "", role: "Mom", contact: "" }, "junk"],
     });
-    expect(answers.people).toEqual([{ name: "Mike", role: "Husband", contact: "410 555 0100" }]);
-    expect(summarizeIntake(answers)).toContainEqual({ label: "Husband", value: "Mike, 410 555 0100" });
+    // Nobody said what Mike should see, so he gets the plan only.
+    expect(answers.people).toEqual([{ name: "Mike", role: "Husband", contact: "410 555 0100", sees: "scope" }]);
+    expect(summarizeIntake(answers)).toContainEqual({ label: "Husband", value: "Mike, 410 555 0100, send the plan only" });
     expect(talkingPoints(answers).some((p) => p.includes("Mike (Husband) also has a say"))).toBe(true);
   });
 });
@@ -213,5 +214,42 @@ describe("answering what they are worried about", () => {
       // Only what is known to be true: no claims about licences, insurance or guarantees.
       expect(`${a.heading} ${a.body}`).not.toMatch(/licen[cs]|insur|warrant|guarantee/i);
     }
+  });
+});
+
+describe("the cleaned-up core pages", () => {
+  it("offers this season's services first, then next season's, each once", async () => {
+    const { servicesBySeason } = await import("./evaluation-intake");
+    const fall = servicesBySeason(new Date("2026-09-27T12:00:00"));
+    expect(fall.map((g) => g.season)).toEqual(["fall", "winter"]);
+    expect(fall[0].values).toContain("beds");
+    expect(fall[0].values).toContain("holiday");
+    expect(fall[1].values).toEqual(["snow"]);
+    const winter = servicesBySeason(new Date("2027-01-10T12:00:00"));
+    expect(winter.map((g) => g.season)).toEqual(["winter", "spring"]);
+    expect(winter[0].values).toEqual(expect.arrayContaining(["removal", "holiday", "snow"]));
+    expect(winter[1].values).toContain("beds");
+    const all = [...fall[0].values, ...fall[1].values];
+    expect(new Set(all).size).toBe(all.length);
+    expect(all).not.toContain("other");
+  });
+
+  it("asks who else is involved when they have an HOA, even if they decide alone", async () => {
+    const { asksForPeople, hasHoa } = await import("./evaluation-intake");
+    expect(asksForPeople("me", { yard: ["hoa"] })).toBe(true);
+    expect(hasHoa("me", { yard: ["hoa"] })).toBe(true);
+    expect(asksForPeople("me", { yard: ["dog"] })).toBe(false);
+    expect(asksForPeople("others")).toBe(true);
+  });
+
+  it("still reads answers the form no longer asks for", () => {
+    const answers = cleanAnswers({ concerns: ["bad_experience"], details: { yard: ["steep", "dog_fence", "prior_contractor"] } });
+    expect(answers.concerns).toEqual(["bad_experience"]);
+    expect(answers.details.yard).toEqual(["steep", "dog_fence", "prior_contractor"]);
+  });
+
+  it("keeps what each person should see, and falls back to the plan only", () => {
+    const answers = cleanAnswers({ people: [{ name: "Oak Ridge HOA", role: "HOA", contact: "board@example.com", sees: "all" }, { name: "Mom", sees: "nonsense" }] });
+    expect(answers.people.map((p) => p.sees)).toEqual(["all", "scope"]);
   });
 });
