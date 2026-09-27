@@ -76,7 +76,8 @@ export function stepsFor(answers: IntakeAnswers): Step[] {
     main("concerns"),
     main("budget"),
     main("timing"),
-    main("decision"),
+    // An HOA already means more than one say, so they go straight to who.
+    ...(hasHoa("", answers.details) ? [] : [main("decision")]),
     // Anybody else in it: only asked once they say there is somebody.
     ...(asksForPeople(answers.decision, answers.details) ? [{ key: "people", kind: "people" } as Step] : []),
     { key: "last", kind: "last" },
@@ -460,7 +461,8 @@ function People({
   onChange: (people: IntakePerson[]) => void;
 }) {
   const blank = (role = ""): IntakePerson => ({ name: "", role, contact: "", sees: "scope" });
-  const rows = people.length > 0 ? people : [blank(hoa ? "HOA" : "")];
+  // With an HOA there is always more than one: the HOA and whoever else.
+  const rows = people.length > 0 ? people : hoa ? [blank("HOA"), blank()] : [blank()];
   const set = (i: number, patch: Partial<IntakePerson>) => onChange(rows.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
   return (
@@ -468,7 +470,7 @@ function People({
       <h2 className="text-xl font-semibold leading-snug">Who else is involved?</h2>
       <p className="-mt-1 text-sm text-muted-foreground">
         {hoa
-          ? "Your HOA usually wants to see the plan before work starts. Add who to send it to, and anyone else with a say."
+          ? "Your HOA will usually want to see the plan before work starts. Add who at the HOA we should send it to, and anyone else who has a say, like a spouse or family member."
           : "Their name, who they are to you, and a phone number or email, so the proposal reaches everyone who has a say."}
       </p>
       {rows.map((person, i) => (
