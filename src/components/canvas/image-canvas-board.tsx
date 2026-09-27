@@ -168,6 +168,8 @@ interface ImageCanvasBoardProps {
   seedZones?: ZoneSeed[];
   /** For practice: a lot to draw the areas on, since there is no job to look one up for. */
   demoLot?: LotData | null;
+  /** Told when a zone made from the set-up is deleted on the map. */
+  onSeedRemoved?: (id: string) => void;
 }
 
 export function ImageCanvasBoard({
@@ -182,6 +184,7 @@ export function ImageCanvasBoard({
   practice = false,
   seedZones,
   demoLot = null,
+  onSeedRemoved,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1132,6 +1135,9 @@ export function ImageCanvasBoard({
 
   function handleDeleteZone(id: string) {
     setZones((prev) => prev.filter((zone) => zone.id !== id));
+    // A zone from the client's form, taken off the map: said back to the
+    // set-up so it is not put back.
+    if (isSeededZone(id)) onSeedRemoved?.(id);
   }
 
   function handleSaveZoneService(

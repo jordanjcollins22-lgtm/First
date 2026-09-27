@@ -18,12 +18,15 @@ import { EvaluationsView } from "@/components/evaluations/evaluations-view";
 import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
+import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
+import { IntakeForm } from "@/components/intake/intake-form";
 import { YourPlan } from "@/components/intake/your-plan";
 
 /**
  * The evaluator's side of a visit, every page in order, with a sample
  * client: how it lands on their calendar, their day, the buttons, what the
- * client sent, the Yes or No set-up, and the site map to submit. The same
+ * client sent, the site map already set up from it, and, when the client
+ * never filled it out, the pre-eval done together first. The same
  * screens they use, in preview: nothing is recorded, saved or sent.
  */
 export const dynamic = "force-dynamic";
@@ -119,7 +122,6 @@ export default async function EvaluatorJourneyPage() {
   const active = catalog.servicePricing.filter((p) => p.status === "active");
   const findByName = (pattern: RegExp) => active.find((p) => pattern.test(p.name))?.service_type_id ?? null;
   const plan = seedPlan(ANSWERS, findByName);
-  const answered = plan.map((item) => ({ ...item, keep: item.label !== "Trimming" || item.area !== "back" }));
   const services = active.map((p) => ({ typeId: p.service_type_id, name: p.name }));
   const photos = SAMPLE_PHOTOS.map(({ path, url }) => ({ path, url }));
 
@@ -192,18 +194,40 @@ export default async function EvaluatorJourneyPage() {
       ),
     },
     {
-      title: "Yes or No set-up",
-      what: "Each piece of work from their form: Yes or No. Add anything else by where and what. Try it.",
-      screen: <SiteMapSetup {...setupProps} initialPlan={plan} alreadyBuilt={false} />,
+      title: "The site map",
+      what: "Already set up from their pre-eval: every piece of work on the map. Remove or add, measure, Submit.",
+      screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
     },
     {
-      title: "The site map",
-      what: "Every Yes is on the map, named, over its part of the yard. Measure, add photos, Submit.",
-      screen: <SiteMapSetup {...setupProps} initialPlan={answered} alreadyBuilt mapOnly />,
+      title: "No pre-eval yet",
+      what: "If they never filled it out, the first thing on arrival is the pre-eval, with them.",
+      screen: (
+        <div className="flex flex-col gap-4">
+          <VisitHeader jobId="sample" when={when} client="Tom Reed" address="9 Oak Ct, Fallston, MD" phone="4105550100" stage="arrived" arrivedAt={at} timeZone={timeZone} preview />
+          <PreEvalFirst formHref="#" skipHref="#" preview />
+        </div>
+      ),
+    },
+    {
+      title: "The pre-eval, together",
+      what: "The client's own form, marked as filled out on the visit. When it is sent, the site map is set up from it.",
+      screen: (
+        <IntakeForm
+          token={"0".repeat(24)}
+          initial={cleanAnswers({})}
+          initialPhotos={[]}
+          submittedAt={null}
+          together
+          businessPhone={null}
+          demo
+          lot={lot}
+          showStaffPrice={false}
+        />
+      ),
     },
     {
       title: "Submitted",
-      what: "Submit writes the proposal, and the visit shows as done on their day.",
+      what: "Submit on the map writes the proposal, and the visit shows as done on their day.",
       screen: <EvaluatorDayView data={dayWith("submitted")} preview />,
     },
   ];

@@ -21,11 +21,14 @@ export default async function PrepPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams?: Promise<{ together?: string }>;
+  searchParams?: Promise<{ together?: string; back?: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { token } = await params;
-  const { together } = (await searchParams) ?? {};
+  const { together, back } = (await searchParams) ?? {};
+  // Where the evaluator goes once it is done together: their visit, and
+  // nowhere else, so the link cannot be pointed off the app.
+  const backTo = together === "1" && back && /^\/evaluate\/[\w-]+$/.test(back) ? back : null;
   const intake = await getIntakeByToken(token);
   if (!intake) notFound();
   // Their lot from the county, for the "which parts of the property"
@@ -55,6 +58,7 @@ export default async function PrepPage({
         initialPhotos={intake.photoUrls}
         submittedAt={intake.submittedAt}
         together={together === "1"}
+        backTo={backTo}
         businessPhone={intake.businessPhone}
         lot={lot}
         greeting={`${intake.clientFirstName ? `${intake.clientFirstName}, a` : "A"} few quick questions, one at a time, so we arrive with ideas instead of guesses. Nothing here is binding.`}

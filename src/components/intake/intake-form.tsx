@@ -133,6 +133,7 @@ export function IntakeForm({
   lot = null,
   startAt,
   showStaffPrice = true,
+  backTo = null,
 }: {
   token: string;
   initial: IntakeAnswers;
@@ -150,6 +151,8 @@ export function IntakeForm({
   startAt?: string;
   /** The demo's staff-only phone quote under the sent page. Off in the page-by-page preview. */
   showStaffPrice?: boolean;
+  /** Filled out together on a visit: where the evaluator goes back to once it is sent. */
+  backTo?: string | null;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswers>(initial);
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
@@ -219,6 +222,11 @@ export function IntakeForm({
           <CheckCircle2 className="h-10 w-10 text-primary" />
           <p className="text-lg font-semibold">Saved</p>
           <p className="text-sm text-muted-foreground">We can get on with the walk.</p>
+          {backTo && (
+            <a href={backTo} className="mt-1 inline-flex h-12 w-full items-center justify-center rounded-md bg-primary font-semibold text-primary-foreground">
+              Back to the visit: the site map is set up
+            </a>
+          )}
         </div>
       );
     }

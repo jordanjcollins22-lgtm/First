@@ -2,12 +2,12 @@
  * The evaluator's visit, from their own screen: where each visit is up to,
  * and the site map set-up they go through on site.
  *
- * The set-up starts from the client's pre-evaluation form: each service
+ * The site map starts from the client's pre-evaluation form: each service
  * they asked for, in each part of the yard they picked, is one piece of
- * work. On site the evaluator says Keep or Remove to each, and adds
+ * work, and each is on the map from the start, named and with its service
+ * set. On site the evaluator takes off what is not being done and adds
  * anything the client did not ask for by picking a part of the yard and a
- * service. The kept pieces become zones on the site map, already named and
- * with their service set, for the evaluator to measure and submit.
+ * service, then measures and submits.
  *
  * Pure, so the rules are tested without a database.
  */
@@ -27,7 +27,7 @@ export interface PlanItem {
   values?: Record<string, string>;
   /** What it is, e.g. "Beds: mulch". */
   label: string;
-  /** Keep (true), Remove (false), or not answered yet. */
+  /** On the map (true), or taken off it (false). Null, from older saves, counts as on it. */
   keep: boolean | null;
   /** Added by the evaluator on site, not asked for on the form. */
   added?: boolean;
@@ -122,7 +122,7 @@ export function seedPlan(answers: IntakeAnswers, findByName: (pattern: RegExp) =
           typeId: as.typeId,
           ...(as.values ? { values: as.values } : {}),
           label: as.label,
-          keep: null,
+          keep: true,
         });
       }
     }
@@ -131,9 +131,9 @@ export function seedPlan(answers: IntakeAnswers, findByName: (pattern: RegExp) =
 }
 
 /**
- * What was saved on site, brought up to date with the form: every answer
- * already given stays, anything added on site stays, and a piece of work
- * the form now asks for that was not there before comes in unanswered.
+ * What was saved on site, brought up to date with the form: anything
+ * taken off stays off, anything added on site stays, and a piece of work
+ * the form now asks for that was not there before comes in on the map.
  */
 export function mergePlan(saved: PlanItem[] | null | undefined, seeded: PlanItem[]): PlanItem[] {
   if (!saved || saved.length === 0) return seeded;
@@ -164,11 +164,6 @@ export function addedItem(area: string, typeId: string, label: string, id: strin
   return { id: `add-${id}`, area, service: null, typeId, label, keep: true, added: true };
 }
 
-/** Whether every piece of work has a Keep or a Remove. */
-export function planAnswered(items: PlanItem[]): boolean {
-  return items.length > 0 && items.every((i) => i.keep !== null);
-}
-
 export interface ZoneSeed {
   id: string;
   name: string;
@@ -178,10 +173,10 @@ export interface ZoneSeed {
   values: Record<string, string>;
 }
 
-/** The kept pieces, as zones for the site map. */
+/** The pieces still on the map, as zones. */
 export function zoneSeeds(items: PlanItem[]): ZoneSeed[] {
   return items
-    .filter((i) => i.keep === true)
+    .filter((i) => i.keep !== false)
     .map((i) => ({
       id: i.id,
       name: `${areaLabel(i.area)} · ${i.label}`,

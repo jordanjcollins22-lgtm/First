@@ -9,25 +9,34 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
-import { getIntakeForJob } from "@/lib/data/evaluation-intake";
+import { getIntakeForJob, intakePath } from "@/lib/data/evaluation-intake";
 import { lotForProperty } from "@/lib/data/lot-map";
-import { isSeededZone, mergePlan, readPlan, seedPlan, visitStage } from "@/lib/evaluation-visit";
+import { mergePlan, readPlan, seedPlan, visitStage } from "@/lib/evaluation-visit";
 import type { EvaluationStatus } from "@/types/domain";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
+import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
 import { YourPlan } from "@/components/intake/your-plan";
 
 /**
  * One evaluation visit, on the evaluator's phone. On my way, I've arrived,
- * then what the client asked for, the site map set-up as Yes or No, and the
- * site map to measure and submit.
+ * then what the client asked for and the site map, already set up from it.
+ * When the client never filled out the pre-eval, it is done with them
+ * first, and the map is set up from that.
  */
 export const dynamic = "force-dynamic";
 
-export default async function EvaluationVisitPage({ params }: { params: Promise<{ jobId: string }> }) {
+export default async function EvaluationVisitPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ jobId: string }>;
+  searchParams: Promise<{ skip?: string }>;
+}) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { jobId } = await params;
+  const { skip } = await searchParams;
   await requireJobAccess(jobId, ["evaluations", "job-detail"]);
 
   const supabase = await createClient();
@@ -67,7 +76,9 @@ export default async function EvaluationVisitPage({ params }: { params: Promise<
   const findByName = (pattern: RegExp) => active.find((p) => pattern.test(p.name))?.service_type_id ?? null;
   const sent = intake?.submittedAt ? intake : null;
   const plan = mergePlan(readPlan(job.evaluation_plan), sent ? seedPlan(sent.answers, findByName) : []);
-  const alreadyBuilt = ((design?.zones as unknown as { id: string }[] | undefined) ?? []).some((z) => isSeededZone(z.id));
+  // With no pre-eval from the client, the form comes first, unless they
+  // chose to draw by hand or have already started the map.
+  const formFirst = !sent && skip !== "1" && plan.length === 0 && ((design?.zones as unknown[] | undefined) ?? []).length === 0;
 
   const client = job.property?.customer?.name || "Client";
   const phone = job.property?.customer?.phone ?? null;
@@ -92,20 +103,27 @@ export default async function EvaluationVisitPage({ params }: { params: Promise<
         timeZone={timeZone}
       />
 
-      <details open={!onSite} className="rounded-2xl border border-border bg-card p-4">
-        <summary className="cursor-pointer text-lg font-semibold">What they asked for</summary>
-        <div className="mt-3">
-          {sent ? (
+      {sent && (
+        <details open={!onSite} className="rounded-2xl border border-border bg-card p-4">
+          <summary className="cursor-pointer text-lg font-semibold">What they asked for</summary>
+          <div className="mt-3">
             <YourPlan answers={sent.answers} photos={sent.photoUrls} lot={lot} />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              They haven&apos;t sent the pre-evaluation form. Walk it with them and add what they want in the set-up.
-            </p>
-          )}
-        </div>
-      </details>
+          </div>
+        </details>
+      )}
 
-      {onSite ? (
+      {!onSite ? (
+        <p className="rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+          {sent
+            ? "Tap I've arrived when you get there. The site map is ready, set up from their pre-eval."
+            : "They haven't filled out the pre-eval. Tap I've arrived when you get there and go through it with them first."}
+        </p>
+      ) : formFirst && intake ? (
+        <PreEvalFirst
+          formHref={`${intakePath(intake.token, true)}&back=${encodeURIComponent(`/evaluate/${jobId}`)}`}
+          skipHref={`/evaluate/${jobId}?skip=1`}
+        />
+      ) : (
         <SiteMapSetup
           jobId={jobId}
           initialPlan={plan}
@@ -117,12 +135,7 @@ export default async function EvaluationVisitPage({ params }: { params: Promise<
           lng={job.property?.lng ?? null}
           evaluationStatus={job.evaluation_status}
           evaluatorName={viewer?.full_name || viewer?.email || null}
-          alreadyBuilt={alreadyBuilt}
         />
-      ) : (
-        <p className="rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          Tap I&apos;ve arrived when you get there to set up the site map.
-        </p>
       )}
     </div>
   );
