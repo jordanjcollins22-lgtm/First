@@ -9,6 +9,33 @@ import { describeDbError } from "@/lib/setup-errors";
 import { listScheduledTimes } from "@/lib/data/social";
 import { describeSlot, nextPostSlot } from "@/lib/social-post";
 import { adoptEvaluationPhotosAsBefores } from "@/lib/data/adopt-befores";
+import Anthropic from "@anthropic-ai/sdk";
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { env, isAnthropicConfigured } from "@/lib/env";
+import { getCurrentOrganization } from "@/lib/data/organizations";
+import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
+import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
+import { serviceTypeById } from "@/components/canvas/service-catalog";
+import { serviceLabelFor } from "@/lib/zone-scope";
+import { formatMeasurements, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
+import { recordOutreach } from "@/lib/actions/outreach-link-actions";
+import { outboundBaseUrl } from "@/lib/base-url";
+import type { WorkZone } from "@/components/canvas/types";
+import {
+  areaFromAddress,
+  CaptionSchema,
+  captionBrief,
+  captionProblems,
+  captionSystemPrompt,
+  composeCaption,
+  describeArea,
+  fallbackCaption,
+  privateTermsFor,
+  scrubCaption,
+} from "@/lib/social-caption";
+
+/** The business line, when none is saved on the organization. */
+const DEFAULT_PHONE = "443-819-1521";
 
 export type SocialResult =
   | { ok: true; message?: string; scheduledFor?: string }
@@ -217,5 +244,111 @@ export async function adoptBeforesForJob(jobId: string): Promise<SocialResult> {
   } catch (err) {
     console.error("adoptBeforesForJob failed:", err);
     return { ok: false, message: "Couldn't use those photos." };
+  }
+}
+
+export type CaptionResult =
+  | { ok: true; caption: string; link: string; note?: string }
+  | { ok: false; message: string };
+
+/**
+ * Write the caption for a before-and-after: Hook, Meat, CTA, SEO.
+ *
+ * From what was done in that area (the service, its materials and colour,
+ * its size, off the site map) and where (the town and zip, nothing
+ * narrower). The writer is never given the client's name or the street, and
+ * what comes back is scrubbed of them and checked for claims we cannot make.
+ *
+ * The call to action carries a tracked link of its own, so a booking that
+ * came from the post counts back to it. Pass it back on a rewrite to keep
+ * the same one.
+ */
+export async function writeSocialCaption(input: {
+  jobId: string;
+  zoneId?: string | null;
+  zoneName?: string | null;
+  link?: string | null;
+}): Promise<CaptionResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, message: "Sign in first." };
+
+  const supabase = await createClient();
+  const [{ data: job }, design, catalog, organization] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select("name, property:properties(address, customer:customers(name))")
+      .eq("id", input.jobId)
+      .maybeSingle(),
+    getCanvasDesignForJob(input.jobId).catch(() => null),
+    getCanvasCatalog().catch(() => null),
+    getCurrentOrganization(),
+  ]);
+  const property = (job as unknown as { property: { address: string | null; customer: { name: string | null } | null } | null } | null)?.property;
+  const address = property?.address ?? null;
+  const area = areaFromAddress(address);
+  const privateTerms = privateTermsFor(property?.customer?.name, address);
+  const phone = (organization as unknown as { business_phone?: string | null }).business_phone?.trim() || DEFAULT_PHONE;
+
+  // What was done in this area, off the site map.
+  const zones = ((design?.zones ?? []) as unknown as WorkZone[]).filter((z) => z.service);
+  const zone = zones.find((z) => z.id === input.zoneId) ?? zones.find((z) => z.name === input.zoneName) ?? zones[0] ?? null;
+  const pricingRow = zone?.service && catalog ? catalog.servicePricing.find((p) => p.service_type_id === zone.service!.typeId) : undefined;
+  const def = zone?.service ? serviceTypeById(zone.service.typeId) : undefined;
+  const service = zone?.service
+    ? serviceLabelFor(def, pricingRow ? { name: pricingRow.name, scopeTemplate: pricingRow.scope_template } : undefined) || "Landscaping"
+    : "Landscaping";
+  const measured = zone ? zoneMeasurements(zone) : null;
+  const materials = zone && catalog ? zoneMaterialLineItems(zone, measured?.areaSqFt ?? 0, catalog).map((m) => m.material) : [];
+  const answers = Object.entries(zone?.service?.values ?? {})
+    .filter(([, v]) => typeof v === "string" && v.trim() && v.length <= 60)
+    .slice(0, 6)
+    .map(([k, v]) => `${k.replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}: ${v}`);
+  const details = [...new Set(materials)].map((m) => `material: ${m}`).concat(answers);
+
+  // The tracked link: kept across rewrites, minted once.
+  let link = input.link?.trim() || "";
+  if (!link) {
+    const recorded = await recordOutreach({
+      kind: "post",
+      platform: "facebook",
+      audience: "Our page",
+      fromPage: organization.name,
+      sentTo: "",
+      service,
+      note: `Before and after, ${describeArea(area)}`,
+      screenshotPath: null,
+    });
+    link = recorded.ok ? recorded.link : `${await outboundBaseUrl()}/book`;
+  }
+
+  const fallback = () => fallbackCaption({ service, area, phone, bookingUrl: link });
+  if (!isAnthropicConfigured) return { ok: true, caption: scrubCaption(fallback(), privateTerms), link, note: "Written from the template: the writer isn't set up on this site." };
+
+  try {
+    const client = new Anthropic({ apiKey: env.anthropicApiKey });
+    const response = await client.beta.messages.parse({
+      model: "claude-opus-5",
+      max_tokens: 4000,
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low", format: betaZodOutputFormat(CaptionSchema) },
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system: captionSystemPrompt(organization.name),
+      messages: [{ role: "user", content: captionBrief({ service, details, sizeLabel: measured ? formatMeasurements(measured, zone!) : null, area, phone, bookingUrl: link }) }],
+    });
+    const parts = response.stop_reason === "refusal" ? null : response.parsed_output;
+    if (!parts) return { ok: true, caption: scrubCaption(fallback(), privateTerms), link, note: "Written from the template this time." };
+    const caption = scrubCaption(composeCaption(parts), privateTerms);
+    const problems = captionProblems(caption, privateTerms);
+    if (problems.length) {
+      console.error("social caption refused:", problems);
+      return { ok: true, caption: scrubCaption(fallback(), privateTerms), link, note: `Written from the template: the draft ${problems.join(" ").toLowerCase()}` };
+    }
+    // The link and number have to survive the writing.
+    const withLink = caption.includes(link) ? caption : `${caption}\n\n${link}`;
+    return { ok: true, caption: withLink, link };
+  } catch (err) {
+    console.error("writeSocialCaption failed:", err);
+    return { ok: true, caption: scrubCaption(fallback(), privateTerms), link, note: "Written from the template: the writer couldn't be reached." };
   }
 }

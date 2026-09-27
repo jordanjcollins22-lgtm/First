@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { v4 as uuid } from "uuid";
@@ -21,14 +21,14 @@ import {
   approveSocialPost,
   markPosted,
   skipSocialPost,
+  writeSocialCaption,
 } from "@/lib/actions/social-actions";
-import { describeSlot, suggestCaption } from "@/lib/social-post";
+import { describeSlot } from "@/lib/social-post";
 import { useComposite, useOnScreen } from "./use-composite";
 import { CompositeEditor } from "./composite-editor";
 import type { JobMissingPhotos, PostCandidate, SocialPost } from "@/lib/data/social";
 
 const BUCKET = "social-posts";
-const PHONE = "443-819-1521";
 
 /**
  * Where finished work becomes posts.
@@ -423,14 +423,45 @@ function MakePostDialog({
   const [blob, setBlob] = useState<Blob | null>(null);
   const [drawError, setDrawError] = useState<string | null>(null);
 
-  const [caption, setCaption] = useState(() =>
-    suggestCaption({
-      services: [candidate.jobName],
-      zoneName: candidate.zoneName,
-      city: candidate.town,
-      phone: PHONE,
-    })
-  );
+  // Written for this post when the dialog opens: Hook, Meat, CTA, SEO, from
+  // what was done in this area and the town and zip, never the client or
+  // the street. Rewrite asks again, keeping the same tracked link.
+  const [caption, setCaption] = useState("");
+  const [captionLink, setCaptionLink] = useState<string | null>(null);
+  const [writing, setWriting] = useState(true);
+  const [captionNote, setCaptionNote] = useState<string | null>(null);
+  const edited = useRef(false);
+
+  function askForCaption(link: string | null, isCurrent: () => boolean = () => true) {
+    return writeSocialCaption({ jobId: candidate.jobId, zoneId: candidate.zoneId, zoneName: candidate.zoneName, link })
+      .then((result) => {
+        if (!isCurrent()) return;
+        if (!result.ok) return setCaptionNote(result.message);
+        setCaptionLink(result.link);
+        edited.current = false;
+        setCaption(result.caption);
+        setCaptionNote(result.note ?? null);
+      })
+      .catch(() => isCurrent() && setCaptionNote("Couldn't write the caption. Write one, or press Rewrite."))
+      .finally(() => isCurrent() && setWriting(false));
+  }
+
+  function rewrite() {
+    setWriting(true);
+    setCaptionNote(null);
+    void askForCaption(captionLink);
+  }
+
+  // Once, when the dialog opens for this pair. Everything it sets is set
+  // when the answer arrives, never during the effect itself.
+  useEffect(() => {
+    let current = true;
+    void askForCaption(null, () => current);
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate.beforePhotoId, candidate.afterPhotoId]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -490,19 +521,42 @@ function MakePostDialog({
             <p className="text-sm text-muted-foreground">One of the photos wouldn&apos;t load.</p>
           )}
 
-          <Textarea
-            value={caption}
-            onChange={(event) => setCaption(event.target.value)}
-            rows={6}
-            aria-label="Caption"
-          />
+          <div className="flex flex-col gap-1">
+            <Textarea
+              value={caption}
+              onChange={(event) => {
+                edited.current = true;
+                setCaption(event.target.value);
+              }}
+              rows={10}
+              aria-label="Caption"
+              placeholder={writing ? "Writing the caption: hook, what was done, how to book, and the search words…" : "Write the caption"}
+              disabled={writing}
+            />
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{captionNote ?? "Hook, what was done, how to book, search words. The town and zip only, never the client or the street."}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={writing}
+                onClick={() => {
+                  if (edited.current && !window.confirm("Replace what you wrote with a new caption?")) return;
+                  rewrite();
+                }}
+              >
+                {writing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                Rewrite
+              </Button>
+            </div>
+          </div>
 
           {problem && (
             <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-700">{problem}</p>
           )}
 
           <div className="flex gap-2">
-            <Button type="button" className="flex-1" disabled={!blob || pending} onClick={approve}>
+            <Button type="button" className="flex-1" disabled={!blob || pending || writing || !caption.trim()} onClick={approve}>
               {pending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
