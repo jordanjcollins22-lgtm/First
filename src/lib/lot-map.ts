@@ -161,6 +161,8 @@ type Px = [number, number];
 export interface LotLayout {
   center: LngLat;
   zoom: number;
+  /** Compass degrees at the top of the picture: the street side is at the bottom. */
+  bearing: number;
   width: number;
   height: number;
   parcel: Px[];
@@ -179,62 +181,129 @@ function worldPx([lng, lat]: LngLat, zoom: number): Px {
   return [((lng + 180) / 360) * scale, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale];
 }
 
-/** The zoom and middle that fit the lot in the picture with some room round it. */
-export function fitView(ring: LngLat[], width: number, height: number, padding = 0.18): { center: LngLat; zoom: number } {
-  const lngs = ring.map((p) => p[0]);
-  const lats = ring.map((p) => p[1]);
-  const center: LngLat = [(Math.min(...lngs) + Math.max(...lngs)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
-  const a = worldPx([Math.min(...lngs), Math.max(...lats)], 0);
-  const b = worldPx([Math.max(...lngs), Math.min(...lats)], 0);
-  const spanX = Math.max(1e-9, b[0] - a[0]);
-  const spanY = Math.max(1e-9, b[1] - a[1]);
+function fromWorldPx([x, y]: Px, zoom: number): LngLat {
+  const scale = TILE * 2 ** zoom;
+  const lng = (x / scale) * 360 - 180;
+  const lat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / scale))) * 180) / Math.PI;
+  return [lng, lat];
+}
+
+/** Turn a map offset so that `bearing` is at the top, as Mapbox does. */
+function turnForBearing([dx, dy]: Px, bearing: number): Px {
+  const b = (-bearing * Math.PI) / 180;
+  return [dx * Math.cos(b) - dy * Math.sin(b), dx * Math.sin(b) + dy * Math.cos(b)];
+}
+
+const normalise = (deg: number) => ((deg % 360) + 360) % 360;
+
+/** Compass degrees from one point to another, on the ground. */
+export function compassBearing(from: LngLat, to: LngLat): number {
+  const dx = (to[0] - from[0]) * Math.cos((from[1] * Math.PI) / 180) * 111320;
+  const dy = (to[1] - from[1]) * 110574;
+  return normalise((Math.atan2(dx, dy) * 180) / Math.PI);
+}
+
+/**
+ * Which way the house's walls run, as a compass angle from 0 to 90. Houses
+ * are mostly right angles, so every wall votes for its direction modulo a
+ * quarter turn, weighted by its length.
+ */
+export function houseAxis(footprint: LngLat[]): number | null {
+  let sx = 0;
+  let sy = 0;
+  for (let i = 1; i < footprint.length; i++) {
+    const a = footprint[i - 1];
+    const b = footprint[i];
+    const length = Math.hypot((b[0] - a[0]) * Math.cos((a[1] * Math.PI) / 180) * 111320, (b[1] - a[1]) * 110574);
+    if (length === 0) continue;
+    const angle = (compassBearing(a, b) * 4 * Math.PI) / 180;
+    sx += length * Math.cos(angle);
+    sy += length * Math.sin(angle);
+  }
+  if (Math.hypot(sx, sy) < 1e-9) return null;
+  return normalise((Math.atan2(sy, sx) * 180) / Math.PI / 4) % 90;
+}
+
+/**
+ * The way the picture is turned: the street side at the bottom, squared to
+ * the house's walls so the front of the house sits level. Each turn from
+ * "Front's wrong?" moves the front a quarter round.
+ */
+export function viewBearing(lot: LotData, turn = 0): number {
+  const house = lot.footprint ? centroidOf(lot.footprint) : null;
+  let front: number | null = null;
+  if (lot.front) front = compassBearing(house ?? centroidOf(lot.ring), lot.front);
+  else if (house) {
+    const middle = centroidOf(lot.ring);
+    // No road known: the house usually sits nearer the street than the back fence.
+    if (Math.hypot(house[0] - middle[0], house[1] - middle[1]) > 1e-7) front = compassBearing(middle, house);
+  }
+  if (front == null) return normalise(turn * 90);
+  const axis = lot.footprint ? houseAxis(lot.footprint) : null;
+  if (axis != null) {
+    // The quarter of the house's own walls nearest the street.
+    const candidates = [0, 1, 2, 3].map((k) => axis + k * 90);
+    const gap = (a: number) => Math.min(normalise(a - front!), normalise(front! - a));
+    front = candidates.reduce((best, c) => (gap(c) < gap(best) ? c : best), candidates[0]);
+  }
+  // The street side down means the opposite way is at the top.
+  return normalise(front + 180 + turn * 90);
+}
+
+/** The zoom and middle that fit the lot in the picture, turned, with some room round it. */
+export function fitView(ring: LngLat[], width: number, height: number, bearing = 0, padding = 0.18): { center: LngLat; zoom: number } {
+  const origin = worldPx(centroidOf(ring), 0);
+  const turned = ring.map((p) => {
+    const w = worldPx(p, 0);
+    return turnForBearing([w[0] - origin[0], w[1] - origin[1]], bearing);
+  });
+  const xs = turned.map((p) => p[0]);
+  const ys = turned.map((p) => p[1]);
+  const spanX = Math.max(1e-12, Math.max(...xs) - Math.min(...xs));
+  const spanY = Math.max(1e-12, Math.max(...ys) - Math.min(...ys));
+  // The middle of the turned box, turned back onto the map.
+  const mid = turnForBearing([(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2], -bearing);
+  const center = fromWorldPx([origin[0] + mid[0], origin[1] + mid[1]], 0);
   const zoom = Math.log2(Math.min((width * (1 - padding * 2)) / spanX, (height * (1 - padding * 2)) / spanY));
   return { center, zoom: Math.min(20, Math.max(15, Math.round(zoom * 100) / 100)) };
 }
 
 export function layoutLot(lot: LotData, width: number, height: number, turn = 0): LotLayout {
-  const { center, zoom } = fitView(lot.ring, width, height);
+  const bearing = viewBearing(lot, turn);
+  const { center, zoom } = fitView(lot.ring, width, height, bearing);
   const origin = worldPx(center, zoom);
   const px = (p: LngLat): Px => {
     const w = worldPx(p, zoom);
-    return [w[0] - origin[0] + width / 2, w[1] - origin[1] + height / 2];
+    const t = turnForBearing([w[0] - origin[0], w[1] - origin[1]], bearing);
+    return [t[0] + width / 2, t[1] + height / 2];
   };
   const parcel = lot.ring.map(px);
   const house = lot.footprint ? lot.footprint.map(px) : null;
   const metresPerPx = (156543.03392 * Math.cos((center[1] * Math.PI) / 180)) / 2 ** zoom / (TILE / 256);
 
-  const houseCentre: Px = house ? (centroidOf(house as unknown as LngLat[]) as unknown as Px) : (centroidOf(parcel as unknown as LngLat[]) as unknown as Px);
-
-  // Towards the street. With no road known, the side of the lot the house
-  // is nearest the edge of is the best guess there is: towards the parcel's
-  // middle is the back.
-  let f: Px;
-  if (lot.front) {
-    const p = px(lot.front);
-    f = [p[0] - houseCentre[0], p[1] - houseCentre[1]];
-  } else {
-    const c = centroidOf(parcel as unknown as LngLat[]);
-    f = [houseCentre[0] - c[0], houseCentre[1] - c[1]];
-    if (Math.hypot(f[0], f[1]) < 1) f = [0, 1];
-  }
-  const len = Math.hypot(f[0], f[1]) || 1;
-  f = [f[0] / len, f[1] / len];
-  for (let i = 0; i < ((turn % 4) + 4) % 4; i++) f = [-f[1], f[0]];
-  const l: Px = [-f[1], f[0]];
-
-  // How far the house reaches along each axis, from its middle.
-  const extent = (points: Px[], axis: Px) => points.map((p) => (p[0] - houseCentre[0]) * axis[0] + (p[1] - houseCentre[1]) * axis[1]);
-  let fs: number[], ls: number[];
+  // The picture is turned so the street is at the bottom: the front is
+  // straight down and the sides are left and right, square to the house.
+  const f: Px = [0, 1];
+  const l: Px = [-1, 0];
+  let houseCentre: Px;
+  let fMin: number, fMax: number, lMin: number, lMax: number;
   if (house) {
-    fs = extent(house, f);
-    ls = extent(house, l);
+    const xs = house.map((p) => p[0]);
+    const ys = house.map((p) => p[1]);
+    houseCentre = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+    fMin = Math.min(...ys) - houseCentre[1];
+    fMax = Math.max(...ys) - houseCentre[1];
+    lMin = -(Math.max(...xs) - houseCentre[0]);
+    lMax = -(Math.min(...xs) - houseCentre[0]);
   } else {
+    houseCentre = centroidOf(parcel as unknown as LngLat[]) as unknown as Px;
     const sideFt = Math.sqrt(Math.min(4000, Math.max(900, (lot.structureSqft ?? 2000) / 1.5)));
     const half = (sideFt * 0.3048) / 2 / metresPerPx;
-    fs = [-half, half];
-    ls = [-half, half];
+    fMin = -half;
+    fMax = half;
+    lMin = -half;
+    lMax = half;
   }
-  const fMin = Math.min(...fs), fMax = Math.max(...fs), lMin = Math.min(...ls), lMax = Math.max(...ls);
   const D = Math.max(width, height) * 4;
   const band = 3 / metresPerPx; // about 10 feet round the house
   const at = (a: number, b: number): Px => [houseCentre[0] + f[0] * a + l[0] * b, houseCentre[1] + f[1] * a + l[1] * b];
@@ -248,11 +317,12 @@ export function layoutLot(lot: LotData, width: number, height: number, turn = 0)
     whole: [parcel],
   };
 
-  // The label sits just inside the lot on the street side.
-  const labelAt = at(fMax + Math.min(40, D), 0);
+  // The label sits on the street side, below the house.
+  const labelAt = at(fMax + 40, 0);
   return {
     center,
     zoom,
+    bearing,
     width,
     height,
     parcel,
@@ -262,10 +332,10 @@ export function layoutLot(lot: LotData, width: number, height: number, turn = 0)
   };
 }
 
-/** The satellite photo behind it, from Mapbox, north up. */
-export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "width" | "height">, token: string): string {
+/** The satellite photo behind it, from Mapbox, turned to the same bearing. */
+export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">, token: string): string {
   const [lng, lat] = layout.center;
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},0/${layout.width}x${layout.height}@2x?access_token=${token}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x?access_token=${token}`;
 }
 
 export function pathOf(points: Px[]): string {
@@ -311,9 +381,7 @@ export function groundToBoard(point: LngLat, geo: ImageGeo, image: BoardImage): 
   const dx = a[0] - c[0];
   const dy = a[1] - c[1];
   // The map was turned so the bearing is at the top.
-  const b = (-geo.bearing * Math.PI) / 180;
-  const mx = dx * Math.cos(b) - dy * Math.sin(b);
-  const my = dx * Math.sin(b) + dy * Math.cos(b);
+  const [mx, my] = turnForBearing([dx, dy], geo.bearing);
   // Map pixels to the photo's pixels, then onto the board.
   const ratio = image.elementWidth / geo.request;
   const ex = mx * ratio * image.scale;

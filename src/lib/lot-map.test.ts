@@ -123,3 +123,44 @@ describe("onto the site map", () => {
     expect(350 - big.y).toBeCloseTo(2 * (350 - small.y), 5);
   });
 });
+
+describe("turning the picture so the street is at the bottom", () => {
+  // The same lot turned 30 degrees, with the road a little off square to the walls.
+  const turn30 = (east: number, north: number): LngLat => {
+    const r = (30 * Math.PI) / 180;
+    return at(east * Math.cos(r) + north * Math.sin(r), -east * Math.sin(r) + north * Math.cos(r));
+  };
+  const ring = [turn30(-20, 0), turn30(20, 0), turn30(20, 60), turn30(-20, 60), turn30(-20, 0)];
+  const house = [turn30(-8, 15), turn30(8, 15), turn30(8, 27), turn30(-8, 27), turn30(-8, 15)];
+  const lot = { ring, footprint: house, front: turn30(6, -8), frontRoad: "MAPLE RD", lotSqft: null, structureSqft: null };
+
+  it("squares the picture to the house's walls, with the street down", async () => {
+    const { layoutLot, viewBearing, houseAxis } = await import("./lot-map");
+    expect(houseAxis(house)).toBeCloseTo(30, 0);
+    // The street is to the south-west of the turned house; its walls run at 30 and 120.
+    expect(viewBearing(lot)).toBeCloseTo(30, 0);
+    const layout = layoutLot(lot, 640, 440);
+    // The front wall of the house is level on the picture.
+    const [a, b] = [layout.house![0], layout.house![1]];
+    expect(Math.abs(a[1] - b[1])).toBeLessThan(0.5);
+    // And the street side is below the house.
+    const houseBottom = Math.max(...layout.house!.map((p) => p[1]));
+    expect(layout.frontLabel!.at[1]).toBeGreaterThan(houseBottom);
+  });
+
+  it("moves the front a quarter turn when asked", async () => {
+    const { viewBearing } = await import("./lot-map");
+    expect(viewBearing(lot, 1)).toBeCloseTo(120, 0);
+  });
+
+  it("fits the turned lot in the picture", async () => {
+    const { layoutLot } = await import("./lot-map");
+    const layout = layoutLot(lot, 640, 440);
+    for (const [x, y] of layout.parcel) {
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(640);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(440);
+    }
+  });
+});
