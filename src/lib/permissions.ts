@@ -190,6 +190,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "as the page is: the crew's reference behind the Weed Guide tab, the client's handout open to " +
     "anybody signed in. It exists because printing HTML leaves the margins to whichever browser is " +
     "holding it, and on a phone that meant the top of every page after the first was cut off.",
+  "/jobs/[jobId]/crew-demo":
+    "A job's crew sheet as a demo to click through, from the shop to asking for the walkthrough. Every " +
+    "tap changes the screen only: nothing is recorded, uploaded or sent. Guarded by requireJobAccess like the crew sheet.",
   "/jobs/[jobId]/work-order":
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself, it shows the work in a job, " +

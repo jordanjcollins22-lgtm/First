@@ -8,7 +8,7 @@ import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, KeyRound, Loader2, Map a
 import { Button } from "@/components/ui/button";
 import { SayIt } from "@/components/ui/say-it";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
-import { arriveAtShop, headOut, setShopPage, setShopStage, setShownJobs, tickShopItem } from "@/lib/actions/shop-flow-actions";
+import * as serverShop from "@/lib/actions/shop-flow-actions";
 import { allLoaded, clampPage, loadPages, pageComplete, STAGE_LABEL } from "@/lib/shop-flow";
 import { sayTime } from "@/lib/sub-crew";
 import { zonesBounds } from "@/lib/work-order";
@@ -23,6 +23,9 @@ import type { ShopDay, SiteMapCard } from "@/lib/data/shop-flow";
  * for the stops they pick, then out the door. On a phone it is the same
  * page, following along, with the list tickable and nothing else to press.
  */
+
+/** What the buttons do. The server's, or a demo's that changes nothing real. */
+export type ShopActions = Pick<typeof serverShop, "arriveAtShop" | "headOut" | "setShopPage" | "setShopStage" | "setShownJobs" | "tickShopItem">;
 export function ShopFlow({
   me,
   shopDay,
@@ -31,6 +34,7 @@ export function ShopFlow({
   siteMaps,
   present,
   shop = null,
+  actions,
 }: {
   me: { profileId: string; name: string; canLead: boolean; arrived: boolean };
   /** When they are due, and how to get in. */
@@ -40,7 +44,10 @@ export function ShopFlow({
   stops: Stop[];
   siteMaps: SiteMapCard[];
   present: { profileId: string; name: string }[];
+  /** For a demo: every button runs these instead, and nothing is saved. */
+  actions?: ShopActions;
 }) {
+  const { arriveAtShop, headOut, setShopPage, setShopStage, setShownJobs, tickShopItem } = actions ?? serverShop;
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -51,7 +58,7 @@ export function ShopFlow({
     startTransition(async () => {
       const result = await work();
       if (!result.ok) setError(result.message ?? "Something went wrong.");
-      router.refresh();
+      if (!actions) router.refresh();
     });
   }
 

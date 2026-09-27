@@ -33,6 +33,11 @@ function text(values: Values, key: string): string | null {
   return values[key]?.trim() || null;
 }
 
+/** A free-text answer that says there is nothing, e.g. "None" or "No plants". */
+function saysNothing(v: string): boolean {
+  return /^(no|none|nothing|n\/?a|no plants?|no bushes|nope)\.?$/i.test(v.trim());
+}
+
 /** "3 bushes", "the bushes marked on the map and photos", or "every bush". */
 function howMany(values: Values, key: string, one: string, many: string): string | null {
   const choice = pick(values, key);
@@ -122,6 +127,7 @@ function plantBushRemoval(v: Values): CrewStep[] {
   if (after === "Return to Lawn") s.work("Spread topsoil over the spot, then seed it.");
   else if (after === "Return to Landscape Bed") s.work("Put the bed back over the spot, with its mulch or stone to match.");
   else if (after === "New Plant Installed") s.work("Leave the hole dug and ready for the new plant.");
+  else if (after && /^(just|nothing|none)\b/i.test(after)) s.work("Leave the spot level and raked clean.");
   else if (after) s.work(`Afterward: ${after}.`);
   s.cleanup(CLEAN_UP);
   return s.done();
@@ -160,9 +166,11 @@ function trimming(v: Values): CrewStep[] {
 function landscapeCleanup(v: Values): CrewStep[] {
   const s = phased();
   const staying = text(v, "plantsStaying");
-  if (staying) s.prep(`Leave these where they are: ${staying}.`);
+  if (staying && !saysNothing(staying)) s.prep(`Leave these where they are: ${staying}.`);
   s.prep("Remove all the leaves, sticks and any debris.");
-  if (pick(v, "cleanupType") === "Property Reset") s.work("Take the whole area back to clean: everything unwanted comes out.");
+  const type = pick(v, "cleanupType");
+  if (type === "Property Reset") s.work("Take the whole area back to clean: everything unwanted comes out.");
+  else if (type && /brush/i.test(type)) s.work("Cut out all the brush, down to the ground, and haul it away.");
   if (pick(v, "overgrowth")) s.work("Cut back all the overgrowth.");
   if (pick(v, "vines")) s.work("Pull the vines down and out, roots and all.");
   if (pick(v, "saplings")) s.work("Dig out the small saplings, roots and all.");

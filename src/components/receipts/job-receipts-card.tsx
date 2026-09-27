@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { addJobReceipt } from "@/lib/actions/job-receipt-actions";
-import { receiptsTotal, sayDollars } from "@/lib/job-receipts";
+import { parseDollars, receiptsTotal, sayDollars } from "@/lib/job-receipts";
 import type { JobReceipt } from "@/lib/data/job-receipts";
 
 /**
@@ -22,6 +22,7 @@ export function JobReceiptsCard({
   canAdd = true,
   preview = false,
   startOpen = false,
+  onDemoAdd,
 }: {
   jobId: string;
   receipts: JobReceipt[];
@@ -30,6 +31,8 @@ export function JobReceiptsCard({
   /** For the walk-through: nothing is uploaded or saved. */
   preview?: boolean;
   startOpen?: boolean;
+  /** For a demo: the receipt is added on this screen only, nothing uploaded or saved. */
+  onDemoAdd?: (receipt: JobReceipt) => void;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement | null>(null);
@@ -46,6 +49,16 @@ export function JobReceiptsCard({
     if (preview) return;
     if (!file) return setError("Add the photo or screenshot of the receipt.");
     if (!what.trim()) return setError("Say what you bought.");
+    if (onDemoAdd) {
+      const cents = amount.trim() ? parseDollars(amount) : null;
+      if (amount.trim() && cents == null) return setError("The amount should look like 12.50.");
+      onDemoAdd({ id: crypto.randomUUID(), what: what.trim(), amountCents: cents, url: URL.createObjectURL(file), byName: "You", at: new Date().toISOString() });
+      setFile(null);
+      setWhat("");
+      setAmount("");
+      setOpen(false);
+      return;
+    }
     start(async () => {
       const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${jobId}/receipt-${crypto.randomUUID()}.${extension}`;

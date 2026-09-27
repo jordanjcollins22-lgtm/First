@@ -50,4 +50,13 @@ describe("crewInstructions", () => {
   it("falls back to what was noted for a service it has no words for", () => {
     expect(crewInstructions("fire-pit", { size: "Big", size__other: "x" })).toEqual(["Big."]);
   });
+
+  it("reads the answers on a real brush clearing and tree removal", () => {
+    const brush = crewInstructions("landscape-cleanup", { cleanupType: "Brush removal", plantsStaying: "No plants", vines: "Heavy", saplings: "Many" });
+    expect(brush.join(" ")).not.toMatch(/No plants/);
+    expect(brush).toContain("Cut out all the brush, down to the ground, and haul it away.");
+    const tree = crewInstructions("plant-bush-removal", { type: "Tree", size: "Large", quantity: "1", afterward: "Just removed" });
+    expect(tree).toContain("Take out the large tree and dig out the root ball.");
+    expect(tree).toContain("Leave the spot level and raked clean.");
+  });
 });

@@ -34,6 +34,7 @@ export function AreaBoard({
   board,
   accountManager,
   map,
+  actions,
 }: {
   jobId: string;
   zones: WorkOrderZone[];
@@ -41,7 +42,15 @@ export function AreaBoard({
   accountManager: { name: string; phone: string | null } | null;
   /** Where each area is, when the page doesn't already show the site map above. */
   map?: React.ReactNode;
+  /** For a demo: every button runs these instead, and nothing is saved or uploaded. */
+  actions?: AreaActions;
 }) {
+  const act: AreaActions = actions ?? {
+    start: (zoneId) => startArea(jobId, zoneId),
+    leave: () => leaveArea(jobId),
+    tick: (zoneId, key, done) => tickAreaStep(jobId, zoneId, key, done),
+    photo: null,
+  };
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +73,7 @@ export function AreaBoard({
       const result = await action();
       if (!result.ok) setError(result.message ?? "That didn't work. Try again.");
       setPicked(undefined);
-      router.refresh();
+      if (!actions) router.refresh();
     });
   }
 
@@ -104,8 +113,9 @@ export function AreaBoard({
             tools={board.tools[myZone.id] ?? []}
             meId={board.meId}
             pending={pending}
-            onTick={(key, value) => run(() => tickAreaStep(jobId, myZone.id, key, value))}
-            onLeave={() => run(() => leaveArea(jobId))}
+            onTick={(key, value) => run(() => act.tick(myZone.id, key, value))}
+            onLeave={() => run(() => act.leave())}
+            demoPhoto={act.photo ? (kind) => run(() => act.photo!(myZone.id, kind)) : null}
             onPhoto={() => {
               setPicked(undefined);
               router.refresh();
@@ -159,7 +169,7 @@ export function AreaBoard({
                       <Scope zone={zone} tools={board.tools[zone.id] ?? []} state={state} />
                       {/* Read the scope, then start: the button stays in reach at the bottom of the screen. */}
                       <div className="sticky bottom-2 z-10">
-                        <StartButton state={state} stage={stage} pending={pending} onStart={() => run(() => startArea(jobId, zone.id))} />
+                        <StartButton state={state} stage={stage} pending={pending} onStart={() => run(() => act.start(zone.id))} />
                       </div>
                     </div>
                   )}
@@ -250,6 +260,15 @@ function StartButton({ state, stage, pending, onStart }: { state: AreaState; sta
   );
 }
 
+/** What the area buttons do. The server's, or a demo's that changes nothing real. */
+export interface AreaActions {
+  start: (zoneId: string) => Promise<{ ok: boolean; message?: string }>;
+  leave: () => Promise<{ ok: boolean; message?: string }>;
+  tick: (zoneId: string, key: string, done: boolean) => Promise<{ ok: boolean; message?: string }>;
+  /** Null: the real camera and upload. */
+  photo: ((zoneId: string, kind: "during" | "after") => Promise<{ ok: boolean; message?: string }>) | null;
+}
+
 const PHASE_HEADING: Record<Phase, string> = {
   prep: "Prep this area",
   work: "The install",
@@ -276,6 +295,7 @@ function InArea({
   onLeave,
   onPhoto,
   onError,
+  demoPhoto,
 }: {
   jobId: string;
   zone: WorkOrderZone;
@@ -291,6 +311,7 @@ function InArea({
   onLeave: () => void;
   onPhoto: () => void;
   onError: (message: string | null) => void;
+  demoPhoto: ((kind: "during" | "after") => void) | null;
 }) {
   const ticked = new Set(steps.filter((s) => s.doneBy).map((s) => s.step.key));
   const list = steps.map((s) => s.step);
@@ -342,7 +363,7 @@ function InArea({
         })}
       </div>
 
-      {photo && <PhotoTaker jobId={jobId} zone={zone} kind={photo} disabled={pending} onDone={onPhoto} onError={onError} />}
+      {photo && <PhotoTaker jobId={jobId} zone={zone} kind={photo} disabled={pending} onDone={onPhoto} onError={onError} demo={demoPhoto ? () => demoPhoto(photo) : null} />}
 
       <details className="rounded-lg border border-border bg-background/60 p-2.5">
         <summary className="cursor-pointer text-sm font-medium">The whole scope for this area</summary>
@@ -388,6 +409,7 @@ function PhotoTaker({
   disabled,
   onDone,
   onError,
+  demo = null,
 }: {
   jobId: string;
   zone: WorkOrderZone;
@@ -395,6 +417,8 @@ function PhotoTaker({
   disabled: boolean;
   onDone: () => void;
   onError: (message: string | null) => void;
+  /** For a demo: the button counts the photo as taken, and nothing is uploaded. */
+  demo?: (() => void) | null;
 }) {
   const input = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -427,7 +451,7 @@ function PhotoTaker({
         {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}
       </p>
       <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload(e.target.files)} />
-      <Button type="button" className="mt-2 h-12 w-full text-base font-semibold" onClick={() => input.current?.click()} disabled={disabled || uploading}>
+      <Button type="button" className="mt-2 h-12 w-full text-base font-semibold" onClick={() => (demo ? demo() : input.current?.click())} disabled={disabled || uploading}>
         {uploading ? <Loader2 className="mr-1.5 h-5 w-5 animate-spin" /> : <Camera className="mr-1.5 h-5 w-5" />}
         {uploading ? "Uploading…" : kind === "during" ? "Take the prep photo" : "Take the after photo"}
       </Button>

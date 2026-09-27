@@ -33,6 +33,7 @@ export function ProjectButtons({
     },
   ];
   return (
+    <div className="flex flex-col gap-1.5">
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {buttons.map(({ key, label, icon: Icon, href, external, empty }) =>
         href ? (
@@ -58,6 +59,13 @@ export function ProjectButtons({
           </div>
         )
       )}
+    </div>
+    {/* The crew's own screens for this job, to click through. Saves nothing. */}
+    {hasSiteMap && (
+      <Link href={`/jobs/${jobId}/crew-demo`} className="self-end text-xs font-medium text-primary hover:underline">
+        Click through the crew sheet (demo)
+      </Link>
+    )}
     </div>
   );
 }

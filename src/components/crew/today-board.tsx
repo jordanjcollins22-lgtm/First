@@ -28,12 +28,15 @@ export function TodayBoard({
   events,
   personName,
   leaveBlockedBy = null,
+  actions,
 }: {
   stops: Stop[];
   events: CrewEvent[];
   personName: string;
   /** Why the truck cannot leave the shop yet: the load-out is not all ticked. */
   leaveBlockedBy?: string | null;
+  /** For a demo: the buttons run these instead, nothing is saved and nothing opens. */
+  actions?: { record: typeof recordCrewEvent; undo: typeof undoLastCrewEvent };
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -54,13 +57,13 @@ export function TodayBoard({
     const heading = kind === "travelling" && jobId ? (stops.find((s) => s.jobId === jobId) ?? null) : null;
     if (heading && voiceWanted()) speak(departureLine(heading));
     startTransition(async () => {
-      const position = await currentPosition();
-      const result = await recordCrewEvent(kind, jobId, position);
+      const position = actions ? null : await currentPosition();
+      const result = await (actions?.record ?? recordCrewEvent)(kind, jobId, position);
       if (!result.ok) {
         setError(result.message);
         return;
       }
-      if (heading) router.push(directionsUrl(heading));
+      if (heading && !actions) router.push(directionsUrl(heading));
     });
   }
 
@@ -108,7 +111,7 @@ export function TodayBoard({
             disabled={isPending}
             onClick={() =>
               startTransition(async () => {
-                const result = await undoLastCrewEvent();
+                const result = await (actions?.undo ?? undoLastCrewEvent)();
                 if (!result.ok) setError(result.message);
               })
             }
