@@ -17,7 +17,7 @@ function FormChip({ sent }: { sent: boolean }) {
       )}
     >
       {sent ? <FileCheck2 className="h-3 w-3" /> : <FileQuestion className="h-3 w-3" />}
-      {sent ? "Form sent" : "No form yet"}
+      {sent ? "Pre-eval filled out" : "No pre-eval yet"}
     </span>
   );
 }

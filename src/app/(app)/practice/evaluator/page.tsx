@@ -168,7 +168,7 @@ export default async function EvaluatorJourneyPage() {
     },
     {
       title: "The day of",
-      what: "Today's visit, and whether the form came in. On my way opens directions.",
+      what: "Today's visit, and whether the client filled out the pre-eval. On my way opens directions.",
       screen: <EvaluatorDayView data={dayWith("booked")} preview />,
     },
     {
