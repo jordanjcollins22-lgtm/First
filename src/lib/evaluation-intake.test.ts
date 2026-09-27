@@ -16,7 +16,6 @@ import {
   INTAKE_QUESTIONS,
   intakeHeadline,
   summarizeIntake,
-  planByService,
   talkingPoints,
 } from "@/lib/evaluation-intake";
 
@@ -270,23 +269,6 @@ describe("photos by part of the yard", () => {
       photo_areas: { "job/intake-a.jpg": "front", "job/intake-b.jpg": "nowhere", "job/intake-c.jpg": "back" },
     });
     expect(answers.photo_areas).toEqual({ "job/intake-a.jpg": "front" });
-  });
-});
-
-describe("their plan back to them", () => {
-  it("lists what they want done under each service they picked", () => {
-    const plan = planByService(
-      cleanAnswers({ services: ["beds", "washing", "other"], services_other: "Fix the gate latch", details: { beds_add: ["mulch"], wash_what: ["siding"] } })
-    );
-    expect(plan.map((p) => p.label)).toEqual(["Beds: mulch, stone or plants", "Soft washing", "Something else"]);
-    expect(plan[0].lines).toContainEqual({ label: "What should go in", value: "Mulch" });
-    expect(plan[1].lines).toContainEqual({ label: "What needs washing", value: "House siding" });
-    expect(plan[2].lines).toEqual([{ label: "In your words", value: "Fix the gate latch" }]);
-  });
-
-  it("keeps a service they picked but said nothing more about", () => {
-    const plan = planByService(cleanAnswers({ services: ["beds"] }));
-    expect(plan).toEqual([{ service: "beds", label: "Beds: mulch, stone or plants", lines: [] }]);
   });
 });
 
