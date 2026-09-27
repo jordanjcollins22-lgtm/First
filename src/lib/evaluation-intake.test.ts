@@ -4,6 +4,7 @@ import {
   answeredCount,
   answersForConcerns,
   asksForPeople,
+  asksLooks,
   BEFORE_VISIT_QUESTIONS,
   CONCERN_ANSWERS,
   DETAIL_QUESTIONS,
@@ -286,5 +287,15 @@ describe("their plan back to them", () => {
   it("keeps a service they picked but said nothing more about", () => {
     const plan = planByService(cleanAnswers({ services: ["beds"] }));
     expect(plan).toEqual([{ service: "beds", label: "Beds: mulch, stone or plants", lines: [] }]);
+  });
+});
+
+describe("colours only for new plants", () => {
+  it("asks about colours when new plants are going in, and not otherwise", () => {
+    expect(asksLooks(cleanAnswers({ services: ["beds"], details: { beds_add: ["mulch", "plants"] } }))).toBe(true);
+    expect(asksLooks(cleanAnswers({ services: ["beds"], details: { beds_add: ["mulch"] } }))).toBe(false);
+    expect(asksLooks(cleanAnswers({ services: ["lawn", "washing"] }))).toBe(false);
+    // Plants picked, then Beds taken off: no plants going in.
+    expect(asksLooks(cleanAnswers({ services: ["lawn"], details: { beds_add: ["plants"] } }))).toBe(false);
   });
 });

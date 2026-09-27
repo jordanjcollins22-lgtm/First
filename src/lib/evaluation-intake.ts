@@ -98,6 +98,16 @@ export const PERSON_SEES: { value: PersonSees; label: string }[] = [
 export const MAX_INTAKE_PEOPLE = 6;
 
 /**
+ * Whether to ask what colours and looks they like: only when they want new
+ * plants in their beds. Mulch, stone, lawns and the rest have nothing to
+ * pick a palette for.
+ */
+export function asksLooks(answers: Pick<IntakeAnswers, "services" | "details">): boolean {
+  const add = answers.details.beds_add;
+  return answers.services.includes("beds") && Array.isArray(add) && add.includes("plants");
+}
+
+/**
  * Whether to ask who else is in it: they said somebody else decides, or
  * they said earlier that they have an HOA, which will want to see the plan.
  */

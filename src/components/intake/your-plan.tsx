@@ -1,5 +1,5 @@
 import { LotPicker } from "@/components/intake/lot-picker";
-import { INTAKE_QUESTIONS, PHOTO_AREAS, photoAreasFor, planByService, labelOf, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { asksLooks, INTAKE_QUESTIONS, PHOTO_AREAS, photoAreasFor, planByService, labelOf, type IntakeAnswers } from "@/lib/evaluation-intake";
 import type { LotData } from "@/lib/lot-map";
 
 /**
@@ -55,7 +55,7 @@ export function YourPlan({ answers, photos, lot }: { answers: IntakeAnswers; pho
               </li>
             ))}
           </ul>
-          {answers.looks.length > 0 && (
+          {asksLooks(answers) && answers.looks.length > 0 && (
             <p className="mt-2 text-sm text-muted-foreground">
               Looks you like: <span className="text-foreground">{answers.looks.map((v) => labelOf(looks, v)).join(", ")}</span>
             </p>

@@ -16,10 +16,10 @@ const ADDITIONS = (INTAKE_QUESTIONS.find((q) => q.key === "services")?.options ?
 
 /**
  * The choices inside a service that open one more page (mulch colour, river
- * rock size, sod or seed, how many storeys), so picking a service shows all
- * of its pages.
+ * rock size, colours for new plants, sod or seed, how many storeys), so
+ * picking a service shows all of its pages.
  */
-const FOLLOW_UPS = { beds_add: ["mulch", "stone"], lawn_need: ["patch"], wash_what: ["siding"] };
+const FOLLOW_UPS = { beds_add: ["mulch", "stone", "plants"], lawn_need: ["patch"], wash_what: ["siding"] };
 
 /**
  * The form's pages side by side. The core pages everybody gets are always
@@ -88,7 +88,14 @@ export function AllPages({ lot: shopLot }: { lot: LotData | null }) {
 
       <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map((step, i) => {
-          const addedBy = step.kind === "detail" ? step.question.group : step.kind === "people" ? "Somebody else decides, or an HOA" : null;
+          const addedBy =
+            step.kind === "detail"
+              ? step.question.group
+              : step.kind === "people"
+                ? "Somebody else decides, or an HOA"
+                : step.key === "looks"
+                  ? "Beds (new plants)"
+                  : null;
           return (
             <li key={step.key} className="flex flex-col gap-1.5">
               <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

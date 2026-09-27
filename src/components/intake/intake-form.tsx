@@ -16,6 +16,7 @@ import {
   INTAKE_QUESTIONS,
   MAX_INTAKE_PEOPLE,
   asksForPeople,
+  asksLooks,
   notesShown,
   type DetailQuestion,
   type IntakeAnswers,
@@ -70,7 +71,8 @@ export function stepsFor(answers: IntakeAnswers): Step[] {
     ...photoAreasFor(answers.areas).map(
       (area, i, all): Step => ({ key: `photos:${area}`, kind: "photos", area, first: i === 0, last: i === all.length - 1 })
     ),
-    main("looks"),
+    // Colours only matter when there are plants going in.
+    ...(asksLooks(answers) ? [main("looks")] : []),
     main("concerns"),
     main("budget"),
     main("timing"),
@@ -98,9 +100,14 @@ function answered(step: Step, answers: IntakeAnswers, photos: Photo[]): boolean 
 
 /** The answers with this screen's answer written in. */
 function write(answers: IntakeAnswers, step: Step, value: string | string[]): IntakeAnswers {
-  if (step.kind === "main") return { ...answers, [step.question.key]: value };
-  if (step.kind === "detail") return { ...answers, details: { ...answers.details, [step.question.id]: value } };
-  return answers;
+  const next =
+    step.kind === "main"
+      ? { ...answers, [step.question.key]: value }
+      : step.kind === "detail"
+        ? { ...answers, details: { ...answers.details, [step.question.id]: value } }
+        : answers;
+  // No plants going in any more: colours picked for them no longer apply.
+  return asksLooks(next) || (!next.looks.length && !next.looks_notes) ? next : { ...next, looks: [], looks_notes: "" };
 }
 
 /**
