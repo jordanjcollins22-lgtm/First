@@ -10,6 +10,7 @@ import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
 import { saveVisitPlan } from "@/lib/actions/evaluation-visit-actions";
 import { PHOTO_AREAS } from "@/lib/evaluation-intake";
 import { addedItem, areaLabel, planAnswered, zoneSeeds, type PlanItem } from "@/lib/evaluation-visit";
+import type { LotData } from "@/lib/lot-map";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +34,8 @@ export function SiteMapSetup({
   evaluationStatus,
   evaluatorName,
   alreadyBuilt,
+  preview = false,
+  demoLot = null,
 }: {
   jobId: string;
   initialPlan: PlanItem[];
@@ -45,6 +48,9 @@ export function SiteMapSetup({
   evaluationStatus: EvaluationStatus;
   evaluatorName: string | null;
   alreadyBuilt: boolean;
+  /** For the owner's walk-through: answers are not saved and the map is the practice one. */
+  preview?: boolean;
+  demoLot?: LotData | null;
 }) {
   const [plan, setPlan] = useState<PlanItem[]>(initialPlan);
   const [built, setBuilt] = useState(alreadyBuilt);
@@ -63,6 +69,7 @@ export function SiteMapSetup({
   function save(next: PlanItem[]) {
     setPlan(next);
     setError(null);
+    if (preview) return;
     start(async () => {
       const result = await saveVisitPlan(jobId, next);
       if (!result.ok) setError(result.message);
@@ -218,7 +225,9 @@ export function SiteMapSetup({
           </ol>
           <ImageCanvasBoard
             catalog={catalog}
-            jobId={jobId}
+            jobId={preview ? undefined : jobId}
+            practice={preview}
+            demoLot={demoLot}
             initialDesign={design}
             initialAddress={address}
             initialLat={lat ?? undefined}

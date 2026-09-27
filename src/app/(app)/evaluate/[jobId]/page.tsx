@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Navigation, Phone } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireJobAccess } from "@/lib/data/access";
@@ -14,7 +14,7 @@ import { lotForProperty } from "@/lib/data/lot-map";
 import { isSeededZone, mergePlan, readPlan, seedPlan, visitStage } from "@/lib/evaluation-visit";
 import type { EvaluationStatus } from "@/types/domain";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { VisitAction } from "@/components/evaluations/visit-action";
+import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
 import { YourPlan } from "@/components/intake/your-plan";
 
@@ -81,27 +81,16 @@ export default async function EvaluationVisitPage({ params }: { params: Promise<
         <ChevronLeft className="h-4 w-4" /> Your evaluations
       </Link>
 
-      <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div>
-          {when && <p className="text-sm font-semibold text-primary">{when}</p>}
-          <h1 className="text-2xl font-bold leading-tight">{client}</h1>
-          <p className="text-sm text-muted-foreground">{job.property?.address}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {phone && (
-            <a href={`tel:${phone}`} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium">
-              <Phone className="h-4 w-4" /> Call
-            </a>
-          )}
-          <Link href={`/jobs/${jobId}/directions`} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium">
-            <Navigation className="h-4 w-4" /> Directions
-          </Link>
-          <Link href={`/jobs/${jobId}`} className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-sm font-medium">
-            Full project
-          </Link>
-        </div>
-        <VisitAction jobId={jobId} stage={stage} arrivedAt={job.evaluator_arrived_at} timeZone={timeZone} openVisitAfterArrive={false} />
-      </section>
+      <VisitHeader
+        jobId={jobId}
+        when={when}
+        client={client}
+        address={job.property?.address ?? ""}
+        phone={phone}
+        stage={stage}
+        arrivedAt={job.evaluator_arrived_at}
+        timeZone={timeZone}
+      />
 
       <details open={!onSite} className="rounded-2xl border border-border bg-card p-4">
         <summary className="cursor-pointer text-lg font-semibold">What they asked for</summary>

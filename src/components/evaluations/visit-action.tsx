@@ -19,12 +19,15 @@ export function VisitAction({
   arrivedAt,
   timeZone,
   openVisitAfterArrive = true,
+  preview = false,
 }: {
   jobId: string;
   stage: VisitStage;
   arrivedAt?: string | null;
   timeZone: string;
   openVisitAfterArrive?: boolean;
+  /** For the owner's walk-through: the buttons show, and record nothing. */
+  preview?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -32,6 +35,7 @@ export function VisitAction({
 
   function press(step: "on_way" | "arrived") {
     setError(null);
+    if (preview) return setError(step === "on_way" ? "Preview: this records the time and opens directions." : "Preview: this records the time and opens the visit.");
     start(async () => {
       const result = await markVisit(jobId, step);
       if (!result.ok) return setError(result.message);
@@ -43,6 +47,7 @@ export function VisitAction({
 
   function undo() {
     setError(null);
+    if (preview) return;
     start(async () => {
       const result = await undoVisit(jobId);
       if (!result.ok) return setError(result.message);
@@ -87,7 +92,7 @@ export function VisitAction({
           </button>
         </p>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className={preview ? "text-xs text-muted-foreground" : "text-sm text-destructive"}>{error}</p>}
     </div>
   );
 }

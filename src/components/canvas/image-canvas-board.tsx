@@ -166,6 +166,8 @@ interface ImageCanvasBoardProps {
    * and one removed there is taken off. Zones drawn by hand are left alone.
    */
   seedZones?: ZoneSeed[];
+  /** For practice: a lot to draw the areas on, since there is no job to look one up for. */
+  demoLot?: LotData | null;
 }
 
 export function ImageCanvasBoard({
@@ -179,6 +181,7 @@ export function ImageCanvasBoard({
   evaluatorName,
   practice = false,
   seedZones,
+  demoLot = null,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -220,9 +223,9 @@ export function ImageCanvasBoard({
   // Where the satellite photo was taken from, so the county's property line
   // and the house can be drawn on the ground. Null for an uploaded photo.
   const [imageGeo, setImageGeo] = useState<ImageGeo | null>(null);
-  const [countyLot, setCountyLot] = useState<LotData | null>(null);
-  /** Whether the county has answered, with a lot or without one. */
-  const [countyChecked, setCountyChecked] = useState(false);
+  const [countyLot, setCountyLot] = useState<LotData | null>(demoLot);
+  /** Whether the county has answered, with a lot or without one. Practice has nobody to ask. */
+  const [countyChecked, setCountyChecked] = useState(practice);
   const [orientConfirmed, setOrientConfirmed] = useState(true);
   const [keepCentered, setKeepCentered] = useState(true);
   const [autoTurned, setAutoTurned] = useState<number | null>(null);
@@ -553,10 +556,15 @@ export function ImageCanvasBoard({
   // Only for the standalone /canvas page — job-scoped canvases use the effect above.
   useEffect(() => {
     if (jobId) return;
-    // Practice starts blank and stays in memory: nothing to restore.
+    // Practice starts blank and stays in memory: nothing to restore. Given
+    // a place, it opens on that place's photo, the way a job does.
     if (practice) {
       loadedRef.current = true;
-      return;
+      if (initialLat == null || initialLng == null) return;
+      const timer = setTimeout(() => {
+        void handleSelectSatelliteLocation({ id: "practice", fullAddress: initialAddress ?? "", lat: initialLat, lng: initialLng });
+      }, 0);
+      return () => clearTimeout(timer);
     }
     let cancelled = false;
     (async () => {
@@ -601,6 +609,8 @@ export function ImageCanvasBoard({
     return () => {
       cancelled = true;
     };
+    // Runs once, on mount: the place is where practice starts, not something to follow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, practice]);
 
   // The county's property line and house for this job, drawn on the photo.
@@ -704,7 +714,7 @@ export function ImageCanvasBoard({
   useEffect(() => {
     // And after the house is pointed the right way, since turning the photo
     // fetches a new one and the areas would be left where the old one was.
-    if (!jobId || !seedZones || !image || !countyChecked || !orientConfirmed) return;
+    if ((!jobId && !practice) || !seedZones || !image || !countyChecked || !orientConfirmed) return;
     const wanted = new Set(seedZones.map((seed) => seed.id));
     // A beat after the photo is drawn, so the zones land on it.
     const timer = setTimeout(() =>
@@ -759,7 +769,7 @@ export function ImageCanvasBoard({
       0
     );
     return () => clearTimeout(timer);
-  }, [jobId, seedZones, image, countyChecked, countyLot, imageGeo, orientConfirmed]);
+  }, [jobId, practice, seedZones, image, countyChecked, countyLot, imageGeo, orientConfirmed]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;

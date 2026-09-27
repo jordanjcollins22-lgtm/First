@@ -119,9 +119,9 @@ export const SYSTEM_FLOW: SystemStage[] = [
       {
         key: "evaluation",
         title: "Evaluation site map",
-        line: "On site, the evaluator draws each area on the map with its photos and measurements.",
-        // The tool itself, to try, with how it is used. Nothing is saved.
-        href: "/practice/site-map",
+        line: "The evaluator's visit: calendar, On my way, I've arrived, Yes or No on the client's plan, then the site map.",
+        // Every page of the visit in preview. The tool alone is at /practice/site-map.
+        href: "/practice/evaluator",
         status: "live",
       },
       {

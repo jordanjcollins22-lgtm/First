@@ -27,18 +27,20 @@ function FormChip({ sent }: { sent: boolean }) {
  * the one button it needs next, then what is coming up, then anything
  * visited and not written up.
  */
-export function EvaluatorDayView({ data }: { data: EvaluatorDay }) {
+export function EvaluatorDayView({ data, preview = false }: { data: EvaluatorDay; preview?: boolean }) {
   const { today, upcoming, toWriteUp, timeZone } = data;
+  // In the walk-through nothing leads anywhere real.
+  const hrefFor = (id: string) => (preview ? "#" : `/evaluate/${id}`);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-2xl font-bold">Your evaluations</h1>
         {data.canSeeEveryone && (
           <div className="flex gap-1 text-sm">
-            <Link href="/evaluate" className={cn("rounded-full px-3 py-1", !data.everyone ? "bg-primary text-primary-foreground" : "border border-border")}>
+            <Link href={preview ? "#" : "/evaluate"} className={cn("rounded-full px-3 py-1", !data.everyone ? "bg-primary text-primary-foreground" : "border border-border")}>
               Mine
             </Link>
-            <Link href="/evaluate?all=1" className={cn("rounded-full px-3 py-1", data.everyone ? "bg-primary text-primary-foreground" : "border border-border")}>
+            <Link href={preview ? "#" : "/evaluate?all=1"} className={cn("rounded-full px-3 py-1", data.everyone ? "bg-primary text-primary-foreground" : "border border-border")}>
               Everyone
             </Link>
           </div>
@@ -50,7 +52,7 @@ export function EvaluatorDayView({ data }: { data: EvaluatorDay }) {
         {today.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No evaluations today.</p>
         ) : (
-          today.map((visit) => <TodayCard key={visit.id} visit={visit} timeZone={timeZone} />)
+          today.map((visit) => <TodayCard key={visit.id} visit={visit} timeZone={timeZone} href={hrefFor(visit.id)} preview={preview} />)
         )}
       </section>
 
@@ -60,7 +62,7 @@ export function EvaluatorDayView({ data }: { data: EvaluatorDay }) {
           <p className="-mt-1 text-sm text-muted-foreground">Visited, and the site map has not been submitted.</p>
           <ul className="flex flex-col divide-y divide-border rounded-xl border border-amber-500/50 bg-card">
             {toWriteUp.map((visit) => (
-              <Row key={visit.id} visit={visit} when={day(visit.evaluationDate, timeZone)} action="Write it up" />
+              <Row key={visit.id} visit={visit} when={day(visit.evaluationDate, timeZone)} action="Write it up" href={hrefFor(visit.id)} />
             ))}
           </ul>
         </section>
@@ -73,7 +75,7 @@ export function EvaluatorDayView({ data }: { data: EvaluatorDay }) {
         ) : (
           <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
             {upcoming.map((visit) => (
-              <Row key={visit.id} visit={visit} when={`${day(visit.evaluationDate, timeZone)} · ${time(visit.evaluationDate, timeZone)}`} />
+              <Row key={visit.id} visit={visit} when={`${day(visit.evaluationDate, timeZone)} · ${time(visit.evaluationDate, timeZone)}`} href={hrefFor(visit.id)} />
             ))}
           </ul>
         )}
@@ -82,10 +84,10 @@ export function EvaluatorDayView({ data }: { data: EvaluatorDay }) {
   );
 }
 
-function TodayCard({ visit, timeZone }: { visit: Visit; timeZone: string }) {
+function TodayCard({ visit, timeZone, href, preview }: { visit: Visit; timeZone: string; href: string; preview: boolean }) {
   return (
     <article className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <Link href={`/evaluate/${visit.id}`} className="flex items-start justify-between gap-3">
+      <Link href={href} className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-primary">{time(visit.evaluationDate, timeZone)}</p>
           <p className="text-lg font-bold leading-tight">{visit.clientName}</p>
@@ -98,9 +100,9 @@ function TodayCard({ visit, timeZone }: { visit: Visit; timeZone: string }) {
         <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
       </Link>
       <div className="flex flex-col gap-2">
-        <VisitAction jobId={visit.id} stage={visit.stage} timeZone={timeZone} />
+        <VisitAction jobId={visit.id} stage={visit.stage} timeZone={timeZone} preview={preview} />
         {visit.stage === "arrived" && (
-          <Link href={`/evaluate/${visit.id}`} className="inline-flex h-12 items-center justify-center rounded-md bg-primary font-semibold text-primary-foreground">
+          <Link href={href} className="inline-flex h-12 items-center justify-center rounded-md bg-primary font-semibold text-primary-foreground">
             Open the visit
           </Link>
         )}
@@ -114,10 +116,10 @@ function TodayCard({ visit, timeZone }: { visit: Visit; timeZone: string }) {
   );
 }
 
-function Row({ visit, when, action }: { visit: Visit; when: string; action?: string }) {
+function Row({ visit, when, action, href }: { visit: Visit; when: string; action?: string; href: string }) {
   return (
     <li>
-      <Link href={`/evaluate/${visit.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-accent/40">
+      <Link href={href} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-accent/40">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-muted-foreground">{when}</p>
           <p className="font-medium">{visit.clientName}</p>
