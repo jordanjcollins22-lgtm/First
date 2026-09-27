@@ -19,7 +19,6 @@ import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
 import { YourPlan } from "@/components/intake/your-plan";
-import { cn } from "@/lib/utils";
 
 /**
  * The evaluator's side of a visit, every page in order, with a sample
@@ -138,11 +137,10 @@ export default async function EvaluatorJourneyPage() {
     demoLot: lot,
   };
 
-  const steps: { title: string; what: string; wide?: boolean; screen: React.ReactNode }[] = [
+  const steps: { title: string; what: string; screen: React.ReactNode }[] = [
     {
-      title: "It lands on their calendar",
-      what: "Booked from the booking page, or by the office. It shows on Operations, Calendar in the app, and is sent to the HighLevel calendar.",
-      wide: true,
+      title: "On their calendar",
+      what: "Booked online or by the office, it shows on their calendar in the app and in HighLevel.",
       screen: (
         <EvaluationsView
           overdue={[]}
@@ -169,18 +167,18 @@ export default async function EvaluatorJourneyPage() {
       ),
     },
     {
-      title: "The day of: My Day",
-      what: "Today's visit, with whether the client sent the pre-evaluation form. They tap On my way, which opens directions to the house.",
+      title: "The day of",
+      what: "Today's visit, and whether the form came in. On my way opens directions.",
       screen: <EvaluatorDayView data={dayWith("booked")} preview />,
     },
     {
       title: "On the way",
-      what: "When they pull up they tap I've arrived. The arrow undoes a mis-tap. The office sees them as On the way, then Arrived.",
+      what: "They tap I've arrived when they pull up. The arrow undoes a mis-tap.",
       screen: <EvaluatorDayView data={dayWith("on_way")} preview />,
     },
     {
-      title: "Arrived: the visit",
-      what: "The visit opens with the client's pre-evaluation form: their lot with the parts they picked, their photos of each part, and what they want done.",
+      title: "Arrived",
+      what: "The visit opens with what the client sent: their lot, photos and what they want done.",
       screen: (
         <div className="flex flex-col gap-4">
           <VisitHeader jobId="sample" when={when} client="Sarah Miller" address={address} phone="4105550100" stage="arrived" arrivedAt={at} timeZone={timeZone} preview />
@@ -194,19 +192,18 @@ export default async function EvaluatorJourneyPage() {
       ),
     },
     {
-      title: "Set up the site map: Yes or No",
-      what: "Every piece of work from their form, part by part: Doing this? Yes or No. Anything else is added by picking where and what. Try it: answer them all, then Build the site map.",
+      title: "Yes or No set-up",
+      what: "Each piece of work from their form: Yes or No. Add anything else by where and what. Try it.",
       screen: <SiteMapSetup {...setupProps} initialPlan={plan} alreadyBuilt={false} />,
     },
     {
-      title: "The site map, from their Yeses",
-      what: "Each Yes is already on the map, named and with its service, over the part of the yard it is in. They confirm the front, tap each area to measure it and add photos, draw anything else, and Submit.",
-      wide: true,
-      screen: <SiteMapSetup {...setupProps} initialPlan={answered} alreadyBuilt />,
+      title: "The site map",
+      what: "Every Yes is on the map, named, over its part of the yard. Measure, add photos, Submit.",
+      screen: <SiteMapSetup {...setupProps} initialPlan={answered} alreadyBuilt mapOnly />,
     },
     {
       title: "Submitted",
-      what: "Submit writes the proposal from the map, and the visit shows as done on their day.",
+      what: "Submit writes the proposal, and the visit shows as done on their day.",
       screen: <EvaluatorDayView data={dayWith("submitted")} preview />,
     },
   ];
@@ -225,22 +222,17 @@ export default async function EvaluatorJourneyPage() {
         </p>
       </header>
 
-      <ol className="flex flex-col gap-8">
+      {/* The same frames as the pre-evaluation form's pages: one phone
+          screen each, all one size, scrolled inside. */}
+      <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map((step, i) => (
-          <li key={step.title} className="flex flex-col gap-2">
-            <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Page {i + 1} of {steps.length}
-              </p>
-              <h2 className="text-lg font-semibold">{step.title}</h2>
-              <p className="text-sm text-muted-foreground">{step.what}</p>
-            </div>
-            <div
-              className={cn(
-                "rounded-2xl border border-border bg-background p-4 shadow-sm",
-                step.wide ? "w-full" : "w-full max-w-[420px]"
-              )}
-            >
+          <li key={step.title} className="flex flex-col gap-1.5">
+            <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Page {i + 1} of {steps.length}
+              <span className="rounded-full bg-muted px-2 py-0.5 normal-case tracking-normal">{step.title}</span>
+            </p>
+            <p className="min-h-8 text-xs leading-snug text-muted-foreground">{step.what}</p>
+            <div className="relative flex h-[640px] flex-col overflow-y-auto rounded-2xl border border-border bg-background px-4 pt-4 pb-4 shadow-sm">
               {step.screen}
             </div>
           </li>
