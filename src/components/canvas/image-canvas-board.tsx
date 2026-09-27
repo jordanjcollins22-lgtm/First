@@ -170,6 +170,12 @@ interface ImageCanvasBoardProps {
   demoLot?: LotData | null;
   /** Told when a zone made from the set-up is deleted on the map. */
   onSeedRemoved?: (id: string) => void;
+  /**
+   * For the evaluator's visit, where the submit is a big button of its own
+   * under the map: the board's own Submit is hidden, and this is handed a
+   * way to save the map now and submit it.
+   */
+  controlRef?: React.MutableRefObject<{ submit: () => Promise<boolean> } | null>;
 }
 
 export function ImageCanvasBoard({
@@ -185,6 +191,7 @@ export function ImageCanvasBoard({
   seedZones,
   demoLot = null,
   onSeedRemoved,
+  controlRef,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -661,6 +668,41 @@ export function ImageCanvasBoard({
     }, 500);
     return () => clearTimeout(timer);
   }, [jobId, practice, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed]);
+
+  // Saving right now, rather than on the autosave's delay, and submitting:
+  // for a submit button outside the board. Refreshed every render so it
+  // always saves what is on the board this moment.
+  useEffect(() => {
+    if (!controlRef) return;
+    controlRef.current = {
+      submit: async () => {
+        if (!jobId) return false;
+        try {
+          await saveCanvasDesign(jobId, {
+            address,
+            imagePath: uploadedImagePathRef.current,
+            imageX: image?.x ?? CANVAS_WIDTH / 2,
+            imageY: image?.y ?? CANVAS_HEIGHT / 2,
+            imageScale: image?.scale ?? 1,
+            imageRotation: image?.rotation ?? 0,
+            imageRealWidthFeet: image?.realWidthFeet ?? null,
+            imageBearing: bearing,
+            imageGeo,
+            orientationConfirmed: orientConfirmed,
+            imageUploaded: image?.uploaded ?? false,
+            locked,
+            propertyLine,
+            houseOutline,
+            marks: withoutEmpty(marks),
+            zones,
+          });
+        } catch {
+          // The autosave has most of it; submitting still goes ahead.
+        }
+        return handleSubmitEvaluation();
+      },
+    };
+  });
 
   // Debounced autosave to the database for job-scoped canvases. Zone photos
   // are uploaded to storage as soon as they're picked (see ZoneServiceDialog)
@@ -1308,8 +1350,8 @@ export function ImageCanvasBoard({
    * live after the first submit — it used to disable itself permanently, so a
    * proposal quoting the wrong service could never be put right.
    */
-  async function handleSubmitEvaluation(force = false) {
-    if (!jobId) return;
+  async function handleSubmitEvaluation(force = false): Promise<boolean> {
+    if (!jobId) return false;
     setSubmittingEval(true);
     setEvalResult(null);
     try {
@@ -1332,6 +1374,7 @@ export function ImageCanvasBoard({
         // Not an error. Regenerating clears a client's acceptance, so it asks
         // rather than doing it as a side effect of a button labelled Submit.
         setEvalConfirm(outcome.confirm ?? "Send a new proposal?");
+        return false;
       } else {
         setEvalResult({
           tone: "warn",
@@ -1341,8 +1384,10 @@ export function ImageCanvasBoard({
               : "Submitted, but there is no site map to build a proposal from.",
         });
       }
+      return true;
     } catch {
       setEvalResult({ tone: "warn", text: "Couldn't submit that. Try again." });
+      return false;
     } finally {
       setSubmittingEval(false);
     }
@@ -1695,7 +1740,7 @@ export function ImageCanvasBoard({
                 </Link>
               </Button>
             )}
-            {jobId && (
+            {jobId && !controlRef && (
               <Button
                 type="button"
                 size="sm"

@@ -43,9 +43,6 @@ export function VisitHeader({
         <Link href={link(`/jobs/${jobId}/directions`)} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium">
           <Navigation className="h-4 w-4" /> Directions
         </Link>
-        <Link href={link(`/jobs/${jobId}`)} className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-sm font-medium">
-          Full project
-        </Link>
       </div>
       <VisitAction jobId={jobId} stage={stage} arrivedAt={arrivedAt} timeZone={timeZone} openVisitAfterArrive={false} preview={preview} />
     </section>

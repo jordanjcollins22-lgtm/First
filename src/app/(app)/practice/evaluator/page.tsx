@@ -234,13 +234,13 @@ export default async function EvaluatorJourneyPage() {
     {
       key: "site-map",
       title: "The site map",
-      what: "Start opens the site map set up from their pre-eval. Add, remove or change areas, measure, Submit.",
+      what: "Start opens the site map set up from their pre-eval. Add, remove or change areas, measure, then Walkthrough complete.",
       screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
     },
     {
       key: "submitted",
-      title: "Submitted",
-      what: "Submit on the map writes the proposal, and the visit shows as done on their day.",
+      title: "Walkthrough complete",
+      what: "The site map goes to the account manager to price and send. Nothing goes to the client yet.",
       screen: <EvaluatorDayView data={dayWith("submitted")} preview />,
     },
   ];

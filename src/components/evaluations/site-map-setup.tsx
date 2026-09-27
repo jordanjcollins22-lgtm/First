@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Plus, Undo2, X } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Loader2, Plus, Undo2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
@@ -22,7 +23,8 @@ import { cn } from "@/lib/utils";
  * anything they did not ask for: pick where, then what. Deleting one on
  * the map itself counts as Remove, so it is not put back. Then the
  * evaluator measures each area, adds photos and submits, on the map they
- * already know.
+ * already know, and finishes with Walkthrough complete, which hands the
+ * map to the account manager to price and send.
  */
 export function SiteMapSetup({
   jobId,
@@ -57,6 +59,30 @@ export function SiteMapSetup({
   const [addArea, setAddArea] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, start] = useTransition();
+  const board = useRef<{ submit: () => Promise<boolean> } | null>(null);
+  const router = useRouter();
+  const [done, setDone] = useState(evaluationStatus === "completed");
+  const [sending, setSending] = useState(false);
+  const [sendNote, setSendNote] = useState<string | null>(null);
+
+  // The map is saved and submitted; the proposal waits for the account
+  // manager to price and approve it, and nothing goes to the client yet.
+  async function completeWalkthrough() {
+    setSendNote(null);
+    if (preview) {
+      setSendNote("Preview: this saves the map and sends it to the account manager.");
+      return;
+    }
+    setSending(true);
+    const ok = await (board.current?.submit() ?? Promise.resolve(false));
+    setSending(false);
+    if (ok) {
+      setDone(true);
+      router.refresh();
+    } else {
+      setSendNote("It didn't go through. Check the note on the map above and try again.");
+    }
+  }
 
   const seeds = useMemo(() => zoneSeeds(plan), [plan]);
   const onMap = plan.filter((i) => i.keep !== false);
@@ -87,8 +113,8 @@ export function SiteMapSetup({
         <h2 className="text-lg font-semibold">The site map</h2>
         <p className="text-sm text-muted-foreground">
           {plan.length > 0
-            ? "Already set up from their pre-eval. Tap each area to measure it and add photos, then Submit."
-            : "Draw each area, measure it and add photos, then Submit."}
+            ? "Already set up from their pre-eval. Tap each area to measure it and add photos, then Walkthrough complete."
+            : "Draw each area, measure it and add photos, then Walkthrough complete."}
         </p>
       </div>
 
@@ -105,6 +131,7 @@ export function SiteMapSetup({
         evaluatorName={evaluatorName}
         seedZones={seeds}
         onSeedRemoved={(id) => setKeep(id, false)}
+        controlRef={board}
       />
 
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
@@ -203,6 +230,24 @@ export function SiteMapSetup({
           </div>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
+      </div>
+
+      {/* The end of the visit. */}
+      <div className="flex flex-col gap-2 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
+        {done && (
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+            <CheckCircle2 className="h-4 w-4" /> Walkthrough complete. The site map is with the account manager.
+          </p>
+        )}
+        <Button type="button" className="h-14 text-base font-semibold" disabled={sending} onClick={completeWalkthrough}>
+          {sending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}
+          {done ? "Send the changes to the account manager" : "Walkthrough complete"}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          When every area is measured. The site map goes to the account manager to price and send to the client. Nothing goes to
+          the client yet.
+        </p>
+        {sendNote && <p className="text-center text-sm text-muted-foreground">{sendNote}</p>}
       </div>
     </section>
   );

@@ -58,11 +58,11 @@ export function EvaluatorDayView({ data, preview = false }: { data: EvaluatorDay
 
       {toWriteUp.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold">Not written up yet</h2>
-          <p className="-mt-1 text-sm text-muted-foreground">Visited, and the site map has not been submitted.</p>
+          <h2 className="text-lg font-semibold">Walkthrough not finished</h2>
+          <p className="-mt-1 text-sm text-muted-foreground">Visited, and Walkthrough complete was never pressed.</p>
           <ul className="flex flex-col divide-y divide-border rounded-xl border border-amber-500/50 bg-card">
             {toWriteUp.map((visit) => (
-              <Row key={visit.id} visit={visit} when={day(visit.evaluationDate, timeZone)} action="Write it up" href={hrefFor(visit.id)} />
+              <Row key={visit.id} visit={visit} when={day(visit.evaluationDate, timeZone)} action="Finish it" href={hrefFor(visit.id)} />
             ))}
           </ul>
         </section>
