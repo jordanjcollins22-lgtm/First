@@ -13,7 +13,8 @@ import { AllPages } from "./all-pages";
  * client sees each one. Each is live to click, and nothing is saved.
  *
  * The lot on "Which parts of the property?" is the shop's own lot from the
- * county, not a client's: this page is for looking at the form.
+ * county until another address is put in the demo box, which is marked as
+ * not part of the form.
  */
 export const dynamic = "force-dynamic";
 

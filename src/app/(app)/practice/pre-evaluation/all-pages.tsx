@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { IntakeForm, stepsFor } from "@/components/intake/intake-form";
+import { DemoAddressBox, type DemoAddress } from "@/components/intake/demo-address";
 import { cleanAnswers } from "@/lib/evaluation-intake";
 import type { LotData } from "@/lib/lot-map";
 
@@ -16,9 +19,15 @@ const EVERY_PAGE = cleanAnswers({
   decision: "others",
 });
 
-export function AllPages({ lot }: { lot: LotData | null }) {
+export function AllPages({ lot: shopLot }: { lot: LotData | null }) {
   const steps = stepsFor(EVERY_PAGE);
+  const [demo, setDemo] = useState<DemoAddress | null>(null);
+  const lot = demo ? demo.lot : shopLot;
   return (
+    <>
+    <div className="max-w-lg">
+      <DemoAddressBox value={demo} onChange={setDemo} />
+    </div>
     <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {steps.map((step, i) => (
         <li key={step.key} className="flex flex-col gap-1.5">
@@ -37,6 +46,7 @@ export function AllPages({ lot }: { lot: LotData | null }) {
               businessPhone={null}
               greeting="Sarah, a few quick questions, one at a time, so we arrive with ideas instead of guesses. Nothing here is binding."
               demo
+              key={`${step.key}:${demo?.address ?? "shop"}`}
               lot={lot}
               startAt={step.key}
             />
@@ -44,5 +54,6 @@ export function AllPages({ lot }: { lot: LotData | null }) {
         </li>
       ))}
     </ol>
+    </>
   );
 }
