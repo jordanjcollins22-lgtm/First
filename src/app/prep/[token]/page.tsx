@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getIntakeByToken } from "@/lib/data/evaluation-intake";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { IntakeForm } from "@/components/intake/intake-form";
+import { lotForProperty } from "@/lib/data/lot-map";
 
 /**
  * The pre-evaluation form, from the link in the booking email.
@@ -27,6 +28,9 @@ export default async function PrepPage({
   const { together } = (await searchParams) ?? {};
   const intake = await getIntakeByToken(token);
   if (!intake) notFound();
+  // Their lot from the county, for the "which parts of the property"
+  // question. Fetched once and kept; the form works without it.
+  const lot = intake.propertyId ? await lotForProperty(intake.propertyId) : null;
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pt-4">
@@ -52,6 +56,7 @@ export default async function PrepPage({
         submittedAt={intake.submittedAt}
         together={together === "1"}
         businessPhone={intake.businessPhone}
+        lot={lot}
         greeting={`${intake.clientFirstName ? `${intake.clientFirstName}, a` : "A"} few quick questions, one at a time, so we arrive with ideas instead of guesses. Nothing here is binding.`}
       />
     </main>

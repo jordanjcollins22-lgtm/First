@@ -26,6 +26,8 @@ import {
 } from "@/lib/evaluation-intake";
 import { addIntakePhoto, removeIntakePhoto, saveIntakeProgress, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
 import { shrinkImage } from "@/lib/shrink-image";
+import { LotPicker } from "@/components/intake/lot-picker";
+import type { LotData } from "@/lib/lot-map";
 
 type Photo = { path: string; url: string };
 
@@ -106,6 +108,7 @@ export function IntakeForm({
   businessPhone,
   greeting,
   demo = false,
+  lot = null,
 }: {
   token: string;
   initial: IntakeAnswers;
@@ -117,6 +120,8 @@ export function IntakeForm({
   greeting?: string;
   /** A look at the form with nothing saved anywhere: for the owner to try it. */
   demo?: boolean;
+  /** Their lot from the county, drawn on the "which parts" question. */
+  lot?: LotData | null;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswers>(initial);
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
@@ -219,6 +224,10 @@ export function IntakeForm({
 
       <div key={step.key} className="flex flex-1 flex-col gap-3 pt-5 animate-in fade-in slide-in-from-right-4 duration-200">
         {index === 0 && greeting && <p className="text-sm text-muted-foreground">{greeting}</p>}
+
+        {step.kind === "main" && step.question.key === "areas" && lot && (
+          <LotPicker lot={lot} picked={answers.areas} disabled={pending} onToggle={(v) => choose(v, false)} />
+        )}
 
         {step.kind === "main" && (
           <Question

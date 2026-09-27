@@ -192,6 +192,9 @@ export interface Database {
           sqft: number | null;
           acreage: number | null;
           occupancy: string | null;
+          /** The county parcel for the lot map: ring, footprint, front road, sizes. */
+          parcel: Json | null;
+          parcel_fetched_at: string | null;
           created_at: string;
           updated_at: string;
         };

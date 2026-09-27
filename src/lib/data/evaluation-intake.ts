@@ -21,6 +21,8 @@ export interface PublicIntake extends Intake {
   businessPhone: string | null;
   clientFirstName: string | null;
   address: string | null;
+  /** For the lot map: the county parcel is kept on the property. */
+  propertyId: string | null;
   /** The visit, as an instant. */
   evaluationAt: string | null;
   cancelled: boolean;
@@ -53,7 +55,7 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
   const { data } = await admin
     .from("evaluation_intakes")
     .select(
-      "id, job_id, token, answers, submitted_at, submitted_by, organization:organizations(name, business_phone), job:jobs(evaluation_date, evaluation_status, cancelled_at, property:properties(address, customer:customers(name)))"
+      "id, job_id, token, answers, submitted_at, submitted_by, organization:organizations(name, business_phone), job:jobs(evaluation_date, evaluation_status, cancelled_at, property:properties(id, address, customer:customers(name)))"
     )
     .eq("token", token)
     .maybeSingle();
@@ -71,7 +73,7 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
       evaluation_date: string | null;
       evaluation_status: string;
       cancelled_at: string | null;
-      property: { address: string; customer: { name: string } | null } | null;
+      property: { id: string; address: string; customer: { name: string } | null } | null;
     } | null;
   };
 
@@ -88,6 +90,7 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
     businessPhone: row.organization?.business_phone ?? null,
     clientFirstName: row.job?.property?.customer?.name?.trim().split(/\s+/)[0] ?? null,
     address: row.job?.property?.address ?? null,
+    propertyId: row.job?.property?.id ?? null,
     evaluationAt: row.job?.evaluation_date ?? null,
     cancelled: Boolean(row.job?.cancelled_at) || row.job?.evaluation_status === "cancelled",
   };
