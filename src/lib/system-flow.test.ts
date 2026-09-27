@@ -22,7 +22,6 @@ describe("the system map", () => {
       "evaluation",
       "pricing",
       "crew-sheet",
-      "field",
       "client-approval",
     ]);
   });

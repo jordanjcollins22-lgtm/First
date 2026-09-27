@@ -267,10 +267,10 @@ export default async function CrewJourneyPage() {
         <ChevronLeft className="h-4 w-4" /> The system
       </Link>
       <header>
-        <h1 className="text-xl font-bold">The crew, every page</h1>
+        <h1 className="text-xl font-bold">The crew sheet, every page</h1>
         <p className="text-sm text-muted-foreground">
-          A signed job from the crew&apos;s side, through to the account manager&apos;s walkthrough, for our own crew or a subcontractor,
-          with the sample job. Signing off and sending the before and afters to the client is the next step, not this one. Nothing
+          Everything the crew do on site, from who&apos;s doing it and the tools they need through to the account manager&apos;s
+          walkthrough, for our own crew or a subcontractor, with the sample job. Signing off and sending the before and afters to the client is the next step, not this one. Nothing
           here is recorded or sent.
         </p>
       </header>
