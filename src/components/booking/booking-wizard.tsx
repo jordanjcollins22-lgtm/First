@@ -495,38 +495,40 @@ export function BookingWizard({
         <CheckCircle2 className="h-12 w-12 text-primary" />
         <h1 className="text-2xl font-bold">You&apos;re booked</h1>
         <p className="text-muted-foreground">
-          {formatDateHeader(booked.date)} at {formatTimeLabel(booked.time)}, at {booked.address}.
+          {formatDateHeader(booked.date)} at {formatTimeLabel(booked.time)}
+          <br />
+          {booked.address}
         </p>
         {/* The one thing left to do, and the reason the booking asked so little. */}
         {(booked.prepToken || preview) && (
           <div className="w-full rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-left text-sm">
-            <p className="font-semibold">Next: tell us what you&apos;d like done</p>
+            <p className="font-semibold">Next step: tell us what you&apos;d like done</p>
             <p className="mt-1 text-muted-foreground">
-              A short pre-evaluation form: what you want done, the looks you like and anything that would give you pause.
-              About five minutes, and we come with ideas.
+              Fill out a short pre-evaluation form about the work you want, the looks you like, and any concerns you have.
+              It takes about five minutes and helps us arrive with ideas ready for you.
             </p>
             <a
               href={booked.prepToken ? `/prep/${booked.prepToken}` : undefined}
               className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
             >
-              Fill in the pre-evaluation form
+              Fill out the pre-evaluation form
             </a>
           </div>
         )}
         <div className="w-full rounded-xl border border-border bg-card p-4 text-left text-sm">
           <p className="font-medium">What happens next</p>
           <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
-            <li>A confirmation is on its way to {doneEmail}.</li>
+            <li>We&apos;ve sent a confirmation to {doneEmail}.</li>
             <li>
               {booked.digital
-                ? "We walk the property with you over a video call, about an hour."
-                : "We walk the property with you, about an hour."}
+                ? "We'll walk through your property with you on a video call. It takes about an hour."
+                : "We'll walk through your property with you. It takes about an hour."}
             </li>
-            <li>You get a written proposal with a fixed price. No obligation.</li>
+            <li>After the visit, you&apos;ll get a written proposal with a fixed price, with no obligation to go ahead.</li>
           </ul>
         </div>
         <p className="text-xs text-muted-foreground">
-          Need to change it? Reply to the confirmation and we&apos;ll move it.
+          Need a different time? Reply to the confirmation email and we&apos;ll reschedule.
         </p>
       </div>
     );
