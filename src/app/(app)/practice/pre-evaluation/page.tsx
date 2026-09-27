@@ -34,8 +34,8 @@ export default async function PreEvaluationPreviewPage() {
       <header>
         <h1 className="text-xl font-bold">Pre-evaluation form, every page</h1>
         <p className="text-sm text-muted-foreground">
-          What a client sees after they book, one page at a time, laid out side by side. Every service is picked so each follow-up
-          page shows; a real client only gets the pages for what they pick. Nothing here is saved.{" "}
+          What a client sees after they book, one page at a time, laid out side by side. The pages everyone gets are always here;
+          pick a service at the top to add the pages it brings in. Nothing here is saved.{" "}
           <Link href="/prep/demo" className="text-primary hover:underline">
             Click through it as a client
           </Link>
