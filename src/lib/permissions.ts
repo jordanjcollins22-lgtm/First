@@ -173,6 +173,13 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself, it shows the work in a job, " +
     "and whoever can open the job can see that.",
+  "/jobs/[jobId]/site-map":
+    "The finished site map for one job, read only: each area, what it gets, its materials and, for " +
+    "people who may see job money, what it costs. Guarded by requireJobAccess like the job page, and " +
+    "the prices are left off for anybody the job page would hide them from.",
+  "/jobs/[jobId]/photos":
+    "The progress photos for one job, befores, durings and afters by area. Guarded by " +
+    "requireJobAccess like the job page, which already shows the same photos.",
   "/jobs/[jobId]/record":
     "The job record: every proposal, message, change and payment on one job, on paper, for the day " +
     "a client is upset or a callback is booked. Guarded by requireJobAccess like the job page, it " +

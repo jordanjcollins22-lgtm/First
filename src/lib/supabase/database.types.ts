@@ -1809,6 +1809,8 @@ export interface Database {
           address_entry: string | null;
           referral_code: string | null;
           evaluation_status: string;
+          /** When the site map was submitted. */
+          evaluation_submitted_at: string | null;
           project_start_date: string | null;
           project_end_date: string | null;
           client_notes: string | null;
@@ -3693,6 +3695,29 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      job_client_reviews: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          token: string;
+          /** sent | approved | changes */
+          status: string;
+          sent_to: string | null;
+          sent_by: string | null;
+          sent_at: string;
+          responded_at: string | null;
+          client_note: string | null;
+          recorded_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_client_reviews"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_client_reviews"]["Row"]>;
+        Relationships: [];
       };
       job_crew: {
         Row: {

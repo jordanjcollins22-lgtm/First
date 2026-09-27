@@ -114,6 +114,12 @@ import { getCrewDay } from "@/lib/data/crew-day";
 import { readDay } from "@/lib/crew-day";
 import { isAccountManager } from "@/lib/affiliate-roles";
 import { serviceLabelFor } from "@/lib/zone-scope";
+import { ProjectTimeline } from "@/components/job/project-timeline";
+import { ProjectButtons } from "@/components/job/project-buttons";
+import { CloseoutCard } from "@/components/job/closeout-card";
+import { closeoutInputFor } from "@/lib/data/client-review";
+import { beforeAfterEmail, canSendForApproval, canSignOffProject, clientReviewPath, closeoutSteps, projectTimeline } from "@/lib/project-closeout";
+import { proposalPath } from "@/lib/proposal-flow";
 
 export default async function JobPage({
   params,
@@ -151,6 +157,7 @@ export default async function JobPage({
     name: string;
     status: JobStatus;
     evaluation_status: EvaluationStatus;
+    evaluation_submitted_at: string | null;
     evaluation_date: string | null;
     evaluation_end_date: string | null;
     project_start_date: string | null;
@@ -558,6 +565,46 @@ export default async function JobPage({
     proto: headersList.get("x-forwarded-proto"),
   });
 
+  // The project at a glance: where it got to and when, and what closing it
+  // still needs. The tabs below are for changing things; this is for knowing.
+  const [closeout, crewArrivedAt] = await Promise.all([
+    closeoutInputFor(jobId).catch(() => null),
+    firstArrival(supabase, jobId),
+  ]);
+  const review = closeout?.input.review ?? null;
+  const firstVisitOn =
+    schedule.sessions
+      .filter((session) => session.status !== "cancelled")
+      .map((session) => session.starts_on)
+      .sort()[0] ?? null;
+  const milestones = projectTimeline({
+    evaluationDate: job.evaluation_date,
+    evaluationStatus: job.evaluation_status,
+    evaluationSubmittedAt: job.evaluation_submitted_at,
+    proposal: proposal ? { status: proposal.status, sentAt: proposal.sent_at ?? null, respondedAt: proposal.responded_at ?? null } : null,
+    jobStatus: job.status,
+    projectStartDate: job.project_start_date,
+    firstVisitOn,
+    crewArrivedAt,
+    review,
+    photosApprovedAt: job.photos_approved_at,
+    completedAt: job.completed_at,
+    now: new Date(),
+  });
+  const closing = Boolean(closeout) && ["approved", "in_progress", "completed"].includes(job.status) && (closeout!.input.started || job.status === "completed");
+  const canClose = isOwnerLevel(viewerRoles) || viewerRoles.includes("admin") || isAccountManager(viewerRoles);
+  const closeoutSendTo = closing ? ((await getJobCustomerContact(jobId).catch(() => null))?.email?.trim() || null) : null;
+  const signer = (me?.first_name || me?.full_name || "").trim().split(/\s+/)[0] || null;
+  const closeoutPreview = closing
+    ? beforeAfterEmail({
+        clientName: job.property?.customers?.name ?? null,
+        businessName: organization.name ?? "",
+        link: "(their private before & after link)",
+        signedBy: signer,
+      })
+    : null;
+  const openedFor = Boolean(openSection || view);
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:gap-6 sm:py-10">
       {/* Back to wherever this was opened from: the pipeline, the calendar,
@@ -584,25 +631,14 @@ export default async function JobPage({
             <DeleteDuplicate jobId={jobId} keeper={standing.copyOf} copies={standing.copies} />
           )}
         </div>
-        {/* What the crew will actually be looking at on site. Worth a tap from
-            here rather than only from inside the drawing tool — checking the
-            sheet before sending somebody out is the point of it existing. */}
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Link
-            href={`/jobs/${jobId}/work-order`}
-            className="rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
-          >
-            View crew sheet
-          </Link>
-          {/* The whole story on paper, for a callback or an unhappy client:
-              what was agreed, what was not, what was said, what was paid. */}
-          <Link
-            href={`/jobs/${jobId}/record`}
-            className="rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
-          >
-            Job record
-          </Link>
-        </div>
+        {/* The whole story on paper, for a callback or an unhappy client:
+            what was agreed, what was not, what was said, what was paid. */}
+        <Link
+          href={`/jobs/${jobId}/record`}
+          className="shrink-0 rounded-lg border border-white/60 bg-card/60 px-3 py-2 text-sm font-medium backdrop-blur-md hover:bg-accent/50"
+        >
+          Job record
+        </Link>
       </div>
 
       {/* Signed and not on the calendar: the one thing this job needs next,
@@ -614,6 +650,41 @@ export default async function JobPage({
         </div>
       )}
 
+      {/* The four things the project is made of, one tap each. */}
+      <ProjectButtons
+        jobId={jobId}
+        proposalHref={proposal?.token ? proposalPath(proposal.token) : null}
+        hasSiteMap={photoZones.length > 0}
+        photoCount={photos.filter((photo) => photo.kind !== "issue").length}
+      />
+
+      <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
+
+      {closing && closeout && (
+        <CloseoutCard
+          jobId={jobId}
+          steps={closeoutSteps(closeout.input)}
+          canSend={canSendForApproval(closeout.input)}
+          canSignOff={canSignOffProject(closeout.input)}
+          canAct={canClose}
+          sendTo={closeoutSendTo}
+          preview={closeoutPreview}
+          reviewLink={review && "token" in review ? `${baseUrl}${clientReviewPath((review as { token: string }).token)}` : null}
+        />
+      )}
+
+      {/* Everything for changing the project: the drawing tool, the
+          proposal editor, the schedule, the crew, messages and billing.
+          Folded away, because the questions above are what somebody opens
+          a project to answer. A link that means one panel opens it. */}
+      <details className="group rounded-xl border border-white/60 bg-card/40 backdrop-blur-md" open={openedFor}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold">
+          Manage the project
+          <span className="text-xs font-normal text-muted-foreground group-open:hidden">
+            Site map tool, proposal editor, schedule, crew, messages, billing
+          </span>
+        </summary>
+        <div className="flex flex-col gap-4 px-2 pb-3 sm:px-3">
       <JobSummary items={outstanding} />
 
       <JobTabbedSections
@@ -996,6 +1067,8 @@ export default async function JobPage({
             : []),
         ]}
       />
+        </div>
+      </details>
 
     </div>
   );
@@ -1183,4 +1256,20 @@ async function countyHouseFor(
   rows.sort((a, b) => a.metres - b.metres);
   const best = rows[0];
   return best && best.metres <= 40 ? shape(best.row) : null;
+}
+
+/**
+ * When the crew first got to this job: the first time somebody tapped
+ * Arrived on it, or failing that the first clock-in against it.
+ */
+async function firstArrival(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string): Promise<string | null> {
+  const [{ data: arrived }, { data: clocked }] = await Promise.all([
+    supabase.from("crew_day_events").select("created_at").eq("job_id", jobId).eq("kind", "arrived_job").order("created_at").limit(1),
+    supabase.from("time_entries").select("clocked_in_at").eq("job_id", jobId).order("clocked_in_at").limit(1),
+  ]);
+  const times = [
+    (arrived as { created_at: string }[] | null)?.[0]?.created_at ?? null,
+    (clocked as { clocked_in_at: string | null }[] | null)?.[0]?.clocked_in_at ?? null,
+  ].filter((t): t is string => Boolean(t));
+  return times.sort()[0] ?? null;
 }

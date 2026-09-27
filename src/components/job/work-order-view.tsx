@@ -16,6 +16,8 @@ import { formatJobNumber } from "@/lib/job-number";
 import { zonesBounds, type WorkOrder } from "@/lib/work-order";
 import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
 import type { ProposalSiteImageTransform } from "@/types/domain";
+import { CrewChecklistCard } from "@/components/job/crew-checklist-card";
+import type { CrewChecklist } from "@/lib/crew-checklist";
 
 /**
  * The crew's sheet for one job.
@@ -60,6 +62,7 @@ export function WorkOrderView({
   bare = false,
   arrived = false,
   practice = false,
+  checklist,
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -101,6 +104,8 @@ export function WorkOrderView({
   arrived?: boolean;
   /** A sample sheet with no job behind it: the links that need a job say so instead. */
   practice?: boolean;
+  /** What to load and what to do, at the top of the sheet. */
+  checklist?: CrewChecklist;
 }) {
   // Worked out here rather than stored: zones get edited and a zone's service
   // can change, and a stored grouping goes wrong the first time somebody
@@ -158,6 +163,8 @@ export function WorkOrderView({
           )}
         </p>
       )}
+
+      {checklist && <CrewChecklistCard checklist={checklist} />}
 
       {/* ------------------------------------------------------- the site map */}
       {order.zones.length > 0 && siteImagePath && imageTransform && (

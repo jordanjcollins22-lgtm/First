@@ -47,7 +47,14 @@ export async function updateEvaluationStatus(
   options: { force?: boolean } = {}
 ): Promise<GenerateOutcome | null> {
   const supabase = await createClient();
-  const { error } = await supabase.from("jobs").update({ evaluation_status: status }).eq("id", jobId);
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      evaluation_status: status,
+      // When the site map went in, for the project's timeline.
+      ...(status === "completed" ? { evaluation_submitted_at: new Date().toISOString() } : {}),
+    })
+    .eq("id", jobId);
   if (error) throw error;
 
   let outcome: GenerateOutcome | null = null;

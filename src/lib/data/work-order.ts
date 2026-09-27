@@ -17,6 +17,8 @@ import { capabilities } from "@/lib/job-stage";
 import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { EvaluationStatus, JobStatus, ProposalSiteImageTransform } from "@/types/domain";
 import { executableAdditions, type ScopeChange } from "@/lib/data/exceptions";
+import { buildCrewChecklist, type CrewChecklist } from "@/lib/crew-checklist";
+import { allMaterialLineItems } from "@/lib/proposal-pricing";
 
 export interface WorkOrderPageData {
   /**
@@ -60,6 +62,8 @@ export interface WorkOrderPageData {
   siteImagePath: string | null;
   accountManager: { name: string; phone: string | null } | null;
   imageTransform: ProposalSiteImageTransform | null;
+  /** What to load and what to do, ticked off as each area gets its after. */
+  checklist: CrewChecklist;
 }
 
 /**
@@ -154,7 +158,21 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
   // see which is which, and the sold scope stays what was sold.
   const approvedAdditions = await executableAdditions(jobId).catch(() => []);
 
+  const checklist = buildCrewChecklist({
+    zones: zones.map((zone) => ({
+      id: zone.id,
+      name: zone.name,
+      serviceTypeId: zone.service!.typeId,
+      serviceName: order.zones.find((z) => z.id === zone.id)?.service ?? zone.service!.typeId,
+    })),
+    serviceTools: catalog.serviceTools,
+    tools: catalog.tools,
+    materials: allMaterialLineItems(zones, catalog),
+    finishedZoneIds: new Set(photos.filter((photo) => photo.kind === "after" && photo.zone_id).map((photo) => photo.zone_id!)),
+  });
+
   return {
+    checklist,
     approvedAdditions,
     photos,
     photoZones: zones.map((zone) => ({ id: zone.id, name: zone.name })),

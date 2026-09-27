@@ -156,10 +156,10 @@ export const SYSTEM_FLOW: SystemStage[] = [
       {
         key: "client-approval",
         title: "Client approves before & after",
-        line: "The client gets the before and after on their phone and approves it.",
+        line: "The account manager sends the befores and afters; the client approves from their phone, then the job is signed off.",
+        // Done from each project's Sign-off card, so there is no one page for it.
         href: null,
-        status: "not-built",
-        gap: "Photos go out on a watch link, but there is no approve button yet.",
+        status: "live",
       },
     ],
   },

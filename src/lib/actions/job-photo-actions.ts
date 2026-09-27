@@ -8,6 +8,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { canCompleteJob, canReopenCompleted, type PhotoWaiver } from "@/lib/job-lifecycle";
 import { walkthroughGate } from "@/lib/walkthrough";
+import { clientApprovalGate } from "@/lib/project-closeout";
+import { latestClientReview } from "@/lib/data/client-review";
 import type { JobPhotoKind, JobPhotoStage, JobStatus, WalkthroughStatus } from "@/types/domain";
 
 export type PhotoResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -162,6 +164,11 @@ export async function completeJob(
       }[]
     );
     if (!walk.ok) return { ok: false, message: walk.reason };
+
+    // The client approves the before and afters before anybody signs the job
+    // off. A job is done when the client is happy, not when the crew packs up.
+    const client = clientApprovalGate(await latestClientReview(jobId));
+    if (!client.ok) return { ok: false, message: client.reason };
 
     const { data: waiverRows } = await supabase
       .from("job_photo_waivers")
