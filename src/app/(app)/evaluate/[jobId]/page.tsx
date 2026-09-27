@@ -10,7 +10,6 @@ import { getCurrentOrganization } from "@/lib/data/organizations";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getIntakeForJob, intakePath } from "@/lib/data/evaluation-intake";
-import { lotForProperty } from "@/lib/data/lot-map";
 import { mergePlan, readPlan, seedPlan, visitStage } from "@/lib/evaluation-visit";
 import type { EvaluationStatus } from "@/types/domain";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -18,11 +17,11 @@ import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
 import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
 import { StartEvaluation } from "@/components/evaluations/start-evaluation";
-import { YourPlan } from "@/components/intake/your-plan";
 
 /**
  * One evaluation visit, on the evaluator's phone. On my way, I've arrived,
- * then what the client asked for and the site map, already set up from it.
+ * Start the evaluation, then the site map, already set up from what the
+ * client asked for on their pre-eval.
  * When the client never filled out the pre-eval, it is done with them
  * first, and the map is set up from that.
  */
@@ -61,13 +60,12 @@ export default async function EvaluationVisitPage({
     property: { address: string | null; lat: number | null; lng: number | null; customer: { name: string | null; phone: string | null } | null } | null;
   };
 
-  const [viewer, organization, catalog, design, intake, lot] = await Promise.all([
+  const [viewer, organization, catalog, design, intake] = await Promise.all([
     getCurrentProfile(),
     getCurrentOrganization().catch(() => null),
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
     getIntakeForJob(jobId).catch(() => null),
-    lotForProperty(job.property_id).catch(() => null),
   ]);
   const timeZone = organization?.reminder_time_zone || "America/New_York";
   const stage = visitStage(job);
@@ -107,15 +105,6 @@ export default async function EvaluationVisitPage({
         arrivedAt={job.evaluator_arrived_at}
         timeZone={timeZone}
       />
-
-      {sent && (
-        <details open={!onSite} className="rounded-2xl border border-border bg-card p-4">
-          <summary className="cursor-pointer text-lg font-semibold">What they asked for</summary>
-          <div className="mt-3">
-            <YourPlan answers={sent.answers} photos={sent.photoUrls} lot={lot} />
-          </div>
-        </details>
-      )}
 
       {!onSite ? (
         <p className="rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">

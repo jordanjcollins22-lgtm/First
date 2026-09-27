@@ -22,7 +22,6 @@ import { StartEvaluation } from "@/components/evaluations/start-evaluation";
 import { JourneyPages, type JourneyStep } from "./journey-pages";
 import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
 import { IntakeForm } from "@/components/intake/intake-form";
-import { YourPlan } from "@/components/intake/your-plan";
 
 /**
  * The evaluator's side of a visit, every page in order, with a sample
@@ -125,7 +124,6 @@ export default async function EvaluatorJourneyPage() {
   const findByName = (pattern: RegExp) => active.find((p) => pattern.test(p.name))?.service_type_id ?? null;
   const plan = seedPlan(ANSWERS, findByName);
   const services = active.map((p) => ({ typeId: p.service_type_id, name: p.name }));
-  const photos = SAMPLE_PHOTOS.map(({ path, url }) => ({ path, url }));
 
   const setupProps = {
     jobId: "sample",
@@ -217,24 +215,18 @@ export default async function EvaluatorJourneyPage() {
     {
       key: "arrived",
       title: "Arrived",
-      what: "One button, Start the evaluation, with what the client sent on their pre-eval under it.",
+      what: "One button: Start the evaluation.",
       screen: (
         <div className="flex flex-col gap-4">
           <VisitHeader jobId="sample" when={when} client="Sarah Miller" address={address} phone="4105550100" stage="arrived" arrivedAt={at} timeZone={timeZone} preview />
           <StartEvaluation href="#" areas={plan.length} preview />
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="text-lg font-semibold">What they asked for</p>
-            <div className="mt-3">
-              <YourPlan answers={ANSWERS} photos={photos} lot={lot} />
-            </div>
-          </div>
         </div>
       ),
     },
     {
       key: "site-map",
       title: "The site map",
-      what: "Start opens the site map set up from their pre-eval. Add, remove or change areas, measure, then Walkthrough complete.",
+      what: "Just the site map, set up from their pre-eval. Walk it, add anything more and the details, then Walkthrough complete.",
       screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
     },
     {
