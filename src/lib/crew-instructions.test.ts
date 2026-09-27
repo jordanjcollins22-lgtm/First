@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { crewInstructions } from "@/lib/crew-instructions";
+import { crewInstructions, crewSteps } from "@/lib/crew-instructions";
+
+describe("crewSteps", () => {
+  it("puts the clearing in prep, what goes in in the work, and ends with the clean up", () => {
+    const steps = crewSteps("landscape-bed", { material: "Mulch", existingMaterial: "Rock", newPlantInstallation: "Select Plants", newPlantInstallation__qty: "3" })!;
+    const phases = steps.map((s) => s.phase);
+    expect(phases.indexOf("work")).toBeGreaterThan(phases.lastIndexOf("prep"));
+    expect(steps.filter((s) => s.phase === "prep").map((s) => s.label)).toContain("Take out all the old rock, down to the soil. The bed is changing to mulch.");
+    expect(steps.filter((s) => s.phase === "work").map((s) => s.label)).toContain("Plant the 3 new plants where they're marked, root ball level with the ground, and water them in.");
+    expect(steps.at(-1)?.phase).toBe("cleanup");
+  });
+
+  it("has no words for a service it doesn't know", () => {
+    expect(crewSteps("fire-pit", {})).toBeNull();
+  });
+});
 
 describe("crewInstructions", () => {
   it("says what to do, not what was picked", () => {
@@ -28,7 +43,7 @@ describe("crewInstructions", () => {
 
   it("uses the evaluator's words for Other", () => {
     const lines = crewInstructions("plant-bush-removal", { type: "Bush", quantity: "1", size: "Large", afterward: "Other", afterward__other: "leave bare for the patio" });
-    expect(lines[0]).toBe("Take out the large bush and dig out the root ball.");
+    expect(lines).toContain("Take out the large bush and dig out the root ball.");
     expect(lines).toContain("Afterward: leave bare for the patio.");
   });
 

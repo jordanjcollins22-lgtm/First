@@ -47,6 +47,8 @@ export async function startArea(jobId: string, zoneId: string): Promise<AreaResu
   if (!state) return { ok: false, message: "That area isn't on the site map." };
   if (state.status === "done") return { ok: false, message: "That area is finished." };
   if (state.status === "waiting") return { ok: false, message: state.waitingReason ?? "Its kit is in use in another area." };
+  // Prepped and waiting on the rest: the next thing to do is somewhere else.
+  if (state.prepped && !fresh.board.allPrepped) return { ok: false, message: "This area is prepped. Prep the next one: the work starts once every area is prepped." };
   if (fresh.board.myZoneId === zoneId) return { ok: true };
 
   const supabase = await createClient();
@@ -82,7 +84,7 @@ export async function tickAreaStep(jobId: string, zoneId: string, stepKey: strin
   if (!fresh) return { ok: false, message: "Couldn't find that job." };
   const zone = fresh.zones.find((z) => z.id === zoneId);
   if (!zone) return { ok: false, message: "That area isn't on the site map." };
-  const list = stepsFor(zone.service!.typeId);
+  const list = stepsFor(zone.service!.typeId, zone.service!.values);
   const step = list.find((s) => s.key === stepKey);
   if (!step) return { ok: false, message: "That step isn't on this area." };
 
@@ -95,7 +97,7 @@ export async function tickAreaStep(jobId: string, zoneId: string, stepKey: strin
 
   const ticked = new Set(fresh.board.steps[zoneId]?.filter((s) => s.doneBy).map((s) => s.step.key) ?? []);
   const hasDuring = fresh.photos.some((p) => p.zone_id === zoneId && p.kind === "during");
-  const verdict = canTick(step, list, ticked, hasDuring);
+  const verdict = canTick(step, list, ticked, hasDuring, fresh.board.allPrepped);
   if (!verdict.ok) return { ok: false, message: verdict.reason };
 
   const { error } = await supabase.from("job_area_steps").upsert(
@@ -108,17 +110,17 @@ export async function tickAreaStep(jobId: string, zoneId: string, stepKey: strin
 }
 
 /**
- * The after photo is in: the area is done. Everybody in it is freed, its
- * kits go back, and the office's progress list says so.
+ * A photo is in, and either way the area is finished for now. The prep
+ * photo: it is prepped, and everybody moves on to prep the next area, since
+ * no work starts until every area is prepped. The after photo: it is done.
+ * Either way everybody in it is freed and its kits go back.
  */
-export async function areaPhotoTaken(jobId: string, zoneId: string, kind: "during" | "after"): Promise<AreaResult> {
+export async function areaPhotoTaken(jobId: string, zoneId: string): Promise<AreaResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, message: "Sign in first." };
-  if (kind === "after") {
-    const supabase = await createClient();
-    const now = new Date().toISOString();
-    await supabase.from("job_area_work").update({ left_at: now }).eq("job_id", jobId).eq("zone_id", zoneId).is("left_at", null);
-  }
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  await supabase.from("job_area_work").update({ left_at: now }).eq("job_id", jobId).eq("zone_id", zoneId).is("left_at", null);
   refresh(jobId);
   return { ok: true };
 }

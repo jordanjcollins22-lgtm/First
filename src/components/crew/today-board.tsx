@@ -87,13 +87,13 @@ export function TodayBoard({
             type="button"
             disabled={isPending || (day.action.kind === "left_shop" && Boolean(leaveBlockedBy))}
             onClick={() => press(day.action!.kind, day.action!.jobId)}
-            className="mt-3 h-14 w-full text-base font-semibold"
+            className="mt-3 h-auto min-h-14 w-full whitespace-normal py-3 text-base font-semibold leading-tight"
           >
             {isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <IconFor kind={day.action.kind} />}
-            {day.action.label}
             {/* "On my way" opens the directions itself, so it says so and
-                there is no second button to wonder about. */}
-            {day.action.kind === "travelling" ? " · Directions" : ""}
+                there is no second button to wonder about. Who it is for is
+                in the card above, so the button stays short. */}
+            {day.action.kind === "travelling" ? "On my way · Directions" : day.action.label}
           </Button>
         )}
         {day.action?.kind === "left_shop" && leaveBlockedBy && (
@@ -120,6 +120,8 @@ export function TodayBoard({
         )}
       </section>
 
+      {/* One stop is already in the card above; the list is for a day with more. */}
+      {stops.length !== 1 && (
       <section>
         <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Today&apos;s stops ({done.size}/{stops.length})
@@ -143,6 +145,7 @@ export function TodayBoard({
           </ol>
         )}
       </section>
+      )}
     </div>
   );
 }
@@ -158,24 +161,18 @@ function StopCallout({ stop, phase, directionsInButton = false }: { stop: Stop; 
       <p className="text-sm text-muted-foreground">{stop.customerName}</p>
       {stop.purpose && <p className="mt-0.5 text-xs text-muted-foreground">{stop.purpose}</p>}
 
-      <div className="mt-2 flex flex-wrap gap-2">
-        {/* One way to get directions at a time: when the big button below
-            is "On my way", it opens them, and this one stays out of the way. */}
+      {/* Links, not buttons: the one button is the big one below. When it
+          is "On my way" it opens the directions, so this leaves them out. */}
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-primary">
         {!directionsInButton && (
-          <Link
-            href={directionsUrl(stop)}
-            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground"
-          >
+          <Link href={directionsUrl(stop)} className="inline-flex min-h-9 items-center gap-1">
             <Navigation className="h-4 w-4" />
             Directions
           </Link>
         )}
-        <Link
-          href={`/jobs/${stop.jobId}`}
-          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium ${directionsInButton ? "flex-1" : ""}`}
-        >
+        <Link href={`/jobs/${stop.jobId}`} className="inline-flex min-h-9 items-center gap-1">
           <MapPin className="h-4 w-4" />
-          Site map
+          Site map and crew sheet
         </Link>
       </div>
     </div>

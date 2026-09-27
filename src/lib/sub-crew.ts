@@ -3,9 +3,10 @@
  *
  * They have no login and no crew day, so the sheet walks them through it
  * one button at a time: pick up at the shop (only when they use our
- * tools), On my way, I've arrived, then each area (a during photo when the
- * prep is done, an after photo when the clean up is), then We're finished,
- * which asks the account manager to come and walk it.
+ * tools), On my way, I've arrived, then the areas one at a time. Every area
+ * is prepped first, each closed by its prep photo; only then the work,
+ * each area closed by its after photo. Then We're finished, which asks the
+ * account manager to come and walk it.
  *
  * Pure, so the order is tested without a database.
  */
@@ -44,6 +45,30 @@ export function areaState(kinds: string[]): AreaState {
   if (kinds.includes("after")) return "done";
   if (kinds.includes("during")) return "prepped";
   return "todo";
+}
+
+/** Every area is prepped (or already done): the work can start. */
+export function subAllPrepped(states: AreaState[]): boolean {
+  return states.every((s) => s !== "todo");
+}
+
+/**
+ * The area they are on now: while prepping, the first one not prepped;
+ * after that, the first one not done. Null when every area is done.
+ */
+export function currentArea<T extends { id: string }>(zones: T[], states: Record<string, AreaState>): { zone: T; kind: "during" | "after" } | null {
+  const all = subAllPrepped(zones.map((z) => states[z.id] ?? "todo"));
+  const zone = zones.find((z) => (states[z.id] ?? "todo") === (all ? "prepped" : "todo"));
+  return zone ? { zone, kind: all ? "after" : "during" } : null;
+}
+
+/** Whether this photo can go on this area now. */
+export function canTakePhoto(kind: "during" | "after", state: AreaState, allPrepped: boolean): { ok: true } | { ok: false; reason: string } {
+  if (state === "done") return { ok: false, reason: "That area is finished." };
+  if (kind === "during" && state !== "todo") return { ok: false, reason: "That area already has its prep photo." };
+  if (kind === "after" && state === "todo") return { ok: false, reason: "Prep it and take the prep photo first." };
+  if (kind === "after" && !allPrepped) return { ok: false, reason: "Every area gets prepped first. Prep the next area." };
+  return { ok: true };
 }
 
 /** Whether they can say they are finished: every area has its after photo. */

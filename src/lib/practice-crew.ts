@@ -13,13 +13,10 @@ import type { SubCrewSheet } from "@/lib/data/sub-crew";
 import type { CrewEvent, Stop } from "@/lib/crew-day";
 import type { AreaState as SubAreaState } from "@/lib/sub-crew";
 import type { JobWalkthrough } from "@/types/domain";
-import { PRACTICE_ADDRESS, practiceWorkOrder } from "@/lib/practice-sample";
+import { PRACTICE_ADDRESS, PRACTICE_ZONES, practiceWorkOrder } from "@/lib/practice-sample";
 
 export const SAMPLE_JOB_ID = "sample";
 const ME = "me";
-
-/** Which rate-card service each sample area is. */
-const TYPE_OF: Record<string, string> = { "Landscape Bed": "landscape-bed", "Plant / Bush Removal": "plant-bush-removal" };
 
 export const SAMPLE_SHOP = { arriveBy: "07:00:00", accessCodes: "Gate 1234, side door 5678", address: "The shop" };
 
@@ -75,38 +72,68 @@ export function sampleShopDay(): ShopDay {
   };
 }
 
-/** The area board at a stage: nothing started, one area prepped, one cleaned up, or all done. */
-export function sampleBoard(stage: "open" | "prep_done" | "cleanup_done" | "all_done"): AreaBoardData {
+/**
+ * The area board at a stage of the day. Every area is prepped first:
+ * nothing started, prepping the first area, its prep photo due, on to the
+ * next, every area prepped, doing the work, and the after photo due.
+ */
+export type BoardStage = "open" | "prepping" | "prep_photo" | "next" | "all_prepped" | "working" | "after_photo";
+
+export function sampleBoard(stage: BoardStage): AreaBoardData {
   const zones = sampleZones();
   const steps: AreaBoardData["steps"] = {};
   const tips: AreaBoardData["tips"] = {};
+  const workStage = stage === "all_prepped" || stage === "working" || stage === "after_photo";
+  const mineIndex = stage === "prepping" || stage === "prep_photo" || stage === "working" || stage === "after_photo" ? 0 : null;
+
   const states: AreaState[] = zones.map((zone, i) => {
-    const typeId = TYPE_OF[zone.service] ?? "landscape-bed";
-    const all = stepsFor(typeId);
-    const mine = i === 0 && (stage === "prep_done" || stage === "cleanup_done");
-    const done = stage === "all_done";
-    const tickedCount = mine ? (stage === "prep_done" ? all.filter((s) => s.phase === "prep").length : all.length) : done ? all.length : 0;
-    steps[zone.id] = all.map((step, n) => ({ step, doneBy: n < tickedCount ? "Jordan" : null }));
-    tips[zone.id] = tipsFor(typeId);
+    const source = PRACTICE_ZONES.find((z) => z.id === zone.id)!;
+    const all = stepsFor(source.typeId, source.values);
+    const prep = all.filter((s) => s.phase === "prep").length;
+    const work = all.filter((s) => s.phase === "work").length;
+    // How many steps are ticked, and whether its photos are in.
+    let ticks = 0;
+    let hasDuring = false;
+    if (workStage || (stage === "next" && i === 0)) {
+      ticks = prep;
+      hasDuring = true;
+    }
+    if (i === 0 && stage === "prepping") ticks = 2;
+    if (i === 0 && stage === "prep_photo") ticks = prep;
+    if (i === 0 && stage === "working") ticks = prep + Math.max(1, work - 1);
+    if (i === 0 && stage === "after_photo") ticks = all.length;
+    steps[zone.id] = all.map((step, n) => ({ step, doneBy: n < ticks ? "Jordan" : null }));
+    tips[zone.id] = tipsFor(source.typeId);
+    const mine = i === mineIndex;
+    const prepDone = ticks >= prep;
+    const phase = ticks < prep ? "prep" : ticks < prep + work ? "work" : ticks < all.length ? "cleanup" : "done";
     return {
       zoneId: zone.id,
-      status: done ? "done" : mine ? "working" : "open",
+      status: mine ? "working" : "open",
       people: mine ? [{ profileId: ME, name: "Jordan" }] : [],
       kits: mine ? [2] : [],
-      phase: done ? "done" : mine ? (stage === "prep_done" ? "prep" : "cleanup") : "prep",
-      stepsDone: tickedCount,
+      phase,
+      stepsDone: ticks,
       stepsTotal: all.length,
-      hasDuring: done || (mine && stage === "cleanup_done"),
-      hasAfter: done,
-      photoDue: mine ? (stage === "prep_done" ? "during" : "after") : null,
+      hasDuring,
+      hasAfter: false,
+      prepped: prepDone && hasDuring,
+      photoDue: prepDone && !hasDuring ? "during" : ticks === all.length ? "after" : null,
       waitingReason: null,
       wouldTake: i === 2 ? [3] : [2],
     };
   });
-  return { meId: ME, myZoneId: stage === "prep_done" || stage === "cleanup_done" ? zones[0].id : null, states, steps, tips, tools: {} };
+  return {
+    meId: ME,
+    myZoneId: mineIndex != null ? zones[mineIndex].id : null,
+    states,
+    allPrepped: states.every((s) => s.prepped),
+    steps,
+    tips,
+    tools: {},
+  };
 }
 
-/** The walkthrough; `bySub` is a subcontractor's We're finished, which has no one on our team behind it. */
 export function sampleWalkthrough(status: "requested" | "approved" | "rejected", bySub = false): JobWalkthrough {
   const now = new Date().toISOString();
   return {
@@ -157,9 +184,12 @@ export function sampleSubSheet(usesOurTools: boolean, walkthrough: SubCrewSheet[
   };
 }
 
-/** Each area's state for the subcontractor's pages. */
-export function sampleSubAreas(stage: "todo" | "first_prepped" | "all_done"): Record<string, SubAreaState> {
+/** Each area's state for the subcontractor's pages: every area prepped first, then the work. */
+export function sampleSubAreas(stage: "todo" | "first_prepped" | "all_prepped" | "all_done"): Record<string, SubAreaState> {
   return Object.fromEntries(
-    sampleZones().map((z, i) => [z.id, stage === "all_done" ? "done" : stage === "first_prepped" && i === 0 ? "prepped" : "todo"])
+    sampleZones().map((z, i) => [
+      z.id,
+      stage === "all_done" ? "done" : stage === "all_prepped" || (stage === "first_prepped" && i === 0) ? "prepped" : "todo",
+    ])
   );
 }

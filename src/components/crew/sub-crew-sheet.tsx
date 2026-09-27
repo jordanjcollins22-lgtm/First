@@ -2,12 +2,14 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, KeyRound, Loader2, MapPin, Navigation, Package, Phone, Wrench } from "lucide-react";
+import { Camera, Check, CheckCircle2, Circle, KeyRound, Loader2, MapPin, Navigation, Package, Phone, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { subAttachPhoto, subFinish, subPhotoSlot, subStep } from "@/lib/actions/sub-crew-actions";
-import { canFinish, sayTime, subStage, type AreaState, type SubStage } from "@/lib/sub-crew";
+import { canFinish, currentArea, sayTime, subAllPrepped, subStage, type AreaState, type SubStage } from "@/lib/sub-crew";
+import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { THUMBNAIL } from "@/lib/storage-image-url";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { AreaTodo } from "@/components/job/area-todo";
 import type { SubCrewSheet } from "@/lib/data/sub-crew";
@@ -18,8 +20,9 @@ const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("en-US",
 /**
  * A subcontractor's crew sheet, from the link the office sent them. One
  * button at a time: pick up at the shop (when they use our tools), On my
- * way, I've arrived; then each area, with what to do, a during photo when
- * the prep is done and an after photo when it is cleaned up; then We're
+ * way, I've arrived; then the areas one at a time. Every area is prepped
+ * first, its prep steps ticked and its prep photo taken; then the work
+ * and clean up, area by area, each closed by its after photo; then We're
  * finished, which asks the account manager to come and walk it.
  */
 export function SubCrewSheetView({
@@ -27,6 +30,7 @@ export function SubCrewSheetView({
   preview = false,
   stage: forcedStage,
   areaStates: forcedAreas,
+  tickedAll = false,
 }: {
   sheet: SubCrewSheet;
   /** For the owner's walk-through: taps record nothing. */
@@ -34,6 +38,8 @@ export function SubCrewSheetView({
   /** For the walk-through's pages: show this stage. */
   stage?: SubStage;
   areaStates?: Record<string, AreaState>;
+  /** For the walk-through's pages: the current area's steps already ticked. */
+  tickedAll?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +50,9 @@ export function SubCrewSheetView({
   const finishable = canFinish(sheet.zones.map((z) => areas[z.id] ?? "todo"));
   const directions = sheet.lat != null && sheet.lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${sheet.lat},${sheet.lng}` : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(sheet.address)}`;
   const doneCount = sheet.zones.filter((z) => areas[z.id] === "done").length;
+  const preppedCount = sheet.zones.filter((z) => (areas[z.id] ?? "todo") !== "todo").length;
+  const prepping = !subAllPrepped(sheet.zones.map((z) => areas[z.id] ?? "todo"));
+  const current = currentArea(sheet.zones, areas);
 
   function step(which: "picked_up" | "on_way" | "arrived") {
     setError(null);
@@ -172,67 +181,153 @@ export function SubCrewSheetView({
 
       {stage === "on_site" && finishable.ok && (
         <section className="flex flex-col gap-2 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || !finishable.ok} onClick={finish}>
+          <Button type="button" className="h-14 text-base font-semibold" disabled={pending} onClick={finish}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle2 className="mr-2 h-5 w-5" />} We&apos;re finished
           </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            The account manager comes to walk it. Keep the tools out until they have.
-          </p>
+          <p className="text-center text-xs text-muted-foreground">The account manager comes to walk it. Keep the tools out until they have.</p>
         </section>
       )}
 
-      {/* The areas: what to do in each, then its photos once on site. */}
+      {/* On site: every area prepped first, then the work, one area at a time. */}
+      {stage === "on_site" && current && (
+        <>
+          <p className={cn("rounded-lg px-3 py-2 text-sm", prepping ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100")}>
+            {prepping
+              ? "First, prep every area. The work starts once every area is prepped and has its prep photo."
+              : "Every area is prepped. Now the work, one area at a time."}
+          </p>
+          <CurrentArea
+            key={`${current.zone.id}-${current.kind}`}
+            token={sheet.token}
+            zone={current.zone}
+            index={sheet.zones.indexOf(current.zone)}
+            kind={current.kind}
+            preview={preview}
+            tickedAll={tickedAll}
+            onError={setError}
+          />
+        </>
+      )}
+
+      {/* The areas: the whole scope before they arrive, where each one is once they have. */}
       <section className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold">{onSite ? "The areas" : "What you'll be doing"}</h2>
+          <h2 className="text-lg font-semibold">{onSite ? "All the areas" : "What you'll be doing"}</h2>
           {onSite && (
             <p className="text-xs text-muted-foreground">
-              {doneCount} of {sheet.zones.length} done
+              {prepping ? `${preppedCount} of ${sheet.zones.length} prepped` : `${doneCount} of ${sheet.zones.length} done`}
             </p>
           )}
         </div>
-        {sheet.zones.map((zone, i) => (
-          <AreaCard key={zone.id} token={sheet.token} zone={zone} index={i} state={areas[zone.id] ?? "todo"} onSite={onSite && stage !== "finished"} preview={preview} onError={setError} />
-        ))}
+        {sheet.zones.map((zone, i) =>
+          onSite ? (
+            <AreaRow key={zone.id} zone={zone} index={i} state={areas[zone.id] ?? "todo"} current={current?.zone.id === zone.id} />
+          ) : (
+            <AreaCard key={zone.id} zone={zone} index={i} />
+          )
+        )}
       </section>
-
-      {stage === "on_site" && !finishable.ok && (
-        <section className="flex flex-col gap-2 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || !finishable.ok} onClick={finish}>
-            {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle2 className="mr-2 h-5 w-5" />} We&apos;re finished
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            {finishable.ok ? "" : finishable.reason}
-          </p>
-        </section>
-      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }
 
-function AreaCard({
+/** An area's whole scope, before they arrive: the evaluation photos and what to do. */
+function AreaCard({ zone, index }: { zone: SubCrewSheet["zones"][number]; index: number }) {
+  return (
+    <article className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
+      <AreaTitle zone={zone} index={index} />
+      <p className="text-sm text-muted-foreground">
+        {zone.service}
+        {zone.location ? ` · ${zone.location}` : ""}
+        {zone.sizeLabel ? ` · ${zone.sizeLabel}` : ""}
+      </p>
+      <ZonePhotos photos={zone.photos} zoneName={zone.name} />
+      <AreaTodo todo={zone.todo} />
+      {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
+    </article>
+  );
+}
+
+function AreaTitle({ zone, index }: { zone: SubCrewSheet["zones"][number]; index: number }) {
+  return (
+    <p className="font-semibold">
+      <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: zone.color }}>
+        {index + 1}
+      </span>
+      {zone.name}
+    </p>
+  );
+}
+
+/** Once on site: where each area is, with its whole scope a tap away. */
+function AreaRow({ zone, index, state, current }: { zone: SubCrewSheet["zones"][number]; index: number; state: AreaState; current: boolean }) {
+  return (
+    <details className={cn("rounded-xl border bg-card px-3 py-2.5", current ? "border-primary" : "border-border")}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+        <AreaTitle zone={zone} index={index} />
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+            state === "done" ? "bg-emerald-100 text-emerald-800" : state === "prepped" ? "bg-amber-100 text-amber-900" : current ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}
+        >
+          {state === "done" ? "Done" : state === "prepped" ? "Prepped" : current ? "Now" : "To prep"}
+        </span>
+      </summary>
+      <div className="mt-2 flex flex-col gap-2">
+        <ZonePhotos photos={zone.photos} zoneName={zone.name} />
+        <AreaTodo todo={zone.todo} />
+      </div>
+    </details>
+  );
+}
+
+/**
+ * The area they are on: the evaluation photo, the steps for now (the prep,
+ * or the work and clean up), ticked as they go, then the one photo. The
+ * ticks are on this phone only; the photo is the record.
+ */
+function CurrentArea({
   token,
   zone,
   index,
-  state,
-  onSite,
+  kind,
   preview,
+  tickedAll,
   onError,
 }: {
   token: string;
   zone: SubCrewSheet["zones"][number];
   index: number;
-  state: AreaState;
-  onSite: boolean;
+  kind: "during" | "after";
   preview: boolean;
+  tickedAll: boolean;
   onError: (message: string | null) => void;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
-  const kind: "during" | "after" = state === "todo" ? "during" : "after";
+  const groups: { title: string; lines: string[] }[] =
+    kind === "during"
+      ? [{ title: "Prep this area", lines: zone.phases.prep }]
+      : [
+          { title: "The work", lines: zone.phases.work },
+          { title: "Clean up", lines: zone.phases.cleanup },
+        ].filter((g) => g.lines.length > 0);
+  const total = groups.reduce((n, g) => n + g.lines.length, 0);
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set(tickedAll ? groups.flatMap((g) => g.lines.map((_, i) => `${g.title}-${i}`)) : []));
+  const ready = ticked.size >= total;
+
+  function toggle(key: string) {
+    setTicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   async function upload(files: FileList | null) {
     const file = files?.[0];
@@ -254,46 +349,54 @@ function AreaCard({
   }
 
   return (
-    <article className={cn("flex flex-col gap-2 rounded-2xl border bg-card p-4", state === "done" ? "border-emerald-300" : "border-border")}>
+    <article className="flex flex-col gap-3 rounded-2xl border-2 border-primary bg-card p-4">
       <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold">
-          <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: zone.color }}>
-            {index + 1}
-          </span>
-          {zone.name}
-        </p>
-        {onSite && (
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-              state === "done" ? "bg-emerald-100 text-emerald-800" : state === "prepped" ? "bg-amber-100 text-amber-900" : "bg-muted text-muted-foreground"
-            )}
-          >
-            {state === "done" ? "Done" : state === "prepped" ? "Prepped" : "To do"}
-          </span>
+        <div>
+          <AreaTitle zone={zone} index={index} />
+          <p className="text-sm text-muted-foreground">{zone.location || zone.service}</p>
+        </div>
+        {zone.photos[0] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={canvasImageUrl(zone.photos[0].path, THUMBNAIL)} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
         )}
       </div>
-      <p className="text-sm text-muted-foreground">
-        {zone.service}
-        {zone.location ? ` · ${zone.location}` : ""}
-        {zone.sizeLabel ? ` · ${zone.sizeLabel}` : ""}
-      </p>
-      <ZonePhotos photos={zone.photos} zoneName={zone.name} />
-      <AreaTodo todo={zone.todo} />
+
       {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
 
-      {onSite && state !== "done" && (
-        <div className="rounded-lg border border-dashed border-primary/60 bg-primary/5 p-2.5">
-          <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the during photo" : "Clean up done: take the after photo"}</p>
+      {groups.map((group) => (
+        <div key={group.title} className="flex flex-col gap-1">
+          <p className="text-sm font-bold">{group.title}</p>
+          {group.lines.map((line, i) => {
+            const key = `${group.title}-${i}`;
+            const done = ticked.has(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggle(key)}
+                className="flex min-h-11 items-start gap-2.5 rounded-lg border border-border bg-background px-2.5 py-2 text-left text-sm"
+              >
+                {done ? <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />}
+                <span className={done ? "text-muted-foreground line-through" : ""}>{line}</span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+      {ready ? (
+        <div className="sticky bottom-2 z-10 rounded-lg border border-dashed border-primary/60 bg-card p-2.5 shadow-lg">
+          <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the prep photo" : "Clean up done: take the after photo"}</p>
           <p className="text-xs text-muted-foreground">
-            {kind === "during" ? "One photo of the area, prepped." : "One photo of the finished area. This finishes it."}
+            {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}
           </p>
           <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload(e.target.files)} />
-          <Button type="button" className="mt-2 w-full" disabled={uploading} onClick={() => (preview ? undefined : input.current?.click())}>
-            {uploading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Camera className="mr-1.5 h-4 w-4" />}
-            {uploading ? "Uploading…" : kind === "during" ? "Take the during photo" : "Take the after photo"}
+          <Button type="button" className="mt-2 h-12 w-full text-base font-semibold" disabled={uploading} onClick={() => (preview ? undefined : input.current?.click())}>
+            {uploading ? <Loader2 className="mr-1.5 h-5 w-5 animate-spin" /> : <Camera className="mr-1.5 h-5 w-5" />}
+            {uploading ? "Uploading…" : kind === "during" ? "Take the prep photo" : "Take the after photo"}
           </Button>
         </div>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">Tick each one as it&apos;s done. The photo comes next.</p>
       )}
     </article>
   );

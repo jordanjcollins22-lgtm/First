@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { areaNeeds, boardState, canTick, pickKits, stepsFor, tipsFor } from "./area-work";
+import { allPrepped, areaNeeds, boardState, canTick, pickKits, stepsFor, tipsFor } from "./area-work";
 
 const tools = [
   { id: "shovel", name: "Shovel", kits: [1] },
@@ -103,7 +103,30 @@ describe("canTick", () => {
 
   it("holds the work until the prep is done and the during photo is in", () => {
     expect(canTick(work, list, new Set(), false).ok).toBe(false);
-    expect(canTick(work, list, prep, false)).toEqual({ ok: false, reason: "Take the during photo first: prep is done." });
+    expect(canTick(work, list, prep, false)).toEqual({ ok: false, reason: "Take the prep photo first: prep is done." });
     expect(canTick(work, list, prep, true).ok).toBe(true);
+  });
+
+  it("holds every area's work until every area is prepped", () => {
+    expect(canTick(work, list, prep, true, false)).toEqual({ ok: false, reason: "Every area gets prepped first. Prep the next area." });
+    expect(canTick(list[0], list, new Set(), false, false).ok).toBe(true);
+  });
+});
+
+describe("the area's own steps", () => {
+  it("are its scope, phase by phase, when the answers are there", () => {
+    const own = stepsFor("landscape-cleanup", { cleanupType: "General" });
+    expect(own[0]).toEqual({ key: "prep-1", label: "Remove all the leaves, sticks and any debris.", phase: "prep" });
+    expect(own.at(-1)?.phase).toBe("cleanup");
+  });
+
+  it("counts an area prepped once its prep is ticked and its prep photo is in", () => {
+    const zones = [{ id: "a", name: "Bed", serviceTypeId: "landscape-bed", values: { material: "Mulch" } }];
+    const prep = new Set(stepsFor("landscape-bed", { material: "Mulch" }).filter((s) => s.phase === "prep").map((s) => s.key));
+    const needs = new Map([["a", { tools: [], kitChoices: [] }]]);
+    const before = boardState({ zones, needs, working: [], ticked: new Map([["a", prep]]), photos: [] });
+    const after = boardState({ zones, needs, working: [], ticked: new Map([["a", prep]]), photos: [{ zoneId: "a", kind: "during" }] });
+    expect(allPrepped(before)).toBe(false);
+    expect(allPrepped(after)).toBe(true);
   });
 });

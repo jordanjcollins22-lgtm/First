@@ -12,20 +12,21 @@ import { THUMBNAIL } from "@/lib/storage-image-url";
 import { createClient } from "@/lib/supabase/client";
 import { attachJobPhoto } from "@/lib/actions/job-photo-actions";
 import { areaPhotoTaken, leaveArea, startArea, tickAreaStep } from "@/lib/actions/area-work-actions";
-import { PHASE_LABEL, canTick, type AreaState, type Phase } from "@/lib/area-work";
+import { canTick, type AreaState, type Phase } from "@/lib/area-work";
 import type { AreaBoardData } from "@/lib/data/area-board";
 import type { WorkOrderZone } from "@/lib/work-order";
 
-const PHASES: Phase[] = ["prep", "work", "cleanup"];
-
 /**
- * The job on site, area by area.
+ * The job on site, area by area, one thing to press at a time.
  *
- * Every area with who is in it, what stage it is at and which kit it has.
- * Tap one to see what to do there. Start it, or join whoever is in it, and
- * tick the steps as they are done: prep, then a during photo, then the work
- * and the clean up, then the after photo, which finishes the area and gives
- * its kits back. An area whose kit is in use elsewhere waits, and says where.
+ * First every area is prepped: pick an area, read the whole scope with the
+ * evaluation photos, Start prep here, tick each prep step as it is done,
+ * then the prep photo. That frees the area and the next one is up. Only
+ * when every area has its prep photo does the work open, and then the same
+ * again: Start the work here, the work, the clean up, the after photo.
+ *
+ * Inside an area only its current steps show, with its photo button once
+ * they are ticked. The whole scope is a tap away but out of the way.
  */
 export function AreaBoard({
   jobId,
@@ -41,107 +42,144 @@ export function AreaBoard({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(board.myZoneId);
+  // undefined: follow the suggestion (the next area to do). A tap overrides it.
+  const [picked, setPicked] = useState<string | null | undefined>(undefined);
 
   const stateOf = new Map(board.states.map((s) => [s.zoneId, s]));
   const numberOf = new Map(zones.map((z, i) => [z.id, i + 1]));
+  const stage: "prep" | "work" = board.allPrepped ? "work" : "prep";
+  const prepped = board.states.filter((s) => s.prepped).length;
   const done = board.states.filter((s) => s.status === "done").length;
 
-  // Workable areas first, finished ones last: the ones that can be picked
-  // are the ones worth reading.
-  const order: Record<AreaState["status"], number> = { working: 0, open: 1, waiting: 2, done: 3 };
-  const sorted = [...zones].sort((a, b) => {
-    const mine = (z: WorkOrderZone) => (z.id === board.myZoneId ? -1 : 0);
-    return mine(a) - mine(b) || order[stateOf.get(a.id)?.status ?? "open"] - order[stateOf.get(b.id)?.status ?? "open"] || (numberOf.get(a.id)! - numberOf.get(b.id)!);
-  });
+  const toDo = (s: AreaState | undefined) => Boolean(s) && s!.status !== "waiting" && (stage === "prep" ? !s!.prepped : s!.status !== "done");
+  const suggested = zones.find((z) => toDo(stateOf.get(z.id)))?.id ?? null;
+  const open = picked === undefined ? suggested : picked;
 
   function run(action: () => Promise<{ ok: boolean; message?: string }>) {
     setError(null);
     start(async () => {
       const result = await action();
       if (!result.ok) setError(result.message ?? "That didn't work. Try again.");
+      setPicked(undefined);
       router.refresh();
     });
   }
 
   if (zones.length === 0) return null;
 
+  const myZone = board.myZoneId ? zones.find((z) => z.id === board.myZoneId) : undefined;
+
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between">
         <h2 className="text-base font-bold">The areas</h2>
         <p className="text-xs text-muted-foreground">
-          {done} of {zones.length} done
+          {stage === "prep" ? `${prepped} of ${zones.length} prepped` : `${done} of ${zones.length} done`}
         </p>
       </div>
 
-      {!board.myZoneId && done === 0 && accountManager && (
-        <p className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-          Questions before you start? Ask {accountManager.name}.
-          {accountManager.phone && (
-            <a href={`tel:${accountManager.phone}`} className="flex items-center gap-1 font-medium text-primary">
-              <Phone className="h-3.5 w-3.5" /> Call
-            </a>
-          )}
-        </p>
-      )}
+      <p className={`rounded-lg px-3 py-2 text-sm ${stage === "prep" ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100"}`}>
+        {stage === "prep"
+          ? "First, prep every area. The work starts once every area is prepped and has its prep photo."
+          : "Every area is prepped. Now the work, one area at a time."}
+      </p>
 
       {error && <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
 
-      <ol className="flex flex-col gap-2">
-        {sorted.map((zone) => {
-          const state = stateOf.get(zone.id)!;
-          const mine = zone.id === board.myZoneId;
-          const expanded = open === zone.id;
-          return (
-            <li
-              key={zone.id}
-              className={`rounded-xl border bg-card/80 backdrop-blur-md ${mine ? "border-2 border-primary" : state.status === "waiting" || state.status === "done" ? "border-border opacity-80" : "border-white/60"}`}
-            >
-              <button type="button" className="flex w-full items-start gap-2 p-3 text-left" onClick={() => setOpen(expanded ? null : zone.id)}>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: zone.color }}>
-                  {state.status === "done" ? <Check className="h-4 w-4" /> : numberOf.get(zone.id)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-semibold leading-snug">{zone.name}</span>
-                  <span className="block text-sm text-primary">{zone.service}</span>
-                  <StatusLine state={state} meId={board.meId} />
-                </span>
-                {/* The area as the evaluator saw it, so it can be found before it is opened. */}
-                {!expanded && zone.photos[0] && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={canvasImageUrl(zone.photos[0].path, THUMBNAIL)} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" loading="lazy" />
-                )}
-                <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
-              </button>
-
-              {expanded && (
-                <AreaDetail
-                  jobId={jobId}
-                  zone={zone}
-                  state={state}
-                  mine={mine}
-                  steps={board.steps[zone.id] ?? []}
-                  tips={board.tips[zone.id] ?? []}
-                  tools={board.tools[zone.id] ?? []}
-                  pending={pending}
-                  onStart={() => run(() => startArea(jobId, zone.id))}
-                  onLeave={() => run(() => leaveArea(jobId))}
-                  onTick={(key, value) => run(() => tickAreaStep(jobId, zone.id, key, value))}
-                  onPhoto={() => router.refresh()}
-                  onError={setError}
-                />
+      {myZone ? (
+        <>
+          <InArea
+            jobId={jobId}
+            zone={myZone}
+            number={numberOf.get(myZone.id)!}
+            state={stateOf.get(myZone.id)!}
+            everyAreaPrepped={board.allPrepped}
+            steps={board.steps[myZone.id] ?? []}
+            tips={board.tips[myZone.id] ?? []}
+            tools={board.tools[myZone.id] ?? []}
+            meId={board.meId}
+            pending={pending}
+            onTick={(key, value) => run(() => tickAreaStep(jobId, myZone.id, key, value))}
+            onLeave={() => run(() => leaveArea(jobId))}
+            onPhoto={() => {
+              setPicked(undefined);
+              router.refresh();
+            }}
+            onError={setError}
+          />
+          {zones.length > 1 && (
+            <p className="text-center text-xs text-muted-foreground">
+              {stage === "prep" ? `${zones.length - prepped - 1} more to prep after this one.` : `${zones.length - done - 1} more after this one.`}
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          {done === 0 && prepped === 0 && accountManager && (
+            <p className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+              Questions before you start? Ask {accountManager.name}.
+              {accountManager.phone && (
+                <a href={`tel:${accountManager.phone}`} className="flex items-center gap-1 font-medium text-primary">
+                  <Phone className="h-3.5 w-3.5" /> Call
+                </a>
               )}
-            </li>
-          );
-        })}
-      </ol>
+            </p>
+          )}
+          <ol className="flex flex-col gap-2">
+            {zones.map((zone) => {
+              const state = stateOf.get(zone.id)!;
+              const expanded = open === zone.id;
+              return (
+                <li
+                  key={zone.id}
+                  className={`rounded-xl border bg-card/80 backdrop-blur-md ${expanded ? "border-2 border-primary" : toDo(state) ? "border-white/60" : "border-border opacity-80"}`}
+                >
+                  <button type="button" className="flex w-full items-start gap-2 p-3 text-left" onClick={() => setPicked(expanded ? null : zone.id)}>
+                    <AreaBadge zone={zone} number={numberOf.get(zone.id)!} state={state} stage={stage} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold leading-snug">{zone.name}</span>
+                      <span className="block text-sm text-primary">{zone.service}</span>
+                      <StatusLine state={state} stage={stage} meId={board.meId} />
+                    </span>
+                    {/* The area as the evaluator saw it, so it can be found before it is opened. */}
+                    {!expanded && zone.photos[0] && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={canvasImageUrl(zone.photos[0].path, THUMBNAIL)} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" loading="lazy" />
+                    )}
+                    <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {expanded && (
+                    <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3">
+                      <Scope zone={zone} tools={board.tools[zone.id] ?? []} state={state} />
+                      {/* Read the scope, then start: the button stays in reach at the bottom of the screen. */}
+                      <div className="sticky bottom-2 z-10">
+                        <StartButton state={state} stage={stage} pending={pending} onStart={() => run(() => startArea(jobId, zone.id))} />
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      )}
     </section>
   );
 }
 
-function StatusLine({ state, meId }: { state: AreaState; meId: string | null }) {
+function AreaBadge({ zone, number, state, stage }: { zone: WorkOrderZone; number: number; state: AreaState; stage: "prep" | "work" }) {
+  const tick = state.status === "done" || (stage === "prep" && state.prepped);
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: zone.color }}>
+      {tick ? <Check className="h-4 w-4" /> : number}
+    </span>
+  );
+}
+
+function StatusLine({ state, stage, meId }: { state: AreaState; stage: "prep" | "work"; meId: string | null }) {
   if (state.status === "done") return <span className="mt-0.5 block text-xs text-emerald-700">Done</span>;
+  if (stage === "prep" && state.prepped) return <span className="mt-0.5 block text-xs text-emerald-700">Prepped, prep photo in</span>;
   if (state.status === "waiting") {
     return (
       <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-700">
@@ -149,68 +187,33 @@ function StatusLine({ state, meId }: { state: AreaState; meId: string | null }) 
       </span>
     );
   }
-  const phase = state.phase === "done" ? "Photos" : PHASE_LABEL[state.phase];
   if (state.status === "working") {
     return (
       <span className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
         <Users className="h-3 w-3" />
         {state.people.map((p) => (p.profileId === meId ? "You" : p.name)).join(", ")}
         {" · "}
-        {phase} · {state.stepsDone}/{state.stepsTotal}
+        {stage === "prep" ? "Prepping" : "Working"}
         {state.kits.length > 0 && ` · kit ${state.kits.join(", ")}`}
       </span>
     );
   }
   return (
     <span className="mt-0.5 block text-xs text-muted-foreground">
-      Open{state.wouldTake.length > 0 ? ` · takes kit ${state.wouldTake.join(", ")}` : ""}
-      {state.stepsDone > 0 ? ` · ${state.stepsDone}/${state.stepsTotal} done` : ""}
+      {stage === "prep" ? "To prep" : "Ready for the work"}
+      {state.wouldTake.length > 0 ? ` · takes kit ${state.wouldTake.join(", ")}` : ""}
     </span>
   );
 }
 
-function AreaDetail({
-  jobId,
-  zone,
-  state,
-  mine,
-  steps,
-  tips,
-  tools,
-  pending,
-  onStart,
-  onLeave,
-  onTick,
-  onPhoto,
-  onError,
-}: {
-  jobId: string;
-  zone: WorkOrderZone;
-  state: AreaState;
-  mine: boolean;
-  steps: AreaBoardData["steps"][string];
-  tips: AreaBoardData["tips"][string];
-  tools: string[];
-  pending: boolean;
-  onStart: () => void;
-  onLeave: () => void;
-  onTick: (key: string, value: boolean) => void;
-  onPhoto: () => void;
-  onError: (message: string | null) => void;
-}) {
-  const ticked = new Set(steps.filter((s) => s.doneBy).map((s) => s.step.key));
-  const list = steps.map((s) => s.step);
-
+/** The whole scope of an area: the evaluation photos, what to do, the note, the tools. */
+function Scope({ zone, tools, state }: { zone: WorkOrderZone; tools: string[]; state: AreaState }) {
   return (
-    <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3">
-      {/* What to do here, from the evaluation. */}
-      {(zone.location || zone.sizeLabel) && (
-        <p className="text-xs text-muted-foreground">{[zone.location, zone.sizeLabel].filter(Boolean).join(" · ")}</p>
-      )}
+    <>
+      {(zone.location || zone.sizeLabel) && <p className="text-xs text-muted-foreground">{[zone.location, zone.sizeLabel].filter(Boolean).join(" · ")}</p>}
       <ZonePhotos photos={zone.photos} zoneName={zone.name} />
       <AreaTodo todo={zone.todo} />
       {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
-
       {tools.length > 0 && state.status !== "done" && (
         <p className="text-sm">
           <span className="font-medium">Tools: </span>
@@ -219,47 +222,129 @@ function AreaDetail({
           {state.status === "open" && state.wouldTake.length > 0 && <span className="text-muted-foreground"> · grab kit {state.wouldTake.join(", ")}</span>}
         </p>
       )}
+    </>
+  );
+}
 
-      {state.status === "waiting" && <p className="text-sm text-amber-700">{state.waitingReason} Pick another area for now.</p>}
+/** The one button on an area that is not yours yet, or why there isn't one. */
+function StartButton({ state, stage, pending, onStart }: { state: AreaState; stage: "prep" | "work"; pending: boolean; onStart: () => void }) {
+  if (state.status === "done") return <PhotoDone label="Done. After photo in." />;
+  if (stage === "prep" && state.prepped) return <PhotoDone label="Prepped. The work starts once every area is prepped." />;
+  if (state.status === "waiting") return <p className="text-sm text-amber-700">{state.waitingReason} Pick another area for now.</p>;
+  const label =
+    state.status === "working"
+      ? `Join ${state.people.map((p) => p.name).join(" and ")} here`
+      : stage === "prep"
+        ? "Start prep here"
+        : "Start the work here";
+  return (
+    <Button type="button" className="h-12 w-full text-base font-semibold shadow-lg" onClick={onStart} disabled={pending}>
+      {pending && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+      {label}
+    </Button>
+  );
+}
 
-      {!mine && (state.status === "open" || state.status === "working") && (
-        <Button type="button" className="h-11" onClick={onStart} disabled={pending}>
-          {state.status === "working" ? `Join ${state.people.map((p) => p.name).join(" and ")} here` : "Start this area"}
-        </Button>
-      )}
+const PHASE_HEADING: Record<Phase, string> = {
+  prep: "Prep this area",
+  work: "The work",
+  cleanup: "Clean up",
+};
 
-      {/* The checklist, phase by phase, with the photo that closes each. */}
-      {(mine || state.status === "working" || state.stepsDone > 0 || state.status === "done") && (
-        <div className="flex flex-col gap-3">
-          {PHASES.map((phase) => {
-            const inPhase = steps.filter((s) => s.step.phase === phase);
-            if (inPhase.length === 0) return null;
-            return (
-              <div key={phase} className="flex flex-col gap-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{PHASE_LABEL[phase]}</p>
-                {inPhase.map(({ step, doneBy }) => {
-                  const allowed = doneBy ? { ok: true as const } : canTick(step, list, ticked, state.hasDuring);
-                  return (
-                    <button
-                      key={step.key}
-                      type="button"
-                      disabled={pending || !mine || state.status === "done"}
-                      onClick={() => (allowed.ok ? onTick(step.key, !doneBy) : onError(allowed.reason))}
-                      className="flex min-h-10 items-start gap-2 rounded-lg px-1 py-1.5 text-left text-sm hover:bg-accent/40 disabled:cursor-default disabled:hover:bg-transparent"
-                    >
-                      {doneBy ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <Circle className={`mt-0.5 h-4 w-4 shrink-0 ${allowed.ok ? "text-muted-foreground" : "text-muted-foreground/40"}`} />}
-                      <span className={`flex-1 ${doneBy ? "text-muted-foreground line-through" : allowed.ok ? "" : "text-muted-foreground/70"}`}>{step.label}</span>
-                      {doneBy && <span className="shrink-0 text-xs text-muted-foreground">{doneBy}</span>}
-                    </button>
-                  );
-                })}
-                {phase === "prep" && (state.hasDuring ? <PhotoDone label="During photo in" /> : state.photoDue === "during" && <PhotoTaker jobId={jobId} zone={zone} kind="during" disabled={pending} onDone={onPhoto} onError={onError} />)}
-                {phase === "cleanup" && (state.hasAfter ? <PhotoDone label="After photo in. Area done." /> : state.photoDue === "after" && <PhotoTaker jobId={jobId} zone={zone} kind="after" disabled={pending} onDone={onPhoto} onError={onError} />)}
-              </div>
-            );
-          })}
+/**
+ * The area you are in: only the steps you are on now, ticked one by one,
+ * then the one photo that closes them. Prep, then the prep photo. Once
+ * every area is prepped: the work, the clean up, then the after photo.
+ */
+function InArea({
+  jobId,
+  zone,
+  number,
+  state,
+  everyAreaPrepped,
+  steps,
+  tips,
+  tools,
+  meId,
+  pending,
+  onTick,
+  onLeave,
+  onPhoto,
+  onError,
+}: {
+  jobId: string;
+  zone: WorkOrderZone;
+  number: number;
+  state: AreaState;
+  everyAreaPrepped: boolean;
+  steps: AreaBoardData["steps"][string];
+  tips: AreaBoardData["tips"][string];
+  tools: string[];
+  meId: string | null;
+  pending: boolean;
+  onTick: (key: string, value: boolean) => void;
+  onLeave: () => void;
+  onPhoto: () => void;
+  onError: (message: string | null) => void;
+}) {
+  const ticked = new Set(steps.filter((s) => s.doneBy).map((s) => s.step.key));
+  const list = steps.map((s) => s.step);
+  const allTicked = (phase: Phase) => steps.filter((s) => s.step.phase === phase).every((s) => s.doneBy);
+
+  // Where this area is: the first phase not finished, or the photo it waits on.
+  const phase: Phase = !allTicked("prep") || !state.hasDuring ? "prep" : !allTicked("work") ? "work" : "cleanup";
+  const photo: "during" | "after" | null = phase === "prep" && allTicked("prep") && !state.hasDuring ? "during" : phase === "cleanup" && allTicked("cleanup") && !state.hasAfter ? "after" : null;
+  const inPhase = steps.filter((s) => s.step.phase === phase);
+  const others = state.people.filter((p) => p.profileId !== meId);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border-2 border-primary bg-card/80 p-3 backdrop-blur-md">
+      <div className="flex items-start gap-2">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: zone.color }}>
+          {number}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold leading-snug">{zone.name}</p>
+          <p className="text-xs text-muted-foreground">
+            You{others.length > 0 ? ` and ${others.map((p) => p.name).join(", ")}` : ""}
+            {state.kits.length > 0 && ` · kit ${state.kits.join(", ")}`}
+          </p>
         </div>
-      )}
+        {zone.photos[0] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={canvasImageUrl(zone.photos[0].path, THUMBNAIL)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" loading="lazy" />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-bold">{PHASE_HEADING[phase]}</p>
+        <p className="text-xs text-muted-foreground">Tick each one as it&apos;s done.</p>
+        {inPhase.map(({ step, doneBy }) => {
+          const allowed = doneBy ? { ok: true as const } : canTick(step, list, ticked, state.hasDuring, everyAreaPrepped);
+          return (
+            <button
+              key={step.key}
+              type="button"
+              disabled={pending}
+              onClick={() => (allowed.ok ? onTick(step.key, !doneBy) : onError(allowed.reason))}
+              className="flex min-h-11 items-start gap-2.5 rounded-lg border border-border bg-background/70 px-2.5 py-2 text-left text-sm hover:bg-accent/40"
+            >
+              {doneBy ? <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />}
+              <span className={`flex-1 ${doneBy ? "text-muted-foreground line-through" : ""}`}>{step.label}</span>
+              {doneBy && <span className="shrink-0 text-xs text-muted-foreground">{doneBy}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {photo && <PhotoTaker jobId={jobId} zone={zone} kind={photo} disabled={pending} onDone={onPhoto} onError={onError} />}
+
+      <details className="rounded-lg border border-border bg-background/60 p-2.5">
+        <summary className="cursor-pointer text-sm font-medium">The whole scope for this area</summary>
+        <div className="mt-2 flex flex-col gap-3">
+          <Scope zone={zone} tools={tools} state={state} />
+        </div>
+      </details>
 
       {tips.length > 0 && (
         <details className="rounded-lg border border-border bg-background/60 p-2.5">
@@ -275,24 +360,22 @@ function AreaDetail({
         </details>
       )}
 
-      {mine && state.status !== "done" && (
-        <button type="button" onClick={onLeave} disabled={pending} className="self-start text-xs text-muted-foreground hover:text-primary">
-          Leave this area
-        </button>
-      )}
+      <button type="button" onClick={onLeave} disabled={pending} className="self-start text-xs text-muted-foreground hover:text-primary">
+        Leave this area
+      </button>
     </div>
   );
 }
 
 function PhotoDone({ label }: { label: string }) {
   return (
-    <p className="flex items-center gap-1.5 rounded-lg bg-emerald-50/70 px-2 py-1.5 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
-      <Camera className="h-3.5 w-3.5" /> {label}
+    <p className="flex items-center gap-1.5 rounded-lg bg-emerald-50/70 px-2.5 py-2 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+      <Camera className="h-4 w-4" /> {label}
     </p>
   );
 }
 
-/** One photo for the area, whoever takes it. The during after prep, the after after clean up. */
+/** The one photo that closes a phase: the prep photo after prep, the after photo after clean up. */
 function PhotoTaker({
   jobId,
   zone,
@@ -324,7 +407,7 @@ function PhotoTaker({
       if (error) return onError("Couldn't upload that photo. Check your signal and try again.");
       const result = await attachJobPhoto(jobId, path, kind, null, { id: zone.id, name: zone.name });
       if (!result.ok) return onError(result.message);
-      await areaPhotoTaken(jobId, zone.id, kind);
+      await areaPhotoTaken(jobId, zone.id);
       onDone();
     } finally {
       setUploading(false);
@@ -333,15 +416,15 @@ function PhotoTaker({
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-primary/60 bg-primary/5 p-2.5">
-      <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the during photo" : "Clean up done: take the after photo"}</p>
+    <div className="sticky bottom-2 z-10 rounded-lg border border-dashed border-primary/60 bg-card p-2.5 shadow-lg">
+      <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the prep photo" : "Clean up done: take the after photo"}</p>
       <p className="text-xs text-muted-foreground">
-        {kind === "during" ? "One photo of the area, prepped. The work unlocks once it is in." : "One photo of the finished area. This finishes the area and frees its kit."}
+        {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}
       </p>
       <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload(e.target.files)} />
-      <Button type="button" className="mt-2 w-full" onClick={() => input.current?.click()} disabled={disabled || uploading}>
-        {uploading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Camera className="mr-1.5 h-4 w-4" />}
-        {uploading ? "Uploading…" : kind === "during" ? "Take the during photo" : "Take the after photo"}
+      <Button type="button" className="mt-2 h-12 w-full text-base font-semibold" onClick={() => input.current?.click()} disabled={disabled || uploading}>
+        {uploading ? <Loader2 className="mr-1.5 h-5 w-5 animate-spin" /> : <Camera className="mr-1.5 h-5 w-5" />}
+        {uploading ? "Uploading…" : kind === "during" ? "Take the prep photo" : "Take the after photo"}
       </Button>
     </div>
   );

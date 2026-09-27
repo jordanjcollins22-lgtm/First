@@ -8,7 +8,7 @@
  * turns them into the sheet. Nothing here is a real client or a real price.
  */
 
-import type { WorkOrder } from "@/lib/work-order";
+import { zonePhases, type WorkOrder } from "@/lib/work-order";
 import { crewInstructions } from "@/lib/crew-instructions";
 
 export const PRACTICE_ADDRESS = "12 Example Court, Bel Air, Maryland 21014";
@@ -159,6 +159,7 @@ export function practiceWorkOrder(): WorkOrder {
       sizeLabel: z.sizeLabel,
       tasks: z.tasks,
       todo: crewInstructions(z.typeId, z.values),
+      phases: zonePhases(z.typeId, z.values),
       notes: z.crewNote,
       photos: z.photos.map((path) => ({ path, markers: [] })),
     })),

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
-import { areaNeeds, boardState, stepsFor, tipsFor, type AreaNeeds, type AreaState, type AreaStep, type Tip } from "@/lib/area-work";
+import { allPrepped, areaNeeds, boardState, stepsFor, tipsFor, type AreaNeeds, type AreaState, type AreaStep, type Tip } from "@/lib/area-work";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { WorkZone } from "@/components/canvas/types";
 
@@ -9,7 +9,9 @@ export interface AreaBoardData {
   /** The area this person is in now, if any. */
   myZoneId: string | null;
   states: AreaState[];
-  /** zoneId -> the service's steps with who ticked them. */
+  /** Every area is prepped with its prep photo: the work is open. */
+  allPrepped: boolean;
+  /** zoneId -> the area's steps with who ticked them. */
   steps: Record<string, { step: AreaStep; doneBy: string | null }[]>;
   tips: Record<string, Tip[]>;
   tools: Record<string, string[]>;
@@ -46,20 +48,22 @@ export async function loadAreaBoard(
   for (const row of tickRows) ticked.set(row.zone_id, new Set([...(ticked.get(row.zone_id) ?? []), row.step_key]));
   const toolRefs = catalog.tools.map((t) => ({ id: t.id, name: t.name, kits: ((t as unknown as { kits?: number[] | null }).kits ?? []) as number[] }));
   const needs = new Map<string, AreaNeeds>(zones.map((zone) => [zone.id, areaNeeds(zone.service!.typeId, catalog.serviceTools, toolRefs)]));
+  const states = boardState({
+    zones: zones.map((zone) => ({ id: zone.id, name: zone.name, serviceTypeId: zone.service!.typeId, values: zone.service!.values })),
+    needs,
+    working,
+    ticked,
+    photos: photos.map((photo) => ({ zoneId: photo.zone_id, kind: photo.kind })),
+  });
   return {
     meId: me?.id ?? null,
     myZoneId: working.find((w) => w.profileId === me?.id)?.zoneId ?? null,
-    states: boardState({
-      zones: zones.map((zone) => ({ id: zone.id, name: zone.name, serviceTypeId: zone.service!.typeId })),
-      needs,
-      working,
-      ticked,
-      photos: photos.map((photo) => ({ zoneId: photo.zone_id, kind: photo.kind })),
-    }),
+    states,
+    allPrepped: allPrepped(states),
     steps: Object.fromEntries(
       zones.map((zone) => [
         zone.id,
-        stepsFor(zone.service!.typeId).map((step) => ({
+        stepsFor(zone.service!.typeId, zone.service!.values).map((step) => ({
           step,
           doneBy: (() => {
             const row = tickRows.find((r) => r.zone_id === zone.id && r.step_key === step.key);

@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyTeamMember } from "@/lib/notifications";
 import { revalidateJobViews } from "@/lib/revalidate-job";
-import { areaState, canFinish, nextStep } from "@/lib/sub-crew";
+import { areaState, canFinish, canTakePhoto, nextStep, subAllPrepped } from "@/lib/sub-crew";
 import type { WorkZone } from "@/components/canvas/types";
 
 export type SubCrewResult<T = object> = ({ ok: true } & T) | { ok: false; message: string };
@@ -78,9 +78,17 @@ export async function subAttachPhoto(token: string, zoneId: string, kind: "durin
   if (!path.startsWith(`${visit.job_id}/sub-`)) return { ok: false, message: "That photo doesn't belong to this job." };
   if (!visit.sub_arrived_at) return { ok: false, message: "Tap I've arrived first." };
 
-  const { data: design } = await admin.from("canvas_designs").select("zones").eq("job_id", visit.job_id).maybeSingle();
-  const zone = ((design?.zones ?? []) as unknown as WorkZone[]).find((z) => z.id === zoneId);
+  const [{ data: design }, { data: photos }] = await Promise.all([
+    admin.from("canvas_designs").select("zones").eq("job_id", visit.job_id).maybeSingle(),
+    admin.from("job_photos").select("kind, zone_id").eq("job_id", visit.job_id),
+  ]);
+  const zones = ((design?.zones ?? []) as unknown as WorkZone[]).filter((z) => z.service);
+  const zone = zones.find((z) => z.id === zoneId);
   if (!zone) return { ok: false, message: "Couldn't find that area." };
+  // Every area is prepped before any area's work: the after photo waits.
+  const stateOf = (id: string) => areaState((photos ?? []).filter((p) => p.zone_id === id).map((p) => p.kind));
+  const allowed = canTakePhoto(kind, stateOf(zone.id), subAllPrepped(zones.map((z) => stateOf(z.id))));
+  if (!allowed.ok) return { ok: false, message: allowed.reason };
 
   const { error } = await admin.from("job_photos").insert({
     organization_id: visit.organization_id,

@@ -18,7 +18,6 @@ import {
 } from "@/lib/practice-crew";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { JourneyPages, type JourneyStep } from "@/components/practice/journey-pages";
-import { WhoDoesIt } from "@/components/job/who-does-it";
 import { ShopFlow } from "@/components/crew/shop-flow";
 import { TodayBoard } from "@/components/crew/today-board";
 import { AreaBoard } from "@/components/job/area-board";
@@ -26,10 +25,12 @@ import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { SubCrewSheetView } from "@/components/crew/sub-crew-sheet";
 
 /**
- * A signed job from the crew's side, every page, for our own crew and for
- * a subcontractor: who it goes to, the shop and the kits (our crew, or a
- * subcontractor on our tools), on the way, the areas with their during and
- * after photos, finished, and the account manager's walkthrough. The real
+ * The crew sheet: a signed job from the crew's side, every page, for our
+ * own crew and for a subcontractor. The shop and the kits (our crew, or a
+ * subcontractor on our tools), on the way, then every area prepped with its
+ * prep photo before any work, then the work area by area with its after
+ * photo, finished, and the account manager's walkthrough. Who does it is
+ * the office's choice on the job page, not something the crew see. The real
  * screens with the sample job; where a screen has no preview of its own it
  * is shown and cannot be tapped, so nothing is recorded.
  */
@@ -39,11 +40,6 @@ export const dynamic = "force-dynamic";
 function Look({ children }: { children: React.ReactNode }) {
   return <div inert>{children}</div>;
 }
-
-const SUB = { id: "sub", name: "Green Edge Crew", phone: "4105550199", email: "crew@example.com", usesOurTools: false };
-const visit = (subcontractorId: string | null) => [
-  { id: "visit", startsOn: new Date().toISOString().slice(0, 10), endsOn: new Date().toISOString().slice(0, 10), subcontractorId, crewToken: subcontractorId ? "sample" : null },
-];
 
 export default async function CrewJourneyPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -56,13 +52,6 @@ export default async function CrewJourneyPage() {
 
   const steps: JourneyStep[] = [
     // ------------------------------------------------------------ our crew
-    {
-      key: "assign",
-      path: "crew",
-      title: "Given to our crew",
-      what: "Once it is signed, or signed and paid, the office books the visit and picks who does it: our crew.",
-      screen: <WhoDoesIt visits={visit(null)} subcontractors={[SUB]} baseUrl="" preview />,
-    },
     {
       key: "shop",
       path: "crew",
@@ -89,7 +78,7 @@ export default async function CrewJourneyPage() {
       key: "on-way",
       path: "crew",
       title: "On my way",
-      what: "Loaded and out the door: On my way opens directions to the first job.",
+      what: "Loaded and out the door. The one button: On my way, which opens the directions.",
       screen: (
         <Look>
           <TodayBoard stops={SAMPLE_STOPS} events={sampleEvents("left_shop")} personName="Jordan" />
@@ -100,7 +89,7 @@ export default async function CrewJourneyPage() {
       key: "arrived",
       path: "crew",
       title: "I've arrived",
-      what: "At the house: I've arrived opens the crew sheet.",
+      what: "At the house, the one button: I've arrived, which opens the crew sheet.",
       screen: (
         <Look>
           <TodayBoard stops={SAMPLE_STOPS} events={sampleEvents("travelling")} personName="Jordan" />
@@ -110,8 +99,8 @@ export default async function CrewJourneyPage() {
     {
       key: "areas",
       path: "crew",
-      title: "The areas",
-      what: "Every area on the job and what to do in it. Each person picks one to start; kits go with the area.",
+      title: "The first area",
+      what: "Every area, with the next one open: the evaluation photos and the whole scope. The one button: Start prep here.",
       screen: (
         <Look>
           <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("open")} accountManager={am} />
@@ -119,24 +108,68 @@ export default async function CrewJourneyPage() {
       ),
     },
     {
-      key: "during",
+      key: "prepping",
       path: "crew",
-      title: "Prep done: during photo",
-      what: "The prep steps ticked, then the during photo, which unlocks the work.",
+      title: "Prep this area",
+      what: "Only the prep for this area, ticked as each thing is done. The whole scope is a tap away.",
       screen: (
         <Look>
-          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("prep_done")} accountManager={am} />
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("prepping")} accountManager={am} />
+        </Look>
+      ),
+    },
+    {
+      key: "prep-photo",
+      path: "crew",
+      title: "The prep photo",
+      what: "Every prep step ticked: the one button is Take the prep photo.",
+      screen: (
+        <Look>
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("prep_photo")} accountManager={am} />
+        </Look>
+      ),
+    },
+    {
+      key: "next",
+      path: "crew",
+      title: "Prep the next area",
+      what: "The photo frees the area and opens the next one to prep. The work waits until every area is prepped.",
+      screen: (
+        <Look>
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("next")} accountManager={am} />
+        </Look>
+      ),
+    },
+    {
+      key: "all-prepped",
+      path: "crew",
+      title: "Every area prepped",
+      what: "The last prep photo is in, so the work opens: Start the work here, on the first area.",
+      screen: (
+        <Look>
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("all_prepped")} accountManager={am} />
+        </Look>
+      ),
+    },
+    {
+      key: "working",
+      path: "crew",
+      title: "The work",
+      what: "The work for this area, ticked as it's done, then the clean up.",
+      screen: (
+        <Look>
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("working")} accountManager={am} />
         </Look>
       ),
     },
     {
       key: "after",
       path: "crew",
-      title: "Clean up done: after photo",
-      what: "The work and clean up ticked, then the after photo, which finishes the area and frees its kit.",
+      title: "The after photo",
+      what: "Cleaned up: the one button is Take the after photo, which finishes the area and frees its kit. Then the next area's work.",
       screen: (
         <Look>
-          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("cleanup_done")} accountManager={am} />
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("after_photo")} accountManager={am} />
         </Look>
       ),
     },
@@ -177,25 +210,18 @@ export default async function CrewJourneyPage() {
 
     // ------------------------------------------------------- subcontractor
     {
-      key: "sub-assign",
-      path: "sub",
-      title: "Given to a subcontractor",
-      what: "The office picks the subcontractor for the visit and texts or emails them the link to their own crew sheet.",
-      screen: <WhoDoesIt visits={visit(SUB.id)} subcontractors={[SUB]} baseUrl="https://app.jslandscapingmd.com" preview />,
-    },
-    {
       key: "sub-pickup",
       path: "sub",
       missed: "our-tools",
       title: "Pick up at the shop",
-      what: "Only for a subcontractor on our tools: the time, the codes to get in, and each kit with its code.",
+      what: "Only for a subcontractor on our tools: the time, the codes to get in, and each kit with its code. The one button: Got the tools.",
       screen: <SubCrewSheetView sheet={sampleSubSheet(true)} preview stage="pickup" areaStates={sampleSubAreas("todo")} />,
     },
     {
       key: "sub-go",
       path: "sub",
       title: "Their crew sheet",
-      what: "The job, what they will be doing in each area, and On my way, which opens directions.",
+      what: "The link the office sent them: the job, and every area with its photos and what to do. The one button: On my way.",
       screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="go" areaStates={sampleSubAreas("todo")} />,
     },
     {
@@ -206,18 +232,39 @@ export default async function CrewJourneyPage() {
       screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_way" areaStates={sampleSubAreas("todo")} />,
     },
     {
-      key: "sub-areas",
+      key: "sub-prep",
       path: "sub",
-      title: "The areas: during photo",
-      what: "Each area with what to do, the evaluation photos, and the during photo once the prep is done.",
+      title: "Prep this area",
+      what: "One area at a time: its prep, ticked as each thing is done.",
       screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("todo")} />,
+    },
+    {
+      key: "sub-prep-photo",
+      path: "sub",
+      title: "The prep photo",
+      what: "Every prep step ticked: Take the prep photo. Then the next area.",
+      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("todo")} tickedAll />,
+    },
+    {
+      key: "sub-next",
+      path: "sub",
+      title: "Prep the next area",
+      what: "The first area is prepped; the next one is up. The work waits until every area is prepped.",
+      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("first_prepped")} />,
+    },
+    {
+      key: "sub-work",
+      path: "sub",
+      title: "The work",
+      what: "Every area prepped, so the work opens, back at the first area: the work and the clean up, ticked as they go.",
+      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("all_prepped")} />,
     },
     {
       key: "sub-after",
       path: "sub",
-      title: "After photo",
-      what: "Prepped areas ask for the after photo once cleaned up, which finishes them.",
-      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("first_prepped")} />,
+      title: "The after photo",
+      what: "Cleaned up: Take the after photo, which finishes the area. Then the next area's work.",
+      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("all_prepped")} tickedAll />,
     },
     {
       key: "sub-finish",
@@ -269,8 +316,8 @@ export default async function CrewJourneyPage() {
       <header>
         <h1 className="text-xl font-bold">The crew sheet, every page</h1>
         <p className="text-sm text-muted-foreground">
-          Everything the crew do on site, from who&apos;s doing it and the tools they need through to the account manager&apos;s
-          walkthrough, for our own crew or a subcontractor, with the sample job. Signing off and sending the before and afters to the client is the next step, not this one. Nothing
+          Everything the crew do on site, from the tools they need through to the account manager&apos;s walkthrough, for our own
+          crew or a subcontractor, with the sample job. Every area is prepped first, then the work, one button at a time. Signing off and sending the before and afters to the client is the next step, not this one. Nothing
           here is recorded or sent.
         </p>
       </header>

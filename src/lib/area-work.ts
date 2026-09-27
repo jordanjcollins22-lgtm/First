@@ -14,8 +14,15 @@
  * And for each service, what to look for: the things that make work look
  * unfinished, said the way somebody on the job would say them.
  *
+ * Every area is prepped before any area's work starts: the prep, then its
+ * during photo, area after area, and only when the last one is in does the
+ * work open anywhere. The steps are the area's own scope (crew-instructions),
+ * so "prep this area" reads as what this area needs.
+ *
  * Pure: the steps, the tips and the kit arithmetic are all tested here.
  */
+
+import { crewSteps } from "@/lib/crew-instructions";
 
 export type Phase = "prep" | "work" | "cleanup";
 
@@ -106,7 +113,17 @@ const DEFAULT_STEPS = steps(
   ["Clean up every bit of debris", "Put back anything you moved"]
 );
 
-export function stepsFor(serviceTypeId: string): AreaStep[] {
+/**
+ * An area's checklist. With the evaluator's answers, it is that area's own
+ * scope, phase by phase; without them, or for a service with no words yet,
+ * the service's general steps.
+ */
+export function stepsFor(serviceTypeId: string, values?: Record<string, string | undefined>): AreaStep[] {
+  const own = values ? crewSteps(serviceTypeId, values) : null;
+  if (own) {
+    const count: Record<Phase, number> = { prep: 0, work: 0, cleanup: 0 };
+    return own.map((step) => ({ key: `${step.phase}-${++count[step.phase]}`, label: step.label, phase: step.phase }));
+  }
   return STEPS[serviceTypeId] ?? DEFAULT_STEPS;
 }
 
@@ -203,6 +220,8 @@ export interface BoardZone {
   id: string;
   name: string;
   serviceTypeId: string;
+  /** The evaluator's answers, which make the area's own steps. */
+  values?: Record<string, string | undefined>;
 }
 
 export interface WorkRow {
@@ -225,6 +244,8 @@ export interface AreaState {
   stepsTotal: number;
   hasDuring: boolean;
   hasAfter: boolean;
+  /** Its prep is ticked and its during photo is in. */
+  prepped: boolean;
   /** What the next photo is, when the steps before it are ticked and it is missing. */
   photoDue: "during" | "after" | null;
   /** Why it cannot be started yet: where the kit it needs is. */
@@ -253,7 +274,7 @@ export function boardState(input: {
     const people = working.filter((w) => w.zoneId === zone.id);
     const heldHere = new Set(people.flatMap((p) => p.kits));
     const heldElsewhere = new Set([...heldBy.entries()].filter(([, z]) => z !== zone.id).map(([k]) => k));
-    const list = stepsFor(zone.serviceTypeId);
+    const list = stepsFor(zone.serviceTypeId, zone.values);
     const ticks = input.ticked.get(zone.id) ?? new Set<string>();
     const hasDuring = input.photos.some((p) => p.zoneId === zone.id && p.kind === "during");
     const hasAfter = input.photos.some((p) => p.zoneId === zone.id && p.kind === "after");
@@ -285,6 +306,7 @@ export function boardState(input: {
       stepsTotal: list.length,
       hasDuring,
       hasAfter,
+      prepped: hasAfter || (prepDone && hasDuring),
       photoDue,
       waitingReason,
       wouldTake: pick.ok ? pick.kits : [],
@@ -292,15 +314,28 @@ export function boardState(input: {
   });
 }
 
+/** Every area is prepped, with its during photo: the work can start. */
+export function allPrepped(states: Pick<AreaState, "prepped">[]): boolean {
+  return states.every((s) => s.prepped);
+}
+
 /**
- * Whether a step can be ticked now. The work waits on the during photo, and
- * a phase waits on the one before it, so the photos land where they belong.
+ * Whether a step can be ticked now. The work waits on the area's prep and
+ * its during photo, and on every other area being prepped too; the clean up
+ * waits on the work, so the photos land where they belong.
  */
-export function canTick(step: AreaStep, list: AreaStep[], ticked: ReadonlySet<string>, hasDuring: boolean): { ok: true } | { ok: false; reason: string } {
+export function canTick(
+  step: AreaStep,
+  list: AreaStep[],
+  ticked: ReadonlySet<string>,
+  hasDuring: boolean,
+  everyAreaPrepped = true
+): { ok: true } | { ok: false; reason: string } {
   const prepDone = list.filter((s) => s.phase === "prep").every((s) => ticked.has(s.key));
   const workDone = list.filter((s) => s.phase === "work").every((s) => ticked.has(s.key));
   if (step.phase === "work" && !prepDone) return { ok: false, reason: "Finish the prep first." };
-  if (step.phase === "work" && !hasDuring) return { ok: false, reason: "Take the during photo first: prep is done." };
+  if (step.phase === "work" && !hasDuring) return { ok: false, reason: "Take the prep photo first: prep is done." };
+  if (step.phase !== "prep" && !everyAreaPrepped) return { ok: false, reason: "Every area gets prepped first. Prep the next area." };
   if (step.phase === "cleanup" && !workDone) return { ok: false, reason: "Finish the work first." };
   return { ok: true };
 }
