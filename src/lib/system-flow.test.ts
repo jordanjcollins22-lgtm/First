@@ -21,7 +21,6 @@ describe("the system map", () => {
       "prep",
       "evaluation",
       "pricing",
-      "proposal",
       "crew-sheet",
       "field",
       "client-approval",

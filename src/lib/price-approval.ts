@@ -43,6 +43,8 @@ export interface PriceBreakdown {
   materialsCents: number;
   markupCents: number;
   priceCents: number;
+  /** Each material for the whole job: how much, and what it costs. */
+  materialTotals: { name: string; amount: string; cents: number | null }[];
   /** Anything that makes the worked-out price a floor rather than a price. */
   warnings: string[];
 }
@@ -76,6 +78,25 @@ export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakd
       };
     });
   const sum = (pick: (a: AreaCost) => number) => areas.reduce((total, a) => total + pick(a), 0);
+  // The same material across areas, added up: 8 yards of mulch, not four
+  // lines of two.
+  const totals = new Map<string, { name: string; unit: string; quantity: number; cents: number | null }>();
+  for (const zone of zones.filter((z) => z.service)) {
+    const m = zoneMeasurements(zone);
+    for (const item of zoneMaterialLineItems(zone, m?.areaSqFt ?? 0, catalog as CanvasCatalog)) {
+      if (item.manual) continue;
+      const key = `${item.material}|${item.unit}`;
+      const t = totals.get(key) ?? { name: item.material, unit: item.unit, quantity: 0, cents: 0 };
+      t.quantity += item.quantity;
+      t.cents = t.cents == null || item.totalCost == null ? null : t.cents + Math.round(item.totalCost * 100);
+      totals.set(key, t);
+    }
+  }
+  const materialTotals = [...totals.values()].map((t) => ({
+    name: t.name,
+    amount: `${t.quantity < 10 ? t.quantity.toFixed(1) : Math.round(t.quantity).toLocaleString("en-US")} ${t.unit}`,
+    cents: t.cents,
+  }));
   const warnings: string[] = [];
   const untimed = areas.filter((a) => a.missingTiming).map((a) => a.service);
   if (untimed.length) warnings.push(`No crew time on the rate card for ${[...new Set(untimed)].join(", ")}, so no labour is counted there.`);
@@ -88,6 +109,7 @@ export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakd
     materialsCents: sum((a) => a.materialsCents),
     markupCents: sum((a) => a.markupCents),
     priceCents: sum((a) => a.priceCents),
+    materialTotals,
     warnings,
   };
 }

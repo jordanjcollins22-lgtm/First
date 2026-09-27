@@ -19,7 +19,16 @@ export interface JourneyStep {
  * with a chip at the top for each thing that might not have been. Picking
  * one adds the pages it brings in, marked with what brought them.
  */
-export function JourneyPages({ steps, missed }: { steps: JourneyStep[]; missed: { key: string; label: string }[] }) {
+export function JourneyPages({
+  steps,
+  missed,
+  heading = "Add the pages for something not done beforehand",
+}: {
+  steps: JourneyStep[];
+  missed: { key: string; label: string }[];
+  /** What the chips at the top are for. */
+  heading?: string;
+}) {
   const [on, setOn] = useState<string[]>([]);
   const shown = steps.filter((s) => !s.missed || on.includes(s.missed));
   const toggle = (key: string) => setOn((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
@@ -30,9 +39,9 @@ export function JourneyPages({ steps, missed }: { steps: JourneyStep[]; missed: 
       {missed.length > 0 && (
       <section className="sticky top-14 z-10 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold">Add the pages for something not done beforehand</p>
+          <p className="text-sm font-semibold">{heading}</p>
           <p className="text-xs text-muted-foreground">
-            {shown.length} pages{on.length ? "" : ", everything done"}
+            {shown.length} pages{on.length ? "" : ", the main path"}
             {on.length > 0 && (
               <button type="button" className="ml-2 font-medium text-primary" onClick={() => setOn([])}>
                 Back to the main pages

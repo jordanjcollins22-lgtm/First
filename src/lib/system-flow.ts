@@ -126,18 +126,10 @@ export const SYSTEM_FLOW: SystemStage[] = [
       },
       {
         key: "pricing",
-        title: "Account manager pricing",
-        line: "Each submitted walkthrough on their My Day: the breakdown, Accept or Decline the price, then Send to client.",
+        title: "Price and proposal",
+        line: "Each submitted walkthrough on the account manager's My Day: the breakdown, Accept price, Review proposal, Send to client.",
         // Every page of it in preview. Nothing is priced or sent.
         href: "/practice/account-manager",
-        status: "live",
-      },
-      {
-        key: "proposal",
-        title: "Proposal from the site map",
-        line: "Each area on the map becomes a priced line, then it goes out to accept and pay.",
-        // Made from a sample site map, to try. Nothing is saved or sent.
-        href: "/practice/proposal",
         status: "live",
       },
     ],

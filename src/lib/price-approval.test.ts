@@ -47,7 +47,16 @@ describe("what is behind the price", () => {
     expect(a.materialsCents).toBe(8000); // 2 yards at $40
     expect(a.labourCents + a.materialsCents + a.markupCents).toBe(a.priceCents);
     expect(b.priceCents).toBe(a.priceCents);
+    expect(b.materialTotals).toEqual([{ name: "Mulch", amount: "2.0 cubic yards", cents: 8000 }]);
     expect(b.warnings).toEqual([]);
+  });
+
+  it("adds up the same material across areas", () => {
+    const b = priceBreakdown(
+      [z("Front", "landscape-bed", 200, { material: "Mulch" }), z("Back", "landscape-bed", 300, { material: "Mulch" })],
+      catalog
+    );
+    expect(b.materialTotals).toEqual([{ name: "Mulch", amount: "5.0 cubic yards", cents: 20000 }]);
   });
 
   it("says when a service has no crew time or an area no measurement", () => {

@@ -13,8 +13,9 @@ import { JourneyPages, type JourneyStep } from "@/components/practice/journey-pa
 
 /**
  * The account manager's side, once a walkthrough is submitted: it lands on
- * their My Day to price, with everything behind the price; Accept price, or
- * Decline price and type the price; then Send to client. A sample job
+ * their My Day to price, with everything behind the price; Accept price;
+ * then Review proposal and Send to client, the last step. Decline price,
+ * for when the price is wrong, is added from the chip at the top. A sample job
  * priced on the business's own rate card, in preview: nothing is priced,
  * saved or sent.
  */
@@ -57,7 +58,8 @@ export default async function AccountManagerJourneyPage() {
     stage: "price",
     // The rate card's figure, or a round sample one when the rate card has nothing to go on.
     totalCents: breakdown.priceCents > 0 ? breakdown.priceCents : 245000,
-    proposalHref: null,
+    // The sample proposal, made from a sample site map, for Review proposal.
+    proposalHref: "/practice/proposal",
     breakdown,
     crewRateCents: catalog.crewCostPerHourCents,
     markup:
@@ -70,26 +72,21 @@ export default async function AccountManagerJourneyPage() {
     {
       key: "to-price",
       title: "It lands on My Day",
-      what: "A submitted walkthrough, from an evaluator or their own, under To price with the price and everything behind it.",
+      what: "A submitted walkthrough, from an evaluator or their own, with the price and everything behind it. Accept price.",
       screen: <PriceApprovals items={[item]} preview />,
     },
     {
       key: "decline",
+      missed: "price-wrong",
       title: "Decline price",
-      what: "Decline asks for the price. They type it and Submit. It is spread across the areas so they add up.",
+      what: "Decline asks for the price. They type it and Submit, and it is spread across the areas so they add up.",
       screen: <PriceCard item={item} preview startAt="decline" />,
     },
     {
       key: "send",
-      title: "Send to client",
-      what: "Accepted or set, the price is ready. Send to client emails the proposal. See what they see first.",
+      title: "Review proposal, send to client",
+      what: "The last step: Review proposal opens it as the client will see it, then Send to client emails it.",
       screen: <PriceCard item={item} preview startAt="send" />,
-    },
-    {
-      key: "sent",
-      title: "Sent",
-      what: "It is with the client, on their proposal page, to accept and pay.",
-      screen: <PriceCard item={item} preview startAt="sent" />,
     },
   ];
 
@@ -101,11 +98,16 @@ export default async function AccountManagerJourneyPage() {
       <header>
         <h1 className="text-xl font-bold">The account manager&apos;s pricing, every page</h1>
         <p className="text-sm text-muted-foreground">
-          What an account manager sees once a walkthrough is submitted, with a sample job priced on your own rate card. These are
-          the real screens in preview: the buttons can be tapped and nothing is priced, saved or sent.
+          What an account manager sees once a walkthrough is submitted, with a sample job priced on your own rate card. Pick
+          &ldquo;The price needs changing&rdquo; at the top to add Decline price. These are the real screens in preview: the buttons
+          can be tapped and nothing is priced, saved or sent.
         </p>
       </header>
-      <JourneyPages steps={steps} missed={[]} />
+      <JourneyPages
+        steps={steps}
+        missed={[{ key: "price-wrong", label: "The price needs changing" }]}
+        heading="Add the pages for when something needs fixing"
+      />
     </div>
   );
 }

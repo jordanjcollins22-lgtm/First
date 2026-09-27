@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, Loader2, Send, X } from "lucide-react";
+import { Check, CheckCircle2, FileText, Loader2, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,19 +173,24 @@ export function PriceCard({
       {stage === "send" && (
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-            <CheckCircle2 className="h-4 w-4" /> Price set. Ready for the client.
+            <CheckCircle2 className="h-4 w-4" /> Price accepted. Review the proposal, then send it.
           </p>
+          {item.proposalHref && (
+            <a
+              href={item.proposalHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-border bg-background font-semibold"
+            >
+              <FileText className="h-5 w-5" /> Review proposal
+            </a>
+          )}
           <Button type="button" className="h-14 text-base font-semibold" disabled={pending || (!sendTo && !preview)} onClick={send}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-5 w-5" />}
             Send to client
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            {sendTo ? `Emails the proposal to ${sendTo}.` : "No email on file. Copy the link from the proposal and text it to them."}{" "}
-            {item.proposalHref && (
-              <a href={preview ? "#" : item.proposalHref} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-2 hover:underline">
-                See what they see
-              </a>
-            )}
+            {sendTo ? `Review it as the client will see it, then send. It emails to ${sendTo}.` : "No email on file. Copy the link from the proposal and text it to them."}
           </p>
         </div>
       )}
@@ -209,7 +214,11 @@ function Breakdown({ item }: { item: PriceApproval }) {
       <dl className="grid grid-cols-2 gap-2">
         <Stat label="Budgeted hours" value={`${hours(b.crewHours)} crew-hrs`} />
         <Stat label="Labour" value={dollars(b.labourCents)} />
-        <Stat label="Materials" value={dollars(b.materialsCents)} />
+        <Stat
+          label="Materials"
+          value={dollars(b.materialsCents)}
+          detail={b.materialTotals.length > 0 ? b.materialTotals.map((m) => `${m.amount} ${m.name.toLowerCase()}${m.cents == null ? ", no cost set" : ""}`) : ["None"]}
+        />
         <Stat label="Markup & overhead" value={dollars(b.markupCents)} />
       </dl>
       <details className="rounded-xl border border-border">
@@ -249,11 +258,16 @@ function Breakdown({ item }: { item: PriceApproval }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, detail }: { label: string; value: string; detail?: string[] }) {
   return (
     <div className={cn("rounded-xl border border-border bg-background p-2.5")}>
       <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="text-base font-semibold tabular-nums">{value}</dd>
+      {detail?.map((line) => (
+        <dd key={line} className="text-xs text-muted-foreground">
+          {line}
+        </dd>
+      ))}
     </div>
   );
 }
