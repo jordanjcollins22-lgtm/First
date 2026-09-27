@@ -122,7 +122,9 @@ import { beforeAfterEmail, canSendForApproval, canSignOffProject, clientReviewPa
 import { proposalPath } from "@/lib/proposal-flow";
 import { AreaProgress } from "@/components/job/area-progress";
 import { UpsellCard } from "@/components/job/upsell-card";
-import { compareUpsell } from "@/lib/instant-price";
+import { compareUpsell, instantPrice } from "@/lib/instant-price";
+import { lotForProperty } from "@/lib/data/lot-map";
+import { PhoneQuoteCard } from "@/components/job/phone-quote-card";
 import { loadAreaBoard } from "@/lib/data/area-board";
 
 export default async function JobPage({
@@ -621,6 +623,12 @@ export default async function JobPage({
           }))
         )
       : null;
+  // The form is in and the visit has not been written up: enough for a
+  // general number over the phone first. Staff who see money only.
+  const phoneQuote =
+    intake?.submittedAt && job.evaluation_status !== "completed" && !proposal && seen.jobMoney
+      ? instantPrice(intake.answers, await lotForProperty(job.property_id).catch(() => null), catalog)
+      : null;
   // While the job is being worked: who is in which area, and at what stage.
   const areaBoard =
     (job.status === "approved" || job.status === "in_progress") && zones.length > 0
@@ -681,6 +689,10 @@ export default async function JobPage({
       />
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
+
+      {phoneQuote && (
+        <PhoneQuoteCard price={phoneQuote} clientName={job.property?.customers?.name ?? null} phone={job.property?.customers?.phone ?? null} />
+      )}
 
       {upsell && <UpsellCard comparison={upsell} showMoney={seen.jobMoney} />}
 
