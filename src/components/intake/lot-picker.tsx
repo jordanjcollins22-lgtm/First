@@ -20,11 +20,14 @@ export function LotPicker({
   picked,
   onToggle,
   disabled,
+  readOnly = false,
 }: {
   lot: LotData;
   picked: string[];
-  onToggle: (value: AreaKey) => void;
+  onToggle?: (value: AreaKey) => void;
   disabled?: boolean;
+  /** Just the picture: for showing them what they picked, with nothing to tap. */
+  readOnly?: boolean;
 }) {
   const [turn, setTurn] = useState(0);
   const clip = useId().replace(/:/g, "");
@@ -55,7 +58,7 @@ export function LotPicker({
                 : null
             )}
             {/* Tap targets for the parts that are a place on the picture. */}
-            {!disabled &&
+            {!disabled && !readOnly && onToggle &&
               TAPPABLE.map((key) =>
                 layout.regions[key].map((poly, i) => (
                   <path key={`tap-${key}-${i}`} d={pathOf(poly)} fill="transparent" className="cursor-pointer" onClick={() => onToggle(key)} />
@@ -81,12 +84,16 @@ export function LotPicker({
           )}
         </svg>
       </div>
+      {readOnly ? (
+        <figcaption className="text-xs text-muted-foreground">Your property line from the county, with the parts you picked.</figcaption>
+      ) : (
       <figcaption className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>Your property line from the county. Tap a part of the yard, or pick below.</span>
         <button type="button" onClick={() => setTurn((t) => (t + 1) % 4)} className="flex shrink-0 items-center gap-1 font-medium text-primary">
           <RotateCw className="h-3.5 w-3.5" /> Front&apos;s wrong?
         </button>
       </figcaption>
+      )}
     </figure>
   );
 }

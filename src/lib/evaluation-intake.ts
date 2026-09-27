@@ -275,7 +275,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
   {
     key: "questions",
     section: "ask",
-    title: "Anything else you want to ask us before we come?",
+    title: "Anything you want to ask us before we come out?",
     kind: "text",
   },
 ];
@@ -855,6 +855,26 @@ export function summarizeDetails(answers: IntakeAnswers): { label: string; value
     if (shown) lines.push({ label: q.short, value: shown });
   }
   return lines;
+}
+
+/**
+ * What they asked for, service by service, with the answers that belong to
+ * each: for the last page, where they see their plan back before sending.
+ */
+export function planByService(answers: IntakeAnswers): { service: string; label: string; lines: { label: string; value: string }[] }[] {
+  const q = INTAKE_QUESTIONS[0];
+  return answers.services.map((service) => {
+    const lines: { label: string; value: string }[] = [];
+    for (const detail of DETAIL_QUESTIONS) {
+      if (!detail.services?.includes(service)) continue;
+      const notes = answers.details[`${detail.id}_notes`];
+      let shown = shownValue(detail, answers.details[detail.id]);
+      if (typeof notes === "string" && notes) shown = shown ? `${shown}. ${notes}` : notes;
+      if (shown) lines.push({ label: detail.title.replace(/\?$/, ""), value: shown });
+    }
+    if (service === "other" && answers.services_other) lines.push({ label: "In your words", value: answers.services_other });
+    return { service, label: labelOf(q, service), lines };
+  });
 }
 
 const SHORT_LABEL: Partial<Record<keyof IntakeAnswers, string>> = {

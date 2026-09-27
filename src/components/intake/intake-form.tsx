@@ -34,6 +34,7 @@ import { addIntakePhoto, removeIntakePhoto, saveIntakeProgress, submitEvaluation
 import { shrinkImage } from "@/lib/shrink-image";
 import { LotPicker } from "@/components/intake/lot-picker";
 import { InstantPriceCard } from "@/components/intake/instant-price-card";
+import { YourPlan } from "@/components/intake/your-plan";
 import type { LotData } from "@/lib/lot-map";
 
 type Photo = { path: string; url: string };
@@ -336,7 +337,9 @@ export function IntakeForm({
 
         {isLast && (
           <div className="flex flex-col gap-4">
-            <h2 className="text-xl font-semibold leading-snug">Anything you want to ask us before we come?</h2>
+            {/* Their plan back to them, like a proposal, before they send it. */}
+            <YourPlan answers={answers} photos={photos} lot={lot} />
+            <h2 className="text-xl font-semibold leading-snug">Anything you want to ask us before we come out?</h2>
             <FrequentQuestions />
             <Textarea
               value={answers.questions}
