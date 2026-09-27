@@ -18,6 +18,8 @@ import { EvaluationsView } from "@/components/evaluations/evaluations-view";
 import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
+import { StartEvaluation } from "@/components/evaluations/start-evaluation";
+import { JourneyPages, type JourneyStep } from "./journey-pages";
 import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
 import { IntakeForm } from "@/components/intake/intake-form";
 import { YourPlan } from "@/components/intake/your-plan";
@@ -139,8 +141,9 @@ export default async function EvaluatorJourneyPage() {
     demoLot: lot,
   };
 
-  const steps: { title: string; what: string; screen: React.ReactNode }[] = [
+  const steps: JourneyStep[] = [
     {
+      key: "calendar",
       title: "On their calendar",
       what: "Booked online or by the office, it shows on their calendar in the app and in HighLevel.",
       screen: (
@@ -169,38 +172,22 @@ export default async function EvaluatorJourneyPage() {
       ),
     },
     {
+      key: "day",
       title: "The day of",
       what: "Today's visit, and whether the client filled out the pre-eval. On my way opens directions.",
       screen: <EvaluatorDayView data={dayWith("booked")} preview />,
     },
     {
+      key: "on-way",
       title: "On the way",
       what: "They tap I've arrived when they pull up. The arrow undoes a mis-tap.",
       screen: <EvaluatorDayView data={dayWith("on_way")} preview />,
     },
     {
-      title: "Arrived",
-      what: "The visit opens with what the client sent: their lot, photos and what they want done.",
-      screen: (
-        <div className="flex flex-col gap-4">
-          <VisitHeader jobId="sample" when={when} client="Sarah Miller" address={address} phone="4105550100" stage="arrived" arrivedAt={at} timeZone={timeZone} preview />
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="text-lg font-semibold">What they asked for</p>
-            <div className="mt-3">
-              <YourPlan answers={ANSWERS} photos={photos} lot={lot} />
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: "The site map",
-      what: "Already set up from their pre-eval: every piece of work on the map. Remove or add, measure, Submit.",
-      screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
-    },
-    {
-      title: "No pre-eval yet",
-      what: "If they never filled it out, the first thing on arrival is the pre-eval, with them.",
+      key: "no-preeval",
+      missed: "no-preeval",
+      title: "No pre-eval on arrival",
+      what: "Instead of Start, the first thing on arrival is the pre-eval, with them.",
       screen: (
         <div className="flex flex-col gap-4">
           <VisitHeader jobId="sample" when={when} client="Tom Reed" address="9 Oak Ct, Fallston, MD" phone="4105550100" stage="arrived" arrivedAt={at} timeZone={timeZone} preview />
@@ -209,8 +196,10 @@ export default async function EvaluatorJourneyPage() {
       ),
     },
     {
+      key: "together",
+      missed: "no-preeval",
       title: "The pre-eval, together",
-      what: "The client's own form, marked as filled out on the visit. When it is sent, the site map is set up from it.",
+      what: "Their own form, filled out on the visit. When it is sent, Back to the visit leads to Start as usual.",
       screen: (
         <IntakeForm
           token={"0".repeat(24)}
@@ -226,6 +215,30 @@ export default async function EvaluatorJourneyPage() {
       ),
     },
     {
+      key: "arrived",
+      title: "Arrived",
+      what: "One button, Start the evaluation, with what the client sent on their pre-eval under it.",
+      screen: (
+        <div className="flex flex-col gap-4">
+          <VisitHeader jobId="sample" when={when} client="Sarah Miller" address={address} phone="4105550100" stage="arrived" arrivedAt={at} timeZone={timeZone} preview />
+          <StartEvaluation href="#" areas={plan.length} preview />
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-lg font-semibold">What they asked for</p>
+            <div className="mt-3">
+              <YourPlan answers={ANSWERS} photos={photos} lot={lot} />
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "site-map",
+      title: "The site map",
+      what: "Start opens the site map set up from their pre-eval. Add, remove or change areas, measure, Submit.",
+      screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
+    },
+    {
+      key: "submitted",
       title: "Submitted",
       what: "Submit on the map writes the proposal, and the visit shows as done on their day.",
       screen: <EvaluatorDayView data={dayWith("submitted")} preview />,
@@ -240,28 +253,13 @@ export default async function EvaluatorJourneyPage() {
       <header>
         <h1 className="text-xl font-bold">The evaluator&apos;s visit, every page</h1>
         <p className="text-sm text-muted-foreground">
-          What an evaluator sees, in order, with a sample client at the shop&apos;s address. These are the real screens in preview:
-          the buttons can be tapped and nothing is recorded, saved or sent. Evaluators find theirs on My Day, or at{" "}
-          <span className="font-mono">/evaluate</span>.
+          The main pages an evaluator goes through when the client did everything beforehand, with a sample client at the
+          shop&apos;s address. Pick something not done at the top to add the pages it brings in. These are the real screens in
+          preview: the buttons can be tapped and nothing is recorded, saved or sent.
         </p>
       </header>
 
-      {/* The same frames as the pre-evaluation form's pages: one phone
-          screen each, all one size, scrolled inside. */}
-      <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {steps.map((step, i) => (
-          <li key={step.title} className="flex flex-col gap-1.5">
-            <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Page {i + 1} of {steps.length}
-              <span className="rounded-full bg-muted px-2 py-0.5 normal-case tracking-normal">{step.title}</span>
-            </p>
-            <p className="min-h-8 text-xs leading-snug text-muted-foreground">{step.what}</p>
-            <div className="relative flex h-[640px] flex-col overflow-y-auto rounded-2xl border border-border bg-background px-4 pt-4 pb-4 shadow-sm">
-              {step.screen}
-            </div>
-          </li>
-        ))}
-      </ol>
+      <JourneyPages steps={steps} missed={[{ key: "no-preeval", label: "They didn't fill out the pre-eval" }]} />
     </div>
   );
 }

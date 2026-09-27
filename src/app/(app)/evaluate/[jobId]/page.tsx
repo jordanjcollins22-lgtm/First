@@ -17,6 +17,7 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { VisitHeader } from "@/components/evaluations/visit-header";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
 import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
+import { StartEvaluation } from "@/components/evaluations/start-evaluation";
 import { YourPlan } from "@/components/intake/your-plan";
 
 /**
@@ -32,11 +33,11 @@ export default async function EvaluationVisitPage({
   searchParams,
 }: {
   params: Promise<{ jobId: string }>;
-  searchParams: Promise<{ skip?: string }>;
+  searchParams: Promise<{ skip?: string; start?: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { jobId } = await params;
-  const { skip } = await searchParams;
+  const { skip, start } = await searchParams;
   await requireJobAccess(jobId, ["evaluations", "job-detail"]);
 
   const supabase = await createClient();
@@ -78,7 +79,11 @@ export default async function EvaluationVisitPage({
   const plan = mergePlan(readPlan(job.evaluation_plan), sent ? seedPlan(sent.answers, findByName) : []);
   // With no pre-eval from the client, the form comes first, unless they
   // chose to draw by hand or have already started the map.
-  const formFirst = !sent && skip !== "1" && plan.length === 0 && ((design?.zones as unknown[] | undefined) ?? []).length === 0;
+  const mapStarted = ((design?.zones as unknown[] | undefined) ?? []).length > 0;
+  const formFirst = !sent && skip !== "1" && plan.length === 0 && !mapStarted;
+  // The map opens on Start, or straight away once it has been started.
+  const showMap = start === "1" || mapStarted || stage === "submitted";
+  const visitHref = `/evaluate/${jobId}`;
 
   const client = job.property?.customer?.name || "Client";
   const phone = job.property?.customer?.phone ?? null;
@@ -120,9 +125,11 @@ export default async function EvaluationVisitPage({
         </p>
       ) : formFirst && intake ? (
         <PreEvalFirst
-          formHref={`${intakePath(intake.token, true)}&back=${encodeURIComponent(`/evaluate/${jobId}`)}`}
-          skipHref={`/evaluate/${jobId}?skip=1`}
+          formHref={`${intakePath(intake.token, true)}&back=${encodeURIComponent(`${visitHref}?start=1`)}`}
+          skipHref={`${visitHref}?skip=1&start=1`}
         />
+      ) : !showMap ? (
+        <StartEvaluation href={`${visitHref}?start=1${skip === "1" ? "&skip=1" : ""}`} areas={plan.filter((i) => i.keep !== false).length} />
       ) : (
         <SiteMapSetup
           jobId={jobId}

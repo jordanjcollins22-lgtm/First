@@ -113,9 +113,10 @@ import { OpsPanel } from "@/components/ops/ops-panel";
  * question, same address, different answer — rather than two entries in the
  * nav where only one of them was ever the right one for you.
  */
-export default async function MyDayPage() {
+export default async function MyDayPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
+  const { tab } = await searchParams;
   const viewer = await getCurrentProfile();
 
   // Somebody trying out with us sees their work and nothing else: no tabs,
@@ -161,6 +162,7 @@ export default async function MyDayPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <PageTabs
+        initialKey={tab}
         tabs={[
           { key: "day", label: "My Day", content: day },
           // Owner-level only, and not because the numbers are secret -- they

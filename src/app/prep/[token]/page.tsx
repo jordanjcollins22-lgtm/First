@@ -28,7 +28,7 @@ export default async function PrepPage({
   const { together, back } = (await searchParams) ?? {};
   // Where the evaluator goes once it is done together: their visit, and
   // nowhere else, so the link cannot be pointed off the app.
-  const backTo = together === "1" && back && /^\/evaluate\/[\w-]+$/.test(back) ? back : null;
+  const backTo = together === "1" && back && /^\/evaluate\/[\w-]+(\?start=1)?$/.test(back) ? back : null;
   const intake = await getIntakeByToken(token);
   if (!intake) notFound();
   // Their lot from the county, for the "which parts of the property"
