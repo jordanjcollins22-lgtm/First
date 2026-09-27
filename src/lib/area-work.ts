@@ -39,7 +39,7 @@ export interface Tip {
 
 export const PHASE_LABEL: Record<Phase, string> = {
   prep: "Prep",
-  work: "The work",
+  work: "The install",
   cleanup: "Clean up",
 };
 
@@ -336,6 +336,6 @@ export function canTick(
   if (step.phase === "work" && !prepDone) return { ok: false, reason: "Finish the prep first." };
   if (step.phase === "work" && !hasDuring) return { ok: false, reason: "Take the prep photo first: prep is done." };
   if (step.phase !== "prep" && !everyAreaPrepped) return { ok: false, reason: "Every area gets prepped first. Prep the next area." };
-  if (step.phase === "cleanup" && !workDone) return { ok: false, reason: "Finish the work first." };
+  if (step.phase === "cleanup" && !workDone) return { ok: false, reason: "Finish the install first." };
   return { ok: true };
 }

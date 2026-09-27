@@ -13,6 +13,7 @@ import type { SubCrewSheet } from "@/lib/data/sub-crew";
 import type { CrewEvent, Stop } from "@/lib/crew-day";
 import type { AreaState as SubAreaState } from "@/lib/sub-crew";
 import type { JobWalkthrough } from "@/types/domain";
+import type { SiteMapData } from "@/components/proposal/price-site-map";
 import { PRACTICE_ADDRESS, PRACTICE_ZONES, practiceWorkOrder } from "@/lib/practice-sample";
 
 export const SAMPLE_JOB_ID = "sample";
@@ -152,6 +153,11 @@ export function sampleWalkthrough(status: "requested" | "approved" | "rejected",
   };
 }
 
+/** The sample job's site map, numbered like its areas. */
+export function sampleMap(): SiteMapData {
+  return { kind: "sample", zones: PRACTICE_ZONES.map((z) => ({ name: z.name, color: z.color, points: z.points })) };
+}
+
 /** A subcontractor's crew sheet for the sample job. */
 export function sampleSubSheet(usesOurTools: boolean, walkthrough: SubCrewSheet["walkthrough"] = null): SubCrewSheet {
   const zones = sampleZones();
@@ -179,6 +185,7 @@ export function sampleSubSheet(usesOurTools: boolean, walkthrough: SubCrewSheet[
         ]
       : [],
     zones,
+    siteMap: sampleMap(),
     areaStates: Object.fromEntries(zones.map((z) => [z.id, "todo" as SubAreaState])),
     walkthrough,
   };

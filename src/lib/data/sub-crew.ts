@@ -2,7 +2,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildWorkOrder, type WorkOrderZone } from "@/lib/work-order";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
 import { areaState, type AreaState, type SubProgress } from "@/lib/sub-crew";
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
+import type { SiteMapData } from "@/components/proposal/price-site-map";
 
 export interface SubCrewSheet {
   token: string;
@@ -24,6 +26,8 @@ export interface SubCrewSheet {
   shop: { address: string | null; arriveBy: string | null; accessCodes: string | null } | null;
   kits: { number: number; container: string | null; code: string | null }[];
   zones: WorkOrderZone[];
+  /** Where each area is: the satellite photo with the areas drawn on and numbered. */
+  siteMap: SiteMapData | null;
   areaStates: Record<string, AreaState>;
   /** The account manager's walkthrough: waiting, approved, or sent back with what to fix. */
   walkthrough: { status: "requested" | "approved" | "rejected"; notes: string | null } | null;
@@ -52,7 +56,7 @@ export async function getSubCrewSheet(token: string): Promise<SubCrewSheet | nul
       .eq("id", session.job_id)
       .maybeSingle(),
     admin.from("organizations").select("name, shop_arrival_time").eq("id", session.organization_id).maybeSingle(),
-    admin.from("canvas_designs").select("zones").eq("job_id", session.job_id).maybeSingle(),
+    admin.from("canvas_designs").select("zones, image_path, image_x, image_y, image_scale, image_rotation").eq("job_id", session.job_id).maybeSingle(),
     admin.from("job_photos").select("kind, zone_id").eq("job_id", session.job_id),
     admin.from("services").select("service_type_id, name").eq("organization_id", session.organization_id),
     admin.from("job_walkthroughs").select("status, review_notes, created_at").eq("job_id", session.job_id).order("created_at", { ascending: false }).limit(1),
@@ -114,6 +118,14 @@ export async function getSubCrewSheet(token: string): Promise<SubCrewSheet | nul
     shop,
     kits,
     zones: order.zones,
+    siteMap: design?.image_path
+      ? {
+          kind: "image",
+          imagePath: design.image_path,
+          transform: { x: design.image_x, y: design.image_y, scale: design.image_scale, rotation: design.image_rotation, canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT },
+          zones: order.zones.map((z) => ({ zoneName: z.name, color: z.color, points: z.points })),
+        }
+      : null,
     areaStates: Object.fromEntries(order.zones.map((z) => [z.id, areaState(kindsByZone.get(z.id) ?? [])])),
     walkthrough:
       walk && (walk.status === "requested" || walk.status === "approved" || walk.status === "rejected")

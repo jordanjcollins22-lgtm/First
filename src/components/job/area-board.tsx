@@ -22,8 +22,8 @@ import type { WorkOrderZone } from "@/lib/work-order";
  * First every area is prepped: pick an area, read the whole scope with the
  * evaluation photos, Start prep here, tick each prep step as it is done,
  * then the prep photo. That frees the area and the next one is up. Only
- * when every area has its prep photo does the work open, and then the same
- * again: Start the work here, the work, the clean up, the after photo.
+ * when every area has its prep photo does the install open, and then the
+ * same again: Start the install, the install, the clean up, the after photo.
  *
  * Inside an area only its current steps show, with its photo button once
  * they are ticked. The whole scope is a tap away but out of the way.
@@ -33,11 +33,14 @@ export function AreaBoard({
   zones,
   board,
   accountManager,
+  map,
 }: {
   jobId: string;
   zones: WorkOrderZone[];
   board: AreaBoardData;
   accountManager: { name: string; phone: string | null } | null;
+  /** Where each area is, when the page doesn't already show the site map above. */
+  map?: React.ReactNode;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -80,9 +83,11 @@ export function AreaBoard({
 
       <p className={`rounded-lg px-3 py-2 text-sm ${stage === "prep" ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100"}`}>
         {stage === "prep"
-          ? "First, prep every area. The work starts once every area is prepped and has its prep photo."
-          : "Every area is prepped. Now the work, one area at a time."}
+          ? "First, prep every area. The install starts once every area is prepped and has its prep photo."
+          : "Every area is prepped. Now the install, one area at a time."}
       </p>
+
+      {map}
 
       {error && <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
 
@@ -193,14 +198,14 @@ function StatusLine({ state, stage, meId }: { state: AreaState; stage: "prep" | 
         <Users className="h-3 w-3" />
         {state.people.map((p) => (p.profileId === meId ? "You" : p.name)).join(", ")}
         {" · "}
-        {stage === "prep" ? "Prepping" : "Working"}
+        {stage === "prep" ? "Prepping" : "Installing"}
         {state.kits.length > 0 && ` · kit ${state.kits.join(", ")}`}
       </span>
     );
   }
   return (
     <span className="mt-0.5 block text-xs text-muted-foreground">
-      {stage === "prep" ? "To prep" : "Ready for the work"}
+      {stage === "prep" ? "To prep" : "Ready to install"}
       {state.wouldTake.length > 0 ? ` · takes kit ${state.wouldTake.join(", ")}` : ""}
     </span>
   );
@@ -229,14 +234,14 @@ function Scope({ zone, tools, state }: { zone: WorkOrderZone; tools: string[]; s
 /** The one button on an area that is not yours yet, or why there isn't one. */
 function StartButton({ state, stage, pending, onStart }: { state: AreaState; stage: "prep" | "work"; pending: boolean; onStart: () => void }) {
   if (state.status === "done") return <PhotoDone label="Done. After photo in." />;
-  if (stage === "prep" && state.prepped) return <PhotoDone label="Prepped. The work starts once every area is prepped." />;
+  if (stage === "prep" && state.prepped) return <PhotoDone label="Prepped. The install starts once every area is prepped." />;
   if (state.status === "waiting") return <p className="text-sm text-amber-700">{state.waitingReason} Pick another area for now.</p>;
   const label =
     state.status === "working"
       ? `Join ${state.people.map((p) => p.name).join(" and ")} here`
       : stage === "prep"
         ? "Start prep here"
-        : "Start the work here";
+        : "Start the install";
   return (
     <Button type="button" className="h-12 w-full text-base font-semibold shadow-lg" onClick={onStart} disabled={pending}>
       {pending && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
@@ -247,14 +252,14 @@ function StartButton({ state, stage, pending, onStart }: { state: AreaState; sta
 
 const PHASE_HEADING: Record<Phase, string> = {
   prep: "Prep this area",
-  work: "The work",
+  work: "The install",
   cleanup: "Clean up",
 };
 
 /**
  * The area you are in: only the steps you are on now, ticked one by one,
  * then the one photo that closes them. Prep, then the prep photo. Once
- * every area is prepped: the work, the clean up, then the after photo.
+ * every area is prepped: the install, the clean up, then the after photo.
  */
 function InArea({
   jobId,

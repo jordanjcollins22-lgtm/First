@@ -48,7 +48,7 @@ export async function startArea(jobId: string, zoneId: string): Promise<AreaResu
   if (state.status === "done") return { ok: false, message: "That area is finished." };
   if (state.status === "waiting") return { ok: false, message: state.waitingReason ?? "Its kit is in use in another area." };
   // Prepped and waiting on the rest: the next thing to do is somewhere else.
-  if (state.prepped && !fresh.board.allPrepped) return { ok: false, message: "This area is prepped. Prep the next one: the work starts once every area is prepped." };
+  if (state.prepped && !fresh.board.allPrepped) return { ok: false, message: "This area is prepped. Prep the next one: the install starts once every area is prepped." };
   if (fresh.board.myZoneId === zoneId) return { ok: true };
 
   const supabase = await createClient();

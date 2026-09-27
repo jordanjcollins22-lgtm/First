@@ -4,11 +4,14 @@ import { SiteMapImage } from "@/components/proposal/site-map-image";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 
 /**
- * The whole site map on the price card, numbered to match the areas under
- * it: the satellite photo with the areas drawn on, as the proposal shows
- * it, or the practice drawing for the sample job.
+ * The whole site map, numbered to match the areas under it: the satellite
+ * photo with the areas drawn on, as the proposal shows it, or the practice
+ * drawing for the sample job. On the price card, and on the crew sheet so
+ * the crew know where area 1 is.
  */
-export function PriceSiteMap({ map }: { map: NonNullable<PriceApproval["siteMap"]> }) {
+export type SiteMapData = NonNullable<PriceApproval["siteMap"]>;
+
+export function PriceSiteMap({ map }: { map: SiteMapData }) {
   if (map.kind === "image") {
     return <SiteMapImage imagePath={map.imagePath} transform={map.transform} zones={map.zones} numbered showLegend={false} className="rounded-xl" />;
   }

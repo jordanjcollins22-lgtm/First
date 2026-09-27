@@ -172,7 +172,7 @@ function StopCallout({ stop, phase, directionsInButton = false }: { stop: Stop; 
         )}
         <Link href={`/jobs/${stop.jobId}`} className="inline-flex min-h-9 items-center gap-1">
           <MapPin className="h-4 w-4" />
-          Site map and crew sheet
+          Crew sheet
         </Link>
       </div>
     </div>

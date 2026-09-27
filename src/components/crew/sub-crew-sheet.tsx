@@ -12,6 +12,7 @@ import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { THUMBNAIL } from "@/lib/storage-image-url";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { AreaTodo } from "@/components/job/area-todo";
+import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import type { SubCrewSheet } from "@/lib/data/sub-crew";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +22,7 @@ const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("en-US",
  * A subcontractor's crew sheet, from the link the office sent them. One
  * button at a time: pick up at the shop (when they use our tools), On my
  * way, I've arrived; then the areas one at a time. Every area is prepped
- * first, its prep steps ticked and its prep photo taken; then the work
+ * first, its prep steps ticked and its prep photo taken; then the install
  * and clean up, area by area, each closed by its after photo; then We're
  * finished, which asks the account manager to come and walk it.
  */
@@ -188,13 +189,21 @@ export function SubCrewSheetView({
         </section>
       )}
 
-      {/* On site: every area prepped first, then the work, one area at a time. */}
+      {/* Where each area is, so area 1 can be found. */}
+      {sheet.siteMap && (stage === "on_site" || stage === "on_way" || stage === "go") && (
+        <section className="flex flex-col gap-1.5">
+          <h2 className="text-sm font-semibold">Where each area is</h2>
+          <PriceSiteMap map={sheet.siteMap} />
+        </section>
+      )}
+
+      {/* On site: every area prepped first, then the install, one area at a time. */}
       {stage === "on_site" && current && (
         <>
           <p className={cn("rounded-lg px-3 py-2 text-sm", prepping ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100")}>
             {prepping
-              ? "First, prep every area. The work starts once every area is prepped and has its prep photo."
-              : "Every area is prepped. Now the work, one area at a time."}
+              ? "First, prep every area. The install starts once every area is prepped and has its prep photo."
+              : "Every area is prepped. Now the install, one area at a time."}
           </p>
           <CurrentArea
             key={`${current.zone.id}-${current.kind}`}
@@ -313,7 +322,7 @@ function CurrentArea({
     kind === "during"
       ? [{ title: "Prep this area", lines: zone.phases.prep }]
       : [
-          { title: "The work", lines: zone.phases.work },
+          { title: "The install", lines: zone.phases.work },
           { title: "Clean up", lines: zone.phases.cleanup },
         ].filter((g) => g.lines.length > 0);
   const total = groups.reduce((n, g) => n + g.lines.length, 0);
