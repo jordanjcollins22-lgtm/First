@@ -80,6 +80,8 @@ export interface Database {
       organizations: {
         Row: {
           id: string;
+          /** When the crew is due at the shop, "HH:MM:SS". */
+          shop_arrival_time?: string;
           require_email_approval: boolean;
           client_reminders_enabled: boolean;
           reminder_time_zone: string;
@@ -2666,6 +2668,8 @@ export interface Database {
           organization_id: string;
           name: string;
           address: string | null;
+          /** The codes that get the crew in, e.g. the door and the gate. */
+          access_codes?: string | null;
           lat: number;
           lng: number;
           created_at: string;
@@ -3344,6 +3348,8 @@ export interface Database {
           id: string;
           organization_id: string;
           name: string;
+          /** The code on its box or lock. */
+          code?: string | null;
           kits: number[];
           kind: string;
           quantity: number | null;
@@ -3683,6 +3689,14 @@ export interface Database {
           tool_ids: string[];
           materials: string[];
           meet_on_site: boolean;
+          /** Given to a subcontractor rather than our crew. */
+          subcontractor_id: string | null;
+          /** Opens the subcontractor's crew sheet, no login. */
+          crew_token: string | null;
+          sub_picked_up_at: string | null;
+          sub_on_way_at: string | null;
+          sub_arrived_at: string | null;
+          sub_finished_at: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -3702,6 +3716,23 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      subcontractors: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          contact_name: string | null;
+          phone: string | null;
+          email: string | null;
+          uses_our_tools: boolean;
+          notes: string | null;
+          archived_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["subcontractors"]["Row"]> & { organization_id: string; name: string };
+        Update: Partial<Database["public"]["Tables"]["subcontractors"]["Row"]>;
+        Relationships: [];
       };
       job_area_work: {
         Row: {

@@ -43,6 +43,7 @@ export async function saveContainer(input: {
   purchaseUrl: string;
   reorderThreshold: string;
   notes: string;
+  code?: string;
 }): Promise<ContainerResult<{ id: string }>> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
@@ -70,6 +71,7 @@ export async function saveContainer(input: {
     purchase_url: input.purchaseUrl.trim() || null,
     reorder_threshold: reorderThreshold === null ? null : Math.round(reorderThreshold),
     notes: input.notes.trim().slice(0, 500) || null,
+    ...(input.code !== undefined ? { code: input.code.trim().slice(0, 60) || null } : {}),
     updated_at: new Date().toISOString(),
   };
 

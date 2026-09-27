@@ -55,6 +55,8 @@ export interface KitContainer {
   reorderThreshold: number | null;
   imagePath: string | null;
   notes: string | null;
+  /** The code on its box or lock, shown to the crew at the shop. */
+  code?: string | null;
   archivedAt: string | null;
   parts: ContainerPart[];
 }

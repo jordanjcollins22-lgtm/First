@@ -35,7 +35,7 @@ import { pendingEarlyStarts } from "@/lib/data/early-start";
 import { TodayBoard } from "@/components/crew/today-board";
 import { ShopFlow } from "@/components/crew/shop-flow";
 import { ShopFlowLive } from "@/components/crew/shop-flow-live";
-import { getDayLoadout, getShopDay, getSiteMaps, whoIsAtTheShop } from "@/lib/data/shop-flow";
+import { getDayLoadout, getShopDay, getShopInfo, getSiteMaps, whoIsAtTheShop } from "@/lib/data/shop-flow";
 import { canLead } from "@/lib/shop-flow";
 import { ClockControl } from "@/components/crew/clock-control";
 import { myOpenEntry } from "@/lib/data/time-clock";
@@ -817,13 +817,14 @@ async function CrewDay({ profile }: { profile: Profile }) {
   // phone: clock in, one kit at a time, the maps, out the door. Shown until
   // this person has left the shop; after that the day board takes over.
   const shopDay = loading ? await getShopDay(day.day).catch(() => null) : null;
-  const [dayLoadout, siteMaps, present] = loading
+  const [dayLoadout, siteMaps, present, shopInfo] = loading
     ? await Promise.all([
         getDayLoadout(day.day, shopDay?.checks ?? []).catch(() => null),
         shopDay && shopDay.stage !== "loadout" ? getSiteMaps(shopDay.shownJobIds).catch(() => []) : Promise.resolve([]),
         whoIsAtTheShop(day.day).catch(() => []),
+        getShopInfo().catch(() => null),
       ])
-    : [null, [], []];
+    : [null, [], [], null];
   const leadsAStop = day.stops.length > 0 && (await leadsAnyStopToday(profile.id, day.stops.map((s) => s.jobId)));
 
   return (
@@ -841,6 +842,7 @@ async function CrewDay({ profile }: { profile: Profile }) {
             stops={day.stops}
             siteMaps={siteMaps}
             present={present}
+            shop={shopInfo}
           />
         </div>
       )}

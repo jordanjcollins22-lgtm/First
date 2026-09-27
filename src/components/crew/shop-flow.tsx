@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Map as MapIcon, Navigation, Package, Truck, Users } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, KeyRound, Loader2, Map as MapIcon, Navigation, Package, Truck, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SayIt } from "@/components/ui/say-it";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import { arriveAtShop, headOut, setShopPage, setShopStage, setShownJobs, tickShopItem } from "@/lib/actions/shop-flow-actions";
 import { allLoaded, clampPage, loadPages, pageComplete, STAGE_LABEL } from "@/lib/shop-flow";
+import { sayTime } from "@/lib/sub-crew";
 import { zonesBounds } from "@/lib/work-order";
 import type { Loadout, LoadoutItem } from "@/lib/loadout";
 import type { Stop } from "@/lib/crew-day";
@@ -29,8 +30,11 @@ export function ShopFlow({
   stops,
   siteMaps,
   present,
+  shop = null,
 }: {
   me: { profileId: string; name: string; canLead: boolean; arrived: boolean };
+  /** When they are due, and how to get in. */
+  shop?: { arriveBy: string | null; accessCodes: string | null } | null;
   shopDay: ShopDay | null;
   loadout: Loadout;
   stops: Stop[];
@@ -74,6 +78,24 @@ export function ShopFlow({
           {shopDay ? `${shopDay.leadName} has opened the day.` : me.canLead ? "Open the day." : "Waiting for the lead to open the day."}
         </p>
         <p className="text-sm text-muted-foreground">One tap says you are here and starts your time.</p>
+        {shop && (sayTime(shop.arriveBy) || shop.accessCodes) && (
+          <div className="mt-2 flex flex-col gap-1 rounded-lg bg-background/80 p-2.5 text-sm">
+            {sayTime(shop.arriveBy) && (
+              <p>
+                <span className="font-semibold">Be at the shop by {sayTime(shop.arriveBy)}.</span>
+              </p>
+            )}
+            {shop.accessCodes && (
+              <p className="flex items-start gap-1.5">
+                <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <span>
+                  <span className="font-semibold">Getting in: </span>
+                  {shop.accessCodes}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
         <Button
           type="button"
           disabled={isPending}

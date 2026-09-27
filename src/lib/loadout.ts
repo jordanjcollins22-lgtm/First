@@ -29,6 +29,8 @@ export interface LoadoutTool {
 export interface LoadoutContainer {
   name: string;
   kits: number[];
+  /** The code on its box or lock. */
+  code?: string | null;
 }
 
 export interface LoadoutCheck {
@@ -62,8 +64,10 @@ export function materialKey(name: string): string {
 
 function kitDetail(kit: number, tools: readonly LoadoutTool[], containers: readonly LoadoutContainer[]): string | null {
   const names = tools.filter((t) => t.kits.includes(kit)).map((t) => t.name);
-  const box = containers.find((c) => c.kits.includes(kit))?.name ?? null;
-  const parts = [box ? `In the ${box.toLowerCase()}` : null, names.length > 0 ? names.join(", ") : null].filter(
+  const container = containers.find((c) => c.kits.includes(kit)) ?? null;
+  const box = container?.name ?? null;
+  const where = box ? `In the ${box.toLowerCase()}${container?.code ? `, code ${container.code}` : ""}` : null;
+  const parts = [where, names.length > 0 ? names.join(", ") : null].filter(
     Boolean
   ) as string[];
   return parts.length > 0 ? parts.join(". ") : null;

@@ -92,6 +92,7 @@ import { BeforeAfterPanel } from "@/components/marketing/before-after-panel";
 import { VisitsPanel } from "@/components/job/visits-panel";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
+import { WhoDoesIt } from "@/components/job/who-does-it";
 import { ObserversPanel, type ObserverRow } from "@/components/job/observers-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
@@ -564,6 +565,18 @@ export default async function JobPage({
   const subQuoteRequests = proposal ? await listSubQuoteRequests(jobId).catch(() => []) : [];
   const subQuoteGroups = serviceGroups(((proposal?.scope_snapshot ?? []) as unknown) as ProposalZoneSnapshot[]);
 
+  // Visits still to happen, and the subcontractors one can be given to.
+  const liveVisits = schedule.sessions.filter((s) => s.status !== "cancelled" && s.status !== "done");
+  const subcontractors =
+    liveVisits.length > 0
+      ? (((await supabase.from("subcontractors").select("id, name, phone, email, uses_our_tools").is("archived_at", null).order("name")).data ?? []) as {
+          id: string;
+          name: string;
+          phone: string | null;
+          email: string | null;
+          uses_our_tools: boolean;
+        }[]).map((row) => ({ id: row.id, name: row.name, phone: row.phone, email: row.email, usesOurTools: row.uses_our_tools }))
+      : [];
   const baseUrl = resolveBaseUrl({
     configured: env.appUrl,
     productionDomain: env.productionDomain,
@@ -678,6 +691,21 @@ export default async function JobPage({
           <p className="text-sm font-medium">Signed, and not scheduled yet.</p>
           <ScheduleJobButton jobId={jobId} />
         </div>
+      )}
+
+      {/* Booked: who does each visit, our crew or a subcontractor. */}
+      {(job.status === "approved" || job.status === "in_progress") && viewer && canRunJobs(viewer.roles) && liveVisits.length > 0 && (
+        <WhoDoesIt
+          visits={liveVisits.map((s) => ({
+            id: s.id,
+            startsOn: s.starts_on,
+            endsOn: s.ends_on,
+            subcontractorId: s.subcontractor_id ?? null,
+            crewToken: s.crew_token ?? null,
+          }))}
+          subcontractors={subcontractors}
+          baseUrl={baseUrl}
+        />
       )}
 
       {/* The four things the project is made of, one tap each. */}

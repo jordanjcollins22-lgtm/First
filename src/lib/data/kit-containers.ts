@@ -15,7 +15,7 @@ export async function listKitContainers(): Promise<KitContainer[]> {
   const { data: containerRows } = await supabase
     .from("kit_containers")
     .select(
-      "id, name, kits, kind, quantity, cost, purchase_url, broken, on_order, reorder_threshold, image_path, notes, archived_at"
+      "id, name, kits, kind, quantity, cost, purchase_url, broken, on_order, reorder_threshold, image_path, notes, code, archived_at"
     )
     .eq("organization_id", organizationId)
     .order("archived_at", { ascending: true, nullsFirst: true })
@@ -64,6 +64,7 @@ export async function listKitContainers(): Promise<KitContainer[]> {
     reorderThreshold: container.reorder_threshold,
     imagePath: container.image_path,
     notes: container.notes,
+    code: container.code ?? null,
     archivedAt: container.archived_at,
     parts: partsOf.get(container.id) ?? [],
   }));

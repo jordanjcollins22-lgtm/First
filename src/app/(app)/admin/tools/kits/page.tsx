@@ -9,6 +9,8 @@ import { kitNumbers, toolsInKit, toolsInNoKit } from "@/lib/kit-sheet";
 import { storedInLabel } from "@/lib/kit-containers";
 import { PrintPdfButton } from "@/components/print/print-pdf-button";
 import { ContainerPanel } from "@/components/kit/container-panel";
+import { ShopAccessCard } from "@/components/kit/shop-access-card";
+import { getShopInfo } from "@/lib/data/shop-flow";
 import { SayIt } from "@/components/ui/say-it";
 
 /**
@@ -28,9 +30,10 @@ export default async function KitsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("tools", "/my-day");
 
-  const [tools, containers] = await Promise.all([
+  const [tools, containers, shop] = await Promise.all([
     listKitTools().catch(() => []),
     listKitContainers().catch(() => []),
+    getShopInfo().catch(() => null),
   ]);
   const kits = kitNumbers(tools);
   const strays = toolsInNoKit(tools);
@@ -85,6 +88,8 @@ export default async function KitsPage() {
           })}
         </div>
       )}
+
+      <ShopAccessCard arriveBy={shop?.arriveBy ?? null} accessCodes={shop?.accessCodes ?? null} />
 
       <ContainerPanel containers={containers} />
 

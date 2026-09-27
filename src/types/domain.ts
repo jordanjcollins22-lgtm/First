@@ -928,6 +928,13 @@ export interface JobWorkSession {
   materials: string[];
   /** Straight to the site with their own tools: no shop stop, no loadout. */
   meet_on_site?: boolean;
+  /** Given to a subcontractor rather than our crew, with the link to their crew sheet. */
+  subcontractor_id?: string | null;
+  crew_token?: string | null;
+  sub_picked_up_at?: string | null;
+  sub_on_way_at?: string | null;
+  sub_arrived_at?: string | null;
+  sub_finished_at?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

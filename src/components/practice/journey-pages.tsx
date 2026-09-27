@@ -12,6 +12,8 @@ export interface JourneyStep {
   screen: ReactNode;
   /** Only when something was not done beforehand: the key of what was missed. */
   missed?: string;
+  /** Only on one of the paths at the top (e.g. our crew, or a subcontractor). */
+  path?: string;
 }
 
 /**
@@ -21,21 +23,49 @@ export interface JourneyStep {
  */
 export function JourneyPages({
   steps,
-  missed,
+  missed: allMissed,
   heading = "Add the pages for something not done beforehand",
+  paths = [],
 }: {
   steps: JourneyStep[];
-  missed: { key: string; label: string }[];
+  missed: { key: string; label: string; path?: string }[];
   /** What the chips at the top are for. */
   heading?: string;
+  /** Two or more ways through, picked at the top; the first is shown first. */
+  paths?: { key: string; label: string }[];
 }) {
   const [on, setOn] = useState<string[]>([]);
-  const shown = steps.filter((s) => !s.missed || on.includes(s.missed));
+  const [path, setPath] = useState<string | null>(paths[0]?.key ?? null);
+  const onPath = (s: { path?: string }) => !s.path || s.path === path;
+  const missed = allMissed.filter(onPath);
+  const shown = steps.filter((s) => onPath(s) && (!s.missed || on.includes(s.missed)));
   const toggle = (key: string) => setOn((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
   const labelOf = (key: string) => missed.find((m) => m.key === key)?.label ?? key;
 
   return (
     <>
+      {paths.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 rounded-xl border border-border bg-card p-1.5" role="tablist">
+          {paths.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              role="tab"
+              aria-selected={path === p.key}
+              onClick={() => {
+                setPath(p.key);
+                setOn([]);
+              }}
+              className={cn(
+                "min-h-10 flex-1 rounded-lg px-4 text-sm font-semibold",
+                path === p.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent/50"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
       {missed.length > 0 && (
       <section className="sticky top-14 z-10 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

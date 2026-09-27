@@ -31,6 +31,7 @@ export function ContainerEditor({
   const [purchaseUrl, setPurchaseUrl] = useState(container?.purchaseUrl ?? "");
   const [reorderThreshold, setReorderThreshold] = useState(container?.reorderThreshold?.toString() ?? "");
   const [notes, setNotes] = useState(container?.notes ?? "");
+  const [code, setCode] = useState(container?.code ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -47,6 +48,7 @@ export function ContainerEditor({
         purchaseUrl,
         reorderThreshold,
         notes,
+        code,
       });
       if (!result.ok) return setError(result.error);
       onDone();
@@ -140,6 +142,13 @@ export function ContainerEditor({
           placeholder="https://…"
           className="h-10"
         />
+      </label>
+
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium">
+          Lock or box code <span className="font-normal text-muted-foreground">Shown to the crew when they load it</span>
+        </span>
+        <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. 4412" className="h-10" />
       </label>
 
       <label className="flex flex-col gap-1.5">

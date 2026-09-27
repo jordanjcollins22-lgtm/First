@@ -57,7 +57,9 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
       )
       .lte("starts_on", day)
       .gte("ends_on", day)
-      .not("status", "in", "(cancelled,done)"),
+      .not("status", "in", "(cancelled,done)")
+      // A visit given to a subcontractor is on their crew sheet, not our crew's day.
+      .is("subcontractor_id", null),
     supabase
       .from("crew_day_events")
       .select("kind, job_id, at")
@@ -150,6 +152,7 @@ async function upcomingVisits(
     .gt("starts_on", day)
     .lte("starts_on", horizon.toISOString().slice(0, 10))
     .not("status", "in", "(cancelled,done)")
+    .is("subcontractor_id", null)
     .order("starts_on", { ascending: true });
 
   type Row = {

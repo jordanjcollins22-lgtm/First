@@ -1,3 +1,4 @@
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { buildLoadout, type Loadout, type LoadoutCheck, type LoadoutContainer, type LoadoutSession, type LoadoutTool } from "@/lib/loadout";
@@ -76,9 +77,11 @@ export async function getDayLoadout(day: string, checks: LoadoutCheck[]): Promis
       .select("id, job_id, kits, tool_ids, materials, jobs(status, properties(address, customers(name)))")
       .lte("starts_on", day)
       .gte("ends_on", day)
-      .not("status", "in", "(cancelled,done)"),
+      .not("status", "in", "(cancelled,done)")
+      // Our crew's load-out; a subcontractor's pickup is on their own sheet.
+      .is("subcontractor_id", null),
     supabase.from("tools").select("id, name, kits, active"),
-    supabase.from("kit_containers").select("name, kits").is("archived_at", null),
+    supabase.from("kit_containers").select("name, kits, code").is("archived_at", null),
   ]);
   type Row = { id: string; job_id: string; kits: number[] | null; tool_ids: string[] | null; materials: string[] | null; jobs: { status: string; properties: { address: string; customers: { name: string } | null } | null } | null };
   const sessions: LoadoutSession[] = ((sessionRows ?? []) as unknown as Row[])
@@ -97,7 +100,11 @@ export async function getDayLoadout(day: string, checks: LoadoutCheck[]): Promis
     name: t.active ? t.name : `${t.name} (marked inactive in inventory)`,
     kits: t.active ? (t.kits ?? []) : [],
   }));
-  const containers: LoadoutContainer[] = ((containerRows ?? []) as { name: string; kits: number[] | null }[]).map((c) => ({ name: c.name, kits: c.kits ?? [] }));
+  const containers: LoadoutContainer[] = ((containerRows ?? []) as { name: string; kits: number[] | null; code?: string | null }[]).map((c) => ({
+    name: c.name,
+    kits: c.kits ?? [],
+    code: c.code ?? null,
+  }));
   return buildLoadout(sessions, tools, containers, checks);
 }
 
@@ -142,4 +149,16 @@ export async function whoIsAtTheShop(day: string): Promise<{ profileId: string; 
     if (!seen.has(r.profile_id)) seen.set(r.profile_id, (r.profiles?.full_name || r.profiles?.email || "Someone").split(" ")[0]);
   }
   return [...seen.entries()].map(([profileId, name]) => ({ profileId, name }));
+}
+
+/** When the crew is due at the shop, and the codes that get them in. */
+export async function getShopInfo(): Promise<{ arriveBy: string | null; accessCodes: string | null; address: string | null }> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const [{ data: org }, { data: places }] = await Promise.all([
+    supabase.from("organizations").select("shop_arrival_time").eq("id", organizationId).maybeSingle(),
+    supabase.from("business_locations").select("name, address, access_codes"),
+  ]);
+  const home = (places ?? []).find((p) => /shop/i.test(p.name)) ?? (places ?? [])[0] ?? null;
+  return { arriveBy: org?.shop_arrival_time ?? null, accessCodes: home?.access_codes ?? null, address: home?.address ?? null };
 }

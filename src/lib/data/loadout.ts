@@ -19,11 +19,12 @@ export async function getLoadout(profileId: string, day: string): Promise<Loadou
       .in("job_id", myJobs)
       .lte("starts_on", day)
       .gte("ends_on", day)
-      .not("status", "in", "(cancelled,done)"),
+      .not("status", "in", "(cancelled,done)")
+      .is("subcontractor_id", null),
     // Every tool, not only the active ones: a visit that names a tool
       // somebody has since retired should still say which tool it meant.
       supabase.from("tools").select("id, name, kits, active"),
-    supabase.from("kit_containers").select("name, kits").is("archived_at", null),
+    supabase.from("kit_containers").select("name, kits, code").is("archived_at", null),
     supabase.from("loadout_checks").select("item_kind, item_key").eq("profile_id", profileId).eq("day", day),
   ]);
 
@@ -56,9 +57,10 @@ export async function getLoadout(profileId: string, day: string): Promise<Loadou
     // A retired tool is out of its kits; the visit that names it still gets it.
     kits: t.active ? (t.kits ?? []) : [],
   }));
-  const containers = ((containerRows ?? []) as { name: string; kits: number[] | null }[]).map((c) => ({
+  const containers = ((containerRows ?? []) as { name: string; kits: number[] | null; code?: string | null }[]).map((c) => ({
     name: c.name,
     kits: c.kits ?? [],
+    code: c.code ?? null,
   }));
   const checks = ((checkRows ?? []) as { item_kind: string; item_key: string }[]).map<LoadoutCheck>((c) => ({
     kind: c.item_kind as LoadoutCheck["kind"],

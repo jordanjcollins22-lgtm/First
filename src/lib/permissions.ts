@@ -113,6 +113,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/practice/account-manager":
     "Every page of the account manager pricing a submitted walkthrough, with a sample job, in preview. " +
     "Prices, saves and sends nothing, and checks the evaluations tab itself, like the other practice pages.",
+  "/practice/crew":
+    "Every page of a signed job from the crew's side, for our crew and for a subcontractor, with the sample job, " +
+    "in preview. Records and sends nothing, and checks the evaluations tab itself, like the other practice pages.",
   "/practice/crew-sheet":
     "The crew sheet for the sample job, beside the site map and proposal it comes from. Read only, no job " +
     "behind it, and checks the evaluations tab itself like the other practice pages.",

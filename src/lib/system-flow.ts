@@ -149,8 +149,9 @@ export const SYSTEM_FLOW: SystemStage[] = [
       {
         key: "field",
         title: "Crew in the field",
-        line: "Photos of the work, and the tools checked onto the truck.",
-        href: "/operations?tab=crew",
+        line: "Our crew or a subcontractor: the shop and kits, On my way, each area with during and after photos, finished, the walkthrough.",
+        // Every page of it for both, in preview. The live board is /operations?tab=crew.
+        href: "/practice/crew",
         status: "partly",
         gap: "The crew cannot log materials they buy yet.",
       },
