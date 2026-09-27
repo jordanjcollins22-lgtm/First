@@ -4,7 +4,7 @@ import { ChevronRight, MessageSquarePlus } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/env";
 import { after } from "next/server";
 import { getCurrentProfile } from "@/lib/data/team";
-import { isFieldOnly } from "@/lib/affiliate-roles";
+import { isCommenterOnly, isFieldOnly } from "@/lib/affiliate-roles";
 import { getCrewDay } from "@/lib/data/crew-day";
 import { owedToProfile } from "@/lib/data/owed-to-me";
 import { getLoadout } from "@/lib/data/loadout";
@@ -296,6 +296,7 @@ async function MyScheduleTab({ profile }: { profile: Profile }) {
  * crews, the calls, the tiles and the money are somebody else's day.
  */
 function isGrowthOnly(roles: string[]): boolean {
+  if (isCommenterOnly(roles)) return true;
   const held = roles.map((r) => r.toLowerCase().trim());
   return held.includes("office") && held.every((r) => r === "office");
 }

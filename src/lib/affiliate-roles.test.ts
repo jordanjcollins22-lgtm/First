@@ -9,10 +9,12 @@ import {
   isAccountManager,
   isCrew,
   isEvaluator,
+  isCommenterOnly,
   isFieldOnly,
   isOfficeRole,
   qualifiesForAffiliateLink,
 } from "@/lib/affiliate-roles";
+import { navModules } from "@/lib/modules";
 
 describe("isFieldOnly", () => {
   it("is true for a crew member", () => {
@@ -160,5 +162,22 @@ describe("evaluatorOptions", () => {
   it("keeps whoever has it now, even if they couldn't be booked for a new one", () => {
     const team = [person("m", "Max", ["crew"]), person("j", "Jace", ["account manager"])];
     expect(evaluatorOptions(team, "m").map((o) => o.name)).toEqual(["Jace", "Max"]);
+  });
+});
+
+describe("somebody who only answers posts", () => {
+  it("gets the comments view: My Day and nothing else", () => {
+    expect(roleViewFor(["commenter"])).toBe("comments");
+    expect(roleViewFor(["Commenter "])).toBe("comments");
+    expect(navModules(["posts-to-answer"], "comments").map((m) => m.key)).toEqual(["my-day"]);
+  });
+
+  it("is neither crew nor the office", () => {
+    expect(isFieldOnly(["commenter"])).toBe(false);
+    expect(isCommenterOnly(["commenter"])).toBe(true);
+    // A second role means they do more than answer posts.
+    expect(isCommenterOnly(["commenter", "evaluator"])).toBe(false);
+    expect(roleViewFor(["commenter", "admin"])).toBe("full");
+    expect(isCommenterOnly([])).toBe(false);
   });
 });

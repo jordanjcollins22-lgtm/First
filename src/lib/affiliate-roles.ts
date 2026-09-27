@@ -64,10 +64,19 @@ export function qualifiesForAffiliateLink(roles: string[]): boolean {
  * Anybody holding one of these needs the full app. Everybody else is in a
  * truck, and the full app is noise to them.
  */
-const OFFICE_ROLES = ["admin", "owner", "overhead", "office", "evaluator", "account manager", "manager"];
+const OFFICE_ROLES = ["admin", "owner", "overhead", "office", "evaluator", "account manager", "manager", "commenter"];
 
 export function isOfficeRole(role: string): boolean {
   return OFFICE_ROLES.includes(normalizeRole(role));
+}
+
+/**
+ * Somebody whose whole job here is answering posts: the comment card on My
+ * Day, and nothing else in the app. Not field (they are not in a truck), and
+ * not the office (they have no business with clients' records or jobs).
+ */
+export function isCommenterOnly(roles: string[]): boolean {
+  return roles.length > 0 && roles.every((r) => normalizeRole(r) === "commenter");
 }
 
 /**
@@ -111,17 +120,19 @@ export function canOverrideGate(roles: string[]): boolean {
  * - field: the crew. My Day and nothing else, as it always was.
  * - evaluator: My Day, and in Operations the calendar and their evaluations.
  * - account manager: the same, plus the jobs they manage.
+ * - comments: My Day, which for them is the comment card, and nothing else.
  * - full: anybody who runs the business, however else they are labelled.
  *
  * Running the business wins over any narrower role held beside it, so an
  * owner who also does evaluations still sees everything.
  */
-export type RoleView = "full" | "account-manager" | "evaluator" | "field";
+export type RoleView = "full" | "account-manager" | "evaluator" | "field" | "comments";
 
 const RUNS_THE_BUSINESS = ["admin", "owner", "overhead", "office", "manager"];
 
 export function roleViewFor(roles: string[]): RoleView {
   if (isFieldOnly(roles)) return "field";
+  if (isCommenterOnly(roles)) return "comments";
   if (roles.some((r) => RUNS_THE_BUSINESS.includes(normalizeRole(r)))) return "full";
   if (isAccountManager(roles)) return "account-manager";
   if (isEvaluator(roles)) return "evaluator";

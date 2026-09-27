@@ -172,6 +172,7 @@ const VIEW_SCOPE: Record<Exclude<RoleView, "full">, Partial<Record<ModuleKey, re
   field: { "my-day": null },
   evaluator: { "my-day": null, operations: ["calendar", "evaluations"] },
   "account-manager": { "my-day": null, operations: ["calendar", "evaluations", "jobs"] },
+  comments: { "my-day": null },
 };
 
 function inView(view: RoleView, key: string, subtab: string): boolean {

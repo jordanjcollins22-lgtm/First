@@ -12,7 +12,7 @@ import { getBookingLinksBundle, type BookingLinksBundle } from "@/lib/data/booki
 import { checkTabAccess } from "@/lib/data/access";
 import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
-import { isAccountManager, isFieldOnly } from "@/lib/affiliate-roles";
+import { isAccountManager, isCommenterOnly, isFieldOnly } from "@/lib/affiliate-roles";
 import { MOVED } from "@/lib/moved-routes";
 
 export default async function Home({
@@ -28,6 +28,8 @@ export default async function Home({
   // Anybody who only works in the field lands on their day and stays there.
   // The office view is noise to somebody standing in a yard with a mower.
   if (profile && isFieldOnly(profile.roles)) redirect("/today");
+  // Somebody who only answers posts has one screen, and it is My Day.
+  if (profile && isCommenterOnly(profile.roles)) redirect("/my-day");
 
   // Admins land on the business, not on a form. Whoever opens this app first
   // thing wants to know what is happening today before they want to start
@@ -71,15 +73,10 @@ export default async function Home({
       }
     }
 
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6 sm:py-10">
-        <h1 className="text-2xl font-bold">New Estimate</h1>
-        <p className="text-sm text-muted-foreground">
-          Your account doesn&apos;t have access to this page. Ask an admin to grant it under Databases &rarr;
-          Permissions.
-        </p>
-      </div>
-    );
+    // Nothing to start here and no evaluations to run: their day is on My
+    // Day. A page titled New Estimate that says "no access" was the first
+    // thing somebody who answers posts saw every time they opened the app.
+    redirect("/my-day");
   }
 
   return (
