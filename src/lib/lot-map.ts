@@ -389,3 +389,71 @@ export function groundToBoard(point: LngLat, geo: ImageGeo, image: BoardImage): 
   const r = (image.rotation * Math.PI) / 180;
   return { x: image.x + ex * Math.cos(r) - ey * Math.sin(r), y: image.y + ex * Math.sin(r) + ey * Math.cos(r) };
 }
+
+/* --------------------------------------------- the parts, on the ground */
+
+/** Clips a polygon to a convex one (Sutherland-Hodgman). */
+function clipTo(subject: Px[], clip: Px[]): Px[] {
+  // Which way the clip polygon winds, so "inside" is the right side.
+  let area = 0;
+  for (let i = 0; i < clip.length; i++) {
+    const a = clip[i];
+    const b = clip[(i + 1) % clip.length];
+    area += a[0] * b[1] - b[0] * a[1];
+  }
+  const sign = area >= 0 ? 1 : -1;
+  let out = subject;
+  for (let i = 0; i < clip.length && out.length > 0; i++) {
+    const a = clip[i];
+    const b = clip[(i + 1) % clip.length];
+    const inside = (p: Px) => sign * ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) >= 0;
+    const cross = (p: Px, q: Px): Px => {
+      const d1 = [q[0] - p[0], q[1] - p[1]];
+      const d2 = [b[0] - a[0], b[1] - a[1]];
+      const den = d1[0] * d2[1] - d1[1] * d2[0];
+      if (Math.abs(den) < 1e-12) return p;
+      const t = ((a[0] - p[0]) * d2[1] - (a[1] - p[1]) * d2[0]) / den;
+      return [p[0] + t * d1[0], p[1] + t * d1[1]];
+    };
+    const input = out;
+    out = [];
+    for (let j = 0; j < input.length; j++) {
+      const p = input[j];
+      const q = input[(j + 1) % input.length];
+      if (inside(q)) {
+        if (!inside(p)) out.push(cross(p, q));
+        out.push(q);
+      } else if (inside(p)) {
+        out.push(cross(p, q));
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Each part of the yard the form offers (front, back, sides, around the
+ * house, the whole lot) as outlines on the ground, cut to the property
+ * line. The same parts the client picked on the form, so the site map can
+ * start with them drawn where the client meant.
+ */
+export function groundRegions(lot: LotData, turn = 0): Record<AreaKey, LngLat[][]> {
+  const width = 640;
+  const height = 440;
+  const layout = layoutLot(lot, width, height, turn);
+  const origin = worldPx(layout.center, layout.zoom);
+  const toGround = ([x, y]: Px): LngLat => {
+    const back = turnForBearing([x - width / 2, y - height / 2], -layout.bearing);
+    return fromWorldPx([back[0] + origin[0], back[1] + origin[1]], layout.zoom);
+  };
+  // An open ring, for clipping.
+  const parcel = layout.parcel.slice(0, layout.parcel.length > 1 && layout.parcel[0][0] === layout.parcel[layout.parcel.length - 1][0] && layout.parcel[0][1] === layout.parcel[layout.parcel.length - 1][1] ? -1 : undefined);
+  const out = {} as Record<AreaKey, LngLat[][]>;
+  for (const key of Object.keys(layout.regions) as AreaKey[]) {
+    out[key] =
+      key === "whole"
+        ? [lot.ring]
+        : layout.regions[key].map((quad) => clipTo(parcel, quad)).filter((ring) => ring.length >= 3).map((ring) => ring.map(toGround));
+  }
+  return out;
+}

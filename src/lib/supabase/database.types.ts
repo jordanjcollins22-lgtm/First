@@ -1814,6 +1814,9 @@ export interface Database {
           evaluation_status: string;
           /** When the site map was submitted. */
           evaluation_submitted_at: string | null;
+          evaluator_on_way_at: string | null;
+          evaluator_arrived_at: string | null;
+          evaluation_plan: Json | null;
           project_start_date: string | null;
           project_end_date: string | null;
           client_notes: string | null;

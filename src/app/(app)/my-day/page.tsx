@@ -4,7 +4,9 @@ import { ChevronRight, MessageSquarePlus } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/env";
 import { after } from "next/server";
 import { getCurrentProfile } from "@/lib/data/team";
-import { isCommenterOnly, isFieldOnly } from "@/lib/affiliate-roles";
+import { isCommenterOnly, isFieldOnly, roleViewFor } from "@/lib/affiliate-roles";
+import { getEvaluatorDay } from "@/lib/data/evaluator-day";
+import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { getCrewDay } from "@/lib/data/crew-day";
 import { owedToProfile } from "@/lib/data/owed-to-me";
 import { getLoadout } from "@/lib/data/loadout";
@@ -127,13 +129,33 @@ export default async function MyDayPage() {
     );
   }
 
+  // An evaluator's day is their visits: the same screen as /evaluate.
+  const evaluatorOnly = viewer ? roleViewFor(viewer.roles) === "evaluator" : false;
+  const visits = viewer && !isFieldOnly(viewer.roles) ? await getEvaluatorDay().catch(() => null) : null;
+
   const day =
     viewer && isFieldOnly(viewer.roles) ? (
       <CrewDay profile={viewer} />
     ) : viewer && isGrowthOnly(viewer.roles) ? (
       await GrowthDay()
+    ) : evaluatorOnly && visits ? (
+      <EvaluatorDayView data={visits} />
     ) : (
-      <OfficeDay />
+      <>
+        {/* Anybody else with a visit today gets one tap to it. */}
+        {visits && visits.today.length > 0 && (
+          <Link
+            href="/evaluate"
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4"
+          >
+            <span className="font-semibold">
+              {visits.today.length === 1 ? "You have an evaluation today" : `You have ${visits.today.length} evaluations today`}
+            </span>
+            <span className="text-sm font-semibold text-primary">Open</span>
+          </Link>
+        )}
+        <OfficeDay />
+      </>
     );
 
   return (

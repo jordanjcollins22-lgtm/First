@@ -164,3 +164,21 @@ describe("turning the picture so the street is at the bottom", () => {
     }
   });
 });
+
+describe("the parts of the yard, on the ground", () => {
+  it("puts the front between the house and the street, inside the property line", async () => {
+    const { groundRegions, pointInRing } = await import("./lot-map");
+    const data = { ring: lot, footprint: house, front: at(0, -8), frontRoad: "MAPLE RD", lotSqft: 25830, structureSqft: 2100 };
+    const regions = groundRegions(data);
+    const front = regions.front[0];
+    // Everything in the front is south of the house and inside the lot.
+    for (const p of front) {
+      expect(p[1]).toBeLessThan(at(0, 15.5)[1]);
+      expect(p[1]).toBeGreaterThan(at(0, -0.5)[1]);
+    }
+    expect(pointInRing(at(0, 7), front)).toBe(true);
+    expect(pointInRing(at(0, 40), regions.back[0])).toBe(true);
+    expect(regions.sides).toHaveLength(2);
+    expect(regions.whole[0]).toEqual(lot);
+  });
+});

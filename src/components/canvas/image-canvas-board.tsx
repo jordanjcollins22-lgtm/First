@@ -62,7 +62,8 @@ import { updateEvaluationStatus } from "@/lib/actions/job-actions";
 import { ExpectationsCard } from "@/components/canvas/expectations-card";
 import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
-import { groundToBoard, type ImageGeo, type LotData } from "@/lib/lot-map";
+import { groundRegions, groundToBoard, type ImageGeo, type LotData } from "@/lib/lot-map";
+import { isSeededZone, type ZoneSeed } from "@/lib/evaluation-visit";
 import { countyLotForJob } from "@/lib/actions/lot-actions";
 
 const ZONE_COLORS = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#db2777"];
@@ -158,6 +159,13 @@ interface ImageCanvasBoardProps {
    * browser, and it opens blank every time.
    */
   practice?: boolean;
+  /**
+   * Zones to start from, made from the evaluator's on-site set-up of the
+   * client's pre-evaluation form. Kept in step with it: a piece of work
+   * kept there is a zone here, drawn over the part of the yard it is in,
+   * and one removed there is taken off. Zones drawn by hand are left alone.
+   */
+  seedZones?: ZoneSeed[];
 }
 
 export function ImageCanvasBoard({
@@ -170,6 +178,7 @@ export function ImageCanvasBoard({
   initialEvaluationStatus,
   evaluatorName,
   practice = false,
+  seedZones,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -212,6 +221,8 @@ export function ImageCanvasBoard({
   // and the house can be drawn on the ground. Null for an uploaded photo.
   const [imageGeo, setImageGeo] = useState<ImageGeo | null>(null);
   const [countyLot, setCountyLot] = useState<LotData | null>(null);
+  /** Whether the county has answered, with a lot or without one. */
+  const [countyChecked, setCountyChecked] = useState(false);
   const [orientConfirmed, setOrientConfirmed] = useState(true);
   const [keepCentered, setKeepCentered] = useState(true);
   const [autoTurned, setAutoTurned] = useState<number | null>(null);
@@ -601,7 +612,10 @@ export function ImageCanvasBoard({
       .then((lot) => {
         if (!cancelled) setCountyLot(lot);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCountyChecked(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -683,6 +697,69 @@ export function ImageCanvasBoard({
     }, 800);
     return () => clearTimeout(timer);
   }, [jobId, image, locked, address, zones, propertyLine, houseOutline, marks, bearing, orientConfirmed, imageGeo]);
+
+  // The on-site set-up, as zones. Waits for the photo and the county, so a
+  // part of the yard is drawn where it is on the ground; with no county lot
+  // it is a square near the middle, to be redrawn.
+  useEffect(() => {
+    // And after the house is pointed the right way, since turning the photo
+    // fetches a new one and the areas would be left where the old one was.
+    if (!jobId || !seedZones || !image || !countyChecked || !orientConfirmed) return;
+    const wanted = new Set(seedZones.map((seed) => seed.id));
+    // A beat after the photo is drawn, so the zones land on it.
+    const timer = setTimeout(() =>
+      setZones((prev) => {
+        const kept = prev.filter((zone) => !isSeededZone(zone.id) || wanted.has(zone.id));
+        const have = new Set(kept.map((zone) => zone.id));
+        const missing = seedZones.filter((seed) => !have.has(seed.id));
+        if (missing.length === 0 && kept.length === prev.length) return prev;
+        const regions = countyLot && imageGeo ? groundRegions(countyLot) : null;
+        const onBoard = { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width };
+        const inArea = new Map<string, number>();
+        const made = missing.map((seed, i): WorkZone => {
+          // Several pieces of work in one part of the yard sit one inside the
+          // other, so each can be seen and tapped.
+          const nth = inArea.get(seed.area) ?? kept.filter((zone) => zone.location === seed.location).length;
+          inArea.set(seed.area, nth + 1);
+          const shrink = Math.max(0.4, 1 - nth * 0.15);
+          let points: Point[] = [];
+          const rings = regions?.[seed.area as keyof typeof regions];
+          if (rings && rings.length > 0 && imageGeo) {
+            const ring = rings.reduce((a, b) => (b.length > a.length ? b : a));
+            const raw = ring.map((p) => groundToBoard(p, imageGeo, onBoard));
+            const cx = raw.reduce((sum, p) => sum + p.x, 0) / raw.length;
+            const cy = raw.reduce((sum, p) => sum + p.y, 0) / raw.length;
+            points = raw.map((p) => ({ x: cx + (p.x - cx) * shrink, y: cy + (p.y - cy) * shrink }));
+          } else {
+            const half = 60 * shrink;
+            const cx = CANVAS_WIDTH / 2 + ((prev.length + i) % 4) * 40 - 60;
+            const cy = CANVAS_HEIGHT / 2 + Math.floor((prev.length + i) / 4) * 40 - 40;
+            points = [
+              { x: cx - half, y: cy - half },
+              { x: cx + half, y: cy - half },
+              { x: cx + half, y: cy + half },
+              { x: cx - half, y: cy + half },
+            ];
+          }
+          return {
+            id: seed.id,
+            name: seed.name,
+            color: ZONE_COLORS[(prev.length + i) % ZONE_COLORS.length],
+            points,
+            location: seed.location,
+            service: seed.typeId ? { typeId: seed.typeId, values: seed.values, notes: "", photos: [], tools: [] } : null,
+            lengthFt: null,
+            widthFt: null,
+            areaSqFt: null,
+            perimeterFt: null,
+          };
+        });
+        return [...kept, ...made];
+      }),
+      0
+    );
+    return () => clearTimeout(timer);
+  }, [jobId, seedZones, image, countyChecked, countyLot, imageGeo, orientConfirmed]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;

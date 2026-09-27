@@ -122,6 +122,12 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/practice/site-map":
     "The site map tool with no job behind it, to try it. Saves nothing, and checks the evaluations tab " +
     "itself, since it is the same tool the evaluator uses on a job.",
+  "/evaluate":
+    "The evaluator's own visits: today, coming up, not written up. Checks the evaluations tab itself, and " +
+    "shows only the viewer's own visits unless an admin or owner asks for everyone's.",
+  "/evaluate/[jobId]":
+    "One evaluation visit on the evaluator's phone. Guarded like the job it belongs to, on the evaluations " +
+    "or job detail tab, the same way the job's directions page is.",
   "/login": "Sign-in page, nobody is signed in yet, so there are no roles to check.",
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +
