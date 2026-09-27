@@ -16,6 +16,7 @@
  */
 
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
+import { crewInstructions } from "@/lib/crew-instructions";
 import type { Point, WorkZone } from "@/components/canvas/types";
 
 export interface ZonePhoto {
@@ -47,8 +48,14 @@ export interface WorkOrderZone {
   location: string;
   /** Size, for judging how long it takes and how much to load. */
   sizeLabel: string | null;
-  /** The evaluator's checklist answers — the actual instructions. */
+  /** The evaluator's checklist answers, as they were picked. */
   tasks: WorkOrderTask[];
+  /**
+   * What to do here, one line each, in order: the answers turned into
+   * instructions. This is what the crew read; the answers describe the area,
+   * these say what to pick up first.
+   */
+  todo: string[];
   notes: string;
   /**
    * What the evaluator photographed here, with whatever they marked on it.
@@ -108,6 +115,7 @@ export function buildWorkOrder(
       location: zone.location,
       sizeLabel: sizeLabelFor(zone),
       tasks,
+      todo: crewInstructions(typeId, zone.service.values ?? {}),
       notes: zone.service.notes ?? "",
       // Markers are keyed by the photo's own path, so a photo with none
       // simply has none — there is no separate "unmarked" state to handle.

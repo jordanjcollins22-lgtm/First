@@ -18,6 +18,9 @@ import { publicStorageUrl, type ImageTransform } from "@/lib/storage-image-url";
  * own data.
  */
 export function canvasImageUrl(path: string, transform?: ImageTransform): string {
+  // A picture that ships with the site (the practice pages' sample job) is
+  // already a URL. Storage paths never start with a slash.
+  if (path.startsWith("/")) return path;
   return publicStorageUrl({
     supabaseUrl: env.supabaseUrl,
     bucket: "canvas-images",

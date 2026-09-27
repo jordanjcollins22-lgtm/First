@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { subAttachPhoto, subFinish, subPhotoSlot, subStep } from "@/lib/actions/sub-crew-actions";
 import { canFinish, sayTime, subStage, type AreaState, type SubStage } from "@/lib/sub-crew";
-import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { THUMBNAIL } from "@/lib/storage-image-url";
+import { ZonePhotos } from "@/components/job/marked-photo";
+import { AreaTodo } from "@/components/job/area-todo";
 import type { SubCrewSheet } from "@/lib/data/sub-crew";
 import { cn } from "@/lib/utils";
 
@@ -278,25 +278,9 @@ function AreaCard({
         {zone.location ? ` · ${zone.location}` : ""}
         {zone.sizeLabel ? ` · ${zone.sizeLabel}` : ""}
       </p>
-      {zone.tasks.length > 0 && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
-          {zone.tasks.map((t) => (
-            <div key={t.label} className="contents">
-              <dt className="text-muted-foreground">{t.label}</dt>
-              <dd>{t.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {zone.notes && <p className="text-sm">{zone.notes}</p>}
-      {zone.photos.length > 0 && (
-        <div className="grid grid-cols-3 gap-1.5">
-          {zone.photos.map((photo) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={photo.path} src={canvasImageUrl(photo.path, THUMBNAIL)} alt={`${zone.name} before`} className="aspect-square w-full rounded-lg bg-muted object-cover" loading="lazy" />
-          ))}
-        </div>
-      )}
+      <ZonePhotos photos={zone.photos} zoneName={zone.name} />
+      <AreaTodo todo={zone.todo} />
+      {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
 
       {onSite && state !== "done" && (
         <div className="rounded-lg border border-dashed border-primary/60 bg-primary/5 p-2.5">

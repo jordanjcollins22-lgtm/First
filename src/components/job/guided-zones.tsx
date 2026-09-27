@@ -6,6 +6,7 @@ import { Camera, Check, ChevronRight, Loader2, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ZonePhotos } from "@/components/job/marked-photo";
+import { AreaTodo } from "@/components/job/area-todo";
 import { createClient } from "@/lib/supabase/client";
 import { attachJobPhoto } from "@/lib/actions/job-photo-actions";
 import { angleLine, zoneProgress } from "@/lib/guided-zones";
@@ -125,21 +126,11 @@ export function GuidedZones({ jobId, zones, photos }: { jobId: string; zones: Wo
           </div>
         </div>
 
-        {current.tasks.length > 0 && (
-          <dl className="mt-3 flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-2.5 text-sm">
-            {current.tasks.map((task) => (
-              <div key={task.label} className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">{task.label}</dt>
-                <dd className="text-right font-medium">{task.value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {current.notes && <p className="mt-2 rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm">{current.notes}</p>}
-
         <div className="mt-3">
           <ZonePhotos photos={current.photos} zoneName={current.name} />
         </div>
+        <AreaTodo todo={current.todo} className="mt-1" />
+        {current.notes && <p className="mt-2 rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm">{current.notes}</p>}
 
         {/* The after photo, from the same angle. The next area waits on it. */}
         <div className="mt-3 rounded-lg border border-dashed border-primary/50 bg-primary/5 p-3">

@@ -4,6 +4,7 @@ import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
 import type { CanvasMark } from "@/lib/canvas-marks";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import { ZonePhotos } from "@/components/job/marked-photo";
+import { AreaTodo } from "@/components/job/area-todo";
 import { GuidedZones } from "@/components/job/guided-zones";
 import { CompletionPanel } from "@/components/job/completion-panel";
 import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
@@ -294,16 +295,7 @@ export function WorkOrderView({
                 </p>
               )}
 
-              {zone.tasks.length > 0 && (
-                <dl className="mb-2 flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-2.5 text-sm">
-                  {zone.tasks.map((task) => (
-                    <div key={task.label} className="flex justify-between gap-3">
-                      <dt className="text-muted-foreground">{task.label}</dt>
-                      <dd className="text-right font-medium">{task.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+              <AreaTodo todo={zone.todo} className="mb-2" />
 
               {zone.notes && (
                 <p className="mb-2 rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm">

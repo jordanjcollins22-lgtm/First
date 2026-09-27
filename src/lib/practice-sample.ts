@@ -9,6 +9,7 @@
  */
 
 import type { WorkOrder } from "@/lib/work-order";
+import { crewInstructions } from "@/lib/crew-instructions";
 
 export const PRACTICE_ADDRESS = "12 Example Court, Bel Air, Maryland 21014";
 
@@ -24,6 +25,13 @@ export interface PracticeZone {
   /** The evaluator's checklist answers: the crew's instructions. */
   tasks: { label: string; value: string }[];
   notes: string;
+  /** The rate-card service and the evaluator's answers, as the site map saves them. */
+  typeId: string;
+  values: Record<string, string>;
+  /** The evaluator's note to the crew. */
+  crewNote: string;
+  /** Photos taken at the evaluation: pictures that ship with the site. */
+  photos: string[];
   crewHours: number;
   materials: { material: string; quantityLabel: string; cost: number }[];
 }
@@ -49,6 +57,19 @@ export const PRACTICE_ZONES: PracticeZone[] = [
       { label: "Plants", value: "Three low shrubs by the steps" },
     ],
     notes: "Pull the old mulch and weeds, edge the beds, and lay fresh black mulch. Plant three low shrubs by the steps.",
+    typeId: "landscape-bed",
+    values: {
+      bedWork: "Renewal",
+      material: "Mulch",
+      existingMaterial: "Mulch",
+      existingMaterialCondition: "Needs Removal",
+      weedLevel: "Moderate",
+      edge: "Existing Edge Needs Redone",
+      newPlantInstallation: "Select Plants",
+      newPlantInstallation__qty: "3",
+    },
+    crewNote: "Black mulch. The three new shrubs go by the steps: one each side and one at the corner.",
+    photos: ["/booking-work/front-bed-mulch-trim.jpg"],
     crewHours: 6,
     materials: [
       { material: "Black mulch", quantityLabel: "3 cubic yards", cost: 126 },
@@ -74,6 +95,17 @@ export const PRACTICE_ZONES: PracticeZone[] = [
       { label: "Mulch", value: "Black, to match the front" },
     ],
     notes: "Weed and edge the bed along the foundation and top it with black mulch to match the front.",
+    typeId: "landscape-bed",
+    values: {
+      bedWork: "Existing Bed Maintenance",
+      material: "Mulch",
+      existingMaterial: "Mulch",
+      existingMaterialCondition: "Normal",
+      weedLevel: "Light",
+      edge: "Existing Good Edge",
+    },
+    crewNote: "Black mulch to match the front. Keep the mulch clear of the dryer vent at the back corner.",
+    photos: ["/booking-work/bed-edging-mulch.jpg"],
     crewHours: 4,
     materials: [{ material: "Black mulch", quantityLabel: "2 cubic yards", cost: 84 }],
   },
@@ -96,6 +128,10 @@ export const PRACTICE_ZONES: PracticeZone[] = [
       { label: "Haul away", value: "Yes" },
     ],
     notes: "Take out two overgrown shrubs taller than the fence, dig out the roots and haul them away.",
+    typeId: "plant-bush-removal",
+    values: { type: "Bush", quantity: "2", size: "Large", afterward: "Return to Lawn" },
+    crewNote: "Both are taller than the fence. The gate is on the left: keep it latched, there's a dog.",
+    photos: ["/booking-work/overgrowth-removal-mulch.jpg"],
     crewHours: 3,
     materials: [],
   },
@@ -122,8 +158,9 @@ export function practiceWorkOrder(): WorkOrder {
       location: z.location,
       sizeLabel: z.sizeLabel,
       tasks: z.tasks,
-      notes: z.notes,
-      photos: [],
+      todo: crewInstructions(z.typeId, z.values),
+      notes: z.crewNote,
+      photos: z.photos.map((path) => ({ path, markers: [] })),
     })),
   };
 }

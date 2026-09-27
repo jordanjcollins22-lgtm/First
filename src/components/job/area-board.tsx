@@ -6,6 +6,9 @@ import { Camera, Check, ChevronDown, Circle, Loader2, Lock, Phone, Users } from 
 
 import { Button } from "@/components/ui/button";
 import { ZonePhotos } from "@/components/job/marked-photo";
+import { AreaTodo } from "@/components/job/area-todo";
+import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { THUMBNAIL } from "@/lib/storage-image-url";
 import { createClient } from "@/lib/supabase/client";
 import { attachJobPhoto } from "@/lib/actions/job-photo-actions";
 import { areaPhotoTaken, leaveArea, startArea, tickAreaStep } from "@/lib/actions/area-work-actions";
@@ -104,6 +107,11 @@ export function AreaBoard({
                   <span className="block text-sm text-primary">{zone.service}</span>
                   <StatusLine state={state} meId={board.meId} />
                 </span>
+                {/* The area as the evaluator saw it, so it can be found before it is opened. */}
+                {!expanded && zone.photos[0] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={canvasImageUrl(zone.photos[0].path, THUMBNAIL)} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" loading="lazy" />
+                )}
                 <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
               </button>
 
@@ -199,18 +207,9 @@ function AreaDetail({
       {(zone.location || zone.sizeLabel) && (
         <p className="text-xs text-muted-foreground">{[zone.location, zone.sizeLabel].filter(Boolean).join(" · ")}</p>
       )}
-      {zone.tasks.length > 0 && (
-        <dl className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-2.5 text-sm">
-          {zone.tasks.map((task) => (
-            <div key={task.label} className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">{task.label}</dt>
-              <dd className="text-right font-medium">{task.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
       <ZonePhotos photos={zone.photos} zoneName={zone.name} />
+      <AreaTodo todo={zone.todo} />
+      {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
 
       {tools.length > 0 && state.status !== "done" && (
         <p className="text-sm">

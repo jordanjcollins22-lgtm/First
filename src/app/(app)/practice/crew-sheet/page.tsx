@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, ChevronLeft } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
+import { crewInstructions } from "@/lib/crew-instructions";
 import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { WorkOrderView } from "@/components/job/work-order-view";
@@ -101,13 +102,11 @@ export default async function CrewSheetPracticePage() {
                     <p className="font-semibold">
                       {z.service} <span className="font-normal text-muted-foreground">· {z.location}, {z.sizeLabel}</span>
                     </p>
-                    <ul className="text-muted-foreground">
-                      {z.tasks.map((t) => (
-                        <li key={t.label}>
-                          {t.label}: {t.value}
-                        </li>
+                    <ol className="list-decimal pl-4 text-muted-foreground">
+                      {crewInstructions(z.typeId, z.values).map((line, n) => (
+                        <li key={n}>{line}</li>
                       ))}
-                    </ul>
+                    </ol>
                   </div>
                 </li>
               ))}
