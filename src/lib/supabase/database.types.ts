@@ -3295,6 +3295,12 @@ export interface Database {
           service: string | null;
           town: string | null;
           sort_reason: string | null;
+          draft_comment: string | null;
+          draft_asked_by: string | null;
+          draft_service: string | null;
+          draft_note: string | null;
+          draft_error: string | null;
+          drafted_at: string | null;
           added_by: string | null;
           created_at: string;
           updated_at: string;

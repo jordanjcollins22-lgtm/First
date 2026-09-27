@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
@@ -9,10 +10,12 @@ import { answeredToday, answersToPost, answersToSamePost } from "@/lib/data/post
 import { mentionComment } from "@/lib/outreach-agent";
 import { alreadyAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
-import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
+import { checkComment, draftFromDisplay, finishComment, LINK_MARKER, looksUsable, personaliseDraft } from "@/lib/comment-prompt";
+import { getCurrentOrganization } from "@/lib/data/organizations";
 import { daysOld, fitOpenerToAge } from "@/lib/post-age";
 import { createClient } from "@/lib/supabase/server";
 import { setPostKind } from "@/lib/data/post-sorter";
+import { draftWaitingPosts } from "@/lib/data/post-draft";
 import { activeServiceNames, readPostFromScreenshot } from "@/lib/data/read-post";
 import { CANT_RESPOND_REASONS, standingFor, type CantRespondReason } from "@/lib/post-board";
 import { cleanLink, platformOfLink, postKeyForLink, postedAtFromAge, PLATFORM_LABEL } from "@/lib/social-finder";
@@ -41,8 +44,13 @@ function refresh() {
  * third person does not pile on meanwhile. The owner is never turned away,
  * by a full post or by the day's limit. Somebody who takes a post they took
  * before gets the comment they already had back, rather than a second link.
+ *
+ * When the board already wrote the comment (it does as the post is sorted),
+ * that is used, with the taker's own opener, or `text` when they changed it
+ * in the box first. Nothing to wait for: the only thing left to make is
+ * their link. A post with nothing written yet is read and written now.
  */
-export async function takePost(seenId: string): Promise<TakeResult> {
+export async function takePost(seenId: string, options: { text?: string } = {}): Promise<TakeResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
   const org = profile.organization_id;
@@ -121,9 +129,29 @@ export async function takePost(seenId: string): Promise<TakeResult> {
   // How old the post really is decides how the comment opens: from
   // yesterday or before, it asks whether they still need someone.
   const days = daysOld(row.posted_at ?? null, row.age_days ?? null, row.created_at, new Date());
-  const read = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment", ageDays: days });
-  if (!read.ok) return letGo(read.error);
-  if (!read.draft) return letGo(read.draftNote ?? "Couldn't write one for that post. Try again.");
+  const edited = options.text?.trim() ? draftFromDisplay(options.text.trim()) : null;
+  let read: { draft: string; askedBy: string | null; groupName: string | null; service: string | null; note: string };
+  if (edited || row.draft_comment) {
+    // Checked again: what somebody typed into the box has to pass the same
+    // rules as what the writer produced.
+    if (edited) {
+      const check = checkComment(edited.split(LINK_MARKER).join(""));
+      if (!check.ok) return letGo(`Can't post that wording. ${check.problems.join(" ")}`);
+    }
+    const organization = await getCurrentOrganization();
+    read = {
+      draft: edited ?? personaliseDraft(row.draft_comment ?? "", profile.roles, organization.name),
+      askedBy: row.draft_asked_by ?? null,
+      groupName: null,
+      service: row.draft_service ?? null,
+      note: row.draft_note ?? "",
+    };
+  } else {
+    const fresh = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment", ageDays: days });
+    if (!fresh.ok) return letGo(fresh.error);
+    if (!fresh.draft) return letGo(fresh.draftNote ?? "Couldn't write one for that post. Try again.");
+    read = { draft: fresh.draft, askedBy: fresh.askedBy, groupName: fresh.groupName, service: fresh.service, note: fresh.note };
+  }
 
   const askedBy = row.author ?? read.askedBy ?? null;
   const recorded = await recordOutreach({
@@ -340,6 +368,8 @@ export async function submitFoundPost(input: {
     return { ok: false, error: error?.message ?? "Couldn't add that." };
   }
   refresh();
+  // Written for the card now, for whoever answers it after the person who added it.
+  after(() => draftWaitingPosts(org).then(() => undefined, (err) => console.error("drafting failed:", err)));
   return {
     ok: true,
     status: "added",

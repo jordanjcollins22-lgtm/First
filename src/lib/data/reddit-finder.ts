@@ -4,6 +4,7 @@ import { log } from "@/lib/log";
 import { recordSeen } from "@/lib/data/outreach-agent";
 import { sortReadPosts } from "@/lib/data/post-sorter";
 import { cleanSubreddit, matchReason, parseRedditListing, redditNewPath, subredditIsLocal, type FoundPost } from "@/lib/social-finder";
+import { draftWaitingPosts } from "@/lib/data/post-draft";
 import type { AgentSettings } from "@/lib/outreach-agent";
 
 /**
@@ -131,6 +132,8 @@ export async function runRedditFinder(organizationId: string, settings: AgentSet
   if (keptAny) {
     const sort = await sortReadPosts(organizationId, { limit: 40, client: admin }).catch(() => ({ sorted: 0, businesses: 0 }));
     look.sorted = sort.sorted;
+    // Posts for us get their comment written now, ready in the box.
+    await draftWaitingPosts(organizationId).catch((err) => console.error("drafting failed:", err));
   }
 
   await admin

@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { getAgentSettings, recordSeen } from "@/lib/data/outreach-agent";
@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { matchReason, postedAtFromAge } from "@/lib/social-finder";
 import { daysOld, postedAtFromLabel } from "@/lib/post-age";
 import { sortReadPosts } from "@/lib/data/post-sorter";
+import { draftWaitingPosts } from "@/lib/data/post-draft";
 
 /**
  * The posts the browser found.
@@ -33,7 +34,7 @@ import { sortReadPosts } from "@/lib/data/post-sorter";
  * seeing posts can be diagnosed from the app.
  */
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 interface IncomingPost {
   /** Null when the page showed the post without a link to it. */
@@ -190,5 +191,9 @@ export async function POST(request: NextRequest) {
   // selling it, and the businesses among the second kept. Anything left
   // unsorted from before is swept up in the same call.
   const sort = kept > 0 ? await sortReadPosts(profile.organization_id, { limit: 40 }) : { sorted: 0, businesses: 0 };
+  // Posts for us get their comment written now, so it is already in the
+  // box when somebody opens the card. After the response: the finder does
+  // not wait on it.
+  after(() => draftWaitingPosts(profile.organization_id).then(() => undefined, (err) => console.error("drafting failed:", err)));
   return NextResponse.json({ ok: true, actions: [], decided: [], kept, skipped, sorted: sort.sorted, businesses: sort.businesses, moreToRead: false });
 }

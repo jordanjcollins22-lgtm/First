@@ -359,3 +359,34 @@ export function looksUsable(text: string, link: string): boolean {
   const body = text.replace(link, "").trim();
   return body.length >= 40 && text.includes(link) && checkComment(body).ok;
 }
+
+/**
+ * Where the link goes in a comment shown before anybody has taken the post.
+ * Readable in the box, and put back to the marker before the link goes in.
+ */
+export const LINK_SLOT = "[your link]";
+
+/** A written comment as the box shows it: the link as a readable slot. */
+export function draftForDisplay(draft: string): string {
+  return draft.split(LINK_MARKER).join(LINK_SLOT);
+}
+
+/** What somebody left in the box, with the slot turned back into the marker. */
+export function draftFromDisplay(text: string): string {
+  return text.split(LINK_SLOT).join(LINK_MARKER);
+}
+
+/**
+ * A comment written once for the board, made true of whoever uses it.
+ *
+ * The board writes with the neutral opener ("I work with ..."), because it
+ * does not know yet who will take the post. The person who does gets their
+ * own ("I do the evaluations for ...", "I operate ...") in its place. If the
+ * neutral opener is not there to swap, it was edited, and is left alone.
+ */
+export function personaliseDraft(draft: string, roles: readonly string[], businessName: string): string {
+  const neutral = commenterIntro([], businessName);
+  const theirs = commenterIntro(roles, businessName);
+  if (neutral === theirs || !draft.includes(neutral)) return draft;
+  return draft.replace(neutral, theirs);
+}

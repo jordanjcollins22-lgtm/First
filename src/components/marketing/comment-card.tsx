@@ -113,10 +113,19 @@ export function CommentCard({
     setBusy(what);
     startTransition(async () => {
       if (what === "respond") {
-        const result = await takePost(post.id);
+        // Their changes to the written comment, if they made any; otherwise
+        // the server puts their own opener and link into the one it wrote.
+        const changed = post.draft && edits[post.id] !== undefined && edits[post.id] !== post.draft ? edits[post.id] : undefined;
+        const result = await takePost(post.id, { text: changed });
         setBusy(null);
         if (!result.ok) return setError(result.error);
         setWritten((w) => ({ ...w, [post.id]: { answerId: result.answerId, comment: result.comment } }));
+        // The box now holds the comment with their link in it, not the draft.
+        setEdits((d) => {
+          const next = { ...d };
+          delete next[post.id];
+          return next;
+        });
         return;
       }
       const result = await letPostGo(mine?.answerId ?? "");
@@ -220,6 +229,28 @@ export function CommentCard({
                 <button type="button" onClick={() => setAsking(false)} className="mx-auto block text-[11px] text-muted-foreground underline">
                   Back
                 </button>
+              </div>
+            ) : !mine && post.draft ? (
+              // Written as the post was read: already in the box. Using it
+              // adds their own opener and tracked link, with nothing to wait for.
+              <div className="mt-auto space-y-2">
+                <Textarea
+                  value={edits[post.id] ?? post.draft}
+                  rows={6}
+                  onChange={(e) => setEdits((d) => ({ ...d, [post.id]: e.target.value }))}
+                  aria-label="Your comment"
+                />
+                <p className="text-[11px] text-muted-foreground">Written for this post. Change anything you like; [your link] becomes your own link.</p>
+                <div className="grid grid-cols-[auto_1fr] gap-2">
+                  <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setError(null); setAsking(true); }} className="h-11 text-sm">
+                    <Ban className="mr-1 h-4 w-4" />
+                    Can&apos;t respond
+                  </Button>
+                  <Button type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-11 text-sm">
+                    {busy === "respond" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <MessageSquareReply className="mr-1 h-4 w-4" />}
+                    {busy === "respond" ? "Adding your link…" : "Use this comment"}
+                  </Button>
+                </div>
               </div>
             ) : !mine ? (
               <div className="mt-auto grid grid-cols-2 gap-2">

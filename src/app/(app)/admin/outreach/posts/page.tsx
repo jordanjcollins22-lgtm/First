@@ -4,6 +4,9 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentOrganization } from "@/lib/data/organizations";
+import { draftWaitingPosts } from "@/lib/data/post-draft";
+import { after } from "next/server";
 import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
 import { affiliateClosedBoard, answeredPostsFor, answeredToday, getPostBoard } from "@/lib/data/post-board";
@@ -36,7 +39,9 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
 
   const now = new Date();
   const [posts, today, settings, leaderboard, answered] = await Promise.all([
-    getPostBoard(profile.organization_id, profile.id, now).catch((err) => {
+    getCurrentOrganization()
+      .then((org) => getPostBoard(profile.organization_id, profile.id, now, { roles: profile.roles, businessName: org.name }))
+      .catch((err) => {
       console.error("Posts to answer failed to load:", err);
       return [];
     }),
@@ -53,6 +58,12 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
       return null;
     }),
   ]);
+  // A post on the board with no comment written yet (it came in before
+  // comments were written on read, or the writer is still catching up): write
+  // it now, after this page is sent, so it is in the box on the next look.
+  if (posts.some((p) => !p.draft && !p.mine)) {
+    after(() => draftWaitingPosts(profile.organization_id).then(() => undefined, (err) => console.error("drafting failed:", err)));
+  }
   const whose = whoId === profile.id ? null : leaderboard?.find((s) => s.profileId === whoId)?.name ?? "Their";
 
   return (

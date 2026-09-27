@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LINK_MARKER,
+  LINK_SLOT,
   checkComment,
   commentBrief,
   commentSystemPrompt,
   commenterIntro,
+  draftForDisplay,
+  draftFromDisplay,
+  finishComment,
+  looksUsable,
+  personaliseDraft,
   replyBrief,
   replySystemPrompt,
-  finishComment,
-  LINK_MARKER,
-  looksUsable,
 } from "@/lib/comment-prompt";
 
 const LINK = "https://app.jslandscapingmd.com/book?ref=abc&rec=kf3mq7z";
@@ -292,5 +296,32 @@ describe("the brief for a direct message", () => {
   it("passes on what we know", () => {
     expect(replyBrief({ note: "wants a patio", ownServices: ["Mulching"] })).toContain("wants a patio");
     expect(replyBrief({ note: " " })).not.toContain("What we know");
+  });
+});
+
+describe("a comment written before anybody takes the post", () => {
+  const neutral = "I work with JS Landscaping MD. We've been featured in the news. Book here:\n\nADD LINK\n\nHappy to help!";
+
+  it("opens the way it is true of whoever uses it", () => {
+    expect(personaliseDraft(neutral, ["owner"], "JS Landscaping MD")).toMatch(/^I operate JS Landscaping MD\./);
+    expect(personaliseDraft(neutral, ["evaluator"], "JS Landscaping MD")).toMatch(/^I do the evaluations for JS Landscaping MD\./);
+    expect(personaliseDraft(neutral, ["commenter"], "JS Landscaping MD")).toBe(neutral);
+    // Inside the still-need-someone opener too.
+    expect(personaliseDraft(`If you haven't gotten this taken care of yet, ${neutral}`, ["owner"], "JS Landscaping MD")).toMatch(
+      /^If you haven't gotten this taken care of yet, I operate JS Landscaping MD\./
+    );
+  });
+
+  it("leaves an opener somebody already changed alone", () => {
+    const edited = neutral.replace("I work with", "My team is");
+    expect(personaliseDraft(edited, ["owner"], "JS Landscaping MD")).toBe(edited);
+  });
+
+  it("shows the link as a readable slot and puts the marker back", () => {
+    const shown = draftForDisplay(neutral);
+    expect(shown).toContain(LINK_SLOT);
+    expect(shown).not.toContain(LINK_MARKER);
+    expect(draftFromDisplay(shown)).toBe(neutral);
+    expect(finishComment(draftFromDisplay(shown), "https://jsl.md/b/abc")).toContain("https://jsl.md/b/abc");
   });
 });

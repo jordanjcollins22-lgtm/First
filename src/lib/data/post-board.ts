@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { draftForDisplay, personaliseDraft } from "@/lib/comment-prompt";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rankClosers, stageOf, type CloserStanding, type PostStage, type SoldJobInput } from "@/lib/affiliate-closes";
 import { BUSINESS_TIME_ZONE, dateKeyIn, zonedToUtc } from "@/lib/time-zone";
@@ -47,6 +48,12 @@ export interface BoardPost {
   matchReason: string | null;
   /** Somebody on the team added it rather than the finder. */
   addedByHand: boolean;
+  /**
+   * The comment already written for it, with this person's opener and the
+   * link as a slot, ready in the box before they take it. Null while it is
+   * still being written, or when the writer would not write one.
+   */
+  draft: string | null;
   /** "Posted 3 hours ago", or "Found 2 hours ago" when the post showed no time. */
   ageLabel: string;
   freshness: Freshness;
@@ -66,7 +73,7 @@ async function freshRequests(organizationId: string, now: Date) {
   const since = new Date(now.getTime() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, post_key, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by")
+    .select("id, url, post_key, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by, draft_comment")
     .eq("organization_id", organizationId)
     .eq("kind", "request")
     .eq("decision", "read")
@@ -156,7 +163,13 @@ function oneRowPerPost<T extends { id: string; url: string; post_key?: string | 
 }
 
 /** The board as one person sees it, newest first. */
-export async function getPostBoard(organizationId: string, profileId: string, now: Date = new Date()): Promise<BoardPost[]> {
+export async function getPostBoard(
+  organizationId: string,
+  profileId: string,
+  now: Date = new Date(),
+  /** Who is looking, so a written comment opens the way it is true of them. */
+  viewer: { roles: readonly string[]; businessName: string } = { roles: [], businessName: "" }
+): Promise<BoardPost[]> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
   // Only posts that can be opened. One without a working link stays off the
@@ -170,14 +183,15 @@ export async function getPostBoard(organizationId: string, profileId: string, no
   );
   return shown
     .sort((a, b) => b.row.created_at.localeCompare(a.row.created_at))
-    .map(({ row, answers: list }) => boardPost(row, list, profileId, now));
+    .map(({ row, answers: list }) => boardPost(row, list, profileId, now, viewer));
 }
 
 function boardPost(
   row: Awaited<ReturnType<typeof freshRequests>>[number],
   list: BoardAnswer[],
   profileId: string,
-  now: Date
+  now: Date,
+  viewer: { roles: readonly string[]; businessName: string }
 ): BoardPost {
     const standing = standingFor(list, profileId, now);
     const text = row.text ?? "";
@@ -194,6 +208,7 @@ function boardPost(
       // The sorter's own words on why it is for us, when it gave them.
       matchReason: row.sort_reason ?? row.match_reason,
       addedByHand: Boolean(row.added_by),
+      draft: row.draft_comment ? draftForDisplay(personaliseDraft(row.draft_comment, viewer.roles, viewer.businessName)) : null,
       foundAt: row.created_at,
       ...(() => {
         const age = describeAge(row.posted_at, row.created_at, now);
