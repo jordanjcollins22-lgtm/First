@@ -141,11 +141,10 @@ export const SYSTEM_FLOW: SystemStage[] = [
       {
         key: "crew-sheet",
         title: "Crew sheet",
-        line: "Everything on site, for our crew or a subcontractor: the shop and the kits with their codes, On my way, every area prepped with its photo, then the work area by area, the walkthrough.",
+        line: "Everything on site, for our crew or a subcontractor: the shop and the kits with their codes, On my way, every area prepped with its photo, then the install area by area, receipts for anything bought.",
         // Every page of it for both, in preview. The live board is /operations?tab=crew.
         href: "/practice/crew",
-        status: "partly",
-        gap: "The crew cannot log materials they buy yet.",
+        status: "live",
       },
       {
         key: "client-approval",

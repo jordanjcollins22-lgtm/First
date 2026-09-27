@@ -14,6 +14,7 @@ import type { CrewEvent, Stop } from "@/lib/crew-day";
 import type { AreaState as SubAreaState } from "@/lib/sub-crew";
 import type { JobWalkthrough } from "@/types/domain";
 import type { SiteMapData } from "@/components/proposal/price-site-map";
+import type { JobReceipt } from "@/lib/data/job-receipts";
 import { PRACTICE_ADDRESS, PRACTICE_ZONES, practiceWorkOrder } from "@/lib/practice-sample";
 
 export const SAMPLE_JOB_ID = "sample";
@@ -153,6 +154,11 @@ export function sampleWalkthrough(status: "requested" | "approved" | "rejected",
   };
 }
 
+/** Something the crew had to buy on the sample job. */
+export const SAMPLE_RECEIPTS: JobReceipt[] = [
+  { id: "r1", what: "2 bags of black mulch, the front ran short", amountCents: 1398, url: null, byName: "Jordan", at: new Date(2026, 8, 27).toISOString() },
+];
+
 /** The sample job's site map, numbered like its areas. */
 export function sampleMap(): SiteMapData {
   return { kind: "sample", zones: PRACTICE_ZONES.map((z) => ({ name: z.name, color: z.color, points: z.points })) };
@@ -191,12 +197,7 @@ export function sampleSubSheet(usesOurTools: boolean, walkthrough: SubCrewSheet[
   };
 }
 
-/** Each area's state for the subcontractor's pages: every area prepped first, then the work. */
-export function sampleSubAreas(stage: "todo" | "first_prepped" | "all_prepped" | "all_done"): Record<string, SubAreaState> {
-  return Object.fromEntries(
-    sampleZones().map((z, i) => [
-      z.id,
-      stage === "all_done" ? "done" : stage === "all_prepped" || (stage === "first_prepped" && i === 0) ? "prepped" : "todo",
-    ])
-  );
+/** Each area's state for the subcontractor's pages: not finished, or every after photo in. */
+export function sampleSubAreas(stage: "todo" | "all_done"): Record<string, SubAreaState> {
+  return Object.fromEntries(sampleZones().map((z) => [z.id, stage === "all_done" ? "done" : "todo"]));
 }

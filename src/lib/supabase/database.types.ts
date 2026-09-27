@@ -4375,6 +4375,28 @@ export interface Database {
           },
         ];
       };
+      job_receipts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          /** Path inside the job-photos bucket, under the job's folder. */
+          path: string;
+          /** What was bought, in the crew member's words. */
+          what: string;
+          amount_cents: number | null;
+          uploaded_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_receipts"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          path: string;
+          what: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_receipts"]["Row"]>;
+        Relationships: [];
+      };
       ledger_entries: {
         Row: {
           id: string;

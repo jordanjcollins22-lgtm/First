@@ -20,6 +20,7 @@ import { executableAdditions, type ScopeChange } from "@/lib/data/exceptions";
 import { buildCrewChecklist, type CrewChecklist } from "@/lib/crew-checklist";
 import { allMaterialLineItems } from "@/lib/proposal-pricing";
 import { loadAreaBoard, type AreaBoardData } from "@/lib/data/area-board";
+import { listJobReceipts, type JobReceipt } from "@/lib/data/job-receipts";
 
 export interface WorkOrderPageData {
   /**
@@ -67,6 +68,8 @@ export interface WorkOrderPageData {
   checklist: CrewChecklist;
   /** Who is in which area, what stage each is at, and which kits are where. */
   areaBoard: AreaBoardData;
+  /** What the crew had to buy for this job, with the receipts. */
+  receipts: JobReceipt[];
 }
 
 
@@ -175,10 +178,11 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     finishedZoneIds: new Set(photos.filter((photo) => photo.kind === "after" && photo.zone_id).map((photo) => photo.zone_id!)),
   });
 
-  const areaBoard = await loadAreaBoard(jobId, { zones, catalog, photos });
+  const [areaBoard, receipts] = await Promise.all([loadAreaBoard(jobId, { zones, catalog, photos }), listJobReceipts(jobId).catch(() => [])]);
 
   return {
     areaBoard,
+    receipts,
     checklist,
     approvedAdditions,
     photos,

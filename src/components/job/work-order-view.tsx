@@ -20,6 +20,8 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
 import { CrewChecklistCard } from "@/components/job/crew-checklist-card";
 import type { CrewChecklist } from "@/lib/crew-checklist";
 import { AreaBoard } from "@/components/job/area-board";
+import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
+import type { JobReceipt } from "@/lib/data/job-receipts";
 import type { AreaBoardData } from "@/lib/data/area-board";
 
 /**
@@ -67,6 +69,7 @@ export function WorkOrderView({
   practice = false,
   checklist,
   areaBoard,
+  receipts = [],
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -112,6 +115,8 @@ export function WorkOrderView({
   checklist?: CrewChecklist;
   /** Who is in which area, and each area's steps: the job on site. */
   areaBoard?: AreaBoardData;
+  /** What the crew had to buy for this job, with the receipts. */
+  receipts?: JobReceipt[];
 }) {
   // On a job being worked, the areas are worked from the board: pick one,
   // tick it off, photograph it. Before and after that, the sheet is a list.
@@ -196,6 +201,9 @@ export function WorkOrderView({
       )}
 
       {onSite && areaBoard && <AreaBoard jobId={jobId} zones={order.zones} board={areaBoard} accountManager={accountManager} />}
+
+      {/* Materials are ordered ahead; anything bought on the day comes with its receipt. */}
+      {onSite && <JobReceiptsCard jobId={jobId} receipts={receipts} />}
 
       {/* Agreed after the job was sold, and kept apart from it. The crew has
           to be able to tell the difference between what was bought and what

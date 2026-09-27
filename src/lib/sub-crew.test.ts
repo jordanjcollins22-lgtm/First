@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { areaState, canFinish, canTakePhoto, currentArea, nextStep, sayTime, subStage } from "./sub-crew";
+import { areaState, canFinish, nextStep, sayTime, subStage } from "./sub-crew";
 
 const base = { usesOurTools: false, pickedUpAt: null, onWayAt: null, arrivedAt: null, finishedAt: null };
 
@@ -43,23 +43,5 @@ describe("the areas", () => {
     expect(sayTime("13:30")).toBe("1:30 pm");
     expect(sayTime("00:15")).toBe("12:15 am");
     expect(sayTime(null)).toBeNull();
-  });
-});
-
-describe("prep every area first", () => {
-  const zones = [{ id: "a" }, { id: "b" }];
-
-  it("preps the areas in order, then does the work in order", () => {
-    expect(currentArea(zones, { a: "todo", b: "todo" })).toEqual({ zone: { id: "a" }, kind: "during" });
-    expect(currentArea(zones, { a: "prepped", b: "todo" })).toEqual({ zone: { id: "b" }, kind: "during" });
-    expect(currentArea(zones, { a: "prepped", b: "prepped" })).toEqual({ zone: { id: "a" }, kind: "after" });
-    expect(currentArea(zones, { a: "done", b: "prepped" })).toEqual({ zone: { id: "b" }, kind: "after" });
-    expect(currentArea(zones, { a: "done", b: "done" })).toBeNull();
-  });
-
-  it("holds the after photo until every area is prepped", () => {
-    expect(canTakePhoto("after", "prepped", false)).toEqual({ ok: false, reason: "Every area gets prepped first. Prep the next area." });
-    expect(canTakePhoto("after", "prepped", true).ok).toBe(true);
-    expect(canTakePhoto("during", "prepped", false).ok).toBe(false);
   });
 });

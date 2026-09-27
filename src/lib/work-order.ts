@@ -16,7 +16,7 @@
  */
 
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
-import { crewInstructions, crewSteps } from "@/lib/crew-instructions";
+import { crewInstructions } from "@/lib/crew-instructions";
 import type { Point, WorkZone } from "@/components/canvas/types";
 
 export interface ZonePhoto {
@@ -56,8 +56,6 @@ export interface WorkOrderZone {
    * these say what to pick up first.
    */
   todo: string[];
-  /** The same lines split by phase: what to prep, the work, the clean up. */
-  phases: ZonePhases;
   notes: string;
   /**
    * What the evaluator photographed here, with whatever they marked on it.
@@ -68,20 +66,6 @@ export interface WorkOrderZone {
    * ring about.
    */
   photos: ZonePhoto[];
-}
-
-export interface ZonePhases {
-  prep: string[];
-  work: string[];
-  cleanup: string[];
-}
-
-/** An area's lines by phase. A service with no words yet has its notes as the work. */
-export function zonePhases(typeId: string, values: Record<string, string | undefined>): ZonePhases {
-  const steps = crewSteps(typeId, values);
-  if (!steps) return { prep: [], work: crewInstructions(typeId, values), cleanup: [] };
-  const of = (phase: keyof ZonePhases) => steps.filter((s) => s.phase === phase).map((s) => s.label);
-  return { prep: of("prep"), work: of("work"), cleanup: of("cleanup") };
 }
 
 export interface WorkOrder {
@@ -132,7 +116,6 @@ export function buildWorkOrder(
       sizeLabel: sizeLabelFor(zone),
       tasks,
       todo: crewInstructions(typeId, zone.service.values ?? {}),
-      phases: zonePhases(typeId, zone.service.values ?? {}),
       notes: zone.service.notes ?? "",
       // Markers are keyed by the photo's own path, so a photo with none
       // simply has none — there is no separate "unmarked" state to handle.

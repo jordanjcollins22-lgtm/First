@@ -93,6 +93,9 @@ import { VisitsPanel } from "@/components/job/visits-panel";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { CrewPanel } from "@/components/job/crew-panel";
 import { WhoDoesIt } from "@/components/job/who-does-it";
+import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
+import { listJobReceipts } from "@/lib/data/job-receipts";
+import { receiptsTotal, sayDollars } from "@/lib/job-receipts";
 import { ObserversPanel, type ObserverRow } from "@/components/job/observers-panel";
 import { WorkOrderView } from "@/components/job/work-order-view";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
@@ -586,9 +589,10 @@ export default async function JobPage({
 
   // The project at a glance: where it got to and when, and what closing it
   // still needs. The tabs below are for changing things; this is for knowing.
-  const [closeout, crewArrivedAt] = await Promise.all([
+  const [closeout, crewArrivedAt, receipts] = await Promise.all([
     closeoutInputFor(jobId).catch(() => null),
     firstArrival(supabase, jobId),
+    listJobReceipts(jobId).catch(() => []),
   ]);
   const review = closeout?.input.review ?? null;
   const firstVisitOn =
@@ -920,6 +924,15 @@ export default async function JobPage({
                 namesById={namesById}
               />
             ),
+          },
+          {
+            id: "receipts",
+            title: "Receipts",
+            hint:
+              receipts.length === 0
+                ? "Nothing bought"
+                : `${receipts.length} receipt${receipts.length === 1 ? "" : "s"}${receiptsTotal(receipts) > 0 ? `, ${sayDollars(receiptsTotal(receipts))}` : ""}`,
+            body: <JobReceiptsCard jobId={jobId} receipts={receipts} />,
           },
           {
             id: "review",

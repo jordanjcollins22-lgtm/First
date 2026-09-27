@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import {
   SAMPLE_JOB_ID,
+  SAMPLE_RECEIPTS,
   SAMPLE_SHOP,
   SAMPLE_STOPS,
   sampleBoard,
@@ -25,6 +26,7 @@ import { AreaBoard } from "@/components/job/area-board";
 import { WalkthroughPanel } from "@/components/job/walkthrough-panel";
 import { SubCrewSheetView } from "@/components/crew/sub-crew-sheet";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
+import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
 
 /**
  * The crew sheet: a signed job from the crew's side, every page, for our
@@ -173,6 +175,14 @@ export default async function CrewJourneyPage() {
       ),
     },
     {
+      key: "bought",
+      path: "crew",
+      missed: "bought",
+      title: "They had to buy something",
+      what: "Materials are ordered ahead. If someone had to buy something, they add the photo or a screenshot of the receipt, what it was for and what it cost. The office sees it on the job.",
+      screen: <JobReceiptsCard jobId={SAMPLE_JOB_ID} receipts={SAMPLE_RECEIPTS} preview startOpen />,
+    },
+    {
       key: "finished",
       path: "crew",
       title: "Finished",
@@ -209,7 +219,7 @@ export default async function CrewJourneyPage() {
       key: "sub-go",
       path: "sub",
       title: "Their crew sheet",
-      what: "The link the office sent them: the job, and every area with its photos and what to do. The one button: On my way.",
+      what: "The link the office sent them: the job, the site map, and every area with its photos and what to do. On my way, or I have questions.",
       screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="go" areaStates={sampleSubAreas("todo")} />,
     },
     {
@@ -220,39 +230,18 @@ export default async function CrewJourneyPage() {
       screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_way" areaStates={sampleSubAreas("todo")} />,
     },
     {
-      key: "sub-prep",
+      key: "sub-onsite",
       path: "sub",
-      title: "Prep this area",
-      what: "The site map with every area numbered, and the first area: its prep, ticked as each thing is done.",
+      title: "On site",
+      what: "The site map and every area to read, with its photos and what to do. How they run it is theirs. The buttons: We're finished, and I have questions.",
       screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("todo")} />,
-    },
-    {
-      key: "sub-prep-photo",
-      path: "sub",
-      title: "The prep photo",
-      what: "Every prep step ticked: Take the prep photo. Then the same for the next area, until every area is prepped.",
-      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("todo")} tickedAll />,
-    },
-    {
-      key: "sub-work",
-      path: "sub",
-      title: "The install",
-      what: "Every area prepped, so the install opens, back at the first area: the install and the clean up, ticked as they go.",
-      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("all_prepped")} />,
     },
     {
       key: "sub-after",
       path: "sub",
-      title: "The after photo",
-      what: "Cleaned up: Take the after photo, which finishes the area. Then the same for the next area.",
-      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("all_prepped")} tickedAll />,
-    },
-    {
-      key: "sub-finish",
-      path: "sub",
-      title: "We're finished",
-      what: "Every area has its after photo: We're finished asks the account manager to come and walk it.",
-      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("all_done")} />,
+      title: "After photos",
+      what: "We're finished asks for the after photo of each area, one at a time. The last one asks the account manager to come and walk it.",
+      screen: <SubCrewSheetView sheet={sampleSubSheet(false)} preview stage="on_site" areaStates={sampleSubAreas("todo")} finishing />,
     },
     {
       key: "sub-waiting",
@@ -298,6 +287,7 @@ export default async function CrewJourneyPage() {
           { key: "sub", label: "Subcontractor" },
         ]}
         missed={[
+          { key: "bought", label: "They had to buy something", path: "crew" },
           { key: "sent-back", label: "The account manager sends it back", path: "crew" },
           { key: "our-tools", label: "They use our tools", path: "sub" },
           { key: "sub-sent-back", label: "The account manager sends it back", path: "sub" },
