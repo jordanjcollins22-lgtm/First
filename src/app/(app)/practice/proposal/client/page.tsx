@@ -1,7 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getCurrentOrganization } from "@/lib/data/organizations";
-import { PRACTICE_ADDRESS, PRACTICE_ZONES } from "@/lib/practice-sample";
+import { PRACTICE_ADDRESS, PRACTICE_ZONES, practicePriceCents } from "@/lib/practice-sample";
 import type { JobProposal } from "@/types/domain";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ProposalView } from "@/components/proposal/proposal-view";
@@ -12,10 +12,6 @@ import { ProposalView } from "@/components/proposal/proposal-view";
  * preview mode, so nothing on it is recorded or sent.
  */
 export const dynamic = "force-dynamic";
-
-/** Sample prices per area: the crew-hours at a rough rate, plus materials, marked up. */
-const priceOf = (zone: (typeof PRACTICE_ZONES)[number]) =>
-  Math.round((zone.crewHours * 60 + zone.materials.reduce((sum, m) => sum + m.cost, 0)) * 2.2) * 100;
 
 export default async function PracticeClientProposalPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -30,7 +26,7 @@ export default async function PracticeClientProposalPage() {
     photoPaths: [],
     points: zone.points,
     color: zone.color,
-    priceCents: priceOf(zone),
+    priceCents: practicePriceCents(zone),
     priceDerived: true,
     performedBy: "own" as const,
   }));

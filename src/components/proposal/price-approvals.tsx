@@ -10,6 +10,7 @@ import { acceptPrice, setPrice } from "@/lib/actions/price-approval-actions";
 import { sendProposalToClient } from "@/lib/actions/proposal-actions";
 import { readPrice } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
+import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { cn } from "@/lib/utils";
 
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -206,11 +207,12 @@ export function PriceCard({
   );
 }
 
-/** Everything behind the price: each area, then the job's totals. */
+/** Everything behind the price: the site map, the job's totals, then each area with its photos. */
 function Breakdown({ item }: { item: PriceApproval }) {
   const b = item.breakdown;
   return (
     <div className="flex flex-col gap-2">
+      {item.siteMap && <PriceSiteMap map={item.siteMap} />}
       <dl className="grid grid-cols-2 gap-2">
         <Stat label="Budgeted hours" value={`${hours(b.crewHours)} crew-hrs`} />
         <Stat label="Labour" value={dollars(b.labourCents)} />
@@ -221,7 +223,7 @@ function Breakdown({ item }: { item: PriceApproval }) {
         />
         <Stat label="Markup & overhead" value={dollars(b.markupCents)} />
       </dl>
-      <details className="rounded-xl border border-border">
+      <details open className="rounded-xl border border-border">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
           {b.areas.length} area{b.areas.length === 1 ? "" : "s"}, area by area
         </summary>
@@ -230,6 +232,9 @@ function Breakdown({ item }: { item: PriceApproval }) {
             <li key={`${a.name}-${i}`} className="flex flex-col gap-1 px-3 py-2 text-sm">
               <div className="flex items-baseline justify-between gap-3">
                 <p className="min-w-0 font-medium">
+                  <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                    {i + 1}
+                  </span>
                   {a.name} <span className="text-muted-foreground">· {a.service}</span>
                 </p>
                 <p className="shrink-0 font-semibold tabular-nums">{dollars(a.priceCents)}</p>
@@ -241,6 +246,19 @@ function Breakdown({ item }: { item: PriceApproval }) {
                 <p className="text-xs text-muted-foreground">
                   {a.materials.map((m) => `${m.name}: ${m.amount}${m.cents != null ? `, ${dollars(m.cents)}` : ", no cost set"}`).join(" · ")}
                 </p>
+              )}
+              {(item.areaPhotos[i] ?? []).length > 0 ? (
+                <div className="mt-1 grid grid-cols-3 gap-1.5">
+                  {item.areaPhotos[i].map((src) => (
+                    // Thumbnails from the walkthrough, at the size shown.
+                    <a key={src} href={src} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt={`${a.name} on the walkthrough`} className="aspect-square w-full rounded-lg bg-muted object-cover" loading="lazy" />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No photos taken of this area.</p>
               )}
             </li>
           ))}

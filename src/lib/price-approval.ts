@@ -34,6 +34,8 @@ export interface AreaCost {
   missingTiming: boolean;
   /** A material has no cost in the inventory, so it counted as nothing. */
   unknownMaterialCost: boolean;
+  /** The photos taken of it on the walkthrough, as storage paths. */
+  photoPaths: string[];
 }
 
 export interface PriceBreakdown {
@@ -75,6 +77,7 @@ export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakd
         priceCents: cost.priceCents,
         missingTiming: cost.hasMissingTiming,
         unknownMaterialCost: cost.hasUnknownMaterialCost,
+        photoPaths: zone.service!.photos ?? [],
       };
     });
   const sum = (pick: (a: AreaCost) => number) => areas.reduce((total, a) => total + pick(a), 0);

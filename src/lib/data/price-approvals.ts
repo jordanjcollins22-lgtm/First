@@ -6,6 +6,9 @@ import { isOwnerLevel } from "@/lib/roles";
 import { proposalPath } from "@/lib/proposal-flow";
 import { priceBreakdown, type PriceBreakdown } from "@/lib/price-approval";
 import type { WorkZone } from "@/components/canvas/types";
+import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
+import { canvasImageUrl } from "@/lib/canvas-image-url";
+import { THUMBNAIL } from "@/lib/storage-image-url";
 
 export interface PriceApproval {
   jobId: string;
@@ -24,6 +27,13 @@ export interface PriceApproval {
   breakdown: PriceBreakdown;
   crewRateCents: number;
   markup: string;
+  /** Each area's walkthrough photos, as images to show, in the order of breakdown.areas. */
+  areaPhotos: string[][];
+  /** The whole site map, as the proposal draws it. Sample: the practice drawing, with no photo behind it. */
+  siteMap:
+    | { kind: "image"; imagePath: string; transform: ProposalSiteImageTransform; zones: Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points">[] }
+    | { kind: "sample"; zones: { name: string; color: string; points: { x: number; y: number }[] }[] }
+    | null;
 }
 
 /**
@@ -41,7 +51,7 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
   const { data, error } = await supabase
     .from("job_proposals")
     .select(
-      "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, job:jobs!inner(id, status, evaluation_submitted_at, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, customer:customers(name, email)))"
+      "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, site_image_path, site_image_transform, scope_snapshot, job:jobs!inner(id, status, evaluation_submitted_at, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, customer:customers(name, email)))"
     )
     .in("status", ["needs_approval", "sent"])
     .order("generated_at", { ascending: true })
@@ -56,6 +66,9 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
     sent_at: string | null;
     token: string | null;
     generated_at: string | null;
+    site_image_path: string | null;
+    site_image_transform: ProposalSiteImageTransform | null;
+    scope_snapshot: ProposalZoneSnapshot[] | null;
     job: {
       id: string;
       status: string;
@@ -81,20 +94,28 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
       ? `× ${m.multiplier}, then + $${(m.overheadPerCrewHourCents / 100).toFixed(2)} a crew-hour overhead`
       : `× ${m.multiplier}, then + ${m.overheadPercent}% overhead`;
 
-  return rows.map((r) => ({
-    jobId: r.job_id,
-    client: r.job.property?.customer?.name || "Client",
-    address: r.job.property?.address ?? "",
-    email: r.job.property?.customer?.email?.trim() || null,
-    evaluator: r.job.assignee?.full_name || r.job.assignee?.email || null,
-    submittedAt: r.job.evaluation_submitted_at ?? r.generated_at,
-    stage: r.status === "needs_approval" ? "price" : "send",
-    totalCents: Math.round((Number(r.total_cost ?? 0) - Number(r.discount_amount ?? 0)) * 100),
-    // The client's own page, in preview: it shows before it is sent, with a
-    // banner saying so, and the office opening it is not counted as the client.
-    proposalHref: r.token ? `${proposalPath(r.token)}?preview=1` : null,
-    breakdown: priceBreakdown(zonesByJob.get(r.job_id) ?? [], catalog),
-    crewRateCents: catalog.crewCostPerHourCents,
-    markup,
-  }));
+  return rows.map((r) => {
+    const breakdown = priceBreakdown(zonesByJob.get(r.job_id) ?? [], catalog);
+    return {
+      jobId: r.job_id,
+      client: r.job.property?.customer?.name || "Client",
+      address: r.job.property?.address ?? "",
+      email: r.job.property?.customer?.email?.trim() || null,
+      evaluator: r.job.assignee?.full_name || r.job.assignee?.email || null,
+      submittedAt: r.job.evaluation_submitted_at ?? r.generated_at,
+      stage: r.status === "needs_approval" ? ("price" as const) : ("send" as const),
+      totalCents: Math.round((Number(r.total_cost ?? 0) - Number(r.discount_amount ?? 0)) * 100),
+      // The client's own page, in preview: it shows before it is sent, with a
+      // banner saying so, and the office opening it is not counted as the client.
+      proposalHref: r.token ? `${proposalPath(r.token)}?preview=1` : null,
+      breakdown,
+      crewRateCents: catalog.crewCostPerHourCents,
+      markup,
+      areaPhotos: breakdown.areas.map((a) => a.photoPaths.map((path) => canvasImageUrl(path, THUMBNAIL))),
+      siteMap:
+        r.site_image_path && r.site_image_transform
+          ? { kind: "image" as const, imagePath: r.site_image_path, transform: r.site_image_transform, zones: r.scope_snapshot ?? [] }
+          : null,
+    };
+  });
 }

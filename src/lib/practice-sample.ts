@@ -101,6 +101,15 @@ export const PRACTICE_ZONES: PracticeZone[] = [
   },
 ];
 
+/**
+ * What each sample area is priced at on the sample proposal, in cents: its
+ * crew-hours at a rough rate plus its materials, marked up. The same number
+ * on the account manager's preview and the client's sample proposal.
+ */
+export function practicePriceCents(zone: PracticeZone): number {
+  return Math.round((zone.crewHours * 60 + zone.materials.reduce((sum, m) => sum + m.cost, 0)) * 2.2) * 100;
+}
+
 /** The sample zones as the crew sheet reads them. */
 export function practiceWorkOrder(): WorkOrder {
   return {

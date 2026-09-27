@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { priceBreakdown } from "@/lib/price-approval";
+import { PRACTICE_ADDRESS, PRACTICE_ZONES, practicePriceCents } from "@/lib/practice-sample";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import type { WorkZone } from "@/components/canvas/types";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -33,31 +34,48 @@ const zone = (name: string, typeId: string, areaSqFt: number, values: Record<str
   measurementKind: "area",
 });
 
+const SAMPLE_PHOTOS = [
+  ["/booking-work/front-bed-mulch-trim.jpg", "/booking-work/bed-edging-mulch.jpg"],
+  ["/booking-work/overgrowth-removal-mulch.jpg"],
+];
+
 export default async function AccountManagerJourneyPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("evaluations", "/my-day");
 
   const catalog = await getCanvasCatalog();
-  const has = (id: string) => catalog.servicePricing.some((p) => p.service_type_id === id && p.status === "active");
-  // A sample walkthrough, priced on this business's own rate card.
-  const zones = [
-    has("landscape-bed") && zone("Front yard · Beds: mulch", "landscape-bed", 450, { material: "Mulch" }),
-    has("landscape-bed") && zone("Back yard · Beds: mulch", "landscape-bed", 300, { material: "Mulch" }),
-    has("landscape-cleanup") && zone("Back yard · Cleanup", "landscape-cleanup", 1200),
-    has("soft-washing") && zone("The property · Soft washing", "soft-washing", 1800),
-  ].filter(Boolean) as WorkZone[];
+  // The sample job: the same three areas, and the same price, as the sample
+  // proposal Review proposal opens, priced on this business's own rate card.
+  const typeFor = (name: string) => catalog.servicePricing.find((p) => p.name === name)?.service_type_id ?? null;
+  const sizeOf = (label: string) => {
+    const [l, w] = label.split("×").map((n) => parseFloat(n));
+    return Number.isFinite(l) && Number.isFinite(w) ? l * w : 0;
+  };
+  const zones = PRACTICE_ZONES.flatMap((z): WorkZone[] => {
+    const typeId = typeFor(z.service);
+    if (!typeId) return [];
+    const area = sizeOf(z.sizeLabel);
+    return [
+      {
+        ...zone(z.name, typeId, area, z.service === "Landscape Bed" ? { material: "Mulch" } : { quantity: "2" }),
+        color: z.color,
+        points: z.points,
+        areaSqFt: area || null,
+        perimeterFt: area ? Math.round(Math.sqrt(area) * 4) : null,
+      },
+    ];
+  });
   const breakdown = priceBreakdown(zones, catalog);
   const m = catalog.markup;
   const item: PriceApproval = {
     jobId: "sample",
     client: "Sarah Miller",
-    address: "123 Example Lane, Bel Air, MD",
+    address: PRACTICE_ADDRESS,
     email: "sarah@example.com",
     evaluator: "Jace",
     submittedAt: new Date().toISOString(),
     stage: "price",
-    // The rate card's figure, or a round sample one when the rate card has nothing to go on.
-    totalCents: breakdown.priceCents > 0 ? breakdown.priceCents : 245000,
+    totalCents: PRACTICE_ZONES.reduce((sum, z) => sum + practicePriceCents(z), 0),
     // The sample job's proposal as the client sees it, for Review proposal.
     proposalHref: "/practice/proposal/client",
     breakdown,
@@ -66,6 +84,9 @@ export default async function AccountManagerJourneyPage() {
       m.overheadPerCrewHourCents != null && m.overheadPerCrewHourCents > 0
         ? `× ${m.multiplier}, then + $${(m.overheadPerCrewHourCents / 100).toFixed(2)} a crew-hour overhead`
         : `× ${m.multiplier}, then + ${m.overheadPercent}% overhead`,
+    // Sample walkthrough photos, one area without any.
+    areaPhotos: breakdown.areas.map((_, i) => SAMPLE_PHOTOS[i] ?? []),
+    siteMap: { kind: "sample", zones: PRACTICE_ZONES.map((z) => ({ name: z.name, color: z.color, points: z.points })) },
   };
 
   const steps: JourneyStep[] = [
