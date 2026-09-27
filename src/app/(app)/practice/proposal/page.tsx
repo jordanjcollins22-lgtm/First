@@ -31,7 +31,7 @@ const STEPS: { title: string; body: string }[] = [
   { title: "Read it through", body: "Open the internal breakdown to see what each zone costs us. The client never sees that part." },
   { title: "Edit if needed", body: "Change the wording of any zone, the price, or add a discount. The total the client sees updates as you type." },
   { title: "Choose how long it stands", body: "7 or 14 days from when it goes out." },
-  { title: "Approve it", body: "On a real job, approving puts the email to the client on My Day for you to confirm and send, and the link goes live." },
+  { title: "Say yes", body: "On a real job, yes makes the link live. Then Preview shows what the client sees, and Send to client emails it to them straight away." },
   { title: "Then the crew sheet", body: "Once the client accepts, the same site map becomes the crew sheet. See the crew sheet practice." },
 ];
 

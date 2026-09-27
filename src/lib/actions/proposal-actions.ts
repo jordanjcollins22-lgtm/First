@@ -17,7 +17,9 @@ import {
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { requestMeasurements } from "@/lib/data/measurement-request";
-import { notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { deliverApproval, queueApproval } from "@/lib/data/outbound-approvals";
+import { isOwnerLevel } from "@/lib/roles";
+import { isAccountManager } from "@/lib/affiliate-roles";
 import { staleAfter } from "@/lib/outbound-approval";
 import { proposalReadyEmail } from "@/lib/proposal-ready-email";
 import { proposalPath } from "@/lib/proposal-flow";
@@ -27,7 +29,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
-import { computeProposalTotal } from "@/lib/proposal-pricing";
+import {
+  computeProposalTotal,
+  formatMaterialQuantity,
+  formatMeasurements,
+  zoneCrewHours,
+  zoneMaterialLineItems,
+  zoneMeasurements,
+} from "@/lib/proposal-pricing";
+import { buildEstimate, withTravelShare, type JobEstimate } from "@/lib/job-estimate";
+import { travelForProperty } from "@/lib/data/job-travel";
 import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
@@ -89,8 +100,6 @@ export async function generateProposal(
   const zones = (design.zones as unknown as WorkZone[]).filter((z) => z.service);
   if (zones.length === 0) return { ok: false, reason: "no_services" };
 
-  const { total } = computeProposalTotal(zones, catalog);
-
   const pricingBy = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
 
   // Worked out for the whole plan at once rather than a zone at a time. The
@@ -123,6 +132,52 @@ export async function generateProposal(
       .map((r) => [r.zoneName, r.recommendedText])
   );
 
+  // Each area's own price, then the estimate around them: hours, crew, the
+  // drive from the shop every day and to the supplier, the materials. Travel
+  // is priced in and shared across the areas, so they still add up.
+  const own = zones.map((zone) => computeProposalTotal([zone], catalog));
+  const supabaseForEstimate = await createClient();
+  const { data: place } = await supabaseForEstimate
+    .from("jobs")
+    .select("property:properties(lat, lng)")
+    .eq("id", jobId)
+    .maybeSingle();
+  const point = (place as unknown as { property: { lat: number | null; lng: number | null } | null } | null)?.property;
+  const travel = await travelForProperty(
+    supabaseForEstimate,
+    organizationId,
+    point?.lat != null && point?.lng != null ? { lat: point.lat, lng: point.lng } : null
+  ).catch((err: unknown) => {
+    console.error("[proposal] travel failed:", jobId, err);
+    return { toSiteMinutes: null, fromSiteMinutes: null, pickupExtraMinutes: null, from: null, pickupFrom: null, notes: ["Drive time could not be worked out."] };
+  });
+  const estimate: JobEstimate = buildEstimate({
+    zones: zones.map((zone, index) => {
+      const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
+      const time = zoneCrewHours(zone, catalog);
+      const measured = zoneMeasurements(zone);
+      return {
+        name: zone.name,
+        service: serviceLabelFor(scopeInputs[index].def, scopeInputs[index].pricing),
+        sizeLabel: measured ? formatMeasurements(measured, zone) : null,
+        crewHours: time.hours,
+        crewSize: pricingRow?.crew_size ?? 1,
+        missingTiming: time.missingTiming,
+        materials: zoneMaterialLineItems(zone, measured?.areaSqFt ?? 0, catalog).map((item) => ({
+          name: item.material,
+          quantityLabel: formatMaterialQuantity(item),
+          costCents: item.totalCost == null ? null : Math.round(item.totalCost * 100),
+        })),
+        priceCents: Math.round(own[index].total * 100),
+      };
+    }),
+    travel,
+    crewCostPerHourCents: catalog.crewCostPerHourCents,
+    markup: catalog.markup,
+  });
+  const areaPrices = withTravelShare(own.map((o) => Math.round(o.total * 100)), estimate.travelPriceCents);
+  const total = estimate.priceCents / 100;
+
   const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone, index) => {
     const def = scopeInputs[index].def;
     const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
@@ -130,7 +185,7 @@ export async function generateProposal(
     // Priced one area at a time as well as all together, so that a client who
     // later asks to drop an area can be shown the price they were quoted
     // minus that area — rather than whatever today's rate card would say.
-    const own = computeProposalTotal([zone], catalog);
+    const areaCost = own[index];
     return {
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricing),
@@ -138,10 +193,11 @@ export async function generateProposal(
       photoPaths: zone.service?.photos ?? [],
       points: zone.points,
       color: zone.color,
-      priceCents: Math.round(own.total * 100),
+      // With its share of the travel: the areas add up to the total.
+      priceCents: areaPrices[index],
       // A service with no timing on it, or a material we have no cost for,
       // means this number is not something the costing fully produced.
-      priceDerived: !own.hasMissingTiming && !own.hasUnknownMaterialCost,
+      priceDerived: !areaCost.hasMissingTiming && !areaCost.hasUnknownMaterialCost,
       // Who a client will actually meet, frozen with the rest of the quote.
       performedBy: pricingRow?.performed_by === "partner" ? "partner" : "own",
       partnerName: pricingRow?.partner_name ?? null,
@@ -204,6 +260,7 @@ export async function generateProposal(
       status: nextStatus,
       total_cost: price.total,
       scope_snapshot: scopeSnapshot,
+      estimate: estimate as unknown as Database["public"]["Tables"]["job_proposals"]["Row"]["estimate"],
       site_image_path: design.image_path,
       site_image_transform: siteImageTransform,
       generated_at: new Date().toISOString(),
@@ -318,12 +375,12 @@ export async function updateProposalDraft(
   revalidateJobViews(jobId);
 }
 
-export type ApproveOutcome = { emailed: "waiting"; to: string } | { emailed: "no_email" };
+/** Who the proposal would go to: null when the client has no email on file. */
+export type ApproveOutcome = { sendTo: string | null };
 
-/** The account manager's sign-off — this is what actually makes the
- * proposal visible on its public link. The email that hands the client
- * the link is written here and parked on My Day for the owner to read
- * and send. */
+/** The sign-off: the Yes. It makes the proposal live on its link. Nothing
+ * goes to the client from here: Send to client, beside Preview, does that,
+ * straight away, when somebody presses it. */
 export async function approveProposal(jobId: string): Promise<ApproveOutcome> {
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
@@ -375,28 +432,64 @@ export async function approveProposal(jobId: string): Promise<ApproveOutcome> {
   // still to be written up.
   await supabase.from("jobs").update({ status: "quoted" }).eq("id", jobId).eq("status", "estimating");
 
-  // Signed by whoever approved it: the name the client will ring.
-  const signedBy = (profile.first_name || profile.full_name || "").trim().split(/\s+/)[0] || null;
-  const outcome = await parkProposalEmail(jobId, now, signedBy).catch((err: unknown) => {
-    console.error("[proposal] client email not parked:", jobId, err);
-    return { emailed: "no_email" as const };
-  });
-
+  const contact = await getJobCustomerContact(jobId).catch(() => null);
   revalidateJobViews(jobId);
-  revalidatePath("/my-day");
-  return outcome;
+  return { sendTo: contact?.email?.trim() || null };
+}
+
+export type SendOutcome = { ok: true; to: string } | { ok: false; error: string };
+
+/**
+ * Send it: the email with the link, the price and how long it stands, to the
+ * client, now.
+ *
+ * Pressing Send to client, after the Preview beside it, is the approval, so
+ * it does not wait on My Day. It still goes through the same approval record
+ * and the same sender as everything else, marked as decided by whoever
+ * pressed it, so the client's message log and the proposal's sent date read
+ * the same as any other send.
+ */
+export async function sendProposalToClient(jobId: string): Promise<SendOutcome> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin") && !isAccountManager(profile.roles)) {
+    return { ok: false, error: "Only an owner, admin or account manager can send a proposal." };
+  }
+  const supabase = await createClient();
+  const { data: proposal } = await supabase.from("job_proposals").select("status, approved_at").eq("job_id", jobId).maybeSingle();
+  if (!proposal) return { ok: false, error: "There is no proposal on this job." };
+  if (proposal.status !== "sent" || !proposal.approved_at) return { ok: false, error: "Say yes to it first." };
+
+  const signedBy = (profile.first_name || profile.full_name || "").trim().split(/\s+/)[0] || null;
+  const admin = createAdminClient();
+  const parked = await writeProposalEmail(jobId, new Date(proposal.approved_at), signedBy, `send:${Date.now()}`).catch((err: unknown) => {
+    console.error("[proposal] client email not written:", jobId, err);
+    return null;
+  });
+  if (!parked) return { ok: false, error: "Couldn't write the email. Try again." };
+  if (parked.emailed === "no_email") return { ok: false, error: "The client has no email on file. Copy the link and text it to them." };
+
+  const { data: row } = await admin.from("outbound_approvals").select("*").eq("id", parked.id).maybeSingle();
+  if (!row) return { ok: false, error: "Couldn't send it. Try again." };
+  const sent = await deliverApproval(admin, row, profile.id);
+  revalidateJobViews(jobId);
+  revalidatePath("/pipeline");
+  return sent.ok ? { ok: true, to: parked.to } : { ok: false, error: sent.message };
 }
 
 /**
- * The client's copy, written and set aside.
- *
- * Nothing goes to the client from the approve button itself. The email is
- * drafted with the link, the price and how long it stands, and waits on
- * My Day where the owner reads it, changes a word if they like, and sends
- * it when the moment is right. A client with no email on file gets nothing
- * parked, and the approver is told so they can text the link instead.
+ * The client's copy: the email with the link, the price and how long it
+ * stands, written into an approval record ready for the sender. Send to
+ * client delivers it at once. A client with no email on file gets nothing
+ * written, and whoever pressed Send is told to text the link instead.
  */
-async function parkProposalEmail(jobId: string, approvedAt: Date, signedBy: string | null): Promise<ApproveOutcome> {
+async function writeProposalEmail(
+  jobId: string,
+  approvedAt: Date,
+  signedBy: string | null,
+  /** Makes each send its own record, so sending it again is possible. */
+  sendKey: string
+): Promise<{ emailed: "written"; to: string; id: string } | { emailed: "no_email" }> {
   const admin = createAdminClient();
   const contact = await getJobCustomerContact(jobId);
   const to = contact?.email?.trim();
@@ -421,11 +514,12 @@ async function parkProposalEmail(jobId: string, approvedAt: Date, signedBy: stri
     signedBy,
   });
 
+  const dedupeKey = `proposal_ready:${jobId}:${approvedAt.toISOString()}:${sendKey}`;
   await queueApproval(admin, {
     organizationId: contact.organizationId,
     source: "client_reminder",
     kind: "proposal_ready",
-    dedupeKey: `proposal_ready:${jobId}:${approvedAt.toISOString()}`,
+    dedupeKey,
     customerId: contact.customerId,
     jobId,
     toEmail: to,
@@ -435,8 +529,14 @@ async function parkProposalEmail(jobId: string, approvedAt: Date, signedBy: stri
     payload: { reference_id: jobId },
     expiresAt: proposal.expires_at ? new Date(proposal.expires_at) : staleAfter("proposal_ready", approvedAt),
   });
-  await notifyApprovers(admin, contact.organizationId).catch(() => {});
-  return { emailed: "waiting", to };
+  const { data: queued } = await admin
+    .from("outbound_approvals")
+    .select("id")
+    .eq("organization_id", contact.organizationId)
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (!queued) return { emailed: "no_email" };
+  return { emailed: "written", to, id: queued.id };
 }
 
 /** Somebody sent the link themselves, by text or in person. The proposal is sent from now. */

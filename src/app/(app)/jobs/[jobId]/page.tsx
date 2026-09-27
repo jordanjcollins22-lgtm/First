@@ -78,6 +78,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { BackLink } from "@/components/ui/back-link";
 import { canonicalTab, tabOfSection } from "@/lib/job-tabs";
 import { IntakeSummary } from "@/components/intake/intake-summary";
+import { ProposalSquare } from "@/components/proposal/proposal-square";
+import { getJobCustomerContact } from "@/lib/job-customer";
 import { getIntakeForJob } from "@/lib/data/evaluation-intake";
 import { intakeHeadline } from "@/lib/evaluation-intake";
 import { MessageThread } from "@/components/job/message-thread";
@@ -542,6 +544,9 @@ export default async function JobPage({
     noHouse: !county,
   };
 
+  // Who Send to client emails. Null when the client has no email on file.
+  const proposalSendTo = proposal ? ((await getJobCustomerContact(jobId).catch(() => null))?.email?.trim() || null) : null;
+
   // Price requests to subcontractors, one per service on the proposal.
   const subQuoteRequests = proposal ? await listSubQuoteRequests(jobId).catch(() => []) : [];
   const subQuoteGroups = serviceGroups(((proposal?.scope_snapshot ?? []) as unknown) as ProposalZoneSnapshot[]);
@@ -667,6 +672,9 @@ export default async function JobPage({
             lockedReason:
               can.proposal.available || proposal ? null : can.proposal.reason,
             body: (
+              // The estimate and the number in one square, yes or no; the
+              // full editor folded underneath for when the answer is no.
+              <ProposalSquare jobId={jobId} proposal={proposal} sendTo={proposalSendTo}>
               <div className="flex flex-col gap-4">
                 <ProposalPanel
                   jobId={jobId}
@@ -685,6 +693,7 @@ export default async function JobPage({
                 />
                 {proposal && <SubQuotesPanel jobId={jobId} groups={subQuoteGroups} requests={subQuoteRequests} />}
               </div>
+              </ProposalSquare>
             ),
           }]),
           ...(!seen.jobMoney || !proposalAttention ? [] : [{

@@ -317,15 +317,15 @@ export function ProposalPanel({
             }
           : p
       );
-      setApprovedNote("Approved. On a real job the email to the client now waits on My Day for you to confirm and send.");
+      setApprovedNote("Approved. On a real job, Preview and Send to client now appear, and Send emails it to the client straight away.");
       return;
     }
     startTransition(async () => {
       try {
         const outcome = await approveProposal(jobId);
         setApprovedNote(
-          outcome.emailed === "waiting"
-            ? `Approved. The email to ${outcome.to} is waiting on My Day for you to confirm and send.`
+          outcome.sendTo
+            ? `Approved. Preview it, then press Send to client to email ${outcome.sendTo}.`
             : "Approved. The client has no email on file, so send them the link yourself."
         );
       } catch (err) {

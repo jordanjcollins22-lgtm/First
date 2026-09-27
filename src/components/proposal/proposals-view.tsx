@@ -82,8 +82,8 @@ function ProposalRow({
       try {
         const outcome = await approveProposal(job.id);
         setNote(
-          outcome.emailed === "waiting"
-            ? `Approved. The email to ${outcome.to} is waiting on My Day for you to confirm and send.`
+          outcome.sendTo
+            ? `Approved. Open the job to preview it and send it to ${outcome.sendTo}.`
             : "Approved. The client has no email on file, so send them the link yourself."
         );
       } catch (err) {

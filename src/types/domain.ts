@@ -737,6 +737,8 @@ export interface Discount {
  * are frozen at generate time (see the migration for why). */
 export interface JobProposal {
   id: string;
+  /** What the number was built from: hours, crew, travel, materials, costs. Null on proposals built before it existed. */
+  estimate?: import("@/lib/job-estimate").JobEstimate | null;
   job_id: string;
   organization_id: string;
   token: string;
