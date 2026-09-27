@@ -32,7 +32,7 @@ import type { LotData } from "@/lib/lot-map";
 type Photo = { path: string; url: string };
 
 /** One screen of the form. */
-type Step =
+export type Step =
   | { key: string; kind: "main"; question: IntakeQuestion }
   | { key: string; kind: "detail"; question: DetailQuestion }
   | { key: "photos"; kind: "photos" }
@@ -50,7 +50,7 @@ const main = (key: IntakeQuestion["key"]): Step => {
  * bring in a follow-up (sod or seed after a lawn repair), so this is worked
  * out again after every answer.
  */
-function stepsFor(answers: IntakeAnswers): Step[] {
+export function stepsFor(answers: IntakeAnswers): Step[] {
   // The questions about the work get a page each. The one about the
   // property sits on the photos page, where they are already looking at it.
   const details = detailQuestionsFor(answers.services, answers.details).filter((q) => q.services !== null);
@@ -109,6 +109,7 @@ export function IntakeForm({
   greeting,
   demo = false,
   lot = null,
+  startAt,
 }: {
   token: string;
   initial: IntakeAnswers;
@@ -122,6 +123,8 @@ export function IntakeForm({
   demo?: boolean;
   /** Their lot from the county, drawn on the "which parts" question. */
   lot?: LotData | null;
+  /** Open on this page, by its key: for the owner's page-by-page preview. */
+  startAt?: string;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswers>(initial);
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
@@ -134,6 +137,7 @@ export function IntakeForm({
   // Where they are, by the screen's key, because the list around it changes.
   const [at, setAt] = useState<string>(() => {
     const steps = stepsFor(initial);
+    if (startAt && steps.some((s) => s.key === startAt)) return startAt;
     if (submittedAt) return steps[0].key;
     return (steps.find((s) => s.kind !== "last" && !answered(s, initial, initialPhotos)) ?? steps[steps.length - 1]).key;
   });

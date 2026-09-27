@@ -113,6 +113,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/practice/crew-sheet":
     "The crew sheet for the sample job, beside the site map and proposal it comes from. Read only, no job " +
     "behind it, and checks the evaluations tab itself like the other practice pages.",
+  "/practice/pre-evaluation":
+    "Every page of the pre-evaluation form side by side, with sample answers and nothing saved. Checks " +
+    "the evaluations tab itself, like the other practice pages.",
   "/practice/proposal":
     "Making a proposal from a sample site map, to try it. Saves nothing and emails nobody, and checks the " +
     "evaluations tab itself, like the site map practice.",

@@ -112,7 +112,8 @@ export const SYSTEM_FLOW: SystemStage[] = [
         key: "prep",
         title: "Pre-evaluation form",
         line: "One question at a time after they book: the work, photos, concerns.",
-        href: "/prep/demo",
+        // Every page side by side; the click-through demo is linked from it.
+        href: "/practice/pre-evaluation",
         status: "live",
       },
       {
