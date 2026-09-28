@@ -27,6 +27,10 @@ import {
 
 export const SALTING_TYPE_ID = "salting";
 
+/** The snow melts as they are named in the inventory, with their photo and where to buy. */
+export const SNOW_MELT = "Calcium chloride snow melt";
+export const SNOW_MELT_PET = "Pet friendly snow melt (calcium chloride)";
+
 /** What the evaluator picks on the site map, and the surface each one is priced as. */
 export const SALTING_SURFACES: { label: string; surface: Surface }[] = [
   { label: "Driveway and walkways", surface: "both" },
@@ -89,7 +93,8 @@ export function saltingMaterial(values: Record<string, string | undefined>, sett
   const pounds = Math.round(poundsFor(order.surface, settings) * Math.max(MINIMUM_TREATMENTS, order.treatments) * 10) / 10;
   const perPound = (order.petFriendly ? settings.petBagCostCents : settings.bagCostCents) / Math.max(1, settings.bagPounds);
   return {
-    name: order.petFriendly ? "Calcium chloride, pet safe blend" : "Calcium chloride",
+    // Named as it is in the inventory, so the price approval finds its photo and link.
+    name: order.petFriendly ? SNOW_MELT_PET : SNOW_MELT,
     pounds,
     bags: Math.ceil(pounds / Math.max(1, settings.bagPounds)),
     cents: Math.round(pounds * perPound),
@@ -160,11 +165,14 @@ export function priceSaltingVisits(
  * salting's are returned as they were.
  */
 export function repriceSaltingScope(text: string, totalCents: number): string {
-  return text.replace(/^Pre-paid salting: (\d+) treatments at \$[\d,.]+ each, \$[\d,.]+ in all/, (_, n: string) => {
-    const treatments = Math.max(1, Number(n));
-    const each = Math.round(totalCents / treatments);
-    return `Pre-paid salting: ${treatments} treatments at ${money(each)} each, ${money(totalCents)} in all`;
-  });
+  return text.replace(
+    /^Pre-paid salting: (\d+) (?:treatments at|applications included in this quote, at) \$[\d,.]+ each, \$[\d,.]+ in all/,
+    (_, n: string) => {
+      const applications = Math.max(1, Number(n));
+      const each = Math.round(totalCents / applications);
+      return `Pre-paid salting: ${applications} applications included in this quote, at ${money(each)} each, ${money(totalCents)} in all`;
+    }
+  );
 }
 
 /** What the proposal says about it, in the client's words: at the salt page's price, or at the one given. */
@@ -174,12 +182,13 @@ export function saltingScope(values: Record<string, string | undefined>, setting
   const where = order.surfaceLabel.toLowerCase();
   const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} treatments at ${money(each)} each, ${money(each * quote.treatments)} in all, on the ${where}.`,
+    `Pre-paid salting: ${quote.treatments} applications included in this quote, at ${money(each)} each, ${money(each * quote.treatments)} in all, on the ${where}.`,
     // The pet blend is named for what it is to the client: a pet friendly snow melt.
     order.petFriendly
-      ? `Each treatment is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`
-      : `Each treatment is calcium chloride, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`,
-    `Three treatments is the minimum to book. They are paid up front so the salt is bought ahead of the season.`,
+      ? `Each application is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`
+      : `Each application is calcium chloride, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`,
+    `Three applications is the minimum to book. They are paid up front, so your salt is bought and set aside before the season.`,
+    // Stored for them until a storm, and again after it if it isn't used: part of the price.
     SALT_KEPT_LINE,
     `Snow removal, when you want it, is billed after each storm by how much fell.`,
   ].join(" ");

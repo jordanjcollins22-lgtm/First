@@ -92,6 +92,7 @@ export default async function AccountManagerJourneyPage() {
     proposalHref: "/practice/proposal/client",
     breakdown,
     fee: { kind: "account-manager", name: "Jace", pct: 15 },
+    products: breakdown.materialTotals.map((m) => ({ ...m, imageUrl: null, url: null, inInventory: true })),
     // A sample drive: twenty minutes out, the supplier on the way, twenty back.
     costs: jobCosts(
       priceSiteMap({

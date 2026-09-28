@@ -43,7 +43,7 @@ export const MINIMUM_TREATMENTS = 3;
 export const SALT_KEPT_YEARS = 2;
 
 /** What the client is told about it, in one line. */
-export const SALT_KEPT_LINE = `Treatments you don't use this winter carry over: we store your salt for up to ${SALT_KEPT_YEARS} years, so it's there for the next storm.`;
+export const SALT_KEPT_LINE = `We store your salt for you until a storm, and whatever isn't used in that storm we store again until the next one, for up to ${SALT_KEPT_YEARS} years. Storage is included in the price.`;
 
 /** The last day an order's unused treatments are kept, from when it was paid. Null while unpaid. */
 export function saltKeptUntil(paidAt: string | null | undefined): Date | null {

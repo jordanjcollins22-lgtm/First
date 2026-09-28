@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, CheckCircle2, FileText, Loader2, Send, X } from "lucide-react";
 
@@ -209,6 +210,62 @@ export function PriceCard({
   );
 }
 
+/**
+ * Every product going in, with its photo, how much, what it costs, and a
+ * link to see it: what the account manager is approving, not just a number.
+ */
+function Products({ products }: { products: PriceApproval["products"] }) {
+  if (products.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-border">
+      <p className="border-b border-border bg-muted/50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Products going in
+      </p>
+      <ul className="divide-y divide-border">
+        {products.map((p) => {
+          const photo = p.imageUrl ? (
+            // The inventory's photo of it, small.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.imageUrl} alt={p.name} className="h-14 w-14 shrink-0 rounded-lg bg-muted object-cover" loading="lazy" />
+          ) : (
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-muted text-xl" aria-hidden>
+              📦
+            </span>
+          );
+          const link = p.url ?? p.imageUrl;
+          return (
+            <li key={p.name} className="flex items-center gap-3 px-3 py-2">
+              {link ? (
+                <a href={link} target="_blank" rel="noopener noreferrer">
+                  {photo}
+                </a>
+              ) : (
+                photo
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-medium leading-snug">{p.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.amount}
+                  {p.cents != null ? ` · ${dollars(p.cents)}` : " · no cost set"}
+                </p>
+                {p.url ? (
+                  <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-primary underline">
+                    See the product
+                  </a>
+                ) : (
+                  <Link href="/admin/tools" className="text-xs text-muted-foreground underline">
+                    {p.inInventory ? "No link yet: add it in Inventory" : "Not in Inventory: add it with a photo and link"}
+                  </Link>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /** "Jace's account manager fee (15%)", "Max's affiliate fee (5%)". */
 function feeLabel(fee: JobFee): string {
   const whose = fee.name === "Account manager" || fee.name === "Affiliate" ? "" : `${fee.name}'s `;
@@ -326,6 +383,7 @@ function Breakdown({
     <div className="flex flex-col gap-2">
       {item.siteMap && <PriceSiteMap map={item.siteMap} />}
       <ProfitTable item={item} total={total} pending={pending} onUsePrice={onUsePrice} />
+      <Products products={item.products} />
       <details open className="rounded-xl border border-border">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
           {b.areas.length} area{b.areas.length === 1 ? "" : "s"}, area by area

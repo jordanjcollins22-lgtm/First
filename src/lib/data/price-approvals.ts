@@ -6,12 +6,25 @@ import { isOwnerLevel } from "@/lib/roles";
 import { proposalPath } from "@/lib/proposal-flow";
 import { priceBreakdown, type JobFee, type PriceBreakdown } from "@/lib/price-approval";
 import { feesForJobs } from "@/lib/data/job-fee";
+import { env } from "@/lib/env";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { jobCosts, priceSiteMap, type JobCosts } from "@/lib/job-price";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { THUMBNAIL } from "@/lib/storage-image-url";
+
+export interface ApprovalProduct {
+  name: string;
+  amount: string;
+  cents: number | null;
+  /** Its photo, when the inventory has one. */
+  imageUrl: string | null;
+  /** Where to see or buy it, when the inventory has a link. */
+  url: string | null;
+  /** In the inventory at all: when not, there is nowhere to put a photo or link yet. */
+  inInventory: boolean;
+}
 
 export interface PriceApproval {
   jobId: string;
@@ -32,6 +45,8 @@ export interface PriceApproval {
   fee: JobFee;
   /** What the job costs us, line by line, travel and whole hours in, and the price it works out at. */
   costs: JobCosts;
+  /** Every product going in: how much, what it costs, and its photo and where to buy it, from the inventory. */
+  products: ApprovalProduct[];
   crewRateCents: number;
   markup: string;
   /** Each area's walkthrough photos, as images to show, in the order of breakdown.areas. */
@@ -98,11 +113,22 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
   if (rows.length === 0) return [];
 
   const jobIds = rows.map((r) => r.job_id);
-  const [catalog, designs, fees] = await Promise.all([
+  const [catalog, designs, fees, stock] = await Promise.all([
     getCanvasCatalog(),
     supabase.from("canvas_designs").select("job_id, zones").in("job_id", jobIds),
     feesForJobs(supabase, profile.organization_id, jobIds),
+    supabase.from("materials").select("name, image_path, purchase_url").eq("organization_id", profile.organization_id),
   ]);
+  // Each product by its name, with its photo and link, for the approval to show.
+  const productBy = new Map(
+    (stock.data ?? []).map((m) => [
+      m.name.trim().toLowerCase(),
+      {
+        imageUrl: m.image_path ? `${env.supabaseUrl}/storage/v1/object/public/material-images/${m.image_path}` : null,
+        url: m.purchase_url?.trim() || null,
+      },
+    ])
+  );
   // The drive for each: shop, supplier, the house, back. Worked out the same
   // way the proposal was, so the costs here are the costs it was priced on.
   const travels = await Promise.all(
@@ -145,6 +171,10 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
       breakdown,
       fee,
       costs,
+      products: breakdown.materialTotals.map((m) => {
+        const found = productBy.get(m.name.trim().toLowerCase());
+        return { ...m, imageUrl: found?.imageUrl ?? null, url: found?.url ?? null, inInventory: Boolean(found) };
+      }),
       crewRateCents: catalog.crewCostPerHourCents,
       markup,
       areaPhotos: breakdown.areas.map((a) => a.photoPaths.map((path) => canvasImageUrl(path, THUMBNAIL))),
