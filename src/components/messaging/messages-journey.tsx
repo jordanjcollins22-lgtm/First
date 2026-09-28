@@ -17,7 +17,19 @@ function status(m: SequenceMessage): string {
   return m.heldForOk ? `${how}, after you OK it on My Day.` : `${how}.`;
 }
 
-export function MessagesJourney({ messages, businessName, fromEmail }: { messages: SequenceMessage[]; businessName: string; fromEmail: string | null }) {
+export function MessagesJourney({
+  messages: all,
+  businessName,
+  fromEmail,
+  step,
+}: {
+  messages: SequenceMessage[];
+  businessName: string;
+  fromEmail: string | null;
+  /** One step on The system: only its automations, as opened from that step. */
+  step?: { key: string; number: number | null; title: string } | null;
+}) {
+  const messages = step ? all.filter((m) => m.square === step.key) : all;
   // One line, in order: each moment numbered, its text before its email.
   // Switched-off ones stay in their place, dimmed and saying so, so the
   // order reads whole and nothing is hidden.
@@ -45,17 +57,38 @@ export function MessagesJourney({ messages, businessName, fromEmail }: { message
       <Link href="/my-day?tab=system" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
         <ChevronLeft className="h-4 w-4" /> The system
       </Link>
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-bold">Emails and texts to the client</h1>
-        <p className="text-sm text-muted-foreground">
-          Everything a client gets from us without anybody typing it, in the order they get it: from booking the evaluation, through the
-          visit, the proposal and the job, to the invoice. Each is numbered to its step on The system, the text before the email: 1.1 is the
-          text when they book, 1.2 the email. Each is shown as it arrives, with your wording and a sample client. Tap an email to read it full size. {on} email{on === 1 ? "" : "s"} and {texts} text{texts === 1 ? "" : "s"} are switched on. Nothing here sends.
-        </p>
-        <Link href="/admin/reminders" className="text-sm font-medium text-primary hover:underline">
-          Change the wording, the timing, or what&apos;s switched on
-        </Link>
-      </header>
+      {step ? (
+        <header className="flex flex-col gap-1">
+          <h1 className="text-xl font-bold">
+            {step.number != null ? `Step ${step.number}: ` : ""}
+            {step.title}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            The emails and texts the client gets at this step, in order, the text before the email. Each is shown as it arrives, with your
+            wording and a sample client. Tap an email to read it full size. Nothing here sends.
+          </p>
+          <p className="flex flex-wrap gap-x-4 text-sm font-medium">
+            <Link href="/practice/messages" className="text-primary hover:underline">
+              See every step
+            </Link>
+            <Link href="/admin/reminders" className="text-primary hover:underline">
+              Change the wording, the timing, or what&apos;s switched on
+            </Link>
+          </p>
+        </header>
+      ) : (
+        <header className="flex flex-col gap-1">
+          <h1 className="text-xl font-bold">Emails and texts to the client</h1>
+          <p className="text-sm text-muted-foreground">
+            Everything a client gets from us without anybody typing it, in the order they get it: from booking the evaluation, through the
+            visit, the proposal and the job, to the invoice. Each is numbered to its step on The system, the text before the email: 1.1 is the
+            text when they book, 1.2 the email. Each is shown as it arrives, with your wording and a sample client. Tap an email to read it full size. {on} email{on === 1 ? "" : "s"} and {texts} text{texts === 1 ? "" : "s"} are switched on. Nothing here sends.
+          </p>
+          <Link href="/admin/reminders" className="text-sm font-medium text-primary hover:underline">
+            Change the wording, the timing, or what&apos;s switched on
+          </Link>
+        </header>
+      )}
       <JourneyPages steps={steps} missed={[]} />
     </div>
   );

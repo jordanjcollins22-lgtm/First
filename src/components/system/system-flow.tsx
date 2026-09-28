@@ -103,7 +103,7 @@ function Square({ square, number, automations }: { square: SystemSquare; number:
         {automations.map((m) => (
           <li key={m.key}>
             <Link
-              href={`/practice/messages#${m.key}`}
+              href={`/practice/messages?step=${m.square}#${m.key}`}
               className={cn("flex items-start gap-1.5 rounded-md px-1 py-0.5 text-[11px] leading-snug hover:bg-accent/60", !m.on && "text-muted-foreground")}
               title={`${m.when}. ${m.on ? "On" : m.note ?? "Switched off"}`}
             >
