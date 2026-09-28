@@ -209,6 +209,11 @@ describe("groups and mentions", () => {
     expect(findPostUrl("Looking for an affordable landscaper in Bel Air please")).toBe(
       "https://www.facebook.com/search/posts?q=Looking%20for%20an%20affordable%20landscaper%20in%20Bel%20Air%20please"
     );
+    // Inside its group when the group is known.
+    expect(findPostUrl("Need my lawn cut", "1603533216622224")).toBe(
+      "https://www.facebook.com/groups/1603533216622224/search/?q=Need%20my%20lawn%20cut"
+    );
+    expect(findPostUrl("Need my lawn cut", "bad/key")).toBe("https://www.facebook.com/search/posts?q=Need%20my%20lawn%20cut");
   });
 
   it("builds a search link", () => {

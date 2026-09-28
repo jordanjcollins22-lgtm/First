@@ -45,6 +45,40 @@ function mentionOf(post: BoardPost, comment: string): string | null {
   return comment.startsWith(`@${first}`) ? first : null;
 }
 
+/**
+ * Copies text there and then, inside the tap, so opening the post's tab
+ * straight after is still allowed. False if the browser would not.
+ */
+function copyNow(text: string): boolean {
+  const box = document.createElement("textarea");
+  box.value = text;
+  box.setAttribute("readonly", "");
+  box.style.position = "fixed";
+  box.style.top = "0";
+  box.style.opacity = "0";
+  document.body.appendChild(box);
+  const active = document.activeElement as HTMLElement | null;
+  try {
+    box.select();
+    box.setSelectionRange(0, text.length);
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    box.remove();
+    active?.focus?.();
+  }
+}
+
+/** The clipboard the modern way, for browsers where copyNow would not. */
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const FRESHNESS_STYLE: Record<BoardPost["freshness"], string> = {
   fresh: "bg-emerald-50 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200",
@@ -74,6 +108,8 @@ export function CommentCard({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedTip, setCopiedTip] = useState<string | null>(null);
+  // The browser stopped the post's tab from opening: a button to open it by hand.
+  const [blockedLink, setBlockedLink] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [otherNote, setOtherNote] = useState("");
   const [, startTransition] = useTransition();
@@ -86,6 +122,7 @@ export function CommentCard({
   function done() {
     setPinned(null);
     setCopiedTip(null);
+    setBlockedLink(null);
     setAsking(false);
     setOtherNote("");
     router.refresh();
@@ -139,16 +176,22 @@ export function CommentCard({
   async function copyAndGo() {
     if (!post || !mine) return;
     setError(null);
+    setBlockedLink(null);
     const first = mentionOf(post, comment);
     const body = first ? comment.slice(first.length + 1).trimStart() : comment;
-    try {
-      await navigator.clipboard.writeText(body);
-    } catch {
+    // Copied and opened in the same moment as the press, with nothing waited
+    // on first: a phone only lets a page open a tab straight from a tap, and
+    // waiting for the clipboard used to lose the tap, so no tab opened.
+    const copiedNow = copyNow(body);
+    const copying = copiedNow ? Promise.resolve(true) : writeClipboard(body);
+    // The post, or with no link a search for it in its group.
+    const tab = window.open(post.link, "_blank");
+    if (tab) tab.opener = null;
+    else setBlockedLink(post.link);
+    if (!(await copying)) {
       setError("Couldn't copy. Press and hold the comment to copy it by hand.");
       return;
     }
-    // The post, or with no link a search for it.
-    window.open(post.link, "_blank", "noopener");
     const find = post.hasUrl ? "" : `Find ${post.author ? `${post.author}'s post` : "the post"}${post.groupName ? ` in ${post.groupName}` : ""}. `;
     setCopiedTip(first ? `Copied. ${find}Type @${first}, pick them from the list, then paste.` : `Copied. ${find}Paste it under the post.`);
     setBusy("posted");
@@ -156,7 +199,8 @@ export function CommentCard({
     setBusy(null);
     if (!result.ok) return setError(result.error);
     // A moment to read the tip before the next post takes this one's place.
-    setTimeout(done, 2500);
+    // If the tab was stopped from opening, it waits for them to open it here.
+    if (tab) setTimeout(done, 2500);
   }
 
   return (
@@ -291,6 +335,17 @@ export function CommentCard({
                   {post.hasUrl ? "Copy & go to post" : "Copy & find the post"}
                 </Button>
                 {copiedTip && <p className="text-center text-xs text-emerald-700">{copiedTip}</p>}
+                {blockedLink && (
+                  <a
+                    href={blockedLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setTimeout(done, 500)}
+                    className="flex h-11 w-full items-center justify-center gap-1 rounded-md border border-primary text-sm font-semibold text-primary"
+                  >
+                    {post.hasUrl ? "Open the post" : "Find the post"} <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
                 <button
                   type="button"
                   disabled={busy !== null}

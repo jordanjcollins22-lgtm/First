@@ -73,7 +73,7 @@ async function freshRequests(organizationId: string, now: Date) {
   const since = new Date(now.getTime() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("outreach_seen_posts")
-    .select("id, url, post_key, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by, draft_comment")
+    .select("id, url, post_key, group_key, group_name, author, text, age_days, created_at, platform, posted_at, match_reason, sort_reason, service, added_by, draft_comment")
     .eq("organization_id", organizationId)
     .eq("kind", "request")
     .eq("decision", "read")
@@ -193,7 +193,7 @@ function boardPost(
     const text = row.text ?? "";
     return {
       id: row.id,
-      link: isPostLink(row.url) ? row.url : findPostUrl(text),
+      link: isPostLink(row.url) ? row.url : findPostUrl(text, row.group_key),
       hasUrl: isPostLink(row.url),
       groupName: row.group_name,
       author: row.author,

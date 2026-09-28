@@ -332,10 +332,16 @@ export function textKeyFor(text: string, groupKey: string | null): string {
   return `text:${groupKey ?? "any"}:${(hash >>> 0).toString(36)}:${words.length}`;
 }
 
-/** A Facebook search for a post's opening words, for a post with no link of its own. */
-export function findPostUrl(text: string): string {
+/**
+ * A Facebook search for a post's opening words, for a post with no link of
+ * its own: inside its group when the group is known, which lands on the post
+ * itself far more often than a search of all of Facebook.
+ */
+export function findPostUrl(text: string, groupKey?: string | null): string {
   const words = cleanPostText(text).split(/\s+/).slice(0, 10).join(" ");
-  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(words)}`;
+  const q = encodeURIComponent(words);
+  if (groupKey && /^[\w.-]+$/.test(groupKey)) return `https://www.facebook.com/groups/${groupKey}/search/?q=${q}`;
+  return `https://www.facebook.com/search/posts?q=${q}`;
 }
 
 /** The first name a stored comment opens with, for the browser's mention picker. */
