@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
-import { isSupabaseConfigured } from "@/lib/env";
+import { env, isSupabaseConfigured } from "@/lib/env";
 import { requireJobAccess } from "@/lib/data/access";
 import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
@@ -33,12 +33,23 @@ export default async function SiteMapPage({ params }: { params: Promise<{ jobId:
   await requireJobAccess(jobId, ["job-detail", "project-data", "evaluations", "pipeline"]);
 
   const supabase = await createClient();
-  const [{ data: job }, catalog, design, viewer] = await Promise.all([
+  const [{ data: job }, catalog, design, viewer, { data: stock }] = await Promise.all([
     supabase.from("jobs").select("id, name, property:properties(address)").eq("id", jobId).maybeSingle(),
     getCanvasCatalog(),
     getCanvasDesignForJob(jobId),
     getCurrentProfile(),
+    supabase.from("materials").select("name, image_path, purchase_url"),
   ]);
+  // Each product's photo and where to buy it, from the inventory, by name.
+  const productBy = new Map(
+    (stock ?? []).map((m) => [
+      m.name.trim().toLowerCase(),
+      {
+        imageUrl: m.image_path ? `${env.supabaseUrl}/storage/v1/object/public/material-images/${m.image_path}` : null,
+        url: m.purchase_url?.trim() || null,
+      },
+    ])
+  );
   if (!job) notFound();
   const address = (job as unknown as { property: { address: string } | null }).property?.address ?? job.name;
   const money = visibilityFor(viewer?.roles ?? []).jobMoney;
@@ -151,14 +162,31 @@ export default async function SiteMapPage({ params }: { params: Promise<{ jobId:
                   <div className="mt-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Materials</p>
                     <ul className="mt-1 flex flex-col gap-0.5 text-sm">
-                      {row.materials.map((m) => (
-                        <li key={`${m.materialId}:${m.unit}`} className="flex justify-between gap-3">
-                          <span>{m.material}</span>
-                          <span className="text-right text-muted-foreground">
-                            {money ? formatMaterialQuantity(m) : formatMaterialQuantity({ ...m, totalCost: null })}
-                          </span>
-                        </li>
-                      ))}
+                      {row.materials.map((m) => {
+                        const product = productBy.get(m.material.trim().toLowerCase());
+                        return (
+                          <li key={`${m.materialId}:${m.unit}`} className="flex items-center gap-3">
+                            {product?.imageUrl && (
+                              <a href={product.url ?? product.imageUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                {/* The inventory's photo of it, small. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={product.imageUrl} alt={m.material} className="h-12 w-12 rounded-lg bg-muted object-cover" loading="lazy" />
+                              </a>
+                            )}
+                            <span className="min-w-0 flex-1">
+                              {m.material}
+                              {product?.url && (
+                                <a href={product.url} target="_blank" rel="noopener noreferrer" className="block text-xs font-medium text-primary underline">
+                                  See the product
+                                </a>
+                              )}
+                            </span>
+                            <span className="text-right text-muted-foreground">
+                              {money ? formatMaterialQuantity(m) : formatMaterialQuantity({ ...m, totalCost: null })}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 )}
