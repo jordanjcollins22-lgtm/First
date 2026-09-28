@@ -1,3 +1,4 @@
+import { billedHours, priceForTarget } from "@/lib/gross-profit";
 import {
   DEFAULT_SALT_SETTINGS,
   MINIMUM_TREATMENTS,
@@ -95,6 +96,63 @@ export function saltingMaterial(values: Record<string, string | undefined>, sett
   };
 }
 
+/** One salting visit priced by the rules every service is held to. */
+export interface SaltingVisits {
+  treatments: number;
+  /** On site for one treatment. */
+  onSiteMinutes: number;
+  /** Shop to the house and back, for one visit. */
+  travelMinutes: number;
+  /** The visit on the clock, in whole hours, one at the least. */
+  billedHours: number;
+  /** Per visit, in cents. */
+  labourCents: number;
+  materialCents: number;
+  /** What the salt page charges a treatment. */
+  saltPageCents: number;
+  /** What a treatment is priced at: the salt page's, or more to reach the gross profit floor. */
+  perVisitCents: number;
+  totalCents: number;
+  /** Raised over the salt page's price to reach the floor. */
+  lifted: boolean;
+}
+
+/**
+ * Salting a visit at a time, held to the same rules as every service: the
+ * crew's time from the shop to the house, the treatment and back, charged in
+ * whole hours, an hour at the least; the salt; and never under half the
+ * price as gross profit after the account manager's or affiliate's share.
+ * The salt page's price stands when it is already over that.
+ */
+export function priceSaltingVisits(
+  values: Record<string, string | undefined>,
+  settings: SaltSettings,
+  trip: { toSiteMinutes: number | null; fromSiteMinutes: number | null; crewCostPerHourCents: number; feePct: number; fallbackDriveMinutes?: number }
+): SaltingVisits {
+  const order = saltingOrder(values);
+  const quote = quoteOrder(order, settings);
+  const one = priceTreatment(order.surface, order.petFriendly, settings);
+  const fallback = trip.fallbackDriveMinutes ?? 30;
+  const to = trip.toSiteMinutes ?? fallback;
+  const back = trip.fromSiteMinutes ?? trip.toSiteMinutes ?? fallback;
+  const hours = billedHours((one.minutes + to + back) / 60);
+  const labourCents = Math.round(hours * Math.max(0, trip.crewCostPerHourCents));
+  const floor = priceForTarget(labourCents, one.materialCents, trip.feePct) ?? 0;
+  const perVisitCents = Math.max(quote.perTreatmentCents, floor);
+  return {
+    treatments: quote.treatments,
+    onSiteMinutes: one.minutes,
+    travelMinutes: Math.round(to + back),
+    billedHours: hours,
+    labourCents,
+    materialCents: one.materialCents,
+    saltPageCents: quote.perTreatmentCents,
+    perVisitCents,
+    totalCents: perVisitCents * quote.treatments,
+    lifted: perVisitCents > quote.perTreatmentCents,
+  };
+}
+
 /**
  * A salting area's words brought to a new price, when the account manager
  * sets the job's price by hand: "3 treatments at $40 each, $120 in all"
@@ -109,13 +167,14 @@ export function repriceSaltingScope(text: string, totalCents: number): string {
   });
 }
 
-/** What the proposal says about it, in the client's words. */
-export function saltingScope(values: Record<string, string | undefined>, settings: SaltSettings = DEFAULT_SALT_SETTINGS): string {
+/** What the proposal says about it, in the client's words: at the salt page's price, or at the one given. */
+export function saltingScope(values: Record<string, string | undefined>, settings: SaltSettings = DEFAULT_SALT_SETTINGS, perTreatmentCents?: number): string {
   const order = saltingOrder(values);
   const quote = quoteOrder(order, settings);
   const where = order.surfaceLabel.toLowerCase();
+  const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} treatments at ${money(quote.perTreatmentCents)} each, ${money(quote.totalCents)} in all, on the ${where}.`,
+    `Pre-paid salting: ${quote.treatments} treatments at ${money(each)} each, ${money(each * quote.treatments)} in all, on the ${where}.`,
     `Each treatment is calcium chloride, never rock salt, so the concrete isn't pitted${order.petFriendly ? ", in the pet safe blend" : ""}. We come out when ice is forecast or after a snow push.`,
     `Three treatments is the minimum to book. They are paid up front so the salt is bought ahead of the season.`,
     SALT_KEPT_LINE,

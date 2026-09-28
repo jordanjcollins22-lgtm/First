@@ -61,8 +61,8 @@ export function PriceCard({
   const [sendTo, setSendTo] = useState<string | null>(item.email);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const b = item.breakdown;
-  const worked = b.priceCents;
+  // What the site map works out at: travel, whole hours and the floor in.
+  const worked = item.costs.workedCents;
 
   function accept() {
     setError(null);
@@ -126,7 +126,7 @@ export function PriceCard({
           <Breakdown item={item} total={total} pending={pending} onUsePrice={(cents) => submitPrice(cents / 100)} />
           {total !== worked && worked > 0 && (
             <p className="text-xs text-muted-foreground">
-              The rate card works it out at {dollars(worked)}; the price was set at {dollars(total)}.
+              It works out at {dollars(worked)} with travel, whole hours and the {Math.round(GROSS_PROFIT_TARGET * 100)}% floor; the price is set at {dollars(total)}.
             </p>
           )}
         </>
@@ -232,14 +232,17 @@ function ProfitTable({
   onUsePrice: (cents: number) => void;
 }) {
   const b = item.breakdown;
-  const m = margin(total, b.labourCents, b.materialsCents, item.fee.pct);
-  const visits = b.visits != null && b.visits > 1 ? b.visits : null;
-  const floor = priceForTarget(b.labourCents, b.materialsCents, item.fee.pct, GROSS_PROFIT_TARGET, visits ?? 1);
+  const c = item.costs;
+  const m = margin(total, c.labourCents, c.materialsCents, item.fee.pct);
+  const visits = c.visits != null && c.visits > 1 ? c.visits : null;
+  const floor = priceForTarget(c.labourCents, c.materialsCents, item.fee.pct, GROSS_PROFIT_TARGET, visits ?? 1);
   const target = Math.round(GROSS_PROFIT_TARGET * 100);
   const cell = (cents: number) => (visits ? [cents / visits, cents] : [cents]);
   const rows: { label: string; detail?: string; cents: number; strong?: boolean }[] = [
     { label: "Price to the client", cents: m.priceCents, strong: true },
-    { label: "Labour", detail: `${hours(b.crewHours / (visits ?? 1))} crew-hrs${visits ? " a visit" : ""} at ${dollars(item.crewRateCents)}/hr`, cents: m.labourCents },
+    // Every hour the crew is on the clock, at the crew rate: on site, in the
+    // truck, and the rest of the last hour.
+    ...c.labour.map((l) => ({ label: l.label, detail: `${l.detail}, at ${dollars(item.crewRateCents)}/hr`, cents: l.cents })),
     {
       label: "Materials",
       detail: b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
@@ -337,19 +340,18 @@ function Breakdown({
                   </span>
                   {a.name} <span className="text-muted-foreground">· {a.service}</span>
                 </p>
-                <p className="shrink-0 font-semibold tabular-nums">{dollars(a.priceCents)}</p>
+                <p className="shrink-0 font-semibold tabular-nums">{dollars(item.costs.areaPricesCents[i] ?? a.priceCents)}</p>
               </div>
               <p className="text-xs text-muted-foreground">
-                {[
-                  a.size ?? "not measured",
-                  `${hours(a.crewHours)} crew-hrs, ${dollars(a.labourCents)} labour`,
-                  `${dollars(a.materialsCents)} materials`,
-                  `${Math.round(margin(a.priceCents, a.labourCents, a.materialsCents, item.fee.pct).grossPct * 100)}% gross profit`,
-                ].join(" · ")}
+                {(a.visits > 1
+                  ? // Salting: its hours are a visit at a time, in the table above.
+                    [a.size ?? "not measured", `${dollars(a.materialsCents)} materials`]
+                  : [a.size ?? "not measured", `${hours(a.crewHours)} crew-hrs on site, ${dollars(a.labourCents)} labour`, `${dollars(a.materialsCents)} materials`]
+                ).join(" · ")}
               </p>
               {a.visits > 1 && (
                 <p className="text-xs text-muted-foreground">
-                  {a.visits} visits: {dollars(a.priceCents / a.visits)} a visit, of which {dollars(a.labourCents / a.visits)} labour and {dollars(a.materialsCents / a.visits)} materials
+                  {a.visits} visits at {dollars((item.costs.areaPricesCents[i] ?? a.priceCents) / a.visits)} a visit
                 </p>
               )}
               {a.materials.length > 0 && (

@@ -13,10 +13,17 @@
  * same markup as the work, and spread across the areas by their share of the
  * price, so the areas still add up to the total the client sees.
  *
+ * Charged in whole hours: the crew's time on the clock -- on site and in
+ * the truck -- is rounded up to the hour, an hour at the least. And never
+ * under half the price as gross profit once labour, materials and the
+ * account manager's or affiliate's share are paid: a rate card that comes
+ * out under that is lifted to it.
+ *
  * Pure: the drive times come in as numbers, worked out elsewhere.
  */
 
 import { priceZone, type Markup } from "@/lib/job-costing";
+import { billedHours, priceForTarget } from "@/lib/gross-profit";
 
 /** Hours in a working day on site, for turning hours into days. */
 export const WORKDAY_HOURS = 8;
@@ -89,16 +96,32 @@ export interface JobEstimate {
   };
   materials: EstimateMaterial[];
   crewCostPerHourCents: number;
+  /** On the clock, on site and in the truck, rounded up to whole hours: what is charged. */
+  billedHours: number;
+  /** Crew-hours added by rounding up to the hour. */
+  roundingCrewHours: number;
   costs: {
     onSiteLabourCents: number;
     travelLabourCents: number;
+    /** The part of an hour rounded up to the whole hour, at the crew rate. */
+    roundingLabourCents?: number;
     materialsCents: number;
-    /** What it all costs us. */
+    /** What it all costs us, before the fee. */
     directCents: number;
   };
   /** The areas' prices before travel, and what travel adds, marked up the same way. */
   workPriceCents: number;
   travelPriceCents: number;
+  /** What rounding up to whole hours adds, marked up the same way. */
+  roundingPriceCents?: number;
+  /** What was added to reach the gross profit floor. Zero when the rate card was already over it. */
+  floorLiftCents?: number;
+  /** The account manager's or affiliate's share, in percent, and in cents of the price. */
+  feePct?: number;
+  feeCents?: number;
+  /** What the price leaves after labour, materials and the fee. */
+  grossCents?: number;
+  grossPct?: number;
   /** The number: what the client is quoted. */
   priceCents: number;
   /** Things that make the number less than certain, in words. */
@@ -112,6 +135,8 @@ export function buildEstimate(input: {
   travel: EstimateTravelInput;
   crewCostPerHourCents: number;
   markup: Markup;
+  /** The account manager's or affiliate's share of the price, in percent. */
+  feePct?: number;
   /** Assumed when the drive could not be worked out. */
   fallbackDriveMinutes?: number;
   fallbackPickupMinutes?: number;
@@ -150,17 +175,38 @@ export function buildEstimate(input: {
     pickup = input.travel.pickupExtraMinutes ?? fallbackPickup;
     if (input.travel.pickupExtraMinutes == null) notes.push(`Material pickup assumed at ${fallbackPickup} minutes.`);
   }
-  const travelCrewHours = round1((days * (toSite + fromSite) * crew + pickup * crew) / 60);
+  // Nothing to go out for: no drive, no hours.
+  const working = input.zones.length > 0;
+  const travelExact = working ? (days * (toSite + fromSite) * crew + pickup * crew) / 60 : 0;
+  const travelCrewHours = round1(travelExact);
+  // The clock runs from leaving the shop to getting back, and is charged in
+  // whole hours: what that adds is its own line, so the hours add up.
+  const clock = working ? billedHours(totalCrewHours / crew + travelExact / crew) : 0;
+  const roundingExact = Math.max(0, clock * crew - totalCrewHours - travelExact);
+  const roundingCrewHours = Math.round(roundingExact * 100) / 100;
 
   const rate = Math.max(0, input.crewCostPerHourCents);
   const onSiteLabourCents = Math.round(totalCrewHours * rate);
-  const travelLabourCents = Math.round(travelCrewHours * rate);
+  const travelLabourCents = Math.round(travelExact * rate);
+  const roundingLabourCents = Math.round(roundingExact * rate);
   const materialsCents = materials.reduce((s, m) => s + (m.costCents ?? 0), 0);
 
   const workPriceCents = input.zones.reduce((s, z) => s + Math.max(0, z.priceCents), 0);
   // Travel is labour: priced as a crew's hours with no materials, so a per
-  // crew-hour overhead is charged on it the same as on the work.
-  const travelPriceCents = priceZone({ materialsCents: 0, crewHours: travelCrewHours, crewCostPerHourCents: rate }, input.markup).priceCents;
+  // crew-hour overhead is charged on it the same as on the work. So is the
+  // rest of the last hour.
+  const travelPriceCents = working ? priceZone({ materialsCents: 0, crewHours: travelExact, crewCostPerHourCents: rate }, input.markup).priceCents : 0;
+  const roundingPriceCents =
+    roundingExact > 0 ? priceZone({ materialsCents: 0, crewHours: roundingExact, crewCostPerHourCents: rate }, input.markup).priceCents : 0;
+
+  // Never under the gross profit floor, after the fee.
+  const feePct = Math.max(0, input.feePct ?? 0);
+  const labourCents = onSiteLabourCents + travelLabourCents + roundingLabourCents;
+  const ratePrice = workPriceCents + travelPriceCents + roundingPriceCents;
+  const floor = working ? priceForTarget(labourCents, materialsCents, feePct) : null;
+  const priceCents = Math.max(ratePrice, floor ?? 0);
+  const feeCents = Math.round((priceCents * feePct) / 100);
+  const grossCents = priceCents - labourCents - materialsCents - feeCents;
 
   const warnings: string[] = [];
   if (rate === 0) warnings.push("No crew rate is set, so labour and travel are priced at nothing. Set it on the Team page.");
@@ -185,15 +231,24 @@ export function buildEstimate(input: {
     },
     materials,
     crewCostPerHourCents: rate,
+    billedHours: clock,
+    roundingCrewHours,
     costs: {
       onSiteLabourCents,
       travelLabourCents,
+      roundingLabourCents,
       materialsCents,
-      directCents: onSiteLabourCents + travelLabourCents + materialsCents,
+      directCents: labourCents + materialsCents,
     },
     workPriceCents,
     travelPriceCents,
-    priceCents: workPriceCents + travelPriceCents,
+    roundingPriceCents,
+    floorLiftCents: priceCents - ratePrice,
+    feePct,
+    feeCents,
+    grossCents,
+    grossPct: priceCents > 0 ? grossCents / priceCents : 0,
+    priceCents,
     warnings,
   };
 }

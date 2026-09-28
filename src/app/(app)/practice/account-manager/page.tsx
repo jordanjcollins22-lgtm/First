@@ -6,6 +6,7 @@ import { requireTab } from "@/lib/data/access";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { priceBreakdown } from "@/lib/price-approval";
 import { PRACTICE_ADDRESS, PRACTICE_ZONES, practicePriceCents } from "@/lib/practice-sample";
+import { jobCosts, priceSiteMap } from "@/lib/job-price";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import type { WorkZone } from "@/components/canvas/types";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -90,6 +91,15 @@ export default async function AccountManagerJourneyPage() {
     proposalHref: "/practice/proposal/client",
     breakdown,
     fee: { kind: "account-manager", name: "Jace", pct: 15 },
+    // A sample drive: twenty minutes out, the supplier on the way, twenty back.
+    costs: jobCosts(
+      priceSiteMap({
+        zones,
+        catalog,
+        travel: { toSiteMinutes: 20, fromSiteMinutes: 20, pickupExtraMinutes: 15, from: "Shop", pickupFrom: "Lehnhoff's", notes: [] },
+        feePct: 15,
+      })
+    ),
     crewRateCents: catalog.crewCostPerHourCents,
     markup:
       m.overheadPerCrewHourCents != null && m.overheadPerCrewHourCents > 0

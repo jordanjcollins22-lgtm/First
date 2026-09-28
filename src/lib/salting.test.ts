@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { costSalting, saltingMaterial, saltingOrder, saltingScope } from "./salting";
-import { quoteOrder } from "./salt";
+import { costSalting, priceSaltingVisits, repriceSaltingScope, saltingMaterial, saltingOrder, saltingScope } from "./salting";
+import { DEFAULT_SALT_SETTINGS, quoteOrder } from "./salt";
+import { margin } from "./gross-profit";
 
 describe("salting off the site map", () => {
   it("costs exactly what the salt page charges for the same order", () => {
@@ -30,5 +31,33 @@ describe("salting off the site map", () => {
     expect(text).toMatch(/3 treatments at \$25 each, \$75 in all, on the sidewalks and walkways/);
     expect(text).toMatch(/Three treatments is the minimum to book/);
     expect(text).toMatch(/paid up front/);
+  });
+});
+
+describe("salting a visit at a time", () => {
+  const settings = { ...DEFAULT_SALT_SETTINGS, bagCostCents: 3200, bagPounds: 50, drivewayPounds: 5, drivewayMinutes: 15, sidewalkMinutes: 5 };
+  const trip = { toSiteMinutes: 20, fromSiteMinutes: 22, crewCostPerHourCents: 2667, feePct: 15 };
+
+  it("charges the visit in whole hours, the drive from the shop and back included", () => {
+    const v = priceSaltingVisits({ surface: "Driveway", treatments: "3" }, settings, trip);
+    // 15 minutes on site and 42 in the truck: an hour.
+    expect(v.onSiteMinutes).toBe(15);
+    expect(v.travelMinutes).toBe(42);
+    expect(v.billedHours).toBe(1);
+    expect(v.labourCents).toBe(2667);
+  });
+
+  it("never leaves under 50% gross profit a visit after the fee", () => {
+    const v = priceSaltingVisits({ surface: "Driveway", treatments: "3" }, settings, trip);
+    expect(margin(v.perVisitCents, v.labourCents, v.materialCents, 15).grossPct).toBeGreaterThanOrEqual(0.5);
+    expect(v.lifted).toBe(true);
+    expect(v.perVisitCents % 100).toBe(0);
+    expect(v.totalCents).toBe(v.perVisitCents * 3);
+  });
+
+  it("puts the new price in its words", () => {
+    const text = saltingScope({ surface: "Driveway", treatments: "3" }, settings);
+    expect(repriceSaltingScope(text, 26_400)).toMatch(/^Pre-paid salting: 3 treatments at \$88 each, \$264 in all, on the driveway\./);
+    expect(saltingScope({ surface: "Driveway", treatments: "3" }, settings, 8800)).toMatch(/at \$88 each, \$264 in all/);
   });
 });

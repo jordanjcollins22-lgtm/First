@@ -44,9 +44,44 @@ describe("the estimate behind a proposal", () => {
     const e = buildEstimate({ zones: [beds, removal], travel, crewCostPerHourCents: 3000, markup });
     expect(e.costs.onSiteLabourCents).toBe(10 * 3000);
     expect(e.costs.materialsCents).toBe(12600);
-    expect(e.costs.travelLabourCents).toBe(Math.round(e.travel.crewHours * 3000));
+    // (25 + 27 + 15) minutes × 2 people.
+    expect(e.costs.travelLabourCents).toBe(Math.round(((67 * 2) / 60) * 3000));
     expect(e.travelPriceCents).toBe(Math.round(e.costs.travelLabourCents * 2 * 1.1));
-    expect(e.priceCents).toBe(70000 + e.travelPriceCents);
+    expect(e.priceCents).toBe(70000 + e.travelPriceCents + (e.roundingPriceCents ?? 0) + (e.floorLiftCents ?? 0));
+  });
+
+  it("charges the clock in whole hours, an hour at the least", () => {
+    const e = buildEstimate({ zones: [beds, removal], travel, crewCostPerHourCents: 3000, markup });
+    // 5 hours on site and 67 minutes in the truck is 6.1 hours: charged as 7, for both people.
+    expect(e.billedHours).toBe(7);
+    expect(10 + (67 * 2) / 60 + e.roundingCrewHours).toBeCloseTo(14, 1);
+    expect(e.costs.directCents).toBe(14 * 3000 + 12600);
+    // A 20-minute job five minutes away is still an hour.
+    const quick = buildEstimate({
+      zones: [{ ...removal, crewHours: 0.33, crewSize: 1, priceCents: 1000 }],
+      travel: { ...travel, toSiteMinutes: 5, fromSiteMinutes: 5 },
+      crewCostPerHourCents: 3000,
+      markup,
+    });
+    expect(quick.billedHours).toBe(1);
+    expect(quick.costs.directCents).toBe(3000);
+  });
+
+  it("never prices under 50% gross profit after the fee", () => {
+    // A rate card that comes out cheap: $100 of work, 15% to the account manager.
+    const e = buildEstimate({ zones: [{ ...removal, priceCents: 10000 }], travel, crewCostPerHourCents: 3000, markup, feePct: 15 });
+    expect(e.grossPct).toBeGreaterThanOrEqual(0.5);
+    expect(e.floorLiftCents).toBeGreaterThan(0);
+    expect(e.feeCents).toBe(Math.round(e.priceCents * 0.15));
+    // One that is already over it is left as it is.
+    const rich = buildEstimate({ zones: [{ ...removal, priceCents: 90000 }], travel, crewCostPerHourCents: 3000, markup, feePct: 15 });
+    expect(rich.floorLiftCents).toBe(0);
+  });
+
+  it("charges nothing for travel when there is no work to go out for", () => {
+    const e = buildEstimate({ zones: [], travel, crewCostPerHourCents: 3000, markup, feePct: 15 });
+    expect(e.priceCents).toBe(0);
+    expect(e.travel.crewHours).toBe(0);
   });
 
   it("says what it had to assume, and what is missing", () => {

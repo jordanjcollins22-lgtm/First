@@ -263,14 +263,22 @@ function EstimateBody({ estimate: e }: { estimate: JobEstimate }) {
         <ul className="flex flex-col gap-0.5 tabular-nums">
           <Row label={`Labour on site (${hours(e.onSiteHours * e.crew)} crew)`} value={money(e.costs.onSiteLabourCents)} />
           <Row label={`Travel (${hours(e.travel.crewHours)} crew)`} value={money(e.costs.travelLabourCents)} />
+          {(e.costs.roundingLabourCents ?? 0) > 0 && (
+            <Row label={`Rounded up to ${e.billedHours} hr${e.billedHours === 1 ? "" : "s"} on the clock`} value={money(e.costs.roundingLabourCents ?? 0)} />
+          )}
           <Row label="Materials" value={money(e.costs.materialsCents)} />
           <Row label="Cost to us" value={money(e.costs.directCents)} strong />
           <Row label="The work, marked up" value={money(e.workPriceCents)} />
           <Row label="Travel, marked up" value={money(e.travelPriceCents)} />
+          {(e.roundingPriceCents ?? 0) > 0 && <Row label="Whole hours, marked up" value={money(e.roundingPriceCents ?? 0)} />}
+          {(e.floorLiftCents ?? 0) > 0 && <Row label="Raised to 50% gross profit" value={money(e.floorLiftCents ?? 0)} />}
           <Row label="Price" value={money(e.priceCents)} strong />
+          {e.feePct != null && e.feePct > 0 && <Row label={`Account manager or affiliate (${e.feePct}%)`} value={money(e.feeCents ?? 0)} />}
+          {e.grossCents != null && <Row label={`Gross profit (${Math.round((e.grossPct ?? 0) * 100)}%)`} value={money(e.grossCents)} strong />}
         </ul>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Crew rate {money(e.crewCostPerHourCents)} an hour. Travel is shared across the areas, so they add up to the price.
+          Crew rate {money(e.crewCostPerHourCents)} an hour, charged in whole hours from leaving the shop to getting back. Travel is
+          shared across the areas, so they add up to the price. Salting is priced a visit at a time and is not in these figures.
         </p>
       </Block>
 

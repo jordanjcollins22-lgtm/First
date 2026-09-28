@@ -19,7 +19,7 @@ type Admin = ReturnType<typeof createAdminClient>;
  */
 export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string): Promise<void> {
   try {
-    const { data: proposal } = await admin.from("job_proposals").select("job_id, organization_id").eq("id", proposalId).maybeSingle();
+    const { data: proposal } = await admin.from("job_proposals").select("job_id, organization_id, scope_snapshot").eq("id", proposalId).maybeSingle();
     if (!proposal?.job_id) return;
 
     const [{ data: design }, { data: existing }] = await Promise.all([
@@ -31,6 +31,7 @@ export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string
       isSalting(z.service?.typeId)
     );
     if (zones.length === 0) return;
+    const snapshot = ((proposal as { scope_snapshot?: unknown }).scope_snapshot ?? []) as { zoneName?: string; priceCents?: number | null }[];
 
     const [{ data: org }, { data: job }] = await Promise.all([
       admin.from("organizations").select("*").eq("id", proposal.organization_id).maybeSingle(),
@@ -46,6 +47,10 @@ export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string
       zones.map((zone) => {
         const order = saltingOrder(zone.service?.values);
         const quote = quoteOrder(order, settings);
+        // What the client paid for it on the proposal, when the proposal
+        // priced it over the salt page (travel, whole hours, the floor).
+        const sold = snapshot.find((s) => s.zoneName === zone.name)?.priceCents;
+        const amount = sold != null && sold > 0 ? sold : quote.totalCents;
         return {
           organization_id: proposal.organization_id,
           name: property?.customer?.name ?? "Client",
@@ -58,8 +63,8 @@ export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string
           pet_friendly: quote.petFriendly,
           treatments: quote.treatments,
           treatments_used: 0,
-          per_treatment_cents: quote.perTreatmentCents,
-          amount_cents: quote.totalCents,
+          per_treatment_cents: Math.round(amount / Math.max(1, quote.treatments)),
+          amount_cents: amount,
           status: "paid",
           paid_at: now,
           customer_id: property?.customer?.id ?? null,

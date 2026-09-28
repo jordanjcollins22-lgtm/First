@@ -29,16 +29,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
-import {
-  computeProposalTotal,
-  formatMaterialQuantity,
-  formatMeasurements,
-  zoneCrewHours,
-  zoneMaterialLineItems,
-  zoneMeasurements,
-} from "@/lib/proposal-pricing";
-import { buildEstimate, withTravelShare, type JobEstimate } from "@/lib/job-estimate";
-import { isSalting } from "@/lib/salting";
+import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
+import { type JobEstimate } from "@/lib/job-estimate";
+import { priceSiteMap } from "@/lib/job-price";
+import { feesForJobs } from "@/lib/data/job-fee";
+import { repriceSaltingScope } from "@/lib/salting";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
@@ -134,9 +129,9 @@ export async function generateProposal(
   );
 
   // Each area's own price, then the estimate around them: hours, crew, the
-  // drive from the shop every day and to the supplier, the materials. Travel
-  // is priced in and shared across the areas, so they still add up.
-  const own = zones.map((zone) => computeProposalTotal([zone], catalog));
+  // drive from the shop every day and to the supplier, the materials, in
+  // whole hours and never under the gross profit floor after the fee.
+  // Travel and the rest are shared across the areas, so they still add up.
   const supabaseForEstimate = await createClient();
   const { data: place } = await supabaseForEstimate
     .from("jobs")
@@ -144,49 +139,29 @@ export async function generateProposal(
     .eq("id", jobId)
     .maybeSingle();
   const point = (place as unknown as { property: { lat: number | null; lng: number | null } | null } | null)?.property;
-  const travel = await travelForProperty(
-    supabaseForEstimate,
-    organizationId,
-    point?.lat != null && point?.lng != null ? { lat: point.lat, lng: point.lng } : null
-  ).catch((err: unknown) => {
-    console.error("[proposal] travel failed:", jobId, err);
-    return { toSiteMinutes: null, fromSiteMinutes: null, pickupExtraMinutes: null, from: null, pickupFrom: null, notes: ["Drive time could not be worked out."] };
-  });
-  // Salting is priced per treatment with the trip already in it, so it takes
-  // no share of the drive and stays out of the crew estimate: its price is
-  // exactly what the salt page would charge for the same order.
-  const salting = zones.map((zone) => isSalting(zone.service?.typeId));
-  const workIndexes = zones.map((_, index) => index).filter((index) => !salting[index]);
-  const estimate: JobEstimate = buildEstimate({
-    zones: workIndexes.map((index) => {
-      const zone = zones[index];
-      const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
-      const time = zoneCrewHours(zone, catalog);
+  const [travel, fees] = await Promise.all([
+    travelForProperty(supabaseForEstimate, organizationId, point?.lat != null && point?.lng != null ? { lat: point.lat, lng: point.lng } : null).catch(
+      (err: unknown) => {
+        console.error("[proposal] travel failed:", jobId, err);
+        return { toSiteMinutes: null, fromSiteMinutes: null, pickupExtraMinutes: null, from: null, pickupFrom: null, notes: ["Drive time could not be worked out."] };
+      }
+    ),
+    feesForJobs(supabaseForEstimate, organizationId, [jobId]),
+  ]);
+  const priced = priceSiteMap({
+    zones,
+    catalog,
+    travel,
+    feePct: fees.get(jobId)?.pct ?? 0,
+    labelFor: (zone, index) => {
       const measured = zoneMeasurements(zone);
-      return {
-        name: zone.name,
-        service: serviceLabelFor(scopeInputs[index].def, scopeInputs[index].pricing),
-        sizeLabel: measured ? formatMeasurements(measured, zone) : null,
-        crewHours: time.hours,
-        crewSize: pricingRow?.crew_size ?? 1,
-        missingTiming: time.missingTiming,
-        materials: zoneMaterialLineItems(zone, measured?.areaSqFt ?? 0, catalog).map((item) => ({
-          name: item.material,
-          quantityLabel: formatMaterialQuantity(item),
-          costCents: item.totalCost == null ? null : Math.round(item.totalCost * 100),
-        })),
-        priceCents: Math.round(own[index].total * 100),
-      };
-    }),
-    // Nothing but salting: nobody drives out for it as a job.
-    travel: workIndexes.length > 0 ? travel : { toSiteMinutes: null, fromSiteMinutes: null, pickupExtraMinutes: null, from: null, pickupFrom: null, notes: [] },
-    crewCostPerHourCents: catalog.crewCostPerHourCents,
-    markup: catalog.markup,
+      return { service: serviceLabelFor(scopeInputs[index].def, scopeInputs[index].pricing), sizeLabel: measured ? formatMeasurements(measured, zone) : null };
+    },
   });
-  const workShares = withTravelShare(workIndexes.map((index) => Math.round(own[index].total * 100)), estimate.travelPriceCents);
-  const areaPrices = zones.map((_, index) => (salting[index] ? Math.round(own[index].total * 100) : workShares[workIndexes.indexOf(index)]));
-  const saltingCents = zones.reduce((sum, _, index) => sum + (salting[index] ? Math.round(own[index].total * 100) : 0), 0);
-  const total = (estimate.priceCents + saltingCents) / 100;
+  const estimate: JobEstimate = priced.estimate;
+  const areaPrices = priced.areaPricesCents;
+  const total = priced.totalCents / 100;
+  const own = zones.map((_, index) => ({ hasMissingTiming: priced.hasMissingTiming[index], hasUnknownMaterialCost: priced.hasUnknownMaterialCost[index] }));
 
   const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone, index) => {
     const def = scopeInputs[index].def;
@@ -199,7 +174,8 @@ export async function generateProposal(
     return {
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricing),
-      scopeText: approved.get(zone.name) ?? scopeTexts[index],
+      // Salting says its price in its words: at the price it came to.
+      scopeText: approved.get(zone.name) ?? (priced.salting[index] ? repriceSaltingScope(scopeTexts[index], areaPrices[index]) : scopeTexts[index]),
       photoPaths: zone.service?.photos ?? [],
       points: zone.points,
       color: zone.color,
