@@ -135,6 +135,10 @@ export function SiteNav({
             {userEmail && (
               <form
                 action={logout}
+                // Pages kept on the phone for no signal are this person's; the next one to sign in shouldn't see them.
+                onSubmit={() => {
+                  if ("caches" in window) void caches.keys().then((names) => Promise.all(names.filter((n) => n.startsWith("field-")).map((n) => caches.delete(n))));
+                }}
                 className="mt-1 flex flex-col gap-1 border-t border-border px-4 pb-2 pt-2 sm:px-3"
               >
                 <span className="truncate text-xs text-muted-foreground">{userEmail}</span>

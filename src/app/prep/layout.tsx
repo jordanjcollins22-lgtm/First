@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "../globals.css";
+import { OutboxRunner } from "@/components/offline/outbox-runner";
 
 /**
  * The pre-evaluation form, outside the app shell.
@@ -27,7 +28,10 @@ export const viewport = {
 export default function PrepLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-background text-foreground">{children}</body>
+      <body className="min-h-full bg-background text-foreground">
+        {children}
+        <OutboxRunner />
+      </body>
     </html>
   );
 }

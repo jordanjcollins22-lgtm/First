@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import { ArrowLeft, Camera, CheckCircle2, ChevronDown, ImagePlus, Loader2, MessageCircleQuestion, X } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, ChevronDown, CloudOff, ImagePlus, Loader2, MessageCircleQuestion, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,9 +31,11 @@ import {
   PHOTO_AREAS,
   PHOTOS_PER_AREA,
 } from "@/lib/evaluation-intake";
-import { finishIntakePhoto, removeIntakePhoto, saveIntakeProgress, startIntakePhoto, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
+import { removeIntakePhoto, saveIntakeProgress } from "@/lib/actions/evaluation-intake-actions";
 import { isHeic, shrinkImage } from "@/lib/shrink-image";
-import { createClient } from "@/lib/supabase/client";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
+import { removeItem } from "@/lib/offline/outbox";
+import { useOnSent, useWaiting } from "@/components/offline/waiting-photos";
 import { LotPicker } from "@/components/intake/lot-picker";
 import { InstantPriceCard } from "@/components/intake/instant-price-card";
 import { YourPlan } from "@/components/intake/your-plan";
@@ -158,6 +160,15 @@ export function IntakeForm({
   const [answers, setAnswers] = useState<IntakeAnswers>(initial);
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
   const [done, setDone] = useState<string | null>(submittedAt);
+  const [sentLater, setSentLater] = useState(false);
+  // A photo kept with no signal joins the others once it is sent.
+  useOnSent(`intake:${token}`, (item, result) => {
+    if (item.kind === "intake-submit") setSentLater(false);
+    if (item.kind !== "intake-photo") return;
+    const path = String(result.path);
+    setPhotos((all) => (all.some((p) => p.path === path) ? all : [...all, { path, url: String(result.url) }]));
+    setAnswers((a) => ({ ...a, photo_areas: { ...a.photo_areas, [path]: String(result.area) } }));
+  });
   const [editing, setEditing] = useState(!submittedAt);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -208,9 +219,15 @@ export function IntakeForm({
   function send() {
     setError(null);
     start(async () => {
-      const result = demo ? { ok: true as const, submittedAt: new Date().toISOString() } : await submitEvaluationIntake({ token, answers, together });
-      if (!result.ok) return setError(result.error);
-      setDone(result.submittedAt);
+      if (demo) {
+        setDone(new Date().toISOString());
+      } else {
+        // With no signal the form is kept on the phone and sent by itself later.
+        const sent = await sendOrKeep({ id: `intake-submit:${token}`, kind: "intake-submit", scope: `intake:${token}`, label: "The pre-evaluation form", blob: null, type: "", args: { token, answers, together } });
+        if (sent.status === "refused") return setError(sent.message);
+        setSentLater(sent.status === "kept");
+        setDone(sent.status === "sent" ? String(sent.result.submittedAt) : new Date().toISOString());
+      }
       setEditing(false);
       window.scrollTo({ top: 0 });
     });
@@ -223,6 +240,7 @@ export function IntakeForm({
           <CheckCircle2 className="h-10 w-10 text-primary" />
           <p className="text-lg font-semibold">Saved</p>
           <p className="text-sm text-muted-foreground">We can get on with the walk.</p>
+          {sentLater && <p className="text-sm text-muted-foreground">There&apos;s no signal, so it&apos;s saved on this phone and sends by itself when there is.</p>}
           {backTo && (
             <a href={backTo} className="mt-1 inline-flex h-12 w-full items-center justify-center rounded-md bg-primary font-semibold text-primary-foreground">
               Back to the visit: the site map is set up
@@ -235,7 +253,8 @@ export function IntakeForm({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 text-center">
           <CheckCircle2 className="h-10 w-10 text-primary" />
-          <p className="text-lg font-semibold">We&apos;ve received your pre-evaluation form</p>
+          <p className="text-lg font-semibold">{sentLater ? "Your pre-evaluation form is saved" : "We\u2019ve received your pre-evaluation form"}</p>
+          {sentLater && <p className="text-sm text-muted-foreground">There&apos;s no signal right now, so it&apos;s saved on this phone. It sends by itself as soon as there is.</p>}
           <p className="text-sm text-muted-foreground">Thank you. We&apos;ll go through your answers and photos before your evaluation.</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 text-left text-sm">
@@ -884,7 +903,9 @@ function Photos({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const here = photos.filter((p) => (photoAreas[p.path] ?? "whole") === area);
-  const room = PHOTOS_PER_AREA - here.length;
+  // Taken with no signal: on the phone, and sent by itself later.
+  const waiting = useWaiting(`intake:${token}`).filter((item) => item.kind === "intake-photo" && item.args.area === area);
+  const room = PHOTOS_PER_AREA - here.length - waiting.length;
   const place = PHOTO_AREAS.find((a) => a.value === area) ?? PHOTO_AREAS[PHOTO_AREAS.length - 1];
 
   async function add(files: FileList | null) {
@@ -904,28 +925,19 @@ function Photos({
           setError("This phone saved that photo in a format we can't open. Take it with the Take a photo button instead.");
           break;
         }
-        // Straight to storage, so a big photo never hits the server's size limit.
         // Some phones hand over a photo with no type at all; its name says what it is.
         const type = small.type || (/\.png$/i.test(small.name) ? "image/png" : /\.webp$/i.test(small.name) ? "image/webp" : "image/jpeg");
-        const slot = await startIntakePhoto({ token, area, type, size: small.size });
-        if (!slot.ok) {
-          setError(slot.error);
+        // Straight to storage, so a big photo never hits the server's size
+        // limit; with no signal, kept on the phone and sent by itself later.
+        const sent = await sendOrKeep({ kind: "intake-photo", scope: `intake:${token}`, label: `Photo of ${place.ask}`, blob: small, type, args: { token, area } });
+        if (sent.status === "refused") {
+          setError(sent.message);
           break;
         }
-        const { error: uploadError } = await createClient()
-          .storage.from("job-photos")
-          .uploadToSignedUrl(slot.path, slot.uploadToken, small, { contentType: type });
-        if (uploadError) {
-          setError("Couldn't upload that photo. Check your signal and try again.");
-          break;
-        }
-        const result = await finishIntakePhoto({ token, area, path: slot.path });
-        if (!result.ok) {
-          setError(result.error);
-          break;
-        }
-        setPhotos((all) => [...all, { path: result.path, url: result.url }]);
-        onArea(result.path, area);
+        if (sent.status === "kept") continue;
+        const path = String(sent.result.path);
+        setPhotos((all) => [...all, { path, url: String(sent.result.url) }]);
+        onArea(path, area);
       }
     } catch {
       setError("Couldn't add that photo. Check your signal and try again.");
@@ -958,8 +970,28 @@ function Photos({
       <p className="-mt-1 text-sm text-muted-foreground">
         Take or upload up to {PHOTOS_PER_AREA} photos of {place.ask}. It lets us price it properly, often before we arrive.
       </p>
-      {(here.length > 0 || busy) && (
+      {(here.length > 0 || waiting.length > 0 || busy) && (
         <div className="grid grid-cols-3 gap-2">
+          {waiting.map((item) => (
+            <div key={item.id} className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+              {item.preview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.preview} alt="" className="h-full w-full object-cover opacity-80" />
+              )}
+              <span className="absolute inset-x-1 bottom-1 flex items-center justify-center gap-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white">
+                <CloudOff className="h-3 w-3" /> Waiting for signal
+              </span>
+              <button
+                type="button"
+                aria-label="Remove this photo"
+                disabled={disabled || busy}
+                onClick={() => void removeItem(item.id)}
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
           {here.map((p) => (
             <div key={p.path} className="relative aspect-square overflow-hidden rounded-lg bg-muted">
               {/* Signed links to a private bucket, so a plain img rather than the image optimiser. */}

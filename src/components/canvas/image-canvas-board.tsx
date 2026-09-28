@@ -50,6 +50,7 @@ import {
 } from "@/lib/canvas-marks";
 import { loadDesign, saveDesign, clearDesign } from "@/lib/canvas-storage";
 import { createClient } from "@/lib/supabase/client";
+import { isNoSignal, keepForLater, localPreview, removeIfPresent } from "@/lib/offline/outbox";
 import { saveCanvasDesign } from "@/lib/actions/canvas-design-actions";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { SatelliteAddressSearch } from "./satellite-address-search";
@@ -186,7 +187,8 @@ function zoneServiceSummary(service: ZoneServiceData, catalog: CanvasCatalog): s
 
 function ZonePhotoThumbnail({ path }: { path: string }) {
   const supabase = createClient();
-  const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
+  // A photo still on the phone, taken with no signal, shows from there until it uploads.
+  const url = localPreview(path) ?? supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />;
 }
@@ -856,7 +858,7 @@ export function ImageCanvasBoard({
               imageDirtyRef.current = false;
             }
           }
-          await saveCanvasDesign(jobId, {
+          const design = {
             address,
             imagePath,
             imageX: image?.x ?? CANVAS_WIDTH / 2,
@@ -873,8 +875,19 @@ export function ImageCanvasBoard({
             houseOutline,
             marks: withoutEmpty(marks),
             zones,
-          });
-          setLastSavedAt(Date.now());
+          };
+          try {
+            await saveCanvasDesign(jobId, design);
+            setLastSavedAt(Date.now());
+            // Saved for real, so an older copy kept with no signal must not be sent over it.
+            void removeIfPresent(`site-map:${jobId}`);
+          } catch (error) {
+            // No signal: the map as it is now is kept on the phone, one copy
+            // per job, and saved by itself when there is signal.
+            if (isNoSignal(error)) {
+              await keepForLater({ id: `site-map:${jobId}`, kind: "site-map", scope: `site-map:${jobId}`, label: "The site map", blob: null, type: "", args: { jobId, design } });
+            }
+          }
         } catch {
           // Best-effort autosave; the design is still held in memory this session.
         }

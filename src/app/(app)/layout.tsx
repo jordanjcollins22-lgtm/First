@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { OutboxRunner } from "@/components/offline/outbox-runner";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganization } from "@/lib/data/organizations";
@@ -134,6 +135,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* pb keeps the last row of any page clear of the iPhone home bar. */}
         <main className="flex-1 pb-[env(safe-area-inset-bottom)]">{children}</main>
         {roles.includes("admin") && <AdminChatWidget />}
+        <OutboxRunner />
       </body>
     </html>
   );

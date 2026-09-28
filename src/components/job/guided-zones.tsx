@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { AreaTodo } from "@/components/job/area-todo";
 import { createClient } from "@/lib/supabase/client";
-import { attachJobPhoto } from "@/lib/actions/job-photo-actions";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
+import { useOnSent, useWaiting, WaitingPhotos } from "@/components/offline/waiting-photos";
 import { angleLine, zoneProgress } from "@/lib/guided-zones";
 import type { WorkOrderZone } from "@/lib/work-order";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
@@ -29,58 +30,74 @@ export function GuidedZones({ jobId, zones, photos }: { jobId: string; zones: Wo
   const [, start] = useTransition();
   const fileInput = useRef<HTMLInputElement | null>(null);
 
+  const scope = `job:${jobId}`;
+  // An after photo kept on the phone with no signal counts: the crew moves on, and it uploads later.
+  const waiting = useWaiting(scope).filter((w) => w.kind === "job-photo" && w.args.kind === "after");
+  const waitingZone = (w: (typeof waiting)[number]) => (w.args.zone as { id: string } | null)?.id ?? null;
   const progress = zoneProgress(
     zones.map((z) => ({ id: z.id, name: z.name })),
-    items.map((p) => ({ zoneId: p.zoneId, kind: p.kind }))
+    [...items.map((p) => ({ zoneId: p.zoneId, kind: p.kind })), ...waiting.map((w) => ({ zoneId: waitingZone(w), kind: "after" as const }))]
   );
   const current = progress.current ? zones.find((z) => z.id === progress.current!.id) ?? null : null;
   const number = current ? zones.findIndex((z) => z.id === current.id) + 1 : 0;
   const afterHere = current ? items.filter((p) => p.kind === "after" && p.zoneId === current.id) : [];
 
+  function addPhoto(id: string, path: string, zone: { id: string; name: string }, url: string | null) {
+    setItems((all) =>
+      all.some((p) => p.id === id)
+        ? all
+        : [
+            ...all,
+            {
+              id,
+              job_id: jobId,
+              organization_id: "",
+              path,
+              kind: "after",
+              zone_id: zone.id,
+              zoneId: zone.id,
+              zone_name: zone.name,
+              caption: null,
+              uploaded_by: null,
+              created_at: new Date().toISOString(),
+              url,
+              uploaderName: null,
+            },
+          ]
+    );
+  }
+
+  // A photo kept with no signal joins the rest once it is sent.
+  useOnSent(scope, (item, result) => {
+    const zone = item.args.zone as { id: string; name: string } | null;
+    if (item.kind !== "job-photo" || item.args.kind !== "after" || !zone) return;
+    addPhoto(String(result.id), String(result.path), zone, item.blob ? URL.createObjectURL(item.blob) : null);
+  });
+
   async function upload(files: FileList | null) {
     if (!files || files.length === 0 || !current) return;
     setError(null);
     setUploading(true);
-    const supabase = createClient();
     try {
       for (const file of Array.from(files)) {
         const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
         const path = `${jobId}/${crypto.randomUUID()}.${extension}`;
-        const { error: uploadError } = await supabase.storage.from("job-photos").upload(path, file, { contentType: file.type || undefined });
-        if (uploadError) {
-          setError("Couldn't upload that photo. Check your signal and try again.");
+        const zone = { id: current.id, name: current.name };
+        const sent = await sendOrKeep({ kind: "job-photo", scope, label: `After photo · ${current.name}`, blob: file, type: file.type, args: { jobId, path, kind: "after", zone, areaDone: false } });
+        if (sent.status === "refused") {
+          setError(sent.message);
           continue;
         }
-        const result = await attachJobPhoto(jobId, path, "after", null, { id: current.id, name: current.name });
-        if (!result.ok) {
-          setError(result.message);
-          continue;
-        }
-        const { data: signed } = await supabase.storage.from("job-photos").createSignedUrl(path, 60 * 60);
-        setItems((all) => [
-          ...all,
-          {
-            id: result.id,
-            job_id: jobId,
-            organization_id: "",
-            path,
-            kind: "after",
-            zone_id: current.id,
-            zoneId: current.id,
-            zone_name: current.name,
-            caption: null,
-            uploaded_by: null,
-            created_at: new Date().toISOString(),
-            url: signed?.signedUrl ?? null,
-            uploaderName: null,
-          },
-        ]);
+        if (sent.status === "kept") continue;
+        const { data: signed } = await createClient().storage.from("job-photos").createSignedUrl(path, 60 * 60);
+        addPhoto(String(sent.result.id), path, zone, signed?.signedUrl ?? null);
       }
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
     }
   }
+
 
   if (zones.length === 0) {
     return <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">No areas have been marked on this job yet. Check with Jordan before you start.</p>;
@@ -146,6 +163,9 @@ export function GuidedZones({ jobId, zones, photos }: { jobId: string; zones: Wo
               )}
             </div>
           )}
+          <div className="mt-2 empty:hidden">
+            <WaitingPhotos scope={scope} filter={(w) => w.kind === "job-photo" && w.args.kind === "after" && (w.args.zone as { id: string } | null)?.id === current.id} />
+          </div>
           <input ref={fileInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => upload(e.target.files)} />
           <Button type="button" variant={afterHere.length > 0 ? "outline" : "default"} className="mt-2 h-12 w-full text-base" disabled={uploading} onClick={() => fileInput.current?.click()}>
             {uploading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Camera className="mr-2 h-5 w-5" />}

@@ -20,7 +20,6 @@ import { createClient } from "@/lib/supabase/client";
 import { adoptBeforesForJob } from "@/lib/actions/social-actions";
 import { unwaivePhotoStage, waivePhotoStage } from "@/lib/actions/photo-waiver-actions";
 import {
-  attachJobPhoto,
   completeJob,
   deleteJobPhoto,
   reopenCompletedJob,
@@ -35,6 +34,8 @@ import {
   type ZoneRef,
 } from "@/lib/job-lifecycle";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
+import { useOnSent, WaitingPhotos } from "@/components/offline/waiting-photos";
 import { REQUIRED_STAGES } from "@/types/domain";
 import type { JobPhotoKind, JobStatus } from "@/types/domain";
 
@@ -95,6 +96,7 @@ export function CompletionPanel({
   completionNotes: string | null;
 }) {
   const [items, setItems] = useState(photos);
+  const scope = `job:${jobId}`;
   const [notes, setNotes] = useState(completionNotes ?? "");
   const router = useRouter();
   const [uploading, setUploading] = useState(0);
@@ -132,7 +134,6 @@ export function CompletionPanel({
     setError(null);
     setMessage(null);
 
-    const supabase = createClient();
     const chosen = Array.from(files);
     setUploading((n) => n + chosen.length);
 
@@ -141,48 +142,61 @@ export function CompletionPanel({
         const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
         // First path segment is the job id — storage checks access against it.
         const path = `${jobId}/${crypto.randomUUID()}.${extension}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("job-photos")
-          .upload(path, file, { contentType: file.type || undefined });
-        if (uploadError) {
-          setError("Couldn't upload that photo, check your signal and try again.");
+        // With no signal it is kept on the phone and sent by itself later.
+        const sent = await sendOrKeep({
+          kind: "job-photo",
+          scope,
+          label: `${PHOTO_KIND_LABELS[kind]} photo${zone ? ` · ${zone.name}` : ""}`,
+          blob: file,
+          type: file.type,
+          args: { jobId, path, kind, zone, areaDone: false },
+        });
+        if (sent.status === "refused") {
+          setError(sent.message);
           continue;
         }
-
-        const result = await attachJobPhoto(jobId, path, kind, null, zone);
-        if (!result.ok) {
-          setError(result.message);
+        if (sent.status === "kept") {
+          setMessage("No signal: saved on this phone. It uploads by itself when there's signal.");
           continue;
         }
-
-        const { data: signed } = await supabase.storage
-          .from("job-photos")
-          .createSignedUrl(path, 60 * 60);
-
-        setItems((current) => [
-          ...current,
-          {
-            id: result.id,
-            job_id: jobId,
-            organization_id: "",
-            path,
-            kind,
-            zone_id: zone?.id ?? null,
-            zoneId: zone?.id ?? null,
-            zone_name: zone?.name ?? null,
-            caption: null,
-            uploaded_by: null,
-            created_at: new Date().toISOString(),
-            url: signed?.signedUrl ?? null,
-            uploaderName: null,
-          },
-        ]);
+        const { data: signed } = await createClient().storage.from("job-photos").createSignedUrl(path, 60 * 60);
+        addPhoto(String(sent.result.id), path, kind, zone, signed?.signedUrl ?? null);
       } finally {
         setUploading((n) => n - 1);
       }
     }
   }
+
+  function addPhoto(id: string, path: string, kind: JobPhotoKind, zone: ZoneRef | null, url: string | null) {
+    setItems((current) =>
+      current.some((p) => p.id === id)
+        ? current
+        : [
+            ...current,
+            {
+              id,
+              job_id: jobId,
+              organization_id: "",
+              path,
+              kind,
+              zone_id: zone?.id ?? null,
+              zoneId: zone?.id ?? null,
+              zone_name: zone?.name ?? null,
+              caption: null,
+              uploaded_by: null,
+              created_at: new Date().toISOString(),
+              url,
+              uploaderName: null,
+            },
+          ]
+    );
+  }
+
+  // A photo kept with no signal joins the rest once it is sent.
+  useOnSent(scope, (item, result) => {
+    if (item.kind !== "job-photo") return;
+    addPhoto(String(result.id), String(result.path), item.args.kind as JobPhotoKind, (item.args.zone as ZoneRef | null) ?? null, item.blob ? URL.createObjectURL(item.blob) : null);
+  });
 
   const jobWide = items.filter((p) => p.zoneId == null);
 
@@ -204,6 +218,9 @@ export function CompletionPanel({
             {doneZones} of {zones.length} zones documented
           </span>
         )}
+      </div>
+      <div className="mb-3 empty:hidden">
+        <WaitingPhotos scope={scope} filter={(item) => item.kind === "job-photo" && !item.args.areaDone} />
       </div>
 
       {evaluationBeforesAvailable > 0 && (

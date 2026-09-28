@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "../globals.css";
+import { OutboxRunner } from "@/components/offline/outbox-runner";
 
 /**
  * A subcontractor's crew sheet, outside the app shell: opened from a text
@@ -25,7 +26,10 @@ export const viewport = {
 export default function CrewLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-background text-foreground">{children}</body>
+      <body className="min-h-full bg-background text-foreground">
+        {children}
+        <OutboxRunner />
+      </body>
     </html>
   );
 }

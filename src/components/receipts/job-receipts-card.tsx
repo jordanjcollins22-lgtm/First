@@ -6,8 +6,8 @@ import { Loader2, Receipt } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
-import { addJobReceipt } from "@/lib/actions/job-receipt-actions";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
+import { WaitingPhotos } from "@/components/offline/waiting-photos";
 import { parseDollars, receiptsTotal, sayDollars } from "@/lib/job-receipts";
 import type { JobReceipt } from "@/lib/data/job-receipts";
 
@@ -59,13 +59,21 @@ export function JobReceiptsCard({
       setOpen(false);
       return;
     }
+    const cents = amount.trim() ? parseDollars(amount) : null;
+    if (amount.trim() && cents == null) return setError("The amount should look like 12.50.");
     start(async () => {
       const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${jobId}/receipt-${crypto.randomUUID()}.${extension}`;
-      const { error: uploadError } = await createClient().storage.from("job-photos").upload(path, file, { contentType: file.type || undefined });
-      if (uploadError) return setError("Couldn't upload the receipt. Check your signal and try again.");
-      const result = await addJobReceipt(jobId, path, what, amount);
-      if (!result.ok) return setError(result.message);
+      // With no signal it is kept on the phone and sent by itself later.
+      const sent = await sendOrKeep({
+        kind: "receipt",
+        scope: `job:${jobId}`,
+        label: `Receipt · ${what.trim()}${cents != null ? ` · ${sayDollars(cents)}` : ""}`,
+        blob: file,
+        type: file.type,
+        args: { jobId, path, what: what.trim(), amount },
+      });
+      if (sent.status === "refused") return setError(sent.message);
       setFile(null);
       setWhat("");
       setAmount("");
@@ -84,6 +92,10 @@ export function JobReceiptsCard({
           <p className="text-xs text-muted-foreground">Materials are ordered ahead. Had to buy something? Add the receipt here.</p>
         </div>
         {receipts.length > 0 && total > 0 && <p className="shrink-0 text-sm font-semibold">{sayDollars(total)}</p>}
+      </div>
+
+      <div className="empty:hidden">
+        <WaitingPhotos scope={`job:${jobId}`} filter={(item) => item.kind === "receipt"} />
       </div>
 
       {receipts.length > 0 && (

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, KeyRound, Loader2, MapPin, Navigation, Package, Phone, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
-import { subAttachPhoto, subFinish, subPhotoSlot, subStep } from "@/lib/actions/sub-crew-actions";
+import { subFinish, subStep } from "@/lib/actions/sub-crew-actions";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
+import { useWaiting, WaitingPhotos } from "@/components/offline/waiting-photos";
 import { sayTime, subStage, type AreaState, type SubStage } from "@/lib/sub-crew";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { THUMBNAIL } from "@/lib/storage-image-url";
@@ -49,7 +50,9 @@ export function SubCrewSheetView({
   const [finishPressed, setFinishPressed] = useState(false);
   const stage = forcedStage ?? subStage(sheet.progress);
   const areas = forcedAreas ?? sheet.areaStates;
-  const done = (id: string) => areas[id] === "done";
+  // An after photo kept on the phone with no signal counts: they move on, and it uploads later.
+  const waiting = useWaiting(`sub:${sheet.token}`).filter((item) => item.kind === "sub-photo");
+  const done = (id: string) => areas[id] === "done" || waiting.some((item) => item.args.zoneId === id);
   // Once one after photo is in, they are finishing up, whatever the phone remembers.
   const finishing = forcedFinishing || finishPressed || sheet.zones.some((z) => done(z.id));
   const nextAfter = sheet.zones.find((z) => !done(z.id)) ?? null;
@@ -181,7 +184,17 @@ export function SubCrewSheetView({
         />
       )}
 
-      {stage === "on_site" && finishing && !nextAfter && (
+      {stage === "on_site" && finishing && !nextAfter && waiting.length > 0 && (
+        <section className="flex flex-col gap-2 rounded-2xl border-2 border-slate-400 bg-card p-4">
+          <p className="text-sm font-semibold">Every after photo is taken.</p>
+          <WaitingPhotos scope={`sub:${sheet.token}`} filter={(item) => item.kind === "sub-photo"} />
+          <p className="text-sm text-muted-foreground">
+            There&apos;s no signal here. Once they upload, {managerFirst} is asked to come and walk it, by itself. Nothing else to press.
+          </p>
+        </section>
+      )}
+
+      {stage === "on_site" && finishing && !nextAfter && waiting.length === 0 && (
         <section className="flex flex-col gap-2 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
           <p className="text-sm">Every after photo is in.</p>
           <Button type="button" className="h-14 text-base font-semibold" disabled={pending} onClick={finish}>
@@ -305,17 +318,18 @@ function AfterPhoto({
     onError(null);
     setUploading(true);
     try {
-      const slot = await subPhotoSlot(token);
-      if (!slot.ok) return onError(slot.message);
-      const sent = await createClient().storage.from("job-photos").uploadToSignedUrl(slot.path, slot.uploadToken, file, { contentType: file.type || "image/jpeg" });
-      if (sent.error) return onError("Couldn't upload that photo. Check your signal and try again.");
-      const saved = await subAttachPhoto(token, zone.id, slot.path);
-      if (!saved.ok) return onError(saved.message);
-      if (last) {
-        const finished = await subFinish(token);
-        if (!finished.ok) onError(finished.message);
-      }
-      router.refresh();
+      // With no signal it is kept on the phone, the next area comes up, and
+      // it is sent by itself later; the last one asks for the walkthrough then.
+      const sent = await sendOrKeep({
+        kind: "sub-photo",
+        scope: `sub:${token}`,
+        label: `After photo · ${zone.name}`,
+        blob: file,
+        type: file.type || "image/jpeg",
+        args: { token, zoneId: zone.id, last },
+      });
+      if (sent.status === "refused") return onError(sent.message);
+      if (sent.status === "sent") router.refresh();
     } finally {
       setUploading(false);
       if (input.current) input.current.value = "";

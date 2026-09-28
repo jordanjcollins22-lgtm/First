@@ -32,6 +32,8 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
 import { proposeServiceType } from "@/lib/actions/service-pricing-actions";
 import { createClient } from "@/lib/supabase/client";
+import { localPreview } from "@/lib/offline/outbox";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { cn } from "@/lib/utils";
 import { AddInventoryItemForm, type CreatedInventoryItem } from "@/components/inventory/add-inventory-item-form";
 import {
@@ -55,7 +57,8 @@ function PhotoThumb({
   onRemove: () => void;
 }) {
   const supabase = createClient();
-  const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
+  // A photo still on the phone, taken with no signal, shows from there until it uploads.
+  const url = localPreview(path) ?? supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
   return (
     <div className="relative h-16 w-16 shrink-0">
       <button type="button" onClick={onMark} className="block h-16 w-16">
@@ -91,7 +94,8 @@ function PhotoMarkerEditor({
   onDone: (markers: Point[]) => void;
 }) {
   const supabase = createClient();
-  const url = supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
+  // A photo still on the phone, taken with no signal, shows from there until it uploads.
+  const url = localPreview(path) ?? supabase.storage.from("canvas-images").getPublicUrl(path).data.publicUrl;
   const [markers, setMarkers] = useState<Point[]>(initialMarkers);
 
   function handleTap(e: ReactMouseEvent<HTMLImageElement>) {
@@ -568,17 +572,21 @@ export function ZoneServiceDialog({
     setPhotoError(null);
     setPhotoUploading(true);
     try {
-      const supabase = createClient();
       const uploaded: string[] = [];
+      let kept = 0;
       for (const file of files) {
         // A pasted screenshot has no filename at all, so the extension comes
         // from what the clipboard says it is. See lib/pasted-images.ts.
         const extension = extensionForImage(file.type, file.name);
         const path = `${jobId}/zone-photos/${crypto.randomUUID()}.${extension}`;
-        const { error } = await supabase.storage.from("canvas-images").upload(path, file);
-        if (error) throw error;
+        // With no signal it is kept on the phone under the same path, which
+        // the area keeps now; it uploads by itself later.
+        const sent = await sendOrKeep({ kind: "zone-photo", scope: `site-map:${jobId}`, label: "Area photo on the site map", blob: file, type: file.type, args: { path } });
+        if (sent.status === "refused") throw new Error(sent.message);
+        if (sent.status === "kept") kept++;
         uploaded.push(path);
       }
+      if (kept > 0) setPhotoError(`No signal: ${kept === 1 ? "that photo is" : `${kept} photos are`} saved on this phone and upload by themselves when there's signal.`);
       setPhotos((prev) => [...prev, ...uploaded]);
       setMarkPromptQueue((prev) => [...prev, ...uploaded]);
     } catch {

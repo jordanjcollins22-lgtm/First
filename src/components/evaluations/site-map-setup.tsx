@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
-import { saveVisitPlan } from "@/lib/actions/evaluation-visit-actions";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { PHOTO_AREAS } from "@/lib/evaluation-intake";
 import { addedItem, areaLabel, suggestionSeeds, zoneSeeds, type PlanItem } from "@/lib/evaluation-visit";
 import type { LotData } from "@/lib/lot-map";
@@ -73,6 +73,12 @@ export function SiteMapSetup({
       setSendNote("Preview: this saves the map and sends it to the account manager.");
       return;
     }
+    // Handing it over needs the server; the map itself is already kept on the phone.
+    const noSignal = "No signal. The site map is saved on this phone. Tap Walkthrough complete again when you have signal.";
+    if (!navigator.onLine) {
+      setSendNote(noSignal);
+      return;
+    }
     setSending(true);
     const ok = await (board.current?.submit() ?? Promise.resolve(false));
     setSending(false);
@@ -80,7 +86,7 @@ export function SiteMapSetup({
       setDone(true);
       router.refresh();
     } else {
-      setSendNote("It didn't go through. Check the note on the map above and try again.");
+      setSendNote(navigator.onLine ? "It didn't go through. Check the note on the map above and try again." : noSignal);
     }
   }
 
@@ -95,8 +101,9 @@ export function SiteMapSetup({
     setError(null);
     if (preview) return;
     start(async () => {
-      const result = await saveVisitPlan(jobId, next);
-      if (!result.ok) setError(result.message);
+      // With no signal, kept on the phone (the latest only) and saved by itself later.
+      const sent = await sendOrKeep({ id: `visit-plan:${jobId}`, kind: "visit-plan", scope: `site-map:${jobId}`, label: "What you ticked and crossed", blob: null, type: "", args: { jobId, items: next } });
+      if (sent.status === "refused") setError(sent.message);
     });
   }
 

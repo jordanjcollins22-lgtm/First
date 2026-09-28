@@ -9,9 +9,9 @@ import { ZonePhotos } from "@/components/job/marked-photo";
 import { AreaTodo } from "@/components/job/area-todo";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { THUMBNAIL } from "@/lib/storage-image-url";
-import { createClient } from "@/lib/supabase/client";
-import { attachJobPhoto } from "@/lib/actions/job-photo-actions";
-import { areaPhotoTaken, leaveArea, startArea, tickAreaStep } from "@/lib/actions/area-work-actions";
+import { leaveArea, startArea, tickAreaStep } from "@/lib/actions/area-work-actions";
+import { sendOrKeep } from "@/lib/offline/outbox-send";
+import { useWaiting, WaitingPhotos } from "@/components/offline/waiting-photos";
 import { canTick, type AreaState, type Phase } from "@/lib/area-work";
 import type { AreaBoardData } from "@/lib/data/area-board";
 import type { WorkOrderZone } from "@/lib/work-order";
@@ -422,6 +422,9 @@ function PhotoTaker({
 }) {
   const input = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const scope = `job:${jobId}`;
+  // With no signal the photo is kept on the phone; the area moves on once it is sent.
+  const waiting = useWaiting(scope).filter((item) => (item.args.zone as { id?: string } | null)?.id === zone.id && item.args.kind === kind);
 
   async function upload(files: FileList | null) {
     const file = files?.[0];
@@ -429,19 +432,31 @@ function PhotoTaker({
     onError(null);
     setUploading(true);
     try {
-      const supabase = createClient();
       const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${jobId}/${crypto.randomUUID()}.${extension}`;
-      const { error } = await supabase.storage.from("job-photos").upload(path, file, { contentType: file.type || undefined });
-      if (error) return onError("Couldn't upload that photo. Check your signal and try again.");
-      const result = await attachJobPhoto(jobId, path, kind, null, { id: zone.id, name: zone.name });
-      if (!result.ok) return onError(result.message);
-      await areaPhotoTaken(jobId, zone.id);
-      onDone();
+      const sent = await sendOrKeep({
+        kind: "job-photo",
+        scope,
+        label: `${kind === "during" ? "Prep photo" : "After photo"} · ${zone.name}`,
+        blob: file,
+        type: file.type,
+        args: { jobId, path: `${jobId}/${crypto.randomUUID()}.${extension}`, kind, zone: { id: zone.id, name: zone.name }, areaDone: true },
+      });
+      if (sent.status === "refused") return onError(sent.message);
+      if (sent.status === "sent") onDone();
     } finally {
       setUploading(false);
       if (input.current) input.current.value = "";
     }
+  }
+
+  if (waiting.length > 0) {
+    return (
+      <div className="sticky bottom-2 z-10 flex flex-col gap-2 rounded-lg border border-dashed border-slate-400 bg-card p-2.5 shadow-lg">
+        <p className="text-sm font-semibold">{kind === "during" ? "Prep photo taken" : "After photo taken"}, no signal</p>
+        <WaitingPhotos scope={scope} filter={(item) => (item.args.zone as { id?: string } | null)?.id === zone.id && item.args.kind === kind} />
+        <p className="text-xs text-muted-foreground">This area moves on as soon as the photo uploads. Don&apos;t take it again.</p>
+      </div>
+    );
   }
 
   return (
