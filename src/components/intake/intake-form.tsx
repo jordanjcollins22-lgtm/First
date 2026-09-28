@@ -31,8 +31,9 @@ import {
   PHOTO_AREAS,
   PHOTOS_PER_AREA,
 } from "@/lib/evaluation-intake";
-import { addIntakePhoto, removeIntakePhoto, saveIntakeProgress, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
-import { shrinkImage } from "@/lib/shrink-image";
+import { finishIntakePhoto, removeIntakePhoto, saveIntakeProgress, startIntakePhoto, submitEvaluationIntake } from "@/lib/actions/evaluation-intake-actions";
+import { isHeic, shrinkImage } from "@/lib/shrink-image";
+import { createClient } from "@/lib/supabase/client";
 import { LotPicker } from "@/components/intake/lot-picker";
 import { InstantPriceCard } from "@/components/intake/instant-price-card";
 import { YourPlan } from "@/components/intake/your-plan";
@@ -898,12 +899,27 @@ function Photos({
           onArea(url, area);
           continue;
         }
-        const small = await shrinkImage(file, 1600, 0.8);
-        const form = new FormData();
-        form.set("token", token);
-        form.set("area", area);
-        form.set("file", small);
-        const result = await addIntakePhoto(form);
+        const small = await shrinkImage(file, 1600, 0.8).catch(() => file);
+        if (isHeic(small)) {
+          setError("This phone saved that photo in a format we can't open. Take it with the Take a photo button instead.");
+          break;
+        }
+        // Straight to storage, so a big photo never hits the server's size limit.
+        // Some phones hand over a photo with no type at all; its name says what it is.
+        const type = small.type || (/\.png$/i.test(small.name) ? "image/png" : /\.webp$/i.test(small.name) ? "image/webp" : "image/jpeg");
+        const slot = await startIntakePhoto({ token, area, type, size: small.size });
+        if (!slot.ok) {
+          setError(slot.error);
+          break;
+        }
+        const { error: uploadError } = await createClient()
+          .storage.from("job-photos")
+          .uploadToSignedUrl(slot.path, slot.uploadToken, small, { contentType: type });
+        if (uploadError) {
+          setError("Couldn't upload that photo. Check your signal and try again.");
+          break;
+        }
+        const result = await finishIntakePhoto({ token, area, path: slot.path });
         if (!result.ok) {
           setError(result.error);
           break;
@@ -911,6 +927,8 @@ function Photos({
         setPhotos((all) => [...all, { path: result.path, url: result.url }]);
         onArea(result.path, area);
       }
+    } catch {
+      setError("Couldn't add that photo. Check your signal and try again.");
     } finally {
       setBusy(false);
       if (input.current) input.current.value = "";
