@@ -26,7 +26,7 @@ import { IntakeForm } from "@/components/intake/intake-form";
 /**
  * The evaluator's side of a visit, every page in order, with a sample
  * client: how it lands on their calendar, their day, the buttons, what the
- * client sent, the site map already set up from it, and, when the client
+ * client sent, the site map with it laid over as suggestions, and, when the client
  * never filled it out, the pre-eval done together first. The same
  * screens they use, in preview: nothing is recorded, saved or sent.
  */
@@ -226,7 +226,7 @@ export default async function EvaluatorJourneyPage() {
     {
       key: "site-map",
       title: "The site map",
-      what: "Just the site map, set up from their pre-eval. Walk it, add anything more and the details, then Walkthrough complete.",
+      what: "The site map with their pre-eval laid over it. Tick or cross each thing they asked for, fill in the details, add anything more, then Walkthrough complete.",
       screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
     },
   ];

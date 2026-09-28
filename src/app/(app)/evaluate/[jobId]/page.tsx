@@ -109,7 +109,7 @@ export default async function EvaluationVisitPage({
       {!onSite ? (
         <p className="rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
           {sent
-            ? "Tap I've arrived when you get there. The site map is ready, set up from their pre-eval."
+            ? "Tap I've arrived when you get there. Their pre-eval will be on the site map for you to tick or cross."
             : "They haven't filled out the pre-eval. Tap I've arrived when you get there and go through it with them first."}
         </p>
       ) : formFirst && intake ? (

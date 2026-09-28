@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Plus, Undo2, X } from "lucide-react";
+import { Check, CheckCircle2, Loader2, Plus, Undo2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ImageCanvasBoard } from "@/components/canvas/image-canvas-board";
@@ -10,21 +10,21 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
 import { saveVisitPlan } from "@/lib/actions/evaluation-visit-actions";
 import { PHOTO_AREAS } from "@/lib/evaluation-intake";
-import { addedItem, areaLabel, zoneSeeds, type PlanItem } from "@/lib/evaluation-visit";
+import { addedItem, areaLabel, suggestionSeeds, zoneSeeds, type PlanItem } from "@/lib/evaluation-visit";
 import type { LotData } from "@/lib/lot-map";
 import { cn } from "@/lib/utils";
 
 /**
- * The site map on site, already set up from the client's pre-evaluation
- * form: every piece of work they asked for is on the map when it opens,
- * named, with its service, over the part of the yard it is in.
+ * The site map on site, with the client's pre-evaluation form laid over it
+ * as suggestions. What they asked for shows dashed over the part of the
+ * yard it is in, each with a tick and a cross; it is not on the site map
+ * until the evaluator ticks it, and then its details open to fill in.
  *
- * Under the map, what is on it, each with Remove (or Put back), and Add for
- * anything they did not ask for: pick where, then what. Deleting one on
- * the map itself counts as Remove, so it is not put back. Then the
- * evaluator measures each area, adds photos and submits, on the map they
- * already know, and finishes with Walkthrough complete, which hands the
- * map to the account manager to price and send.
+ * Under the map, the same suggestions as a list, what is on the map with
+ * Remove, what was crossed out with Put back, and Add for anything they did
+ * not ask for. Drawing an area by hand works as always. Walkthrough
+ * complete waits until every suggestion is ticked or crossed, then hands
+ * the map to the account manager to price and send.
  */
 export function SiteMapSetup({
   jobId,
@@ -85,7 +85,9 @@ export function SiteMapSetup({
   }
 
   const seeds = useMemo(() => zoneSeeds(plan), [plan]);
-  const onMap = plan.filter((i) => i.keep !== false);
+  const suggested = useMemo(() => suggestionSeeds(plan), [plan]);
+  const waiting = plan.filter((i) => i.keep === null);
+  const onMap = plan.filter((i) => i.keep === true);
   const off = plan.filter((i) => i.keep === false);
 
   function save(next: PlanItem[]) {
@@ -112,9 +114,9 @@ export function SiteMapSetup({
       <div>
         <h2 className="text-lg font-semibold">The site map</h2>
         <p className="text-sm text-muted-foreground">
-          {plan.length > 0
-            ? "Already set up from their pre-eval. Tap each area to measure it and add photos, then Walkthrough complete."
-            : "Draw each area, measure it and add photos, then Walkthrough complete."}
+          {waiting.length > 0
+            ? "What they asked for on their pre-eval is on the map, dashed. Tap ✓ to add it to the site map and fill in the details, or ✗ if it isn't being done. Draw or add anything else they want."
+            : "Tap each area to measure it and add photos. Draw or add anything else they want, then Walkthrough complete."}
         </p>
       </div>
 
@@ -131,12 +133,46 @@ export function SiteMapSetup({
         evaluatorName={evaluatorName}
         seedZones={seeds}
         onSeedRemoved={(id) => setKeep(id, false)}
+        suggestions={suggested}
+        onSuggestion={(id, accept) => setKeep(id, accept)}
         controlRef={board}
       />
 
+      {waiting.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-amber-500/50 bg-amber-50/60 p-4">
+          <p className="text-sm font-semibold">From their pre-eval, still to decide ({waiting.length})</p>
+          {waiting.map((item) => (
+            <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-background/80 p-3">
+              <p className="min-w-0 text-sm">
+                <span className="font-medium">{item.label}</span>
+                <span className="block text-xs text-muted-foreground">{areaLabel(item.area)}</span>
+              </p>
+              <div className="flex shrink-0 gap-1.5">
+                <button
+                  type="button"
+                  aria-label={`Add ${item.label} to the site map`}
+                  onClick={() => setKeep(item.id, true)}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-white"
+                >
+                  <Check className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Not doing ${item.label}`}
+                  onClick={() => setKeep(item.id, false)}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
-        <p className="text-sm font-semibold">On the map ({onMap.length})</p>
-        {onMap.length === 0 && <p className="text-sm text-muted-foreground">Nothing yet. Add what they want below.</p>}
+        <p className="text-sm font-semibold">On the site map ({onMap.length})</p>
+        {onMap.length === 0 && <p className="text-sm text-muted-foreground">Nothing yet. Tick what they asked for, draw an area, or add one below.</p>}
         {onMap.map((item) => (
           <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
             <div className="min-w-0">
@@ -157,7 +193,7 @@ export function SiteMapSetup({
 
         {off.length > 0 && (
           <>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Taken off</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Not doing</p>
             {off.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 p-3">
                 <p className="min-w-0 text-sm text-muted-foreground line-through">
@@ -239,7 +275,12 @@ export function SiteMapSetup({
             <CheckCircle2 className="h-4 w-4" /> Walkthrough complete. The site map is with the account manager.
           </p>
         )}
-        <Button type="button" className="h-14 text-base font-semibold" disabled={sending} onClick={completeWalkthrough}>
+        {waiting.length > 0 && (
+          <p className="text-center text-sm font-medium text-amber-800">
+            Tick or cross {waiting.length === 1 ? "the last thing" : `the ${waiting.length} things`} from their pre-eval first.
+          </p>
+        )}
+        <Button type="button" className="h-14 text-base font-semibold" disabled={sending || waiting.length > 0} onClick={completeWalkthrough}>
           {sending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}
           {done ? "Send the changes to the account manager" : "Walkthrough complete"}
         </Button>

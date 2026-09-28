@@ -16,7 +16,7 @@ export function StartEvaluation({ href, areas, preview = false }: { href: string
       </Link>
       <p className="text-center text-sm text-muted-foreground">
         {areas > 0
-          ? `Opens the site map, set up from their pre-eval with ${areas} ${areas === 1 ? "area" : "areas"} on it. Add or change any of them there.`
+          ? `Opens the site map with their pre-eval laid over it: ${areas} ${areas === 1 ? "thing" : "things"} they asked for. Tick or cross each one there, and add anything else.`
           : "Opens the site map to draw each area."}
       </p>
     </section>

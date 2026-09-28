@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -10,7 +11,7 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RefreshCw, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, ZoomIn } from "lucide-react";
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RefreshCw, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, X, ZoomIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,6 +111,55 @@ function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasEleme
   };
 }
 
+/** Where each part of the yard goes on the board when the county has no lot, as fractions across and down. */
+const FALLBACK_SPOT: Record<string, [number, number]> = {
+  front: [0.5, 0.78],
+  back: [0.5, 0.22],
+  sides: [0.16, 0.5],
+  foundation: [0.5, 0.5],
+  whole: [0.84, 0.5],
+};
+
+type BoardPlacement = { x: number; y: number; scale: number; rotation: number; elementWidth: number };
+
+/**
+ * Where a piece of work from the pre-eval sits on the board: over the part
+ * of the yard it is in, when the county has the lot, shrunk a step for
+ * each one before it in that part so they nest and each can be seen; with
+ * no lot, a square near the middle, to be redrawn.
+ */
+function seedPoints(
+  area: string,
+  nth: number,
+  slot: number,
+  regions: ReturnType<typeof groundRegions> | null,
+  imageGeo: ImageGeo | null,
+  onBoard: BoardPlacement
+): Point[] {
+  const shrink = Math.max(0.4, 1 - nth * 0.15);
+  const rings = regions?.[area as keyof typeof regions];
+  if (rings && rings.length > 0 && imageGeo) {
+    const ring = rings.reduce((a, b) => (b.length > a.length ? b : a));
+    const raw = ring.map((p) => groundToBoard(p, imageGeo, onBoard));
+    const cx = raw.reduce((sum, p) => sum + p.x, 0) / raw.length;
+    const cy = raw.reduce((sum, p) => sum + p.y, 0) / raw.length;
+    return raw.map((p) => ({ x: cx + (p.x - cx) * shrink, y: cy + (p.y - cy) * shrink }));
+  }
+  // No lot to go by: each part of the yard in a spot of its own, the front
+  // at the bottom of the board where the front is marked, so they don't
+  // pile up in the middle.
+  const half = 60 * shrink;
+  const spot = FALLBACK_SPOT[area];
+  const cx = spot ? CANVAS_WIDTH * spot[0] : CANVAS_WIDTH / 2 + (slot % 4) * 40 - 60;
+  const cy = spot ? CANVAS_HEIGHT * spot[1] : CANVAS_HEIGHT / 2 + Math.floor(slot / 4) * 40 - 40;
+  return [
+    { x: cx - half, y: cy - half },
+    { x: cx + half, y: cy - half },
+    { x: cx + half, y: cy + half },
+    { x: cx - half, y: cy + half },
+  ];
+}
+
 function loadImageElement(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
@@ -171,6 +221,14 @@ interface ImageCanvasBoardProps {
   /** Told when a zone made from the set-up is deleted on the map. */
   onSeedRemoved?: (id: string) => void;
   /**
+   * The client's pre-eval, laid over the map as suggestions, separate from
+   * the site map itself: each is shown dashed over the part of the yard it
+   * is in, with a tick and a cross. They are not areas until ticked.
+   */
+  suggestions?: ZoneSeed[];
+  /** Told when a suggestion is ticked (true) or crossed out (false). */
+  onSuggestion?: (id: string, accept: boolean) => void;
+  /**
    * For the evaluator's visit, where the submit is a big button of its own
    * under the map: the board's own Submit is hidden, and this is handed a
    * way to save the map now and submit it.
@@ -191,6 +249,8 @@ export function ImageCanvasBoard({
   seedZones,
   demoLot = null,
   onSeedRemoved,
+  suggestions,
+  onSuggestion,
   controlRef,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -255,6 +315,43 @@ export function ImageCanvasBoard({
   const [evalConfirm, setEvalConfirm] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sideToolbarOpen, setSideToolbarOpen] = useState(true);
+
+  // The pre-eval's suggestions, placed where they would go as areas, once
+  // the photo, the county and the way the house faces are all settled.
+  const suggestionShapes = useMemo(() => {
+    if (!suggestions || suggestions.length === 0 || !image || !countyChecked || !orientConfirmed) return [];
+    const regions = countyLot && imageGeo ? groundRegions(countyLot) : null;
+    const onBoard = { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width };
+    const inArea = new Map<string, number>();
+    return suggestions.map((seed, i) => {
+      const nth = inArea.get(seed.area) ?? 0;
+      inArea.set(seed.area, nth + 1);
+      const points = seedPoints(seed.area, nth, i, regions, imageGeo, onBoard);
+      return {
+        seed,
+        points,
+        cx: points.reduce((sum, p) => sum + p.x, 0) / points.length,
+        cy: points.reduce((sum, p) => sum + p.y, 0) / points.length,
+      };
+    });
+  }, [suggestions, image, countyChecked, orientConfirmed, countyLot, imageGeo]);
+  // One column of ticks and crosses per part of the yard, in the middle of it.
+  const suggestionGroups = useMemo(() => {
+    const groups = new Map<string, { area: string; location: string; cx: number; cy: number; shapes: (typeof suggestionShapes[number] & { label: string })[] }>();
+    for (const shape of suggestionShapes) {
+      const group = groups.get(shape.seed.area) ?? { area: shape.seed.area, location: shape.seed.location, cx: shape.cx, cy: shape.cy, shapes: [] };
+      const prefix = `${shape.seed.location} · `;
+      group.shapes.push({ ...shape, label: shape.seed.name.startsWith(prefix) ? shape.seed.name.slice(prefix.length) : shape.seed.name });
+      groups.set(shape.seed.area, group);
+    }
+    return [...groups.values()];
+  }, [suggestionShapes]);
+  const suggestionShapesRef = useRef(suggestionShapes);
+  useEffect(() => {
+    suggestionShapesRef.current = suggestionShapes;
+  }, [suggestionShapes]);
+  /** A suggestion just ticked, whose details open once it is an area. */
+  const openWhenReadyRef = useRef<string | null>(null);
 
   // Lock background scroll while fullscreen, and let Escape back out of it.
   useEffect(() => {
@@ -398,6 +495,25 @@ export function ImageCanvasBoard({
       ctx.setLineDash([]);
     }
 
+    // The pre-eval's suggestions: dashed and faint, under the real areas,
+    // so it is plain they are not on the site map yet.
+    for (const shape of suggestionShapes) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(shape.points[0].x, shape.points[0].y);
+      for (const point of shape.points.slice(1)) ctx.lineTo(point.x, point.y);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(245, 158, 11, 0.12)";
+      ctx.fill();
+      ctx.setLineDash([8, 6]);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#f59e0b";
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     for (const zone of zones) {
       if (zone.points.length < 2) continue;
       ctx.beginPath();
@@ -440,7 +556,17 @@ export function ImageCanvasBoard({
         ctx.fill();
       }
     }
-  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget, countyLot, imageGeo]);
+  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget, countyLot, imageGeo, suggestionShapes]);
+
+  // A ticked suggestion opens its details as soon as it is an area, so the
+  // evaluator goes straight on to what the client wants done there.
+  useEffect(() => {
+    const id = openWhenReadyRef.current;
+    if (!id || !zones.some((zone) => zone.id === id)) return;
+    openWhenReadyRef.current = null;
+    const timer = setTimeout(() => setServiceDialogZoneId(id), 0);
+    return () => clearTimeout(timer);
+  }, [zones]);
 
   useEffect(() => {
     draw();
@@ -795,29 +921,12 @@ export function ImageCanvasBoard({
         const inArea = new Map<string, number>();
         const made = missing.map((seed, i): WorkZone => {
           // Several pieces of work in one part of the yard sit one inside the
-          // other, so each can be seen and tapped.
+          // other, so each can be seen and tapped. A ticked suggestion lands
+          // exactly where it was shown.
+          const shown = suggestionShapesRef.current.find((shape) => shape.seed.id === seed.id);
           const nth = inArea.get(seed.area) ?? kept.filter((zone) => zone.location === seed.location).length;
           inArea.set(seed.area, nth + 1);
-          const shrink = Math.max(0.4, 1 - nth * 0.15);
-          let points: Point[] = [];
-          const rings = regions?.[seed.area as keyof typeof regions];
-          if (rings && rings.length > 0 && imageGeo) {
-            const ring = rings.reduce((a, b) => (b.length > a.length ? b : a));
-            const raw = ring.map((p) => groundToBoard(p, imageGeo, onBoard));
-            const cx = raw.reduce((sum, p) => sum + p.x, 0) / raw.length;
-            const cy = raw.reduce((sum, p) => sum + p.y, 0) / raw.length;
-            points = raw.map((p) => ({ x: cx + (p.x - cx) * shrink, y: cy + (p.y - cy) * shrink }));
-          } else {
-            const half = 60 * shrink;
-            const cx = CANVAS_WIDTH / 2 + ((prev.length + i) % 4) * 40 - 60;
-            const cy = CANVAS_HEIGHT / 2 + Math.floor((prev.length + i) / 4) * 40 - 40;
-            points = [
-              { x: cx - half, y: cy - half },
-              { x: cx + half, y: cy - half },
-              { x: cx + half, y: cy + half },
-              { x: cx - half, y: cy + half },
-            ];
-          }
+          const points = shown ? shown.points : seedPoints(seed.area, nth, prev.length + i, regions, imageGeo, onBoard);
           return {
             id: seed.id,
             name: seed.name,
@@ -1844,6 +1953,7 @@ export function ImageCanvasBoard({
         )}
       >
         <div className={isFullscreen ? "h-full overflow-auto" : "max-h-[70vh] overflow-auto"}>
+          <div className="relative">
           <canvas
             ref={canvasRef}
             width={CANVAS_WIDTH}
@@ -1857,6 +1967,45 @@ export function ImageCanvasBoard({
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
           />
+          {suggestionGroups.map((group) => (
+            <div
+              key={group.area}
+              className={cn(
+                "absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5",
+                tool !== "move" && "pointer-events-none opacity-40"
+              )}
+              style={{ left: `${(group.cx / CANVAS_WIDTH) * 100}%`, top: `${(group.cy / CANVAS_HEIGHT) * 100}%` }}
+            >
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white shadow">
+                Asked for: {group.location}
+              </span>
+              {group.shapes.map((shape) => (
+                <div key={shape.seed.id} className="flex items-center gap-1 rounded-full border border-amber-500 bg-white/95 py-0.5 pl-2.5 pr-0.5 shadow-md">
+                  <span className="max-w-36 truncate text-xs font-semibold text-slate-900">{shape.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`Add ${shape.seed.name} to the site map`}
+                    onClick={() => {
+                      openWhenReadyRef.current = shape.seed.id;
+                      onSuggestion?.(shape.seed.id, true);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white"
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Not doing ${shape.seed.name}`}
+                    onClick={() => onSuggestion?.(shape.seed.id, false)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-800"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ))}
+          </div>
         </div>
 
         {!image && (

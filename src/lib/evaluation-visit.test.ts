@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cleanAnswers } from "./evaluation-intake";
-import { addedItem, groupVisits, isSeededZone, mergePlan, readPlan, seedPlan, visitStage, zoneSeeds } from "./evaluation-visit";
+import { addedItem, groupVisits, isSeededZone, mergePlan, readPlan, seedPlan, suggestionSeeds, visitStage, zoneSeeds } from "./evaluation-visit";
 
 describe("where a visit is up to", () => {
   it("goes booked, on the way, arrived, submitted", () => {
@@ -28,8 +28,8 @@ describe("the site map from the client's form", () => {
       "back New plants",
       "whole Soft washing",
     ]);
-    // All of it on the map from the start.
-    expect(plan[0]).toEqual(expect.objectContaining({ typeId: "landscape-bed", values: { material: "Mulch" }, keep: true }));
+    // Every one a suggestion until the evaluator ticks or crosses it.
+    expect(plan[0]).toEqual(expect.objectContaining({ typeId: "landscape-bed", values: { material: "Mulch" }, keep: null }));
   });
 
   it("keeps what was taken off, off, and brings in anything new on the form", () => {
@@ -37,13 +37,14 @@ describe("the site map from the client's form", () => {
     const later = seedPlan(cleanAnswers({ ...answers, services: ["beds", "washing", "cleanup"] }));
     const merged = mergePlan(first, later);
     expect(merged.slice(0, first.length)).toEqual(first);
-    expect(merged.slice(first.length).map((i) => `${i.label} ${i.keep}`)).toEqual(["Cleanup true", "Cleanup true"]);
+    expect(merged.slice(first.length).map((i) => `${i.label} ${i.keep}`)).toEqual(["Cleanup null", "Cleanup null"]);
   });
 
-  it("turns what is on the map, and anything added, into named zones", () => {
+  it("turns what was ticked, and anything added, into named zones, and leaves the rest as suggestions", () => {
     const plan = [...seedPlan(answers).map((i) => ({ ...i, keep: i.label === "New plants" ? false : i.id.startsWith("seed-front") ? null : true })), addedItem("sides", "trimming", "Trimming", "abc")];
     const seeds = zoneSeeds(plan);
-    expect(seeds.map((s) => s.name)).toEqual(["Front yard · Beds: mulch", "Back yard · Beds: mulch", "The property · Soft washing", "Side yards · Trimming"]);
+    expect(seeds.map((s) => s.name)).toEqual(["Back yard · Beds: mulch", "The property · Soft washing", "Side yards · Trimming"]);
+    expect(suggestionSeeds(plan).map((s) => s.name)).toEqual(["Front yard · Beds: mulch"]);
     expect(seeds.every((s) => isSeededZone(s.id))).toBe(true);
     expect(isSeededZone("0f8a3c2e-hand-drawn")).toBe(false);
   });

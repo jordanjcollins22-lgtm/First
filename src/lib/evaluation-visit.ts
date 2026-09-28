@@ -2,12 +2,12 @@
  * The evaluator's visit, from their own screen: where each visit is up to,
  * and the site map set-up they go through on site.
  *
- * The site map starts from the client's pre-evaluation form: each service
- * they asked for, in each part of the yard they picked, is one piece of
- * work, and each is on the map from the start, named and with its service
- * set. On site the evaluator takes off what is not being done and adds
- * anything the client did not ask for by picking a part of the yard and a
- * service, then measures and submits.
+ * The client's pre-evaluation form is a recommendation laid over the site
+ * map, not the site map itself: each service they asked for, in each part
+ * of the yard they picked, shows on the map as a suggestion. The evaluator
+ * ticks it, and it becomes an area on the site map with its service set,
+ * or crosses it out. Anything the client did not ask for is drawn or added
+ * as usual. Then they measure and submit.
  *
  * Pure, so the rules are tested without a database.
  */
@@ -27,7 +27,10 @@ export interface PlanItem {
   values?: Record<string, string>;
   /** What it is, e.g. "Beds: mulch". */
   label: string;
-  /** On the map (true), or taken off it (false). Null, from older saves, counts as on it. */
+  /**
+   * Ticked, so an area on the site map (true); crossed out (false); or
+   * still a suggestion from their pre-eval, waiting for the evaluator (null).
+   */
   keep: boolean | null;
   /** Added by the evaluator on site, not asked for on the form. */
   added?: boolean;
@@ -122,7 +125,8 @@ export function seedPlan(answers: IntakeAnswers, findByName: (pattern: RegExp) =
           typeId: as.typeId,
           ...(as.values ? { values: as.values } : {}),
           label: as.label,
-          keep: true,
+          // A suggestion until the evaluator ticks or crosses it.
+          keep: null,
         });
       }
     }
@@ -173,10 +177,18 @@ export interface ZoneSeed {
   values: Record<string, string>;
 }
 
-/** The pieces still on the map, as zones. */
+/** The pieces ticked or added, as areas on the site map. */
 export function zoneSeeds(items: PlanItem[]): ZoneSeed[] {
+  return asSeeds(items.filter((i) => i.keep === true));
+}
+
+/** Their pre-eval's suggestions not yet ticked or crossed out, laid over the map. */
+export function suggestionSeeds(items: PlanItem[]): ZoneSeed[] {
+  return asSeeds(items.filter((i) => i.keep === null));
+}
+
+function asSeeds(items: PlanItem[]): ZoneSeed[] {
   return items
-    .filter((i) => i.keep !== false)
     .map((i) => ({
       id: i.id,
       name: `${areaLabel(i.area)} · ${i.label}`,
