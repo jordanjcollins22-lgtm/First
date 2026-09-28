@@ -106,7 +106,7 @@ export function JourneyPages({
           screen each, all one size, scrolled inside. */}
       <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((step, i) => (
-          <li key={step.key} className="flex flex-col gap-1.5">
+          <li key={step.key} id={step.key} className="flex scroll-mt-20 flex-col gap-1.5 target:[&>div]:ring-2 target:[&>div]:ring-primary">
             <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Page {i + 1} of {shown.length}
               {step.missed ? (

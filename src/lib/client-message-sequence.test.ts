@@ -39,7 +39,11 @@ describe("the client's messages, in order", () => {
     expect(booked[1].key).toBe("evaluation-booked");
     const eveningBefore = all.filter((m) => m.key === "evaluation_reminder--18-sms" || m.key === "evaluation-day_before");
     expect(new Set(eveningBefore.map((m) => m.moment)).size).toBe(1);
-    expect(all.map((m) => m.number)).toContain("2.1");
+    // Numbered to the step on The system: the booking's reminders carry on from 1.2.
+    expect(all.find((m) => m.key === "evaluation-day_before")?.number).toMatch(/^1\.\d$/);
+    expect(all.find((m) => m.key === "evaluation-after")?.square).toBe("evaluation");
+    expect(all.find((m) => m.key === "proposal-ready")?.square).toBe("pricing");
+    expect(all.find((m) => m.key === "proposal-ready")?.number).toBe("4.1");
   });
 
   it("runs evaluation, proposal, job, invoice", () => {

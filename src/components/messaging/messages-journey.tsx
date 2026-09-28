@@ -49,8 +49,8 @@ export function MessagesJourney({ messages, businessName, fromEmail }: { message
         <h1 className="text-xl font-bold">Emails and texts to the client</h1>
         <p className="text-sm text-muted-foreground">
           Everything a client gets from us without anybody typing it, in the order they get it: from booking the evaluation, through the
-          visit, the proposal and the job, to the invoice. Each moment is numbered, and its text comes before its email: 1.1 is the text when
-          they book, 1.2 the email. Each is shown as it arrives, with your wording and a sample client. Tap an email to read it full size. {on} email{on === 1 ? "" : "s"} and {texts} text{texts === 1 ? "" : "s"} are switched on. Nothing here sends.
+          visit, the proposal and the job, to the invoice. Each is numbered to its step on The system, the text before the email: 1.1 is the
+          text when they book, 1.2 the email. Each is shown as it arrives, with your wording and a sample client. Tap an email to read it full size. {on} email{on === 1 ? "" : "s"} and {texts} text{texts === 1 ? "" : "s"} are switched on. Nothing here sends.
         </p>
         <Link href="/admin/reminders" className="text-sm font-medium text-primary hover:underline">
           Change the wording, the timing, or what&apos;s switched on

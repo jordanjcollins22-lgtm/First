@@ -23,7 +23,6 @@ describe("the system map", () => {
       "pricing",
       "crew-sheet",
       "client-approval",
-      "client-messages",
     ]);
   });
 

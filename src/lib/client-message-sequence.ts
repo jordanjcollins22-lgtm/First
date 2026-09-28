@@ -13,6 +13,7 @@ import { composeReminder, fitSms } from "@/lib/client-message-templates";
 import { describeOffset, KIND_LABEL, type ReminderKind, type ReminderRule } from "@/lib/client-reminders";
 import { proposalReadyEmail } from "@/lib/proposal-ready-email";
 import { beforeAfterEmail } from "@/lib/project-closeout";
+import { SYSTEM_FLOW } from "@/lib/system-flow";
 
 export interface SequenceMessage {
   key: string;
@@ -20,6 +21,8 @@ export interface SequenceMessage {
   number: string;
   /** The moment it belongs to, e.g. "Evaluation booked". */
   moment: string;
+  /** The step on The system it belongs to, e.g. "booking". */
+  square: string;
   /** Where in the client's journey it lands. */
   stage: "evaluation" | "proposal" | "job" | "invoice";
   title: string;
@@ -78,7 +81,32 @@ function sayWhen(kind: ReminderKind, hours: number): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-type Draft = Omit<SequenceMessage, "number" | "moment">;
+type Draft = Omit<SequenceMessage, "number" | "moment" | "square">;
+
+/**
+ * The step on The system each moment belongs to. The booking owns
+ * everything it sets off up to the visit; the visit its thank you; the
+ * proposal its follow-ups; the crew sheet the evening before the job; the
+ * finish the before and after and the invoice.
+ */
+function squareFor(momentKey: string): string {
+  if (/^evaluation-after/.test(momentKey)) return "evaluation";
+  if (/^(evaluation|evaluation_confirmed|evaluation_reminder)/.test(momentKey)) return "booking";
+  if (/^(proposal)/.test(momentKey)) return "pricing";
+  if (/^job_start/.test(momentKey)) return "crew-sheet";
+  return "client-approval";
+}
+
+/** Each step's number on The system: marketing is not numbered, the line after it is. */
+export function systemStepNumbers(): Map<string, number> {
+  const numbers = new Map<string, number>();
+  let n = 0;
+  for (const stage of SYSTEM_FLOW) {
+    if (stage.key === "marketing") continue;
+    for (const square of stage.squares) numbers.set(square.key, ++n);
+  }
+  return numbers;
+}
 
 /** What each evaluation email's moment is called on the list. */
 const MOMENT_TITLE: Record<string, string> = {
@@ -113,9 +141,9 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
   // invoice reminder: 0 the booking, 1000 + hours around the visit, 3000 +
   // hours after the proposal, 5000 + hours around the job, 6000 the finish,
   // 7000 + hours after the invoice.
-  const moments = new Map<string, { title: string; at: number; items: Draft[] }>();
+  const moments = new Map<string, { title: string; at: number; square: string; items: Draft[] }>();
   const at = (key: string, title: string, place: number) => {
-    if (!moments.has(key)) moments.set(key, { title, at: place, items: [] });
+    if (!moments.has(key)) moments.set(key, { title, at: place, square: squareFor(key), items: [] });
     return moments.get(key)!;
   };
 
@@ -149,7 +177,7 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
     for (const hours of rule.offsetsHours) {
       // Where this lands. The booking confirmation and the evening-before
       // reminder share their moment with the evaluation email for it.
-      let moment: { title: string; at: number; items: Draft[] };
+      let moment: { title: string; at: number; square: string; items: Draft[] };
       if (kind === "evaluation_confirmed" && hours === 0 && evalMoment.booked) moment = moments.get(evalMoment.booked)!;
       else if (kind === "evaluation_reminder" && hours === -18 && evalMoment.day_before) moment = moments.get(evalMoment.day_before)!;
       else if (kind === "evaluation_confirmed") moment = at(`${kind}-${hours}`, sayWhen(kind, hours), hours / 1000);
@@ -233,12 +261,19 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
   });
   reminder("invoice_reminder");
 
-  // In order, numbered: the moment, then its text before its email.
+  // In order, numbered by the step on The system they belong to: the
+  // booking's are 1.1, 1.2 and on, the text before the email at each moment.
+  const stepNumber = systemStepNumbers();
+  const count = new Map<string, number>();
   return [...moments.values()]
     .sort((a, b) => a.at - b.at)
-    .flatMap((moment, i) =>
+    .flatMap((moment) =>
       [...moment.items]
         .sort((a, b) => (a.channel === b.channel ? 0 : a.channel === "sms" ? -1 : 1))
-        .map((item, j) => ({ ...item, number: `${i + 1}.${j + 1}`, moment: moment.title }))
+        .map((item) => {
+          const n = (count.get(moment.square) ?? 0) + 1;
+          count.set(moment.square, n);
+          return { ...item, number: `${stepNumber.get(moment.square) ?? "?"}.${n}`, moment: moment.title, square: moment.square };
+        })
     );
 }
