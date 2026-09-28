@@ -31,12 +31,12 @@ export function loadPages(loadout: Loadout): LoadPage[] {
   const loose = loadout.items.filter((i) => i.kind !== "kit");
   const pages: LoadPage[] = kits.map((kit) => ({
     key: `kit:${kit.key}`,
-    title: `Load ${kit.label}`,
+    title: `Go grab ${kit.label} and load it into the truck`,
     subtitle: [kit.detail, `For ${kit.forStops.join(", ")}`].filter(Boolean).join(". "),
     items: [kit],
   }));
   if (loose.length > 0) {
-    pages.push({ key: "loose", title: "Loose tools and materials", subtitle: "Everything not in a kit.", items: loose });
+    pages.push({ key: "loose", title: "Now grab these and load them into the truck", subtitle: "Everything that isn't in a kit.", items: loose });
   }
   return pages;
 }

@@ -48,6 +48,8 @@ export interface LoadoutItem {
   /** Which stops want it, by client, so a shared kit reads as shared. */
   forStops: string[];
   checked: boolean;
+  /** What the kit looks like on the shelf, when somebody has taken a photo of it. */
+  photoUrl?: string | null;
 }
 
 export interface Loadout {
@@ -66,8 +68,8 @@ function kitDetail(kit: number, tools: readonly LoadoutTool[], containers: reado
   const names = tools.filter((t) => t.kits.includes(kit)).map((t) => t.name);
   const container = containers.find((c) => c.kits.includes(kit)) ?? null;
   const box = container?.name ?? null;
-  const where = box ? `In the ${box.toLowerCase()}${container?.code ? `, code ${container.code}` : ""}` : null;
-  const parts = [where, names.length > 0 ? names.join(", ") : null].filter(
+  const where = box ? `It's in the ${box.toLowerCase()}${container?.code ? `, code ${container.code}` : ""}` : null;
+  const parts = [where, names.length > 0 ? `What's in it: ${names.join(", ")}` : null].filter(
     Boolean
   ) as string[];
   return parts.length > 0 ? parts.join(". ") : null;
@@ -83,7 +85,9 @@ export function buildLoadout(
   sessions: readonly LoadoutSession[],
   tools: readonly LoadoutTool[],
   containers: readonly LoadoutContainer[],
-  checks: readonly LoadoutCheck[]
+  checks: readonly LoadoutCheck[],
+  /** Each kit's photo, by kit number. */
+  kitPhotos: Readonly<Record<number, string>> = {}
 ): Loadout {
   const ticked = new Set(checks.map((c) => `${c.kind}:${c.key}`));
   const kitStops = new Map<string, Set<string>>();
@@ -115,6 +119,7 @@ export function buildLoadout(
         detail: kitDetail(kit, tools, containers),
         forStops: [...kitStops.get(String(kit))!],
         checked: ticked.has(`kit:${kit}`),
+        photoUrl: kitPhotos[kit] ?? null,
       })),
     ...[...toolStops.keys()]
       .map((id) => ({ id, name: toolName.get(id) ?? "A tool deleted from inventory" }))

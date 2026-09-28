@@ -9,7 +9,7 @@ import { listKitContainers } from "@/lib/data/kit-containers";
 import { getShopInfo } from "@/lib/data/shop-flow";
 import { getCurrentProfile } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
-import { areaNeeds, pickKits, tipsFor, type AreaNeeds } from "@/lib/area-work";
+import { areaNeeds, tipsFor, type AreaNeeds } from "@/lib/area-work";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { CrewDemo } from "@/components/crew-demo/crew-demo";
 import type { WorkZone } from "@/components/canvas/types";
@@ -57,13 +57,9 @@ export default async function CrewDemoPage({
   const toolRefs = catalog.tools.map((t) => ({ id: t.id, name: t.name, kits: ((t as unknown as { kits?: number[] | null }).kits ?? []) as number[] }));
   const needs: Record<string, AreaNeeds> = Object.fromEntries(workZones.map((z) => [z.id, areaNeeds(z.service!.typeId, catalog.serviceTools, toolRefs)]));
 
-  // What goes on the truck for this job: a kit for each tool that lives in
-  // one, and the tools that travel loose.
-  const kits = new Set<number>();
-  for (const z of workZones) {
-    const pick = pickKits(needs[z.id], new Set(kits), new Set());
-    if (pick.ok) pick.kits.forEach((k) => kits.add(k));
-  }
+  // What goes on the truck for this job: the same kits and loose tools the
+  // crew sheet's checklist sends them for.
+  const kits = (data.checklist.kits ?? []).map((k) => k.kit);
   const typeIds = new Set(workZones.map((z) => z.service!.typeId));
   const looseToolIds = [
     ...new Set(
@@ -88,10 +84,11 @@ export default async function CrewDemoPage({
       needs={needs}
       tips={Object.fromEntries(workZones.map((z) => [z.id, tipsFor(z.service!.typeId)]))}
       loadout={{
-        kits: [...kits].sort((a, b) => a - b),
+        kits,
         toolIds: looseToolIds,
         tools: toolRefs,
         containers: containers.filter((c) => !c.archivedAt).map((c) => ({ name: c.name, kits: c.kits, code: c.code ?? null })),
+        kitPhotos: Object.fromEntries((data.checklist.kits ?? []).filter((k) => k.photoUrl).map((k) => [k.kit, k.photoUrl!])),
       }}
       shop={shop}
       siteImagePath={data.siteImagePath}

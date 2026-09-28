@@ -136,7 +136,11 @@ export function ShopFlow({
             {page && (
               <div className="mt-2">
                 <p className="text-2xl font-bold leading-tight">{page.title}</p>
-                {page.subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{page.subtitle}</p>}
+                {page.items.length === 1 && page.items[0].photoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={page.items[0].photoUrl} alt={`What ${page.items[0].label} looks like`} className="mt-2 aspect-[4/3] w-full rounded-xl border border-border bg-muted object-cover" />
+                )}
+                {page.subtitle && <p className="mt-1.5 text-sm text-muted-foreground">{page.subtitle}</p>}
                 <ul className="mt-3 flex flex-col gap-2">
                   {page.items.map((item) => (
                     <TickRow
@@ -298,9 +302,9 @@ function TickRow({ item, who, disabled, onTick }: { item: LoadoutItem; who: stri
           {item.checked && <Check className="h-4 w-4" />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-base font-semibold leading-snug">{item.label}</span>
+          <span className="block text-base font-semibold leading-snug">{item.kind === "kit" ? `${item.label} is in the truck` : item.label}</span>
           {item.kind !== "kit" && <span className="block text-xs text-muted-foreground">For {item.forStops.join(", ")}</span>}
-          {item.checked && who && <span className="block text-xs text-emerald-800">On the truck, {who}</span>}
+          {item.checked && who && <span className="block text-xs text-emerald-800">Loaded by {who}</span>}
         </span>
       </button>
       {/* Beside the tick, not inside it: hearing the name must not load it. */}

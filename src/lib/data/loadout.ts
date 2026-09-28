@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getKitPhotos } from "@/lib/data/kit-photos";
 import { buildLoadout, type Loadout, type LoadoutCheck, type LoadoutSession, type LoadoutTool } from "@/lib/loadout";
 
 /**
@@ -67,5 +68,5 @@ export async function getLoadout(profileId: string, day: string): Promise<Loadou
     key: c.item_key,
   }));
 
-  return buildLoadout(sessions, tools, containers, checks);
+  return buildLoadout(sessions, tools, containers, checks, await getKitPhotos().catch(() => ({})));
 }

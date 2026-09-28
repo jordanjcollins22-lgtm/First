@@ -21,7 +21,7 @@ describe("loadPages", () => {
       ["kit:2", 1],
       ["loose", 2],
     ]);
-    expect(pages[0].title).toBe("Load Kit 1");
+    expect(pages[0].title).toBe("Go grab Kit 1 and load it into the truck");
     expect(pages[0].subtitle).toBe("Rakes, shovels. For Linda");
     expect(pageComplete(pages[1])).toBe(true);
     expect(allLoaded(pages)).toBe(false);

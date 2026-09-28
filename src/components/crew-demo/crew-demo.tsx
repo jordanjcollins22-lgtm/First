@@ -57,7 +57,7 @@ export function CrewDemo({
   boardZones: BoardZone[];
   needs: Record<string, AreaNeeds>;
   tips: Record<string, Tip[]>;
-  loadout: { kits: number[]; toolIds: string[]; tools: LoadoutTool[]; containers: LoadoutContainer[] };
+  loadout: { kits: number[]; toolIds: string[]; tools: LoadoutTool[]; containers: LoadoutContainer[]; kitPhotos?: Record<number, string> };
   shop: { arriveBy: string | null; accessCodes: string | null; address: string | null } | null;
   siteImagePath: string | null;
   imageTransform: ProposalSiteImageTransform | null;
@@ -96,7 +96,8 @@ export function CrewDemo({
         [{ sessionId: "demo", jobId, customerName: stop.customerName, address: stop.address, kits: loadoutInput.kits, toolIds: loadoutInput.toolIds, materials: [] }],
         loadoutInput.tools,
         loadoutInput.containers,
-        checks ?? []
+        checks ?? [],
+        loadoutInput.kitPhotos ?? {}
       ),
     [checks, jobId, loadoutInput, stop.address, stop.customerName]
   );

@@ -73,11 +73,15 @@ export function LoadoutPanel({ day, loadout, compact = false }: { day: string; l
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-base font-semibold leading-snug">
                       <KindIcon kind={item.kind} />
-                      {item.label}
+                      {item.kind === "kit" ? `Grab ${item.label}` : item.label}
                     </span>
                     {item.detail && <span className="block text-xs text-muted-foreground">{item.detail}</span>}
                     <span className="block text-xs text-muted-foreground">For {item.forStops.join(", ")}</span>
                   </span>
+                  {item.photoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.photoUrl} alt={`What ${item.label} looks like`} className="h-16 w-20 shrink-0 rounded-md border border-border object-cover" />
+                  )}
                 </button>
               </li>
             ))}

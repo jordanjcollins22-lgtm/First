@@ -4397,6 +4397,23 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["job_receipts"]["Row"]>;
         Relationships: [];
       };
+      kit_photos: {
+        Row: {
+          organization_id: string;
+          kit: number;
+          /** Path inside the tool-images bucket, under kits/. */
+          image_path: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["kit_photos"]["Row"]> & {
+          organization_id: string;
+          kit: number;
+          image_path: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kit_photos"]["Row"]>;
+        Relationships: [];
+      };
       ledger_entries: {
         Row: {
           id: string;

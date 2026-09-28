@@ -12,6 +12,10 @@ import { ContainerPanel } from "@/components/kit/container-panel";
 import { ShopAccessCard } from "@/components/kit/shop-access-card";
 import { getShopInfo } from "@/lib/data/shop-flow";
 import { SayIt } from "@/components/ui/say-it";
+import { KitPhotoUpload } from "@/components/kit/kit-photo-upload";
+import { getKitPhotos } from "@/lib/data/kit-photos";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { kitPhotoFolder } from "@/lib/kit-photos";
 
 /**
  * The kit checklists, and what is on each one.
@@ -30,10 +34,12 @@ export default async function KitsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("tools", "/my-day");
 
-  const [tools, containers, shop] = await Promise.all([
+  const [tools, containers, shop, kitPhotos, organizationId] = await Promise.all([
     listKitTools().catch(() => []),
     listKitContainers().catch(() => []),
     getShopInfo().catch(() => null),
+    getKitPhotos().catch(() => ({}) as Record<number, string>),
+    getCurrentOrganizationId(),
   ]);
   const kits = kitNumbers(tools);
   const strays = toolsInNoKit(tools);
@@ -41,6 +47,7 @@ export default async function KitsPage() {
   const missingDescription = tools.filter((tool) => !(tool.description ?? "").trim()).length;
   const missingBin = tools.filter((tool) => !(tool.storageLocation ?? "").trim()).length;
   const kitsWithNoContainer = kitNumbers(tools).filter((kit) => !storedInLabel(containers, kit));
+  const kitsWithNoPhoto = kits.filter((kit) => !kitPhotos[kit]);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
@@ -74,6 +81,7 @@ export default async function KitsPage() {
                   {inKit.length} tool{inKit.length === 1 ? "" : "s"}
                   {storedIn ? ` · in the ${storedIn}` : ""}
                 </p>
+                <KitPhotoUpload kit={kit} photoUrl={kitPhotos[kit] ?? null} folder={kitPhotoFolder(organizationId)} />
                 <ul className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   {inKit.map((tool) => (
                     <li key={tool.id} className="flex items-center gap-1">
@@ -126,10 +134,17 @@ export default async function KitsPage() {
         </section>
       )}
 
-      {(missingPhoto > 0 || missingDescription > 0 || missingBin > 0 || kitsWithNoContainer.length > 0) && (
+      {(kitsWithNoPhoto.length > 0 || missingPhoto > 0 || missingDescription > 0 || missingBin > 0 || kitsWithNoContainer.length > 0) && (
         <section className="rounded-lg border border-border p-3 text-sm">
           <h3 className="font-semibold">What would make the sheets more useful</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+            {kitsWithNoPhoto.length > 0 && (
+              <li>
+                Kit{kitsWithNoPhoto.length === 1 ? " " : "s "}
+                {kitsWithNoPhoto.join(", ")} {kitsWithNoPhoto.length === 1 ? "has" : "have"} no photo. The crew sees
+                it when the load-out says to go grab the kit, so nobody has to know which box is which.
+              </li>
+            )}
             {missingPhoto > 0 && (
               <li>
                 {missingPhoto} tool{missingPhoto === 1 ? " has" : "s have"} no photo. A name alone means

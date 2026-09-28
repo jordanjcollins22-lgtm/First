@@ -22,7 +22,17 @@ export interface ChecklistArea {
   done: boolean;
 }
 
+export interface ChecklistKit {
+  kit: number;
+  /** Everything packed in it, so they can see it's all there. */
+  contents: string[];
+  photoUrl: string | null;
+}
+
 export interface CrewChecklist {
+  /** The kits to grab: the fewest, lowest-numbered kits holding every kitted tool the job needs. */
+  kits: ChecklistKit[];
+  /** The tools the job needs that aren't in any kit. */
   tools: string[];
   materials: ChecklistMaterial[];
   areas: ChecklistArea[];
@@ -31,21 +41,46 @@ export interface CrewChecklist {
 export function buildCrewChecklist(input: {
   zones: { id: string; name: string; serviceTypeId: string; serviceName: string }[];
   serviceTools: { service_type_id: string; tool_id: string }[];
-  tools: { id: string; name: string }[];
+  /** kits: the kits each tool is packed in. Left out, every tool travels loose. */
+  tools: { id: string; name: string; kits?: number[] | null }[];
   materials: { material: string; unit: string; quantity: number; manual?: boolean }[];
   /** Zone ids that have an after photo. */
   finishedZoneIds: Set<string>;
+  /** Each kit's photo, by kit number. */
+  kitPhotos?: Readonly<Record<number, string>>;
 }): CrewChecklist {
   const services = new Set(input.zones.map((z) => z.serviceTypeId));
-  const toolName = new Map(input.tools.map((t) => [t.id, t.name]));
-  const tools = [
-    ...new Set(
+  const byId = new Map(input.tools.map((t) => [t.id, t]));
+  const needed = [
+    ...new Map(
       input.serviceTools
         .filter((link) => services.has(link.service_type_id))
-        .map((link) => toolName.get(link.tool_id))
-        .filter((name): name is string => Boolean(name))
-    ),
-  ].sort((a, b) => a.localeCompare(b));
+        .map((link) => byId.get(link.tool_id))
+        .filter((tool): tool is (typeof input.tools)[number] => Boolean(tool))
+        .map((tool) => [tool.id, tool])
+    ).values(),
+  ];
+
+  // A tool in a kit comes with the kit. The kits holding the most of what's
+  // needed go first, so the crew grabs as few as it can.
+  const kitted = needed.filter((t) => (t.kits ?? []).length > 0);
+  const chosen: number[] = [];
+  let uncovered = kitted;
+  while (uncovered.length > 0) {
+    const counts = new Map<number, number>();
+    for (const tool of uncovered) for (const k of tool.kits ?? []) counts.set(k, (counts.get(k) ?? 0) + 1);
+    const [best] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+    chosen.push(best);
+    uncovered = uncovered.filter((t) => !(t.kits ?? []).includes(best));
+  }
+  const kits = chosen
+    .sort((a, b) => a - b)
+    .map((kit) => ({
+      kit,
+      contents: [...new Set(input.tools.filter((t) => (t.kits ?? []).includes(kit)).map((t) => t.name))].sort((a, b) => a.localeCompare(b)),
+      photoUrl: input.kitPhotos?.[kit] ?? null,
+    }));
+  const tools = [...new Set(needed.filter((t) => (t.kits ?? []).length === 0).map((t) => t.name))].sort((a, b) => a.localeCompare(b));
 
   const totals = new Map<string, { name: string; unit: string; quantity: number; manual: boolean }>();
   for (const item of input.materials) {
@@ -61,5 +96,5 @@ export function buildCrewChecklist(input: {
   }));
 
   const areas = input.zones.map((z) => ({ id: z.id, name: z.name, service: z.serviceName, done: input.finishedZoneIds.has(z.id) }));
-  return { tools, materials, areas };
+  return { kits, tools, materials, areas };
 }

@@ -46,4 +46,29 @@ describe("buildCrewChecklist", () => {
       ["Back lawn", false],
     ]);
   });
+
+  it("sends the crew for the kit, not the tools in it, with its photo", () => {
+    const kitted = buildCrewChecklist({
+      zones: [{ id: "a", name: "Front", serviceTypeId: "landscape-cleanup", serviceName: "Cleanup" }],
+      serviceTools: [
+        { service_type_id: "landscape-cleanup", tool_id: "rake" },
+        { service_type_id: "landscape-cleanup", tool_id: "saw" },
+        { service_type_id: "landscape-cleanup", tool_id: "tarp" },
+      ],
+      tools: [
+        { id: "rake", name: "Rake", kits: [1, 2] },
+        { id: "broom", name: "Push broom", kits: [1, 2] },
+        { id: "saw", name: "Reciprocating saw", kits: [4] },
+        { id: "tarp", name: "Tarp", kits: [] },
+      ],
+      materials: [],
+      finishedZoneIds: new Set(),
+      kitPhotos: { 1: "https://example.test/kit-1.jpg" },
+    });
+    expect(kitted.kits).toEqual([
+      { kit: 1, contents: ["Push broom", "Rake"], photoUrl: "https://example.test/kit-1.jpg" },
+      { kit: 4, contents: ["Reciprocating saw"], photoUrl: null },
+    ]);
+    expect(kitted.tools).toEqual(["Tarp"]);
+  });
 });

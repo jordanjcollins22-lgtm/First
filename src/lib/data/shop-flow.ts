@@ -1,5 +1,6 @@
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { createClient } from "@/lib/supabase/server";
+import { getKitPhotos } from "@/lib/data/kit-photos";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { buildLoadout, type Loadout, type LoadoutCheck, type LoadoutContainer, type LoadoutSession, type LoadoutTool } from "@/lib/loadout";
 import type { ShopStage } from "@/lib/shop-flow";
@@ -105,7 +106,7 @@ export async function getDayLoadout(day: string, checks: LoadoutCheck[]): Promis
     kits: c.kits ?? [],
     code: c.code ?? null,
   }));
-  return buildLoadout(sessions, tools, containers, checks);
+  return buildLoadout(sessions, tools, containers, checks, await getKitPhotos().catch(() => ({})));
 }
 
 export interface SiteMapCard {

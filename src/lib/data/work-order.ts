@@ -18,6 +18,7 @@ import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
 import type { EvaluationStatus, JobStatus, ProposalSiteImageTransform } from "@/types/domain";
 import { executableAdditions, type ScopeChange } from "@/lib/data/exceptions";
 import { buildCrewChecklist, type CrewChecklist } from "@/lib/crew-checklist";
+import { getKitPhotos } from "@/lib/data/kit-photos";
 import { allMaterialLineItems } from "@/lib/proposal-pricing";
 import { loadAreaBoard, type AreaBoardData } from "@/lib/data/area-board";
 import { listJobReceipts, type JobReceipt } from "@/lib/data/job-receipts";
@@ -176,6 +177,7 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     tools: catalog.tools,
     materials: allMaterialLineItems(zones, catalog),
     finishedZoneIds: new Set(photos.filter((photo) => photo.kind === "after" && photo.zone_id).map((photo) => photo.zone_id!)),
+    kitPhotos: await getKitPhotos().catch(() => ({})),
   });
 
   const [areaBoard, receipts] = await Promise.all([loadAreaBoard(jobId, { zones, catalog, photos }), listJobReceipts(jobId).catch(() => [])]);
