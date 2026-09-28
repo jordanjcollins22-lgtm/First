@@ -30,6 +30,16 @@ export interface ProjectReviewRow {
   /** The proposal has not been said yes to yet: the review is what it would start from. */
   preview: boolean;
   fiveStarMarked: boolean | null;
+  /** The account manager's final sign-off is in: the review exists from then on. */
+  signedOff: boolean;
+  /** What the job was priced on, for the sign-off to start from. */
+  budget: ProjectReviewInput["budget"];
+  /** Hours on the clock and receipts so far, for the sign-off to start from. */
+  clockedHours: number;
+  receiptsCents: number;
+  /** What the account manager entered at sign-off, when they have. */
+  final: ProjectReviewInput["final"];
+  finalNote: string | null;
 }
 
 const CLOSED = new Set(["resolved", "closed", "done"]);
@@ -48,7 +58,9 @@ export async function getProjectReviews(jobIds: string[]): Promise<ProjectReview
   const [jobsRes, proposalsRes, timeRes, receiptsRes, issuesRes, ticketsRes, catalog, fees, proofRes] = await Promise.all([
     supabase
       .from("jobs")
-      .select("id, status, created_at, five_star_review, property:properties(address, lat, lng, customer:customers(id, name))")
+      .select(
+        "id, status, created_at, five_star_review, photos_approved_at, final_crew_hours, final_materials_cents, final_other_cents, final_cost_note, property:properties(address, lat, lng, customer:customers(id, name))"
+      )
       .in("id", jobIds),
     supabase.from("job_proposals").select("job_id, status, total_cost, discount_amount, estimate").in("job_id", jobIds),
     supabase.from("time_entries").select("job_id, clocked_in_at, clocked_out_at").in("job_id", jobIds),
@@ -65,6 +77,11 @@ export async function getProjectReviews(jobIds: string[]): Promise<ProjectReview
     status: string;
     created_at: string;
     five_star_review: boolean | null;
+    photos_approved_at: string | null;
+    final_crew_hours: number | string | null;
+    final_materials_cents: number | null;
+    final_other_cents: number | null;
+    final_cost_note: string | null;
     property: { address: string | null; lat: number | null; lng: number | null; customer: { id: string; name: string | null } | null } | null;
   };
   const jobs = (jobsRes.data ?? []) as unknown as JobRow[];
@@ -152,7 +169,12 @@ export async function getProjectReviews(jobIds: string[]): Promise<ProjectReview
             : { value: null, how: null, note: null };
 
       const issues = (issuesBy.get(job.id) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const final =
+        job.final_crew_hours != null
+          ? { crewHours: Number(job.final_crew_hours), materialsCents: job.final_materials_cents ?? 0, otherCents: job.final_other_cents ?? 0 }
+          : null;
       const review = scoreProject({
+        final,
         priceCents,
         budget,
         realCrewHours: hoursBy.get(job.id) ?? 0,
@@ -175,6 +197,12 @@ export async function getProjectReviews(jobIds: string[]): Promise<ProjectReview
         issues,
         preview: proposal?.status !== "accepted",
         fiveStarMarked: job.five_star_review,
+        signedOff: job.photos_approved_at != null,
+        budget,
+        clockedHours: Math.round((hoursBy.get(job.id) ?? 0) * 10) / 10,
+        receiptsCents: receiptsBy.get(job.id) ?? 0,
+        final,
+        finalNote: job.final_cost_note,
       };
     })
   );
@@ -188,16 +216,21 @@ export async function getProjectReview(jobId: string): Promise<ProjectReviewRow 
   return (await getProjectReviews([jobId]))[0] ?? null;
 }
 
-/** Every project a client said yes to, newest first, for the board. */
+/**
+ * Every project the account manager has signed off, newest first, for the
+ * board. A project comes onto it only at the final sign-off, with its real
+ * cost in.
+ */
 export async function listProjectReviews(): Promise<ProjectReviewRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
-    .from("job_proposals")
-    .select("job_id, approved_at, job:jobs!inner(status)")
-    .eq("status", "accepted")
-    .order("approved_at", { ascending: false })
+    .from("jobs")
+    .select("id, status")
+    .not("photos_approved_at", "is", null)
+    .neq("status", "cancelled")
+    .order("photos_approved_at", { ascending: false })
     .limit(100);
-  const ids = ((data ?? []) as unknown as { job_id: string; job: { status: string } }[]).filter((p) => p.job.status !== "cancelled").map((p) => p.job_id);
+  const ids = (data ?? []).map((j) => j.id);
   const rows = await getProjectReviews(ids);
   return ids.map((id) => rows.find((r) => r.jobId === id)).filter((r): r is ProjectReviewRow => Boolean(r));
 }

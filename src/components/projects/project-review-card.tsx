@@ -68,7 +68,12 @@ export function ProjectReviewCard({ row, interactive = false, href }: { row: Pro
         </p>
       )}
       {squares}
-      <p className="text-[11px] text-muted-foreground">{r.profit.detail}. Real cost is clocked hours at the crew rate, the materials, and receipts.</p>
+      <p className="text-[11px] text-muted-foreground">
+        {r.profit.detail}.{" "}
+        {row.final
+          ? `Real cost as signed off: ${row.final.crewHours} crew-hrs at the crew rate, $${Math.round(row.final.materialsCents / 100).toLocaleString("en-US")} materials, $${Math.round(row.final.otherCents / 100).toLocaleString("en-US")} else${row.finalNote ? ` (${row.finalNote})` : ""}.`
+          : "Real cost is clocked hours at the crew rate, the materials, and receipts."}
+      </p>
       {interactive && <Details row={row} />}
     </section>
   );

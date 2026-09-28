@@ -40,6 +40,12 @@ export interface ProjectReviewInput {
   crewRateCents: number;
   /** Anything bought for it on the day, from the receipts. */
   receiptsCents: number;
+  /**
+   * What the job really cost, entered by the account manager at the final
+   * sign-off. When it is in, the review is scored on it rather than on the
+   * clock and the receipts.
+   */
+  final?: { crewHours: number; materialsCents: number; otherCents: number } | null;
   feePct: number;
   issues: ReviewIssue[];
   /** Did they leave a five-star review: marked by hand, or found among the reviews pulled in. */
@@ -89,7 +95,7 @@ export function scoreProject(input: ProjectReviewInput): ProjectReview {
   };
 
   const budgetHours = input.budget?.crewHours ?? null;
-  const real = Math.round(input.realCrewHours * 10) / 10;
+  const real = Math.round((input.final?.crewHours ?? input.realCrewHours) * 10) / 10;
   const hours = {
     good: budgetHours != null && real <= budgetHours + 0.05,
     value: `${budgetHours == null ? "?" : hrs(budgetHours)}/${hrs(real)}`,
@@ -107,8 +113,9 @@ export function scoreProject(input: ProjectReviewInput): ProjectReview {
   // The real cost: the hours clocked at the crew rate, the materials as they
   // were priced (they are bought to the list), and whatever was bought on
   // the day on top.
-  const materialsCents = input.budget?.materialsCents ?? 0;
-  const realCents = Math.round(real * input.crewRateCents) + materialsCents + input.receiptsCents;
+  const materialsCents = input.final?.materialsCents ?? input.budget?.materialsCents ?? 0;
+  const otherCents = input.final?.otherCents ?? input.receiptsCents;
+  const realCents = Math.round(real * input.crewRateCents) + materialsCents + otherCents;
   const budgetCents = input.budget ? input.budget.labourCents + input.budget.materialsCents : null;
   const cost = {
     good: budgetCents != null && realCents <= budgetCents,

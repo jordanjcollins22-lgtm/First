@@ -649,9 +649,11 @@ export default async function JobPage({
       ? instantPrice(intake.answers, await lotForProperty(job.property_id).catch(() => null), catalog)
       : null;
   // While the job is being worked: who is in which area, and at what stage.
-  // The project review: scored live from the job as it runs. For whoever
-  // sees the job's money, once there is a proposal to score it against.
-  const projectReview = proposal && seen.jobMoney ? await getProjectReview(jobId).catch((err) => {
+  // The project review: scored live from the job, shown once the account
+  // manager's final sign-off is in with its real cost. Loaded before then
+  // too, for whoever closes the job, so the sign-off starts from the clock,
+  // the budget and the receipts.
+  const projectReview = proposal && (seen.jobMoney || canClose) ? await getProjectReview(jobId).catch((err) => {
     console.error("Project review failed to load:", err);
     return null;
   }) : null;
@@ -730,7 +732,7 @@ export default async function JobPage({
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
 
-      {projectReview && <ProjectReviewCard row={projectReview} interactive />}
+      {projectReview?.signedOff && seen.jobMoney && <ProjectReviewCard row={projectReview} interactive />}
 
       {phoneQuote && (
         <PhoneQuoteCard price={phoneQuote} clientName={job.property?.customers?.name ?? null} phone={job.property?.customers?.phone ?? null} />
@@ -752,6 +754,17 @@ export default async function JobPage({
           sendTo={closeoutSendTo}
           preview={closeoutPreview}
           reviewLink={review && "token" in review ? `${baseUrl}${clientReviewPath((review as { token: string }).token)}` : null}
+          costStart={
+            projectReview
+              ? {
+                  crewHours: projectReview.clockedHours,
+                  materialsCents: projectReview.budget?.materialsCents ?? 0,
+                  otherCents: projectReview.receiptsCents,
+                  budgetHours: projectReview.budget ? Math.round(projectReview.budget.crewHours * 10) / 10 : null,
+                  budgetCents: projectReview.budget ? projectReview.budget.labourCents + projectReview.budget.materialsCents : null,
+                }
+              : null
+          }
         />
       )}
 

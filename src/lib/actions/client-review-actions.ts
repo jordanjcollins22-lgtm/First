@@ -133,11 +133,21 @@ export async function recordApprovalInPerson(jobId: string): Promise<ReviewResul
 
 /**
  * The last step: the client has approved, so you approve, and the job is
- * signed off in the same tap. Checked against the database, not the screen.
+ * signed off in the same tap, with what it really cost: the crew's hours,
+ * the materials bought and anything else it took. The project review is
+ * scored on those from here on, and the job comes onto it now. Checked
+ * against the database, not the screen.
  */
-export async function approveAndSignOff(jobId: string): Promise<ReviewResult> {
+export async function approveAndSignOff(
+  jobId: string,
+  cost: { crewHours: number; materialsDollars: number; otherDollars: number; note?: string }
+): Promise<ReviewResult> {
   const who = await closer();
   if ("error" in who) return { ok: false, message: who.error! };
+  const fine = (n: number) => Number.isFinite(n) && n >= 0;
+  if (!cost || !fine(cost.crewHours) || !fine(cost.materialsDollars) || !fine(cost.otherDollars)) {
+    return { ok: false, message: "Put in what it really cost: the crew's hours, the materials, and anything else (0 if nothing)." };
+  }
 
   const state = await closeoutInputFor(jobId);
   if (!state) return { ok: false, message: "Couldn't find that job." };
@@ -151,13 +161,18 @@ export async function approveAndSignOff(jobId: string): Promise<ReviewResult> {
     .update({
       photos_approved_at: now,
       photos_approved_by: who.profile.id,
+      final_crew_hours: Math.round(cost.crewHours * 100) / 100,
+      final_materials_cents: Math.round(cost.materialsDollars * 100),
+      final_other_cents: Math.round(cost.otherDollars * 100),
+      final_cost_note: cost.note?.trim() || null,
       ...(state.input.jobStatus === "completed" ? {} : { status: "completed", completed_at: now, completed_by: who.profile.id }),
     })
     .eq("id", jobId);
   if (error) return { ok: false, message: "Couldn't sign it off. Try again." };
   refresh(jobId);
   revalidatePath("/pipeline");
-  return { ok: true, message: "Signed off." };
+  revalidatePath("/jobs/review");
+  return { ok: true, message: "Signed off. It's on the project review now." };
 }
 
 /**

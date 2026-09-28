@@ -52,4 +52,12 @@ describe("the project review", () => {
     expect(r.hours.good).toBe(false);
     expect(r.cost.good).toBe(false);
   });
+
+  it("is scored on the real cost entered at the final sign-off", () => {
+    const r = scoreProject({ ...base, realCrewHours: 0, final: { crewHours: 11, materialsCents: 12_000, otherCents: 2_500 } });
+    expect(r.hours.value).toBe("10/11");
+    expect(r.hours.good).toBe(false);
+    // 11 hours at $30, $120 of materials, $25 else.
+    expect(r.cost.realCents).toBe(33_000 + 12_000 + 2_500);
+  });
 });

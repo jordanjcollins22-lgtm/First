@@ -157,7 +157,7 @@ export const SYSTEM_FLOW: SystemStage[] = [
       {
         key: "project-review",
         title: "Project review",
-        line: "Every project scored live, green or red: issues (each put right and changed so it can't happen again), hours and cost against budget, a five-star review, a referral, and profit.",
+        line: "From the account manager's final sign-off, with the real cost: every project green or red on issues (each put right and changed so it can't happen again), hours and cost against budget, a five-star review, a referral, and profit.",
         href: "/jobs/review",
         status: "live",
       },

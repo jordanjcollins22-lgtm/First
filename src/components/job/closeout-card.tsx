@@ -24,6 +24,7 @@ export function CloseoutCard({
   sendTo,
   preview,
   reviewLink,
+  costStart,
 }: {
   jobId: string;
   steps: CloseoutStep[];
@@ -35,11 +36,18 @@ export function CloseoutCard({
   preview: { subject: string; text: string } | null;
   /** The link the client was sent, to copy and text. */
   reviewLink: string | null;
+  /** What the real cost starts from: the clock, the budget's materials, the receipts; and the budget beside it. */
+  costStart?: { crewHours: number; materialsCents: number; otherCents: number; budgetHours: number | null; budgetCents: number | null } | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [hours, setHours] = useState(costStart ? String(costStart.crewHours) : "");
+  const [materials, setMaterials] = useState(costStart ? String(Math.round(costStart.materialsCents / 100)) : "");
+  const [other, setOther] = useState(costStart ? String(Math.round(costStart.otherCents / 100)) : "0");
+  const [costNote, setCostNote] = useState("");
+  const num = (s: string) => (s.trim() === "" ? NaN : Number(s.replace(/[$,\s]/g, "")));
 
   const nextKey = steps.find((s) => !s.done)?.key ?? null;
   const signedOff = steps.every((s) => s.done);
@@ -144,9 +152,50 @@ export function CloseoutCard({
 
           {nextKey === "approve" && (
             canSignOff.ok ? (
-              <Button type="button" onClick={() => run(() => approveAndSignOff(jobId))} disabled={pending}>
-                {pending ? "Signing off…" : "Approve & sign off the job"}
-              </Button>
+              // The final submission: what the job really cost goes in with it,
+              // and the project review is scored on it from here on.
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/70 p-3">
+                <p className="text-sm font-semibold">What did it really cost?</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-medium">
+                    Crew hours
+                    <input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} className="h-10 rounded-md border border-border bg-background px-2 text-sm" />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium">
+                    Materials $
+                    <input inputMode="decimal" value={materials} onChange={(e) => setMaterials(e.target.value)} className="h-10 rounded-md border border-border bg-background px-2 text-sm" />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium">
+                    Anything else $
+                    <input inputMode="decimal" value={other} onChange={(e) => setOther(e.target.value)} className="h-10 rounded-md border border-border bg-background px-2 text-sm" />
+                  </label>
+                </div>
+                <input
+                  value={costNote}
+                  onChange={(e) => setCostNote(e.target.value)}
+                  placeholder="Anything else was what? (dump fee, rental, a sub…)"
+                  className="h-10 rounded-md border border-border bg-background px-2 text-sm"
+                />
+                {costStart && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Filled in from the clock ({costStart.crewHours} hrs), the materials it was priced with, and the receipts. Change anything that
+                    isn&apos;t right.
+                    {costStart.budgetHours != null && ` Budget: ${costStart.budgetHours} hrs`}
+                    {costStart.budgetCents != null && `, $${Math.round(costStart.budgetCents / 100).toLocaleString("en-US")} cost.`}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  onClick={() =>
+                    run(() =>
+                      approveAndSignOff(jobId, { crewHours: num(hours), materialsDollars: num(materials), otherDollars: num(other), note: costNote })
+                    )
+                  }
+                  disabled={pending}
+                >
+                  {pending ? "Signing off…" : "Approve & sign off the job"}
+                </Button>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">{canSignOff.reason}</p>
             )

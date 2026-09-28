@@ -36,14 +36,15 @@ export default async function ProjectReviewPage() {
       <header>
         <h1 className="text-xl font-semibold">Project review</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Every project a client said yes to, kept up to date as the work runs. Green is good, red is not: any issue, over the hours or
-          the cost, no five-star review, no referral, or under 50% profit.
+          Every project, from the account manager&apos;s final sign-off, scored on the real cost entered then, and kept up to date after:
+          a callback, a review, a referral. Green is good, red is not: any issue, over the hours or the cost, no five-star review, no
+          referral, or under 50% profit.
         </p>
       </header>
       {rows == null ? (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">The reviews couldn&apos;t load just now. Reload the page.</p>
       ) : rows.length === 0 ? (
-        <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">No projects yet. One lands here when a client says yes.</p>
+        <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">No projects yet. One lands here when the account manager signs it off.</p>
       ) : (
         <>
           <p className="text-sm">

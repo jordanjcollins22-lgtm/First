@@ -1800,6 +1800,11 @@ export interface Database {
       };
       jobs: {
         Row: {
+          /** What the job really cost, entered at the final sign-off. */
+          final_crew_hours: number | null;
+          final_materials_cents: number | null;
+          final_other_cents: number | null;
+          final_cost_note: string | null;
           /** Did they leave a five-star review: null when nobody has said. */
           five_star_review: boolean | null;
           five_star_review_at: string | null;
