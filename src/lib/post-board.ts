@@ -34,7 +34,15 @@ export const BOARD_MAX_AGE_DAYS = 14;
  */
 export const DEFAULT_DAILY_PER_PERSON = 6;
 
-export type AnswerStatus = "written" | "posted" | "let_go";
+export type AnswerStatus = "written" | "posted" | "let_go" | "already";
+
+/**
+ * Answered by that person: posted from the board, or "already", a post they
+ * had commented on straight on Facebook before the board brought it to them.
+ */
+export function isAnswered(status: AnswerStatus): boolean {
+  return status === "posted" || status === "already";
+}
 
 export interface BoardAnswer {
   id: string;
@@ -66,7 +74,7 @@ export interface BoardStanding {
 }
 
 function holds(answer: BoardAnswer, now: Date): boolean {
-  if (answer.status === "posted") return true;
+  if (isAnswered(answer.status)) return true;
   if (answer.status !== "written") return false;
   return now.getTime() - new Date(answer.updatedAt).getTime() < HOLD_HOURS * 3_600_000;
 }
@@ -83,7 +91,9 @@ export function standingFor(answers: BoardAnswer[], profileId: string, now: Date
   const others = answers
     .filter((a) => a.profileId !== profileId && holds(a, now))
     // Posted before writing, then earliest first, so the names read in order.
-    .sort((a, b) => (a.status === b.status ? a.createdAt.localeCompare(b.createdAt) : a.status === "posted" ? -1 : 1));
+    .sort((a, b) =>
+      isAnswered(a.status) === isAnswered(b.status) ? a.createdAt.localeCompare(b.createdAt) : isAnswered(a.status) ? -1 : 1
+    );
   if (mine) return { pile: "mine", mine, others };
   return { pile: others.length >= ANSWERS_PER_POST ? "full" : "open", mine: null, others };
 }
@@ -242,7 +252,7 @@ export function groupSamePosts<T extends { id: string }>(rows: T[], keysOf: (row
  */
 export function onePerPerson(answers: BoardAnswer[]): BoardAnswer[] {
   const best = new Map<string, BoardAnswer>();
-  const rank = (a: BoardAnswer) => (a.status === "posted" ? 2 : a.status === "written" ? 1 : 0);
+  const rank = (a: BoardAnswer) => (isAnswered(a.status) ? 2 : a.status === "written" ? 1 : 0);
   for (const answer of answers) {
     const held = best.get(answer.profileId);
     if (!held || rank(answer) > rank(held)) best.set(answer.profileId, answer);
@@ -253,7 +263,7 @@ export function onePerPerson(answers: BoardAnswer[]): BoardAnswer[] {
 /** Why this person may not answer a post they have already answered, or null. */
 export function alreadyAnswered(answers: BoardAnswer[], profileId: string, onPostId: string, answerPostIds: Map<string, string>): string | null {
   const mine = answers.filter((a) => a.profileId === profileId && a.status !== "let_go");
-  if (mine.some((a) => a.status === "posted")) return "You've already answered this post. One comment each, so it doesn't look like a campaign.";
+  if (mine.some((a) => isAnswered(a.status))) return "You've already answered this post. One comment each, so it doesn't look like a campaign.";
   if (mine.some((a) => answerPostIds.get(a.id) !== onPostId)) {
     return "You're already answering this post from another copy of it on the board. Finish that one.";
   }

@@ -21,6 +21,17 @@ function answer(over: Partial<BoardAnswer>): BoardAnswer {
 }
 
 describe("standingFor", () => {
+  it("counts one they had already commented on as answered by them, for good", () => {
+    const already = answer({ status: "already", updatedAt: "2026-09-01T12:00:00Z" });
+    // Off their own card: it is theirs, not written, so nothing to copy.
+    expect(standingFor([already], "p1", now)).toMatchObject({ pile: "mine", mine: { status: "already" } });
+    // The others see it answered, however long ago.
+    expect(standingFor([already], "me", now).others).toHaveLength(1);
+    // And they are not asked to answer it again from another copy.
+    expect(alreadyAnswered([already], "p1", "post-2", new Map([["a", "post-1"]]))).toMatch(/already answered/);
+    expect(onePerPerson([answer({ id: "w" }), already])[0].status).toBe("already");
+  });
+
   it("is open when nobody has it", () => {
     expect(standingFor([], "me", now).pile).toBe("open");
   });

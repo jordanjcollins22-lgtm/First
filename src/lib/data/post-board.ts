@@ -235,7 +235,9 @@ export async function answeredToday(organizationId: string, profileId: string, n
     .select("id", { count: "exact", head: true })
     .eq("organization_id", organizationId)
     .eq("profile_id", profileId)
-    .neq("status", "let_go")
+    // Handed back, or answered on Facebook before the board had it: not one
+    // of today's comments from the board.
+    .not("status", "in", "(let_go,already)")
     .gte("created_at", startOfToday(now).toISOString());
   return count ?? 0;
 }
@@ -515,7 +517,7 @@ export async function postInsights(organizationId: string, days = 30, now: Date 
   const { data: answers } = ours.length
     ? await supabase.from("outreach_post_answers").select("seen_post_id, link_id, status").eq("organization_id", organizationId).in("seen_post_id", ours)
     : { data: [] as { seen_post_id: string; link_id: string | null; status: string }[] };
-  const answeredIds = new Set((answers ?? []).filter((a) => a.status === "posted").map((a) => a.seen_post_id));
+  const answeredIds = new Set((answers ?? []).filter((a) => a.status === "posted" || a.status === "already").map((a) => a.seen_post_id));
   const linkIds = (answers ?? []).map((a) => a.link_id).filter((id): id is string => Boolean(id));
   const { data: links } = linkIds.length
     ? await supabase.from("outreach_links").select("id, code").in("id", linkIds)

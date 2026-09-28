@@ -8,7 +8,7 @@ import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings, getSeen, setPicked } from "@/lib/data/outreach-agent";
 import { answeredToday, answersToPost, answersToSamePost } from "@/lib/data/post-board";
 import { mentionComment } from "@/lib/outreach-agent";
-import { alreadyAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
+import { alreadyAnswered, isAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { checkComment, draftFromDisplay, finishComment, LINK_MARKER, looksUsable, personaliseDraft } from "@/lib/comment-prompt";
 import { getCurrentOrganization } from "@/lib/data/organizations";
@@ -207,6 +207,28 @@ export async function markAnswerPosted(answerId: string): Promise<Result> {
   return { ok: true };
 }
 
+/**
+ * They had already commented on this post, straight on Facebook, before the
+ * board brought it to them. Kept as answered by them, so it leaves their
+ * board, is not offered to them again from any copy of it, and shows the
+ * others it has been answered; but not counted as a comment from the board.
+ */
+export async function markAlreadyCommented(seenId: string): Promise<Result> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("outreach_post_answers")
+    .upsert(
+      { organization_id: profile.organization_id, seen_post_id: seenId, profile_id: profile.id, status: "already", posted_at: now, updated_at: now },
+      { onConflict: "seen_post_id,profile_id" }
+    );
+  if (error) return { ok: false, error: error.message };
+  refresh();
+  return { ok: true };
+}
+
 /** Hand a post back, for somebody else to answer. */
 export async function letPostGo(answerId: string): Promise<Result> {
   const profile = await getCurrentProfile();
@@ -388,9 +410,9 @@ async function describeKept(
   if (row.decision === "declined") return { message: "Already in: it was taken off the board.", canAnswer: false };
   const answers = await answersToPost(org, row.id);
   const standing = standingFor(answers, profileId, new Date());
-  if (standing.mine?.status === "posted") return { message: "Already in, and you've already answered it. One comment each.", canAnswer: false };
+  if (standing.mine && isAnswered(standing.mine.status)) return { message: "Already in, and you've already answered it. One comment each.", canAnswer: false };
   if (standing.pile === "mine") return { message: "Already in, and it's yours: it's up next.", canAnswer: true };
-  const names = standing.others.map((a) => `${a.name}${a.status === "posted" ? " answered it" : " is answering it"}`).join(", ");
+  const names = standing.others.map((a) => `${a.name}${isAnswered(a.status) ? " answered it" : " is answering it"}`).join(", ");
   if (standing.pile === "full") return { message: `Already in: ${names}.`, canAnswer: false };
   return { message: names ? `Already in: ${names}. There's room for yours; it's up next.` : "Already in and nobody has answered it yet. It's up next.", canAnswer: true };
 }

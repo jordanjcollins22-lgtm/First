@@ -7,8 +7,8 @@ import { Ban, Copy, ExternalLink, ImagePlus, Loader2, MessageSquareReply, Undo2 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { letPostGo, markAnswerPosted, markCantRespond, submitFoundPost, takePost } from "@/lib/actions/post-board-actions";
-import { CANT_RESPOND_REASONS, type CantRespondReason } from "@/lib/post-board";
+import { letPostGo, markAlreadyCommented, markAnswerPosted, markCantRespond, submitFoundPost, takePost } from "@/lib/actions/post-board-actions";
+import { CANT_RESPOND_REASONS, isAnswered, type CantRespondReason } from "@/lib/post-board";
 import { createShotUpload } from "@/lib/actions/outreach-link-actions";
 import { createClient } from "@/lib/supabase/client";
 import { hashBytes } from "@/lib/screenshot-hash";
@@ -144,6 +144,20 @@ export function CommentCard({
     });
   }
 
+  // They had commented on it on Facebook already: off their board for good.
+  function alreadyCommented() {
+    if (!post) return;
+    setError(null);
+    setBusy("already");
+    startTransition(async () => {
+      const result = await markAlreadyCommented(post.id);
+      setBusy(null);
+      if (!result.ok) return setError(result.error);
+      setSkipped((s) => new Set(s).add(post.id));
+      done();
+    });
+  }
+
   function run(what: "respond" | "hand-back") {
     if (!post) return;
     setError(null);
@@ -198,9 +212,8 @@ export function CommentCard({
     const result = await markAnswerPosted(mine.answerId);
     setBusy(null);
     if (!result.ok) return setError(result.error);
-    // A moment to read the tip before the next post takes this one's place.
-    // If the tab was stopped from opening, it waits for them to open it here.
-    if (tab) setTimeout(done, 2500);
+    // It stays here until they say: once at the post they may find they had
+    // commented on it already, and say so rather than lose it.
   }
 
   return (
@@ -262,13 +275,23 @@ export function CommentCard({
             )}
             {post.others.length > 0 && (
               <p className="text-[11px] text-muted-foreground">
-                {post.others.map((a) => `${a.name} ${a.status === "posted" ? "answered it" : "is answering it"}`).join(" · ")}. Room for yours.
+                {post.others.map((a) => `${a.name} ${isAnswered(a.status) ? "answered it" : "is answering it"}`).join(" · ")}. Room for yours.
               </p>
             )}
 
             {!mine && asking ? (
               <div className="mt-auto space-y-2">
                 <p className="text-sm font-semibold">Why can&apos;t you respond?</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={alreadyCommented}
+                  className="h-auto w-full whitespace-normal py-2 text-xs"
+                >
+                  {busy === "already" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                  I already commented on it
+                </Button>
                 <div className="grid grid-cols-2 gap-2">
                   {CANT_RESPOND_REASONS.filter((r) => r.key !== "other").map((r) => (
                     <Button
@@ -340,20 +363,36 @@ export function CommentCard({
                     href={blockedLink}
                     target="_blank"
                     rel="noreferrer"
-                    onClick={() => setTimeout(done, 500)}
                     className="flex h-11 w-full items-center justify-center gap-1 rounded-md border border-primary text-sm font-semibold text-primary"
                   >
                     {post.hasUrl ? "Open the post" : "Find the post"} <ExternalLink className="h-4 w-4" />
                   </a>
                 )}
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => run("hand-back")}
-                  className="mx-auto flex items-center gap-1 text-[11px] text-muted-foreground underline"
-                >
-                  <Undo2 className="h-3 w-3" /> Hand it back
-                </button>
+                {copiedTip ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" variant="outline" disabled={busy !== null} onClick={alreadyCommented} className="h-auto whitespace-normal py-2 text-xs">
+                      {busy === "already" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                      I&apos;d already commented on it
+                    </Button>
+                    <Button type="button" disabled={busy !== null} onClick={done} className="h-auto py-2 text-sm">
+                      Next post
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-4">
+                    <button type="button" disabled={busy !== null} onClick={alreadyCommented} className="text-[11px] text-muted-foreground underline">
+                      {busy === "already" ? "Saving…" : "I'd already commented on it"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => run("hand-back")}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground underline"
+                    >
+                      <Undo2 className="h-3 w-3" /> Hand it back
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

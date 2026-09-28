@@ -3264,7 +3264,7 @@ export interface Database {
           profile_id: string;
           link_id: string | null;
           comment: string | null;
-          status: "written" | "posted" | "let_go";
+          status: "written" | "posted" | "let_go" | "already";
           posted_at: string | null;
           created_at: string;
           updated_at: string;
