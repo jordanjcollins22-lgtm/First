@@ -72,6 +72,7 @@ import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
 import { Suspense, cache } from "react";
+import { cn } from "@/lib/utils";
 
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
@@ -115,10 +116,10 @@ import { OpsPanel } from "@/components/ops/ops-panel";
  * question, same address, different answer — rather than two entries in the
  * nav where only one of them was ever the right one for you.
  */
-export default async function MyDayPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function MyDayPage({ searchParams }: { searchParams: Promise<{ tab?: string; open?: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
-  const { tab } = await searchParams;
+  const { tab, open } = await searchParams;
   const viewer = await getCurrentProfile();
 
   // Somebody trying out with us sees their work and nothing else: no tabs,
@@ -138,11 +139,15 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
   // Walkthroughs waiting on a price, for whoever prices them.
   const approvals = viewer && !isFieldOnly(viewer.roles) && !evaluatorOnly ? await getPriceApprovals().catch(() => null) : null;
 
+  const accountManagerOnly = viewer ? roleViewFor(viewer.roles) === "account-manager" : false;
+
   const day =
     viewer && isFieldOnly(viewer.roles) ? (
       <CrewDay profile={viewer} />
     ) : viewer && isGrowthOnly(viewer.roles) ? (
       await GrowthDay()
+    ) : accountManagerOnly ? (
+      await AccountManagerDay({ open, visits, approvals })
     ) : evaluatorOnly && visits ? (
       <EvaluatorDayView data={visits} />
     ) : (
@@ -338,6 +343,99 @@ async function GrowthDay() {
   // Their day is Posts to Answer: the next post, the leaderboard, and what
   // came of every post they answered.
   return <PostsToAnswerPage />;
+}
+
+/**
+ * An account manager's day: three squares, and nothing else.
+ *
+ * Commenting, their evaluations, and the site maps waiting on their price,
+ * each with what is waiting in it. Tapping one opens it underneath; the
+ * one with something waiting today opens by itself. The crews, the money
+ * and the tiles are somebody else's day.
+ */
+async function AccountManagerDay({
+  open,
+  visits,
+  approvals,
+}: {
+  open: string | undefined;
+  visits: Awaited<ReturnType<typeof getEvaluatorDay>> | null;
+  approvals: Awaited<ReturnType<typeof getPriceApprovals>>;
+}) {
+  const { allowed: canComment } = await checkTabAccess("posts-to-answer").catch(() => ({ allowed: false }));
+  const organizationId = canComment ? await getCurrentOrganizationId().catch(() => null) : null;
+  const posts = organizationId ? await countOpenPosts(organizationId).catch(() => 0) : 0;
+  const today = visits?.today.length ?? 0;
+  const toWriteUp = visits?.toWriteUp.length ?? 0;
+  const upcoming = visits?.upcoming.length ?? 0;
+  const toPrice = (approvals ?? []).filter((a) => a.stage === "price").length;
+  const toSend = (approvals ?? []).filter((a) => a.stage === "send").length;
+
+  type Square = { key: string; title: string; count: number; line: string };
+  const squares: Square[] = [
+    ...(canComment
+      ? [{ key: "comments", title: "Commenting", count: posts, line: posts === 0 ? "No posts waiting" : `${posts === 1 ? "post" : "posts"} to answer` }]
+      : []),
+    {
+      key: "evaluations",
+      title: "Evaluations",
+      count: today > 0 ? today : toWriteUp,
+      line: today > 0 ? `today${toWriteUp > 0 ? ` · ${toWriteUp} to write up` : ""}` : toWriteUp > 0 ? "to write up" : upcoming > 0 ? `None today · ${upcoming} coming up` : "None booked",
+    },
+    {
+      key: "approval",
+      title: "Site map approval",
+      count: toPrice > 0 ? toPrice : toSend,
+      line: toPrice > 0 ? `to price${toSend > 0 ? ` · ${toSend} to send` : ""}` : toSend > 0 ? "to send to the client" : "Nothing waiting",
+    },
+  ];
+  // What opens: the one tapped, or else the most urgent with something in it.
+  const chosen =
+    squares.find((sq) => sq.key === open)?.key ??
+    (today > 0 ? "evaluations" : toPrice + toSend > 0 ? "approval" : toWriteUp > 0 ? "evaluations" : posts > 0 && canComment ? "comments" : null);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <ul className={cn("grid gap-2", squares.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+        {squares.map((sq) => (
+          <li key={sq.key}>
+            <Link
+              href={`/my-day?open=${sq.key}#${sq.key}`}
+              scroll={false}
+              aria-current={chosen === sq.key ? "true" : undefined}
+              className={cn(
+                "flex h-full min-h-28 flex-col justify-between rounded-2xl border p-3 transition-colors",
+                chosen === sq.key ? "border-primary bg-primary/10 shadow-sm" : "border-border bg-card/80 hover:border-primary/60"
+              )}
+            >
+              <span className="text-sm font-semibold leading-tight">{sq.title}</span>
+              <span>
+                {sq.count > 0 && <span className="block text-3xl font-bold leading-none text-primary">{sq.count}</span>}
+                <span className="mt-1 block text-xs leading-snug text-muted-foreground">{sq.line}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {chosen === "comments" && (
+        <section id="comments" className="scroll-mt-20">
+          <PostsToAnswerPage />
+        </section>
+      )}
+      {chosen === "evaluations" && (
+        <section id="evaluations" className="scroll-mt-20">
+          {visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>}
+        </section>
+      )}
+      {chosen === "approval" && (
+        <section id="approval" className="scroll-mt-20">
+          <PriceApprovals items={approvals ?? []} />
+        </section>
+      )}
+      {!chosen && <p className="text-center text-sm text-muted-foreground">Nothing waiting on you. Tap a square to open it.</p>}
+    </div>
+  );
 }
 
 /** A section still on its way. Small, so the page never jumps when it lands. */
