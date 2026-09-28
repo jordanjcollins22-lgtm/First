@@ -20,7 +20,7 @@ import { mentionComment, normaliseGroupUrl, type AgentGroup, type AgentSources }
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { finishComment, LINK_MARKER, looksUsable } from "@/lib/comment-prompt";
 import { createClient } from "@/lib/supabase/server";
-import { removeBusiness, setPostKind, sortReadPosts } from "@/lib/data/post-sorter";
+import { removeBusiness, setPostKind } from "@/lib/data/post-sorter";
 import { draftWaitingPosts } from "@/lib/data/post-draft";
 import { after } from "next/server";
 
@@ -197,16 +197,6 @@ export async function setAgentPostKind(input: { seenId: string; kind: "request" 
   if (!result.ok) return { ok: false, error: result.error ?? "Couldn't save that." };
   revalidatePath("/admin/outreach/agent");
   return { ok: true };
-}
-
-/** Sort whatever is still unsorted in the pile, now. */
-export async function sortAgentPosts(): Promise<Result & { sorted?: number }> {
-  const profile = await getCurrentProfile();
-  if (!profile) return { ok: false, error: "Not signed in." };
-  const result = await sortReadPosts(profile.organization_id, { limit: 40 });
-  after(() => draftWaitingPosts(profile.organization_id).then(() => undefined, (err) => console.error("drafting failed:", err)));
-  revalidatePath("/admin/outreach/agent");
-  return { ok: true, sorted: result.sorted };
 }
 
 /** Not a business worth keeping. Off the list, and it stays off. */

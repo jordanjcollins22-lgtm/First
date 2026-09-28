@@ -147,8 +147,10 @@ export function CommentCard({
       setError("Couldn't copy. Press and hold the comment to copy it by hand.");
       return;
     }
-    if (post.hasUrl) window.open(post.link, "_blank", "noopener");
-    setCopiedTip(first ? `Copied. Type @${first}, pick them from the list, then paste.` : "Copied. Paste it under the post.");
+    // The post, or with no link a search for it.
+    window.open(post.link, "_blank", "noopener");
+    const find = post.hasUrl ? "" : `Find ${post.author ? `${post.author}'s post` : "the post"}${post.groupName ? ` in ${post.groupName}` : ""}. `;
+    setCopiedTip(first ? `Copied. ${find}Type @${first}, pick them from the list, then paste.` : `Copied. ${find}Paste it under the post.`);
     setBusy("posted");
     const result = await markAnswerPosted(mine.answerId);
     setBusy(null);
@@ -196,6 +198,24 @@ export function CommentCard({
                 </a>
               )}
             </div>
+            {/* The page showed this one without its link. It is still somebody
+                asking for the work: say where to find it, and search for it. */}
+            {!post.hasUrl && (
+              <div className="rounded-lg border border-amber-400/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-950 dark:bg-amber-500/10 dark:text-amber-100">
+                <p>
+                  No link came with this one. It&apos;s {post.author ? <span className="font-semibold">{post.author}</span> : "a post"}
+                  {post.groupName ? (
+                    <>
+                      {" "}in <span className="font-semibold">{post.groupName}</span>
+                    </>
+                  ) : null}
+                  : open the group and look for it, or search for it.
+                </p>
+                <a href={post.link} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-semibold underline">
+                  Find it on Facebook <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
             {post.others.length > 0 && (
               <p className="text-[11px] text-muted-foreground">
                 {post.others.map((a) => `${a.name} ${a.status === "posted" ? "answered it" : "is answering it"}`).join(" · ")}. Room for yours.
@@ -268,7 +288,7 @@ export function CommentCard({
                 <Textarea value={comment} rows={6} onChange={(e) => setEdits((d) => ({ ...d, [post.id]: e.target.value }))} />
                 <Button type="button" className="w-full" disabled={busy !== null} onClick={copyAndGo}>
                   {busy === "posted" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Copy className="mr-1 h-4 w-4" />}
-                  {post.hasUrl ? "Copy & go to post" : "Copy comment"}
+                  {post.hasUrl ? "Copy & go to post" : "Copy & find the post"}
                 </Button>
                 {copiedTip && <p className="text-center text-xs text-emerald-700">{copiedTip}</p>}
                 <button

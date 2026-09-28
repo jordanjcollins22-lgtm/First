@@ -172,16 +172,12 @@ export async function getPostBoard(
 ): Promise<BoardPost[]> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  // Only posts that can be opened. One without a working link stays off the
-  // board until the finder brings its link back, unless somebody already
-  // took it, who still needs to see what they took.
-  // A post somebody added by hand shows too, link or not: a person looked at
-  // it and said it is worth answering.
+  // Every request the sorter found is on the board, link or not: a post the
+  // page showed without its link is still somebody asking for the work, and
+  // leaving it off hid most of what came in. One without a link says so on
+  // the card, with who posted it, where, and a search to find it.
   // The same post kept twice shows once, with everybody's answers to either.
-  const shown = oneRowPerPost(posts, answers).filter(
-    ({ row, answers: list }) => isPostLink(row.url) || Boolean(row.added_by) || list.some((a) => a.status !== "let_go")
-  );
-  return shown
+  return oneRowPerPost(posts, answers)
     .sort((a, b) => b.row.created_at.localeCompare(a.row.created_at))
     .map(({ row, answers: list }) => boardPost(row, list, profileId, now, viewer));
 }
@@ -228,9 +224,7 @@ function boardPost(
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return oneRowPerPost(posts, answers).filter(
-    ({ row, answers: list }) => (isPostLink(row.url) || Boolean(row.added_by)) && standingFor(list, "", now).others.length === 0
-  ).length;
+  return oneRowPerPost(posts, answers).filter(({ answers: list }) => standingFor(list, "", now).others.length === 0).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */

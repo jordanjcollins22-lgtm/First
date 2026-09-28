@@ -18,6 +18,8 @@ import { listBusinesses } from "@/lib/data/post-sorter";
 import { postInsights } from "@/lib/data/post-board";
 import { PostInsightsCard } from "@/components/marketing/post-insights";
 import { Download } from "lucide-react";
+import { after } from "next/server";
+import { sweepPosts } from "@/lib/data/post-sweep";
 import extension from "../../../../../../extension/manifest.json";
 
 /**
@@ -52,6 +54,9 @@ export default async function GroupAgentPage() {
       return null;
     }),
   ]);
+  // Anything read and not sorted yet is sorted once this page is sent, and
+  // written for, so it is on Posts to Answer without a button.
+  if (toPick.some((row) => !row.kind)) after(() => sweepPosts(profile.organization_id).then(() => undefined));
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
   const because = state.active ? null : state.because;
   const paused = because === "paused";

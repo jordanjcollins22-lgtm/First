@@ -6,6 +6,7 @@ import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
 import { runRedditFinder, type RedditLook } from "@/lib/data/reddit-finder";
+import { sweepPosts } from "@/lib/data/post-sweep";
 import { log } from "@/lib/log";
 
 /**
@@ -50,11 +51,14 @@ export async function GET(request: NextRequest) {
     if (refused) return refused;
   }
 
-  let query = admin.from("outreach_agent_settings").select("organization_id, reddit_enabled, paused_until").eq("reddit_enabled", true);
+  // Every business with the finder set up, Reddit on or not: whatever the
+  // browser brought in is swept up here too, sorted and written, so it is on
+  // Posts to Answer without anybody pressing anything.
+  let query = admin.from("outreach_agent_settings").select("organization_id, reddit_enabled, paused_until");
   if (orgFilter) query = query.eq("organization_id", orgFilter);
   const { data: orgs } = await query;
 
-  const looks: { organizationId: string; look?: RedditLook; skipped?: string }[] = [];
+  const looks: { organizationId: string; look?: RedditLook; swept?: { sorted: number; drafted: number }; skipped?: string }[] = [];
   for (const org of orgs ?? []) {
     // Paused is paused, for every platform.
     if (org.paused_until && new Date(org.paused_until).getTime() > Date.now()) {
@@ -62,6 +66,10 @@ export async function GET(request: NextRequest) {
       continue;
     }
     try {
+      if (!org.reddit_enabled) {
+        looks.push({ organizationId: org.organization_id, swept: await sweepPosts(org.organization_id) });
+        continue;
+      }
       const settings = await getAgentSettings(org.organization_id, admin);
       looks.push({ organizationId: org.organization_id, look: await runRedditFinder(org.organization_id, settings, admin) });
     } catch (err) {

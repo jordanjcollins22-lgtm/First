@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ExternalLink, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { passAgentPost, setAgentPostKind, sortAgentPosts } from "@/lib/actions/outreach-agent-actions";
+import { passAgentPost, setAgentPostKind } from "@/lib/actions/outreach-agent-actions";
 import type { SeenRow } from "@/lib/data/outreach-agent";
 import { findPostUrl } from "@/lib/outreach-agent";
 import { shortWhen } from "@/lib/time-zone";
@@ -28,7 +28,6 @@ export function AgentPicker({ rows }: { rows: SeenRow[] }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pile, setPile] = useState<Pile>("request");
-  const [note, setNote] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const left = rows.filter((r) => !gone.has(r.id));
@@ -53,16 +52,6 @@ export function AgentPicker({ rows }: { rows: SeenRow[] }) {
     });
   }
 
-  function sortNow() {
-    setNote(null);
-    setBusy("sort");
-    startTransition(async () => {
-      const result = await sortAgentPosts();
-      setBusy(null);
-      setNote(result.ok ? `Sorted ${result.sorted ?? 0}. Refresh the page to see them in their piles.` : result.error);
-    });
-  }
-
   if (left.length === 0) {
     return <p className="text-sm text-muted-foreground">Nothing read yet. Press Look now in the extension and the posts it reads show up here.</p>;
   }
@@ -83,13 +72,7 @@ export function AgentPicker({ rows }: { rows: SeenRow[] }) {
         {tab("request", "Asking for work")}
         {tab("other", "Other posts")}
         {counts.unsorted > 0 && tab("unsorted", "Not sorted yet")}
-        {counts.unsorted > 0 && (
-          <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={sortNow}>
-            {busy === "sort" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-            Sort them now
-          </Button>
-        )}
-        {note && <span className="text-xs text-muted-foreground">{note}</span>}
+        {counts.unsorted > 0 && <span className="text-xs text-muted-foreground">Sorting by itself now. Refresh in a minute.</span>}
       </div>
       {shown.length === 0 && (
         <p className="text-sm text-muted-foreground">

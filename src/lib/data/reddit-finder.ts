@@ -2,9 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 import { log } from "@/lib/log";
 import { recordSeen } from "@/lib/data/outreach-agent";
-import { sortReadPosts } from "@/lib/data/post-sorter";
+import { sweepPosts } from "@/lib/data/post-sweep";
 import { cleanSubreddit, matchReason, parseRedditListing, redditNewPath, subredditIsLocal, type FoundPost } from "@/lib/social-finder";
-import { draftWaitingPosts } from "@/lib/data/post-draft";
 import type { AgentSettings } from "@/lib/outreach-agent";
 
 /**
@@ -83,7 +82,6 @@ export async function runRedditFinder(organizationId: string, settings: AgentSet
   const token = await appToken();
   const look: RedditLook = { at: now.toISOString(), via: token ? "oauth" : "public", subreddits: [], sorted: 0 };
   const names = settings.redditSubreddits.map(cleanSubreddit).filter((n): n is string => Boolean(n));
-  let keptAny = false;
 
   for (const name of names) {
     const read = await readSubreddit(name, token);
@@ -120,7 +118,6 @@ export async function runRedditFinder(organizationId: string, settings: AgentSet
         // Null is the unique key saying this one is already kept.
         if (id) {
           entry.kept += 1;
-          keptAny = true;
         }
       } catch (err) {
         entry.error = err instanceof Error ? err.message : String(err);
@@ -129,12 +126,10 @@ export async function runRedditFinder(organizationId: string, settings: AgentSet
     look.subreddits.push(entry);
   }
 
-  if (keptAny) {
-    const sort = await sortReadPosts(organizationId, { limit: 40, client: admin }).catch(() => ({ sorted: 0, businesses: 0 }));
-    look.sorted = sort.sorted;
-    // Posts for us get their comment written now, ready in the box.
-    await draftWaitingPosts(organizationId).catch((err) => console.error("drafting failed:", err));
-  }
+  // Every run, not only when something new came in: anything left unsorted
+  // from the browser, or still without its comment, is swept up here, so
+  // nothing waits on somebody pressing a button.
+  look.sorted = (await sweepPosts(organizationId)).sorted;
 
   await admin
     .from("outreach_agent_settings")

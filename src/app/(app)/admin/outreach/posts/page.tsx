@@ -5,7 +5,7 @@ import { requireTab } from "@/lib/data/access";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganization } from "@/lib/data/organizations";
-import { draftWaitingPosts } from "@/lib/data/post-draft";
+import { sweepPosts } from "@/lib/data/post-sweep";
 import { after } from "next/server";
 import { isOwnerLevel } from "@/lib/roles";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
@@ -61,9 +61,9 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
   // A post on the board with no comment written yet (it came in before
   // comments were written on read, or the writer is still catching up): write
   // it now, after this page is sent, so it is in the box on the next look.
-  if (posts.some((p) => !p.draft && !p.mine)) {
-    after(() => draftWaitingPosts(profile.organization_id).then(() => undefined, (err) => console.error("drafting failed:", err)));
-  }
+  // And anything the finder brought in that is not sorted yet is sorted, so
+  // it is here on the next look without anybody pressing a button.
+  after(() => sweepPosts(profile.organization_id).then(() => undefined));
   const whose = whoId === profile.id ? null : leaderboard?.find((s) => s.profileId === whoId)?.name ?? "Their";
 
   return (

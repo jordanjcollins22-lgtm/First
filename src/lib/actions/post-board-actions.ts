@@ -58,9 +58,8 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   const row = await getSeen(org, seenId);
   if (!row || row.decision !== "read") return { ok: false, error: "That post isn't on the board any more." };
   if (!row.text) return { ok: false, error: "There are no words on that post to answer." };
-  if (!isPostLink(row.url) && !row.screenshot_path) {
-    return { ok: false, error: "That post has no working link yet, so it can't be answered from here." };
-  }
+  // A post with no link is answered all the same: the card says who posted
+  // it and where, and searches for it, so it can be found and commented on.
 
   const now = new Date();
   const supabase = await createClient();
