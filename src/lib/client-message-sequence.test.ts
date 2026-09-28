@@ -18,7 +18,7 @@ const step = (key: SequenceStep["step"], ordinal: number, enabled = true): Seque
 
 const input = {
   businessName: "JS Landscaping MD",
-  steps: [step("after", 5), step("booked", 1), step("two_days", 2, false)],
+  steps: [step("after", 5), step("booked", 1), step("two_days", 2, false), step("day_before", 3)],
   rules: DEFAULT_RULES,
   remindersOn: true,
   approvalRequired: false,
@@ -29,12 +29,25 @@ const input = {
 describe("the client's messages, in order", () => {
   const all = buildMessageSequence(input);
 
+  it("numbers each moment, with its text before its email", () => {
+    const booked = all.filter((m) => m.moment === "Evaluation booked");
+    expect(booked.map((m) => [m.number, m.channel])).toEqual([
+      ["1.1", "sms"],
+      ["1.2", "email"],
+    ]);
+    // The rule's own email is the old version of the evaluation email, so only its text is kept.
+    expect(booked[1].key).toBe("evaluation-booked");
+    const eveningBefore = all.filter((m) => m.key === "evaluation_reminder--18-sms" || m.key === "evaluation-day_before");
+    expect(new Set(eveningBefore.map((m) => m.moment)).size).toBe(1);
+    expect(all.map((m) => m.number)).toContain("2.1");
+  });
+
   it("runs evaluation, proposal, job, invoice", () => {
     const stages = all.map((m) => m.stage);
     const order = ["evaluation", "proposal", "job", "invoice"];
     expect([...stages].sort((a, b) => order.indexOf(a) - order.indexOf(b))).toEqual(stages);
-    expect(all[0].key).toBe("evaluation-booked");
-    expect(all[0].subject).toBe("Hi Deanna");
+    expect(all[1].key).toBe("evaluation-booked");
+    expect(all[1].subject).toBe("Hi Deanna");
   });
 
   it("says which are switched off, and texts only where a rule sends texts", () => {

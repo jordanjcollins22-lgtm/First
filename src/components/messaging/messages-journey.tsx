@@ -7,8 +7,8 @@ import { EmailPreview, TextPreview } from "@/components/messaging/message-previe
 
 /**
  * The client's emails and texts in order, each as it arrives, laid out
- * like the other pages of The system: emails or texts at the top, and the
- * emails that are switched off behind a chip.
+ * like the other pages of The system: one line, numbered by moment, the
+ * text before the email at each.
  */
 function status(m: SequenceMessage): string {
   if (m.note) return m.note;
@@ -18,14 +18,12 @@ function status(m: SequenceMessage): string {
 }
 
 export function MessagesJourney({ messages, businessName, fromEmail }: { messages: SequenceMessage[]; businessName: string; fromEmail: string | null }) {
-  // Emails that don't go wait behind a chip, so the main path is exactly
-  // what a client gets. Every text is shown: none may be on yet, and the
-  // point is to read them before switching any on.
+  // One line, in order: each moment numbered, its text before its email.
+  // Switched-off ones stay in their place, dimmed and saying so, so the
+  // order reads whole and nothing is hidden.
   const steps: JourneyStep[] = messages.map((m) => ({
     key: m.key,
-    path: m.channel,
-    missed: m.channel === "email" && !m.on ? "off" : undefined,
-    title: m.title,
+    title: `${m.number} ${m.moment} · ${m.channel === "sms" ? "Text" : "Email"}`,
     what: `${m.when}. ${status(m)}`,
     screen:
       m.channel === "email" ? (
@@ -51,22 +49,14 @@ export function MessagesJourney({ messages, businessName, fromEmail }: { message
         <h1 className="text-xl font-bold">Emails and texts to the client</h1>
         <p className="text-sm text-muted-foreground">
           Everything a client gets from us without anybody typing it, in the order they get it: from booking the evaluation, through the
-          visit, the proposal and the job, to the invoice. Each is shown as it arrives, with your wording and a sample client. Tap an email to
-          read it full size. {on} email{on === 1 ? "" : "s"} and {texts} text{texts === 1 ? "" : "s"} are switched on. Nothing here sends.
+          visit, the proposal and the job, to the invoice. Each moment is numbered, and its text comes before its email: 1.1 is the text when
+          they book, 1.2 the email. Each is shown as it arrives, with your wording and a sample client. Tap an email to read it full size. {on} email{on === 1 ? "" : "s"} and {texts} text{texts === 1 ? "" : "s"} are switched on. Nothing here sends.
         </p>
         <Link href="/admin/reminders" className="text-sm font-medium text-primary hover:underline">
           Change the wording, the timing, or what&apos;s switched on
         </Link>
       </header>
-      <JourneyPages
-        steps={steps}
-        paths={[
-          { key: "email", label: "Emails" },
-          { key: "sms", label: "Texts" },
-        ]}
-        missed={messages.some((m) => m.channel === "email" && !m.on) ? [{ key: "off", label: "Switched off", path: "email" }] : []}
-        heading="Add the emails that are switched off"
-      />
+      <JourneyPages steps={steps} missed={[]} />
     </div>
   );
 }
