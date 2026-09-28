@@ -72,7 +72,7 @@ import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
 import { Suspense, cache } from "react";
-import { cn } from "@/lib/utils";
+import { AccountManagerDayView, type DaySquare } from "@/components/dashboard/account-manager-day";
 
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
@@ -351,7 +351,8 @@ async function GrowthDay() {
  * Commenting, their evaluations, and the site maps waiting on their price,
  * each with what is waiting in it. Tapping one opens it underneath; the
  * one with something waiting today opens by itself. The crews, the money
- * and the tiles are somebody else's day.
+ * and the tiles are somebody else's day. The same squares are on The
+ * system, in the account manager's preview.
  */
 async function AccountManagerDay({
   open,
@@ -371,8 +372,7 @@ async function AccountManagerDay({
   const toPrice = (approvals ?? []).filter((a) => a.stage === "price").length;
   const toSend = (approvals ?? []).filter((a) => a.stage === "send").length;
 
-  type Square = { key: string; title: string; count: number; line: string };
-  const squares: Square[] = [
+  const squares: DaySquare[] = [
     ...(canComment
       ? [{ key: "comments", title: "Commenting", count: posts, line: posts === 0 ? "No posts waiting" : `${posts === 1 ? "post" : "posts"} to answer` }]
       : []),
@@ -395,46 +395,15 @@ async function AccountManagerDay({
     (today > 0 ? "evaluations" : toPrice + toSend > 0 ? "approval" : toWriteUp > 0 ? "evaluations" : posts > 0 && canComment ? "comments" : null);
 
   return (
-    <div className="flex flex-col gap-4">
-      <ul className={cn("grid gap-2", squares.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
-        {squares.map((sq) => (
-          <li key={sq.key}>
-            <Link
-              href={`/my-day?open=${sq.key}#${sq.key}`}
-              scroll={false}
-              aria-current={chosen === sq.key ? "true" : undefined}
-              className={cn(
-                "flex h-full min-h-28 flex-col justify-between rounded-2xl border p-3 transition-colors",
-                chosen === sq.key ? "border-primary bg-primary/10 shadow-sm" : "border-border bg-card/80 hover:border-primary/60"
-              )}
-            >
-              <span className="text-sm font-semibold leading-tight">{sq.title}</span>
-              <span>
-                {sq.count > 0 && <span className="block text-3xl font-bold leading-none text-primary">{sq.count}</span>}
-                <span className="mt-1 block text-xs leading-snug text-muted-foreground">{sq.line}</span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-
-      {chosen === "comments" && (
-        <section id="comments" className="scroll-mt-20">
-          <PostsToAnswerPage />
-        </section>
-      )}
-      {chosen === "evaluations" && (
-        <section id="evaluations" className="scroll-mt-20">
-          {visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>}
-        </section>
-      )}
-      {chosen === "approval" && (
-        <section id="approval" className="scroll-mt-20">
-          <PriceApprovals items={approvals ?? []} />
-        </section>
-      )}
-      {!chosen && <p className="text-center text-sm text-muted-foreground">Nothing waiting on you. Tap a square to open it.</p>}
-    </div>
+    <AccountManagerDayView
+      squares={squares}
+      initialOpen={chosen}
+      sections={{
+        ...(canComment ? { comments: <PostsToAnswerPage /> } : {}),
+        evaluations: visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>,
+        approval: <PriceApprovals items={approvals ?? []} />,
+      }}
+    />
   );
 }
 
