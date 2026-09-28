@@ -370,7 +370,8 @@ async function AccountManagerDay({
   const { allowed: canComment } = await checkTabAccess("posts-to-answer").catch(() => ({ allowed: false }));
   const organizationId = canComment ? await getCurrentOrganizationId().catch(() => null) : null;
   const posts = organizationId ? await countOpenPosts(organizationId).catch(() => 0) : 0;
-  const today = visits?.today.length ?? 0;
+  // Today's visits still to do: one already submitted is done with.
+  const today = visits?.today.filter((v) => v.stage !== "submitted").length ?? 0;
   const toWriteUp = visits?.toWriteUp.length ?? 0;
   const upcoming = visits?.upcoming.length ?? 0;
   const toPrice = (approvals ?? []).filter((a) => a.stage === "price").length;
@@ -387,7 +388,12 @@ async function AccountManagerDay({
       key: "evaluations",
       title: "Evaluations",
       count: today > 0 ? today : toWriteUp,
-      line: today > 0 ? `today${toWriteUp > 0 ? ` · ${toWriteUp} to write up` : ""}` : toWriteUp > 0 ? "to write up" : upcoming > 0 ? `None today · ${upcoming} coming up` : "None booked",
+      line:
+        today > 0
+          ? `today${toWriteUp > 0 ? ` · ${toWriteUp} to write up` : ""}`
+          : toWriteUp > 0
+            ? "to write up"
+            : `${(visits?.today.length ?? 0) > 0 ? "Today's done" : "None today"}${upcoming > 0 ? ` · ${upcoming} coming up` : ""}`,
     },
     {
       key: "approval",
