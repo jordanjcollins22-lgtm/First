@@ -1,6 +1,6 @@
 -- An account manager asking for part of a project's commission before it is
--- payable, on a project the client has paid in full.
--- payable. Asked for, approved or declined by the owner, then paid; paying
+-- payable, on a project the client has paid in full. Asked for, approved or
+-- declined by the owner, then paid; paying
 -- it writes a commission payout against the project, so it comes off what
 -- is owed on it when the commission is due.
 create table if not exists public.commission_advances (
