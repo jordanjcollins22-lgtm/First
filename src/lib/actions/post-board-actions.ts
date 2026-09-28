@@ -5,8 +5,8 @@ import { after } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
-import { getAgentSettings, getSeen, setPicked } from "@/lib/data/outreach-agent";
-import { answeredToday, answersToPost, answersToSamePost } from "@/lib/data/post-board";
+import { getSeen, setPicked } from "@/lib/data/outreach-agent";
+import { answersToPost, answersToSamePost } from "@/lib/data/post-board";
 import { mentionComment } from "@/lib/outreach-agent";
 import { alreadyAnswered, isAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
@@ -65,7 +65,7 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   const supabase = await createClient();
   // Every copy of this post, and every answer to any of them: one comment
   // per person per post, however many times the post was kept.
-  const [same, today, settings] = await Promise.all([answersToSamePost(org, row), answeredToday(org, profile.id, now), getAgentSettings(org)]);
+  const same = await answersToSamePost(org, row);
   const answers = same.answers.filter((a) => same.postOf.get(a.id) === seenId);
   // Not even the owner answers the same post twice.
   const twice = alreadyAnswered(same.answers, profile.id, seenId, same.postOf);
@@ -89,8 +89,6 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
     answers: onePerPerson(same.answers),
     profileId: profile.id,
     now,
-    answeredToday: today,
-    dailyLimit: settings.dailyCap,
     override: isOwnerLevel(profile.roles),
   });
   if (refusal) return { ok: false, error: refusal };

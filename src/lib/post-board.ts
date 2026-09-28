@@ -108,24 +108,15 @@ export function namesOf(answers: BoardAnswer[]): string {
 /**
  * Why this person may not take this post, or null when they may.
  *
- * `override` is the owner: never turned away, by a full post or by the
- * day's limit.
+ * There is no limit on how many anybody answers in a day: as long as there
+ * are posts, they can answer them. Only a post two others already hold is
+ * turned away. `override` is the owner: never turned away at all.
  */
-export function whyNotTake(input: {
-  answers: BoardAnswer[];
-  profileId: string;
-  now: Date;
-  answeredToday: number;
-  dailyLimit: number;
-  override?: boolean;
-}): string | null {
+export function whyNotTake(input: { answers: BoardAnswer[]; profileId: string; now: Date; override?: boolean }): string | null {
   const standing = standingFor(input.answers, input.profileId, input.now);
   if (standing.pile === "mine" || input.override) return null;
   if (standing.pile === "full") {
     return `${namesOf(standing.others)} already have this one. Two answers a post is the most, so leave it to them.`;
-  }
-  if (input.answeredToday >= input.dailyLimit) {
-    return `That's ${input.answeredToday} from your account today. More than that in a day and Facebook starts to notice, so leave the rest for tomorrow or for somebody else.`;
   }
   return null;
 }

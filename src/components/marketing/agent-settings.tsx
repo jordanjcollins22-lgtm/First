@@ -25,7 +25,8 @@ export function AgentSettingsForm({ settings, owner }: { settings: AgentSettings
   const [areaWords, setAreaWords] = useState(settings.areaWords.join(", "));
   const [keywords, setKeywords] = useState(settings.keywords.join(", "));
   const [redditSubreddits, setRedditSubreddits] = useState(settings.redditSubreddits.join("\n"));
-  const [dailyCap, setDailyCap] = useState(String(settings.dailyCap));
+  // Kept as it is: nobody's answering is limited by it any more.
+  const [dailyCap] = useState(String(settings.dailyCap));
   const [activeFrom, setActiveFrom] = useState(settings.activeFrom);
   const [activeTo, setActiveTo] = useState(settings.activeTo);
   const [scanEvery, setScanEvery] = useState(String(settings.scanEveryMinutes));
@@ -160,14 +161,12 @@ export function AgentSettingsForm({ settings, owner }: { settings: AgentSettings
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Field label="Answers a day, each person" value={dailyCap} onChange={setDailyCap} disabled={disabled} type="number" />
         <Field label="Look every (minutes)" value={scanEvery} onChange={setScanEvery} disabled={disabled} type="number" />
         <Field label="Look from" value={activeFrom} onChange={setActiveFrom} disabled={disabled} type="time" />
         <Field label="Look until" value={activeTo} onChange={setActiveTo} disabled={disabled} type="time" />
       </div>
       <p className="text-xs text-muted-foreground">
-        &ldquo;Answers a day&rdquo; is per person, from their own Facebook account. Keep it low: spreading the
-        answering across the team only protects the accounts if no one of them answers everything.
+        There&apos;s no limit on how many posts anybody answers in a day: as long as there are posts, they can answer them.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">

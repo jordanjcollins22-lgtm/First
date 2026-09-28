@@ -91,14 +91,13 @@ export function CommentCard({
   posts,
   pinned: pinnedAtLoad,
   answeredToday,
-  dailyLimit,
-  owner,
 }: {
   posts: BoardPost[];
   pinned: string | null;
   answeredToday: number;
-  dailyLimit: number;
-  owner: boolean;
+  /** No longer used: there is no daily limit. Kept so callers need not change. */
+  dailyLimit?: number;
+  owner?: boolean;
 }) {
   const router = useRouter();
   const [pinned, setPinned] = useState<string | null>(pinnedAtLoad);
@@ -221,7 +220,7 @@ export function CommentCard({
       <div className="flex min-h-[26rem] flex-col rounded-2xl border border-border bg-card p-4 shadow-lg shadow-black/5">
         <div className="mb-3 flex items-baseline justify-between text-xs text-muted-foreground">
           <span>{waiting} waiting</span>
-          <span>{owner ? `You've answered ${answeredToday} today` : `${answeredToday} of ${dailyLimit} today`}</span>
+          <span>You&apos;ve answered {answeredToday} today</span>
         </div>
 
         {!post ? (

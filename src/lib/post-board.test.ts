@@ -62,7 +62,7 @@ describe("standingFor", () => {
 });
 
 describe("whyNotTake", () => {
-  const base = { profileId: "me", now, answeredToday: 0, dailyLimit: 6 };
+  const base = { profileId: "me", now };
   const two = [answer({ status: "posted" }), answer({ id: "b", profileId: "p2", name: "Andrew" })];
   it("allows a post with a place left", () => {
     expect(whyNotTake({ ...base, answers: [] })).toBeNull();
@@ -71,13 +71,12 @@ describe("whyNotTake", () => {
   it("names who has a full one", () => {
     expect(whyNotTake({ ...base, answers: two })).toMatch(/Jace and Andrew already have this one/);
   });
-  it("stops at the day's limit, but never stops you reopening your own", () => {
-    expect(whyNotTake({ ...base, answers: [], answeredToday: 6 })).toMatch(/6 from your account today/);
-    expect(whyNotTake({ ...base, answers: [answer({ profileId: "me" })], answeredToday: 6 })).toBeNull();
+  it("has no limit on how many a day", () => {
+    expect(whyNotTake({ ...base, answers: [] })).toBeNull();
+    expect(whyNotTake({ ...base, answers: [answer({ profileId: "me" })] })).toBeNull();
   });
   it("never turns the owner away", () => {
     expect(whyNotTake({ ...base, answers: two, override: true })).toBeNull();
-    expect(whyNotTake({ ...base, answers: two, answeredToday: 20, override: true })).toBeNull();
   });
 });
 
