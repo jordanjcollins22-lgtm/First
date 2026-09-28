@@ -2108,6 +2108,8 @@ export interface Database {
           reference: string | null;
           note: string | null;
           recorded_by: string | null;
+          /** Commission kept to pay back an advance, not handed over. */
+          advance_repayment: boolean;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["commission_payouts"]["Row"]> & {
@@ -2125,7 +2127,7 @@ export interface Database {
           id: string;
           organization_id: string;
           profile_id: string;
-          job_id: string;
+          job_id: string | null;
           amount: number;
           reason: string | null;
           status: "requested" | "approved" | "declined" | "paid" | "cancelled";
@@ -2145,7 +2147,6 @@ export interface Database {
         Insert: Partial<Database["public"]["Tables"]["commission_advances"]["Row"]> & {
           organization_id: string;
           profile_id: string;
-          job_id: string;
           amount: number;
         };
         Update: Partial<Database["public"]["Tables"]["commission_advances"]["Row"]>;

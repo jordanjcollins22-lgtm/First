@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Deferred } from "@/components/deferred";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
-import { listAdvances, type AdvanceRow } from "@/lib/data/commission-advances";
+import { advanceOwed, listAdvances, type AdvanceRow } from "@/lib/data/commission-advances";
 import { AdvanceApprovals } from "@/components/payments/commission-advances";
 import { getPaymentsData } from "@/lib/data/payments";
 import { getCommissionByManager, type ManagerCommission } from "@/lib/data/commission";
@@ -100,6 +100,9 @@ export default async function PaymentsPage({
       console.error("Commission failed to load:", err);
       return [];
     });
+  // What each owes on advances, paid back first out of their next commission.
+  const owedBy = await advanceOwed(commission.map((c) => c.profileId)).catch(() => new Map<string, number>());
+  for (const book of commission) book.advanceOwed = owedBy.get(book.profileId) ?? 0;
 
   if (!data) {
     return (

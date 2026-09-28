@@ -72,7 +72,7 @@ import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
 import { AdvanceApprovals, AdvanceRequest } from "@/components/payments/commission-advances";
-import { advanceProjects, listAdvances, type AdvanceProject, type AdvanceRow } from "@/lib/data/commission-advances";
+import { advanceBook, advanceOwed, listAdvances, type AdvanceBook, type AdvanceRow } from "@/lib/data/commission-advances";
 import { Suspense, cache } from "react";
 import { AccountManagerDayView, type DaySquare } from "@/components/dashboard/account-manager-day";
 import { JobManagement, jobsNeedingYou } from "@/components/dashboard/job-management";
@@ -383,14 +383,11 @@ async function AccountManagerDay({
   const { toWalk, toSchedule } = jobsNeedingYou(managed);
   // Their commission, and advances on it: what they can ask for, and what they have.
   const me = await getCurrentProfile().catch(() => null);
-  const [commission, advanceRoom, myAdvances] = me
-    ? await Promise.all([
-        getCommissionFor(me).catch(() => null),
-        advanceProjects(me).catch(() => [] as AdvanceProject[]),
-        listAdvances({ profileId: me.id }).catch(() => [] as AdvanceRow[]),
-      ])
-    : [null, [] as AdvanceProject[], [] as AdvanceRow[]];
-  const advancesOpen = myAdvances.filter((a) => a.status === "requested" || a.status === "approved").length;
+  const noBook: AdvanceBook = { projects: [], owed: 0, pending: 0, limit: 0, advances: [] };
+  const [commission, book] = me
+    ? await Promise.all([getCommissionFor(me).catch(() => null), advanceBook(me).catch(() => noBook)])
+    : [null, noBook];
+  const advancesOpen = book.advances.filter((a) => a.status === "requested" || a.status === "approved").length;
 
   const squares: DaySquare[] = [
     ...(canComment
@@ -429,7 +426,7 @@ async function AccountManagerDay({
       title: "Commission",
       count: advancesOpen,
       line: commission
-        ? `$${Math.round(commission.earned).toLocaleString("en-US")} payable · $${Math.round(commission.accruing + commission.held).toLocaleString("en-US")} coming${advancesOpen > 0 ? ` · ${advancesOpen} advance${advancesOpen === 1 ? "" : "s"} open` : ""}`
+        ? `$${Math.round(commission.earned).toLocaleString("en-US")} payable · $${Math.round(commission.accruing + commission.held).toLocaleString("en-US")} coming${book.owed > 0 ? ` · $${Math.round(book.owed).toLocaleString("en-US")} advance owed` : ""}${advancesOpen > 0 ? ` · ${advancesOpen} asked` : ""}`
         : "Your commission and advances",
     },
   ];
@@ -459,8 +456,10 @@ async function AccountManagerDay({
         jobs: <JobManagement items={managed} />,
         commission: (
           <div className="flex flex-col gap-3">
-            {commission && commission.lines.length > 0 && <CommissionPanel summary={commission} subtitle="Across every client you manage." />}
-            <AdvanceRequest projects={advanceRoom} advances={myAdvances} />
+            <AdvanceRequest book={book} advances={book.advances} />
+            {commission && commission.lines.length > 0 && (
+              <CommissionPanel summary={commission} advanceOwed={book.owed} subtitle="Across every client you manage." />
+            )}
           </div>
         ),
       }}
@@ -880,10 +879,11 @@ async function CommissionBlock({ profile }: { profile: Profile }) {
     return null as CommissionSummary | null;
   });
   if (!commission || commission.lines.length === 0) return null;
+  const owed = (await advanceOwed([profile.id]).catch(() => new Map<string, number>())).get(profile.id) ?? 0;
   return (
     <div className="mb-6">
       <h2 className="mb-1 text-lg font-bold">Your commission</h2>
-      <CommissionPanel summary={commission} subtitle="Across every client you manage, not just today's." />
+      <CommissionPanel summary={commission} advanceOwed={owed} subtitle="Across every client you manage, not just today's." />
     </div>
   );
 }

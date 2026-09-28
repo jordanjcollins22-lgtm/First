@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceRoom, isPending, paidInFull, whyNotAdvance } from "./commission-advance";
+import { advanceLimit, advanceRoom, isPending, paidInFull, splitRepayment, whyNotAdvance } from "./commission-advance";
 
 describe("an advance on commission", () => {
   it("can be up to what the project's commission will come to, less what has gone out or been asked for", () => {
@@ -21,8 +21,8 @@ describe("an advance on commission", () => {
 
   it("says why an amount can't be asked for", () => {
     expect(whyNotAdvance(0, 100)).toMatch(/how much/);
-    expect(whyNotAdvance(50, 0)).toMatch(/nothing left/);
-    expect(whyNotAdvance(150, 100)).toBe("The most you can ask for on this project is $100.");
+    expect(whyNotAdvance(50, 0)).toMatch(/nothing to advance/);
+    expect(whyNotAdvance(150, 100)).toBe("The most you can ask for right now is $100.");
     expect(whyNotAdvance(100, 100)).toBeNull();
   });
 
@@ -31,5 +31,16 @@ describe("an advance on commission", () => {
     expect(isPending("approved")).toBe(true);
     expect(isPending("paid")).toBe(false);
     expect(isPending("declined")).toBe(false);
+  });
+
+  it("can be up to the commission to come, less what is owed and asked for", () => {
+    expect(advanceLimit([607.5, 487.5, 97.5, 47.25], 500, 0)).toBe(739.75);
+    expect(advanceLimit([100], 150, 0)).toBe(0);
+  });
+
+  it("is paid back first out of every commission payout, then the rest is handed over", () => {
+    const split = splitRepayment([{ amount: 300 }, { amount: 300 }, { amount: 100 }], 500);
+    expect(split.map((l) => [l.repay, l.cash])).toEqual([[300, 0], [200, 100], [0, 100]]);
+    expect(splitRepayment([{ amount: 80 }], 0)[0]).toMatchObject({ repay: 0, cash: 80 });
   });
 });

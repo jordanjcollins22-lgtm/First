@@ -124,6 +124,7 @@ export function PaymentsDashboard({
                 summary={book.summary}
                 title={book.personName}
                 profileId={book.profileId}
+                advanceOwed={book.advanceOwed ?? 0}
                 // This screen is already gated on being whoever sends the
                 // money, so anybody looking at it may say it has been sent.
                 canMarkPaid

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
+import { advanceOwed } from "@/lib/data/commission-advances";
+import { splitRepayment } from "@/lib/commission-advance";
 
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -49,20 +51,51 @@ export async function recordCommissionPaid(input: {
   const lines = input.lines.filter((line) => line.jobId && Number(line.amount) > 0);
   if (lines.length === 0) return { ok: false, error: "Nothing to record." };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("commission_payouts").insert(
-    lines.map((line) => ({
-      organization_id: profile.organization_id,
-      profile_id: input.profileId,
-      job_id: line.jobId,
-      amount: Math.round(Number(line.amount) * 100) / 100,
-      paid_at: input.paidAt || new Date().toISOString(),
-      method: input.method ?? null,
-      reference: input.reference ?? null,
-      note: input.note ?? null,
-      recorded_by: profile.id,
-    }))
+  // An advance they owe is paid back first: that much of the commission is
+  // kept, and written down as paying it back rather than as handed over.
+  const owed = (await advanceOwed([input.profileId])).get(input.profileId) ?? 0;
+  const split = splitRepayment(
+    lines.map((line) => ({ jobId: line.jobId, amount: Math.round(Number(line.amount) * 100) / 100 })),
+    owed
   );
+  const paidAt = input.paidAt || new Date().toISOString();
+  const rows = split.flatMap((line) => [
+    ...(line.repay > 0
+      ? [
+          {
+            organization_id: profile.organization_id,
+            profile_id: input.profileId,
+            job_id: line.jobId,
+            amount: line.repay,
+            paid_at: paidAt,
+            method: "Advance repaid",
+            reference: null,
+            note: "Kept to pay back an advance",
+            recorded_by: profile.id,
+            advance_repayment: true,
+          },
+        ]
+      : []),
+    ...(line.cash > 0
+      ? [
+          {
+            organization_id: profile.organization_id,
+            profile_id: input.profileId,
+            job_id: line.jobId,
+            amount: line.cash,
+            paid_at: paidAt,
+            method: input.method ?? null,
+            reference: input.reference ?? null,
+            note: input.note ?? null,
+            recorded_by: profile.id,
+            advance_repayment: false,
+          },
+        ]
+      : []),
+  ]);
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("commission_payouts").insert(rows);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/payments");

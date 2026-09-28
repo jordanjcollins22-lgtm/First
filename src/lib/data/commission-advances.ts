@@ -2,20 +2,22 @@ import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
 import { loadMoney } from "@/lib/data/commission";
 import { DEFAULT_ACCOUNT_MANAGER_PCT } from "@/lib/commission";
-import { advanceRoom, isPending, paidInFull, type AdvanceStatus } from "@/lib/commission-advance";
+import { advanceLimit, advanceRoom, isPending, paidInFull, type AdvanceStatus } from "@/lib/commission-advance";
 import type { Profile } from "@/types/domain";
 
 /**
- * Advances on commission: every one asked for, with where it stands, and
- * for an account manager the projects they could ask on and how much.
+ * Advances on commission: every one asked for, with where it stands; what
+ * each account manager owes on them; and for an account manager, how much
+ * more they could ask for.
  */
 
 export interface AdvanceRow {
   id: string;
   profileId: string;
   person: string;
-  jobId: string;
-  client: string;
+  /** Older advances were asked on a project; an advance now is on the account. */
+  jobId: string | null;
+  client: string | null;
   amount: number;
   reason: string | null;
   status: AdvanceStatus;
@@ -53,7 +55,7 @@ export async function listAdvances(filter: { profileId?: string } = {}): Promise
   type Row = {
     id: string;
     profile_id: string;
-    job_id: string;
+    job_id: string | null;
     amount: number | string;
     reason: string | null;
     status: AdvanceStatus;
@@ -71,7 +73,7 @@ export async function listAdvances(filter: { profileId?: string } = {}): Promise
     profileId: r.profile_id,
     person: (r.person?.full_name || r.person?.email || "Somebody").split(" ")[0],
     jobId: r.job_id,
-    client: r.job?.property?.customer?.name ?? "A project",
+    client: r.job?.property?.customer?.name ?? null,
     amount: Number(r.amount),
     reason: r.reason,
     status: r.status,
@@ -85,32 +87,65 @@ export async function listAdvances(filter: { profileId?: string } = {}): Promise
 }
 
 /**
- * The projects this account manager could ask for an advance on -- sold
- * work on clients they manage, paid for in full by the client -- with how
- * much each could still be.
+ * What each account manager owes on advances: every advance paid to them,
+ * less the commission kept to pay them back.
  */
-export async function advanceProjects(profile: Pick<Profile, "id" | "commission_pct">): Promise<AdvanceProject[]> {
+export async function advanceOwed(profileIds: string[]): Promise<Map<string, number>> {
+  const owed = new Map<string, number>();
+  if (profileIds.length === 0) return owed;
+  const supabase = await createClient();
+  const [{ data: paid }, { data: repaid }] = await Promise.all([
+    supabase.from("commission_advances").select("profile_id, amount").eq("status", "paid").in("profile_id", profileIds),
+    supabase.from("commission_payouts").select("profile_id, amount").eq("advance_repayment", true).in("profile_id", profileIds),
+  ]);
+  for (const a of paid ?? []) owed.set(a.profile_id, (owed.get(a.profile_id) ?? 0) + Number(a.amount));
+  for (const r of repaid ?? []) owed.set(r.profile_id, (owed.get(r.profile_id) ?? 0) - Number(r.amount));
+  for (const [id, n] of owed) owed.set(id, Math.max(0, Math.round(n * 100) / 100));
+  return owed;
+}
+
+export interface AdvanceBook {
+  /** Projects the client has paid in full, with the commission still to come on each. */
+  projects: AdvanceProject[];
+  /** Owed on advances already paid. */
+  owed: number;
+  /** Asked for, not paid yet. */
+  pending: number;
+  /** What can be asked for now. */
+  limit: number;
+  advances: AdvanceRow[];
+}
+
+/**
+ * One account manager's advances: what they owe, what is waiting, and how
+ * much more they could ask for -- the commission to come on sold work the
+ * client has paid in full, less what they owe and have asked for.
+ */
+export async function advanceBook(profile: Pick<Profile, "id" | "commission_pct">): Promise<AdvanceBook> {
   const all = await listJobsWithLocation();
   const mine = all.filter((j) => j.property.customer.account_manager_id === profile.id && SOLD.has(j.status));
-  if (mine.length === 0) return [];
-  const [money, advances] = await Promise.all([loadMoney(mine.map((j) => j.id)), listAdvances({ profileId: profile.id })]);
+  const [money, advances, owedBy] = await Promise.all([
+    loadMoney(mine.map((j) => j.id)),
+    listAdvances({ profileId: profile.id }),
+    advanceOwed([profile.id]),
+  ]);
   const pct = profile.commission_pct ?? DEFAULT_ACCOUNT_MANAGER_PCT;
-  return mine
+  const projects = mine
     // Paid in full on what the client handed over: a card payment recorded
     // with its fee taken out still paid the whole price.
     .filter((job) => paidInFull(money.contract.get(job.id) ?? null, money.paidByClient.get(job.id) ?? 0))
-    .map((job) => {
-      const pending = advances.filter((a) => a.jobId === job.id && isPending(a.status)).reduce((sum, a) => sum + a.amount, 0);
-      return {
-        jobId: job.id,
-        client: job.property.customer.name,
-        address: job.property.address,
-        room: advanceRoom(
-          { pct, contractValue: money.contract.get(job.id) ?? null, collected: money.collected.get(job.id) ?? 0, paidOut: money.paidOut.get(job.id) ?? 0 },
-          pending
-        ),
-      };
-    })
+    .map((job) => ({
+      jobId: job.id,
+      client: job.property.customer.name,
+      address: job.property.address,
+      room: advanceRoom(
+        { pct, contractValue: money.contract.get(job.id) ?? null, collected: money.collected.get(job.id) ?? 0, paidOut: money.paidOut.get(job.id) ?? 0 },
+        0
+      ),
+    }))
     .filter((p) => p.room > 0)
     .sort((a, b) => b.room - a.room);
+  const owed = owedBy.get(profile.id) ?? 0;
+  const pending = advances.filter((a) => isPending(a.status)).reduce((sum, a) => sum + a.amount, 0);
+  return { projects, owed, pending, limit: advanceLimit(projects.map((p) => p.room), owed, pending), advances };
 }

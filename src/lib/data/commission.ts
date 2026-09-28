@@ -178,6 +178,8 @@ export interface ManagerCommission {
   profileId: string;
   personName: string;
   summary: CommissionSummary;
+  /** Owed on advances: paid back first out of their next commission. */
+  advanceOwed?: number;
 }
 
 /** Every account manager's book, for the Money page. */

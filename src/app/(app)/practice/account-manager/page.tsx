@@ -163,7 +163,7 @@ export default async function AccountManagerJourneyPage() {
         { key: "evaluations", title: "Evaluations", count: 1, line: "today · 1 to write up" },
         { key: "approval", title: "Site map approval", count: 1, line: "to price" },
         { key: "jobs", title: "Job management", count: 2, line: "1 to walk · 1 to schedule" },
-        { key: "commission", title: "Commission", count: 1, line: "$98 payable · $555 coming · 1 advance open" },
+        { key: "commission", title: "Commission", count: 1, line: "$98 payable · $555 coming · $150 advance owed · 1 asked" },
       ]}
       sections={{
         // The card as Jace sees it; in the preview it can't be pressed, so nothing is taken or posted.
@@ -178,13 +178,18 @@ export default async function AccountManagerJourneyPage() {
         commission: (
           <div inert>
             <AdvanceRequest
-              projects={[
-                { jobId: "sample-j2", client: "Dana Brooks", address: "7 Brook Ln, Forest Hill, MD", room: 277.5 },
-                { jobId: "sample-j3", client: "Chris Patel", address: "52 Grove St, Fallston, MD", room: 210 },
-              ]}
+              book={{
+                owed: 150,
+                pending: 0,
+                limit: 337.5,
+                projects: [
+                  { jobId: "sample-j2", client: "Dana Brooks", address: "7 Brook Ln, Forest Hill, MD", room: 277.5 },
+                  { jobId: "sample-j3", client: "Chris Patel", address: "52 Grove St, Fallston, MD", room: 210 },
+                ],
+              }}
               advances={[
-                { id: "a1", profileId: "p", person: "Jace", jobId: "sample-j3", client: "Chris Patel", amount: 150, reason: "Truck repair", status: "requested", requestedAt: hoursFromNow(-20), decidedAt: null, decisionNote: null, paidAt: null, method: null, reference: null },
-                { id: "a2", profileId: "p", person: "Jace", jobId: "sample-j1", client: "Mark Ellis", amount: 90, reason: "Rent", status: "paid", requestedAt: hoursFromNow(-240), decidedAt: hoursFromNow(-230), decisionNote: null, paidAt: hoursFromNow(-228), method: "Zelle", reference: null },
+                { id: "a1", profileId: "p", person: "Jace", jobId: null, client: null, amount: 100, reason: "Truck repair", status: "requested", requestedAt: hoursFromNow(-20), decidedAt: null, decisionNote: null, paidAt: null, method: null, reference: null },
+                { id: "a2", profileId: "p", person: "Jace", jobId: null, client: null, amount: 150, reason: "Rent", status: "paid", requestedAt: hoursFromNow(-240), decidedAt: hoursFromNow(-230), decisionNote: null, paidAt: hoursFromNow(-228), method: "Zelle", reference: null },
               ]}
             />
           </div>

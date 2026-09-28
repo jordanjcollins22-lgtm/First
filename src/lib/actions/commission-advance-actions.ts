@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { isAccountManager } from "@/lib/affiliate-roles";
-import { advanceProjects } from "@/lib/data/commission-advances";
+import { advanceBook } from "@/lib/data/commission-advances";
 import { whyNotAdvance } from "@/lib/commission-advance";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
@@ -21,24 +21,24 @@ function refresh() {
   revalidatePath("/admin/payments");
 }
 
-/** An account manager asks for part of a project's commission now. */
-export async function requestAdvance(input: { jobId: string; amount: number; reason: string }): Promise<Result> {
+/** An account manager asks for an advance on their commission, owed back from it as it comes due. */
+export async function requestAdvance(input: { amount: number; reason: string }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
   if (!isAccountManager(profile.roles)) return { ok: false, error: "Advances are for account managers, on the projects they manage." };
   const reason = input.reason.trim();
   if (!reason) return { ok: false, error: "Say what it's for." };
 
-  // The room is worked out again here, not trusted from the screen.
-  const project = (await advanceProjects(profile)).find((p) => p.jobId === input.jobId);
-  const why = whyNotAdvance(input.amount, project?.room ?? 0);
+  // The limit is worked out again here, not trusted from the screen.
+  const book = await advanceBook(profile);
+  const why = whyNotAdvance(input.amount, book.limit);
   if (why) return { ok: false, error: why };
 
   const supabase = await createClient();
   const { error } = await supabase.from("commission_advances").insert({
     organization_id: profile.organization_id,
     profile_id: profile.id,
-    job_id: input.jobId,
+    job_id: null,
     amount: Math.round(input.amount * 100) / 100,
     reason: reason.slice(0, 500),
   });
@@ -86,42 +86,16 @@ export async function decideAdvance(id: string, approve: boolean, note: string):
 }
 
 /**
- * It has been sent. Written as a commission payout against the project, so
- * it counts as paid on it and comes off what is owed when the commission is
- * due.
+ * It has been sent. From here it is a balance they owe: every commission
+ * payout to them goes to paying it back first.
  */
 export async function payAdvance(id: string, input: { method: string; reference: string }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
   if (!approves(profile.roles)) return { ok: false, error: "Only the owner pays advances." };
   const supabase = await createClient();
-  const { data: advance } = await supabase
-    .from("commission_advances")
-    .select("id, organization_id, profile_id, job_id, amount, status, reason")
-    .eq("id", id)
-    .maybeSingle();
-  if (!advance) return { ok: false, error: "Couldn't find that advance." };
-  if (advance.status !== "approved") return { ok: false, error: advance.status === "paid" ? "It's already paid." : "Approve it first." };
-
   const now = new Date().toISOString();
-  const { data: payout, error: payoutError } = await supabase
-    .from("commission_payouts")
-    .insert({
-      organization_id: advance.organization_id,
-      profile_id: advance.profile_id,
-      job_id: advance.job_id,
-      amount: Number(advance.amount),
-      paid_at: now,
-      method: input.method.trim() || null,
-      reference: input.reference.trim() || null,
-      note: `Advance${advance.reason ? `: ${advance.reason}` : ""}`,
-      recorded_by: profile.id,
-    })
-    .select("id")
-    .single();
-  if (payoutError || !payout) return { ok: false, error: payoutError?.message ?? "Couldn't record the payment." };
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("commission_advances")
     .update({
       status: "paid",
@@ -129,15 +103,13 @@ export async function payAdvance(id: string, input: { method: string; reference:
       paid_by: profile.id,
       method: input.method.trim() || null,
       reference: input.reference.trim() || null,
-      payout_id: payout.id,
       updated_at: now,
     })
-    .eq("id", id);
-  if (error) {
-    // Not left half done: the payout goes if the advance can't say it was paid.
-    await supabase.from("commission_payouts").delete().eq("id", payout.id);
-    return { ok: false, error: error.message };
-  }
+    .eq("id", id)
+    .eq("status", "approved")
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: "Approve it first, or it's already paid." };
   refresh();
-  return { ok: true, message: "Paid, and recorded against the project's commission." };
+  return { ok: true, message: "Paid. It comes back out of their commission as it's paid." };
 }

@@ -30,7 +30,7 @@ function money(n: number): string {
  * what is owed, and making them tick six boxes to say so is a way to have
  * five of them paid.
  */
-export function MarkCommissionPaid({ profileId, lines }: { profileId: string; lines: PayableLine[] }) {
+export function MarkCommissionPaid({ profileId, lines, advanceOwed = 0 }: { profileId: string; lines: PayableLine[]; advanceOwed?: number }) {
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<Set<string>>(new Set(lines.map((line) => line.jobId)));
   const [reference, setReference] = useState("");
@@ -42,6 +42,9 @@ export function MarkCommissionPaid({ profileId, lines }: { profileId: string; li
 
   const picked = lines.filter((line) => chosen.has(line.jobId));
   const total = picked.reduce((sum, line) => sum + line.amount, 0);
+  // An advance owed is paid back first: that much is kept, the rest is sent.
+  const kept = Math.min(Math.max(0, advanceOwed), total);
+  const toSend = Math.round((total - kept) * 100) / 100;
 
   if (!open) {
     return (
@@ -103,9 +106,15 @@ export function MarkCommissionPaid({ profileId, lines }: { profileId: string; li
         </label>
       </div>
 
+      {kept > 0 && (
+        <p className="text-xs">
+          {money(kept)} of it pays back the advance they owe. <span className="font-semibold">Send them {money(toSend)}.</span>
+        </p>
+      )}
+
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -126,7 +135,7 @@ export function MarkCommissionPaid({ profileId, lines }: { profileId: string; li
           }}
         >
           {isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-          Record {money(total)} paid
+          {kept > 0 ? `Record: ${money(kept)} to the advance, ${money(toSend)} sent` : `Record ${money(total)} paid`}
         </Button>
         <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setOpen(false)}>
           Cancel

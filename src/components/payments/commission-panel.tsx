@@ -21,6 +21,7 @@ export function CommissionPanel({
   subtitle,
   profileId,
   canMarkPaid = false,
+  advanceOwed = 0,
 }: {
   summary: CommissionSummary;
   title?: string;
@@ -29,6 +30,8 @@ export function CommissionPanel({
   profileId?: string;
   /** Only for whoever actually sends the money. */
   canMarkPaid?: boolean;
+  /** Owed on advances: paid back first out of the next commission. */
+  advanceOwed?: number;
 }) {
   return (
     <section className="rounded-xl border border-white/60 bg-card/60 p-3 backdrop-blur-md">
@@ -49,9 +52,17 @@ export function CommissionPanel({
         <Tile label="Paid out" value={money(summary.paid)} />
       </div>
 
+      {advanceOwed > 0 && (
+        <p className="mb-3 rounded-lg border border-amber-400/70 bg-amber-50/60 px-2.5 py-1.5 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <span className="font-semibold">{money(advanceOwed)} advance owed.</span> Paid back first out of commission as it&apos;s paid; the
+          rest is handed over.
+        </p>
+      )}
+
       {canMarkPaid && profileId && summary.earned > 0 && (
         <MarkCommissionPaid
           profileId={profileId}
+          advanceOwed={advanceOwed}
           lines={summary.lines
             .filter((line) => line.state === "earned" && line.amount > 0)
             .map((line) => ({

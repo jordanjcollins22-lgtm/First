@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { decideAdvance, payAdvance, requestAdvance, withdrawAdvance } from "@/lib/actions/commission-advance-actions";
 import { ADVANCE_STATUS_LABEL, type AdvanceStatus } from "@/lib/commission-advance";
-import type { AdvanceProject, AdvanceRow } from "@/lib/data/commission-advances";
+import type { AdvanceBook, AdvanceRow } from "@/lib/data/commission-advances";
 
 const money = (n: number) =>
   `$${n.toLocaleString("en-US", Number.isInteger(n) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -49,36 +49,38 @@ function Status({ status }: { status: AdvanceStatus }) {
  * its commission will still pay, and see every one asked for and where it
  * stands.
  */
-export function AdvanceRequest({ projects, advances }: { projects: AdvanceProject[]; advances: AdvanceRow[] }) {
+export function AdvanceRequest({ book, advances }: { book: Pick<AdvanceBook, "limit" | "owed" | "pending" | "projects">; advances: AdvanceRow[] }) {
   const { pending, message, run } = useRun();
-  const [jobId, setJobId] = useState(projects[0]?.jobId ?? "");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
-  const project = projects.find((p) => p.jobId === jobId);
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3">
       <div>
-        <h3 className="font-semibold">Ask for an advance</h3>
+        <h3 className="font-semibold">Advances</h3>
         <p className="text-xs text-muted-foreground">
-          Part of a project&apos;s commission now, on a project the client has paid in full. Once it&apos;s approved and paid, it comes off what
-          that project pays you when it&apos;s due.
+          Money now, owed back from your commission: every commission payout pays back what you owe first, then the rest comes to you.
         </p>
       </div>
-      {projects.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No project to advance on right now. An advance can only be asked on a project the client has paid in full.</p>
+      <div className="grid grid-cols-2 gap-2">
+        <div className={cn("rounded-lg border p-2", book.owed > 0 ? "border-amber-400 bg-amber-50/60 dark:bg-amber-950/30" : "border-border")}>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">You owe</p>
+          <p className="text-lg font-bold tabular-nums">{money(book.owed)}</p>
+          <p className="text-[11px] text-muted-foreground">{book.owed > 0 ? "Comes out of your next commission" : "Nothing owed"}</p>
+        </div>
+        <div className="rounded-lg border border-border p-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">You can ask for</p>
+          <p className="text-lg font-bold tabular-nums">{money(book.limit)}</p>
+          <p className="text-[11px] text-muted-foreground">Commission to come on jobs paid in full</p>
+        </div>
+      </div>
+      {book.limit <= 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing to ask for right now. An advance is covered by commission to come on jobs the client has paid in full
+          {book.owed > 0 ? ", less what you owe" : ""}.
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
-          <label className="flex flex-col gap-1 text-xs font-medium">
-            Project
-            <select value={jobId} onChange={(e) => setJobId(e.target.value)} className="h-10 rounded-md border border-border bg-background px-2 text-sm">
-              {projects.map((p) => (
-                <option key={p.jobId} value={p.jobId}>
-                  {p.client}: up to {money(p.room)}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="flex flex-col gap-1 text-xs font-medium">
             How much
             <div className="relative">
@@ -87,7 +89,7 @@ export function AdvanceRequest({ projects, advances }: { projects: AdvanceProjec
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder={project ? String(Math.floor(project.room)) : ""}
+                placeholder={String(Math.floor(book.limit))}
                 className="h-10 w-full rounded-md border border-border bg-background pl-6 pr-2 text-sm"
               />
             </div>
@@ -98,10 +100,10 @@ export function AdvanceRequest({ projects, advances }: { projects: AdvanceProjec
           </label>
           <Button
             type="button"
-            disabled={pending || !jobId}
+            disabled={pending}
             onClick={() =>
               run(
-                () => requestAdvance({ jobId, amount: Number(amount.replace(/[$,\s]/g, "")), reason }),
+                () => requestAdvance({ amount: Number(amount.replace(/[$,\s]/g, "")), reason }),
                 () => {
                   setAmount("");
                   setReason("");
@@ -110,8 +112,13 @@ export function AdvanceRequest({ projects, advances }: { projects: AdvanceProjec
             }
           >
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Ask for it
+            Ask for an advance
           </Button>
+          {book.projects.length > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Covered by: {book.projects.map((p) => `${p.client} ${money(p.room)}`).join(" · ")}
+            </p>
+          )}
         </div>
       )}
       {message && <p className={cn("text-sm", message.ok ? "text-emerald-700" : "text-destructive")}>{message.text}</p>}
@@ -122,7 +129,7 @@ export function AdvanceRequest({ projects, advances }: { projects: AdvanceProjec
             <li key={a.id} className="flex flex-col gap-0.5 py-2 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">
-                  {money(a.amount)} <span className="font-normal text-muted-foreground">on {a.client}</span>
+                  {money(a.amount)} {a.client && <span className="font-normal text-muted-foreground">on {a.client}</span>}
                 </span>
                 <Status status={a.status} />
               </div>
@@ -175,7 +182,8 @@ export function AdvanceApprovals({ advances }: { advances: AdvanceRow[] }) {
             {done.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-2 text-xs">
                 <span>
-                  {a.person}: {money(a.amount)} on {a.client}
+                  {a.person}: {money(a.amount)}
+                  {a.client ? ` on ${a.client}` : ""}
                   {a.paidAt ? `, paid ${day(a.paidAt)}${a.method ? ` by ${a.method}` : ""}${a.reference ? ` (${a.reference})` : ""}` : ""}
                 </span>
                 <Status status={a.status} />
@@ -198,7 +206,7 @@ function AdvanceToAnswer({ advance: a }: { advance: AdvanceRow }) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">
-            {a.person} asks {money(a.amount)} <span className="font-normal text-muted-foreground">on {a.client}</span>
+            {a.person} asks {money(a.amount)} {a.client && <span className="font-normal text-muted-foreground">on {a.client}</span>}
           </p>
           <p className="text-xs text-muted-foreground">
             {day(a.requestedAt)}
@@ -235,7 +243,7 @@ function AdvanceToAnswer({ advance: a }: { advance: AdvanceRow }) {
           </label>
           <Button type="button" size="sm" disabled={pending} onClick={() => run(() => payAdvance(a.id, { method, reference }))}>
             {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-            Mark paid {money(a.amount)}
+            Mark paid {money(a.amount)}, owed back
           </Button>
         </div>
       )}
