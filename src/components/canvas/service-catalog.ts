@@ -119,7 +119,7 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
     id: "landscape-cleanup",
     label: "Landscape Cleanup",
     fields: [
-      { key: "cleanupType", label: "Cleanup type", type: "select", options: ["General", "Overgrowth", "Property Reset"] },
+      { key: "cleanupType", label: "Cleanup type", type: "select", options: ["General", "Overgrowth", "Property Reset", "Cut down"] },
       { key: "weedLevel", label: "Weed level", type: "select", options: ["Light", "Moderate", "Heavy"] },
       { key: "overgrowth", label: "Overgrowth", type: "select", options: ["Light", "Moderate", "Heavy"] },
       { key: "vines", label: "Vines", type: "select", options: ["None", "Light", "Heavy"] },

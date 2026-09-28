@@ -119,7 +119,18 @@ function plantBushRemoval(v: Values): CrewStep[] {
   const s = phased();
   const qty = Number(v.quantity);
   const size = pick(v, "size");
-  const noun = plural(pick(v, "type") ?? "Plant", qty);
+
+  // Something already down, like a fallen branch: cut up and taken, with
+  // no digging and no root ball.
+  const kind = pick(v, "type");
+  if (kind && /branch|limb|log|fallen/i.test(kind)) {
+    s.work(`Cut up the ${lower(kind)} and haul it away.`);
+    s.work("Leave the spot level and raked clean.");
+    s.cleanup(CLEAN_UP);
+    return s.done();
+  }
+
+  const noun = plural(kind ?? "Plant", qty);
   s.prep(UTILITIES);
   s.prep(`Take out the ${qty > 1 ? `${qty} ` : ""}${size ? `${lower(size)} ` : ""}${noun} and dig out ${qty === 1 ? "the root ball" : "the root balls"}.`);
   s.work("Fill each hole with soil and tamp it level.");
@@ -167,8 +178,20 @@ function landscapeCleanup(v: Values): CrewStep[] {
   const s = phased();
   const staying = text(v, "plantsStaying");
   if (staying && !saysNothing(staying)) s.prep(`Leave these where they are: ${staying}.`);
-  s.prep("Remove all the leaves, sticks and any debris.");
   const type = pick(v, "cleanupType");
+
+  // A cut back, not a clearing: everything is cut to the ground and the
+  // cuttings go, but nothing is pulled and the ground is not cleared bare.
+  // Sold smaller, so the sheet must not send the crew to do the full job.
+  if (type && /^cut/i.test(type)) {
+    s.prep("Pick up the loose ground debris you can: sticks, fallen limbs and trash. Don't rake the area out.");
+    s.work("Cut the overgrowth, brush, vines and saplings down to the ground.");
+    s.work("Cut, don't pull: the roots and the weeds stay.");
+    s.cleanup("Load and haul away every bit of what you cut, then blow off the walks and driveway.");
+    return s.done();
+  }
+
+  s.prep("Remove all the leaves, sticks and any debris.");
   if (type === "Property Reset") s.work("Take the whole area back to clean: everything unwanted comes out.");
   else if (type && /brush/i.test(type)) s.work("Cut out all the brush, down to the ground, and haul it away.");
   if (pick(v, "overgrowth")) s.work("Cut back all the overgrowth.");

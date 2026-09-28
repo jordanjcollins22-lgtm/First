@@ -59,4 +59,18 @@ describe("crewInstructions", () => {
     expect(tree).toContain("Take out the large tree and dig out the root ball.");
     expect(tree).toContain("Leave the spot level and raked clean.");
   });
+
+  it("cuts back, not clears, when the job was sold as a cut back", () => {
+    const steps = crewSteps("landscape-cleanup", { cleanupType: "Cut down", vines: "Heavy", saplings: "Many", weedLevel: "Heavy", overgrowth: "Heavy" })!;
+    const said = steps.map((s) => s.label).join(" ");
+    expect(said).toMatch(/down to the ground/);
+    expect(said).toMatch(/haul away every bit of what you cut/);
+    expect(said).not.toMatch(/Pull every weed|roots and all|Dig out/);
+  });
+
+  it("cuts up a fallen branch instead of digging out a tree", () => {
+    const lines = crewInstructions("plant-bush-removal", { type: "Other", type__other: "Fallen tree branch", size: "Large", quantity: "1", afterward: "Just removed" });
+    expect(lines[0]).toBe("Cut up the fallen tree branch and haul it away.");
+    expect(lines.join(" ")).not.toMatch(/root ball/);
+  });
 });
