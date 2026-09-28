@@ -21,6 +21,8 @@ async function safe<T>(query: PromiseLike<{ data: T[] | null }>): Promise<T[]> {
 
 export interface JobMoney {
   collected: Map<string, number>;
+  /** What the client handed over, card fee and all: whether they have paid the whole price. */
+  paidByClient: Map<string, number>;
   contract: Map<string, number | null>;
   openTickets: Map<string, number>;
   /** Commission already handed over, per job. */
@@ -42,6 +44,7 @@ export interface JobMoney {
 export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
   const empty: JobMoney = {
     collected: new Map(),
+    paidByClient: new Map(),
     contract: new Map(),
     openTickets: new Map(),
     paidOut: new Map(),
@@ -71,9 +74,11 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
   ]);
 
   const collected = new Map<string, number>();
-  const add = (jobId: string | null, amount: number) => {
+  const paidByClient = new Map<string, number>();
+  const add = (jobId: string | null, amount: number, fee = 0) => {
     if (!jobId) return;
     collected.set(jobId, (collected.get(jobId) ?? 0) + amount);
+    paidByClient.set(jobId, (paidByClient.get(jobId) ?? 0) + amount + fee);
   };
 
   // Money that arrived, fee excluded. The card fee is not money against the
@@ -87,7 +92,7 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     invoice_id: string | null;
     stripe_invoice_id: string | null;
   }[]) {
-    add(row.job_id, (row.amount_cents - (row.surcharge_cents ?? 0)) / 100);
+    add(row.job_id, (row.amount_cents - (row.surcharge_cents ?? 0)) / 100, (row.surcharge_cents ?? 0) / 100);
     if (row.invoice_id) coveredInvoices.add(row.invoice_id);
     if (row.stripe_invoice_id) coveredInvoices.add(row.stripe_invoice_id);
   }
@@ -139,7 +144,7 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     if (!seen || row.paid_at > seen) lastPaidAt.set(row.job_id, row.paid_at);
   }
 
-  return { collected, contract, openTickets, paidOut, lastPaidAt };
+  return { collected, paidByClient, contract, openTickets, paidOut, lastPaidAt };
 }
 
 function toInputs(jobs: JobWithLocation[], money: JobMoney): CommissionJobInput[] {

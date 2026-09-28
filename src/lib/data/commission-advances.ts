@@ -96,7 +96,9 @@ export async function advanceProjects(profile: Pick<Profile, "id" | "commission_
   const [money, advances] = await Promise.all([loadMoney(mine.map((j) => j.id)), listAdvances({ profileId: profile.id })]);
   const pct = profile.commission_pct ?? DEFAULT_ACCOUNT_MANAGER_PCT;
   return mine
-    .filter((job) => paidInFull(money.contract.get(job.id) ?? null, money.collected.get(job.id) ?? 0))
+    // Paid in full on what the client handed over: a card payment recorded
+    // with its fee taken out still paid the whole price.
+    .filter((job) => paidInFull(money.contract.get(job.id) ?? null, money.paidByClient.get(job.id) ?? 0))
     .map((job) => {
       const pending = advances.filter((a) => a.jobId === job.id && isPending(a.status)).reduce((sum, a) => sum + a.amount, 0);
       return {
