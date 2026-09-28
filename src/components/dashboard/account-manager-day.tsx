@@ -43,7 +43,7 @@ export function AccountManagerDayView({
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className={cn("grid gap-2", squares.length === 3 ? "grid-cols-3" : squares.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2")}>
+      <ul className={cn("grid gap-2", squares.length === 3 ? "grid-cols-3" : squares.length === 4 ? "grid-cols-2 sm:grid-cols-4" : squares.length >= 5 ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2")}>
         {squares.map((sq) => (
           <li key={sq.key}>
             <button

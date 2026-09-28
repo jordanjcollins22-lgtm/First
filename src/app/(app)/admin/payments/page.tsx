@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { Deferred } from "@/components/deferred";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
+import { listAdvances, type AdvanceRow } from "@/lib/data/commission-advances";
+import { AdvanceApprovals } from "@/components/payments/commission-advances";
 import { getPaymentsData } from "@/lib/data/payments";
 import { getCommissionByManager, type ManagerCommission } from "@/lib/data/commission";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -75,6 +77,10 @@ export default async function PaymentsPage({
   // its own — a page about money should not go blank because the table that
   // says whether Stripe is up has not been created yet.
   const organization = await getCurrentOrganization().catch(() => null);
+  const advances = await listAdvances().catch((err) => {
+    console.error("Advances failed to load:", err);
+    return [] as AdvanceRow[];
+  });
   const health = organization
     ? await paymentsHealthFor(organization.id).catch(() => null)
     : null;
@@ -120,6 +126,12 @@ export default async function PaymentsPage({
         since={downSince}
       />
       <WebhookBanner verdict={webhook} />
+      {/* Advances on commission: approve, pay, and the ones done with. */}
+      {advances.length > 0 && (
+        <div className="mb-4">
+          <AdvanceApprovals advances={advances} />
+        </div>
+      )}
       <PageTabs
         tabs={[
           {

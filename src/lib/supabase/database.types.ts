@@ -2119,6 +2119,38 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["commission_payouts"]["Row"]>;
         Relationships: [];
       };
+      /** An account manager asking for part of a project's commission early. */
+      commission_advances: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          job_id: string;
+          amount: number;
+          reason: string | null;
+          status: "requested" | "approved" | "declined" | "paid" | "cancelled";
+          requested_at: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          paid_at: string | null;
+          paid_by: string | null;
+          method: string | null;
+          reference: string | null;
+          /** The commission payout written when it was paid. */
+          payout_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["commission_advances"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          job_id: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["commission_advances"]["Row"]>;
+        Relationships: [];
+      };
       client_consent: {
         Row: {
           id: string;

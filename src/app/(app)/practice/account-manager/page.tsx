@@ -13,6 +13,7 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PriceApprovals, PriceCard } from "@/components/proposal/price-approvals";
 import { JourneyPages, type JourneyStep } from "@/components/practice/journey-pages";
 import { AccountManagerDayView } from "@/components/dashboard/account-manager-day";
+import { AdvanceRequest } from "@/components/payments/commission-advances";
 import { JobManagement } from "@/components/dashboard/job-management";
 import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { CommentCard } from "@/components/marketing/comment-card";
@@ -162,6 +163,7 @@ export default async function AccountManagerJourneyPage() {
         { key: "evaluations", title: "Evaluations", count: 1, line: "today · 1 to write up" },
         { key: "approval", title: "Site map approval", count: 1, line: "to price" },
         { key: "jobs", title: "Job management", count: 2, line: "1 to walk · 1 to schedule" },
+        { key: "commission", title: "Commission", count: 1, line: "$98 payable · $555 coming · 1 advance open" },
       ]}
       sections={{
         // The card as Jace sees it; in the preview it can't be pressed, so nothing is taken or posted.
@@ -172,6 +174,21 @@ export default async function AccountManagerJourneyPage() {
         ),
         evaluations: <EvaluatorDayView data={sampleDay} preview />,
         approval: <PriceApprovals items={[item]} preview />,
+        // The form as Jace sees it; in the preview it can't be pressed, so nothing is asked for.
+        commission: (
+          <div inert>
+            <AdvanceRequest
+              projects={[
+                { jobId: "sample-j2", client: "Dana Brooks", address: "7 Brook Ln, Forest Hill, MD", room: 277.5 },
+                { jobId: "sample-j3", client: "Chris Patel", address: "52 Grove St, Fallston, MD", room: 210 },
+              ]}
+              advances={[
+                { id: "a1", profileId: "p", person: "Jace", jobId: "sample-j3", client: "Chris Patel", amount: 150, reason: "Truck repair", status: "requested", requestedAt: hoursFromNow(-20), decidedAt: null, decisionNote: null, paidAt: null, method: null, reference: null },
+                { id: "a2", profileId: "p", person: "Jace", jobId: "sample-j1", client: "Mark Ellis", amount: 90, reason: "Rent", status: "paid", requestedAt: hoursFromNow(-240), decidedAt: hoursFromNow(-230), decisionNote: null, paidAt: hoursFromNow(-228), method: "Zelle", reference: null },
+              ]}
+            />
+          </div>
+        ),
         jobs: (
           <JobManagement
             preview

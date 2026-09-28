@@ -71,6 +71,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { DashboardSections } from "@/components/dashboard/dashboard-sections";
 import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/dashboard/my-work-panels";
 import { CommissionPanel } from "@/components/payments/commission-panel";
+import { AdvanceApprovals, AdvanceRequest } from "@/components/payments/commission-advances";
+import { advanceProjects, listAdvances, type AdvanceProject, type AdvanceRow } from "@/lib/data/commission-advances";
 import { Suspense, cache } from "react";
 import { AccountManagerDayView, type DaySquare } from "@/components/dashboard/account-manager-day";
 import { JobManagement, jobsNeedingYou } from "@/components/dashboard/job-management";
@@ -379,6 +381,16 @@ async function AccountManagerDay({
   // Sold work on their book: to book a date for, to walk and sign off, underway, booked.
   const managed = (await myWorkFor(profileId))?.managed ?? [];
   const { toWalk, toSchedule } = jobsNeedingYou(managed);
+  // Their commission, and advances on it: what they can ask for, and what they have.
+  const me = await getCurrentProfile().catch(() => null);
+  const [commission, advanceRoom, myAdvances] = me
+    ? await Promise.all([
+        getCommissionFor(me).catch(() => null),
+        advanceProjects(me).catch(() => [] as AdvanceProject[]),
+        listAdvances({ profileId: me.id }).catch(() => [] as AdvanceRow[]),
+      ])
+    : [null, [] as AdvanceProject[], [] as AdvanceRow[]];
+  const advancesOpen = myAdvances.filter((a) => a.status === "requested" || a.status === "approved").length;
 
   const squares: DaySquare[] = [
     ...(canComment
@@ -412,6 +424,14 @@ async function AccountManagerDay({
             ? `${managed.length} underway or booked`
             : "No live jobs",
     },
+    {
+      key: "commission",
+      title: "Commission",
+      count: advancesOpen,
+      line: commission
+        ? `$${Math.round(commission.earned).toLocaleString("en-US")} payable · $${Math.round(commission.accruing + commission.held).toLocaleString("en-US")} coming${advancesOpen > 0 ? ` · ${advancesOpen} advance${advancesOpen === 1 ? "" : "s"} open` : ""}`
+        : "Your commission and advances",
+    },
   ];
   // What opens: the one tapped, or else the most urgent with something in it.
   const chosen =
@@ -437,6 +457,12 @@ async function AccountManagerDay({
         evaluations: visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>,
         approval: <PriceApprovals items={approvals ?? []} />,
         jobs: <JobManagement items={managed} />,
+        commission: (
+          <div className="flex flex-col gap-3">
+            {commission && commission.lines.length > 0 && <CommissionPanel summary={commission} subtitle="Across every client you manage." />}
+            <AdvanceRequest projects={advanceRoom} advances={myAdvances} />
+          </div>
+        ),
       }}
     />
   );
@@ -561,6 +587,11 @@ async function OfficeDay() {
 
       <Suspense fallback={null}>
         <OpsBlock />
+      </Suspense>
+
+      {/* Advances on commission waiting on the owner: to approve, then to pay. */}
+      <Suspense fallback={null}>
+        <AdvancesBlock profile={profile} />
       </Suspense>
 
       <Suspense fallback={<BlockLoading lines={2} />}>
@@ -832,6 +863,15 @@ async function WorkBlock({ profile }: { profile: Profile }) {
       )}
     </>
   );
+}
+
+/** Advances asked for, for whoever approves and pays them. Only when one is waiting. */
+async function AdvancesBlock({ profile }: { profile: Profile }) {
+  const approves = isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead");
+  if (!approves) return null;
+  const advances = await listAdvances().catch(() => [] as AdvanceRow[]);
+  if (!advances.some((a) => a.status === "requested" || a.status === "approved")) return null;
+  return <AdvanceApprovals advances={advances} />;
 }
 
 async function CommissionBlock({ profile }: { profile: Profile }) {
