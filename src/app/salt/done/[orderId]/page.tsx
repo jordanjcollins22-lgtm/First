@@ -3,6 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { saltOrderSummary, settleSaltOrder } from "@/lib/actions/public-salt-actions";
+import { SALT_KEPT_LINE } from "@/lib/salt";
 
 /**
  * Where they land after paying.
@@ -63,6 +64,7 @@ export default async function SaltDonePage({
           address and how you want the walks done, and we will make sure your order is covered
           before the first storm. You will not need to call us when it snows.
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">{SALT_KEPT_LINE}</p>
       </section>
 
       <p className="text-center text-xs text-muted-foreground">

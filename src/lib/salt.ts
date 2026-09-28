@@ -35,6 +35,31 @@ export const SURFACE_LABEL: Record<Surface, string> = {
 /** The fewest treatments worth putting a truck on the road for. */
 export const MINIMUM_TREATMENTS = 3;
 
+/**
+ * How long a client's salt is kept for them. Treatments not used this winter
+ * are not lost: the salt is stored, and they are there for the next storm,
+ * for up to two years from paying.
+ */
+export const SALT_KEPT_YEARS = 2;
+
+/** What the client is told about it, in one line. */
+export const SALT_KEPT_LINE = `Treatments you don't use this winter carry over: we store your salt for up to ${SALT_KEPT_YEARS} years, so it's there for the next storm.`;
+
+/** The last day an order's unused treatments are kept, from when it was paid. Null while unpaid. */
+export function saltKeptUntil(paidAt: string | null | undefined): Date | null {
+  if (!paidAt) return null;
+  const until = new Date(paidAt);
+  if (Number.isNaN(until.getTime())) return null;
+  until.setUTCFullYear(until.getUTCFullYear() + SALT_KEPT_YEARS);
+  return until;
+}
+
+/** Past its two years: what is left of it is no longer owed. */
+export function saltExpired(paidAt: string | null | undefined, now: Date = new Date()): boolean {
+  const until = saltKeptUntil(paidAt);
+  return until != null && until.getTime() < now.getTime();
+}
+
 export interface SaltSettings {
   /** What a bag of calcium chloride costs us, in cents. */
   bagCostCents: number;

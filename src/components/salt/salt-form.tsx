@@ -5,7 +5,7 @@ import { useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { startSaltOrder, type SaltOffer } from "@/lib/actions/public-salt-actions";
-import { MINIMUM_TREATMENTS, PET_NOTE, PRODUCT_NOTE, SURFACE_LABEL, type Surface } from "@/lib/salt";
+import { MINIMUM_TREATMENTS, PET_NOTE, PRODUCT_NOTE, SALT_KEPT_LINE, SURFACE_LABEL, type Surface } from "@/lib/salt";
 
 /**
  * Four questions and a card sheet.
@@ -254,7 +254,7 @@ export function SaltForm({ offer }: { offer: SaltOffer }) {
         <p className="mt-1 text-3xl font-bold text-primary tabular-nums">
           ${total.toLocaleString()}
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">Paid once, up front, for the season.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Paid once, up front. {SALT_KEPT_LINE}</p>
       </div>
 
       {!offer.canPay ? (

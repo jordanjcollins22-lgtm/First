@@ -5,6 +5,7 @@ import {
   poundsFor,
   priceTreatment,
   quoteOrder,
+  SALT_KEPT_LINE,
   type SaltQuote,
   type SaltSettings,
   type Surface,
@@ -94,6 +95,20 @@ export function saltingMaterial(values: Record<string, string | undefined>, sett
   };
 }
 
+/**
+ * A salting area's words brought to a new price, when the account manager
+ * sets the job's price by hand: "3 treatments at $40 each, $120 in all"
+ * becomes the new total, split over the same treatments. Words that are not
+ * salting's are returned as they were.
+ */
+export function repriceSaltingScope(text: string, totalCents: number): string {
+  return text.replace(/^Pre-paid salting: (\d+) treatments at \$[\d,.]+ each, \$[\d,.]+ in all/, (_, n: string) => {
+    const treatments = Math.max(1, Number(n));
+    const each = Math.round(totalCents / treatments);
+    return `Pre-paid salting: ${treatments} treatments at ${money(each)} each, ${money(totalCents)} in all`;
+  });
+}
+
 /** What the proposal says about it, in the client's words. */
 export function saltingScope(values: Record<string, string | undefined>, settings: SaltSettings = DEFAULT_SALT_SETTINGS): string {
   const order = saltingOrder(values);
@@ -102,6 +117,8 @@ export function saltingScope(values: Record<string, string | undefined>, setting
   return [
     `Pre-paid salting: ${quote.treatments} treatments at ${money(quote.perTreatmentCents)} each, ${money(quote.totalCents)} in all, on the ${where}.`,
     `Each treatment is calcium chloride, never rock salt, so the concrete isn't pitted${order.petFriendly ? ", in the pet safe blend" : ""}. We come out when ice is forecast or after a snow push.`,
-    `Three treatments is the minimum to book. They are paid up front so the salt is bought ahead of the season. Snow removal, when you want it, is billed after each storm by how much fell.`,
+    `Three treatments is the minimum to book. They are paid up front so the salt is bought ahead of the season.`,
+    SALT_KEPT_LINE,
+    `Snow removal, when you want it, is billed after each storm by how much fell.`,
   ].join(" ");
 }

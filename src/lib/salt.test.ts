@@ -10,6 +10,8 @@ import {
   poundsFor,
   priceTreatment,
   quoteOrder,
+  saltExpired,
+  saltKeptUntil,
   type SaltSettings,
 } from "@/lib/salt";
 
@@ -187,5 +189,15 @@ describe("money", () => {
   it("drops the cents on a round number", () => {
     expect(money(9_000)).toBe("$90");
     expect(money(9_050)).toBe("$90.50");
+  });
+});
+
+describe("salt kept for two years", () => {
+  it("keeps unused treatments for two years from paying", () => {
+    expect(saltKeptUntil("2026-10-01T12:00:00Z")?.toISOString()).toBe("2028-10-01T12:00:00.000Z");
+    expect(saltKeptUntil(null)).toBeNull();
+    expect(saltExpired("2026-10-01T12:00:00Z", new Date("2028-02-01T00:00:00Z"))).toBe(false);
+    expect(saltExpired("2026-10-01T12:00:00Z", new Date("2028-10-02T00:00:00Z"))).toBe(true);
+    expect(saltExpired(null)).toBe(false);
   });
 });

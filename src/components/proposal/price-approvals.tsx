@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { acceptPrice, setPrice } from "@/lib/actions/price-approval-actions";
 import { sendProposalToClient } from "@/lib/actions/proposal-actions";
-import { readPrice } from "@/lib/price-approval";
+import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { cn } from "@/lib/utils";
 
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+// To the cent, for a visit's share, so the lines of it add up.
+const cents = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const hours = (h: number) => (h < 10 ? h.toFixed(1) : Math.round(h).toString());
 
 /**
@@ -73,9 +75,9 @@ export function PriceCard({
     });
   }
 
-  function submitPrice() {
+  function submitPrice(given?: number) {
     setError(null);
-    const price = readPrice(typed);
+    const price = given ?? readPrice(typed);
     if (price == null) return setError("Type the price in dollars, like 2450.");
     if (preview) {
       setTotal(Math.round(price * 100));
@@ -121,7 +123,7 @@ export function PriceCard({
 
       {(stage === "price" || stage === "decline") && (
         <>
-          <Breakdown item={item} />
+          <Breakdown item={item} total={total} pending={pending} onUsePrice={(cents) => submitPrice(cents / 100)} />
           {total !== worked && worked > 0 && (
             <p className="text-xs text-muted-foreground">
               The rate card works it out at {dollars(worked)}; the price was set at {dollars(total)}.
@@ -160,7 +162,7 @@ export function PriceCard({
                 autoFocus={!preview}
               />
             </div>
-            <Button type="button" className="h-12 px-5 font-semibold" disabled={pending} onClick={submitPrice}>
+            <Button type="button" className="h-12 px-5 font-semibold" disabled={pending} onClick={() => submitPrice()}>
               {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Submit"}
             </Button>
           </div>
@@ -207,22 +209,120 @@ export function PriceCard({
   );
 }
 
-/** Everything behind the price: the site map, the job's totals, then each area with its photos. */
-function Breakdown({ item }: { item: PriceApproval }) {
+/** "Jace's account manager fee (15%)", "Max's affiliate fee (5%)". */
+function feeLabel(fee: JobFee): string {
+  const whose = fee.name === "Account manager" || fee.name === "Affiliate" ? "" : `${fee.name}'s `;
+  return `${whose}${fee.kind === "affiliate" ? "affiliate" : "account manager"} fee (${fee.pct}%)`;
+}
+
+/**
+ * What the price leaves: labour, materials and the fee taken off it, and the
+ * gross profit, a visit at a time when the crew comes out more than once.
+ * Under 50% it says the price that makes 50%, with a button to use it.
+ */
+function ProfitTable({
+  item,
+  total,
+  pending,
+  onUsePrice,
+}: {
+  item: PriceApproval;
+  total: number;
+  pending: boolean;
+  onUsePrice: (cents: number) => void;
+}) {
+  const b = item.breakdown;
+  const m = margin(total, b.labourCents, b.materialsCents, item.fee.pct);
+  const visits = b.visits != null && b.visits > 1 ? b.visits : null;
+  const floor = priceForTarget(b.labourCents, b.materialsCents, item.fee.pct, GROSS_PROFIT_TARGET, visits ?? 1);
+  const target = Math.round(GROSS_PROFIT_TARGET * 100);
+  const cell = (cents: number) => (visits ? [cents / visits, cents] : [cents]);
+  const rows: { label: string; detail?: string; cents: number; strong?: boolean }[] = [
+    { label: "Price to the client", cents: m.priceCents, strong: true },
+    { label: "Labour", detail: `${hours(b.crewHours / (visits ?? 1))} crew-hrs${visits ? " a visit" : ""} at ${dollars(item.crewRateCents)}/hr`, cents: m.labourCents },
+    {
+      label: "Materials",
+      detail: b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
+      cents: m.materialsCents,
+    },
+    { label: feeLabel(item.fee), detail: "of the price", cents: m.feeCents },
+    { label: "Total cost", cents: m.costCents, strong: true },
+  ];
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="px-3 py-1.5 text-left font-medium">Cost &amp; profit</th>
+            {visits && <th className="px-3 py-1.5 text-right font-medium">Per visit</th>}
+            <th className="px-3 py-1.5 text-right font-medium">{visits ? `All ${visits} visits` : "This job"}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map((r) => (
+            <tr key={r.label} className={r.strong ? "font-semibold" : undefined}>
+              <td className="px-3 py-1.5 align-top">
+                {r.label}
+                {r.detail && <span className="block text-xs font-normal text-muted-foreground">{r.detail}</span>}
+              </td>
+              {cell(r.cents).map((c, i) => (
+                <td key={i} className="px-3 py-1.5 text-right align-top tabular-nums">
+                  {visits && i === 0 ? cents(c) : dollars(c)}
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr className={cn("font-bold", m.meetsTarget ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-300")}>
+            <td className="px-3 py-2">
+              Gross profit
+              <span className="block text-xs font-medium">{Math.round(m.grossPct * 100)}% of the price</span>
+            </td>
+            {cell(m.grossCents).map((c, i) => (
+              <td key={i} className="px-3 py-2 text-right tabular-nums">
+                {visits && i === 0 ? cents(c) : dollars(c)}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+      {m.meetsTarget ? (
+        <p className="border-t border-border px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+          At or above the {target}% gross profit every job needs.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-red-900 dark:text-red-300">
+          <span>
+            Under the {target}% gross profit every job needs.
+            {floor != null && ` ${dollars(floor)}${visits ? ` (${dollars(floor / visits)} a visit)` : ""} leaves ${target}%.`}
+          </span>
+          {floor != null && (
+            <Button type="button" size="sm" disabled={pending} onClick={() => onUsePrice(floor)}>
+              Price it at {dollars(floor)}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Everything behind the price: the site map, what it costs and leaves, then each area with its photos. */
+function Breakdown({
+  item,
+  total,
+  pending,
+  onUsePrice,
+}: {
+  item: PriceApproval;
+  total: number;
+  pending: boolean;
+  onUsePrice: (cents: number) => void;
+}) {
   const b = item.breakdown;
   return (
     <div className="flex flex-col gap-2">
       {item.siteMap && <PriceSiteMap map={item.siteMap} />}
-      <dl className="grid grid-cols-2 gap-2">
-        <Stat label="Budgeted hours" value={`${hours(b.crewHours)} crew-hrs`} />
-        <Stat label="Labour" value={dollars(b.labourCents)} />
-        <Stat
-          label="Materials"
-          value={dollars(b.materialsCents)}
-          detail={b.materialTotals.length > 0 ? b.materialTotals.map((m) => `${m.amount} ${m.name.toLowerCase()}${m.cents == null ? ", no cost set" : ""}`) : ["None"]}
-        />
-        <Stat label="Markup & overhead" value={dollars(b.markupCents)} />
-      </dl>
+      <ProfitTable item={item} total={total} pending={pending} onUsePrice={onUsePrice} />
       <details open className="rounded-xl border border-border">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
           {b.areas.length} area{b.areas.length === 1 ? "" : "s"}, area by area
@@ -240,8 +340,18 @@ function Breakdown({ item }: { item: PriceApproval }) {
                 <p className="shrink-0 font-semibold tabular-nums">{dollars(a.priceCents)}</p>
               </div>
               <p className="text-xs text-muted-foreground">
-                {[a.size ?? "not measured", `${hours(a.crewHours)} crew-hrs, ${dollars(a.labourCents)} labour`, `${dollars(a.materialsCents)} materials`, `${dollars(a.markupCents)} markup & overhead`].join(" · ")}
+                {[
+                  a.size ?? "not measured",
+                  `${hours(a.crewHours)} crew-hrs, ${dollars(a.labourCents)} labour`,
+                  `${dollars(a.materialsCents)} materials`,
+                  `${Math.round(margin(a.priceCents, a.labourCents, a.materialsCents, item.fee.pct).grossPct * 100)}% gross profit`,
+                ].join(" · ")}
               </p>
+              {a.visits > 1 && (
+                <p className="text-xs text-muted-foreground">
+                  {a.visits} visits: {dollars(a.priceCents / a.visits)} a visit, of which {dollars(a.labourCents / a.visits)} labour and {dollars(a.materialsCents / a.visits)} materials
+                </p>
+              )}
               {a.materials.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   {a.materials.map((m) => `${m.name}: ${m.amount}${m.cents != null ? `, ${dollars(m.cents)}` : ", no cost set"}`).join(" · ")}
@@ -271,20 +381,6 @@ function Breakdown({ item }: { item: PriceApproval }) {
         <p key={w} className="rounded-lg bg-amber-100/70 px-3 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           {w}
         </p>
-      ))}
-    </div>
-  );
-}
-
-function Stat({ label, value, detail }: { label: string; value: string; detail?: string[] }) {
-  return (
-    <div className={cn("rounded-xl border border-border bg-background p-2.5")}>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="text-base font-semibold tabular-nums">{value}</dd>
-      {detail?.map((line) => (
-        <dd key={line} className="text-xs text-muted-foreground">
-          {line}
-        </dd>
       ))}
     </div>
   );

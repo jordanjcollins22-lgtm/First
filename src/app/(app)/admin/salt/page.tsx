@@ -146,7 +146,13 @@ export default async function SaltPage() {
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {SURFACE_LABEL[order.surface]}
                   {order.petFriendly && ", pet safe"} · {order.treatments - order.used} of{" "}
-                  {order.treatments} left · {order.email}
+                  {order.treatments} left
+                  {order.keptUntil &&
+                    order.treatments - order.used > 0 &&
+                    (order.expired
+                      ? " · past its 2 years, no longer owed"
+                      : ` · kept until ${new Date(order.keptUntil).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`)}{" "}
+                  · {order.email}
                   {order.phone && ` · ${order.phone}`}
                 </p>
                 {order.jobId && (

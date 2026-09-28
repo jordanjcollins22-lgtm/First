@@ -17,7 +17,7 @@ import type { WorkZone } from "@/components/canvas/types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { costZone, formatMaterialQuantity, zoneCrewHours, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
 import type { ProposalZoneSnapshot } from "@/types/domain";
-import { isSalting, saltingOrder } from "@/lib/salting";
+import { isSalting, repriceSaltingScope, saltingOrder } from "@/lib/salting";
 
 export interface AreaCost {
   name: string;
@@ -37,6 +37,8 @@ export interface AreaCost {
   unknownMaterialCost: boolean;
   /** The photos taken of it on the walkthrough, as storage paths. */
   photoPaths: string[];
+  /** How many times the crew comes out for it: the treatments, for salting; one otherwise. */
+  visits: number;
 }
 
 export interface PriceBreakdown {
@@ -50,6 +52,8 @@ export interface PriceBreakdown {
   materialTotals: { name: string; amount: string; cents: number | null }[];
   /** Anything that makes the worked-out price a floor rather than a price. */
   warnings: string[];
+  /** Visits, when every area is done the same number of times; null when they differ. */
+  visits: number | null;
 }
 
 type Catalog = Pick<CanvasCatalog, "servicePricing" | "serviceMaterialRules" | "materials" | "crewCostPerHourCents" | "markup" | "salt">;
@@ -88,6 +92,7 @@ export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakd
         missingTiming: cost.hasMissingTiming,
         unknownMaterialCost: cost.hasUnknownMaterialCost,
         photoPaths: zone.service!.photos ?? [],
+        visits: isSalting(zone.service!.typeId) ? saltingOrder(zone.service!.values).treatments : 1,
       };
     });
   const sum = (pick: (a: AreaCost) => number) => areas.reduce((total, a) => total + pick(a), 0);
@@ -124,7 +129,60 @@ export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakd
     priceCents: sum((a) => a.priceCents),
     materialTotals,
     warnings,
+    visits: areas.length > 0 && areas.every((a) => a.visits === areas[0].visits) ? areas[0].visits : null,
   };
+}
+
+/** The gross profit every job is priced to leave, at least. */
+export const GROSS_PROFIT_TARGET = 0.5;
+
+/** Who is paid a share of the job's price for bringing it in or looking after it. */
+export interface JobFee {
+  kind: "account-manager" | "affiliate";
+  /** Their first name, or who they are when there is nobody named. */
+  name: string;
+  /** Their share of the price, in percent. */
+  pct: number;
+}
+
+export interface Margin {
+  priceCents: number;
+  labourCents: number;
+  materialsCents: number;
+  feeCents: number;
+  /** Labour, materials and the fee. */
+  costCents: number;
+  grossCents: number;
+  /** Gross profit as a share of the price, 0 to 1. */
+  grossPct: number;
+  /** At or above the target. */
+  meetsTarget: boolean;
+}
+
+/**
+ * What the job leaves once it is paid for: the price less the crew's labour,
+ * the materials and the account manager's or affiliate's share of the price.
+ * Overhead is not taken off; gross profit is what pays for it.
+ */
+export function margin(priceCents: number, labourCents: number, materialsCents: number, feePct: number): Margin {
+  const feeCents = Math.round((priceCents * Math.max(0, feePct)) / 100);
+  const costCents = labourCents + materialsCents + feeCents;
+  const grossCents = priceCents - costCents;
+  const grossPct = priceCents > 0 ? grossCents / priceCents : 0;
+  return { priceCents, labourCents, materialsCents, feeCents, costCents, grossCents, grossPct, meetsTarget: grossPct >= GROSS_PROFIT_TARGET - 0.0005 };
+}
+
+/**
+ * The lowest price that leaves the target gross profit after labour,
+ * materials and the fee, rounded up to the dollar -- to the dollar a visit,
+ * when the crew comes out more than once, so each visit is a round price.
+ * Null when the fee alone leaves no room for it.
+ */
+export function priceForTarget(labourCents: number, materialsCents: number, feePct: number, target = GROSS_PROFIT_TARGET, visits = 1): number | null {
+  const room = 1 - target - Math.max(0, feePct) / 100;
+  if (room <= 0) return null;
+  const each = Math.max(1, Math.round(visits));
+  return Math.ceil((labourCents + materialsCents) / room / each / 100) * 100 * each;
 }
 
 /**
@@ -143,7 +201,9 @@ export function spreadPrice(snapshot: ProposalZoneSnapshot[], totalDollars: numb
   return snapshot.map((zone, i) => {
     const cents = i === snapshot.length - 1 ? totalCents - given : Math.round(totalCents * shares[i]);
     given += cents;
-    return { ...zone, priceCents: cents, priceDerived: false };
+    // Salting says its price in its words: they follow the new one.
+    const scopeText = zone.scopeText ? repriceSaltingScope(zone.scopeText, cents) : zone.scopeText;
+    return { ...zone, scopeText, priceCents: cents, priceDerived: false };
   });
 }
 

@@ -4,6 +4,8 @@ import { getCurrentOrganization } from "@/lib/data/organizations";
 import {
   buyingList,
   DEFAULT_SALT_SETTINGS,
+  saltExpired,
+  saltKeptUntil,
   type BuyingList,
   type SaltSettings,
   type Surface,
@@ -35,6 +37,10 @@ export interface SaltOrderRow {
   paidAt: string | null;
   jobId: string | null;
   customerId: string | null;
+  /** The last day its unused treatments are kept: two years from paying. */
+  keptUntil: string | null;
+  /** Past that: what is left is no longer owed, and no salt is bought for it. */
+  expired: boolean;
   /**
    * Paid, but the address could not be placed on the map, so no property and
    * no job exist for it yet. One thing for a person to finish, and the only
@@ -117,6 +123,8 @@ export async function getSaltBoard(): Promise<SaltBoard> {
     paidAt: row.paid_at,
     jobId: row.job_id,
     customerId: row.customer_id,
+    keptUntil: saltKeptUntil(row.paid_at)?.toISOString() ?? null,
+    expired: row.status === "paid" && saltExpired(row.paid_at),
     needsPlacing: row.status === "paid" && !row.property_id,
   }));
 
@@ -124,11 +132,14 @@ export async function getSaltBoard(): Promise<SaltBoard> {
   // sheet and closed it, and buying salt for them would be buying salt for
   // nobody.
   const paid = orders.filter((order) => order.status === "paid");
+  // Unused treatments carry over from one winter to the next, for two years
+  // from paying; after that, nothing is bought for what is left.
+  const owed = paid.filter((order) => !order.expired);
 
   return {
     orders,
     buying: buyingList(
-      paid.map((order) => ({
+      owed.map((order) => ({
         surface: order.surface,
         petFriendly: order.petFriendly,
         treatments: order.treatments,

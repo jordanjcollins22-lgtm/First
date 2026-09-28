@@ -89,6 +89,7 @@ export default async function AccountManagerJourneyPage() {
     // The sample job's proposal as the client sees it, for Review proposal.
     proposalHref: "/practice/proposal/client",
     breakdown,
+    fee: { kind: "account-manager", name: "Jace", pct: 15 },
     crewRateCents: catalog.crewCostPerHourCents,
     markup:
       m.overheadPerCrewHourCents != null && m.overheadPerCrewHourCents > 0

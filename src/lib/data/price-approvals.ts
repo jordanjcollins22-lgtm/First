@@ -4,7 +4,8 @@ import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { isAccountManager } from "@/lib/affiliate-roles";
 import { isOwnerLevel } from "@/lib/roles";
 import { proposalPath } from "@/lib/proposal-flow";
-import { priceBreakdown, type PriceBreakdown } from "@/lib/price-approval";
+import { priceBreakdown, type JobFee, type PriceBreakdown } from "@/lib/price-approval";
+import { DEFAULT_ACCOUNT_MANAGER_PCT } from "@/lib/commission";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
@@ -25,6 +26,8 @@ export interface PriceApproval {
   totalCents: number;
   proposalHref: string | null;
   breakdown: PriceBreakdown;
+  /** Who is paid a share of the price: the affiliate who brought it in, or else the client's account manager. */
+  fee: JobFee;
   crewRateCents: number;
   markup: string;
   /** Each area's walkthrough photos, as images to show, in the order of breakdown.areas. */
@@ -51,7 +54,7 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
   const { data, error } = await supabase
     .from("job_proposals")
     .select(
-      "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, site_image_path, site_image_transform, scope_snapshot, job:jobs!inner(id, status, evaluation_submitted_at, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, customer:customers(name, email)))"
+      "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, site_image_path, site_image_transform, scope_snapshot, job:jobs!inner(id, status, evaluation_submitted_at, referral_code, referred_by_profile_id, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, customer:customers(name, email, account_manager_id)))"
     )
     .in("status", ["needs_approval", "sent"])
     .order("generated_at", { ascending: true })
@@ -73,8 +76,10 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
       id: string;
       status: string;
       evaluation_submitted_at: string | null;
+      referral_code: string | null;
+      referred_by_profile_id: string | null;
       assignee: { full_name: string | null; email: string | null } | null;
-      property: { address: string | null; customer: { name: string | null; email: string | null } | null } | null;
+      property: { address: string | null; customer: { name: string | null; email: string | null; account_manager_id: string | null } | null } | null;
     };
   };
   // Waiting on a price, or priced lately and not sent to the client yet.
@@ -83,10 +88,34 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
   );
   if (rows.length === 0) return [];
 
-  const [catalog, designs] = await Promise.all([
+  const codes = [...new Set(rows.map((r) => r.job.referral_code).filter((c): c is string => Boolean(c)))];
+  const [catalog, designs, people, links] = await Promise.all([
     getCanvasCatalog(),
     supabase.from("canvas_designs").select("job_id, zones").in("job_id", rows.map((r) => r.job_id)),
+    supabase.from("profiles").select("id, full_name, email, commission_pct").eq("organization_id", profile.organization_id),
+    codes.length > 0
+      ? supabase.from("outreach_links").select("code, profile_id").eq("organization_id", profile.organization_id).in("code", codes)
+      : Promise.resolve({ data: [] as { code: string; profile_id: string }[] }),
   ]);
+  const personById = new Map((people.data ?? []).map((p) => [p.id, p]));
+  const posterByCode = new Map((links.data ?? []).map((l) => [l.code, l.profile_id]));
+  const firstName = (id: string) => {
+    const p = personById.get(id);
+    return (p?.full_name || p?.email || "").trim().split(/[\s@]/)[0] || null;
+  };
+  const pctOf = (id: string) => {
+    const pct = personById.get(id)?.commission_pct;
+    return pct == null ? DEFAULT_ACCOUNT_MANAGER_PCT : Number(pct);
+  };
+  // The affiliate whose link or name brought the job in is paid their
+  // share; otherwise the client's account manager is.
+  const feeFor = (r: Row): JobFee => {
+    const affiliate = r.job.referred_by_profile_id ?? (r.job.referral_code ? posterByCode.get(r.job.referral_code) : undefined);
+    if (affiliate && personById.has(affiliate)) return { kind: "affiliate", name: firstName(affiliate) ?? "Affiliate", pct: pctOf(affiliate) };
+    const manager = r.job.property?.customer?.account_manager_id;
+    if (manager && personById.has(manager)) return { kind: "account-manager", name: firstName(manager) ?? "Account manager", pct: pctOf(manager) };
+    return { kind: "account-manager", name: "Account manager", pct: DEFAULT_ACCOUNT_MANAGER_PCT };
+  };
   const zonesByJob = new Map((designs.data ?? []).map((d) => [d.job_id as string, (d.zones ?? []) as unknown as WorkZone[]]));
   const m = catalog.markup;
   const markup =
@@ -109,6 +138,7 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
       // banner saying so, and the office opening it is not counted as the client.
       proposalHref: r.token ? `${proposalPath(r.token)}?preview=1` : null,
       breakdown,
+      fee: feeFor(r),
       crewRateCents: catalog.crewCostPerHourCents,
       markup,
       areaPhotos: breakdown.areas.map((a) => a.photoPaths.map((path) => canvasImageUrl(path, THUMBNAIL))),
