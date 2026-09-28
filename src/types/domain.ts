@@ -972,6 +972,8 @@ export interface JobTicket {
   /** Whether the business ate the cost. The question every callback ends on. */
   billable: boolean;
   resolution: string | null;
+  /** What changes so it cannot happen again. */
+  prevention?: string | null;
   resolved_at: string | null;
   opened_by: string | null;
   created_at: string;

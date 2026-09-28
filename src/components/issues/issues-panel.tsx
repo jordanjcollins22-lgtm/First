@@ -52,6 +52,7 @@ export function IssuesPanel({
   const [description, setDescription] = useState("");
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolution, setResolution] = useState("");
+  const [prevention, setPrevention] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -183,6 +184,7 @@ export function IssuesPanel({
                       {issue.resolvedByName ? `, ${issue.resolvedByName}` : ""}
                     </p>
                   )}
+                  {issue.prevention && <p className="mt-0.5 text-xs text-muted-foreground">So it can&apos;t happen again: {issue.prevention}</p>}
                 </div>
 
                 {issue.status === "open" && !compact && (
@@ -224,18 +226,25 @@ export function IssuesPanel({
                     value={resolution}
                     onChange={(e) => setResolution(e.target.value)}
                     placeholder="What was done about it"
+                    className="min-h-10 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  />
+                  <input
+                    value={prevention}
+                    onChange={(e) => setPrevention(e.target.value)}
+                    placeholder="What changes so it can't happen again"
                     className="min-h-10 flex-1 rounded-md border border-border bg-background px-2 text-sm"
                   />
                   <button
                     type="button"
-                    disabled={pending || resolution.trim() === ""}
+                    disabled={pending || resolution.trim() === "" || prevention.trim() === ""}
                     onClick={() =>
                       start(async () => {
-                        const result = await resolveIssue({ issueId: issue.id, jobId, resolution });
+                        const result = await resolveIssue({ issueId: issue.id, jobId, resolution, prevention });
                         if (!result.ok) setError(result.error);
                         else {
                           setResolving(null);
                           setResolution("");
+                          setPrevention("");
                           router.refresh();
                         }
                       })

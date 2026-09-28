@@ -100,6 +100,8 @@ export interface Issue {
   /** Which gate it holds, when it holds one in particular. */
   blockingStage: BlockingStage | null;
   resolution: string | null;
+  /** What changes so it cannot happen again. */
+  prevention?: string | null;
   resolvedBy: string | null;
   resolvedByName: string | null;
   resolvedAt: string | null;

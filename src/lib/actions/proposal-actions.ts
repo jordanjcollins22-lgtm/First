@@ -158,7 +158,7 @@ export async function generateProposal(
       return { service: serviceLabelFor(scopeInputs[index].def, scopeInputs[index].pricing), sizeLabel: measured ? formatMeasurements(measured, zone) : null };
     },
   });
-  const estimate: JobEstimate = priced.estimate;
+  const estimate: JobEstimate = { ...priced.estimate, salting: priced.salting.filter((s): s is NonNullable<typeof s> => s != null) };
   const areaPrices = priced.areaPricesCents;
   const total = priced.totalCents / 100;
   const own = zones.map((_, index) => ({ hasMissingTiming: priced.hasMissingTiming[index], hasUnknownMaterialCost: priced.hasUnknownMaterialCost[index] }));

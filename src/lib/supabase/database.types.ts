@@ -167,6 +167,8 @@ export interface Database {
           geocode_attempted_at: string | null;
           geocode_error: string | null;
           in_target_market: boolean | null;
+          /** The client who sent this one to us. */
+          referred_by_customer_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1798,6 +1800,10 @@ export interface Database {
       };
       jobs: {
         Row: {
+          /** Did they leave a five-star review: null when nobody has said. */
+          five_star_review: boolean | null;
+          five_star_review_at: string | null;
+          five_star_review_by: string | null;
           job_number: number | null;
           id: string;
           property_id: string;
@@ -4138,6 +4144,8 @@ export interface Database {
           status: string;
           billable: boolean;
           resolution: string | null;
+          /** What changes so it cannot happen again. */
+          prevention: string | null;
           resolved_at: string | null;
           opened_by: string | null;
           created_at: string;
@@ -4226,6 +4234,8 @@ export interface Database {
           blocking: boolean;
           blocking_stage: string | null;
           resolution: string | null;
+          /** What changes so it cannot happen again. */
+          prevention: string | null;
           resolved_by: string | null;
           resolved_at: string | null;
           updated_at: string;

@@ -25,6 +25,8 @@ import { canRunJobs, isOwnerLevel, visibilityFor } from "@/lib/roles";
 import { JobTabbedSections } from "@/components/job/job-tabbed-sections";
 import { FieldScreen } from "@/components/job/field-screen";
 import { IssuesPanel } from "@/components/issues/issues-panel";
+import { ProjectReviewCard } from "@/components/projects/project-review-card";
+import { getProjectReview } from "@/lib/data/project-review";
 import { ExceptionsPanel } from "@/components/exceptions/exceptions-panel";
 import { ScopeChangesPanel } from "@/components/exceptions/scope-changes-panel";
 import { JobHistory } from "@/components/exceptions/job-history";
@@ -647,6 +649,12 @@ export default async function JobPage({
       ? instantPrice(intake.answers, await lotForProperty(job.property_id).catch(() => null), catalog)
       : null;
   // While the job is being worked: who is in which area, and at what stage.
+  // The project review: scored live from the job as it runs. For whoever
+  // sees the job's money, once there is a proposal to score it against.
+  const projectReview = proposal && seen.jobMoney ? await getProjectReview(jobId).catch((err) => {
+    console.error("Project review failed to load:", err);
+    return null;
+  }) : null;
   const areaBoard =
     (job.status === "approved" || job.status === "in_progress") && zones.length > 0
       ? await loadAreaBoard(jobId, { zones, catalog, photos }).catch(() => null)
@@ -721,6 +729,8 @@ export default async function JobPage({
       />
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
+
+      {projectReview && <ProjectReviewCard row={projectReview} interactive />}
 
       {phoneQuote && (
         <PhoneQuoteCard price={phoneQuote} clientName={job.property?.customers?.name ?? null} phone={job.property?.customers?.phone ?? null} />

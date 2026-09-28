@@ -24,6 +24,7 @@
 
 import { priceZone, type Markup } from "@/lib/job-costing";
 import { billedHours, priceForTarget } from "@/lib/gross-profit";
+import type { SaltingVisits } from "@/lib/salting";
 
 /** Hours in a working day on site, for turning hours into days. */
 export const WORKDAY_HOURS = 8;
@@ -126,6 +127,8 @@ export interface JobEstimate {
   priceCents: number;
   /** Things that make the number less than certain, in words. */
   warnings: string[];
+  /** Salting on the same proposal, a visit at a time: kept with it for the budget. */
+  salting?: SaltingVisits[];
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;

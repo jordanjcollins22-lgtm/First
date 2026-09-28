@@ -83,22 +83,26 @@ export async function raiseIssue(input: {
 }
 
 /**
- * It is dealt with.
+ * It is dealt with, and it cannot happen again.
  *
- * The resolution is required. An issue that closes with no word on what
- * happened is the thing somebody re-opens in three weeks having learned
- * nothing.
+ * Both are required: what was done, and what changes so it does not happen
+ * on the next job. An issue that closes with no word on what happened is the
+ * thing somebody re-opens in three weeks having learned nothing, and one put
+ * right without a change is the same issue waiting for the next client.
  */
 export async function resolveIssue(input: {
   issueId: string;
   jobId: string;
   resolution: string;
+  prevention: string;
 }): Promise<ActionResult<null>> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, error: "Not signed in." };
     const resolution = input.resolution.trim();
     if (resolution === "") return { ok: false, error: "Say what was done about it." };
+    const prevention = (input.prevention ?? "").trim();
+    if (prevention === "") return { ok: false, error: "Say what changes so it can't happen again." };
 
     const supabase = await createClient();
     const { error } = await supabase
@@ -106,6 +110,7 @@ export async function resolveIssue(input: {
       .update({
         status: "resolved",
         resolution,
+        prevention,
         resolved_by: profile.id,
         resolved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

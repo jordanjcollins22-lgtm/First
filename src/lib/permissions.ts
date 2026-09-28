@@ -172,6 +172,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/eddm/mailings/[mailingId]/order":
     "The printed order package for one EDDM mailing, at its own URL so it can be opened in a tab and " +
     "printed. Guarded by requireAnyTab on Project Data, which is the only place a mailing can be made.",
+  "/jobs/review":
+    "Every project a client said yes to, scored on issues, hours, cost, a review, a referral and profit. " +
+    "Gated in the page on the owner, admin and account manager roles directly, the same people who see a " +
+    "job's money and price its proposal.",
   "/jobs/[jobId]/directions":
     "The way to one job's address, drawn in the app. Guarded by requireJobAccess like the job page, " +
     "it shows a property address, which anybody who can open the job can already see.",

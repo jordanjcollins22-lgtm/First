@@ -326,23 +326,27 @@ export async function updateTicketCause(
   }
 }
 
-/** Closes a ticket out. Resolving asks what was done, which is the half that
- * makes the record useful the next time the same thing happens. */
+/** Closes a ticket out. Resolving asks what was done, and what changes so it
+ * cannot happen again: the half that stops the same thing on the next job. */
 export async function setTicketStatus(
   id: string,
   status: TicketStatus,
-  resolution: string | null = null
+  resolution: string | null = null,
+  prevention: string | null = null
 ): Promise<SessionResult> {
   try {
     if (!(await getCurrentProfile())) return { ok: false, message: "Sign in first." };
 
     const supabase = await createClient();
     const resolving = status === "resolved" || status === "closed";
+    if (resolving && !resolution?.trim()) return { ok: false, message: "Say what was done to fix it." };
+    if (resolving && !prevention?.trim()) return { ok: false, message: "Say what changes so it can't happen again." };
     const { data, error } = await supabase
       .from("job_tickets")
       .update({
         status,
         resolution: resolving ? resolution?.trim() || null : null,
+        prevention: resolving ? prevention?.trim() || null : null,
         resolved_at: resolving ? new Date().toISOString() : null,
       })
       .eq("id", id)

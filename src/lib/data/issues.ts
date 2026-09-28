@@ -24,6 +24,7 @@ interface IssueRow {
   blocking: boolean;
   blocking_stage: string | null;
   resolution: string | null;
+  prevention?: string | null;
   resolved_by: string | null;
   resolved_at: string | null;
 }
@@ -48,6 +49,7 @@ function toIssue(row: IssueRow, names: Map<string, string>): Issue {
     blocking: row.blocking,
     blockingStage: (row.blocking_stage as BlockingStage | null) ?? null,
     resolution: row.resolution,
+    prevention: row.prevention ?? null,
     resolvedBy: row.resolved_by,
     resolvedByName: row.resolved_by ? (names.get(row.resolved_by) ?? null) : null,
     resolvedAt: row.resolved_at,

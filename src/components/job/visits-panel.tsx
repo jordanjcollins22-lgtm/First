@@ -657,6 +657,7 @@ function TicketRow({
 }) {
   const [resolving, setResolving] = useState(false);
   const [resolution, setResolution] = useState("");
+  const [prevention, setPrevention] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const open = isTicketOpen(ticket.status);
@@ -718,6 +719,7 @@ function TicketRow({
       {ticket.resolution && (
         <p className="mt-1 text-[11px] text-muted-foreground">Fixed by: {ticket.resolution}</p>
       )}
+      {ticket.prevention && <p className="text-[11px] text-muted-foreground">So it can&apos;t happen again: {ticket.prevention}</p>}
 
       {open &&
         (resolving ? (
@@ -728,15 +730,21 @@ function TicketRow({
               placeholder="What did you do to fix it?"
               autoFocus
             />
+            <Input
+              className="mt-2"
+              value={prevention}
+              onChange={(e) => setPrevention(e.target.value)}
+              placeholder="What changes so it can't happen again?"
+            />
             <div className="mt-2 flex flex-wrap gap-2">
               <Button
                 type="button"
                 size="sm"
                 className="min-h-9"
-                disabled={isPending}
+                disabled={isPending || !resolution.trim() || !prevention.trim()}
                 onClick={() =>
                   startTransition(async () => {
-                    const result = await setTicketStatus(ticket.id, "resolved", resolution);
+                    const result = await setTicketStatus(ticket.id, "resolved", resolution, prevention);
                     onResult(result);
                     if (result.ok) setResolving(false);
                   })
