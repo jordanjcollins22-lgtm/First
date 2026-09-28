@@ -33,6 +33,7 @@ type Screen = "shop" | "road" | "site";
 export function CrewDemo({
   jobId,
   personName,
+  viewingAs = null,
   stop,
   zones,
   boardZones,
@@ -46,6 +47,8 @@ export function CrewDemo({
 }: {
   jobId: string;
   personName: string;
+  /** The crew member whose phone this is, when it's somebody's in particular. */
+  viewingAs?: string | null;
   stop: Stop;
   zones: WorkOrderZone[];
   boardZones: BoardZone[];
@@ -231,7 +234,9 @@ export function CrewDemo({
         </button>
       </div>
       <p className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
-        <span className="font-semibold">Demo.</span> The crew&apos;s screens for {stop.customerName}&apos;s job. Tap through it like the crew would. Nothing is saved, uploaded or sent.
+        <span className="font-semibold">Demo{viewingAs ? ` as ${viewingAs}` : ""}.</span>{" "}
+        {viewingAs ? `What ${first} sees` : "The crew's screens"} for {stop.customerName}&apos;s job. Tap through it like the crew would. Nothing is saved,
+        uploaded or sent.
       </p>
 
       {screen === "shop" && (

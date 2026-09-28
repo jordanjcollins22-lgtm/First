@@ -65,6 +65,7 @@ describe("crewInstructions", () => {
     const said = steps.map((s) => s.label).join(" ");
     expect(said).toMatch(/down to the ground/);
     expect(said).toMatch(/haul away every bit of what you cut/);
+    expect(said).toMatch(/Cut the weeds down too\. Don't pull them out\./);
     expect(said).not.toMatch(/Pull every weed|roots and all|Dig out/);
   });
 

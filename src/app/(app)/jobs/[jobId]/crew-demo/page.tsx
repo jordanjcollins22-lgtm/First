@@ -22,13 +22,21 @@ import type { WorkZone } from "@/components/canvas/types";
  */
 export const dynamic = "force-dynamic";
 
-export default async function CrewDemoPage({ params }: { params: Promise<{ jobId: string }> }) {
+export default async function CrewDemoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ jobId: string }>;
+  /** as: whose phone to see it from. Left out, the job's crew lead. */
+  searchParams: Promise<{ as?: string }>;
+}) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { jobId } = await params;
+  const { as } = await searchParams;
   await requireJobAccess(jobId, ["job-detail", "project-data", "evaluations", "pipeline"]);
 
   const supabase = await createClient();
-  const [data, design, catalog, containers, shop, me, { data: place }] = await Promise.all([
+  const [data, design, catalog, containers, shop, me, { data: place }, { data: crewRows }] = await Promise.all([
     getWorkOrderForJob(jobId),
     getCanvasDesignForJob(jobId),
     getCanvasCatalog(),
@@ -36,8 +44,14 @@ export default async function CrewDemoPage({ params }: { params: Promise<{ jobId
     getShopInfo().catch(() => null),
     getCurrentProfile().catch(() => null),
     supabase.from("jobs").select("property:properties(lat, lng)").eq("id", jobId).maybeSingle(),
+    supabase.from("job_crew").select("profile_id, is_lead, profiles:profile_id(full_name, email)").eq("job_id", jobId),
   ]);
   if (!data) notFound();
+
+  // Seen from one crew member's phone: the one asked for, or the job's lead.
+  const crew = (crewRows ?? []) as unknown as { profile_id: string; is_lead: boolean; profiles: { full_name: string | null; email: string } | null }[];
+  const viewer = crew.find((c) => c.profile_id === as) ?? crew.find((c) => c.is_lead) ?? crew[0] ?? null;
+  const viewerName = viewer ? viewer.profiles?.full_name || viewer.profiles?.email || null : null;
 
   const workZones = ((design?.zones ?? []) as unknown as WorkZone[]).filter((z) => z.service);
   const toolRefs = catalog.tools.map((t) => ({ id: t.id, name: t.name, kits: ((t as unknown as { kits?: number[] | null }).kits ?? []) as number[] }));
@@ -65,7 +79,8 @@ export default async function CrewDemoPage({ params }: { params: Promise<{ jobId
   return (
     <CrewDemo
       jobId={jobId}
-      personName={me?.full_name || "Jordan"}
+      personName={viewerName ?? me?.full_name ?? "Jordan"}
+      viewingAs={viewerName}
       stop={{ jobId, sessionId: "demo", address: data.address, customerName: data.customerName, lat: property?.lat ?? null, lng: property?.lng ?? null, purpose: null }}
       zones={data.order.zones}
       boardZones={workZones.map((z) => ({ id: z.id, name: z.name, serviceTypeId: z.service!.typeId, values: z.service!.values }))}
