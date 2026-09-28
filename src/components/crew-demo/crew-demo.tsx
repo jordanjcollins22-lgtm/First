@@ -7,12 +7,12 @@ import { CheckCircle2, ChevronLeft, ClipboardCheck, RotateCcw } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { ShopFlow, type ShopActions } from "@/components/crew/shop-flow";
 import { TodayBoard } from "@/components/crew/today-board";
-import { AreaBoard, type AreaActions } from "@/components/job/area-board";
-import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
-import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
+import { type AreaActions } from "@/components/job/area-board";
+import { WorkOrderView } from "@/components/job/work-order-view";
+import type { WorkOrderPageData } from "@/lib/data/work-order";
 import { allPrepped, boardState, canTick, stepsFor, type AreaNeeds, type BoardZone, type Tip, type WorkRow } from "@/lib/area-work";
 import { buildLoadout, type LoadoutCheck, type LoadoutContainer, type LoadoutTool } from "@/lib/loadout";
-import { zonesBounds, type WorkOrderZone } from "@/lib/work-order";
+import type { WorkOrderZone } from "@/lib/work-order";
 import type { CrewEvent, CrewEventKind, Stop } from "@/lib/crew-day";
 import type { AreaBoardData } from "@/lib/data/area-board";
 import type { ShopDay } from "@/lib/data/shop-flow";
@@ -34,6 +34,7 @@ export function CrewDemo({
   jobId,
   personName,
   viewingAs = null,
+  sheet,
   stop,
   zones,
   boardZones,
@@ -49,6 +50,8 @@ export function CrewDemo({
   personName: string;
   /** The crew member whose phone this is, when it's somebody's in particular. */
   viewingAs?: string | null;
+  /** The job's crew sheet, exactly as the crew's phone loads it. */
+  sheet: WorkOrderPageData;
   stop: Stop;
   zones: WorkOrderZone[];
   boardZones: BoardZone[];
@@ -207,28 +210,18 @@ export function CrewDemo({
   };
   const allDone = states.length > 0 && states.every((s) => s.status === "done");
 
-  const map =
-    siteImagePath && imageTransform && zones.length > 0 ? (
-      <div className="flex flex-col gap-1.5">
-        <p className="text-sm font-semibold">Where each area is</p>
-        <FocusableSiteMap
-          imagePath={siteImagePath}
-          transform={imageTransform}
-          numbered
-          dimSurroundings
-          defaultFrame={zonesBounds(zones, imageTransform.canvasWidth, imageTransform.canvasHeight)}
-          className="w-full rounded-xl border border-white/60 bg-muted"
-          zones={zones.map((zone, i) => ({ zoneName: zone.name, color: zone.color, points: zone.points, number: i + 1 }))}
-        />
-      </div>
-    ) : null;
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
       <div className="flex items-center justify-between gap-2">
-        <Link href={`/jobs/${jobId}`} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
-          <ChevronLeft className="h-4 w-4" /> The job
-        </Link>
+        {/* On site the crew sheet has its own way back. */}
+        {screen === "site" ? (
+          <span />
+        ) : (
+          <Link href={`/jobs/${jobId}`} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
+            <ChevronLeft className="h-4 w-4" /> The job
+          </Link>
+        )}
         <button type="button" onClick={startOver} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
           <RotateCcw className="h-3.5 w-3.5" /> Start over
         </button>
@@ -259,47 +252,47 @@ export function CrewDemo({
       {screen === "road" && <TodayBoard stops={[stop]} events={events} personName={personName} actions={roadActions} />}
 
       {screen === "site" && (
-        <>
-          <header>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Crew sheet</p>
-            <h1 className="text-xl font-bold leading-tight">{stop.address}</h1>
-            <p className="text-sm text-muted-foreground">{stop.customerName}</p>
-          </header>
-
-          {!allDone && <AreaBoard jobId={jobId} zones={zones} board={board} accountManager={accountManager} map={map} actions={areaActions} />}
-
-          {allDone && (
-            <section className="flex flex-col gap-3 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
-              <p className="flex items-center gap-1.5 text-lg font-bold">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Every area is done
-              </p>
-              {asked ? (
-                <p className="text-sm">
-                  Asked. {accountManager?.name.split(/\s+/)[0] ?? "The account manager"} is coming to walk it. Keep the tools out until it&apos;s walked.
-                </p>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">Keep the tools out. The account manager walks the job before anyone leaves.</p>
-                  <Button type="button" className="h-14 text-base font-semibold" onClick={() => setAsked(true)}>
-                    <ClipboardCheck className="mr-2 h-5 w-5" /> Ask {accountManager?.name.split(/\s+/)[0] ?? "the manager"} to walk it
-                  </Button>
-                </>
-              )}
-            </section>
-          )}
-
-          <JobReceiptsCard jobId={jobId} receipts={receipts} onDemoAdd={(r) => setReceipts((prev) => [r, ...prev])} />
-
-          {asked && (
-            <section className="rounded-2xl border border-border bg-card p-4 text-sm">
-              <p className="font-semibold">That&apos;s the end of the crew&apos;s day on this job.</p>
-              <p className="text-muted-foreground">The walkthrough, and sending the before and afters to the client, are the account manager&apos;s.</p>
-              <Button type="button" variant="outline" className="mt-3 h-11 w-full" onClick={startOver}>
-                <RotateCcw className="mr-1.5 h-4 w-4" /> Start the demo over
-              </Button>
-            </section>
-          )}
-        </>
+        // The crew sheet itself, the screen the crew's phone opens on site:
+        // the checklist to load, the map, the areas, receipts, photos. The
+        // areas and receipts run on this screen only.
+        <div className="-mx-4">
+          <WorkOrderView
+            jobId={jobId}
+            {...sheet}
+            back={{ href: `/jobs/${jobId}`, label: "Back to the job" }}
+            demo={{
+              board,
+              areaActions,
+              receipts,
+              onReceipt: (r) => setReceipts((prev) => [r, ...prev]),
+              after: allDone ? (
+                <section className="flex flex-col gap-3 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
+                  <p className="flex items-center gap-1.5 text-lg font-bold">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Every area is done
+                  </p>
+                  {asked ? (
+                    <>
+                      <p className="text-sm">
+                        Asked. {accountManager?.name.split(/\s+/)[0] ?? "The account manager"} is coming to walk it. Keep the tools out until it&apos;s walked.
+                      </p>
+                      <p className="text-sm text-muted-foreground">That&apos;s the end of the crew&apos;s day on this job. The walkthrough is the account manager&apos;s.</p>
+                      <Button type="button" variant="outline" className="h-11 w-full" onClick={startOver}>
+                        <RotateCcw className="mr-1.5 h-4 w-4" /> Start the demo over
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">Keep the tools out. The account manager walks the job before anyone leaves.</p>
+                      <Button type="button" className="h-14 text-base font-semibold" onClick={() => setAsked(true)}>
+                        <ClipboardCheck className="mr-2 h-5 w-5" /> Ask {accountManager?.name.split(/\s+/)[0] ?? "the manager"} to walk it
+                      </Button>
+                    </>
+                  )}
+                </section>
+              ) : null,
+            }}
+          />
+        </div>
       )}
     </div>
   );

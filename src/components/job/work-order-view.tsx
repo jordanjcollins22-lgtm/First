@@ -19,10 +19,11 @@ import { groupByService, groupHeading, worthGrouping } from "@/lib/service-group
 import type { ProposalSiteImageTransform } from "@/types/domain";
 import { CrewChecklistCard } from "@/components/job/crew-checklist-card";
 import type { CrewChecklist } from "@/lib/crew-checklist";
-import { AreaBoard } from "@/components/job/area-board";
+import { AreaBoard, type AreaActions } from "@/components/job/area-board";
 import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
 import type { JobReceipt } from "@/lib/data/job-receipts";
 import type { AreaBoardData } from "@/lib/data/area-board";
+import type { ReactNode } from "react";
 
 /**
  * The crew's sheet for one job.
@@ -70,6 +71,7 @@ export function WorkOrderView({
   checklist,
   areaBoard,
   receipts = [],
+  demo,
 }: {
   jobId: string;
   /** The number the office will say on the phone when they ring about it. */
@@ -117,7 +119,24 @@ export function WorkOrderView({
   areaBoard?: AreaBoardData;
   /** What the crew had to buy for this job, with the receipts. */
   receipts?: JobReceipt[];
+  /**
+   * A demo of this job's sheet: the same screen, every button run on the
+   * screen only. The areas and receipts are the demo's; the photo and
+   * sign-off panels show as they are and can't be tapped.
+   */
+  demo?: {
+    board: AreaBoardData;
+    areaActions: AreaActions;
+    receipts: JobReceipt[];
+    onReceipt: (receipt: JobReceipt) => void;
+    /** Anything the demo shows after the areas, like asking for the walkthrough. */
+    after?: ReactNode;
+  };
 }) {
+  if (demo) {
+    areaBoard = demo.board;
+    receipts = demo.receipts;
+  }
   // On a job being worked, the areas are worked from the board: pick one,
   // tick it off, photograph it. Before and after that, the sheet is a list.
   const onSite = Boolean(areaBoard) && !bare && !practice && (jobStatus === "approved" || jobStatus === "in_progress");
@@ -146,7 +165,7 @@ export function WorkOrderView({
           {jobName && ` · ${jobName}`}
           {formatJobNumber(jobNumber) && ` · ${formatJobNumber(jobNumber)}`}
         </p>
-        {practice ? (
+        {practice || demo ? (
           <p className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary/60 text-base font-semibold text-primary-foreground" title="On a real job this opens the route in maps.">
             <Navigation className="h-5 w-5" />
             Directions
@@ -200,10 +219,14 @@ export function WorkOrderView({
         />
       )}
 
-      {onSite && areaBoard && <AreaBoard jobId={jobId} zones={order.zones} board={areaBoard} accountManager={accountManager} />}
+      {onSite && areaBoard && (
+        <AreaBoard jobId={jobId} zones={order.zones} board={areaBoard} accountManager={accountManager} actions={demo?.areaActions} />
+      )}
+
+      {demo?.after}
 
       {/* Materials are ordered ahead; anything bought on the day comes with its receipt. */}
-      {onSite && <JobReceiptsCard jobId={jobId} receipts={receipts} />}
+      {onSite && <JobReceiptsCard jobId={jobId} receipts={receipts} onDemoAdd={demo?.onReceipt} />}
 
       {/* Agreed after the job was sold, and kept apart from it. The crew has
           to be able to tell the difference between what was bought and what
@@ -332,6 +355,8 @@ export function WorkOrderView({
       {/* The manager's punch list, where the crew are standing. They cannot
           mark or approve — that is the point of the step — but they can see
           what came back and tick it off. */}
+      {/* In a demo these show as they are, and taps on them do nothing. */}
+      <div inert={demo ? true : undefined} className="flex flex-col gap-4">
       {!bare && (
         <PhotoReviewPanel
           jobId={jobId}
@@ -361,6 +386,7 @@ export function WorkOrderView({
         completionNotes={completionNotes}
       />
       )}
+      </div>
     </div>
   );
 }

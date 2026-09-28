@@ -81,6 +81,7 @@ export default async function CrewDemoPage({
       jobId={jobId}
       personName={viewerName ?? me?.full_name ?? "Jordan"}
       viewingAs={viewerName}
+      sheet={data}
       stop={{ jobId, sessionId: "demo", address: data.address, customerName: data.customerName, lat: property?.lat ?? null, lng: property?.lng ?? null, purpose: null }}
       zones={data.order.zones}
       boardZones={workZones.map((z) => ({ id: z.id, name: z.name, serviceTypeId: z.service!.typeId, values: z.service!.values }))}
