@@ -12,6 +12,7 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PriceApprovals, PriceCard } from "@/components/proposal/price-approvals";
 import { JourneyPages, type JourneyStep } from "@/components/practice/journey-pages";
 import { AccountManagerDayView } from "@/components/dashboard/account-manager-day";
+import { JobManagement } from "@/components/dashboard/job-management";
 import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { CommentCard } from "@/components/marketing/comment-card";
 import type { BoardPost } from "@/lib/data/post-board";
@@ -149,6 +150,7 @@ export default async function AccountManagerJourneyPage() {
         { key: "comments", title: "Commenting", count: 3, line: "posts to answer" },
         { key: "evaluations", title: "Evaluations", count: 1, line: "today · 1 to write up" },
         { key: "approval", title: "Site map approval", count: 1, line: "to price" },
+        { key: "jobs", title: "Job management", count: 2, line: "1 to walk · 1 to schedule" },
       ]}
       sections={{
         // The card as Jace sees it; in the preview it can't be pressed, so nothing is taken or posted.
@@ -159,6 +161,17 @@ export default async function AccountManagerJourneyPage() {
         ),
         evaluations: <EvaluatorDayView data={sampleDay} preview />,
         approval: <PriceApprovals items={[item]} preview />,
+        jobs: (
+          <JobManagement
+            preview
+            items={[
+              { jobId: "sample-j1", customerName: "Mark Ellis", address: "18 Ridge Rd, Bel Air, MD", bucket: "needs_signoff", date: hoursFromNow(-4).slice(0, 10), value: 650 },
+              { jobId: "sample-j2", customerName: "Dana Brooks", address: "7 Brook Ln, Forest Hill, MD", bucket: "unscheduled", date: null, value: 1850 },
+              { jobId: "sample-j3", customerName: "Chris Patel", address: "52 Grove St, Fallston, MD", bucket: "working", date: hoursFromNow(0).slice(0, 10), value: 2400 },
+              { jobId: "sample-j4", customerName: "Erin Walsh", address: "3 Hill Ct, Bel Air, MD", bucket: "scheduled", date: hoursFromNow(72).slice(0, 10), value: 980 },
+            ]}
+          />
+        ),
       }}
     />
   );
@@ -167,7 +180,7 @@ export default async function AccountManagerJourneyPage() {
     {
       key: "my-day",
       title: "Jace's My Day",
-      what: "Three squares and nothing else: Commenting, Evaluations and Site map approval, each with what is waiting. Tap one to open it underneath.",
+      what: "Four squares and nothing else: Commenting, Evaluations, Site map approval and Job management, each with what is waiting. Tap one to open it underneath.",
       screen: myDay("approval"),
     },
     {

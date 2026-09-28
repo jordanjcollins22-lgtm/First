@@ -13,7 +13,7 @@ export interface DaySquare {
 }
 
 /**
- * An account manager's day: three squares, like The system's, each with
+ * An account manager's day: a square for each part of it, like The system's, each with
  * what is waiting in it. Tapping one opens it underneath, straight away,
  * with no trip to the server; the address remembers which, so a refresh
  * keeps it open.
@@ -43,7 +43,7 @@ export function AccountManagerDayView({
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className={cn("grid gap-2", squares.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>
+      <ul className={cn("grid gap-2", squares.length === 3 ? "grid-cols-3" : squares.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2")}>
         {squares.map((sq) => (
           <li key={sq.key}>
             <button

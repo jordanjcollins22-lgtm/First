@@ -73,6 +73,7 @@ import { ManagedJobs, NeedsSubmitting, UpcomingEvaluations } from "@/components/
 import { CommissionPanel } from "@/components/payments/commission-panel";
 import { Suspense, cache } from "react";
 import { AccountManagerDayView, type DaySquare } from "@/components/dashboard/account-manager-day";
+import { JobManagement, jobsNeedingYou } from "@/components/dashboard/job-management";
 
 import { PageTabs } from "@/components/ui/page-tabs";
 import { GrowthView } from "@/components/growth/growth-view";
@@ -147,7 +148,7 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
     ) : viewer && isGrowthOnly(viewer.roles) ? (
       await GrowthDay()
     ) : accountManagerOnly ? (
-      await AccountManagerDay({ open, visits, approvals })
+      await AccountManagerDay({ open, visits, approvals, profileId: viewer!.id })
     ) : evaluatorOnly && visits ? (
       <EvaluatorDayView data={visits} />
     ) : (
@@ -346,10 +347,11 @@ async function GrowthDay() {
 }
 
 /**
- * An account manager's day: three squares, and nothing else.
+ * An account manager's day: four squares, and nothing else.
  *
- * Commenting, their evaluations, and the site maps waiting on their price,
- * each with what is waiting in it. Tapping one opens it underneath; the
+ * Commenting, their evaluations, the site maps waiting on their price, and
+ * the jobs they run (booking dates, walking and signing off), each with
+ * what is waiting in it. Tapping one opens it underneath; the
  * one with something waiting today opens by itself. The crews, the money
  * and the tiles are somebody else's day. The same squares are on The
  * system, in the account manager's preview.
@@ -358,8 +360,10 @@ async function AccountManagerDay({
   open,
   visits,
   approvals,
+  profileId,
 }: {
   open: string | undefined;
+  profileId: string;
   visits: Awaited<ReturnType<typeof getEvaluatorDay>> | null;
   approvals: Awaited<ReturnType<typeof getPriceApprovals>>;
 }) {
@@ -371,6 +375,9 @@ async function AccountManagerDay({
   const upcoming = visits?.upcoming.length ?? 0;
   const toPrice = (approvals ?? []).filter((a) => a.stage === "price").length;
   const toSend = (approvals ?? []).filter((a) => a.stage === "send").length;
+  // Sold work on their book: to book a date for, to walk and sign off, underway, booked.
+  const managed = (await myWorkFor(profileId))?.managed ?? [];
+  const { toWalk, toSchedule } = jobsNeedingYou(managed);
 
   const squares: DaySquare[] = [
     ...(canComment
@@ -388,11 +395,32 @@ async function AccountManagerDay({
       count: toPrice > 0 ? toPrice : toSend,
       line: toPrice > 0 ? `to price${toSend > 0 ? ` · ${toSend} to send` : ""}` : toSend > 0 ? "to send to the client" : "Nothing waiting",
     },
+    {
+      key: "jobs",
+      title: "Job management",
+      count: toWalk + toSchedule,
+      line:
+        toWalk + toSchedule > 0
+          ? [toWalk > 0 ? `${toWalk} to walk` : null, toSchedule > 0 ? `${toSchedule} to schedule` : null].filter(Boolean).join(" · ")
+          : managed.length > 0
+            ? `${managed.length} underway or booked`
+            : "No live jobs",
+    },
   ];
   // What opens: the one tapped, or else the most urgent with something in it.
   const chosen =
     squares.find((sq) => sq.key === open)?.key ??
-    (today > 0 ? "evaluations" : toPrice + toSend > 0 ? "approval" : toWriteUp > 0 ? "evaluations" : posts > 0 && canComment ? "comments" : null);
+    (today > 0
+      ? "evaluations"
+      : toPrice + toSend > 0
+        ? "approval"
+        : toWalk + toSchedule > 0
+          ? "jobs"
+          : toWriteUp > 0
+            ? "evaluations"
+            : posts > 0 && canComment
+              ? "comments"
+              : null);
 
   return (
     <AccountManagerDayView
@@ -402,6 +430,7 @@ async function AccountManagerDay({
         ...(canComment ? { comments: <PostsToAnswerPage /> } : {}),
         evaluations: visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>,
         approval: <PriceApprovals items={approvals ?? []} />,
+        jobs: <JobManagement items={managed} />,
       }}
     />
   );
