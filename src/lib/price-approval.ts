@@ -17,6 +17,7 @@ import type { WorkZone } from "@/components/canvas/types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { costZone, formatMaterialQuantity, zoneCrewHours, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
 import type { ProposalZoneSnapshot } from "@/types/domain";
+import { isSalting, saltingOrder } from "@/lib/salting";
 
 export interface AreaCost {
   name: string;
@@ -51,7 +52,7 @@ export interface PriceBreakdown {
   warnings: string[];
 }
 
-type Catalog = Pick<CanvasCatalog, "servicePricing" | "serviceMaterialRules" | "materials" | "crewCostPerHourCents" | "markup">;
+type Catalog = Pick<CanvasCatalog, "servicePricing" | "serviceMaterialRules" | "materials" | "crewCostPerHourCents" | "markup" | "salt">;
 
 export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakdown {
   const nameOf = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p.name]));
@@ -64,7 +65,16 @@ export function priceBreakdown(zones: WorkZone[], catalog: Catalog): PriceBreakd
       return {
         name: zone.name,
         service: nameOf.get(zone.service!.typeId) ?? zone.service!.typeId,
-        size: m && m.areaSqFt > 0 ? `${Math.round(m.areaSqFt).toLocaleString("en-US")} sq ft` : m && m.perimeterFt > 0 ? `${Math.round(m.perimeterFt).toLocaleString("en-US")} ft` : null,
+        size: isSalting(zone.service!.typeId)
+          ? (() => {
+              const order = saltingOrder(zone.service!.values);
+              return `${order.treatments} treatments · ${order.surfaceLabel}${order.petFriendly ? " · pet safe" : ""}`;
+            })()
+          : m && m.areaSqFt > 0
+            ? `${Math.round(m.areaSqFt).toLocaleString("en-US")} sq ft`
+            : m && m.perimeterFt > 0
+              ? `${Math.round(m.perimeterFt).toLocaleString("en-US")} ft`
+              : null,
         crewHours: zoneCrewHours(zone, catalog as CanvasCatalog).hours,
         labourCents: cost.labourCents,
         materials: items.map((item) => ({

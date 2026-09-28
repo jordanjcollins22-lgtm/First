@@ -13,6 +13,7 @@
  */
 
 import { PHOTO_AREAS, photoAreasFor, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { SALTING_TYPE_ID } from "@/lib/salting";
 
 export interface PlanItem {
   /** Stable, and the id of the zone it becomes on the site map. */
@@ -54,11 +55,7 @@ export function areaLabel(area: string): string {
 }
 
 /** The rate card service each of the form's services is, and what it needs set. */
-function priceAs(
-  service: string,
-  answers: IntakeAnswers,
-  findByName: (pattern: RegExp) => string | null
-): { typeId: string | null; values?: Record<string, string>; label: string }[] {
+function priceAs(service: string, answers: IntakeAnswers): { typeId: string | null; values?: Record<string, string>; label: string }[] {
   const picked = (id: string): string[] => {
     const v = answers.details[id];
     return Array.isArray(v) ? v : v ? [v] : [];
@@ -93,7 +90,9 @@ function priceAs(
     case "washing":
       return [{ typeId: "soft-washing", label: "Soft washing" }];
     case "snow":
-      return [{ typeId: findByName(/snow/i), label: "Snow removal" }];
+      // Sold as prepaid salting, three treatments at least, priced by the salt
+      // route's rules; the evaluator sets what gets salted on the map.
+      return [{ typeId: SALTING_TYPE_ID, values: { surface: "Driveway and walkways", treatments: "3", petSafe: "No" }, label: "Salting (prepaid)" }];
     case "hardscape":
       return [{ typeId: null, label: "Patio, walkway or wall" }];
     case "holiday":
@@ -111,13 +110,13 @@ const WHOLE_HOUSE = new Set(["washing", "snow", "holiday", "drainage", "other", 
  * the yard they picked. Washing, snow and the like are one piece for the
  * whole property rather than one per part.
  */
-export function seedPlan(answers: IntakeAnswers, findByName: (pattern: RegExp) => string | null = () => null): PlanItem[] {
+export function seedPlan(answers: IntakeAnswers): PlanItem[] {
   const areas = photoAreasFor(answers.areas);
   const items: PlanItem[] = [];
   for (const service of answers.services) {
     const where = WHOLE_HOUSE.has(service) ? ["whole"] : areas;
     for (const area of where) {
-      for (const [i, as] of priceAs(service, answers, findByName).entries()) {
+      for (const [i, as] of priceAs(service, answers).entries()) {
         items.push({
           id: `seed-${area}-${service}-${i}`,
           area,

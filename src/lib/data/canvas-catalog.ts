@@ -10,6 +10,7 @@ import { getCurrentOrganization } from "./organizations";
 import { listProfiles } from "./team";
 import { blendedCrewRateCents, type Markup } from "@/lib/job-costing";
 import { overheadPerCrewHourCents } from "@/lib/data/per-diem";
+import { saltSettingsFrom, type SaltSettings } from "@/lib/salt";
 import type {
   MeasurementBasis,
   Material,
@@ -40,6 +41,12 @@ export interface CanvasCatalog {
   crewCostPerHourCents: number;
   /** How direct cost becomes the price a client is quoted. */
   markup: Markup;
+  /**
+   * What a salting area is priced from: the salt route's own settings, so
+   * an order costs the same off the site map as off the salt page. Left out
+   * of hand-made catalogs, which get the defaults.
+   */
+  salt?: SaltSettings;
 }
 
 /**
@@ -106,5 +113,6 @@ export const getCanvasCatalog = cache(async function getCanvasCatalog(): Promise
         : "area",
     serviceTools: (serviceToolsRes.data ?? []) as unknown as ServiceToolLink[],
     serviceMaterialRules: (serviceMaterialsRes.data ?? []) as unknown as ServiceMaterialRule[],
+    salt: saltSettingsFrom(organization as unknown as Record<string, unknown>),
   };
 });

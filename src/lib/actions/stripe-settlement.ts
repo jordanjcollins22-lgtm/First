@@ -3,6 +3,7 @@
 import type Stripe from "stripe";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { saltOrdersForPaidProposal } from "@/lib/data/salt-from-proposal";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer, stripeClient } from "@/lib/stripe-customer";
 import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
@@ -98,6 +99,8 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
       .update({ paid_at: new Date().toISOString() })
       .eq("id", proposalId)
       .is("paid_at", null);
+    // Salting on it goes on the salt route, so the salt is bought ahead.
+    await saltOrdersForPaidProposal(admin, proposalId);
   }
 
   if (session.subscription && planId) {

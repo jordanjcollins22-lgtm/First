@@ -72,9 +72,8 @@ export default async function EvaluationVisitPage({
   const onSite = stage === "arrived" || stage === "submitted";
 
   const active = catalog.servicePricing.filter((p) => p.status === "active");
-  const findByName = (pattern: RegExp) => active.find((p) => pattern.test(p.name))?.service_type_id ?? null;
   const sent = intake?.submittedAt ? intake : null;
-  const plan = mergePlan(readPlan(job.evaluation_plan), sent ? seedPlan(sent.answers, findByName) : []);
+  const plan = mergePlan(readPlan(job.evaluation_plan), sent ? seedPlan(sent.answers) : []);
   // With no pre-eval from the client, the form comes first, unless they
   // chose to draw by hand or have already started the map.
   const mapStarted = ((design?.zones as unknown[] | undefined) ?? []).length > 0;

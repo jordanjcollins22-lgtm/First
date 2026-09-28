@@ -9,8 +9,8 @@ import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@
 import { ensureClientAccount } from "@/lib/data/client-accounts";
 import { lookupAddress } from "@/lib/mapbox-geocoding";
 import {
-  DEFAULT_SALT_SETTINGS,
   isSurface,
+  saltSettingsFrom,
   MINIMUM_TREATMENTS,
   money,
   quoteOrder,
@@ -53,26 +53,7 @@ export interface SaltOffer {
 
 /** The settings this organisation prices from, with the defaults behind them. */
 function settingsFrom(row: Record<string, unknown> | null): SaltSettings {
-  if (!row) return DEFAULT_SALT_SETTINGS;
-  const num = (key: string, fallback: number) => {
-    const value = Number(row[key]);
-    return Number.isFinite(value) && value > 0 ? value : fallback;
-  };
-  return {
-    bagCostCents: num("salt_bag_cost_cents", DEFAULT_SALT_SETTINGS.bagCostCents),
-    petBagCostCents: num("salt_pet_bag_cost_cents", DEFAULT_SALT_SETTINGS.petBagCostCents),
-    bagPounds: num("salt_bag_pounds", DEFAULT_SALT_SETTINGS.bagPounds),
-    sidewalkPounds: num("salt_sidewalk_pounds", DEFAULT_SALT_SETTINGS.sidewalkPounds),
-    drivewayPounds: num("salt_driveway_pounds", DEFAULT_SALT_SETTINGS.drivewayPounds),
-    sidewalkMinutes: num("salt_sidewalk_minutes", DEFAULT_SALT_SETTINGS.sidewalkMinutes),
-    drivewayMinutes: num("salt_driveway_minutes", DEFAULT_SALT_SETTINGS.drivewayMinutes),
-    crewCostPerHourCents: DEFAULT_SALT_SETTINGS.crewCostPerHourCents,
-    overheadPerCrewHourCents: DEFAULT_SALT_SETTINGS.overheadPerCrewHourCents,
-    multiplier: DEFAULT_SALT_SETTINGS.multiplier,
-    // Zero is a real answer here, so it cannot go through the positive-only
-    // reader above.
-    petSurchargeCents: Math.max(0, Number(row.salt_pet_surcharge_cents) || 0),
-  };
+  return saltSettingsFrom(row);
 }
 
 /** The organisation this form sells for, and what it charges. */

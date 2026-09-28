@@ -90,6 +90,34 @@ export const DEFAULT_SALT_SETTINGS: SaltSettings = {
   petSurchargeCents: 0,
 };
 
+/**
+ * The settings an organisation prices salt from, off its own row, with the
+ * defaults behind anything it hasn't set. The salt page and the site map
+ * both read it, so the same order costs the same wherever it is sold.
+ */
+export function saltSettingsFrom(row: Record<string, unknown> | null | undefined): SaltSettings {
+  if (!row) return DEFAULT_SALT_SETTINGS;
+  const num = (key: string, fallback: number) => {
+    const value = Number(row[key]);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  };
+  return {
+    bagCostCents: num("salt_bag_cost_cents", DEFAULT_SALT_SETTINGS.bagCostCents),
+    petBagCostCents: num("salt_pet_bag_cost_cents", DEFAULT_SALT_SETTINGS.petBagCostCents),
+    bagPounds: num("salt_bag_pounds", DEFAULT_SALT_SETTINGS.bagPounds),
+    sidewalkPounds: num("salt_sidewalk_pounds", DEFAULT_SALT_SETTINGS.sidewalkPounds),
+    drivewayPounds: num("salt_driveway_pounds", DEFAULT_SALT_SETTINGS.drivewayPounds),
+    sidewalkMinutes: num("salt_sidewalk_minutes", DEFAULT_SALT_SETTINGS.sidewalkMinutes),
+    drivewayMinutes: num("salt_driveway_minutes", DEFAULT_SALT_SETTINGS.drivewayMinutes),
+    crewCostPerHourCents: DEFAULT_SALT_SETTINGS.crewCostPerHourCents,
+    overheadPerCrewHourCents: DEFAULT_SALT_SETTINGS.overheadPerCrewHourCents,
+    multiplier: DEFAULT_SALT_SETTINGS.multiplier,
+    // Zero is a real answer here, so it cannot go through the positive-only
+    // reader above.
+    petSurchargeCents: Math.max(0, Number(row.salt_pet_surcharge_cents) || 0),
+  };
+}
+
 /** Pounds of product one treatment of this surface takes. */
 export function poundsFor(surface: Surface, settings: SaltSettings): number {
   if (surface === "sidewalks") return settings.sidewalkPounds;

@@ -1,3 +1,5 @@
+import { SALTING_SURFACES, SALTING_TREATMENT_OPTIONS, SALTING_TYPE_ID, saltingScope } from "@/lib/salting";
+
 export type ServiceFieldType = "select" | "text" | "number";
 
 export interface ServiceFieldDef {
@@ -195,14 +197,27 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
       { key: "stainingAreas", label: "Special staining/problem areas?", type: "text" },
     ],
   },
+  {
+    // Priced by the salt route's rules (lib/salting), not by the square foot:
+    // per treatment, three at least, paid up front so the salt is bought ahead.
+    id: SALTING_TYPE_ID,
+    label: "Salting (prepaid)",
+    fields: [
+      { key: "surface", label: "What gets salted", type: "select", options: SALTING_SURFACES.map((s) => s.label) },
+      { key: "treatments", label: "Treatments (3 is the minimum)", type: "select", options: SALTING_TREATMENT_OPTIONS },
+      { key: "petSafe", label: "Pet safe blend", type: "select", options: ["No", "Yes"] },
+    ],
+    autoScope: (values) => saltingScope(values),
+  },
 ];
 
 // Every select field gets an "Other" option (with a free-text explanation the
 // dialog asks for when it's chosen) so nothing forces a bad fit into a preset.
 export const SERVICE_TYPES: ServiceTypeDef[] = RAW_SERVICE_TYPES.map((type) => ({
   ...type,
+  // Salting's answers are its price, so there is no "Other" to pick.
   fields: type.fields.map((field) =>
-    field.type === "select" && field.options
+    field.type === "select" && field.options && type.id !== SALTING_TYPE_ID
       ? { ...field, options: Array.from(new Set([...field.options, "Other"])) }
       : field
   ),

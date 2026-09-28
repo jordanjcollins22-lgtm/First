@@ -38,6 +38,7 @@ import {
   zoneMeasurements,
 } from "@/lib/proposal-pricing";
 import { buildEstimate, withTravelShare, type JobEstimate } from "@/lib/job-estimate";
+import { isSalting } from "@/lib/salting";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
@@ -151,8 +152,14 @@ export async function generateProposal(
     console.error("[proposal] travel failed:", jobId, err);
     return { toSiteMinutes: null, fromSiteMinutes: null, pickupExtraMinutes: null, from: null, pickupFrom: null, notes: ["Drive time could not be worked out."] };
   });
+  // Salting is priced per treatment with the trip already in it, so it takes
+  // no share of the drive and stays out of the crew estimate: its price is
+  // exactly what the salt page would charge for the same order.
+  const salting = zones.map((zone) => isSalting(zone.service?.typeId));
+  const workIndexes = zones.map((_, index) => index).filter((index) => !salting[index]);
   const estimate: JobEstimate = buildEstimate({
-    zones: zones.map((zone, index) => {
+    zones: workIndexes.map((index) => {
+      const zone = zones[index];
       const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
       const time = zoneCrewHours(zone, catalog);
       const measured = zoneMeasurements(zone);
@@ -171,12 +178,15 @@ export async function generateProposal(
         priceCents: Math.round(own[index].total * 100),
       };
     }),
-    travel,
+    // Nothing but salting: nobody drives out for it as a job.
+    travel: workIndexes.length > 0 ? travel : { toSiteMinutes: null, fromSiteMinutes: null, pickupExtraMinutes: null, from: null, pickupFrom: null, notes: [] },
     crewCostPerHourCents: catalog.crewCostPerHourCents,
     markup: catalog.markup,
   });
-  const areaPrices = withTravelShare(own.map((o) => Math.round(o.total * 100)), estimate.travelPriceCents);
-  const total = estimate.priceCents / 100;
+  const workShares = withTravelShare(workIndexes.map((index) => Math.round(own[index].total * 100)), estimate.travelPriceCents);
+  const areaPrices = zones.map((_, index) => (salting[index] ? Math.round(own[index].total * 100) : workShares[workIndexes.indexOf(index)]));
+  const saltingCents = zones.reduce((sum, _, index) => sum + (salting[index] ? Math.round(own[index].total * 100) : 0), 0);
+  const total = (estimate.priceCents + saltingCents) / 100;
 
   const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone, index) => {
     const def = scopeInputs[index].def;

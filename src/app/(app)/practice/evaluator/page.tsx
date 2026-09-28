@@ -121,8 +121,7 @@ export default async function EvaluatorJourneyPage() {
   } as unknown as JobWithLocation;
 
   const active = catalog.servicePricing.filter((p) => p.status === "active");
-  const findByName = (pattern: RegExp) => active.find((p) => pattern.test(p.name))?.service_type_id ?? null;
-  const plan = seedPlan(ANSWERS, findByName);
+  const plan = seedPlan(ANSWERS);
   const services = active.map((p) => ({ typeId: p.service_type_id, name: p.name }));
 
   const setupProps = {

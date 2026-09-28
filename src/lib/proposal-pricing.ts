@@ -2,6 +2,7 @@ import type { WorkZone } from "@/components/canvas/types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { kindOfSaved } from "@/lib/zone-measurement";
 import { priceJob, priceZone, type ZoneCost } from "@/lib/job-costing";
+import { costSalting, isSalting, saltingMaterial } from "@/lib/salting";
 
 const CUBIC_FEET_PER_YARD = 27;
 // Typical loaded wheelbarrow capacity used for hauling estimates.
@@ -53,6 +54,11 @@ export interface MaterialLineItem {
 export function zoneMaterialLineItems(zone: WorkZone, areaSqFt: number, catalog: CanvasCatalog): MaterialLineItem[] {
   const service = zone.service;
   if (!service) return [];
+  // Salting takes the salt for every treatment sold, not a coverage per square foot.
+  if (isSalting(service.typeId)) {
+    const salt = saltingMaterial(service.values, catalog.salt);
+    return [{ zoneName: zone.name, materialId: "salting", material: salt.name, unit: "lb", quantity: salt.pounds, totalCost: salt.cents / 100 }];
+  }
   const items: MaterialLineItem[] = [];
   for (const rule of catalog.serviceMaterialRules) {
     if (rule.service_type_id !== service.typeId) continue;
@@ -160,6 +166,7 @@ export function zoneCrewHours(
 ): { hours: number; missingTiming: boolean } {
   const service = zone.service;
   if (!service) return { hours: 0, missingTiming: false };
+  if (isSalting(service.typeId)) return { hours: costSalting(service.values, catalog.salt).crewHours, missingTiming: false };
 
   const pricing = catalog.servicePricing.find((p) => p.service_type_id === service.typeId);
   if (!pricing || pricing.status !== "active") return { hours: 0, missingTiming: false };
@@ -209,6 +216,21 @@ export function zoneMaterialsCents(
 
 /** Cost and price for one work area. */
 export function costZone(zone: WorkZone, catalog: CanvasCatalog): ZonePricing {
+  // Salting is priced as the salt page prices it: per treatment, three at least.
+  if (zone.service && isSalting(zone.service.typeId)) {
+    const salt = costSalting(zone.service.values, catalog.salt);
+    const directCostCents = salt.materialsCents + salt.labourCents;
+    return {
+      materialsCents: salt.materialsCents,
+      labourCents: salt.labourCents,
+      directCostCents,
+      overheadCents: salt.overheadCents,
+      marginCents: salt.priceCents - directCostCents - salt.overheadCents,
+      priceCents: salt.priceCents,
+      hasUnknownMaterialCost: false,
+      hasMissingTiming: false,
+    };
+  }
   const materials = zoneMaterialsCents(zone, catalog);
   const time = zoneCrewHours(zone, catalog);
 

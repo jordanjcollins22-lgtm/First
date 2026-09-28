@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { saltOrdersForPaidProposal } from "@/lib/data/salt-from-proposal";
 import { isStripeConfigured } from "@/lib/env";
 import { stripeClient } from "@/lib/stripe-customer";
 import { settlementFor } from "@/lib/flyer-settlement";
@@ -63,6 +64,8 @@ export async function settleProposalPayment(token: string): Promise<void> {
         .update({ paid_at: new Date().toISOString() })
         .eq("id", proposal.id)
         .is("paid_at", null);
+      // Salting on it goes on the salt route, so the salt is bought ahead.
+      await saltOrdersForPaidProposal(admin, proposal.id);
       revalidateJobViews(proposal.job_id);
       return;
     }

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { saltOrdersForPaidProposal } from "@/lib/data/salt-from-proposal";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { revalidateJobViews } from "@/lib/revalidate-job";
@@ -352,6 +354,11 @@ export async function importTransactions(
         .in("job_id", jobIds)
         .is("paid_at", null);
       if (error) console.error("Marking proposals paid failed:", error);
+
+      // Salting on any of them goes on the salt route, so the salt is bought ahead.
+      const admin = createAdminClient();
+      const { data: paidProposals } = await admin.from("job_proposals").select("id").in("job_id", jobIds);
+      for (const row of paidProposals ?? []) await saltOrdersForPaidProposal(admin, row.id);
 
       // And the stage. Recording the money is not the same as moving the
       // work: the board reads a job's own status, which knows nothing about
