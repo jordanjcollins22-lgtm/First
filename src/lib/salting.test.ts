@@ -60,4 +60,9 @@ describe("salting a visit at a time", () => {
     expect(repriceSaltingScope(text, 26_400)).toMatch(/^Pre-paid salting: 3 treatments at \$88 each, \$264 in all, on the driveway\./);
     expect(saltingScope({ surface: "Driveway", treatments: "3" }, settings, 8800)).toMatch(/at \$88 each, \$264 in all/);
   });
+
+  it("calls the pet blend a pet friendly snow melt on the proposal", () => {
+    expect(saltingScope({ surface: "Driveway", treatments: "3", petSafe: "Yes" })).toMatch(/Each treatment is a pet friendly snow melt, never rock salt/);
+    expect(saltingScope({ surface: "Driveway", treatments: "3", petSafe: "No" })).toMatch(/Each treatment is calcium chloride/);
+  });
 });

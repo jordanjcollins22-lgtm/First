@@ -175,7 +175,10 @@ export function saltingScope(values: Record<string, string | undefined>, setting
   const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
     `Pre-paid salting: ${quote.treatments} treatments at ${money(each)} each, ${money(each * quote.treatments)} in all, on the ${where}.`,
-    `Each treatment is calcium chloride, never rock salt, so the concrete isn't pitted${order.petFriendly ? ", in the pet safe blend" : ""}. We come out when ice is forecast or after a snow push.`,
+    // The pet blend is named for what it is to the client: a pet friendly snow melt.
+    order.petFriendly
+      ? `Each treatment is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`
+      : `Each treatment is calcium chloride, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`,
     `Three treatments is the minimum to book. They are paid up front so the salt is bought ahead of the season.`,
     SALT_KEPT_LINE,
     `Snow removal, when you want it, is billed after each storm by how much fell.`,
