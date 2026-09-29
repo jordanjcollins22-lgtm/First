@@ -140,3 +140,34 @@ function refresh(jobId: string) {
   revalidatePath(`/jobs/${jobId}/work-order`);
   revalidatePath("/my-day");
 }
+
+/** One crew photo looked at and fine, from Projects today. */
+export async function approveCrewPhoto(jobId: string, photoId: string): Promise<ReviewResult> {
+  try {
+    const profile = await getCurrentProfile();
+    if (!profile) return { ok: false, message: "Sign in first." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("job_photos")
+      .update({ reviewed_at: new Date().toISOString(), reviewed_by: profile.id })
+      .eq("id", photoId)
+      .eq("job_id", jobId);
+    if (error) return { ok: false, message: describeDbError(error) };
+    refresh(jobId);
+    revalidatePath("/my-day");
+    return { ok: true };
+  } catch (err) {
+    console.error("approveCrewPhoto failed:", err);
+    return { ok: false, message: "Couldn't approve that photo." };
+  }
+}
+
+/**
+ * A crew photo sent back: a touch-up on it with what to redo, the same punch
+ * list the crew already work from, pinned to the middle of the photo.
+ */
+export async function redoCrewPhoto(jobId: string, photoId: string, note: string): Promise<ReviewResult> {
+  const result = await addPhotoMark({ jobId, photoId, x: 0.5, y: 0.5, note });
+  if (result.ok) revalidatePath("/my-day");
+  return result.ok ? { ok: true, message: "Sent back to the crew." } : result;
+}

@@ -4410,6 +4410,9 @@ export interface Database {
           caption: string | null;
           uploaded_by: string | null;
           created_at: string;
+          /** The account manager looked at it and said it is fine, from Projects today. */
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["job_photos"]["Row"]> & {
           job_id: string;

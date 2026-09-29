@@ -52,6 +52,8 @@ import { countOpenPosts } from "@/lib/data/post-board";
 import { listBoardJobs } from "@/lib/data/job-board";
 import { needsScheduling } from "@/lib/job-board";
 import { checkTabAccess } from "@/lib/data/access";
+import { getProjectsToday } from "@/lib/data/projects-today";
+import { ProjectsToday } from "@/components/projects/projects-today";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
 import { nextRouteToApprove } from "@/lib/data/route-approval";
@@ -400,6 +402,15 @@ async function AccountManagerDay({
     ? await Promise.all([getCommissionFor(me).catch(() => null), advanceBook(me).catch(() => noBook)])
     : [null, noBook];
   const advancesOpen = book.advances.filter((a) => a.status === "requested" || a.status === "approved").length;
+  // The projects out today on their clients: where each has got to, and the crew's photos waiting on them.
+  const projects = me
+    ? await getProjectsToday({ id: me.id, seesAll: isOwnerLevel(me.roles) || me.roles.includes("admin") }).catch((err) => {
+        console.error("Projects today failed to load:", err);
+        return [];
+      })
+    : [];
+  const photosWaiting = projects.reduce((n, p) => n + p.photos.length, 0);
+  const projectIssues = projects.reduce((n, p) => n + p.issues.length, 0);
 
   const squares: DaySquare[] = [
     ...(canComment
@@ -421,6 +432,17 @@ async function AccountManagerDay({
       title: "Site map approval",
       count: toPrice > 0 ? toPrice : toSend,
       line: toPrice > 0 ? `to price${toSend > 0 ? ` · ${toSend} to send` : ""}` : toSend > 0 ? "to send to the client" : "Nothing waiting",
+    },
+    {
+      key: "projects",
+      title: "Projects today",
+      count: photosWaiting > 0 ? photosWaiting : projects.length,
+      line:
+        projects.length === 0
+          ? "None out today"
+          : photosWaiting > 0
+            ? `${photosWaiting === 1 ? "photo" : "photos"} to approve · ${projects.length} out${projectIssues > 0 ? ` · ${projectIssues} ${projectIssues === 1 ? "issue" : "issues"}` : ""}`
+            : `out today${projectIssues > 0 ? ` · ${projectIssues} ${projectIssues === 1 ? "issue" : "issues"}` : ""}`,
     },
     {
       key: "jobs",
@@ -445,7 +467,9 @@ async function AccountManagerDay({
   // What opens: the one tapped, or else the most urgent with something in it.
   const chosen =
     squares.find((sq) => sq.key === open)?.key ??
-    (today > 0
+    (photosWaiting + projectIssues > 0
+      ? "projects"
+      : today > 0
       ? "evaluations"
       : toPrice + toSend > 0
         ? "approval"
@@ -465,6 +489,7 @@ async function AccountManagerDay({
         ...(canComment ? { comments: <PostsToAnswerPage /> } : {}),
         evaluations: visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>,
         approval: <PriceApprovals items={approvals ?? []} />,
+        projects: <ProjectsToday projects={projects} />,
         jobs: <JobManagement items={managed} />,
         commission: (
           <div className="flex flex-col gap-3">
