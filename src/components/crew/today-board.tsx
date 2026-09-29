@@ -44,6 +44,9 @@ export function TodayBoard({
 
   const day = readDay(events, stops);
   const done = new Set(day.stopsDone);
+  // Where they are going is not shown until the tools are on the truck: the
+  // address is what makes somebody leave, and nobody leaves half loaded.
+  const hideWhere = Boolean(leaveBlockedBy) && (day.phase === "before_shop" || day.phase === "at_shop");
 
   /**
    * Attaches a rough position when the phone offers one, and never waits long
@@ -79,9 +82,11 @@ export function TodayBoard({
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {greeting()}, {personName.split(" ")[0]}
         </p>
-        <p className="mt-1 text-lg font-bold leading-snug">{day.headline}</p>
+        <p className="mt-1 text-lg font-bold leading-snug">
+          {hideWhere ? "Load the tools first. Where you're going shows once everything is on the truck." : day.headline}
+        </p>
 
-        {(day.currentStop ?? day.nextStop) && (
+        {!hideWhere && (day.currentStop ?? day.nextStop) && (
           <StopCallout stop={(day.currentStop ?? day.nextStop)!} phase={day.phase} directionsInButton={day.action?.kind === "travelling"} />
         )}
 
@@ -124,7 +129,7 @@ export function TodayBoard({
       </section>
 
       {/* One stop is already in the card above; the list is for a day with more. */}
-      {stops.length !== 1 && (
+      {stops.length !== 1 && !hideWhere && (
       <section>
         <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Today&apos;s stops ({done.size}/{stops.length})
