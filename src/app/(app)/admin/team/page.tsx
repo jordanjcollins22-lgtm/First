@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { RoleCheckboxes } from "@/components/team/role-checkboxes";
 import { DoesEvaluationsToggle } from "@/components/team/does-evaluations-toggle";
+import { CanEditToolsToggle } from "@/components/team/can-edit-tools-toggle";
+import { isToolsOwner } from "@/lib/tool-editors";
 import { canDoEvaluations } from "@/lib/affiliate-roles";
 import { CreateTeamMemberForm } from "@/components/team/create-team-member-form";
 import { ResetPasswordControl } from "@/components/team/reset-password-control";
@@ -79,6 +81,8 @@ export default async function TeamServicesPage() {
   }
 
   const isAdmin = currentProfile?.roles.includes("admin") ?? false;
+  // Whose tools they are: the one person who decides who else may change them.
+  const ownsTools = isToolsOwner(realProfile?.email);
   // The account really signed in, not the one being viewed as. View-as is
   // that person's feature, and it should still be here while they use it.
   const realIsAdmin = realProfile?.roles.includes("admin") ?? false;
@@ -276,6 +280,18 @@ export default async function TeamServicesPage() {
                                 initial={profile.does_evaluations ?? null}
                                 roleSays={canDoEvaluations(profile.roles)}
                               />
+                            </div>
+                          )}
+                          {/* Only the owner hands this out, so only the owner
+                              sees it. */}
+                          {ownsTools && (
+                            <div className="mt-1.5">
+                              <p className="mb-0.5 text-[11px] text-muted-foreground">Changes tools &amp; kits</p>
+                              {isToolsOwner(profile.email) ? (
+                                <p className="text-[11px] font-medium">Owner, always</p>
+                              ) : (
+                                <CanEditToolsToggle profileId={profile.id} initial={Boolean(profile.can_edit_tools)} />
+                              )}
                             </div>
                           )}
                         </td>

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { CONTAINER_KINDS, parseKits } from "@/lib/kit-containers";
+import { NOT_A_TOOL_EDITOR, canEditTools } from "@/lib/tool-editors";
 
 /**
  * Keeping the bins, and what to do when one breaks.
@@ -47,6 +48,7 @@ export async function saveContainer(input: {
 }): Promise<ContainerResult<{ id: string }>> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
+  if (!canEditTools(profile)) return fail(NOT_A_TOOL_EDITOR);
 
   const name = input.name.trim();
   if (!name) return fail("Give it a name, the thing you would say out loud.");
@@ -101,6 +103,7 @@ export async function archiveContainer(input: {
 }): Promise<ContainerResult> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
+  if (!canEditTools(profile)) return fail(NOT_A_TOOL_EDITOR);
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -125,6 +128,7 @@ export async function savePart(input: {
 }): Promise<ContainerResult<{ id: string }>> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
+  if (!canEditTools(profile)) return fail(NOT_A_TOOL_EDITOR);
 
   const name = input.name.trim();
   if (!name) return fail("What is the part called?");
@@ -163,6 +167,7 @@ export async function savePart(input: {
 export async function removePart(input: { id: string }): Promise<ContainerResult> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
+  if (!canEditTools(profile)) return fail(NOT_A_TOOL_EDITOR);
 
   const supabase = await createClient();
   const { error } = await supabase.from("kit_container_parts").delete().eq("id", input.id);
@@ -187,6 +192,7 @@ export async function reportBroken(input: {
 }): Promise<ContainerResult> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
+  if (!canEditTools(profile)) return fail(NOT_A_TOOL_EDITOR);
 
   const broken = Math.max(0, Math.round(input.broken));
   const supabase = await createClient();
@@ -214,6 +220,7 @@ export async function markOnOrder(input: {
 }): Promise<ContainerResult> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("Not signed in.");
+  if (!canEditTools(profile)) return fail(NOT_A_TOOL_EDITOR);
 
   const supabase = await createClient();
   const { error } = input.partId

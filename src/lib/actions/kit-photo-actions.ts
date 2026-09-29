@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { kitPhotoFolder } from "@/lib/kit-photos";
+import { NOT_A_TOOL_EDITOR, canEditTools } from "@/lib/tool-editors";
 
 export type KitPhotoResult = { ok: true } | { ok: false; message: string };
 
@@ -17,6 +18,7 @@ export type KitPhotoResult = { ok: true } | { ok: false; message: string };
 export async function setKitPhoto(kit: number, path: string | null): Promise<KitPhotoResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, message: "Sign in first." };
+  if (!canEditTools(profile)) return { ok: false, message: NOT_A_TOOL_EDITOR };
   if (!Number.isInteger(kit) || kit < 1) return { ok: false, message: "That isn't a kit number." };
   const organizationId = await getCurrentOrganizationId();
   if (path && !path.startsWith(kitPhotoFolder(organizationId))) return { ok: false, message: "That photo isn't in this business's kit folder." };

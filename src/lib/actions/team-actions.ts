@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentProfile } from "@/lib/data/team";
+import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
+import { isToolsOwner } from "@/lib/tool-editors";
 import { toE164 } from "@/lib/sms";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import type { Role } from "@/types/domain";
@@ -408,5 +409,32 @@ export async function setDoesEvaluations(input: {
   revalidatePath("/admin/team");
   revalidatePath("/dashboard");
   revalidatePath("/evaluations");
+  return { ok: true };
+}
+
+/**
+ * Let somebody change tools, kits and their photos, or stop them. The
+ * owner's call alone: the database refuses it from anybody else too.
+ */
+export async function setCanEditTools(input: {
+  profileId: string;
+  value: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const caller = await getRealProfile();
+  if (!caller || !isToolsOwner(caller.email)) {
+    return { ok: false, error: "Only Jordan decides who can change tools and kits." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ can_edit_tools: input.value })
+    .eq("id", input.profileId)
+    .eq("organization_id", caller.organization_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/team");
+  revalidatePath("/admin/tools");
+  revalidatePath("/admin/tools/kits");
   return { ok: true };
 }

@@ -285,6 +285,8 @@ export interface Profile {
    * at all to whether they visit properties.
    */
   does_evaluations: boolean | null;
+  /** The owner has allowed them to change tools, kits and their photos. */
+  can_edit_tools?: boolean;
   /** Trying out with us: own tools, meets on site, sees the work and nothing else. */
   trial_crew: boolean;
   phone: string | null;

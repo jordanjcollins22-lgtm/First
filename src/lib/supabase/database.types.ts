@@ -1926,6 +1926,7 @@ export interface Database {
           affiliate_slug: string | null;
           is_affiliate: boolean;
           does_evaluations: boolean | null;
+          can_edit_tools?: boolean;
           /** Trying out with us: the day and the crew sheet show the work and nothing else. */
           trial_crew: boolean;
           phone: string | null;

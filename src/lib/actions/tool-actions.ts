@@ -4,7 +4,20 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { getCurrentProfile } from "@/lib/data/team";
+import { NOT_A_TOOL_EDITOR, canEditTools } from "@/lib/tool-editors";
 import type { ToolCategory } from "@/types/domain";
+
+/**
+ * The database connection for changing tools, once it is known the person may:
+ * the owner, or somebody the owner allowed. The database refuses anybody else
+ * anyway; checking here first says why instead of saving nothing.
+ */
+async function editorClient() {
+  const profile = await getCurrentProfile();
+  if (!canEditTools(profile)) throw new Error(NOT_A_TOOL_EDITOR);
+  return createClient();
+}
 
 export type CreateToolResult =
   | { ok: true; id: string; name: string }
@@ -29,7 +42,7 @@ export async function createTool(formData: FormData): Promise<CreateToolResult> 
 
 async function createToolInner(formData: FormData): Promise<CreateToolResult> {
   const organizationId = await getCurrentOrganizationId();
-  const supabase = await createClient();
+  const supabase = await editorClient();
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, message: "Enter a tool name." };
@@ -137,7 +150,7 @@ async function reviveTool(
   organizationId: string,
   values: Record<string, unknown>
 ): Promise<CreateToolResult> {
-  const supabase = await createClient();
+  const supabase = await editorClient();
 
   const { data: existing, error: findError } = await supabase
     .from("tools")
@@ -168,7 +181,7 @@ async function reviveTool(
 }
 
 export async function updateToolCategory(id: string, category: ToolCategory) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ category }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -176,7 +189,7 @@ export async function updateToolCategory(id: string, category: ToolCategory) {
 }
 
 export async function updateToolCost(id: string, cost: number | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ cost }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -184,7 +197,7 @@ export async function updateToolCost(id: string, cost: number | null) {
 }
 
 export async function updateToolQuantity(id: string, quantity: number | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ quantity }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -192,7 +205,7 @@ export async function updateToolQuantity(id: string, quantity: number | null) {
 }
 
 export async function updateToolOwnership(id: string, isRental: boolean) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ is_rental: isRental }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -200,7 +213,7 @@ export async function updateToolOwnership(id: string, isRental: boolean) {
 }
 
 export async function updateToolStorageLocation(id: string, storageLocation: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ storage_location: storageLocation }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -208,7 +221,7 @@ export async function updateToolStorageLocation(id: string, storageLocation: str
 }
 
 export async function updateToolStockMethod(id: string, stockMethod: "in_stock" | "order_as_needed") {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ stock_method: stockMethod }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -216,7 +229,7 @@ export async function updateToolStockMethod(id: string, stockMethod: "in_stock" 
 }
 
 export async function updateToolDelivered(id: string, isDelivered: boolean) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ is_delivered: isDelivered }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -224,7 +237,7 @@ export async function updateToolDelivered(id: string, isDelivered: boolean) {
 }
 
 export async function updateToolShopLocation(id: string, shopLocation: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ shop_location: shopLocation }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -232,21 +245,21 @@ export async function updateToolShopLocation(id: string, shopLocation: string | 
 }
 
 export async function updateToolNotOwnedReason(id: string, reason: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ not_owned_reason: reason }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
 }
 
 export async function updateToolCostToOwn(id: string, costToOwn: number | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ cost_to_own: costToOwn }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
 }
 
 export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ purchase_url: purchaseUrl }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -261,7 +274,7 @@ export async function updateToolPurchaseUrl(id: string, purchaseUrl: string | nu
  * whoever typed it can see it happen and rewrite it.
  */
 export async function updateToolDescription(id: string, description: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const trimmed = description?.trim().slice(0, 160) || null;
   const { error } = await supabase.from("tools").update({ description: trimmed }).eq("id", id);
   if (error) throw error;
@@ -271,7 +284,7 @@ export async function updateToolDescription(id: string, description: string | nu
 
 /** YouTube (or any) link showing how to use this tool — surfaces on services and job checklists. */
 export async function updateToolHowToUrl(id: string, howToUrl: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ how_to_url: howToUrl }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -281,7 +294,7 @@ export async function updateToolHowToUrl(id: string, howToUrl: string | null) {
 }
 
 export async function updateToolReorderThreshold(id: string, threshold: number | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ reorder_threshold: threshold }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -289,7 +302,7 @@ export async function updateToolReorderThreshold(id: string, threshold: number |
 }
 
 export async function setToolOnOrder(id: string, onOrder: boolean) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ on_order: onOrder }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -308,7 +321,7 @@ export async function setToolOnOrder(id: string, onOrder: boolean) {
  * same tool in the same second. They are not going to.
  */
 export async function updateToolKitQuantity(id: string, kit: number, quantity: number) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { data: existing } = await supabase.from("tools").select("kit_quantities").eq("id", id).maybeSingle();
 
   const next: Record<string, number> = { ...((existing?.kit_quantities ?? {}) as Record<string, number>) };
@@ -323,7 +336,7 @@ export async function updateToolKitQuantity(id: string, kit: number, quantity: n
 }
 
 export async function updateToolKits(id: string, kits: number[]) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ kits }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -331,7 +344,7 @@ export async function updateToolKits(id: string, kits: number[]) {
 }
 
 export async function updateToolImage(id: string, imagePath: string | null) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
 
   const { data: existing } = await supabase.from("tools").select("image_path").eq("id", id).maybeSingle();
   if (existing?.image_path && existing.image_path !== imagePath) {
@@ -345,7 +358,7 @@ export async function updateToolImage(id: string, imagePath: string | null) {
 }
 
 export async function deactivateTool(id: string) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   const { error } = await supabase.from("tools").update({ active: false }).eq("id", id);
   if (error) throw error;
   revalidatePath("/admin/tools");
@@ -353,7 +366,7 @@ export async function deactivateTool(id: string) {
 }
 
 export async function setServiceToolLink(serviceTypeId: string, toolId: string, enabled: boolean) {
-  const supabase = await createClient();
+  const supabase = await editorClient();
   if (enabled) {
     const { error } = await supabase
       .from("service_tools")
