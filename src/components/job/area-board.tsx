@@ -19,15 +19,16 @@ import type { WorkOrderZone } from "@/lib/work-order";
 /**
  * The job on site, area by area, one thing to press at a time.
  *
- * First every area is prepped: pick an area, Start prep on it (the button
- * is in that area's own card, under its name), read the whole scope with
- * the evaluation photos, tick each prep step as it is done, then the prep
- * photo. That frees the area and the next one is up. Only
- * when every area has its prep photo does the install open, and then the
- * same again: Start the install, the install, the clean up, the after photo.
+ * First every area is prepped: pick an area, reading the whole job for it
+ * with the evaluation photos, Start prep on it (the button is in that
+ * area's own card, under its name), tick each prep step as it is done, then
+ * the prep photo. That frees the area and the next one is up. Only when
+ * every area has its prep photo does the install open, and then the same
+ * again: Start the install (its card lists only the install), the install,
+ * the clean up, the after photo.
  *
  * Inside an area only its current steps show, with its photo button once
- * they are ticked. The whole scope is a tap away but out of the way.
+ * they are ticked. Nothing else: the whole job was read when choosing.
  */
 export function AreaBoard({
   jobId,
@@ -111,7 +112,6 @@ export function AreaBoard({
             everyAreaPrepped={board.allPrepped}
             steps={board.steps[myZone.id] ?? []}
             tips={board.tips[myZone.id] ?? []}
-            tools={board.tools[myZone.id] ?? []}
             meId={board.meId}
             pending={pending}
             onTick={(key, value) => run(() => act.tick(myZone.id, key, value))}
@@ -176,7 +176,14 @@ export function AreaBoard({
                         pending={pending}
                         onStart={() => run(() => act.start(zone.id))}
                       />
-                      <Scope zone={zone} tools={board.tools[zone.id] ?? []} state={state} />
+                      <Scope
+                        zone={zone}
+                        tools={board.tools[zone.id] ?? []}
+                        state={state}
+                        // The whole job only while choosing where to start. For the
+                        // install, what the install is: the prep is done.
+                        todo={stage === "work" ? (board.steps[zone.id] ?? []).filter((s) => s.step.phase !== "prep").map((s) => s.step.label) : zone.todo}
+                      />
                     </div>
                   )}
                 </li>
@@ -227,13 +234,13 @@ function StatusLine({ state, stage, meId }: { state: AreaState; stage: "prep" | 
   );
 }
 
-/** The whole scope of an area: the evaluation photos, what to do, the note, the tools. */
-function Scope({ zone, tools, state }: { zone: WorkOrderZone; tools: string[]; state: AreaState }) {
+/** An area before it is started: the evaluation photos, what to do, the note, the tools. */
+function Scope({ zone, tools, state, todo }: { zone: WorkOrderZone; tools: string[]; state: AreaState; todo: string[] }) {
   return (
     <>
       {(zone.location || zone.sizeLabel) && <p className="text-xs text-muted-foreground">{[zone.location, zone.sizeLabel].filter(Boolean).join(" · ")}</p>}
       <ZonePhotos photos={zone.photos} zoneName={zone.name} />
-      <AreaTodo todo={zone.todo} />
+      <AreaTodo todo={todo} />
       {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
       {tools.length > 0 && state.status !== "done" && (
         <p className="text-sm">
@@ -309,7 +316,6 @@ function InArea({
   everyAreaPrepped,
   steps,
   tips,
-  tools,
   meId,
   pending,
   onTick,
@@ -325,7 +331,6 @@ function InArea({
   everyAreaPrepped: boolean;
   steps: AreaBoardData["steps"][string];
   tips: AreaBoardData["tips"][string];
-  tools: string[];
   meId: string | null;
   pending: boolean;
   onTick: (key: string, value: boolean) => void;
@@ -386,12 +391,10 @@ function InArea({
 
       {photo && <PhotoTaker jobId={jobId} zone={zone} kind={photo} disabled={pending} onDone={onPhoto} onError={onError} demo={demoPhoto ? () => demoPhoto(photo) : null} />}
 
-      <details className="rounded-lg border border-border bg-background/60 p-2.5">
-        <summary className="cursor-pointer text-sm font-medium">The whole scope for this area</summary>
-        <div className="mt-2 flex flex-col gap-3">
-          <Scope zone={zone} tools={tools} state={state} />
-        </div>
-      </details>
+      {/* Only what is being done now: the rest of the job was read when choosing
+          the area, and a list with the prep on it during the install reads as
+          more to do. The evaluator's note stays, it is about this area. */}
+      {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
 
       {tips.length > 0 && (
         <details className="rounded-lg border border-border bg-background/60 p-2.5">

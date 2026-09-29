@@ -123,7 +123,7 @@ export default async function CrewJourneyPage() {
       key: "prepping",
       path: "crew",
       title: "Prep this area",
-      what: "Only the prep for this area, ticked as each thing is done. The whole scope is a tap away.",
+      what: "Only the prep for this area, ticked as each thing is done. Nothing about the install shows here.",
       screen: (
         <Look>
           <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("prepping")} accountManager={am} map={whereEachAreaIs} />
@@ -145,7 +145,7 @@ export default async function CrewJourneyPage() {
       key: "all-prepped",
       path: "crew",
       title: "Every area prepped",
-      what: "The same for each area until the last prep photo is in. Then the install opens: Start the install on the first area, in its card.",
+      what: "The same for each area until the last prep photo is in. Then the install opens: Start the install on the first area, in its card, which lists only the install.",
       screen: (
         <Look>
           <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("all_prepped")} accountManager={am} map={whereEachAreaIs} />
