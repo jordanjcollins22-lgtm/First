@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Deferred } from "@/components/deferred";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listRoles } from "@/lib/data/team";
-import { listRolePermissions } from "@/lib/data/permissions";
+import { listRoleEdits, listRolePermissions } from "@/lib/data/permissions";
 import { checkSchema, type MigrationStatus } from "@/lib/data/schema-check";
 import { PaymentReadiness } from "@/components/admin/payment-readiness";
 import { env, isStripeConfigured } from "@/lib/env";
@@ -13,6 +13,7 @@ import { BookingNoticePanel } from "@/components/admin/booking-notice-panel";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PageTabs } from "@/components/ui/page-tabs";
 import { PermissionsMatrix } from "@/components/permissions/permissions-matrix";
+import { RoleEditLog } from "@/components/permissions/role-edit-log";
 import { MigrationRunner } from "@/components/admin/migration-runner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateOrganizationForm } from "@/components/organizations/create-organization-form";
@@ -76,6 +77,8 @@ async function PermissionsTab() {
   } catch {
     migrationMissing = true;
   }
+  // Loaded on its own: a problem with the log costs the log, not the grid.
+  const edits = await listRoleEdits().catch(() => []);
 
   if (migrationMissing) {
     return (
@@ -100,6 +103,7 @@ async function PermissionsTab() {
         Use <strong>Open to all</strong> to give a page to every role in one tap.
       </p>
       <PermissionsMatrix roles={roles} permissions={permissions} />
+      <RoleEditLog edits={edits} />
     </div>
   );
 }
