@@ -6,6 +6,7 @@ import { CloudOff, Loader2, RotateCcw, Trash2, UploadCloud, X } from "lucide-rea
 
 import { OUTBOX_CHANGED, OUTBOX_SENT, localPreview, outboxItems, removeItem, updateItem, type OutboxItem } from "@/lib/offline/outbox";
 import { sendItem } from "@/lib/offline/outbox-send";
+import { cookieSaysDemo } from "@/lib/demo-guard";
 import { cn } from "@/lib/utils";
 
 /** Tries this many times before saying it couldn't be sent. No-signal tries don't count. */
@@ -35,6 +36,9 @@ export function OutboxRunner() {
 
   const run = useCallback(async () => {
     if (running.current || !navigator.onLine) return;
+    // A demo sends nothing, and a photo waiting from before it keeps waiting
+    // rather than using up its tries on the demo's refusals.
+    if (cookieSaysDemo(document.cookie)) return;
     running.current = true;
     let sentAny = false;
     try {

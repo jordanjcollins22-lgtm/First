@@ -1,6 +1,8 @@
 import nodemailer from "nodemailer";
 
 import { env } from "@/lib/env";
+import { inDemo } from "@/lib/demo-mode";
+import { DEMO_BLOCKED } from "@/lib/demo-guard";
 
 /**
  * Sending from the business's own Gmail.
@@ -36,6 +38,8 @@ function transport() {
 
 export async function sendGmail(input: GmailInput): Promise<GmailResult> {
   if (!isGmailConfigured) return { ok: false, message: "Gmail sending is not set up: GMAIL_USER and GMAIL_APP_PASSWORD are missing." };
+  // A demo sends nothing (lib/demo-guard.ts).
+  if (await inDemo()) return { ok: false, message: DEMO_BLOCKED };
   try {
     const info = await transport().sendMail({
       from: { name: input.fromName, address: env.gmailUser },

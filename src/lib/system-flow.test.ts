@@ -15,7 +15,7 @@ describe("the system map", () => {
   const squares = SYSTEM_FLOW.flatMap((s) => s.squares);
 
   it("runs in the order a customer meets the business", () => {
-    expect(SYSTEM_FLOW.map((s) => s.key)).toEqual(["marketing", "win", "work"]);
+    expect(SYSTEM_FLOW.map((s) => s.key)).toEqual(["marketing", "win", "work", "admin"]);
     expect(squares.filter((s) => !SYSTEM_FLOW[0].squares.includes(s)).map((s) => s.key)).toEqual([
       "booking",
       "prep",
@@ -24,6 +24,7 @@ describe("the system map", () => {
       "crew-sheet",
       "client-approval",
       "project-review",
+      "demo",
     ]);
   });
 

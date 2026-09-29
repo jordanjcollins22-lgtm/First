@@ -5,9 +5,10 @@ import { env, isStripeConfigured } from "@/lib/env";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { stripeCustomerFor } from "@/lib/stripe-customer";
 import { sendSms, toE164 } from "@/lib/sms";
+import { stripeOptions } from "@/lib/stripe-options";
 
 function getStripeClient(): Stripe {
-  return new Stripe(env.stripeSecretKey);
+  return new Stripe(env.stripeSecretKey, stripeOptions());
 }
 
 /**

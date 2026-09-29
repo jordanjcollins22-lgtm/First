@@ -163,4 +163,18 @@ export const SYSTEM_FLOW: SystemStage[] = [
       },
     ],
   },
+  {
+    key: "admin",
+    title: "Admin",
+    squares: [
+      {
+        key: "demo",
+        title: "Demo",
+        line: "Every role and the people who have it, with what each has on. Open the app as any of them to see their day, their jobs and what it looks like, on live data, with nothing saved or sent.",
+        href: "/admin/demo",
+        status: "partly",
+        gap: "Look only for now: trying saves in a copy of live data that resets when the demo closes needs a go ahead on where that copy lives.",
+      },
+    ],
+  },
 ];

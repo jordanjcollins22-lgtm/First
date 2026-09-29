@@ -1,5 +1,7 @@
 import { env } from "@/lib/env";
 import { log } from "@/lib/log";
+import { inDemo } from "@/lib/demo-mode";
+import { DEMO_BLOCKED } from "@/lib/demo-guard";
 
 /**
  * One photo post on the business's Facebook Page.
@@ -18,6 +20,8 @@ export async function publishPhotoToPage(input: { imageUrl: string; caption: str
   if (!env.facebookPageId || !env.facebookPageAccessToken) {
     return { ok: false, message: "Facebook is not set up. Add FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN." };
   }
+  // A demo posts nothing (lib/demo-guard.ts).
+  if (await inDemo()) return { ok: false, message: DEMO_BLOCKED };
   const body = new URLSearchParams({
     url: input.imageUrl,
     message: input.caption,

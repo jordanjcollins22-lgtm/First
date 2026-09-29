@@ -1,5 +1,7 @@
 import { env } from "@/lib/env";
 import type { DnsRecord, DomainStatus } from "@/lib/sending-domains";
+import { inDemo } from "@/lib/demo-mode";
+import { DEMO_BLOCKED } from "@/lib/demo-guard";
 
 /**
  * Resend, over plain fetch.
@@ -26,6 +28,8 @@ async function call<T>(
   if (!env.resendApiKey) {
     return { ok: false, message: "Email isn't connected yet, RESEND_API_KEY is not set." };
   }
+  // A demo sends nothing (lib/demo-guard.ts); looking something up is fine.
+  if (init.method !== "GET" && (await inDemo())) return { ok: false, message: DEMO_BLOCKED };
 
   let response: Response;
   try {

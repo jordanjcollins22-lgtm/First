@@ -2,9 +2,10 @@ import Stripe from "stripe";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
+import { stripeOptions } from "@/lib/stripe-options";
 
 export function stripeClient(): Stripe {
-  return new Stripe(env.stripeSecretKey);
+  return new Stripe(env.stripeSecretKey, stripeOptions());
 }
 
 /**

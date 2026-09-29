@@ -7,6 +7,7 @@ import { env, isStripeConfigured } from "@/lib/env";
 import { countsAsCash } from "@/lib/plaid";
 import { paymentState } from "@/lib/proposal-payment";
 import { creditLimitFrom, type Card, type CashPicture } from "@/lib/debt-plan";
+import { stripeOptions } from "@/lib/stripe-options";
 
 /**
  * The four numbers the plan needs, from the four places they live.
@@ -111,7 +112,7 @@ export async function getDebtInputs(): Promise<DebtInputs> {
  */
 async function stripeInTransit(): Promise<number> {
   if (!isStripeConfigured) return 0;
-  const stripe = new Stripe(env.stripeSecretKey);
+  const stripe = new Stripe(env.stripeSecretKey, stripeOptions());
   const balance = await stripe.balance.retrieve();
   const cents = [...balance.available, ...balance.pending]
     .filter((entry) => entry.currency === "usd")

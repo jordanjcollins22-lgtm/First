@@ -156,6 +156,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/admin/view-as":
     "See the app as another team member. Gated on the account actually signed in being an admin, " +
     "not on a tab, so an admin already viewing as somebody can switch to the next person.",
+  "/admin/demo":
+    "Every role and its people, to open the app as any of them with nothing saved. Gated on the " +
+    "account actually signed in being an admin, like View as, so it stays reachable from inside a demo.",
   "/today": "Redirects to My Day, which shows a crew member their own stops.",
   "/routes/[playId]":
     "One door-hanger round, walked door by door on a phone. Reached from My Day by whoever the round " +

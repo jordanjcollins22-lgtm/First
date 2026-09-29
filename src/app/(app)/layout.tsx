@@ -4,8 +4,10 @@ import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { DemoBanner } from "@/components/demo-banner";
+import { inDemo } from "@/lib/demo-mode";
 import { OutboxRunner } from "@/components/offline/outbox-runner";
-import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
+import { getCurrentProfile, getRealProfile, listProfiles } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { listRolePermissions } from "@/lib/data/permissions";
@@ -65,6 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let roles: string[] = [];
   let allowedTabs: string[] = [];
   let impersonatingName: string | null = null;
+  let demo: { viewing: { id: string; name: string; roles: string[] }; team: { id: string; name: string; roles: string[] }[] } | null = null;
   let orgName: string | null = null;
   if (isSupabaseConfigured) {
     // getRealProfile already asks the auth server and memoises the answer for
@@ -89,6 +92,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       orgName = org?.name ?? null;
       if (profile && realProfile && profile.id !== realProfile.id) {
         impersonatingName = profile.full_name || profile.email;
+      }
+      // A demo open: its own bar, with the team to swap between.
+      if (profile && realProfile.roles.includes("admin") && (await inDemo())) {
+        const team = await listProfiles().catch(() => []);
+        demo = {
+          viewing: { id: profile.id, name: profile.full_name || profile.email, roles: profile.roles },
+          team: team.map((p) => ({ id: p.id, name: p.full_name || p.email, roles: p.roles })),
+        };
       }
       // Not auto-granted for admins — see the note in lib/data/access.ts.
       // The Permissions nav link itself stays role-gated below, independent
@@ -120,7 +131,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="absolute bottom-0 left-1/4 h-80 w-80 rounded-full bg-teal-400/25 blur-3xl" />
           <div className="absolute bottom-[-6rem] right-1/4 h-72 w-72 rounded-full bg-lime-300/25 blur-3xl" />
         </div>
-        {impersonatingName && <ImpersonationBanner name={impersonatingName} />}
+        {demo ? <DemoBanner viewing={demo.viewing} team={demo.team} /> : impersonatingName && <ImpersonationBanner name={impersonatingName} />}
         <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150 dark:border-white/10">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:py-3">
             <Link

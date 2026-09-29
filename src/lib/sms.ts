@@ -5,6 +5,7 @@ import { env, isSmsConfigured, isTwilioConfigured } from "@/lib/env";
 import { isGhlConfigured, sendSmsMessage, upsertContact } from "@/lib/ghl/client";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { frozenForClient } from "@/lib/data/job-dispute";
+import { refuseInDemo } from "@/lib/demo-mode";
 
 /** Assumes a US number when given a bare 10-digit phone — good enough for
  * a single-country landscaping business. Returns null if it can't tell. */
@@ -25,6 +26,8 @@ export function last10Digits(phone: string): string {
 
 export async function sendSms(to: string, body: string, who: { name?: string | null } = {}): Promise<void> {
   if (!isSmsConfigured) return;
+  // A demo texts nobody (lib/demo-guard.ts).
+  await refuseInDemo();
 
   // No Twilio line of our own: the number GoHighLevel holds for us sends
   // it, into the same conversation the office reads there.

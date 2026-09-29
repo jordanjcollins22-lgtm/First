@@ -1,5 +1,6 @@
 import { env } from "@/lib/env";
 import { log } from "@/lib/log";
+import { refuseInDemo } from "@/lib/demo-mode";
 
 /**
  * The GoHighLevel API, the little of it we use.
@@ -14,6 +15,8 @@ const VERSION = "2021-04-15";
 export const isGhlConfigured = Boolean(env.ghlApiKey && env.ghlLocationId && env.ghlCalendarId);
 
 async function call<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
+  // A demo reads HighLevel and changes nothing there (lib/demo-guard.ts).
+  if (method !== "GET") await refuseInDemo();
   const response = await fetch(`${BASE}${path}`, {
     method,
     headers: {

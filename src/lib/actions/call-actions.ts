@@ -7,6 +7,7 @@ import { getJobCustomerContact } from "@/lib/job-customer";
 import { toE164 } from "@/lib/sms";
 import { env, isTwilioConfigured } from "@/lib/env";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
+import { refuseInDemo } from "@/lib/demo-mode";
 
 function escapeXml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -19,6 +20,8 @@ function escapeXml(text: string): string {
  */
 export async function startCall(jobId: string): Promise<void> {
   if (!isTwilioConfigured) throw new Error("Calling isn't set up yet.");
+  // A demo rings nobody (lib/demo-guard.ts).
+  await refuseInDemo();
 
   const profile = await getCurrentProfile();
   if (!profile) throw new Error("Not signed in.");
