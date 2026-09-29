@@ -13,6 +13,7 @@ import { affiliateClosedBoard, answeredPostsFor, answeredToday, getPostBoard } f
 import { AnsweringLeaderboard } from "@/components/marketing/answering-leaderboard";
 import { AnsweredPosts } from "@/components/marketing/answered-posts";
 import { CommentCard } from "@/components/marketing/comment-card";
+import { RecentAnswers } from "@/components/marketing/recent-answers";
 
 /**
  * Posts to answer.
@@ -90,6 +91,8 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
       </header>
 
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
+
+      <RecentAnswers posts={posts} />
 
       {leaderboard ? (
         <AnsweringLeaderboard standings={leaderboard} meId={profile.id} viewingId={whoId} linkNames={owner} />

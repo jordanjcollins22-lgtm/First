@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { POST_STAGES, type PostStage } from "@/lib/affiliate-closes";
+import { copyNow, writeClipboard } from "@/lib/clipboard";
 import type { AnsweredPost } from "@/lib/data/post-board";
 
 const STAGE_STYLE: Record<PostStage, string> = {
@@ -113,6 +114,7 @@ export function AnsweredPosts({ posts, whose }: { posts: AnsweredPost[]; whose: 
                         Open the post
                       </a>
                     )}
+                    {p.comment && <CopyComment text={p.comment} />}
                     {p.comment && (
                       <details className="w-full">
                         <summary className="cursor-pointer text-muted-foreground">What you wrote</summary>
@@ -128,5 +130,23 @@ export function AnsweredPosts({ posts, whose }: { posts: AnsweredPost[]; whose: 
       )}
       </div>
     </details>
+  );
+}
+
+/** Copy what was written, again, to paste under the post. */
+function CopyComment({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const ok = copyNow(text) || (await writeClipboard(text));
+        setCopied(ok);
+        if (ok) setTimeout(() => setCopied(false), 2500);
+      }}
+      className="font-medium text-primary hover:underline"
+    >
+      {copied ? "Copied" : "Copy comment"}
+    </button>
   );
 }

@@ -172,12 +172,13 @@ export async function getPostBoard(
 ): Promise<BoardPost[]> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  // Every request the sorter found is on the board, link or not: a post the
-  // page showed without its link is still somebody asking for the work, and
-  // leaving it off hid most of what came in. One without a link says so on
-  // the card, with who posted it, where, and a search to find it.
+  // Only a post with its own link comes in: the affiliates answer on the
+  // post itself, and one found without its link could not be answered at
+  // all. One somebody already answered stays for them, so what they wrote
+  // is still here to copy.
   // The same post kept twice shows once, with everybody's answers to either.
   return oneRowPerPost(posts, answers)
+    .filter(({ row, answers: list }) => isPostLink(row.url) || list.some((a) => a.profileId === profileId))
     .sort((a, b) => b.row.created_at.localeCompare(a.row.created_at))
     .map(({ row, answers: list }) => boardPost(row, list, profileId, now, viewer));
 }
@@ -224,7 +225,7 @@ function boardPost(
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return oneRowPerPost(posts, answers).filter(({ answers: list }) => standingFor(list, "", now).others.length === 0).length;
+  return oneRowPerPost(posts, answers).filter(({ row, answers: list }) => isPostLink(row.url) && standingFor(list, "", now).others.length === 0).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */

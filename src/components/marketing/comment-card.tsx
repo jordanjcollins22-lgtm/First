@@ -15,6 +15,7 @@ import { hashBytes } from "@/lib/screenshot-hash";
 import { shrinkImage } from "@/lib/shrink-image";
 import { PLATFORM_LABEL } from "@/lib/social-finder";
 import { shortWhen } from "@/lib/time-zone";
+import { copyNow, writeClipboard } from "@/lib/clipboard";
 import type { BoardPost } from "@/lib/data/post-board";
 
 /**
@@ -43,41 +44,6 @@ function mentionOf(post: BoardPost, comment: string): string | null {
   const first = post.author?.trim().split(/\s+/)[0];
   if (!first) return null;
   return comment.startsWith(`@${first}`) ? first : null;
-}
-
-/**
- * Copies text there and then, inside the tap, so opening the post's tab
- * straight after is still allowed. False if the browser would not.
- */
-function copyNow(text: string): boolean {
-  const box = document.createElement("textarea");
-  box.value = text;
-  box.setAttribute("readonly", "");
-  box.style.position = "fixed";
-  box.style.top = "0";
-  box.style.opacity = "0";
-  document.body.appendChild(box);
-  const active = document.activeElement as HTMLElement | null;
-  try {
-    box.select();
-    box.setSelectionRange(0, text.length);
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    box.remove();
-    active?.focus?.();
-  }
-}
-
-/** The clipboard the modern way, for browsers where copyNow would not. */
-async function writeClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 const FRESHNESS_STYLE: Record<BoardPost["freshness"], string> = {
@@ -425,7 +391,8 @@ function FoundAPost({ onAdded }: { onAdded: (seenId: string) => void }) {
 
   async function submit() {
     setResult(null);
-    if (!link.trim() && !file) return setResult({ text: "Paste the post's link or add a screenshot.", tone: "bad" });
+    // The link is what makes it answerable: a post without one never comes in.
+    if (!link.trim()) return setResult({ text: "Paste the post's link (Share, then Copy link). A post without its link can't be answered.", tone: "bad" });
     setBusy(true);
     try {
       let screenshotPath: string | null = null;
