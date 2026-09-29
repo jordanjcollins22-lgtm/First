@@ -19,9 +19,10 @@ import type { WorkOrderZone } from "@/lib/work-order";
 /**
  * The job on site, area by area, one thing to press at a time.
  *
- * First every area is prepped: pick an area, read the whole scope with the
- * evaluation photos, Start prep here, tick each prep step as it is done,
- * then the prep photo. That frees the area and the next one is up. Only
+ * First every area is prepped: pick an area, Start prep on it (the button
+ * is in that area's own card, under its name), read the whole scope with
+ * the evaluation photos, tick each prep step as it is done, then the prep
+ * photo. That frees the area and the next one is up. Only
  * when every area has its prep photo does the install open, and then the
  * same again: Start the install, the install, the clean up, the after photo.
  *
@@ -166,11 +167,16 @@ export function AreaBoard({
 
                   {expanded && (
                     <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3">
+                      {/* In the area's own card, under its name, never floating over the
+                          next one: whoever taps it knows which area they started. */}
+                      <StartButton
+                        area={`${numberOf.get(zone.id)!} · ${zone.name}`}
+                        state={state}
+                        stage={stage}
+                        pending={pending}
+                        onStart={() => run(() => act.start(zone.id))}
+                      />
                       <Scope zone={zone} tools={board.tools[zone.id] ?? []} state={state} />
-                      {/* Read the scope, then start: the button stays in reach at the bottom of the screen. */}
-                      <div className="sticky bottom-2 z-10">
-                        <StartButton state={state} stage={stage} pending={pending} onStart={() => run(() => act.start(zone.id))} />
-                      </div>
                     </div>
                   )}
                 </li>
@@ -241,21 +247,36 @@ function Scope({ zone, tools, state }: { zone: WorkOrderZone; tools: string[]; s
   );
 }
 
-/** The one button on an area that is not yours yet, or why there isn't one. */
-function StartButton({ state, stage, pending, onStart }: { state: AreaState; stage: "prep" | "work"; pending: boolean; onStart: () => void }) {
+/** The one button on an area that is not yours yet, or why there isn't one. Says which area it starts. */
+function StartButton({
+  area,
+  state,
+  stage,
+  pending,
+  onStart,
+}: {
+  area: string;
+  state: AreaState;
+  stage: "prep" | "work";
+  pending: boolean;
+  onStart: () => void;
+}) {
   if (state.status === "done") return <PhotoDone label="Done. After photo in." />;
   if (stage === "prep" && state.prepped) return <PhotoDone label="Prepped. The install starts once every area is prepped." />;
   if (state.status === "waiting") return <p className="text-sm text-amber-700">{state.waitingReason} Pick another area for now.</p>;
   const label =
     state.status === "working"
-      ? `Join ${state.people.map((p) => p.name).join(" and ")} here`
+      ? `Join ${state.people.map((p) => p.name).join(" and ")} on`
       : stage === "prep"
-        ? "Start prep here"
-        : "Start the install";
+        ? "Start prep on"
+        : "Start the install on";
   return (
-    <Button type="button" className="h-12 w-full text-base font-semibold shadow-lg" onClick={onStart} disabled={pending}>
-      {pending && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-      {label}
+    <Button type="button" className="h-auto min-h-12 w-full flex-col gap-0 py-2 text-base font-semibold" onClick={onStart} disabled={pending}>
+      <span className="flex items-center">
+        {pending && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+        {label}
+      </span>
+      <span className="text-sm font-medium opacity-90">{area}</span>
     </Button>
   );
 }
@@ -451,7 +472,7 @@ function PhotoTaker({
 
   if (waiting.length > 0) {
     return (
-      <div className="sticky bottom-2 z-10 flex flex-col gap-2 rounded-lg border border-dashed border-slate-400 bg-card p-2.5 shadow-lg">
+      <div className="flex flex-col gap-2 rounded-lg border border-dashed border-slate-400 bg-card p-2.5">
         <p className="text-sm font-semibold">{kind === "during" ? "Prep photo taken" : "After photo taken"}, no signal</p>
         <WaitingPhotos scope={scope} filter={(item) => (item.args.zone as { id?: string } | null)?.id === zone.id && item.args.kind === kind} />
         <p className="text-xs text-muted-foreground">This area moves on as soon as the photo uploads. Don&apos;t take it again.</p>
@@ -460,7 +481,7 @@ function PhotoTaker({
   }
 
   return (
-    <div className="sticky bottom-2 z-10 rounded-lg border border-dashed border-primary/60 bg-card p-2.5 shadow-lg">
+    <div className="rounded-lg border border-dashed border-primary/60 bg-card p-2.5">
       <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the prep photo" : "Clean up done: take the after photo"}</p>
       <p className="text-xs text-muted-foreground">
         {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}

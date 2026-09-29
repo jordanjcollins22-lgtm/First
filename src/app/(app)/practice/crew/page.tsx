@@ -112,7 +112,7 @@ export default async function CrewJourneyPage() {
       key: "areas",
       path: "crew",
       title: "The first area",
-      what: "The site map with every area numbered, and the first area open: its evaluation photos and the whole scope. The one button: Start prep here.",
+      what: "The site map with every area numbered, and the first area open: its evaluation photos and the whole scope. The one button, in that area's card under its name: Start prep on Front beds.",
       screen: (
         <Look>
           <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("open")} accountManager={am} map={whereEachAreaIs} />
@@ -145,7 +145,7 @@ export default async function CrewJourneyPage() {
       key: "all-prepped",
       path: "crew",
       title: "Every area prepped",
-      what: "The same for each area until the last prep photo is in. Then the install opens: Start the install, on the first area.",
+      what: "The same for each area until the last prep photo is in. Then the install opens: Start the install on the first area, in its card.",
       screen: (
         <Look>
           <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("all_prepped")} accountManager={am} map={whereEachAreaIs} />
