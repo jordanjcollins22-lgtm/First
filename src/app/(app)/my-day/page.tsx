@@ -52,6 +52,9 @@ import { needsScheduling } from "@/lib/job-board";
 import { checkTabAccess } from "@/lib/data/access";
 import { getProjectsToday } from "@/lib/data/projects-today";
 import { ProjectsToday } from "@/components/projects/projects-today";
+import { getEvaluationsToday } from "@/lib/data/evaluations-today";
+import { EvaluationsToday } from "@/components/evaluations/evaluations-today";
+import { isToolsOwner } from "@/lib/tool-editors";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
 import { nextRouteToApprove } from "@/lib/data/route-approval";
@@ -136,16 +139,21 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
     );
   }
 
+  // Jordan's own day: the evaluations and the projects out today, and nothing else.
+  const ownersDay = Boolean(viewer && isToolsOwner(viewer.email));
+
   // An evaluator's day is their visits: the same screen as /evaluate.
   const evaluatorOnly = viewer ? roleViewFor(viewer.roles) === "evaluator" : false;
-  const visits = viewer && !isFieldOnly(viewer.roles) ? await getEvaluatorDay().catch(() => null) : null;
+  const visits = viewer && !ownersDay && !isFieldOnly(viewer.roles) ? await getEvaluatorDay().catch(() => null) : null;
   // Walkthroughs waiting on a price, for whoever prices them.
-  const approvals = viewer && !isFieldOnly(viewer.roles) && !evaluatorOnly ? await getPriceApprovals().catch(() => null) : null;
+  const approvals = viewer && !ownersDay && !isFieldOnly(viewer.roles) && !evaluatorOnly ? await getPriceApprovals().catch(() => null) : null;
 
   const accountManagerOnly = viewer ? roleViewFor(viewer.roles) === "account-manager" : false;
 
   const day =
-    viewer && isFieldOnly(viewer.roles) ? (
+    viewer && ownersDay ? (
+      <OwnersDay profile={viewer} />
+    ) : viewer && isFieldOnly(viewer.roles) ? (
       <>
         <CrewDay profile={viewer} />
         {/* A crew member who brought a client in has an affiliate's share. */}
@@ -409,6 +417,15 @@ async function AccountManagerDay({
     : [];
   const photosWaiting = projects.reduce((n, p) => n + p.photos.length, 0);
   const projectIssues = projects.reduce((n, p) => n + p.issues.length, 0);
+  // The evaluations out today on their clients: where each has got to, and which are theirs to price or send.
+  const evaluationsOut = me
+    ? await getEvaluationsToday({ id: me.id, seesAll: isOwnerLevel(me.roles) || me.roles.includes("admin") }).catch((err) => {
+        console.error("Evaluations today failed to load:", err);
+        return [];
+      })
+    : [];
+  const evalsYourMove = evaluationsOut.filter((e) => e.stage.yourMove).length;
+  const evalsLate = evaluationsOut.filter((e) => e.stage.late).length;
 
   const squares: DaySquare[] = [
     ...(canComment
@@ -430,6 +447,17 @@ async function AccountManagerDay({
       title: "Site map approval",
       count: toPrice > 0 ? toPrice : toSend,
       line: toPrice > 0 ? `to price${toSend > 0 ? ` · ${toSend} to send` : ""}` : toSend > 0 ? "to send to the client" : "Nothing waiting",
+    },
+    {
+      key: "evaluations-today",
+      title: "Evaluations today",
+      count: evalsYourMove > 0 ? evalsYourMove : evaluationsOut.length,
+      line:
+        evaluationsOut.length === 0
+          ? "None out today"
+          : evalsYourMove > 0
+            ? `yours to price or send · ${evaluationsOut.length} today${evalsLate > 0 ? ` · ${evalsLate} late` : ""}`
+            : `out today${evalsLate > 0 ? ` · ${evalsLate} late` : ""}`,
     },
     {
       key: "projects",
@@ -467,6 +495,8 @@ async function AccountManagerDay({
     squares.find((sq) => sq.key === open)?.key ??
     (photosWaiting + projectIssues > 0
       ? "projects"
+      : evalsYourMove + evalsLate > 0
+        ? "evaluations-today"
       : today > 0
       ? "evaluations"
       : toPrice + toSend > 0
@@ -487,6 +517,7 @@ async function AccountManagerDay({
         ...(canComment ? { comments: <PostsToAnswerPage /> } : {}),
         evaluations: visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>,
         approval: <PriceApprovals items={approvals ?? []} />,
+        "evaluations-today": <EvaluationsToday evaluations={evaluationsOut} />,
         projects: <ProjectsToday projects={projects} />,
         jobs: <JobManagement items={managed} />,
         commission: (
@@ -745,7 +776,41 @@ async function OpenTimeBlock({ profile }: { profile: Profile }) {
   );
 }
 
-async function ProjectsTodayBlock({ profile }: { profile: Profile }) {
+/**
+ * Jordan's My Day: what is out today, and nothing else. The evaluations and
+ * the projects, each where it has got to, streamed in on their own.
+ */
+async function OwnersDay({ profile }: { profile: Profile }) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
+      {/* One refresh for both, every two minutes, rather than one each. */}
+      <AutoRefresh seconds={120} />
+      <h1 className="mb-4 text-2xl font-bold">My Day</h1>
+      <Suspense fallback={<BlockLoading lines={3} />}>
+        <EvaluationsTodayBlock profile={profile} />
+      </Suspense>
+      <Suspense fallback={<BlockLoading lines={3} />}>
+        <ProjectsTodayBlock profile={profile} refresh={false} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function EvaluationsTodayBlock({ profile }: { profile: Profile }) {
+  const evaluations = await getEvaluationsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+    console.error("Evaluations today failed to load:", err);
+    return null;
+  });
+  if (!evaluations) return null;
+  return (
+    <section className="mb-6">
+      <h2 className="mb-2 text-lg font-bold">Evaluations today</h2>
+      <EvaluationsToday evaluations={evaluations} />
+    </section>
+  );
+}
+
+async function ProjectsTodayBlock({ profile, refresh = true }: { profile: Profile; refresh?: boolean }) {
   const projects = await getProjectsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
     console.error("Projects today failed to load:", err);
     return null;
@@ -753,7 +818,7 @@ async function ProjectsTodayBlock({ profile }: { profile: Profile }) {
   if (!projects) return null;
   return (
     <section className="mb-6">
-      {projects.length > 0 && <AutoRefresh seconds={120} />}
+      {refresh && projects.length > 0 && <AutoRefresh seconds={120} />}
       <h2 className="mb-2 text-lg font-bold">Projects today</h2>
       <ProjectsToday projects={projects} />
     </section>
