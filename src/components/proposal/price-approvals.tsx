@@ -2,13 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, FileText, Loader2, Send, X } from "lucide-react";
+import { Check, CheckCircle2, FileText, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { acceptPrice, setPrice } from "@/lib/actions/price-approval-actions";
-import { sendProposalToClient } from "@/lib/actions/proposal-actions";
 import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
@@ -55,7 +53,6 @@ export function PriceCard({
   /** For the preview's pages: open on a later step. */
   startAt?: "decline" | "send" | "sent";
 }) {
-  const router = useRouter();
   const [stage, setStage] = useState<"price" | "decline" | "send" | "sent">(startAt ?? item.stage);
   const [total, setTotal] = useState(item.totalCents);
   const [typed, setTyped] = useState("");
@@ -90,18 +87,6 @@ export function PriceCard({
       setTotal(Math.round(price * 100));
       setSendTo(result.sendTo);
       setStage("send");
-    });
-  }
-
-  function send() {
-    setError(null);
-    if (preview) return setStage("sent");
-    start(async () => {
-      const result = await sendProposalToClient(item.jobId);
-      if (!result.ok) return setError(result.error);
-      setSendTo(result.to);
-      setStage("sent");
-      router.refresh();
     });
   }
 
@@ -194,22 +179,20 @@ export function PriceCard({
           <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
             <CheckCircle2 className="h-4 w-4" /> Price accepted. Review the proposal, then send it.
           </p>
+          {/* The one next step: read it as the client will. Send to client is
+              at the bottom of that page, once it has been read. */}
           {item.proposalHref && (
             <a
               href={item.proposalHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-border bg-background font-semibold"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-md bg-primary text-base font-semibold text-primary-foreground"
             >
               <FileText className="h-5 w-5" /> Review proposal
             </a>
           )}
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || (!sendTo && !preview)} onClick={send}>
-            {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-5 w-5" />}
-            Send to client
-          </Button>
           <p className="text-center text-xs text-muted-foreground">
-            {sendTo ? `Review it as the client will see it, then send. It emails to ${sendTo}.` : "No email on file. Copy the link from the proposal and text it to them."}
+            {sendTo
+              ? `Review it as the client will see it. Send to client is at the bottom. It emails to ${sendTo}.`
+              : "Review it as the client will see it. No email on file, so copy its link and text it to them."}
           </p>
         </div>
       )}
