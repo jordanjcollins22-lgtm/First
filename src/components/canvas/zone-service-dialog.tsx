@@ -1,8 +1,8 @@
 "use client";
 
-import { type ChangeEvent, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type MouseEvent as ReactMouseEvent, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Camera, Check, ClipboardPaste, ImagePlus, Loader2, Pencil, X } from "lucide-react";
+import { Camera, Check, ClipboardPaste, Eye, ImagePlus, Loader2, MessageCircle, Pencil, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -26,7 +26,8 @@ import { SayIt } from "@/components/ui/say-it";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { serviceTypeById, type ServiceFieldDef } from "./service-catalog";
+import { fieldApplies, serviceTypeById, withoutStale, type ServiceFieldDef } from "./service-catalog";
+import { KIND_LABEL, STEP_QUESTIONS, countQuestion, fieldQuestion, type Question } from "@/lib/walkthrough-questions";
 import type { Point, ZoneServiceData } from "./types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { addCustomFieldOption } from "@/lib/actions/custom-field-option-actions";
@@ -158,17 +159,19 @@ function ReviewRow({
   children,
 }: {
   label: string;
-  onEdit: () => void;
+  onEdit?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-border p-2.5">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <button type="button" onClick={onEdit} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
-          <Pencil className="h-3 w-3" />
-          Edit
-        </button>
+        {onEdit && (
+          <button type="button" onClick={onEdit} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+            <Pencil className="h-3 w-3" />
+            Edit
+          </button>
+        )}
       </div>
       {children}
     </div>
@@ -195,19 +198,48 @@ function buildSteps(
   hasService: boolean,
   checklistFields: ServiceFieldDef[],
   otherFields: ServiceFieldDef[],
-  values: Record<string, string>
+  values: Record<string, string>,
+  /** On the walkthrough the place and the service are already known, so not asked. */
+  knownPlaceAndService = false
 ): StepKey[] {
-  const steps: StepKey[] = ["location", "measurements", "service"];
+  const steps: StepKey[] = knownPlaceAndService ? ["measurements"] : ["location", "measurements", "service"];
   if (hasService) {
     if (checklistFields.length > 0) steps.push("checklist");
     for (const field of checklistFields) {
       if (isChecklistChecked(values, field.key)) steps.push(`detail:${field.key}`);
     }
-    for (const field of otherFields) steps.push(`field:${field.key}`);
+    for (const field of otherFields) if (fieldApplies(field, values)) steps.push(`field:${field.key}`);
     steps.push("materials");
   }
   steps.push("photos", "notes", "review");
   return steps;
+}
+
+/**
+ * The evaluator's walkthrough, where every question says who answers it
+ * and an area can be taken off from any of its questions.
+ */
+const WalkthroughContext = createContext<{ area: string; onRemove: () => void } | null>(null);
+
+/** Who answers the question on screen: blue for the client, amber for the evaluator. */
+function WhoAnswers({ question }: { question: Question }) {
+  const client = question.kind !== "check";
+  return (
+    <div className="flex flex-col gap-1">
+      <p
+        className={cn(
+          "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold uppercase tracking-wide text-white",
+          client ? "bg-sky-600" : "bg-amber-500"
+        )}
+      >
+        {client ? <MessageCircle className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        {KIND_LABEL[question.kind]}
+      </p>
+      {question.kind === "confirm" && (
+        <p className="text-center text-xs font-medium text-sky-800 dark:text-sky-300">They already picked this on their form</p>
+      )}
+    </div>
+  );
 }
 
 function StepShell({
@@ -215,9 +247,11 @@ function StepShell({
   totalSteps,
   title,
   subtitle,
+  question,
   children,
   nextDisabled,
   nextLabel,
+  hideNext,
   onBack,
   onNext,
 }: {
@@ -225,29 +259,58 @@ function StepShell({
   totalSteps: number;
   title: string;
   subtitle?: string;
+  /** On the walkthrough: who answers, and the words to say. Replaces the title. */
+  question?: Question;
   children: React.ReactNode;
   nextDisabled?: boolean;
   nextLabel?: string;
+  /** When the answer buttons move on by themselves. */
+  hideNext?: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
+  const walk = useContext(WalkthroughContext);
+  const said = question && question.kind !== "check";
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      {walk ? (
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{walk.area}</p>
+            <p className="text-xs text-muted-foreground">
+              {currentIndex + 1} of {totalSteps}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={walk.onRemove}
+            className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-2.5 text-xs font-semibold text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Remove area
+          </button>
+        </div>
+      ) : (
         <p className="text-xs font-medium text-muted-foreground">
           Step {currentIndex + 1} of {totalSteps}
         </p>
-        <p className="text-base font-semibold">{title}</p>
-        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      )}
+      {question && <WhoAnswers question={question} />}
+      <div>
+        <p className={question ? "text-center text-xl font-bold text-balance" : "text-base font-semibold"}>
+          {question ? (said ? `\u201c${question.text}\u201d` : question.text) : title}
+        </p>
+        {subtitle && <p className={cn("text-sm text-muted-foreground", question && "text-center")}>{subtitle}</p>}
       </div>
       <div>{children}</div>
       <div className="flex items-center justify-between border-t border-border pt-3">
         <Button type="button" variant="ghost" onClick={onBack} disabled={currentIndex === 0}>
           Back
         </Button>
-        <Button type="button" onClick={onNext} disabled={nextDisabled}>
-          {nextLabel ?? "Next"}
-        </Button>
+        {!hideNext && (
+          <Button type="button" onClick={onNext} disabled={nextDisabled}>
+            {nextLabel ?? "Next"}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -258,14 +321,17 @@ function OptionButtons({
   value,
   onChange,
   onAdvance,
+  big = false,
 }: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
   onAdvance: () => void;
+  /** One big button a row, for a phone held in one hand in a garden. */
+  big?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={big ? "grid grid-cols-1 gap-2" : "flex flex-wrap gap-2"}>
       {options.map((option) => (
         <button
           key={option}
@@ -276,6 +342,7 @@ function OptionButtons({
           }}
           className={cn(
             "rounded-lg border px-3 py-2 text-sm transition-colors",
+            big && "min-h-14 rounded-xl border-2 text-base font-semibold",
             value === option
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-card/60 hover:bg-accent"
@@ -315,6 +382,19 @@ interface ZoneServiceDialogProps {
   onCancel: () => void;
   /** Locations already used on this evaluation, for the chips. */
   otherLocations?: string[];
+  /**
+   * The evaluator's walkthrough: the place and service are known, each
+   * question says whether it is the client's or the evaluator's, answers
+   * from the client's form are read back to confirm, and the area can be
+   * removed from any question.
+   */
+  walkthrough?: {
+    /** The fields the client already answered on their pre-eval. */
+    fromForm: string[];
+    /** Been through before: opens on the summary rather than the first question. */
+    reviewed: boolean;
+    onRemove: () => void;
+  };
 }
 
 export function ZoneServiceDialog({
@@ -332,6 +412,7 @@ export function ZoneServiceDialog({
   initialPerimeterFt,
   onSave,
   onCancel,
+  walkthrough,
 }: ZoneServiceDialogProps) {
   const [location, setLocation] = useState(initialLocation);
   // Worked out from what has been named so far rather than from a stored
@@ -359,7 +440,11 @@ export function ZoneServiceDialog({
   // Answering everything already on file would mean re-clicking through
   // questions that were already answered, so jump straight to the summary
   // for a zone that's been filled in before; walk fresh zones one at a time.
-  const [stepKey, setStepKey] = useState<StepKey>(initialService ? "review" : "location");
+  const [stepKey, setStepKey] = useState<StepKey>(
+    walkthrough ? (walkthrough.reviewed ? "review" : "measurements") : initialService ? "review" : "location"
+  );
+  /** Confirm questions the client changed their mind on, now showing the choices. */
+  const [changing, setChanging] = useState<Record<string, boolean>>({});
 
   // Some work is a run rather than a rectangle — weeds out of driveway
   // cracks, edging a bed — and asking for a width gets a made-up number.
@@ -440,7 +525,7 @@ export function ZoneServiceDialog({
     (name) => materialOptions(name, "type").length > 0 || materialOptions(name, "color").length > 0
   );
 
-  const steps = buildSteps(Boolean(typeId), checklistFields, otherFields, values);
+  const steps = buildSteps(Boolean(typeId), checklistFields, otherFields, values, Boolean(walkthrough && typeId));
   const currentIndex = Math.max(0, steps.indexOf(stepKey));
   const currentStep = steps[currentIndex] ?? "location";
 
@@ -506,7 +591,7 @@ export function ZoneServiceDialog({
   }
 
   function handleFieldChange(key: string, value: string) {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => withoutStale(serviceType?.fields ?? [], { ...prev, [key]: value }));
   }
 
   function toggleChecklistItem(field: ServiceFieldDef, checked: boolean) {
@@ -837,6 +922,8 @@ export function ZoneServiceDialog({
   }
 
   let body: React.ReactNode;
+  /** The walkthrough's version of a question; nothing changes off it. */
+  const asked = (question: Question) => (walkthrough ? question : undefined);
 
   if (currentStep === "location") {
     body = (
@@ -899,6 +986,7 @@ export function ZoneServiceDialog({
         // would be guessing on the evaluator's behalf about the one thing
         // this step exists to establish.
         nextDisabled={!measurementIsSettled(measurement)}
+        question={asked(STEP_QUESTIONS.measurements)}
         title="What are the measurements?"
         subtitle="Measure on site, in feet. Length only is fine for a run."
       >
@@ -1062,7 +1150,7 @@ export function ZoneServiceDialog({
     );
   } else if (currentStep === "checklist") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What would they like done in this area?" subtitle="Check everything that applies.">
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What would they like done in this area?" subtitle="Check everything that applies." question={asked(STEP_QUESTIONS.checklist)}>
         <div className="flex flex-col gap-2">
           {checklistFields.map((field) => {
             const checked = isChecklistChecked(values, field.key);
@@ -1099,7 +1187,7 @@ export function ZoneServiceDialog({
     const key = currentStep.slice("detail:".length);
     const field = checklistFields.find((f) => f.key === key);
     body = field ? (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title={`${field.checklistItem?.question}, how many ${field.checklistItem?.unit}?`}>
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title={`${field.checklistItem?.question}, how many ${field.checklistItem?.unit}?`} subtitle={walkthrough ? field.checklistItem?.question : undefined} question={asked(countQuestion(field.checklistItem?.unit ?? ""))}>
         <Input
           type="number"
           min={0}
@@ -1113,15 +1201,37 @@ export function ZoneServiceDialog({
   } else if (currentStep.startsWith("field:")) {
     const key = currentStep.slice("field:".length);
     const field = otherFields.find((f) => f.key === key);
+    const question = field && walkthrough ? fieldQuestion(typeId, field, values[field.key], walkthrough.fromForm.includes(field.key)) : undefined;
+    // What they picked on their form, read back: one tap if it still stands.
+    const confirming = question?.kind === "confirm" && !changing[key];
     body = field ? (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title={`${field.label}?`}>
-        {field.type === "select" ? (
+      <StepShell
+        currentIndex={currentIndex}
+        totalSteps={steps.length}
+        onBack={goBack}
+        onNext={goNext}
+        title={`${field.label}?`}
+        question={question}
+        hideNext={confirming}
+      >
+        {confirming ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-center text-sm font-semibold">{values[field.key]}</p>
+            <Button type="button" className="h-14 text-base font-semibold" onClick={goNext}>
+              <Check className="mr-1.5 h-5 w-5" /> Yes, that&apos;s right
+            </Button>
+            <Button type="button" variant="outline" className="h-14 text-base font-semibold" onClick={() => setChanging((prev) => ({ ...prev, [key]: true }))}>
+              No, change it
+            </Button>
+          </div>
+        ) : field.type === "select" ? (
           <div className="flex flex-col gap-2">
             <OptionButtons
               options={fieldOptionsFor(field)}
               value={values[field.key] ?? ""}
               onChange={(v) => handleFieldChange(field.key, v)}
               onAdvance={goNext}
+              big={Boolean(walkthrough)}
             />
             {values[field.key] === "Other" && (
               <Input
@@ -1145,7 +1255,7 @@ export function ZoneServiceDialog({
     ) : null;
   } else if (currentStep === "materials") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What material would they like?" subtitle="Ask the customer their preferred type and color. Tools are handled automatically.">
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="What material would they like?" subtitle={walkthrough ? undefined : "Ask the customer their preferred type and color. Tools are handled automatically."} question={asked(STEP_QUESTIONS.materials)}>
         <div className="flex flex-col gap-3">
           {zoneMaterialNames.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -1269,7 +1379,7 @@ export function ZoneServiceDialog({
     );
   } else if (currentStep === "photos") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Any photos for this zone?">
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Any photos for this zone?" question={asked(STEP_QUESTIONS.photos)}>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
             {photos.map((photo, index) => (
@@ -1363,7 +1473,7 @@ export function ZoneServiceDialog({
     );
   } else if (currentStep === "notes") {
     body = (
-      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Anything else worth noting?" nextLabel="Review">
+      <StepShell currentIndex={currentIndex} totalSteps={steps.length} onBack={goBack} onNext={goNext} title="Anything else worth noting?" nextLabel="Review" question={asked(STEP_QUESTIONS.notes)}>
         <Textarea
           placeholder="Anything else worth noting for this zone"
           value={notes}
@@ -1377,12 +1487,12 @@ export function ZoneServiceDialog({
     body = (
       <div className="flex flex-col gap-4">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Review</p>
-          <p className="text-base font-semibold">Everything look right?</p>
+          <p className="text-xs font-medium text-muted-foreground">{walkthrough ? zoneName : "Review"}</p>
+          <p className="text-base font-semibold">{walkthrough ? "That's this area. Everything look right?" : "Everything look right?"}</p>
         </div>
 
         <div className="flex flex-col gap-2 text-sm">
-          <ReviewRow label="Location" onEdit={() => setStepKey("location")}>
+          <ReviewRow label="Location" onEdit={walkthrough ? undefined : () => setStepKey("location")}>
             <p>{location || "-"}</p>
           </ReviewRow>
 
@@ -1413,7 +1523,7 @@ export function ZoneServiceDialog({
             )}
           </ReviewRow>
 
-          <ReviewRow label="Service" onEdit={() => setStepKey("service")}>
+          <ReviewRow label="Service" onEdit={walkthrough ? undefined : () => setStepKey("service")}>
             <p>{selectedServiceRow?.name ?? serviceType?.label ?? "None selected"}</p>
             {selectedServiceRow?.status === "pending" && (
               <p className="mt-1 text-xs text-amber-600">⏳ Pending pricing review</p>
@@ -1475,7 +1585,7 @@ export function ZoneServiceDialog({
               Cancel
             </Button>
             <Button type="button" onClick={handleSave}>
-              Save
+              {walkthrough ? "Done" : "Save"}
             </Button>
           </div>
         </div>
@@ -1490,7 +1600,9 @@ export function ZoneServiceDialog({
           <DialogTitle>{zoneName}</DialogTitle>
           <DialogDescription>Answer a few quick questions about this zone.</DialogDescription>
         </DialogHeader>
-        {body}
+        <WalkthroughContext.Provider value={walkthrough ? { area: zoneName, onRemove: walkthrough.onRemove } : null}>
+          {body}
+        </WalkthroughContext.Provider>
         {/* A paste works from any step, so what it did has to be visible from
             any step. */}
         {pasted !== null && (

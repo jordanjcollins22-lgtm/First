@@ -35,6 +35,14 @@ export interface PlanItem {
   keep: boolean | null;
   /** Added by the evaluator on site, not asked for on the form. */
   added?: boolean;
+  /**
+   * Which of the values the client chose on their form, so the walkthrough
+   * reads them back to confirm rather than asking again. A value filled in
+   * as a default (three salting treatments) is not one of them.
+   */
+  fromForm?: string[];
+  /** The evaluator has been through it on site. */
+  reviewed?: boolean;
 }
 
 export type VisitStage = "booked" | "on_way" | "arrived" | "submitted";
@@ -54,32 +62,65 @@ export function areaLabel(area: string): string {
   return PHOTO_AREAS.find((a) => a.value === area)?.label ?? area;
 }
 
+type PricedAs = { typeId: string | null; values?: Record<string, string>; fromForm?: string[]; label: string };
+
+const MULCH_COLOUR: Record<string, string> = { brown: "Brown", black: "Black", natural: "Natural" };
+const ROCK_SIZE: Record<string, string> = { small: "Small", medium: "Medium", large: "Large", local: "Local" };
+const LAWN_METHOD: Record<string, string> = { sod: "Sod", seed: "Seed" };
+
 /** The rate card service each of the form's services is, and what it needs set. */
-function priceAs(service: string, answers: IntakeAnswers): { typeId: string | null; values?: Record<string, string>; label: string }[] {
+function priceAs(service: string, answers: IntakeAnswers): PricedAs[] {
   const picked = (id: string): string[] => {
     const v = answers.details[id];
     return Array.isArray(v) ? v : v ? [v] : [];
   };
+  // A choice from the form, carried onto the site map when they made one
+  // ("Not sure" is not a choice).
+  const chose = (id: string, map: Record<string, string>): string | undefined => map[picked(id)[0] ?? ""];
   switch (service) {
     case "beds": {
       const add = picked("beds_add");
-      const out: { typeId: string | null; values?: Record<string, string>; label: string }[] = [];
-      if (add.includes("mulch")) out.push({ typeId: "landscape-bed", values: { material: "Mulch" }, label: "Beds: mulch" });
-      if (add.includes("stone")) out.push({ typeId: "landscape-bed", values: { material: "Rock" }, label: "Beds: river rock" });
+      const out: PricedAs[] = [];
+      if (add.includes("mulch")) {
+        const color = chose("mulch_color", MULCH_COLOUR);
+        out.push({
+          typeId: "landscape-bed",
+          values: { material: "Mulch", ...(color ? { color } : {}) },
+          fromForm: color ? ["material", "color"] : ["material"],
+          label: "Beds: mulch",
+        });
+      }
+      if (add.includes("stone")) {
+        const rockSize = chose("bed_stone", ROCK_SIZE);
+        out.push({
+          typeId: "landscape-bed",
+          values: { material: "Rock", ...(rockSize ? { rockSize } : {}) },
+          fromForm: rockSize ? ["material", "rockSize"] : ["material"],
+          label: "Beds: river rock",
+        });
+      }
       if (out.length === 0) out.push({ typeId: "landscape-bed", label: "Beds" });
       if (add.includes("plants")) out.push({ typeId: "plant-installation", label: "New plants" });
       return out;
     }
     case "lawn": {
       const need = picked("lawn_need");
-      const out: { typeId: string | null; label: string }[] = [];
-      if (need.includes("redo") || need.includes("patch")) out.push({ typeId: "lawn-restoration", label: need.includes("redo") ? "Lawn: redo" : "Lawn: repair" });
-      if (need.includes("mowing") || out.length === 0) out.push({ typeId: "lawn-care", label: "Lawn: mowing" });
+      const out: PricedAs[] = [];
+      if (need.includes("redo") || need.includes("patch")) {
+        const method = chose("lawn_method", LAWN_METHOD);
+        out.push({
+          typeId: "lawn-restoration",
+          ...(method ? { values: { method }, fromForm: ["method"] } : {}),
+          label: need.includes("redo") ? "Lawn: redo" : "Lawn: repair",
+        });
+      }
+      if (need.includes("mowing")) out.push({ typeId: "lawn-care", values: { serviceType: "Mowing" }, fromForm: ["serviceType"], label: "Lawn: mowing" });
+      else if (out.length === 0) out.push({ typeId: "lawn-care", label: "Lawn: mowing" });
       return out;
     }
     case "cleanup": {
       const what = picked("cleanup_what");
-      const out: { typeId: string | null; label: string }[] = [{ typeId: "landscape-cleanup", label: "Cleanup" }];
+      const out: PricedAs[] = [{ typeId: "landscape-cleanup", label: "Cleanup" }];
       if (what.includes("trim") || what.includes("tall")) out.push({ typeId: "trimming", label: "Trimming" });
       return out;
     }
@@ -123,6 +164,7 @@ export function seedPlan(answers: IntakeAnswers): PlanItem[] {
           service,
           typeId: as.typeId,
           ...(as.values ? { values: as.values } : {}),
+          ...(as.fromForm ? { fromForm: as.fromForm } : {}),
           label: as.label,
           // A suggestion until the evaluator ticks or crosses it.
           keep: null,
@@ -159,12 +201,45 @@ export function readPlan(raw: unknown): PlanItem[] {
       label: (i.label as string).slice(0, 120),
       keep: i.keep === true ? true : i.keep === false ? false : null,
       ...(i.added ? { added: true } : {}),
+      ...(Array.isArray(i.fromForm) ? { fromForm: (i.fromForm as unknown[]).filter((k): k is string => typeof k === "string") } : {}),
+      ...(i.reviewed === true ? { reviewed: true } : {}),
     }));
+}
+
+/* ------------------------------------------------------- the walkthrough */
+
+/**
+ * The plan as the walkthrough works it. What the client asked for on their
+ * pre-eval is wanted: they filled out the form for it. So nothing waits on
+ * a yes; each piece is on the site map until the evaluator removes it.
+ */
+export function walkPlan(items: PlanItem[]): PlanItem[] {
+  return items.map((i) => (i.keep === null ? { ...i, keep: true } : i));
+}
+
+/** What still has to be gone through before the evaluation can be submitted. */
+export function stillToReview(items: PlanItem[]): PlanItem[] {
+  return items.filter((i) => i.keep !== false && !i.reviewed);
+}
+
+/** Gone through on site. */
+export function markReviewed(items: PlanItem[], id: string): PlanItem[] {
+  return items.map((i) => (i.id === id ? { ...i, keep: true, reviewed: true } : i));
+}
+
+/** Taken off the site map. Removing it is a decision, so it is not waiting on anything. */
+export function removeFromPlan(items: PlanItem[], id: string): PlanItem[] {
+  return items.map((i) => (i.id === id ? { ...i, keep: false, reviewed: true } : i));
+}
+
+/** Put back on the site map, to be gone through again. */
+export function putBack(items: PlanItem[], id: string): PlanItem[] {
+  return items.map((i) => (i.id === id ? { ...i, keep: true, reviewed: false } : i));
 }
 
 /** A piece of work the evaluator adds on site. */
 export function addedItem(area: string, typeId: string, label: string, id: string): PlanItem {
-  return { id: `add-${id}`, area, service: null, typeId, label, keep: true, added: true };
+  return { id: `add-${id}`, area, service: null, typeId, label, keep: true, added: true, reviewed: false };
 }
 
 export interface ZoneSeed {

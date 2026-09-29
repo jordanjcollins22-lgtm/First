@@ -235,7 +235,30 @@ interface ImageCanvasBoardProps {
    * under the map: the board's own Submit is hidden, and this is handed a
    * way to save the map now and submit it.
    */
-  controlRef?: React.MutableRefObject<{ submit: () => Promise<boolean> } | null>;
+  controlRef?: React.MutableRefObject<BoardControl | null>;
+  /**
+   * The evaluator's walkthrough: the map is only looked at. No address, no
+   * drawing, no tools; the areas are numbered to match the list under it,
+   * and each one's questions are opened from that list.
+   */
+  walkthrough?: {
+    /** The number each area wears on the map, by zone id. */
+    badges: Record<string, number>;
+    /** What the client answered on their form for this area, and whether it has been gone through. */
+    formFor: (zoneId: string) => { fromForm: string[]; reviewed: boolean };
+    /** An area's questions answered to the end. */
+    onReviewed: (zoneId: string) => void;
+    /** The areas as they are now, for the list. */
+    onZones: (zones: WorkZone[]) => void;
+  };
+}
+
+/** What a page around the board can ask it to do. */
+export interface BoardControl {
+  /** Save the map now and submit it. */
+  submit: () => Promise<boolean>;
+  /** Open an area's questions, as soon as it is on the map. */
+  openZone: (zoneId: string) => void;
 }
 
 export function ImageCanvasBoard({
@@ -254,6 +277,7 @@ export function ImageCanvasBoard({
   suggestions,
   onSuggestion,
   controlRef,
+  walkthrough,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -316,6 +340,8 @@ export function ImageCanvasBoard({
   /** Set when regenerating would clear a client's acceptance. */
   const [evalConfirm, setEvalConfirm] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  /** The saved map, or a fresh photo, has finished loading (or failed to). */
+  const [designLoaded, setDesignLoaded] = useState(false);
   const [sideToolbarOpen, setSideToolbarOpen] = useState(true);
 
   // The pre-eval's suggestions, placed where they would go as areas, once
@@ -530,6 +556,28 @@ export function ImageCanvasBoard({
 
       const cx = zone.points.reduce((sum, p) => sum + p.x, 0) / zone.points.length;
       const cy = zone.points.reduce((sum, p) => sum + p.y, 0) / zone.points.length;
+      // On the walkthrough, the area's number from the list, not its name.
+      const badge = walkthrough?.badges[zone.id];
+      if (badge != null) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+        ctx.fillStyle = zone.color;
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 5;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 15px system-ui, -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(badge), cx, cy + 1);
+        ctx.restore();
+        continue;
+      }
       ctx.font = "600 14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -558,7 +606,7 @@ export function ImageCanvasBoard({
         ctx.fill();
       }
     }
-  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget, countyLot, imageGeo, suggestionShapes]);
+  }, [image, zones, propertyLine, houseOutline, marks, tool, drawingPoints, cursorPos, showFrontTarget, countyLot, imageGeo, suggestionShapes, walkthrough?.badges]);
 
   // A ticked suggestion opens its details as soon as it is an area, so the
   // evaluator goes straight on to what the client wants done there.
@@ -685,6 +733,7 @@ export function ImageCanvasBoard({
         // No saved design yet (or it failed to load) — start from a blank canvas.
       } finally {
         loadedRef.current = true;
+        if (!cancelled) setDesignLoaded(true);
       }
     })();
     return () => {
@@ -702,9 +751,14 @@ export function ImageCanvasBoard({
     // a place, it opens on that place's photo, the way a job does.
     if (practice) {
       loadedRef.current = true;
-      if (initialLat == null || initialLng == null) return;
       const timer = setTimeout(() => {
-        void handleSelectSatelliteLocation({ id: "practice", fullAddress: initialAddress ?? "", lat: initialLat, lng: initialLng }, demoLot);
+        if (initialLat == null || initialLng == null) {
+          setDesignLoaded(true);
+          return;
+        }
+        void handleSelectSatelliteLocation({ id: "practice", fullAddress: initialAddress ?? "", lat: initialLat, lng: initialLng }, demoLot).finally(() =>
+          setDesignLoaded(true)
+        );
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -807,6 +861,10 @@ export function ImageCanvasBoard({
   useEffect(() => {
     if (!controlRef) return;
     controlRef.current = {
+      openZone: (zoneId: string) => {
+        if (zones.some((zone) => zone.id === zoneId)) setServiceDialogZoneId(zoneId);
+        else openWhenReadyRef.current = zoneId;
+      },
       submit: async () => {
         if (!jobId) return false;
         try {
@@ -920,7 +978,11 @@ export function ImageCanvasBoard({
   useEffect(() => {
     // And after the house is pointed the right way, since turning the photo
     // fetches a new one and the areas would be left where the old one was.
-    if ((!jobId && !practice) || !seedZones || !image || !countyChecked || !orientConfirmed) return;
+    // The walkthrough never asks about the photo, and a property with no
+    // photo still gets its areas, placed by the part of the yard they are in.
+    const settled = orientConfirmed || Boolean(walkthrough);
+    const ready = image || (walkthrough && designLoaded);
+    if ((!jobId && !practice) || !seedZones || !ready || !countyChecked || !settled) return;
     const wanted = new Set(seedZones.map((seed) => seed.id));
     // A beat after the photo is drawn, so the zones land on it.
     const timer = setTimeout(() =>
@@ -929,8 +991,10 @@ export function ImageCanvasBoard({
         const have = new Set(kept.map((zone) => zone.id));
         const missing = seedZones.filter((seed) => !have.has(seed.id));
         if (missing.length === 0 && kept.length === prev.length) return prev;
-        const regions = countyLot && imageGeo ? groundRegions(countyLot) : null;
-        const onBoard = { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width };
+        const regions = countyLot && imageGeo && image ? groundRegions(countyLot) : null;
+        const onBoard = image
+          ? { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width }
+          : { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale: 1, rotation: 0, elementWidth: CANVAS_WIDTH };
         const inArea = new Map<string, number>();
         const made = missing.map((seed, i): WorkZone => {
           // Several pieces of work in one part of the yard sit one inside the
@@ -958,7 +1022,16 @@ export function ImageCanvasBoard({
       0
     );
     return () => clearTimeout(timer);
-  }, [jobId, practice, seedZones, image, countyChecked, countyLot, imageGeo, orientConfirmed]);
+  }, [jobId, practice, seedZones, image, countyChecked, countyLot, imageGeo, orientConfirmed, walkthrough, designLoaded]);
+
+  // The walkthrough's list follows the areas on the map.
+  const onZonesRef = useRef(walkthrough?.onZones);
+  useEffect(() => {
+    onZonesRef.current = walkthrough?.onZones;
+  });
+  useEffect(() => {
+    onZonesRef.current?.(zones);
+  }, [zones]);
 
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
@@ -1357,6 +1430,7 @@ export function ImageCanvasBoard({
           : zone
       )
     );
+    if (serviceDialogZoneId) walkthrough?.onReviewed(serviceDialogZoneId);
     setServiceDialogZoneId(null);
   }
 
@@ -1596,6 +1670,61 @@ export function ImageCanvasBoard({
         ? "property-line"
         : "editing";
   const isDrawingNow = tool === "house" || tool === "property-line" || tool === "zone";
+
+  const zoneDialog = (
+    <ZoneServiceDialog
+      key={serviceDialogZoneId ?? "none"}
+      open={dialogZone !== null}
+      zoneName={dialogZone?.name ?? ""}
+      jobId={jobId}
+      practice={practice}
+      catalog={catalog}
+      initialLocation={dialogZone?.location ?? ""}
+      // Every place named on this evaluation so far, so the next zone in
+      // the front garden is a tap rather than a retype.
+      otherLocations={zones.map((zone) => zone.location)}
+      initialService={dialogZone?.service ?? null}
+      initialLengthFt={dialogZone?.lengthFt ?? null}
+      initialWidthFt={dialogZone?.widthFt ?? null}
+      initialAreaSqFt={dialogZone?.areaSqFt ?? null}
+      initialPerimeterFt={dialogZone?.perimeterFt ?? null}
+      onSave={handleSaveZoneService}
+      onCancel={() => setServiceDialogZoneId(null)}
+      walkthrough={
+        walkthrough && dialogZone
+          ? {
+              ...walkthrough.formFor(dialogZone.id),
+              onRemove: () => {
+                handleDeleteZone(dialogZone.id);
+                setServiceDialogZoneId(null);
+              },
+            }
+          : undefined
+      }
+    />
+  );
+
+  // The walkthrough: the map to look at, and the questions when an area is opened.
+  if (walkthrough) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="relative overflow-hidden rounded-xl border border-border bg-muted">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            className="block w-full"
+            aria-label="The property, with each area numbered"
+          />
+          {!image && !designLoaded && (
+            <p className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-muted-foreground">Loading the map...</p>
+          )}
+        </div>
+        {!image && designLoaded && <p className="text-xs text-muted-foreground">No map photo for this address. Every area is still in the list below.</p>}
+        {zoneDialog}
+      </div>
+    );
+  }
   const noteCount = withoutEmpty(marks).length;
 
   return (
@@ -2419,25 +2548,7 @@ export function ImageCanvasBoard({
       </div>
       )}
 
-      <ZoneServiceDialog
-        key={serviceDialogZoneId ?? "none"}
-        open={dialogZone !== null}
-        zoneName={dialogZone?.name ?? ""}
-        jobId={jobId}
-        practice={practice}
-        catalog={catalog}
-        initialLocation={dialogZone?.location ?? ""}
-        // Every place named on this evaluation so far, so the next zone in
-        // the front garden is a tap rather than a retype.
-        otherLocations={zones.map((zone) => zone.location)}
-        initialService={dialogZone?.service ?? null}
-        initialLengthFt={dialogZone?.lengthFt ?? null}
-        initialWidthFt={dialogZone?.widthFt ?? null}
-        initialAreaSqFt={dialogZone?.areaSqFt ?? null}
-        initialPerimeterFt={dialogZone?.perimeterFt ?? null}
-        onSave={handleSaveZoneService}
-        onCancel={() => setServiceDialogZoneId(null)}
-      />
+      {zoneDialog}
 
       {editingMark && (
         <MarkNoteDialog

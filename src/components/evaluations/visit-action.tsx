@@ -58,7 +58,7 @@ export function VisitAction({
   if (stage === "submitted") {
     return (
       <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-        <CheckCircle2 className="h-4 w-4" /> Walkthrough complete · with the account manager
+        <CheckCircle2 className="h-4 w-4" /> Evaluation submitted · with the account manager
       </p>
     );
   }

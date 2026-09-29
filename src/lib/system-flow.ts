@@ -119,7 +119,7 @@ export const SYSTEM_FLOW: SystemStage[] = [
       {
         key: "evaluation",
         title: "Evaluation site map",
-        line: "The evaluator's visit: On my way, I've arrived, Start, the site map from the pre-eval, Walkthrough complete.",
+        line: "The evaluator's visit: On my way, I've arrived, Start, the walkthrough with every area from the pre-eval to review, Submit evaluation.",
         // Every page of the visit in preview. The tool alone is at /practice/site-map.
         href: "/practice/evaluator",
         status: "live",

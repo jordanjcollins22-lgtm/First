@@ -225,7 +225,7 @@ export default async function EvaluatorJourneyPage() {
     {
       key: "site-map",
       title: "The site map",
-      what: "The site map with their pre-eval laid over it. Tick or cross each thing they asked for, fill in the details, add anything more, then Walkthrough complete.",
+      what: "The walkthrough: everything from their pre-eval is on the site map. Review each area one question at a time, add anything more, then Submit evaluation.",
       screen: <SiteMapSetup {...setupProps} initialPlan={plan} />,
     },
   ];

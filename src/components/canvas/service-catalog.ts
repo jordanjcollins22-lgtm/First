@@ -14,6 +14,8 @@ export interface ServiceFieldDef {
    * checked.
    */
   checklistItem?: { question: string; unit: string };
+  /** Only asked, and only kept, while another field has one of these answers. */
+  showIf?: { key: string; values: string[] };
 }
 
 export interface ServiceTypeDef {
@@ -31,6 +33,15 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
     fields: [
       { key: "bedWork", label: "Bed work", type: "select", options: ["New Creation", "Renewal", "Existing Bed Maintenance"] },
       { key: "material", label: "Material", type: "select", options: ["Mulch", "Rock"] },
+      // What the client picked on their pre-eval, so the crew bring the right one.
+      { key: "color", label: "Mulch colour", type: "select", options: ["Brown", "Black", "Natural"], showIf: { key: "material", values: ["Mulch"] } },
+      {
+        key: "rockSize",
+        label: "River rock size",
+        type: "select",
+        options: ["Small", "Medium", "Large", "Local"],
+        showIf: { key: "material", values: ["Rock"] },
+      },
       { key: "existingMaterial", label: "Existing material", type: "select", options: ["None", "Mulch", "Rock"] },
       { key: "existingMaterialCondition", label: "Existing material condition", type: "select", options: ["Normal", "Excessive", "Needs Removal"] },
       { key: "weedLevel", label: "Weed level", type: "select", options: ["None", "Light", "Moderate", "Heavy"] },
@@ -136,6 +147,7 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
     label: "Lawn Restoration",
     fields: [
       { key: "condition", label: "Condition", type: "select", options: ["Bare", "Thin", "Damaged", "Landscape-to-Lawn Conversion"] },
+      { key: "method", label: "Sod or seed", type: "select", options: ["Sod", "Seed"] },
       { key: "soilCondition", label: "Soil condition", type: "select", options: ["Good", "Needs Topsoil"] },
       { key: "grade", label: "Grade", type: "select", options: ["Good", "Needs Correction"] },
     ],
@@ -225,4 +237,23 @@ export const SERVICE_TYPES: ServiceTypeDef[] = RAW_SERVICE_TYPES.map((type) => (
 
 export function serviceTypeById(id: string): ServiceTypeDef | undefined {
   return SERVICE_TYPES.find((t) => t.id === id);
+}
+
+/** Whether a field is asked, given the answers so far: mulch colour only for mulch. */
+export function fieldApplies(field: ServiceFieldDef, values: Record<string, string>): boolean {
+  return !field.showIf || field.showIf.values.includes(values[field.showIf.key] ?? "");
+}
+
+/**
+ * The answers without any to a question that no longer applies, so a bed
+ * changed from mulch to rock does not carry a mulch colour to the crew.
+ */
+export function withoutStale(fields: ServiceFieldDef[], values: Record<string, string>): Record<string, string> {
+  const out = { ...values };
+  for (const field of fields) {
+    if (fieldApplies(field, out)) continue;
+    delete out[field.key];
+    delete out[`${field.key}__other`];
+  }
+  return out;
 }

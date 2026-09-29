@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import { cleanAnswers } from "./evaluation-intake";
-import { addedItem, groupVisits, isSeededZone, mergePlan, readPlan, seedPlan, suggestionSeeds, visitStage, zoneSeeds } from "./evaluation-visit";
+import {
+  addedItem,
+  groupVisits,
+  isSeededZone,
+  markReviewed,
+  mergePlan,
+  putBack,
+  readPlan,
+  removeFromPlan,
+  seedPlan,
+  stillToReview,
+  suggestionSeeds,
+  visitStage,
+  walkPlan,
+  zoneSeeds,
+} from "./evaluation-visit";
 
 describe("where a visit is up to", () => {
   it("goes booked, on the way, arrived, submitted", () => {
@@ -54,6 +69,54 @@ describe("the site map from the client's form", () => {
       { id: "seed-a", area: "front", service: null, typeId: "landscape-bed", label: "Beds", keep: true },
     ]);
     expect(readPlan(null)).toEqual([]);
+  });
+});
+
+describe("the walkthrough", () => {
+  const answers = cleanAnswers({
+    services: ["beds", "lawn", "snow"],
+    areas: ["front"],
+    details: { beds_add: ["mulch"], mulch_color: "black", lawn_need: ["patch", "mowing"], lawn_method: "unsure" },
+  });
+
+  it("carries what they picked on their form onto the site map, and says which it was", () => {
+    const plan = seedPlan(answers);
+    const beds = plan.find((i) => i.label === "Beds: mulch")!;
+    expect(beds.values).toEqual({ material: "Mulch", color: "Black" });
+    expect(beds.fromForm).toEqual(["material", "color"]);
+    // "Not sure" is not a choice: nothing to confirm.
+    const repair = plan.find((i) => i.label === "Lawn: repair")!;
+    expect(repair.values).toBeUndefined();
+    expect(plan.find((i) => i.label === "Lawn: mowing")!.fromForm).toEqual(["serviceType"]);
+    // Salting's defaults are ours, not theirs.
+    expect(plan.find((i) => i.label === "Salting (prepaid)")!.fromForm).toBeUndefined();
+  });
+
+  it("counts everything they asked for as wanted, with nothing waiting on a yes", () => {
+    const plan = walkPlan(seedPlan(answers));
+    expect(plan.every((i) => i.keep === true)).toBe(true);
+    // Something already taken off stays off.
+    expect(walkPlan([{ ...plan[0], keep: false }])[0].keep).toBe(false);
+  });
+
+  it("waits for every area to be reviewed, and a removed one isn't waiting", () => {
+    let plan = walkPlan(seedPlan(answers));
+    const [first, second, ...rest] = plan;
+    plan = markReviewed(plan, first.id);
+    plan = removeFromPlan(plan, second.id);
+    expect(stillToReview(plan).map((i) => i.id)).toEqual(rest.map((i) => i.id));
+    for (const item of rest) plan = markReviewed(plan, item.id);
+    expect(stillToReview(plan)).toEqual([]);
+    // Put back, it has to be gone through again.
+    plan = putBack(plan, second.id);
+    expect(stillToReview(plan).map((i) => i.id)).toEqual([second.id]);
+    expect(zoneSeeds(plan).map((s) => s.id)).toContain(second.id);
+  });
+
+  it("keeps the reviewed mark and the form's answers when saved and read back", () => {
+    const item = { ...seedPlan(answers)[0], keep: true, reviewed: true };
+    expect(readPlan([item])[0]).toEqual(expect.objectContaining({ reviewed: true, fromForm: ["material", "color"] }));
+    expect(addedItem("back", "trimming", "Trimming", "x").reviewed).toBe(false);
   });
 });
 
