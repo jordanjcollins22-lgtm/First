@@ -17,13 +17,11 @@ import { readDay } from "@/lib/crew-day";
 import { LoadoutPanel } from "@/components/crew/loadout-panel";
 import { LocationBeacon } from "@/components/crew/location-beacon";
 import { AutoRefresh } from "@/components/crew/auto-refresh";
-import { CrewsTodayPanel } from "@/components/crew/crews-today-panel";
 import { CrewLeaderboard } from "@/components/crew/crew-leaderboard";
 import { getCrewBoards } from "@/lib/data/crew-leaderboard";
 import { LeaderboardsView } from "@/components/leaderboards/leaderboards-view";
 import { getEvaluationBoards } from "@/lib/data/evaluation-leaderboard";
 import { canRunJobs, canSeeCompanyMoney } from "@/lib/roles";
-import { getCrewsToday } from "@/lib/data/crews-today";
 import { pullGhlCalendarIfStale } from "@/lib/ghl/inbound";
 import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/open-time";
 import { OpenTimePanel, TeamOpenTimePanel } from "@/components/team/open-time-panel";
@@ -535,7 +533,6 @@ async function OfficeDay() {
     );
   }
   const rings = isAccountManager(profile.roles) || isOwnerLevel(profile.roles) || profile.roles.includes("admin");
-  const showTicks = isOwnerLevel(profile.roles) || profile.roles.includes("admin") || profile.roles.includes("overhead") || profile.roles.includes("office");
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
@@ -587,9 +584,10 @@ async function OfficeDay() {
         <OpenTimeBlock profile={profile} />
       </Suspense>
 
-      {/* What is being done today, by whom, with what on the truck. */}
+      {/* The projects out today, the same view the account managers have:
+          where each has got to, anything wrong, the crew's photos to approve. */}
       <Suspense fallback={<BlockLoading lines={3} />}>
-        <CrewsBlock showTicks={showTicks} />
+        <ProjectsTodayBlock profile={profile} />
       </Suspense>
 
       {/* Above everything else for an account manager: the money on the
@@ -747,17 +745,18 @@ async function OpenTimeBlock({ profile }: { profile: Profile }) {
   );
 }
 
-async function CrewsBlock({ showTicks }: { showTicks: boolean }) {
-  const crewsToday = await getCrewsToday(dateKeyIn(new Date())).catch((err) => {
-    console.error("Crews today failed to load:", err);
+async function ProjectsTodayBlock({ profile }: { profile: Profile }) {
+  const projects = await getProjectsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+    console.error("Projects today failed to load:", err);
     return null;
   });
-  if (!crewsToday) return null;
+  if (!projects) return null;
   return (
-    <>
-      {crewsToday.stops.length > 0 && <AutoRefresh seconds={120} />}
-      <CrewsTodayPanel today={crewsToday} showTicks={showTicks} />
-    </>
+    <section className="mb-6">
+      {projects.length > 0 && <AutoRefresh seconds={120} />}
+      <h2 className="mb-2 text-lg font-bold">Projects today</h2>
+      <ProjectsToday projects={projects} />
+    </section>
   );
 }
 
