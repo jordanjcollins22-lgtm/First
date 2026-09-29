@@ -69,7 +69,7 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
   const jobIds = [...byJob.keys()];
   if (jobIds.length === 0) return [];
 
-  const [{ data: crewRows }, { data: shopDay }, { data: designs }, { data: photoRows }, { data: walkRows }, { data: issueRows }, { data: markRows }, catalog] =
+  const [{ data: crewRows }, { data: shopDay }, { data: designs }, { data: photoRows }, { data: walkRows }, { data: issueRows }, { data: markRows }, { data: areaRows }, { data: stepRows }, catalog] =
     await Promise.all([
       supabase.from("job_crew").select("job_id, profile_id, profiles:profile_id(full_name, email)").in("job_id", jobIds),
       supabase.from("crew_shop_days").select("clocked_in_at, loadout_done_at, en_route_at").eq("day", day).maybeSingle(),
@@ -78,6 +78,8 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
       supabase.from("job_walkthroughs").select("job_id, requested_at, status").in("job_id", jobIds).eq("status", "requested"),
       supabase.from("job_issues").select("job_id, title, status").in("job_id", jobIds).not("status", "in", "(resolved,closed)"),
       supabase.from("job_photo_marks").select("photo_id, resolved_at").in("job_id", jobIds).is("resolved_at", null),
+      supabase.from("job_area_work").select("job_id, started_at").in("job_id", jobIds).gte("started_at", dayStart),
+      supabase.from("job_area_steps").select("job_id, done_at").in("job_id", jobIds).gte("done_at", dayStart),
       getCanvasCatalog(),
     ]);
 
@@ -126,12 +128,20 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
         };
       });
 
+      // Work started in an area, a step ticked or a photo taken at the house
+      // today: they are there, whether or not they tapped I've arrived.
+      const workedAt = [
+        ...((areaRows ?? []) as { job_id: string; started_at: string }[]).filter((r) => r.job_id === jobId).map((r) => r.started_at),
+        ...((stepRows ?? []) as { job_id: string; done_at: string }[]).filter((r) => r.job_id === jobId).map((r) => r.done_at),
+        ...photos.filter((p) => p.job_id === jobId && p.created_at >= dayStart && (p.kind === "during" || p.kind === "after")).map((p) => p.created_at),
+      ].sort()[0] ?? null;
+
       const stage = projectStage({
         meetOnSite: Boolean(visit.meet_on_site),
         atShopAt: first("arrived_shop") ?? shop?.clocked_in_at ?? null,
         loadedAt: shop?.loadout_done_at ?? null,
         leftShopAt: first("left_shop") ?? shop?.en_route_at ?? null,
-        arrivedAt: first("arrived_job", true),
+        arrivedAt: first("arrived_job", true) ?? workedAt,
         areas,
         walkthroughAskedAt: ((walkRows ?? []) as { job_id: string; requested_at: string | null }[]).find((w) => w.job_id === jobId)?.requested_at ?? null,
       });

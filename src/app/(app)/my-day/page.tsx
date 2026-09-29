@@ -1038,7 +1038,10 @@ async function CrewDay({ profile }: { profile: Profile }) {
           name: stop.customerName,
         }))}
       />
-      {(!loading || phase === "at_shop") && (
+      {/* One thing at a time: while the shop's load-out is up, it is the
+          only box. Its last step heads out, for everybody at the shop, and
+          then the day board takes over with I've arrived. */}
+      {(!loading || (phase === "at_shop" && !dayLoadout)) && (
         <TodayBoard
           stops={day.stops}
           events={day.events}

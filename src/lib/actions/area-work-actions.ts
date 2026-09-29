@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { dateKeyIn } from "@/lib/time-zone";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
@@ -62,8 +63,38 @@ export async function startArea(jobId: string, zoneId: string): Promise<AreaResu
     kits: state.status === "working" ? state.kits : state.wouldTake,
   });
   if (error) return { ok: false, message: "Couldn't start there. Try again." };
+  await recordArrivalIfSkipped(fresh.organizationId, profile.id, jobId);
   refresh(jobId);
   return { ok: true };
+}
+
+/**
+ * Starting work in an area means being at the house. Somebody who went
+ * straight from the shop into the crew sheet never tapped Leaving the shop
+ * or I've arrived, and their day, the office's map and the account
+ * manager's bar all went on saying they were at the shop. What they skipped
+ * is written down for them now, marked as filled in.
+ */
+async function recordArrivalIfSkipped(organizationId: string, profileId: string, jobId: string) {
+  try {
+    const supabase = await createClient();
+    const day = dateKeyIn(new Date());
+    const { data } = await supabase.from("crew_day_events").select("kind, job_id").eq("profile_id", profileId).eq("day", day);
+    const events = (data ?? []) as { kind: string; job_id: string | null }[];
+    if (events.some((e) => e.kind === "arrived_job" && e.job_id === jobId)) return;
+    const now = Date.now();
+    const note = "Filled in: started work here without tapping it";
+    const rows = [
+      ...(events.some((e) => e.kind === "arrived_shop") && !events.some((e) => e.kind === "left_shop")
+        ? [{ kind: "left_shop", job_id: null, at: new Date(now - 2000).toISOString() }]
+        : []),
+      { kind: "travelling", job_id: jobId, at: new Date(now - 1000).toISOString() },
+      { kind: "arrived_job", job_id: jobId, at: new Date(now).toISOString() },
+    ].map((r) => ({ ...r, organization_id: organizationId, profile_id: profileId, day, note }));
+    await supabase.from("crew_day_events").insert(rows);
+  } catch (err) {
+    console.error("recordArrivalIfSkipped failed:", err);
+  }
 }
 
 /** Step out of the area you are in, and give back its kits if you were the last one there. */
