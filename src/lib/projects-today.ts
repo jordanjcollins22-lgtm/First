@@ -1,13 +1,13 @@
 /**
  * Where each project out today has got to, for the account manager: one bar,
  * seven steps, from the crew's own taps. At the shop, the tools loaded, out
- * of the shop, at the house, prepping each area, working each area, and
+ * of the shop, at the house, prepping each area, installing each area, and
  * every area finished with the walkthrough asked for.
  *
  * Pure, so where a project is shown to be is tested without a database.
  */
 
-export const PROJECT_STEPS = ["At shop", "Tools loaded", "Left shop", "Arrived", "Prep", "Work", "Walkthrough"] as const;
+export const PROJECT_STEPS = ["At shop", "Tools loaded", "Left shop", "Arrived", "Prep", "Install", "Walkthrough"] as const;
 
 export type ProjectStep = -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -68,7 +68,7 @@ export function projectStage(input: StageInput): Stage {
       return { ...base, step: 4, now: at ? `Prepping ${named(at.area, at.index, total)}` : "Getting started", since: input.arrivedAt };
     }
     const at = which(input.areas, (a) => a.working && !a.done) ?? which(input.areas, (a) => !a.done);
-    return { ...base, step: 5, now: at ? `Working ${named(at.area, at.index, total)}` : "Working", since: null };
+    return { ...base, step: 5, now: at ? `Installing ${named(at.area, at.index, total)}` : "Installing", since: null };
   }
   // No shop for them: the first three steps are not theirs to do.
   if (input.meetOnSite) {

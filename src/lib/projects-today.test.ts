@@ -26,7 +26,7 @@ describe("where a project out today has got to", () => {
     const prepping = projectStage(day({ arrivedAt: "8:30", areas: [area("Zone 1", { prepped: true }), area("Zone 2", { working: true, location: "Left side" })] }));
     expect(prepping).toMatchObject({ step: 4, now: "Prepping Zone 2 (2 of 2), left side" });
     const working = projectStage(day({ arrivedAt: "8:30", areas: [area("Zone 1", { prepped: true, done: true }), area("Zone 2", { prepped: true, working: true })] }));
-    expect(working).toMatchObject({ step: 5, now: "Working Zone 2 (2 of 2)", areasDone: 1, areasTotal: 2 });
+    expect(working).toMatchObject({ step: 5, now: "Installing Zone 2 (2 of 2)", areasDone: 1, areasTotal: 2 });
   });
 
   it("is at the walkthrough once every area is done, or it was asked for", () => {
