@@ -170,6 +170,7 @@ export function CrewDemo({
     myZoneId: working.find((w) => w.profileId === ME)?.zoneId ?? null,
     states,
     allPrepped: everyAreaPrepped,
+    previousLayout: false,
     steps: Object.fromEntries(
       boardZones.map((z) => [z.id, stepsFor(z.serviceTypeId, z.values).map((step) => ({ step, doneBy: ticked[z.id]?.includes(step.key) ? first : null }))])
     ),

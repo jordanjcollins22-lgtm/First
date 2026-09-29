@@ -130,6 +130,7 @@ export function sampleBoard(stage: BoardStage): AreaBoardData {
     myZoneId: mineIndex != null ? zones[mineIndex].id : null,
     states,
     allPrepped: states.every((s) => s.prepped),
+    previousLayout: false,
     steps,
     tips,
     tools: {},

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { Camera, Check, ChevronDown, Circle, Loader2, Lock, Phone, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -112,6 +113,8 @@ export function AreaBoard({
             everyAreaPrepped={board.allPrepped}
             steps={board.steps[myZone.id] ?? []}
             tips={board.tips[myZone.id] ?? []}
+            tools={board.tools[myZone.id] ?? []}
+            previousLayout={board.previousLayout}
             meId={board.meId}
             pending={pending}
             onTick={(key, value) => run(() => act.tick(myZone.id, key, value))}
@@ -167,23 +170,35 @@ export function AreaBoard({
 
                   {expanded && (
                     <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3">
-                      {/* In the area's own card, under its name, never floating over the
-                          next one: whoever taps it knows which area they started. */}
-                      <StartButton
-                        area={`${numberOf.get(zone.id)!} · ${zone.name}`}
-                        state={state}
-                        stage={stage}
-                        pending={pending}
-                        onStart={() => run(() => act.start(zone.id))}
-                      />
-                      <Scope
-                        zone={zone}
-                        tools={board.tools[zone.id] ?? []}
-                        state={state}
-                        // The whole job only while choosing where to start. For the
-                        // install, what the install is: the prep is done.
-                        todo={stage === "work" ? (board.steps[zone.id] ?? []).filter((s) => s.step.phase !== "prep").map((s) => s.step.label) : zone.todo}
-                      />
+                      {board.previousLayout ? (
+                        // A job already under way when the sheet changed keeps the one it started on.
+                        <>
+                          <Scope zone={zone} tools={board.tools[zone.id] ?? []} state={state} todo={zone.todo} />
+                          <div className="sticky bottom-2 z-10">
+                            <StartButton previous state={state} stage={stage} pending={pending} onStart={() => run(() => act.start(zone.id))} />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* In the area's own card, under its name, never floating over the
+                              next one: whoever taps it knows which area they started. */}
+                          <StartButton
+                            area={`${numberOf.get(zone.id)!} · ${zone.name}`}
+                            state={state}
+                            stage={stage}
+                            pending={pending}
+                            onStart={() => run(() => act.start(zone.id))}
+                          />
+                          <Scope
+                            zone={zone}
+                            tools={board.tools[zone.id] ?? []}
+                            state={state}
+                            // The whole job only while choosing where to start. For the
+                            // install, what the install is: the prep is done.
+                            todo={stage === "work" ? (board.steps[zone.id] ?? []).filter((s) => s.step.phase !== "prep").map((s) => s.step.label) : zone.todo}
+                          />
+                        </>
+                      )}
                     </div>
                   )}
                 </li>
@@ -257,12 +272,15 @@ function Scope({ zone, tools, state, todo }: { zone: WorkOrderZone; tools: strin
 /** The one button on an area that is not yours yet, or why there isn't one. Says which area it starts. */
 function StartButton({
   area,
+  previous = false,
   state,
   stage,
   pending,
   onStart,
 }: {
-  area: string;
+  area?: string;
+  /** The sheet a job already under way started on: floating, and not naming the area. */
+  previous?: boolean;
   state: AreaState;
   stage: "prep" | "work";
   pending: boolean;
@@ -271,6 +289,16 @@ function StartButton({
   if (state.status === "done") return <PhotoDone label="Done. After photo in." />;
   if (stage === "prep" && state.prepped) return <PhotoDone label="Prepped. The install starts once every area is prepped." />;
   if (state.status === "waiting") return <p className="text-sm text-amber-700">{state.waitingReason} Pick another area for now.</p>;
+  if (previous) {
+    const was =
+      state.status === "working" ? `Join ${state.people.map((p) => p.name).join(" and ")} here` : stage === "prep" ? "Start prep here" : "Start the install";
+    return (
+      <Button type="button" className="h-12 w-full text-base font-semibold shadow-lg" onClick={onStart} disabled={pending}>
+        {pending && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+        {was}
+      </Button>
+    );
+  }
   const label =
     state.status === "working"
       ? `Join ${state.people.map((p) => p.name).join(" and ")} on`
@@ -316,6 +344,8 @@ function InArea({
   everyAreaPrepped,
   steps,
   tips,
+  tools,
+  previousLayout,
   meId,
   pending,
   onTick,
@@ -331,6 +361,8 @@ function InArea({
   everyAreaPrepped: boolean;
   steps: AreaBoardData["steps"][string];
   tips: AreaBoardData["tips"][string];
+  tools: string[];
+  previousLayout: boolean;
   meId: string | null;
   pending: boolean;
   onTick: (key: string, value: boolean) => void;
@@ -389,12 +421,32 @@ function InArea({
         })}
       </div>
 
-      {photo && <PhotoTaker jobId={jobId} zone={zone} kind={photo} disabled={pending} onDone={onPhoto} onError={onError} demo={demoPhoto ? () => demoPhoto(photo) : null} />}
+      {photo && (
+        <PhotoTaker
+          jobId={jobId}
+          zone={zone}
+          kind={photo}
+          floating={previousLayout}
+          disabled={pending}
+          onDone={onPhoto}
+          onError={onError}
+          demo={demoPhoto ? () => demoPhoto(photo) : null}
+        />
+      )}
 
-      {/* Only what is being done now: the rest of the job was read when choosing
-          the area, and a list with the prep on it during the install reads as
-          more to do. The evaluator's note stays, it is about this area. */}
-      {zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>}
+      {previousLayout ? (
+        <details className="rounded-lg border border-border bg-background/60 p-2.5">
+          <summary className="cursor-pointer text-sm font-medium">The whole scope for this area</summary>
+          <div className="mt-2 flex flex-col gap-3">
+            <Scope zone={zone} tools={tools} state={state} todo={zone.todo} />
+          </div>
+        </details>
+      ) : (
+        // Only what is being done now: the rest of the job was read when choosing
+        // the area, and a list with the prep on it during the install reads as
+        // more to do. The evaluator's note stays, it is about this area.
+        zone.notes && <p className="rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm dark:bg-amber-950/30">{zone.notes}</p>
+      )}
 
       {tips.length > 0 && (
         <details className="rounded-lg border border-border bg-background/60 p-2.5">
@@ -430,6 +482,7 @@ function PhotoTaker({
   jobId,
   zone,
   kind,
+  floating = false,
   disabled,
   onDone,
   onError,
@@ -438,6 +491,8 @@ function PhotoTaker({
   jobId: string;
   zone: WorkOrderZone;
   kind: "during" | "after";
+  /** The sheet a job already under way started on, where it floated at the bottom of the screen. */
+  floating?: boolean;
   disabled: boolean;
   onDone: () => void;
   onError: (message: string | null) => void;
@@ -475,7 +530,7 @@ function PhotoTaker({
 
   if (waiting.length > 0) {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-dashed border-slate-400 bg-card p-2.5">
+      <div className={cn("flex flex-col gap-2 rounded-lg border border-dashed border-slate-400 bg-card p-2.5", floating && "sticky bottom-2 z-10 shadow-lg")}>
         <p className="text-sm font-semibold">{kind === "during" ? "Prep photo taken" : "After photo taken"}, no signal</p>
         <WaitingPhotos scope={scope} filter={(item) => (item.args.zone as { id?: string } | null)?.id === zone.id && item.args.kind === kind} />
         <p className="text-xs text-muted-foreground">This area moves on as soon as the photo uploads. Don&apos;t take it again.</p>
@@ -484,7 +539,7 @@ function PhotoTaker({
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-primary/60 bg-card p-2.5">
+    <div className={cn("rounded-lg border border-dashed border-primary/60 bg-card p-2.5", floating && "sticky bottom-2 z-10 shadow-lg")}>
       <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the prep photo" : "Clean up done: take the after photo"}</p>
       <p className="text-xs text-muted-foreground">
         {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}

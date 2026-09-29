@@ -1,3 +1,4 @@
+import { usesPreviousCrewSheet } from "@/lib/crew-sheet-layout";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { allPrepped, areaNeeds, boardState, stepsFor, tipsFor, type AreaNeeds, type AreaState, type AreaStep, type Tip } from "@/lib/area-work";
@@ -15,6 +16,8 @@ export interface AreaBoardData {
   steps: Record<string, { step: AreaStep; doneBy: string | null }[]>;
   tips: Record<string, Tip[]>;
   tools: Record<string, string[]>;
+  /** Under way before the crew sheet changed: keeps the sheet it started on. See lib/crew-sheet-layout. */
+  previousLayout: boolean;
 }
 
 /**
@@ -31,10 +34,11 @@ export async function loadAreaBoard(
   const { zones, catalog, photos } = loaded;
   // The board: who is where, which kit is in which area, and each area's
   // steps. Read fresh every time, because two phones are changing it.
-  const [{ data: workRows }, { data: stepRows }, me] = await Promise.all([
+  const [{ data: workRows }, { data: stepRows }, me, previousLayout] = await Promise.all([
     supabase.from("job_area_work").select("zone_id, profile_id, kits, profiles:profile_id(full_name, email)").eq("job_id", jobId).is("left_at", null),
     supabase.from("job_area_steps").select("zone_id, step_key, profiles:done_by(full_name, email)").eq("job_id", jobId),
     getCurrentProfile().catch(() => null),
+    startedBeforeTheChange(supabase, jobId),
   ]);
   const personName = (p: { full_name: string | null; email: string } | null) => (p?.full_name || p?.email || "Somebody").split(/\s+/)[0];
   const working = ((workRows ?? []) as unknown as { zone_id: string; profile_id: string; kits: number[]; profiles: { full_name: string | null; email: string } | null }[]).map((row) => ({
@@ -74,5 +78,17 @@ export async function loadAreaBoard(
     ),
     tips: Object.fromEntries(zones.map((zone) => [zone.id, tipsFor(zone.service!.typeId)])),
     tools: Object.fromEntries(zones.map((zone) => [zone.id, needs.get(zone.id)?.tools ?? []])),
+    previousLayout,
   };
+}
+
+/** Whether this job was under way before the crew sheet changed. Three small reads, each one row. */
+async function startedBeforeTheChange(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string): Promise<boolean> {
+  const [{ data: day }, { data: work }, { data: tick }] = await Promise.all([
+    supabase.from("job_work_sessions").select("starts_on").eq("job_id", jobId).neq("status", "cancelled").order("starts_on").limit(1).maybeSingle(),
+    supabase.from("job_area_work").select("started_at").eq("job_id", jobId).order("started_at").limit(1).maybeSingle(),
+    supabase.from("job_area_steps").select("done_at").eq("job_id", jobId).order("done_at").limit(1).maybeSingle(),
+  ]);
+  const times = [(work as { started_at: string } | null)?.started_at, (tick as { done_at: string } | null)?.done_at].filter((t): t is string => Boolean(t)).sort();
+  return usesPreviousCrewSheet({ firstWorkDay: (day as { starts_on: string } | null)?.starts_on ?? null, firstWorkAt: times[0] ?? null });
 }
