@@ -184,11 +184,14 @@ function landscapeCleanup(v: Values): CrewStep[] {
   // included, and the cuttings go, but nothing is pulled out and the ground
   // is not cleared bare.
   // Sold smaller, so the sheet must not send the crew to do the full job.
+  // The cutting is the prep: an area is cut down before anything leaves it,
+  // and what the job is, once it is down, is hauling it all away.
   if (type && /^cut/i.test(type)) {
     s.prep("Pick up the loose ground debris you can: sticks, fallen limbs and trash. Don't rake the area out.");
-    s.work("Cut the overgrowth, brush, vines and saplings down to the ground.");
-    s.work("Cut the weeds down too. Don't pull them out.");
-    s.cleanup("Load and haul away every bit of what you cut, then blow off the walks and driveway.");
+    s.prep("Cut the overgrowth, brush, vines and saplings down to the ground.");
+    s.prep("Cut the weeds down too. Don't pull them out.");
+    s.work("Load up everything you cut and the debris, and haul it all away.");
+    s.cleanup("Blow off the walks and driveway.");
     return s.done();
   }
 

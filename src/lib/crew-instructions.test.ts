@@ -64,9 +64,17 @@ describe("crewInstructions", () => {
     const steps = crewSteps("landscape-cleanup", { cleanupType: "Cut down", vines: "Heavy", saplings: "Many", weedLevel: "Heavy", overgrowth: "Heavy" })!;
     const said = steps.map((s) => s.label).join(" ");
     expect(said).toMatch(/down to the ground/);
-    expect(said).toMatch(/haul away every bit of what you cut/);
+    expect(said).toMatch(/haul it all away/);
     expect(said).toMatch(/Cut the weeds down too\. Don't pull them out\./);
     expect(said).not.toMatch(/Pull every weed|roots and all|Dig out/);
+    // Cutting it down is the prep; hauling it away is the job.
+    const prep = steps.filter((s) => s.phase === "prep").map((s) => s.label);
+    expect(prep).toEqual([
+      "Pick up the loose ground debris you can: sticks, fallen limbs and trash. Don't rake the area out.",
+      "Cut the overgrowth, brush, vines and saplings down to the ground.",
+      "Cut the weeds down too. Don't pull them out.",
+    ]);
+    expect(steps.filter((s) => s.phase === "work").map((s) => s.label)).toEqual(["Load up everything you cut and the debris, and haul it all away."]);
   });
 
   it("cuts up a fallen branch instead of digging out a tree", () => {
