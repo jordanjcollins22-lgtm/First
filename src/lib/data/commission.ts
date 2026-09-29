@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { canDoEvaluations } from "@/lib/affiliate-roles";
@@ -51,6 +53,16 @@ export interface JobMoney {
  * account manager does not add four more round trips.
  */
 export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
+  // Once per page for the same jobs: the commission and the advances on
+  // My Day both ask.
+  return loadMoneyFor([...new Set(jobIds)].sort().join(","));
+}
+
+const loadMoneyFor = cache(async function loadMoneyFor(key: string): Promise<JobMoney> {
+  return readMoney(key ? key.split(",") : []);
+});
+
+async function readMoney(jobIds: string[]): Promise<JobMoney> {
   const empty: JobMoney = {
     collected: new Map(),
     paidByClient: new Map(),
@@ -201,7 +213,8 @@ export interface PoolContext {
   posterByCode: Map<string, string>;
 }
 
-export async function loadPoolContext(): Promise<PoolContext> {
+/** Once per page, however many books are worked out on it. */
+export const loadPoolContext = cache(async function loadPoolContext(): Promise<PoolContext> {
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
   const [{ data: profiles }, { data: roleRows }, { data: org }, { data: links }] = await Promise.all([
@@ -230,7 +243,7 @@ export async function loadPoolContext(): Promise<PoolContext> {
     splitFrom: (org as { commission_split_from?: string | null } | null)?.commission_split_from ?? "2026-09-29",
     posterByCode: new Map(((links ?? []) as { code: string; profile_id: string }[]).map((l) => [l.code, l.profile_id])),
   };
-}
+});
 
 type JobWithCode = JobWithLocation & { referral_code?: string | null; created_at?: string | null };
 
@@ -312,12 +325,32 @@ export function sharesByPerson(jobs: JobWithCode[], money: JobMoney, ctx: PoolCo
 
 /** One person's book: every share they hold, as account manager, evaluator or affiliate. */
 export async function getCommissionFor(profile: Profile): Promise<CommissionSummary> {
+  // Most of the crew can hold no share at all: not an account manager, not
+  // sent to evaluate, nobody booked through them. Three tiny lookups say so,
+  // instead of every job and its money on a page the crew's phone re-reads
+  // all morning.
+  if (!(await mightHoldAShare(profile))) return commissionFor([], profile.commission_pct);
+
   const [all, ctx] = await Promise.all([listJobsWithLocation(), loadPoolContext()]);
   const mine = (all as JobWithCode[]).filter((j) => touches(j, ctx, profile.id));
   if (mine.length === 0) return commissionFor([], profile.commission_pct);
 
   const money = await loadMoney(mine.map((j) => j.id));
   return commissionFor(sharesByPerson(mine, money, ctx).get(profile.id) ?? [], profile.commission_pct);
+}
+
+/** Whether somebody could hold any share of the pool: manages a client, evaluates, or has brought somebody in. */
+async function mightHoldAShare(profile: Profile): Promise<boolean> {
+  if (canDoEvaluations(profile.roles, profile.does_evaluations)) return true;
+  const supabase = await createClient();
+  const [managed, referred, links] = await Promise.all([
+    supabase.from("customers").select("id").eq("account_manager_id", profile.id).limit(1),
+    supabase.from("jobs").select("id").eq("referred_by_profile_id", profile.id).limit(1),
+    supabase.from("outreach_links").select("code").eq("profile_id", profile.id).limit(1),
+  ]);
+  // A lookup that failed is not a no: work the book out properly.
+  if (managed.error || referred.error || links.error) return true;
+  return (managed.data?.length ?? 0) + (referred.data?.length ?? 0) + (links.data?.length ?? 0) > 0;
 }
 
 export interface ManagerCommission {

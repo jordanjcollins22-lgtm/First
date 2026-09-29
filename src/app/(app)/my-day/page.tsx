@@ -730,7 +730,7 @@ async function CrewsBlock({ showTicks }: { showTicks: boolean }) {
   if (!crewsToday) return null;
   return (
     <>
-      {crewsToday.stops.length > 0 && <AutoRefresh seconds={60} />}
+      {crewsToday.stops.length > 0 && <AutoRefresh seconds={120} />}
       <CrewsTodayPanel today={crewsToday} showTicks={showTicks} />
     </>
   );

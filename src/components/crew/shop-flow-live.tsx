@@ -24,7 +24,7 @@ export function ShopFlowLive({ shopDayId }: { shopDayId: string | null }) {
       .subscribe();
     const poll = setInterval(() => {
       if (document.visibilityState === "visible") router.refresh();
-    }, 20_000);
+    }, 60_000);
     return () => {
       clearInterval(poll);
       void supabase.removeChannel(channel);
