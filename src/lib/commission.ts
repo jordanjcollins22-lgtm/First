@@ -58,6 +58,14 @@ export interface CommissionJobInput {
    */
   paidOut?: number;
   lastPaidAt?: string | null;
+  /** This person's rate on this job, when it is not their usual one: their share of the pool. */
+  pct?: number;
+  /** Which shares of the pool it is, in words: "Account manager 7% + Evaluator 4%". */
+  roleLabel?: string;
+  /** Payable as soon as the money is in, not at the sign-off: an affiliate's share. */
+  onCollect?: boolean;
+  /** Held for this reason whatever else is true: an evaluator's share on a job with a site map issue. */
+  hold?: string | null;
 }
 
 export interface CommissionLine {
@@ -80,6 +88,8 @@ export interface CommissionLine {
   amount: number;
   completedAt: string | null;
   openTickets: number;
+  /** Which shares of the pool it is, when it is split. */
+  roleLabel?: string;
 }
 
 export interface CommissionSummary {
@@ -126,6 +136,14 @@ export function commissionState(
       state: "paid",
       reason: job.lastPaidAt ? `Paid on ${new Date(job.lastPaidAt).toLocaleDateString()}.` : "Paid.",
     };
+  }
+  if (job.hold) {
+    return { state: "held", reason: job.hold };
+  }
+  // An affiliate's share: payable as the money comes in, finished or not.
+  if (job.onCollect) {
+    if (job.collected <= 0) return { state: "accruing", reason: "Nothing collected yet." };
+    return paidOut > 0 ? { state: "earned", reason: `Part paid. ${money(owed)} still to come.` } : { state: "earned", reason: "" };
   }
   if (paidOut > 0 && job.status === "completed" && job.openTickets === 0) {
     return { state: "earned", reason: `Part paid. ${money(owed)} still to come.` };
@@ -175,8 +193,9 @@ export function commissionFor(
   const lines = jobs
     .filter((job) => job.status !== "cancelled")
     .map((job): CommissionLine => {
-      const { state, reason } = commissionState(job, rate);
-      const earnedTotal = round2((rate / 100) * job.collected);
+      const jobRate = job.pct ?? rate;
+      const { state, reason } = commissionState(job, jobRate);
+      const earnedTotal = round2((jobRate / 100) * job.collected);
       const paidOut = round2(job.paidOut ?? 0);
       return {
         jobId: job.jobId,
@@ -192,7 +211,8 @@ export function commissionFor(
         outstanding: round2(
           Math.max(0, (job.contractValue ?? job.collected) - job.collected),
         ),
-        pct: rate,
+        pct: jobRate,
+        roleLabel: job.roleLabel,
         // What is still owed on this job. A paid line reads zero, which is
         // the honest answer to "what do I get for that one".
         amount: round2(Math.max(0, earnedTotal - paidOut)),

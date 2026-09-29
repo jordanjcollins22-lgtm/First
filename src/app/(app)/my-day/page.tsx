@@ -146,13 +146,25 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
 
   const day =
     viewer && isFieldOnly(viewer.roles) ? (
-      <CrewDay profile={viewer} />
+      <>
+        <CrewDay profile={viewer} />
+        {/* A crew member who brought a client in has an affiliate's share. */}
+        <Suspense fallback={null}>
+          <CommissionBlock profile={viewer} />
+        </Suspense>
+      </>
     ) : viewer && isGrowthOnly(viewer.roles) ? (
       await GrowthDay()
     ) : accountManagerOnly ? (
       await AccountManagerDay({ open, visits, approvals, profileId: viewer!.id })
     ) : evaluatorOnly && visits ? (
-      <EvaluatorDayView data={visits} />
+      <>
+        <EvaluatorDayView data={visits} />
+        {/* Their 4% on every site map that sold. */}
+        <Suspense fallback={null}>
+          <CommissionBlock profile={viewer!} />
+        </Suspense>
+      </>
     ) : (
       <>
         {approvals && (
@@ -883,7 +895,7 @@ async function CommissionBlock({ profile }: { profile: Profile }) {
   return (
     <div className="mb-6">
       <h2 className="mb-1 text-lg font-bold">Your commission</h2>
-      <CommissionPanel summary={commission} advanceOwed={owed} subtitle="Across every client you manage, not just today's." />
+      <CommissionPanel summary={commission} advanceOwed={owed} subtitle="Every project you have a share in, not just today's." />
     </div>
   );
 }

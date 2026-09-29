@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
-import { isAccountManager } from "@/lib/affiliate-roles";
+import { canDoEvaluations } from "@/lib/affiliate-roles";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { describeShare, shareRule, sharesFor, usesSplit, type JobRoles } from "@/lib/commission-split";
 import {
   commissionFor,
   type CommissionJobInput,
@@ -28,6 +30,13 @@ export interface JobMoney {
   /** Commission already handed over, per job. */
   paidOut: Map<string, number>;
   lastPaidAt: Map<string, string>;
+  /** The same, per job and person: `${jobId}:${profileId}`. A split job pays three people. */
+  paidOutBy: Map<string, number>;
+  lastPaidAtBy: Map<string, string>;
+  /** When the client said yes: the accepted proposal's answer. */
+  soldAt: Map<string, string>;
+  /** Open issues traced back to the site map, which hold the evaluator's share. */
+  designIssues: Map<string, number>;
 }
 
 /**
@@ -49,6 +58,10 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     openTickets: new Map(),
     paidOut: new Map(),
     lastPaidAt: new Map(),
+    paidOutBy: new Map(),
+    lastPaidAtBy: new Map(),
+    soldAt: new Map(),
+    designIssues: new Map(),
   };
   if (jobIds.length === 0) return empty;
 
@@ -58,9 +71,9 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     safe(
       supabase.from("ledger_entries").select("job_id, amount, direction").eq("direction", "in").in("job_id", jobIds)
     ),
-    safe(supabase.from("job_proposals").select("job_id, total_cost, discount_amount").in("job_id", jobIds)),
-    safe(supabase.from("job_tickets").select("job_id, status").in("job_id", jobIds)),
-    safe(supabase.from("commission_payouts").select("job_id, amount, paid_at").in("job_id", jobIds)),
+    safe(supabase.from("job_proposals").select("job_id, total_cost, discount_amount, status, responded_at, approved_at").in("job_id", jobIds)),
+    safe(supabase.from("job_tickets").select("job_id, status, cause").in("job_id", jobIds)),
+    safe(supabase.from("commission_payouts").select("job_id, profile_id, amount, paid_at").in("job_id", jobIds)),
     // The payments table is where Stripe and the hand-recorded cheques both
     // land, and until now nothing here read it: commission was worked out
     // from invoices and the ledger, which were empty, while a hundred card
@@ -124,12 +137,21 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
     ])
   );
 
+  const soldAt = new Map<string, string>();
+  for (const p of proposals as { job_id: string; status: string | null; responded_at: string | null; approved_at: string | null }[]) {
+    const at = p.status === "accepted" ? (p.responded_at ?? p.approved_at) : null;
+    const seen = soldAt.get(p.job_id);
+    if (at && (!seen || at < seen)) soldAt.set(p.job_id, at);
+  }
+
   const openTickets = new Map<string, number>();
-  for (const t of tickets as { job_id: string; status: string }[]) {
+  const designIssues = new Map<string, number>();
+  for (const t of tickets as { job_id: string; status: string; cause: string | null }[]) {
     // Resolved and closed tickets are the record of something already dealt
     // with. Only the ones somebody still owes a trip for hold a payout.
     if (t.status === "open" || t.status === "scheduled") {
       openTickets.set(t.job_id, (openTickets.get(t.job_id) ?? 0) + 1);
+      if (t.cause === "design") designIssues.set(t.job_id, (designIssues.get(t.job_id) ?? 0) + 1);
     }
   }
 
@@ -138,40 +160,164 @@ export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
   // would say settled and be wrong.
   const paidOut = new Map<string, number>();
   const lastPaidAt = new Map<string, string>();
-  for (const row of payouts as { job_id: string; amount: number; paid_at: string }[]) {
-    paidOut.set(row.job_id, (paidOut.get(row.job_id) ?? 0) + (Number(row.amount) || 0));
+  const paidOutBy = new Map<string, number>();
+  const lastPaidAtBy = new Map<string, string>();
+  for (const row of payouts as { job_id: string; profile_id: string; amount: number; paid_at: string }[]) {
+    const amount = Number(row.amount) || 0;
+    paidOut.set(row.job_id, (paidOut.get(row.job_id) ?? 0) + amount);
     const seen = lastPaidAt.get(row.job_id);
     if (!seen || row.paid_at > seen) lastPaidAt.set(row.job_id, row.paid_at);
+    const key = `${row.job_id}:${row.profile_id}`;
+    paidOutBy.set(key, (paidOutBy.get(key) ?? 0) + amount);
+    const seenBy = lastPaidAtBy.get(key);
+    if (!seenBy || row.paid_at > seenBy) lastPaidAtBy.set(key, row.paid_at);
   }
 
-  return { collected, paidByClient, contract, openTickets, paidOut, lastPaidAt };
+  return { collected, paidByClient, contract, openTickets, paidOut, lastPaidAt, paidOutBy, lastPaidAtBy, soldAt, designIssues };
 }
 
-function toInputs(jobs: JobWithLocation[], money: JobMoney): CommissionJobInput[] {
-  return jobs.map((job) => ({
-    jobId: job.id,
-    customerName: job.property.customer.name,
-    address: job.property.address,
-    status: job.status,
-    completedAt: job.completed_at,
-    collected: money.collected.get(job.id) ?? 0,
-    // The proposal total is what the job is worth if it all comes in. It is
-    // context for the collected figure, never the basis for the commission.
-    contractValue: money.contract.get(job.id) ?? null,
-    openTickets: money.openTickets.get(job.id) ?? 0,
-    paidOut: money.paidOut.get(job.id) ?? 0,
-    lastPaidAt: money.lastPaidAt.get(job.id) ?? null,
-  }));
+
+/** Sold work: past the client's yes. */
+const SOLD = new Set(["approved", "scheduled", "in_progress", "completed"]);
+
+/** The owner: whose business it is, so no share is theirs. */
+function isOwner(roles: string[]): boolean {
+  return roles.some((r) => ["admin", "owner"].includes(r.toLowerCase().trim()));
 }
 
-/** One account manager's book — every job on a client they manage. */
+interface PoolPerson {
+  id: string;
+  name: string;
+  pct: number | null;
+  owner: boolean;
+  /** Can be sent to walk a property: whose site map it would be. */
+  evaluates: boolean;
+}
+
+/** Everybody who could hold a share, the day the split started, and whose link each referral code is. */
+export interface PoolContext {
+  people: Map<string, PoolPerson>;
+  splitFrom: string;
+  posterByCode: Map<string, string>;
+}
+
+export async function loadPoolContext(): Promise<PoolContext> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const [{ data: profiles }, { data: roleRows }, { data: org }, { data: links }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, email, commission_pct, does_evaluations").eq("organization_id", organizationId),
+    supabase.from("profile_roles").select("profile_id, role_name"),
+    supabase.from("organizations").select("commission_split_from").eq("id", organizationId).maybeSingle(),
+    supabase.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId),
+  ]);
+  const rolesOf = new Map<string, string[]>();
+  for (const r of (roleRows ?? []) as { profile_id: string; role_name: string }[]) {
+    rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  }
+  const people = new Map<string, PoolPerson>();
+  for (const p of (profiles ?? []) as { id: string; full_name: string | null; email: string | null; commission_pct: number | string | null; does_evaluations: boolean | null }[]) {
+    const roles = rolesOf.get(p.id) ?? [];
+    people.set(p.id, {
+      id: p.id,
+      name: p.full_name || p.email || "Somebody",
+      pct: p.commission_pct == null ? null : Number(p.commission_pct),
+      owner: isOwner(roles),
+      evaluates: canDoEvaluations(roles, p.does_evaluations),
+    });
+  }
+  return {
+    people,
+    splitFrom: (org as { commission_split_from?: string | null } | null)?.commission_split_from ?? "2026-09-29",
+    posterByCode: new Map(((links ?? []) as { code: string; profile_id: string }[]).map((l) => [l.code, l.profile_id])),
+  };
+}
+
+type JobWithCode = JobWithLocation & { referral_code?: string | null; created_at?: string | null };
+
+/** Who filled each share of the pool on a job, before anybody is left out. */
+function rolesOn(job: JobWithCode, ctx: PoolContext): JobRoles {
+  const evaluator = job.assigned_to && ctx.people.get(job.assigned_to)?.evaluates ? job.assigned_to : null;
+  const affiliate = job.referred_by_profile_id ?? (job.referral_code ? (ctx.posterByCode.get(job.referral_code) ?? null) : null);
+  return {
+    accountManagerId: job.property.customer.account_manager_id ?? null,
+    evaluatorId: evaluator,
+    affiliateId: affiliate && ctx.people.has(affiliate) ? affiliate : null,
+  };
+}
+
+/** Whether somebody might hold a share on a job: worth loading its money for. */
+function touches(job: JobWithCode, ctx: PoolContext, profileId?: string): boolean {
+  const r = rolesOn(job, ctx);
+  const ids = [r.accountManagerId, r.evaluatorId, r.affiliateId].filter((id): id is string => Boolean(id));
+  return profileId ? ids.includes(profileId) : ids.length > 0;
+}
+
+/**
+ * Every share of commission on these jobs, per person.
+ *
+ * A project sold before the split started keeps the deal it was sold on: the
+ * account manager at their own rate. One sold since pays out of the 15% pool,
+ * 7% to the account manager, 4% to the evaluator, 4% to the affiliate, each
+ * a line of their own, paid and tracked apart. An evaluator's or affiliate's
+ * share is only a line once the client has said yes.
+ */
+export function sharesByPerson(jobs: JobWithCode[], money: JobMoney, ctx: PoolContext): Map<string, CommissionJobInput[]> {
+  const by = new Map<string, CommissionJobInput[]>();
+  const owners = new Set([...ctx.people.values()].filter((p) => p.owner).map((p) => p.id));
+  for (const job of jobs) {
+    if (job.status === "cancelled") continue;
+    const base = {
+      jobId: job.id,
+      customerName: job.property.customer.name,
+      address: job.property.address,
+      status: job.status,
+      completedAt: job.completed_at,
+      collected: money.collected.get(job.id) ?? 0,
+      // The proposal total is what the job is worth if it all comes in. It is
+      // context for the collected figure, never the basis for the commission.
+      contractValue: money.contract.get(job.id) ?? null,
+      openTickets: money.openTickets.get(job.id) ?? 0,
+    };
+    const paid = (profileId: string) => ({
+      paidOut: money.paidOutBy.get(`${job.id}:${profileId}`) ?? 0,
+      lastPaidAt: money.lastPaidAtBy.get(`${job.id}:${profileId}`) ?? null,
+    });
+    const push = (profileId: string, input: CommissionJobInput) => by.set(profileId, [...(by.get(profileId) ?? []), input]);
+
+    const roles = rolesOn(job, ctx);
+    const sold = SOLD.has(job.status);
+    // Work done before proposals were answered in the app has no yes on
+    // record; it was sold when it was booked.
+    const soldAt = money.soldAt.get(job.id) ?? (sold ? (job.created_at ?? job.completed_at ?? "2000-01-01") : null);
+    if (!usesSplit(soldAt, ctx.splitFrom)) {
+      const manager = roles.accountManagerId;
+      if (manager && ctx.people.has(manager) && !owners.has(manager)) push(manager, { ...base, ...paid(manager), roleLabel: "Sold before the pool" });
+      continue;
+    }
+    const earning = sold || money.soldAt.has(job.id) ? roles : { accountManagerId: roles.accountManagerId, evaluatorId: null, affiliateId: null };
+    for (const share of sharesFor(earning, owners)) {
+      const rule = shareRule(share.roles, money.designIssues.get(job.id) ?? 0);
+      push(share.profileId, {
+        ...base,
+        ...paid(share.profileId),
+        pct: share.pct,
+        roleLabel: describeShare(share.roles),
+        onCollect: rule.onCollect,
+        hold: rule.hold,
+      });
+    }
+  }
+  return by;
+}
+
+/** One person's book: every share they hold, as account manager, evaluator or affiliate. */
 export async function getCommissionFor(profile: Profile): Promise<CommissionSummary> {
-  const all = await listJobsWithLocation();
-  const mine = all.filter((j) => j.property.customer.account_manager_id === profile.id);
+  const [all, ctx] = await Promise.all([listJobsWithLocation(), loadPoolContext()]);
+  const mine = (all as JobWithCode[]).filter((j) => touches(j, ctx, profile.id));
   if (mine.length === 0) return commissionFor([], profile.commission_pct);
 
   const money = await loadMoney(mine.map((j) => j.id));
-  return commissionFor(toInputs(mine, money), profile.commission_pct);
+  return commissionFor(sharesByPerson(mine, money, ctx).get(profile.id) ?? [], profile.commission_pct);
 }
 
 export interface ManagerCommission {
@@ -182,100 +328,78 @@ export interface ManagerCommission {
   advanceOwed?: number;
 }
 
-/** Every account manager's book, for the Money page. */
+/** Everybody's book, for the Money page: account managers, evaluators and affiliates. */
 export async function getCommissionByManager(profiles: Profile[]): Promise<ManagerCommission[]> {
-  const managers = profiles.filter((p) => isAccountManager(p.roles));
-  if (managers.length === 0) return [];
-
-  const managerIds = new Set(managers.map((m) => m.id));
-  const all = await listJobsWithLocation();
-  const relevant = all.filter((j) => {
-    const owner = j.property.customer.account_manager_id;
-    return owner != null && managerIds.has(owner);
-  });
-
+  const [all, ctx] = await Promise.all([listJobsWithLocation(), loadPoolContext()]);
+  const relevant = (all as JobWithCode[]).filter((j) => touches(j, ctx));
   const money = await loadMoney(relevant.map((j) => j.id));
+  const shares = sharesByPerson(relevant, money, ctx);
 
-  return managers
-    .map((manager) => ({
-      profileId: manager.id,
-      personName: manager.full_name || manager.email,
-      summary: commissionFor(
-        toInputs(
-          relevant.filter((j) => j.property.customer.account_manager_id === manager.id),
-          money
-        ),
-        manager.commission_pct
-      ),
+  return profiles
+    .filter((person) => shares.has(person.id))
+    .map((person) => ({
+      profileId: person.id,
+      personName: person.full_name || person.email,
+      summary: commissionFor(shares.get(person.id) ?? [], person.commission_pct),
     }))
     // Somebody with nothing on their book is not a row worth printing.
     .filter((b) => b.summary.lines.length > 0)
     .sort((a, b) => b.summary.earned - a.summary.earned);
 }
 
-/** One job's commission, for the person whose commission it is. */
+/** One person's commission on one job. */
 export interface JobCommission {
   line: CommissionLine;
-  /** Whose book it sits on. */
+  /** Whose share it is. */
   managerName: string;
-  /** Whether the person looking at it is that manager. */
+  /** Whether the person looking at it is the one it is paid to. */
   mine: boolean;
-  /** Every payment already recorded against it. */
+  /** Every payment already recorded against it, to them. */
   payouts: { id: string; amount: number; paidAt: string; reference: string | null }[];
 }
 
 /**
- * The commission on one job, for the job's own page.
+ * The commission on one job, for the job's own page: a share per person.
  *
- * An account manager standing on a project wants to know what it is worth to
- * them and whether it has been paid, and going to the Money page to find out
- * is a trip nobody makes. Shown on the job, where the question is asked.
+ * Somebody standing on a project wants to know what it is worth to them and
+ * whether it has been paid, and going to the Money page to find out is a trip
+ * nobody makes. Shown on the job, where the question is asked.
  *
- * Nothing here for somebody who neither manages the client nor runs the
- * money: what a colleague earns is not everybody's business.
+ * Each person sees their own share. Whoever runs the money sees them all;
+ * what a colleague earns is not everybody's business.
  */
-export async function getJobCommission(jobId: string, viewer: Profile): Promise<JobCommission | null> {
+export async function getJobCommission(jobId: string, viewer: Profile): Promise<JobCommission[]> {
   const supabase = await createClient();
-  const all = await listJobsWithLocation();
-  const job = all.find((j) => j.id === jobId);
-  const managerId = job?.property.customer.account_manager_id ?? null;
-  if (!job || !managerId) return null;
+  const [all, ctx] = await Promise.all([listJobsWithLocation(), loadPoolContext()]);
+  const job = (all as JobWithCode[]).find((j) => j.id === jobId);
+  if (!job) return [];
 
-  const mine = managerId === viewer.id;
   const runsTheMoney = viewer.roles.includes("admin") || viewer.roles.includes("overhead");
-  if (!mine && !runsTheMoney) return null;
-
-  const { data: manager } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, commission_pct")
-    .eq("id", managerId)
-    .maybeSingle();
-  if (!manager) return null;
-
   const money = await loadMoney([job.id]);
-  const summary = commissionFor(toInputs([job], money), manager.commission_pct);
-  const line = summary.lines[0];
-  if (!line) return null;
+  const shares = [...sharesByPerson([job], money, ctx).entries()].filter(([id]) => runsTheMoney || id === viewer.id);
+  if (shares.length === 0) return [];
 
-  const payouts = await safe(
+  const payouts = (await safe(
     supabase
       .from("commission_payouts")
-      .select("id, amount, paid_at, reference")
+      .select("id, profile_id, amount, paid_at, reference")
       .eq("job_id", job.id)
       .order("paid_at", { ascending: false })
-  );
+  )) as { id: string; profile_id: string; amount: number; paid_at: string; reference: string | null }[];
 
-  return {
-    line,
-    managerName: manager.full_name || manager.email,
-    mine,
-    payouts: (payouts as { id: string; amount: number; paid_at: string; reference: string | null }[]).map(
-      (row) => ({
-        id: row.id,
-        amount: Number(row.amount) || 0,
-        paidAt: row.paid_at,
-        reference: row.reference,
-      })
-    ),
-  };
+  return shares.flatMap(([profileId, inputs]) => {
+    const person = ctx.people.get(profileId);
+    const line = commissionFor(inputs, person?.pct ?? null).lines[0];
+    if (!line) return [];
+    return [
+      {
+        line,
+        managerName: (person?.name ?? "Somebody").split(" ")[0],
+        mine: profileId === viewer.id,
+        payouts: payouts
+          .filter((row) => row.profile_id === profileId)
+          .map((row) => ({ id: row.id, amount: Number(row.amount) || 0, paidAt: row.paid_at, reference: row.reference })),
+      },
+    ];
+  });
 }

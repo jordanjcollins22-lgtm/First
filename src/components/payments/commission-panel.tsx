@@ -15,6 +15,13 @@ function money(n: number): string {
  * hand over. Held is a job to go and unblock. Accruing is work still running,
  * shown so nobody has to guess what a month is shaping up to be.
  */
+/** "15% of collected", or, when the shares differ job to job, what the pool pays. */
+function rateLabel(summary: CommissionSummary): string {
+  const rates = new Set(summary.lines.map((line) => line.pct));
+  if (rates.size <= 1) return `${summary.lines[0]?.pct ?? summary.pct}% of collected`;
+  return "Shares of the 15% pool";
+}
+
 export function CommissionPanel({
   summary,
   title,
@@ -38,7 +45,7 @@ export function CommissionPanel({
       {title && (
         <div className="mb-1 flex items-baseline justify-between gap-2">
           <h3 className="font-semibold">{title}</h3>
-          <span className="text-xs text-muted-foreground">{summary.pct}% of collected</span>
+          <span className="text-xs text-muted-foreground">{rateLabel(summary)}</span>
         </div>
       )}
       {subtitle && <p className="mb-2 text-xs text-muted-foreground">{subtitle}</p>}
@@ -108,6 +115,7 @@ export function CommissionPanel({
                   >
                     {STATE_LABELS[line.state]}
                   </span>
+                  {line.roleLabel && <span>{line.roleLabel}</span>}
                   <span>{money(line.collected)} collected</span>
                   {line.outstanding > 0 && <span>{money(line.outstanding)} still out</span>}
                   {line.paidOut > 0 && <span>{money(line.paidOut)} paid out</span>}
@@ -121,7 +129,7 @@ export function CommissionPanel({
 
       <p className="mt-2 text-[11px] text-muted-foreground">
         Commission is a share of money actually received, not of what was quoted, and becomes payable once the
-        job is finished with no tickets open on it. A job goes back to payable if more money comes in after it
+        job is finished with no tickets open on it; an affiliate&apos;s share as soon as the client pays. A job goes back to payable if more money comes in after it
         was paid out on, because the share grows with what is collected.
       </p>
     </section>

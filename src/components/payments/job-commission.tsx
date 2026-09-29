@@ -7,8 +7,8 @@ function money(n: number): string {
 }
 
 /**
- * What this one project is worth to the person managing it, and whether it
- * has been paid.
+ * What this one project is worth to one person on it -- the account manager,
+ * the evaluator or the affiliate -- and whether it has been paid.
  *
  * On the job rather than on the money screen, because that is where the
  * question is asked. An account manager standing on a project is not going to
@@ -31,7 +31,13 @@ export function JobCommissionPanel({ commission }: { commission: JobCommission }
     >
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">{mine ? "Your commission" : `${managerName}'s commission`}</h3>
-        <span className="text-xs text-muted-foreground">{line.pct}% of collected</span>
+        <span className="text-right text-xs text-muted-foreground">
+          {!line.roleLabel
+            ? `${line.pct}% of collected`
+            : line.roleLabel.includes("+")
+              ? `${line.roleLabel} = ${line.pct}% of collected`
+              : `${line.roleLabel} of collected`}
+        </span>
       </div>
 
       <p className="mt-1 flex items-baseline gap-2">

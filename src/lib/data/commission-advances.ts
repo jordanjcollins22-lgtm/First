@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { listJobsWithLocation } from "@/lib/data/jobs";
-import { loadMoney } from "@/lib/data/commission";
+import { loadMoney, loadPoolContext, sharesByPerson } from "@/lib/data/commission";
 import { DEFAULT_ACCOUNT_MANAGER_PCT } from "@/lib/commission";
 import { advanceLimit, advanceRoom, isPending, paidInFull, type AdvanceStatus } from "@/lib/commission-advance";
 import type { Profile } from "@/types/domain";
@@ -117,29 +117,31 @@ export interface AdvanceBook {
 }
 
 /**
- * One account manager's advances: what they owe, what is waiting, and how
- * much more they could ask for -- the commission to come on sold work the
- * client has paid in full, less what they owe and have asked for.
+ * One person's advances: what they owe, what is waiting, and how much more
+ * they could ask for -- their share of the commission to come on sold work
+ * the client has paid in full, less what they owe and have asked for.
  */
 export async function advanceBook(profile: Pick<Profile, "id" | "commission_pct">): Promise<AdvanceBook> {
-  const all = await listJobsWithLocation();
-  const mine = all.filter((j) => j.property.customer.account_manager_id === profile.id && SOLD.has(j.status));
+  const [all, ctx] = await Promise.all([listJobsWithLocation(), loadPoolContext()]);
   const [money, advances, owedBy] = await Promise.all([
-    loadMoney(mine.map((j) => j.id)),
+    loadMoney(all.filter((j) => SOLD.has(j.status)).map((j) => j.id)),
     listAdvances({ profileId: profile.id }),
     advanceOwed([profile.id]),
   ]);
-  const pct = profile.commission_pct ?? DEFAULT_ACCOUNT_MANAGER_PCT;
-  const projects = mine
+  // Their own share on each job: 15% on a job sold before the split, 7% as
+  // account manager, 4% as evaluator or affiliate on one sold since.
+  const shares = (sharesByPerson(all.filter((j) => SOLD.has(j.status)), money, ctx).get(profile.id) ?? []).filter((s) => !s.hold);
+  const usual = profile.commission_pct ?? DEFAULT_ACCOUNT_MANAGER_PCT;
+  const projects = shares
     // Paid in full on what the client handed over: a card payment recorded
     // with its fee taken out still paid the whole price.
-    .filter((job) => paidInFull(money.contract.get(job.id) ?? null, money.paidByClient.get(job.id) ?? 0))
-    .map((job) => ({
-      jobId: job.id,
-      client: job.property.customer.name,
-      address: job.property.address,
+    .filter((share) => paidInFull(money.contract.get(share.jobId) ?? null, money.paidByClient.get(share.jobId) ?? 0))
+    .map((share) => ({
+      jobId: share.jobId,
+      client: share.customerName,
+      address: share.address,
       room: advanceRoom(
-        { pct, contractValue: money.contract.get(job.id) ?? null, collected: money.collected.get(job.id) ?? 0, paidOut: money.paidOut.get(job.id) ?? 0 },
+        { pct: share.pct ?? usual, contractValue: share.contractValue ?? null, collected: share.collected, paidOut: share.paidOut ?? 0 },
         0
       ),
     }))

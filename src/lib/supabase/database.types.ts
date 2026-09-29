@@ -80,6 +80,8 @@ export interface Database {
       organizations: {
         Row: {
           id: string;
+          /** Projects sold on or after this day split the commission pool 7 / 4 / 4. */
+          commission_split_from?: string;
           /** When the crew is due at the shop, "HH:MM:SS". */
           shop_arrival_time?: string;
           require_email_approval: boolean;

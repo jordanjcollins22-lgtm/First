@@ -266,8 +266,9 @@ function Products({ products }: { products: PriceApproval["products"] }) {
   );
 }
 
-/** "Jace's account manager fee (15%)", "Max's affiliate fee (5%)". */
+/** "Commission pool (15%)", "Jace's account manager fee (15%)", "Max's affiliate fee (5%)". */
 function feeLabel(fee: JobFee): string {
+  if (fee.kind === "pool") return `Commission pool (${fee.pct}%)`;
   const whose = fee.name === "Account manager" || fee.name === "Affiliate" ? "" : `${fee.name}'s `;
   return `${whose}${fee.kind === "affiliate" ? "affiliate" : "account manager"} fee (${fee.pct}%)`;
 }
@@ -305,7 +306,7 @@ function ProfitTable({
       detail: b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
       cents: m.materialsCents,
     },
-    { label: feeLabel(item.fee), detail: "of the price", cents: m.feeCents },
+    { label: feeLabel(item.fee), detail: item.fee.shares ? item.fee.shares.join(" · ") : "of the price", cents: m.feeCents },
     { label: "Total cost", cents: m.costCents, strong: true },
   ];
   return (

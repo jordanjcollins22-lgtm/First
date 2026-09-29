@@ -15,11 +15,13 @@ export const GROSS_PROFIT_TARGET = 0.5;
 
 /** Who is paid a share of the job's price for bringing it in or looking after it. */
 export interface JobFee {
-  kind: "account-manager" | "affiliate";
+  kind: "account-manager" | "affiliate" | "pool";
   /** Their first name, or who they are when there is nobody named. */
   name: string;
-  /** Their share of the price, in percent. */
+  /** Their share of the price, in percent: the whole pool, for the pool. */
   pct: number;
+  /** The pool, a share at a time: "Jace 7% account manager", "4% affiliate, kept". */
+  shares?: string[];
 }
 
 export interface Margin {

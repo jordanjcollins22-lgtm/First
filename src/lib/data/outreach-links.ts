@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { loadMoney } from "@/lib/data/commission";
+import { SHARE_PCT, usesSplit } from "@/lib/commission-split";
 import { affiliatePipeline, type AffiliateBookingLine } from "@/lib/affiliate-pipeline";
 import {
   tallyByGroup,
@@ -140,6 +141,12 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name, email, commission_pct").eq("organization_id", organizationId),
   ]);
+  const [{ data: org }, { data: ownerRows }] = await Promise.all([
+    supabase.from("organizations").select("commission_split_from").eq("id", organizationId).maybeSingle(),
+    supabase.from("profile_roles").select("profile_id, role_name").in("role_name", ["admin", "owner"]),
+  ]);
+  const splitFrom = (org as { commission_split_from?: string | null } | null)?.commission_split_from ?? "2026-09-29";
+  const owners = new Set(((ownerRows ?? []) as { profile_id: string }[]).map((r) => r.profile_id));
 
   // What each booking became, and what it earned whoever posted the link:
   // a share of what the client has paid, minus what has been handed over.
@@ -200,7 +207,13 @@ export async function getOutreachBoard(options: { onlyProfileId?: string } = {})
       contractValue: money.contract.get(job.id) ?? null,
       commission: outreachCommission({
         converted: isConverted(job.status, collected),
-        pct: pctOf.get(posterId) ?? null,
+        // Sold since the pool started: the affiliate's 4% of it, none to the
+        // owner. Sold before: the rate on their profile, as it was sold.
+        pct: usesSplit(money.soldAt.get(job.id) ?? (isConverted(job.status, 0) ? job.created_at : null), splitFrom)
+          ? owners.has(posterId)
+            ? 0
+            : SHARE_PCT.affiliate
+          : (pctOf.get(posterId) ?? null),
         collected,
         paidOut: paid.amount,
       }),

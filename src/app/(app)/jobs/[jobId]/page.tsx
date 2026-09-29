@@ -1189,9 +1189,9 @@ async function OverviewTab(jobId: string, roles: string[], viewer: Profile | nul
     jobFacts(jobId),
     listJobIssues(jobId).catch(() => []),
     listGateOverrides(jobId).catch(() => ({}) as Awaited<ReturnType<typeof listGateOverrides>>),
-    // Nothing for anybody who neither manages this client nor runs the money:
-    // what a colleague earns is not everybody's business.
-    viewer ? getJobCommission(jobId, viewer).catch(() => null) : null,
+    // Each person sees their own share; whoever runs the money sees them
+    // all. What a colleague earns is not everybody's business.
+    viewer ? getJobCommission(jobId, viewer).catch(() => []) : [],
   ]);
   // Which gate matters depends on where the job is: quoting work is judged on
   // whether it can be quoted, sold work on whether it can start, and work in
@@ -1201,7 +1201,9 @@ async function OverviewTab(jobId: string, roles: string[], viewer: Profile | nul
   return (
     <div className="space-y-3">
       <ReadinessPanel jobId={jobId} result={result} canOverride={canOverrideGate(roles)} />
-      {commission && <JobCommissionPanel commission={commission} />}
+      {commission.map((share) => (
+        <JobCommissionPanel key={share.managerName + share.line.pct} commission={share} />
+      ))}
       {/* The way to clear a failing confirmation, on the screen that reports
           it failing. */}
       {gate === "ready" && (
