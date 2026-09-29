@@ -66,6 +66,7 @@ export function WorkOrderView({
   approvedAdditions,
   back,
   bare = false,
+  crew = false,
   arrived = false,
   practice = false,
   checklist,
@@ -109,6 +110,12 @@ export function WorkOrderView({
   back?: { href: string; label: string };
   /** The work and nothing else: for somebody trying out with us. No contact line, no punch list, no completion or photos. */
   bare?: boolean;
+  /**
+   * Seen by the crew. Their photos are taken area by area on the board above,
+   * so the zone-by-zone completion and photos panel below is left off: the
+   * same photos twice, and a sign-off that isn't theirs.
+   */
+  crew?: boolean;
   /** They have tapped Arrived on My Day: the sheet walks them through one area at a time. */
   arrived?: boolean;
   /** A sample sheet with no job behind it: the links that need a job say so instead. */
@@ -369,7 +376,7 @@ export function WorkOrderView({
         />
       )}
 
-      {!bare && (
+      {!bare && !crew && (
       <CompletionPanel
         jobId={jobId}
         status={jobStatus}

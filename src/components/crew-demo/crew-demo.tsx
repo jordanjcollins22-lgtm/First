@@ -260,6 +260,7 @@ export function CrewDemo({
           <WorkOrderView
             jobId={jobId}
             {...sheet}
+            crew
             back={{ href: `/jobs/${jobId}`, label: "Back to the job" }}
             demo={{
               board,

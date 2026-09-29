@@ -545,7 +545,7 @@ export default async function JobPage({
       const state = day ? readDay(day.events, day.stops) : null;
       arrived = state?.phase === "on_site" && state.currentStop?.jobId === jobId;
     }
-    return <WorkOrderView jobId={jobId} {...sheet} bare={Boolean(me?.trial_crew)} arrived={arrived} />;
+    return <WorkOrderView jobId={jobId} {...sheet} bare={Boolean(me?.trial_crew)} crew arrived={arrived} />;
   }
 
   const host = headersList.get("host") ?? "";
