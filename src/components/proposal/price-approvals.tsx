@@ -133,13 +133,28 @@ export function PriceCard({
         </>
       )}
 
+      {/* The wording each area is quoted with is approved or declined on
+          the site map before anybody prices it: until then there is
+          nothing to accept, and it says so here instead of failing. */}
+      {stage === "price" && item.wordingToApprove.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-sm dark:bg-amber-950/30">
+          <p className="font-semibold text-amber-900 dark:text-amber-200">
+            Approve or decline the wording for {listed(item.wordingToApprove)} on the site map first.
+          </p>
+          <p className="text-xs text-muted-foreground">The price can be accepted once every area&apos;s wording is approved or declined.</p>
+          <Link href={item.reviewHref} className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground">
+            Open the site map to approve it
+          </Link>
+        </div>
+      )}
+
       {stage === "price" && (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending} onClick={accept}>
+          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || item.wordingToApprove.length > 0} onClick={accept}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
             Accept price
           </Button>
-          <Button type="button" variant="outline" className="h-14 text-base font-semibold" disabled={pending} onClick={() => setStage("decline")}>
+          <Button type="button" variant="outline" className="h-14 text-base font-semibold" disabled={pending || item.wordingToApprove.length > 0} onClick={() => setStage("decline")}>
             <X className="mr-2 h-5 w-5" /> Decline price
           </Button>
         </div>
@@ -264,6 +279,11 @@ function Products({ products }: { products: PriceApproval["products"] }) {
       </ul>
     </div>
   );
+}
+
+/** "Zone 1", "Zone 1 and Zone 2", "Zone 1, Zone 2 and Zone 3". */
+function listed(names: string[]): string {
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 /** "Commission pool (15%)", "Jace's account manager fee (15%)", "Max's affiliate fee (5%)". */

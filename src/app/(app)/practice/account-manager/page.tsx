@@ -87,6 +87,8 @@ export default async function AccountManagerJourneyPage() {
     evaluator: "Jace",
     submittedAt: new Date().toISOString(),
     stage: "price",
+    wordingToApprove: [],
+    reviewHref: "/practice/proposal",
     totalCents: PRACTICE_ZONES.reduce((sum, z) => sum + practicePriceCents(z), 0),
     // The sample job's proposal as the client sees it, for Review proposal.
     proposalHref: "/practice/proposal/client",

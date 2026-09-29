@@ -40,7 +40,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import type { Database } from "@/lib/supabase/database.types";
-import { listScopeRecommendations } from "@/lib/data/scope-reviews";
+import { listScopeRecommendations, zonesForReview } from "@/lib/data/scope-reviews";
 import { reviewBlocker, reviewsFor } from "@/lib/scope-review";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { DEFAULT_VALID_DAYS, expiryOf, isValidDays } from "@/lib/proposal-validity";
@@ -376,19 +376,7 @@ export async function approveProposal(jobId: string): Promise<ApproveOutcome> {
   // the template wording for that zone, which is not what anybody meant.
   const [design, catalog] = await Promise.all([getCanvasDesignForJob(jobId), getCanvasCatalog()]);
   if (design) {
-    const pricingBy = new Map(catalog.servicePricing.map((p) => [p.service_type_id, p]));
-    const zones = (design.zones as unknown as WorkZone[])
-      .filter((z) => z.service)
-      .map((z, zoneIndex) => {
-        const def = z.service ? serviceTypeById(z.service.typeId) : undefined;
-        const pricing = z.service ? pricingBy.get(z.service.typeId) : undefined;
-        return {
-          zoneIndex,
-          zoneName: z.name,
-          note: (z.service?.notes ?? "").trim(),
-          serviceLabel: serviceLabelFor(def, pricing ? { name: pricing.name, scopeTemplate: pricing.scope_template } : undefined),
-        };
-      });
+    const zones = zonesForReview(design.zones as unknown as WorkZone[], catalog.servicePricing);
     const blocker = reviewBlocker(reviewsFor(zones, await listScopeRecommendations(jobId).catch(() => [])));
     if (blocker) throw new Error(blocker);
   }

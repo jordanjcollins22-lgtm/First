@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ScopeRecommendation } from "@/lib/scope-review";
+import { reviewsFor, type ScopeRecommendation, type ZoneWithNote } from "@/lib/scope-review";
+import { serviceTypeById } from "@/components/canvas/service-catalog";
+import { serviceLabelFor } from "@/lib/zone-scope";
+import type { WorkZone } from "@/components/canvas/types";
 
 export function recommendationFromRow(r: {
   id: string;
@@ -41,4 +44,52 @@ export async function listScopeRecommendations(jobId: string): Promise<ScopeReco
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(recommendationFromRow);
+}
+
+/**
+ * The zones of a site map as the review sees them: each zone with a service,
+ * its note, and the service's name. The price approval and the approval
+ * itself both read it from here, so they can never disagree about which
+ * areas still need their wording approved.
+ */
+export function zonesForReview(
+  zones: WorkZone[],
+  pricing: { service_type_id: string; name: string | null; scope_template?: string | null }[]
+): ZoneWithNote[] {
+  const pricingBy = new Map(pricing.map((p) => [p.service_type_id, p]));
+  return zones
+    .filter((z) => z.service)
+    .map((z, zoneIndex) => {
+      const def = z.service ? serviceTypeById(z.service.typeId) : undefined;
+      const row = z.service ? pricingBy.get(z.service.typeId) : undefined;
+      return {
+        zoneIndex,
+        zoneName: z.name,
+        note: (z.service?.notes ?? "").trim(),
+        serviceLabel: serviceLabelFor(def, row ? { name: row.name ?? "", scopeTemplate: row.scope_template ?? null } : undefined),
+      };
+    });
+}
+
+/**
+ * For each job, the areas whose recommended wording nobody has approved or
+ * declined yet: the price cannot be accepted until there are none.
+ */
+export async function wordingToApprove(
+  designs: { jobId: string; zones: WorkZone[] }[],
+  pricing: { service_type_id: string; name: string | null; scope_template?: string | null }[]
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (designs.length === 0) return out;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("scope_recommendations")
+    .select("id, job_id, zone_index, zone_name, round, evaluator_note, service_label, recommended_text, status, decline_reason, decided_at, created_at")
+    .in("job_id", designs.map((d) => d.jobId));
+  const recs = (data ?? []).map(recommendationFromRow);
+  for (const d of designs) {
+    const open = reviewsFor(zonesForReview(d.zones, pricing), recs.filter((r) => r.jobId === d.jobId)).filter((r) => !r.settled);
+    if (open.length > 0) out.set(d.jobId, open.map((r) => r.zoneName));
+  }
+  return out;
 }

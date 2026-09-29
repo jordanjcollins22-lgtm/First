@@ -6,6 +6,7 @@ import { isOwnerLevel } from "@/lib/roles";
 import { proposalPath } from "@/lib/proposal-flow";
 import { priceBreakdown, type JobFee, type PriceBreakdown } from "@/lib/price-approval";
 import { feesForJobs } from "@/lib/data/job-fee";
+import { wordingToApprove } from "@/lib/data/scope-reviews";
 import { env } from "@/lib/env";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { jobCosts, priceSiteMap, type JobCosts } from "@/lib/job-price";
@@ -37,6 +38,13 @@ export interface PriceApproval {
   submittedAt: string | null;
   /** Price it: accept or decline. Send: priced, not sent to the client yet. */
   stage: "price" | "send";
+  /**
+   * Areas whose recommended wording nobody has approved or declined yet. The
+   * price cannot be accepted until there are none; it is done on the site map.
+   */
+  wordingToApprove: string[];
+  /** Where on the project that wording is approved or declined. */
+  reviewHref: string;
   /** What the client would be quoted, after any discount, in cents. */
   totalCents: number;
   proposalHref: string | null;
@@ -145,6 +153,11 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
     })
   );
   const zonesByJob = new Map((designs.data ?? []).map((d) => [d.job_id as string, (d.zones ?? []) as unknown as WorkZone[]]));
+  // Only a price still to accept is held up by wording.
+  const toApprove = await wordingToApprove(
+    rows.filter((r) => r.status === "needs_approval").map((r) => ({ jobId: r.job_id, zones: zonesByJob.get(r.job_id) ?? [] })),
+    catalog.servicePricing
+  ).catch(() => new Map<string, string[]>());
   const m = catalog.markup;
   const markup =
     m.overheadPerCrewHourCents != null && m.overheadPerCrewHourCents > 0
@@ -164,6 +177,8 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
       evaluator: r.job.assignee?.full_name || r.job.assignee?.email || null,
       submittedAt: r.job.evaluation_submitted_at ?? r.generated_at,
       stage: r.status === "needs_approval" ? ("price" as const) : ("send" as const),
+      wordingToApprove: toApprove.get(r.job_id) ?? [],
+      reviewHref: `/jobs/${r.job_id}?open=proposal`,
       totalCents: Math.round((Number(r.total_cost ?? 0) - Number(r.discount_amount ?? 0)) * 100),
       // The client's own page, in preview: it shows before it is sent, with a
       // banner saying so, and the office opening it is not counted as the client.
