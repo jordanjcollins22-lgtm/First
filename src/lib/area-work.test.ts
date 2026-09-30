@@ -130,3 +130,28 @@ describe("the area's own steps", () => {
     expect(allPrepped(after)).toBe(true);
   });
 });
+
+describe("lawn care that brings ground back to grass", () => {
+  const rick = { frequency: "One-time", serviceType: "Aeration", lawnCondition: "Poor", specialInstructions: "Client is looking for aeration and overseeding to return backyard back to grass" };
+
+  it("clears and smooths the dirt, aerates with the rental and seeds, with nothing about mowing or clippings", () => {
+    const labels = stepsFor("lawn-care", rick).map((s) => `${s.phase}: ${s.label}`);
+    expect(labels).toEqual([
+      "prep: Walk the whole area and rake out all the rocks, sticks and any other debris, levelling it out and leaving the whole area smooth.",
+      "work: Run the aerator (the rental from Home Depot) over the whole area.",
+      "work: Seed the whole area with the seeder.",
+      "cleanup: Blow the dirt and seed off the walks and driveway, and load the rocks and debris.",
+    ]);
+    expect(labels.join(" ")).not.toMatch(/clipping|mow|lawn/i);
+  });
+
+  it("aerates without seeding when nobody asked for seed, and seeds for an overseed", () => {
+    expect(stepsFor("lawn-care", { serviceType: "Aeration" }).some((s) => /seed/i.test(s.label))).toBe(false);
+    expect(stepsFor("lawn-care", { serviceType: "Overseeding" }).map((s) => s.label)).toContain("Seed the whole area with the seeder.");
+  });
+
+  it("only talks about clippings when there was mowing", () => {
+    expect(stepsFor("lawn-care", { serviceType: "Mowing" }).at(-1)?.label).toMatch(/clippings/);
+    expect(stepsFor("lawn-care", { serviceType: "Fertilization" }).at(-1)?.label).toBe("Blow off the walks and driveway.");
+  });
+});

@@ -235,16 +235,26 @@ function lawnRestoration(v: Values): CrewStep[] {
 function lawnCare(v: Values): CrewStep[] {
   const s = phased();
   const what = pick(v, "serviceType");
+  const special = text(v, "specialInstructions");
+  // Aerating or seeding is bringing ground back to grass, often bare dirt:
+  // nothing to mow, so no clippings. The ground is cleared and smoothed,
+  // aerated with the rented machine, and seeded.
+  if (what === "Aeration" || what === "Overseeding") {
+    s.prep("Walk the whole area and rake out all the rocks, sticks and any other debris, levelling it out and leaving the whole area smooth.");
+    const seeded = what === "Overseeding" || /seed/i.test(special ?? "");
+    if (what === "Aeration") s.work("Run the aerator (the rental from Home Depot) over the whole area.");
+    if (seeded) s.work("Seed the whole area with the seeder.");
+    s.cleanup(`Blow the dirt${seeded ? " and seed" : ""} off the walks and driveway, and load the rocks and debris.`);
+    return s.done();
+  }
   s.prep("Walk the lawn and pick up sticks, toys and rocks.");
   if (what === "Fertilization") s.work("Spread the fertilizer evenly across the lawn.");
   else if (what === "Weed Control") s.work("Spray the weeds in the lawn, following the label.");
-  else if (what === "Aeration") s.work("Core aerate the whole lawn.");
-  else if (what === "Overseeding") s.work("Seed the thin and bare spots.");
   else if (what === "Edging") s.work("Edge along every walk, drive and bed.");
   else s.work("Mow, edge along every walk, drive and bed, and string trim what the mower can't reach.");
-  const special = text(v, "specialInstructions");
-  if (special) s.work(`${special}.`);
-  s.cleanup("Blow the clippings off the walks, driveway and beds.");
+  // Only mowing and edging leave clippings to blow off.
+  const mowed = what !== "Fertilization" && what !== "Weed Control";
+  s.cleanup(mowed ? "Blow the clippings off the walks, driveway and beds." : "Blow off the walks and driveway.");
   return s.done();
 }
 

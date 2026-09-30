@@ -116,7 +116,11 @@ export function buildWorkOrder(
       sizeLabel: sizeLabelFor(zone),
       tasks,
       todo: crewInstructions(typeId, zone.service.values ?? {}),
-      notes: zone.service.notes ?? "",
+      // What the client told us about the lawn is something to know, not a step to tick.
+      notes: [zone.service.notes, typeId === "lawn-care" ? zone.service.values?.specialInstructions : null]
+        .map((note) => note?.trim())
+        .filter(Boolean)
+        .join(" "),
       // Markers are keyed by the photo's own path, so a photo with none
       // simply has none — there is no separate "unmarked" state to handle.
       photos: (zone.service.photos ?? []).map((path) => ({
