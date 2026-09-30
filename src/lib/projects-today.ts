@@ -1,15 +1,15 @@
 /**
  * Where each project out today has got to, for the account manager: one bar,
- * seven steps, from the crew's own taps. At the shop, the tools loaded, out
- * of the shop, at the house, prepping each area, installing each area, and
- * every area finished with the walkthrough asked for.
+ * eight steps, from the crew's own taps. At the shop, the tools loaded, out
+ * of the shop, at the house, prepping each area, installing each area, the
+ * clean up once every after photo is approved, and the walkthrough asked for.
  *
  * Pure, so where a project is shown to be is tested without a database.
  */
 
-export const PROJECT_STEPS = ["At shop", "Tools loaded", "Left shop", "Arrived", "Prep", "Install", "Walkthrough"] as const;
+export const PROJECT_STEPS = ["At shop", "Tools loaded", "Left shop", "Arrived", "Prep", "Install", "Cleanup", "Walkthrough"] as const;
 
-export type ProjectStep = -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type ProjectStep = -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export interface AreaProgress {
   name: string;
@@ -31,6 +31,8 @@ export interface StageInput {
   areas: AreaProgress[];
   /** The walkthrough was asked for. */
   walkthroughAskedAt: string | null;
+  /** Areas whose newest after photo the account manager hasn't approved yet. The clean up waits on them. */
+  aftersToApprove?: number;
 }
 
 export interface Stage {
@@ -58,8 +60,16 @@ export function projectStage(input: StageInput): Stage {
   const base = { areasDone: done, areasTotal: total };
 
   const allDone = total > 0 && done === total;
-  if (input.walkthroughAskedAt || (allDone && input.arrivedAt)) {
-    return { ...base, step: 6, now: input.walkthroughAskedAt ? "Every area done. Asked you to walk it" : "Every area done", since: input.walkthroughAskedAt };
+  if (input.walkthroughAskedAt) {
+    return { ...base, step: 7, now: "Every area done. Asked you to walk it", since: input.walkthroughAskedAt };
+  }
+  if (allDone && input.arrivedAt) {
+    // Every area installed: the after photos are approved, then the clean up.
+    const waiting = input.aftersToApprove ?? 0;
+    if (waiting > 0) {
+      return { ...base, step: 5, now: `Every area done. ${waiting === 1 ? "1 after photo" : `${waiting} after photos`} to approve`, since: null };
+    }
+    return { ...base, step: 6, now: "After photos approved. Cleaning up", since: null };
   }
   if (input.arrivedAt) {
     const allPrepped = total > 0 && input.areas.every((a) => a.prepped || a.done);

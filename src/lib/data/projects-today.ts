@@ -144,6 +144,7 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
         arrivedAt: first("arrived_job", true) ?? workedAt,
         areas,
         walkthroughAskedAt: ((walkRows ?? []) as { job_id: string; requested_at: string | null }[]).find((w) => w.job_id === jobId)?.requested_at ?? null,
+        aftersToApprove: aftersToApprove(photos.filter((p) => p.job_id === jobId)),
       });
 
       return {
@@ -161,4 +162,15 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
   );
   // What needs the account manager first: issues, then photos, then the rest by how far along.
   return cards.sort((a, b) => b.issues.length - a.issues.length || b.photos.length - a.photos.length || b.step - a.step);
+}
+
+/** Areas whose newest after photo hasn't been approved: a retake replaces the one sent back. */
+function aftersToApprove(photos: { kind: string; zone_id: string | null; created_at: string; reviewed_at: string | null }[]): number {
+  const newest = new Map<string, { created_at: string; reviewed_at: string | null }>();
+  for (const p of photos) {
+    if (p.kind !== "after" || !p.zone_id) continue;
+    const was = newest.get(p.zone_id);
+    if (!was || p.created_at > was.created_at) newest.set(p.zone_id, p);
+  }
+  return [...newest.values()].filter((p) => !p.reviewed_at).length;
 }

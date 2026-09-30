@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ZonePhotos } from "@/components/job/marked-photo";
 import { AreaTodo } from "@/components/job/area-todo";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { THUMBNAIL } from "@/lib/storage-image-url";
+import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
 import { leaveArea, startArea, tickAreaStep } from "@/lib/actions/area-work-actions";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { useWaiting, WaitingPhotos } from "@/components/offline/waiting-photos";
@@ -502,6 +502,7 @@ function PhotoTaker({
   const input = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const scope = `job:${jobId}`;
+  const before = zone.photos[0]?.path ?? null;
   // With no signal the photo is kept on the phone; the area moves on once it is sent.
   const waiting = useWaiting(scope).filter((item) => (item.args.zone as { id?: string } | null)?.id === zone.id && item.args.kind === kind);
 
@@ -541,9 +542,20 @@ function PhotoTaker({
   return (
     <div className={cn("rounded-lg border border-dashed border-primary/60 bg-card p-2.5", floating && "sticky bottom-2 z-10 shadow-lg")}>
       <p className="text-sm font-semibold">{kind === "during" ? "Prep done: take the prep photo" : "Clean up done: take the after photo"}</p>
-      <p className="text-xs text-muted-foreground">
-        {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}
-      </p>
+      {before ? (
+        // The before from the evaluation, to stand in the same spot and match
+        // the angle, so the before and after line up side by side.
+        <div className="mt-1 flex flex-col gap-1">
+          <p className="text-xs font-medium">Line it up with the before photo:</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={canvasImageUrl(before, PREVIEW)} alt={`Before: ${zone.name}`} className="max-h-48 w-full rounded-md bg-muted object-contain" loading="lazy" />
+          <p className="text-xs text-muted-foreground">Stand where the before was taken and match the angle, the whole area in the frame.</p>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {kind === "during" ? "One photo of the whole area, prepped. Then on to the next area." : "One photo of the finished area, from the same spot. This finishes it."}
+        </p>
+      )}
       <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload(e.target.files)} />
       <Button type="button" className="mt-2 h-12 w-full text-base font-semibold" onClick={() => (demo ? demo() : input.current?.click())} disabled={disabled || uploading}>
         {uploading ? <Loader2 className="mr-1.5 h-5 w-5 animate-spin" /> : <Camera className="mr-1.5 h-5 w-5" />}

@@ -39,7 +39,7 @@ export function ProjectsToday({ projects }: { projects: ProjectToday[] }) {
 }
 
 function ProjectCard({ project: p }: { project: ProjectToday }) {
-  const walk = p.step === 6;
+  const walk = p.step === 7;
   return (
     <li className={cn("rounded-2xl border bg-card p-3 shadow-sm", p.issues.length > 0 ? "border-red-400" : walk ? "border-emerald-400" : "border-border")}>
       <div className="flex items-start justify-between gap-2">

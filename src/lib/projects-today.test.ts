@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectStage, stepState, type AreaProgress, type StageInput } from "./projects-today";
+import { PROJECT_STEPS, projectStage, stepState, type AreaProgress, type StageInput } from "./projects-today";
 
 const area = (name: string, extra: Partial<AreaProgress> = {}): AreaProgress => ({ name, location: null, prepped: false, done: false, working: false, ...extra });
 const day = (extra: Partial<StageInput> = {}): StageInput => ({
@@ -32,12 +32,21 @@ describe("where a project out today has got to", () => {
   it("is at the walkthrough once every area is done, or it was asked for", () => {
     const done = [area("Zone 1", { prepped: true, done: true }), area("Zone 2", { prepped: true, done: true })];
     expect(projectStage(day({ arrivedAt: "8:30", areas: done })).step).toBe(6);
-    expect(projectStage(day({ arrivedAt: "8:30", areas: done, walkthroughAskedAt: "2:15" }))).toMatchObject({ step: 6, now: "Every area done. Asked you to walk it" });
+    expect(projectStage(day({ arrivedAt: "8:30", areas: done, walkthroughAskedAt: "2:15" }))).toMatchObject({ step: 7, now: "Every area done. Asked you to walk it" });
   });
 
   it("skips the shop for a crew meeting on site", () => {
     expect(projectStage(day({ meetOnSite: true })).step).toBe(3);
     expect(projectStage(day({ meetOnSite: true, arrivedAt: "8:00" })).step).toBe(4);
+  });
+
+  it("cleans up once every after photo is approved, before the walkthrough", () => {
+    const done = [area("Zone 1", { prepped: true, done: true }), area("Zone 2", { prepped: true, done: true })];
+    expect(projectStage(day({ arrivedAt: "8:30", areas: done, aftersToApprove: 2 }))).toMatchObject({ step: 5, now: "Every area done. 2 after photos to approve" });
+    expect(projectStage(day({ arrivedAt: "8:30", areas: done, aftersToApprove: 1 })).now).toBe("Every area done. 1 after photo to approve");
+    expect(projectStage(day({ arrivedAt: "8:30", areas: done, aftersToApprove: 0 }))).toMatchObject({ step: 6, now: "After photos approved. Cleaning up" });
+    expect(PROJECT_STEPS[6]).toBe("Cleanup");
+    expect(PROJECT_STEPS[7]).toBe("Walkthrough");
   });
 
   it("colours the bar", () => {
