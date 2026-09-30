@@ -375,6 +375,8 @@ export function ImageCanvasBoard({
     return [...groups.values()];
   }, [suggestionShapes]);
   const suggestionShapesRef = useRef(suggestionShapes);
+  /** Areas placed before the lot was here, by id: where they were put, to move them once it is. */
+  const standInRef = useRef(new Map<string, { area: string; nth: number; slot: number; points: Point[] }>());
   useEffect(() => {
     suggestionShapesRef.current = suggestionShapes;
   }, [suggestionShapes]);
@@ -814,14 +816,21 @@ export function ImageCanvasBoard({
   useEffect(() => {
     if (!jobId || practice) return;
     let cancelled = false;
-    countyLotForJob(jobId)
-      .then((lot) => {
-        if (!cancelled) setCountyLot(lot);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setCountyChecked(true);
-      });
+    // A lookup that fails on a phone with a weak signal is tried again: an
+    // area added before the lot arrives lands in a stand-in spot, which is
+    // only put right once the lot is here.
+    (async () => {
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt += 1) {
+        try {
+          const lot = await countyLotForJob(jobId);
+          if (!cancelled) setCountyLot(lot);
+          break;
+        } catch {
+          if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+        }
+      }
+      if (!cancelled) setCountyChecked(true);
+    })();
     return () => {
       cancelled = true;
     };
@@ -972,6 +981,29 @@ export function ImageCanvasBoard({
     return () => clearTimeout(timer);
   }, [countyLot, imageGeo, image, propertyLine.length]);
 
+  // An area placed before the lot and the photo were both here sat in a
+  // stand-in spot, which is not on the property. Once they are, each one
+  // still exactly where it was put goes over the part of the yard it is in.
+  useEffect(() => {
+    if (standInRef.current.size === 0 || !countyLot || !imageGeo || !image) return;
+    const regions = groundRegions(countyLot);
+    const onBoard = { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width };
+    const same = (a: Point[], b: Point[]) => a.length === b.length && a.every((p, i) => p.x === b[i].x && p.y === b[i].y);
+    const timer = setTimeout(() => {
+      let changed = false;
+      const next = zones.map((zone) => {
+        const stood = standInRef.current.get(zone.id);
+        if (!stood) return zone;
+        standInRef.current.delete(zone.id);
+        if (!same(zone.points, stood.points)) return zone;
+        changed = true;
+        return { ...zone, points: seedPoints(stood.area, stood.nth, stood.slot, regions, imageGeo, onBoard), lengthFt: null, widthFt: null, areaSqFt: null, perimeterFt: null };
+      });
+      if (changed) setZones(next);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [countyLot, imageGeo, image, zones]);
+
   // The on-site set-up, as zones. Waits for the photo and the county, so a
   // part of the yard is drawn where it is on the ground; with no county lot
   // it is a square near the middle, to be redrawn.
@@ -1004,6 +1036,8 @@ export function ImageCanvasBoard({
           const nth = inArea.get(seed.area) ?? kept.filter((zone) => zone.location === seed.location).length;
           inArea.set(seed.area, nth + 1);
           const points = shown ? shown.points : seedPoints(seed.area, nth, prev.length + i, regions, imageGeo, onBoard);
+          // Placed in a stand-in spot: moved onto the lot when it arrives, unless somebody moves it first.
+          if (!shown && !regions) standInRef.current.set(seed.id, { area: seed.area, nth, slot: prev.length + i, points });
           return {
             id: seed.id,
             name: seed.name,
