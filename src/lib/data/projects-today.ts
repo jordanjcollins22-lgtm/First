@@ -31,6 +31,8 @@ export interface ProjectToday {
   areasTotal: number;
   issues: string[];
   photos: PhotoToReview[];
+  /** Today's visit, for moving or cancelling it when the client rings. */
+  visitId: string;
 }
 
 type Row = {
@@ -157,6 +159,7 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
         client: job.properties?.customers?.name ?? "Client",
         address: job.properties?.address ?? "",
         crew: team.map((c) => (c.profiles?.full_name || c.profiles?.email || "Crew").split(" ")[0]),
+        visitId: visit.id,
         ...stage,
         issues: ((issueRows ?? []) as { job_id: string; title: string }[]).filter((i) => i.job_id === jobId).map((i) => i.title),
         photos: toReview

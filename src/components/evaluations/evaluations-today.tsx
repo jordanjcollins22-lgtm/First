@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EVALUATION_STEPS, evaluationStepState } from "@/lib/evaluations-today";
 import type { EvaluationToday } from "@/lib/data/evaluations-today";
+import { ClientChange } from "@/components/schedule/client-change";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 
@@ -125,6 +126,8 @@ function EvaluationCard({ evaluation: e }: { evaluation: EvaluationToday }) {
           {stage.yourMove === "price" ? "Price it" : "Review and send"}
         </Link>
       )}
+      {/* Only before the visit has happened: after it, there is nothing to move. */}
+      {stage.step < 3 && <ClientChange target={{ kind: "evaluation", jobId: e.jobId }} />}
     </li>
   );
 }

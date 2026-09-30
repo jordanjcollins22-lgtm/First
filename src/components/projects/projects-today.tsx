@@ -7,6 +7,7 @@ import { AlertTriangle, Camera, Check, CheckCircle2, Loader2, MapPin, RotateCcw 
 
 import { cn } from "@/lib/utils";
 import { PROJECT_STEPS, stepState } from "@/lib/projects-today";
+import { ClientChange } from "@/components/schedule/client-change";
 import { approveCrewPhoto, redoCrewPhoto } from "@/lib/actions/photo-review-actions";
 import type { PhotoToReview, ProjectToday } from "@/lib/data/projects-today";
 
@@ -116,6 +117,7 @@ function ProjectCard({ project: p }: { project: ProjectToday }) {
           </div>
         </div>
       )}
+      <ClientChange target={{ kind: "visit", visitId: p.visitId }} />
     </li>
   );
 }
