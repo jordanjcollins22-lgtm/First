@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PROJECT_STEPS, projectStage, stepState, type AreaProgress, type StageInput } from "./projects-today";
+import { PROJECT_STEPS, afterEarlierStop, projectStage, stepState, type AreaProgress, type StageInput } from "./projects-today";
 
 const area = (name: string, extra: Partial<AreaProgress> = {}): AreaProgress => ({ name, location: null, prepped: false, done: false, working: false, ...extra });
 const day = (extra: Partial<StageInput> = {}): StageInput => ({
@@ -47,6 +47,14 @@ describe("where a project out today has got to", () => {
     expect(projectStage(day({ arrivedAt: "8:30", areas: done, aftersToApprove: 0 }))).toMatchObject({ step: 6, now: "After photos approved. Cleaning up" });
     expect(PROJECT_STEPS[6]).toBe("Cleanup");
     expect(PROJECT_STEPS[7]).toBe("Walkthrough");
+  });
+
+  it("says a later stop is waiting on the crew's earlier job, not that they're on the way", () => {
+    const onTheWay = projectStage(day({ atShopAt: "7:00", leftShopAt: "7:45" }));
+    expect(afterEarlierStop(onTheWay, "Jonathan Mazzone")).toMatchObject({ step: 3, now: "At Jonathan Mazzone's first. This is the next stop", since: null });
+    expect(afterEarlierStop(onTheWay, null)).toBe(onTheWay);
+    const there = projectStage(day({ arrivedAt: "8:30", areas: [area("Zone 1")] }));
+    expect(afterEarlierStop(there, "Jonathan Mazzone")).toBe(there);
   });
 
   it("colours the bar", () => {

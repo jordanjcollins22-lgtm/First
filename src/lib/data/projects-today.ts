@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { loadAreaBoard } from "@/lib/data/area-board";
 import { dateKeyIn, zonedToUtc } from "@/lib/time-zone";
-import { projectStage, type ProjectStep } from "@/lib/projects-today";
+import { afterEarlierStop, projectStage, type ProjectStep } from "@/lib/projects-today";
 import type { WorkZone } from "@/components/canvas/types";
 
 /**
@@ -136,7 +136,12 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
         ...photos.filter((p) => p.job_id === jobId && p.created_at >= dayStart && (p.kind === "during" || p.kind === "after")).map((p) => p.created_at),
       ].sort()[0] ?? null;
 
-      const stage = projectStage({
+      // At another of today's jobs and not finished there: this one is a later stop.
+      const atEarlier = theirs.find(
+        (e) => e.kind === "arrived_job" && e.job_id && e.job_id !== jobId && !theirs.some((f) => f.kind === "finished_job" && f.job_id === e.job_id)
+      );
+      const earlierClient = atEarlier?.job_id ? (byJob.get(atEarlier.job_id)?.jobs?.properties?.customers?.name ?? "the first job") : null;
+      const stage = afterEarlierStop(projectStage({
         meetOnSite: Boolean(visit.meet_on_site),
         atShopAt: first("arrived_shop") ?? shop?.clocked_in_at ?? null,
         loadedAt: shop?.loadout_done_at ?? null,
@@ -145,7 +150,7 @@ export async function getProjectsToday(viewer: { id: string; seesAll: boolean })
         areas,
         walkthroughAskedAt: ((walkRows ?? []) as { job_id: string; requested_at: string | null }[]).find((w) => w.job_id === jobId)?.requested_at ?? null,
         aftersToApprove: aftersToApprove(photos.filter((p) => p.job_id === jobId)),
-      });
+      }), earlierClient);
 
       return {
         jobId,

@@ -90,6 +90,15 @@ export function projectStage(input: StageInput): Stage {
   return { ...base, step: -1, now: "Not at the shop yet", since: null };
 }
 
+/**
+ * A later stop on a crew's day: out of the shop, but at an earlier job
+ * first. "On the way" there reads as if they are driving to it now.
+ */
+export function afterEarlierStop(stage: Stage, earlierClient: string | null): Stage {
+  if (stage.step !== 3 || !earlierClient) return stage;
+  return { ...stage, now: `At ${earlierClient}'s first. This is the next stop`, since: null };
+}
+
 /** How far along a step is on the bar: done, the one they are on, or still to come. */
 export function stepState(step: number, current: ProjectStep): "done" | "now" | "todo" {
   if (step < current) return "done";
