@@ -604,6 +604,126 @@ async function scanPosts(keywords, r, asked) {
     return isFacebookLink(grab.text) ? grab.text.trim() : null;
   };
 
+  // The post's own address when the page doesn't draw it as a link. Two
+  // places it still is, tried before the Share menu and never pressing
+  // anything: another link inside the post that carries the post's number
+  // (a photo, the comments, a reaction), and the data Facebook keeps behind
+  // the post on the page itself, which also has when it went up.
+  const via = { page: 0, anchor: 0, data: 0, share: 0, time: 0 };
+  const canonical = (href, groupId) => {
+    let u;
+    try {
+      u = new URL(href, location.href);
+    } catch {
+      return null;
+    }
+    if (!/(^|\.)facebook\.com$/i.test(u.hostname)) return null;
+    const path = u.pathname.match(/^\/groups\/([^/]+)\/(?:posts|permalink)\/(\d+|pfbid\w+)/i);
+    if (path) return `https://www.facebook.com/groups/${path[1]}/posts/${path[2]}/`;
+    const q = u.searchParams;
+    if (q.get("story_fbid") && q.get("id")) return `https://www.facebook.com/permalink.php?story_fbid=${q.get("story_fbid")}&id=${q.get("id")}`;
+    const set = q.get("set") || "";
+    if (/^gm\.\d+$/.test(set) && groupId) return `https://www.facebook.com/groups/${groupId}/posts/${set.slice(3)}/`;
+    const ent = q.get("ft_ent_identifier") || "";
+    if (/^\d+$/.test(ent) && groupId) return `https://www.facebook.com/groups/${groupId}/posts/${ent}/`;
+    const own = u.pathname.match(/^\/([^/]+)\/posts\/(pfbid\w+|\d+)/i);
+    if (own && own[1] !== "groups") return `https://www.facebook.com/${own[1]}/posts/${own[2]}/`;
+    return null;
+  };
+  const groupIdOf = (links) => {
+    for (const a of links) {
+      const m = (a.href || "").match(/facebook\.com\/groups\/([^/?#]+)/i);
+      if (m && !/^(feed|discover|joins|search)$/i.test(m[1])) return m[1];
+    }
+    const here = location.pathname.match(/^\/groups\/([^/?#]+)/i);
+    return here ? here[1] : null;
+  };
+  const linkFromAnchors = (links) => {
+    const groupId = groupIdOf(links);
+    for (const a of links) {
+      const url = canonical(a.href || "", groupId);
+      if (url) return url;
+    }
+    return null;
+  };
+  // Facebook's page keeps each post's data on its boxes. Read from the
+  // post's own box upward until a box holds more than this one post, and
+  // from what is drawn inside it, with a limit on how much is looked at.
+  const fiberOf = (el) => {
+    for (const key in el) if (key.startsWith("__reactFiber$")) return el[key];
+    return null;
+  };
+  const propsOf = (el) => {
+    for (const key in el) if (key.startsWith("__reactProps$")) return el[key];
+    return null;
+  };
+  const SKIP = new Set(["children", "_owner", "_store", "return", "child", "sibling", "stateNode", "ref", "alternate", "memoizedState", "updateQueue"]);
+  const fromData = (box) => {
+    if (r.readPostData === false) return { url: null, createdAt: null };
+    const seen = new Set();
+    let budget = r.dataBudget ?? 3000;
+    let url = null;
+    let createdAt = null;
+    const groupId = groupIdOf(Array.from(box.querySelectorAll("a[href]")));
+    const look = (value, depth) => {
+      if (budget <= 0 || (url && createdAt) || depth > (r.dataDepth ?? 7)) return;
+      if (typeof value === "string") {
+        if (!url && value.length < 400 && /facebook\.com/i.test(value)) url = canonical(value, groupId);
+        return;
+      }
+      if (!value || typeof value !== "object" || seen.has(value)) return;
+      if (typeof Node !== "undefined" && value instanceof Node) return;
+      seen.add(value);
+      budget -= 1;
+      if (Array.isArray(value)) {
+        for (const item of value.slice(0, 20)) look(item, depth + 1);
+        return;
+      }
+      for (const key of Object.keys(value)) {
+        if (SKIP.has(key) || key.startsWith("__")) continue;
+        const v = value[key];
+        if (!createdAt && (key === "creation_time" || key === "created_time") && typeof v === "number" && v > 1e9 && v < 4e9) {
+          createdAt = new Date(v * 1000).toISOString();
+          continue;
+        }
+        if (!url && (key === "permalink_url" || key === "url" || key === "wwwURL" || key === "shareable_url") && typeof v === "string") {
+          const found = canonical(v, groupId);
+          if (found) {
+            url = found;
+            continue;
+          }
+        }
+        look(v, depth + 1);
+      }
+    };
+    try {
+      // Upward: the post's own box and the ones wrapping it, until one wraps another post.
+      let fiber = fiberOf(box);
+      for (let i = 0; fiber && i < (r.dataUp ?? 25) && !(url && createdAt); i += 1) {
+        const node = fiber.stateNode;
+        if (node && node.nodeType === 1 && node !== box && !node.contains(box)) break;
+        if (node && node.nodeType === 1 && node !== box) {
+          const others = Array.from(node.querySelectorAll(r.article)).some((el) => el !== box && !box.contains(el));
+          if (others) break;
+        }
+        look(fiber.memoizedProps, 0);
+        fiber = fiber.return;
+      }
+      // Downward: what is drawn inside the post.
+      if (!(url && createdAt)) {
+        const inside = box.querySelectorAll("*");
+        for (let i = 0; i < inside.length && i < (r.dataDown ?? 250) && !(url && createdAt); i += 1) {
+          // A comment is somebody else's box: its links are to the comment.
+          if (inside[i].matches && inside[i].matches(r.article)) continue;
+          look(propsOf(inside[i]), 0);
+        }
+      }
+    } catch {
+      // The page's data could not be read; the Share menu is still tried.
+    }
+    return { url, createdAt };
+  };
+
   // When a post went up. Facebook scrambles the short "2h" with hidden
   // letters, so only the letters actually drawn inside the link are kept.
   const visibleLabel = (a) => {
@@ -663,21 +783,37 @@ async function scanPosts(keywords, r, asked) {
       const permalink = links.find((a) => postLink.test(a.href));
       const attempt = (tries.get(box) ?? 0) + 1;
       tries.set(box, attempt);
+      const matched = mentionsWork(text);
+      // Its number on another link in the post, then the data behind it.
+      let url = permalink ? permalink.href : null;
+      let how = url ? "page" : null;
+      if (!url) {
+        url = linkFromAnchors(links);
+        if (url) how = "anchor";
+      }
+      const data = matched || !url ? fromData(box) : { url: null, createdAt: null };
+      if (!url && data.url) {
+        url = data.url;
+        how = "data";
+      }
       // No link yet: one more hover on the next pass before giving up on it.
-      if (!permalink && attempt < 2) continue;
+      if (!url && attempt < 2) continue;
       done.add(box);
       stats.posts += 1;
       stats.withText += 1;
-      const matched = mentionsWork(text);
       // Still no link: ask the Share menu for one, for posts about the work.
-      let url = permalink ? permalink.href : null;
       const opening = text.slice(0, 80);
       if (!url && matched && r.shareForLink !== false && stats.shared < (r.shareMax ?? 15) && !askedBefore.has(opening)) {
         url = await shareLink(box);
         askedNow.push(opening);
         askedBefore.add(opening);
-        if (url) stats.shared += 1;
+        if (url) {
+          stats.shared += 1;
+          how = "share";
+        }
       }
+      if (how) via[how] += 1;
+      if (data.createdAt) via.time += 1;
       if (url) stats.withLink += 1;
       if (matched) stats.mentioned += 1;
       if (matched && !url) stats.mentionedNoLink += 1;
@@ -713,7 +849,7 @@ async function scanPosts(keywords, r, asked) {
           if (candidate && (!group || candidate !== group.name)) author = candidate;
         }
       }
-      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, group, matched });
+      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, postedAt: data.createdAt, group, matched });
     }
   };
 
@@ -730,7 +866,7 @@ async function scanPosts(keywords, r, asked) {
     posts: Array.from(byUrl.values()).slice(0, r.maxPosts ?? 25),
     askedNow,
     // What the page looked like, so a look that found nothing can say why.
-    stats: { ...stats, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
+    stats: { ...stats, via, articles: stats.posts, textChars: (document.body.innerText || "").length, title: pageGroup.slice(0, 80) },
   };
 }
 

@@ -153,6 +153,12 @@ const LABELS: Record<NotificationKind, string> = {
   walkthrough_requests: "Walkthrough requests",
 };
 
+/** Alerts that are not a preference anybody sets, for the email subject when they go by email. */
+const OTHER_LABELS: Record<string, string> = {
+  payments_down: "Card payments are down",
+  finder_stopped: "The post finder stopped",
+};
+
 export function label(kind: NotificationKind): string {
-  return LABELS[kind] ?? kind;
+  return LABELS[kind] ?? OTHER_LABELS[kind as string] ?? kind;
 }

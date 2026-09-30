@@ -6,6 +6,7 @@ import { isSupabaseAdminConfigured } from "@/lib/env";
 import { authorizeCron } from "@/lib/cron-auth";
 import { getAgentSettings } from "@/lib/data/outreach-agent";
 import { runRedditFinder, type RedditLook } from "@/lib/data/reddit-finder";
+import { watchFinder } from "@/lib/data/finder-watch";
 import { sweepPosts } from "@/lib/data/post-sweep";
 import { log } from "@/lib/log";
 
@@ -60,6 +61,9 @@ export async function GET(request: NextRequest) {
 
   const looks: { organizationId: string; look?: RedditLook; swept?: { sorted: number; drafted: number }; skipped?: string }[] = [];
   for (const org of orgs ?? []) {
+    // Whether the laptop's finder has stopped, told to the owner. It only
+    // speaks while the finder is switched on and inside its hours.
+    await watchFinder(admin, org.organization_id);
     // Paused is paused, for every platform.
     if (org.paused_until && new Date(org.paused_until).getTime() > Date.now()) {
       looks.push({ organizationId: org.organization_id, skipped: "paused" });

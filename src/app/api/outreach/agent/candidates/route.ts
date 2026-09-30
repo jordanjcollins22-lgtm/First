@@ -49,7 +49,17 @@ interface IncomingPost {
    * page; this is not.
    */
   postedLabel?: string | null;
+  /** When it went up, read from the data Facebook keeps behind the post. Exact when there. */
+  postedAt?: string | null;
   group?: { url?: string | null; name?: string | null } | null;
+}
+
+/** A posting time from the page's data, if it is a real time and not in the future. */
+function postedAtFromData(value: unknown, now: Date): Date | null {
+  if (typeof value !== "string") return null;
+  const t = new Date(value).getTime();
+  if (!Number.isFinite(t) || t > now.getTime() + 60 * 60_000 || t < now.getTime() - 400 * 86_400_000) return null;
+  return new Date(t);
 }
 
 const SOURCES: ScanSource[] = ["feed", "search", "group"];
@@ -69,6 +79,11 @@ function lookFrom(raw: { name?: unknown; source?: unknown; stats?: unknown; vers
     mentioned: num(stats.mentioned),
     mentionedNoLink: num(stats.mentionedNoLink),
     withLink: num(stats.withLink),
+    // Where each link came from, so a look that finds none says which way failed.
+    via: (() => {
+      const v = (stats.via && typeof stats.via === "object" ? stats.via : {}) as Record<string, unknown>;
+      return { page: num(v.page), anchor: num(v.anchor), data: num(v.data), share: num(v.share), time: num(v.time) };
+    })(),
     textChars: num(stats.textChars),
     sent,
     samples: samples.map((s) => {
@@ -152,9 +167,9 @@ export async function POST(request: NextRequest) {
     // name somewhere near here; the feed and listed groups are local already.
     const verdict = matchReason({ text, keywords: settings.keywords, areaWords: settings.areaWords, needArea: source === "search" });
     const matched = verdict.matched || matchesKeywords(text, settings.keywords);
-    // The hovered full date first, then the short label, then nothing:
+    // The time from the post's data first, then the hovered full date, then the short label, then nothing:
     // a post with no time says so on the card rather than guess.
-    const postedAt = postedAtFromLabel(post.postedLabel, now) ?? postedAtFromLabel(post.ageLabel, now);
+    const postedAt = postedAtFromData(post.postedAt, now) ?? postedAtFromLabel(post.postedLabel, now) ?? postedAtFromLabel(post.ageLabel, now);
     const ageDays = postedAt ? daysOld(postedAt.toISOString(), null, now.toISOString(), now) : ageDaysFromLabel(post.ageLabel, now);
     const id = await recordSeen(profile.organization_id, profile.id, {
       postKey: key,
