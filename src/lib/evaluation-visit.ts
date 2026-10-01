@@ -12,7 +12,7 @@
  * Pure, so the rules are tested without a database.
  */
 
-import { PHOTO_AREAS, photoAreasFor, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { isGrounds, PHOTO_AREAS, photoAreasFor, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { SALTING_TYPE_ID } from "@/lib/salting";
 
 export interface PlanItem {
@@ -152,7 +152,7 @@ const WHOLE_HOUSE = new Set(["washing", "snow", "holiday", "drainage", "other", 
  * whole property rather than one per part.
  */
 export function seedPlan(answers: IntakeAnswers): PlanItem[] {
-  const areas = photoAreasFor(answers.areas);
+  const areas = photoAreasFor(answers.areas, isGrounds(answers));
   const items: PlanItem[] = [];
   for (const service of answers.services) {
     const where = WHOLE_HOUSE.has(service) ? ["whole"] : areas;

@@ -10,6 +10,7 @@ import { getCurrentOrganization } from "@/lib/data/organizations";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { getIntakeForJob, intakePath } from "@/lib/data/evaluation-intake";
+import { isGrounds } from "@/lib/evaluation-intake";
 import { mergePlan, readPlan, seedPlan, visitStage } from "@/lib/evaluation-visit";
 import type { EvaluationStatus } from "@/types/domain";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -130,6 +131,7 @@ export default async function EvaluationVisitPage({
           lng={job.property?.lng ?? null}
           evaluationStatus={job.evaluation_status}
           evaluatorName={viewer?.full_name || viewer?.email || null}
+          grounds={intake ? isGrounds(intake.answers) : false}
         />
       )}
     </div>

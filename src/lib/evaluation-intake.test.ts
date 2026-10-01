@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  areaOptionsFor,
+  isGrounds,
+  photoAreasFor,
   answeredCount,
   answersForConcerns,
   asksForPeople,
@@ -279,5 +282,39 @@ describe("colours only for new plants", () => {
     expect(asksLooks(cleanAnswers({ services: ["lawn", "washing"] }))).toBe(false);
     // Plants picked, then Beds taken off: no plants going in.
     expect(asksLooks(cleanAnswers({ services: ["lawn"], details: { beds_add: ["plants"] } }))).toBe(false);
+  });
+});
+
+describe("an HOA's or a business's grounds", () => {
+  it("knows grounds from a home", () => {
+    expect(isGrounds({ property: "hoa" })).toBe(true);
+    expect(isGrounds({ property: "commercial" })).toBe(true);
+    expect(isGrounds({ property: "home" })).toBe(false);
+    expect(isGrounds({ property: "" })).toBe(false);
+  });
+
+  it("offers common areas for grounds and yard parts for a home", () => {
+    const grounds = areaOptionsFor(true).map((o) => o.value);
+    const home = areaOptionsFor(false).map((o) => o.value);
+    expect(grounds).toEqual(["entrance", "medians", "common", "ponds", "amenities", "streetside", "whole"]);
+    expect(home).toEqual(["front", "back", "sides", "foundation", "whole"]);
+  });
+
+  it("keeps the common areas and the property kind it was given", () => {
+    const answers = cleanAnswers({ property: "hoa", areas: ["entrance", "ponds"] });
+    expect(answers.property).toBe("hoa");
+    expect(answers.areas).toEqual(["entrance", "ponds"]);
+  });
+
+  it("asks for photos of each common area, and all of the grounds as one", () => {
+    expect(photoAreasFor(["medians", "entrance"], true)).toEqual(["entrance", "medians"]);
+    expect(photoAreasFor(["whole"], true)).toEqual(["whole"]);
+    expect(photoAreasFor(["whole"], false)).toEqual(["front", "back", "sides"]);
+  });
+
+  it("says it is an HOA first, for the evaluator", () => {
+    const answers = cleanAnswers({ property: "hoa", services: ["cleanup"], areas: ["entrance"] });
+    expect(summarizeIntake(answers)[0]).toEqual({ label: "For", value: "An HOA or community" });
+    expect(intakeHeadline(answers, "2026-10-01T12:00:00Z").startsWith("An HOA or community · ")).toBe(true);
   });
 });

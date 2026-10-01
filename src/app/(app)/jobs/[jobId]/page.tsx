@@ -83,7 +83,7 @@ import { IntakeSummary } from "@/components/intake/intake-summary";
 import { ProposalSquare } from "@/components/proposal/proposal-square";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { getIntakeForJob } from "@/lib/data/evaluation-intake";
-import { intakeHeadline } from "@/lib/evaluation-intake";
+import { intakeHeadline, isGrounds } from "@/lib/evaluation-intake";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
 import { InvoiceSection } from "@/components/job/invoice-section";
@@ -806,6 +806,7 @@ export default async function JobPage({
                   initialLng={job.property?.lng}
                   initialEvaluationStatus={job.evaluation_status}
                   evaluatorName={viewer?.full_name || viewer?.email || null}
+                  noCountyLot={intake ? isGrounds(intake.answers) : false}
                 />
 
                 {/* Where the house actually is, said by the one person who can

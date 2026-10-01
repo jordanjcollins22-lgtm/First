@@ -24,6 +24,8 @@ import {
   type IntakePerson,
   type IntakeQuestion,
   hasHoa,
+  isGrounds,
+  areaOptionsFor,
   PERSON_SEES,
   servicesBySeason,
   SEASON_LABEL,
@@ -66,12 +68,15 @@ export function stepsFor(answers: IntakeAnswers): Step[] {
   // The questions about the work get a page each. The one about the
   // property sits on the photos page, where they are already looking at it.
   const details = detailQuestionsFor(answers.services, answers.details).filter((q) => q.services !== null);
+  const grounds = isGrounds(answers);
   return [
+    // Their home, or an HOA's or a business's grounds: it decides which parts are asked about.
+    main("property"),
     main("services"),
     main("areas"),
     ...details.map((question): Step => ({ key: `d:${question.id}`, kind: "detail", question })),
     // A page of photos for each part of the yard they picked, one at a time.
-    ...photoAreasFor(answers.areas).map(
+    ...photoAreasFor(answers.areas, grounds).map(
       (area, i, all): Step => ({ key: `photos:${area}`, kind: "photos", area, first: i === 0, last: i === all.length - 1 })
     ),
     // Colours only matter when there are plants going in.
@@ -110,6 +115,11 @@ function write(answers: IntakeAnswers, step: Step, value: string | string[]): In
       : step.kind === "detail"
         ? { ...answers, details: { ...answers.details, [step.question.id]: value } }
         : answers;
+  // Home and grounds have different parts: switching keeps only the ones that still apply.
+  if (step.kind === "main" && step.question.key === "property" && isGrounds(next) !== isGrounds(answers)) {
+    const allowed = new Set(areaOptionsFor(isGrounds(next)).map((o) => o.value));
+    next.areas = next.areas.filter((a) => allowed.has(a));
+  }
   // No plants going in any more: colours picked for them no longer apply.
   return asksLooks(next) || (!next.looks.length && !next.looks_notes) ? next : { ...next, looks: [], looks_notes: "" };
 }
@@ -310,16 +320,17 @@ export function IntakeForm({
       <div key={step.key} className="flex flex-1 flex-col gap-3 pt-5 animate-in fade-in slide-in-from-right-4 duration-200">
         {index === 0 && greeting && <p className="text-sm text-muted-foreground">{greeting}</p>}
 
-        {step.kind === "main" && step.question.key === "areas" && lot && (
+        {/* Their own lot from the county. Grounds are not one lot, so not for them. */}
+        {step.kind === "main" && step.question.key === "areas" && lot && !isGrounds(answers) && (
           <LotPicker lot={lot} picked={answers.areas} disabled={pending} onToggle={(v) => choose(v, false)} />
         )}
 
         {step.kind === "main" && (
           <Question
-            title={step.question.title}
+            title={step.question.key === "areas" && isGrounds(answers) ? "Which areas?" : step.question.title}
             help={step.question.help}
             kind={step.question.kind}
-            options={step.question.options}
+            options={step.question.key === "areas" ? areaOptionsFor(isGrounds(answers)) : step.question.options}
             groups={step.question.key === "services" ? seasonGroups(answers.services) : undefined}
             value={answers[step.question.key]}
             disabled={pending}
@@ -372,7 +383,7 @@ export function IntakeForm({
             <Photos
               token={token}
               area={step.area}
-              picked={step.first ? photoAreasFor(answers.areas) : null}
+              picked={step.first ? photoAreasFor(answers.areas, isGrounds(answers)) : null}
               photos={photos}
               photoAreas={answers.photo_areas}
               setPhotos={setPhotos}

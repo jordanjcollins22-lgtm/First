@@ -119,6 +119,13 @@ const FALLBACK_SPOT: Record<string, [number, number]> = {
   sides: [0.16, 0.5],
   foundation: [0.5, 0.5],
   whole: [0.84, 0.5],
+  // An HOA's or a business's grounds: spread out, to be dragged where they are.
+  entrance: [0.5, 0.8],
+  streetside: [0.18, 0.8],
+  medians: [0.82, 0.8],
+  common: [0.3, 0.3],
+  ponds: [0.7, 0.3],
+  amenities: [0.5, 0.5],
 };
 
 type BoardPlacement = { x: number; y: number; scale: number; rotation: number; elementWidth: number };
@@ -251,6 +258,12 @@ interface ImageCanvasBoardProps {
     /** The areas as they are now, for the list. */
     onZones: (zones: WorkZone[]) => void;
   };
+  /**
+   * Grounds, not a home: an HOA's or a business's. The county's single lot
+   * at the pin is somebody's house or nothing, so it is not looked up or
+   * drawn; the areas start in spots of their own, to be dragged into place.
+   */
+  noCountyLot?: boolean;
 }
 
 /** What a page around the board can ask it to do. */
@@ -278,6 +291,7 @@ export function ImageCanvasBoard({
   onSuggestion,
   controlRef,
   walkthrough,
+  noCountyLot = false,
 }: ImageCanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -719,7 +733,7 @@ export function ImageCanvasBoard({
           // by the debounced database autosave below, instead of being ignored.
           if (initialLat != null && initialLng != null) {
             loadedRef.current = true;
-            const lot = await countyLotForJob(jobId).catch(() => null);
+            const lot = noCountyLot ? null : await countyLotForJob(jobId).catch(() => null);
             await handleSelectSatelliteLocation(
               {
                 id: "confirmed-property",
@@ -816,6 +830,10 @@ export function ImageCanvasBoard({
   useEffect(() => {
     if (!jobId || practice) return;
     let cancelled = false;
+    if (noCountyLot) {
+      const timer = setTimeout(() => setCountyChecked(true), 0);
+      return () => clearTimeout(timer);
+    }
     // A lookup that fails on a phone with a weak signal is tried again: an
     // area added before the lot arrives lands in a stand-in spot, which is
     // only put right once the lot is here.
@@ -834,7 +852,7 @@ export function ImageCanvasBoard({
     return () => {
       cancelled = true;
     };
-  }, [jobId, practice]);
+  }, [jobId, practice, noCountyLot]);
 
   // Debounced autosave to this browser's storage whenever the design changes.
   // Only for the standalone /canvas page — job-scoped canvases autosave to the

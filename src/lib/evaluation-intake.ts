@@ -30,6 +30,8 @@ export interface IntakeOption {
   swatches?: string[];
   /** Kept so old answers still read, but no longer offered. */
   hidden?: boolean;
+  /** Offered only for a home, or only for an HOA or business's grounds. Both when not set. */
+  for?: "home" | "grounds";
 }
 
 /** Where a question sits on the form. */
@@ -53,6 +55,8 @@ export interface IntakeQuestion {
 }
 
 export interface IntakeAnswers {
+  /** A home, an HOA or community, or a business: "home", "hoa" or "commercial". */
+  property: string;
   services: string[];
   services_other: string;
   areas: string[];
@@ -197,10 +201,16 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     title: "Which parts of the property?",
     kind: "multi",
     options: [
-      { value: "front", label: "Front yard" },
-      { value: "back", label: "Back yard" },
-      { value: "sides", label: "Side yards" },
-      { value: "foundation", label: "Around the house" },
+      { value: "front", label: "Front yard", for: "home" },
+      { value: "back", label: "Back yard", for: "home" },
+      { value: "sides", label: "Side yards", for: "home" },
+      { value: "foundation", label: "Around the house", for: "home" },
+      { value: "entrance", label: "Entrance and signs", for: "grounds" },
+      { value: "medians", label: "Medians and islands", for: "grounds" },
+      { value: "common", label: "Common lawns and open space", for: "grounds" },
+      { value: "ponds", label: "Ponds and stormwater areas", for: "grounds" },
+      { value: "amenities", label: "Clubhouse, pool or playground grounds", for: "grounds" },
+      { value: "streetside", label: "Along the streets and sidewalks", for: "grounds" },
       { value: "whole", label: "The whole property" },
     ],
   },
@@ -288,7 +298,30 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     title: "Anything you want to ask us before we come out?",
     kind: "text",
   },
+  {
+    // Asked first (see stepsFor); kept last here so the services stay first.
+    key: "property",
+    section: "work",
+    title: "What is this for?",
+    kind: "single",
+    options: [
+      { value: "home", label: "My home" },
+      { value: "hoa", label: "An HOA or community" },
+      { value: "commercial", label: "A business or commercial property" },
+    ],
+  },
 ];
+
+/** Grounds rather than a home: an HOA, a community or a business. */
+export function isGrounds(answers: Pick<IntakeAnswers, "property">): boolean {
+  return answers.property === "hoa" || answers.property === "commercial";
+}
+
+/** The parts to choose from, for a home or for grounds. */
+export function areaOptionsFor(grounds: boolean): IntakeOption[] {
+  const areas = INTAKE_QUESTIONS.find((q) => q.key === "areas")?.options ?? [];
+  return areas.filter((o) => !o.for || o.for === (grounds ? "grounds" : "home"));
+}
 
 // ---------------------------------------------------------------------------
 // The details that set the price
@@ -553,8 +586,17 @@ export const PHOTO_AREAS: { value: string; label: string; ask: string }[] = [
   { value: "back", label: "Back yard", ask: "the back yard" },
   { value: "sides", label: "Side yards", ask: "the side yards" },
   { value: "foundation", label: "Around the house", ask: "the beds and ground around the house" },
+  { value: "entrance", label: "Entrance and signs", ask: "the entrance and signs" },
+  { value: "medians", label: "Medians and islands", ask: "the medians and islands" },
+  { value: "common", label: "Common lawns", ask: "the common lawns and open space" },
+  { value: "ponds", label: "Ponds and stormwater", ask: "the ponds and stormwater areas" },
+  { value: "amenities", label: "Clubhouse and amenities", ask: "the clubhouse, pool or playground grounds" },
+  { value: "streetside", label: "Along the streets", ask: "the areas along the streets and sidewalks" },
   { value: "whole", label: "The property", ask: "the property" },
 ];
+
+/** The common areas of an HOA or business, none of which is part of a home. */
+export const GROUNDS_AREAS = new Set(["entrance", "medians", "common", "ponds", "amenities", "streetside"]);
 
 /**
  * The parts of the yard to ask photos of, one page each, from what they
@@ -562,14 +604,16 @@ export const PHOTO_AREAS: { value: string; label: string; ask: string }[] = [
  * front, the back and the sides. Nothing picked asks for the property as a
  * whole.
  */
-export function photoAreasFor(areas: string[]): string[] {
-  const wanted = new Set(areas.includes("whole") ? [...areas.filter((a) => a !== "whole"), "front", "back", "sides"] : areas);
+export function photoAreasFor(areas: string[], grounds = false): string[] {
+  // A home's whole property is its front, back and sides. Grounds have no
+  // such parts, so all of it is one page.
+  const wanted = new Set(areas.includes("whole") && !grounds ? [...areas.filter((a) => a !== "whole"), "front", "back", "sides"] : areas);
   const ordered = PHOTO_AREAS.map((a) => a.value).filter((v) => v !== "whole" && wanted.has(v));
   return ordered.length > 0 ? ordered : ["whole"];
 }
 
 /** Most photos one form keeps: every part of the yard, full. */
-export const MAX_INTAKE_PHOTOS = PHOTOS_PER_AREA * (PHOTO_AREAS.length - 1);
+export const MAX_INTAKE_PHOTOS = PHOTOS_PER_AREA * Math.max(4, GROUNDS_AREAS.size);
 
 // ---------------------------------------------------------------------------
 // Answering what they are worried about
@@ -699,6 +743,7 @@ export const BEFORE_VISIT_QUESTIONS: IntakeAnswer[] = [
 
 export function emptyAnswers(): IntakeAnswers {
   return {
+    property: "",
     services: [],
     services_other: "",
     areas: [],
@@ -838,7 +883,9 @@ function shownValue(question: { kind: IntakeKind; options?: IntakeOption[] }, va
 /** The answers as the evaluator reads them: one line per question answered. */
 export function summarizeIntake(answers: IntakeAnswers): { label: string; value: string }[] {
   const lines: { label: string; value: string }[] = [];
-  for (const q of INTAKE_QUESTIONS) {
+  // What the property is comes first: it changes how everything after reads.
+  const ordered = [...INTAKE_QUESTIONS.filter((q) => q.key === "property"), ...INTAKE_QUESTIONS.filter((q) => q.key !== "property")];
+  for (const q of ordered) {
     const notes = q.notesKey ? String(answers[q.notesKey] ?? "") : "";
     let shown = shownValue(q, answers[q.key]);
     const older = q.key === "concerns" ? answers.concerns_notes : "";
@@ -868,6 +915,7 @@ export function summarizeDetails(answers: IntakeAnswers): { label: string; value
 }
 
 const SHORT_LABEL: Partial<Record<keyof IntakeAnswers, string>> = {
+  property: "For",
   services: "Wants",
   areas: "Where",
   looks: "Looks",
@@ -886,7 +934,8 @@ export function intakeHeadline(answers: IntakeAnswers | null, submittedAt: strin
   const q = INTAKE_QUESTIONS[0];
   const wants = answers.services.map((v) => labelOf(q, v));
   const budget = answers.budget ? labelOf(INTAKE_QUESTIONS.find((x) => x.key === "budget")!, answers.budget) : "";
-  return [wants.slice(0, 3).join(", "), budget].filter(Boolean).join(" · ") || "Filled in.";
+  const grounds = isGrounds(answers) ? labelOf(INTAKE_QUESTIONS.find((x) => x.key === "property")!, answers.property) : "";
+  return [grounds, wants.slice(0, 3).join(", "), budget].filter(Boolean).join(" · ") || "Filled in.";
 }
 
 /**

@@ -11,7 +11,7 @@ import type { WorkZone } from "@/components/canvas/types";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { CanvasDesignRow, EvaluationStatus } from "@/types/domain";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
-import { PHOTO_AREAS } from "@/lib/evaluation-intake";
+import { GROUNDS_AREAS, PHOTO_AREAS } from "@/lib/evaluation-intake";
 import {
   addedItem,
   areaLabel,
@@ -56,6 +56,7 @@ export function SiteMapSetup({
   evaluatorName,
   preview = false,
   demoLot = null,
+  grounds = false,
 }: {
   jobId: string;
   initialPlan: PlanItem[];
@@ -70,6 +71,8 @@ export function SiteMapSetup({
   /** For the owner's walk-through: nothing is saved and the map is the practice one. */
   preview?: boolean;
   demoLot?: LotData | null;
+  /** An HOA's or a business's grounds: their common areas to pick from, and no single county lot. */
+  grounds?: boolean;
 }) {
   const [plan, setPlan] = useState<PlanItem[]>(() => walkPlan(initialPlan));
   const planRef = useRef(plan);
@@ -196,6 +199,7 @@ export function SiteMapSetup({
         onSeedRemoved={(id) => update((items) => removeFromPlan(items, id))}
         controlRef={board}
         walkthrough={walkthrough}
+        noCountyLot={grounds}
       />
 
       <div className="flex items-baseline justify-between">
@@ -281,7 +285,7 @@ export function SiteMapSetup({
         {sendNote && <p className="text-center text-sm text-muted-foreground">{sendNote}</p>}
       </div>
 
-      <AddArea open={adding} services={services} onAdd={add} onClose={() => setAdding(false)} />
+      <AddArea open={adding} services={services} grounds={grounds} onAdd={add} onClose={() => setAdding(false)} />
     </section>
   );
 }
@@ -362,11 +366,13 @@ function ReviewButton({ quiet, onClick, label }: { quiet: boolean; onClick: () =
 function AddArea({
   open,
   services,
+  grounds,
   onAdd,
   onClose,
 }: {
   open: boolean;
   services: { typeId: string; name: string }[];
+  grounds: boolean;
   onAdd: (area: string, typeId: string, name: string) => void;
   onClose: () => void;
 }) {
@@ -384,7 +390,7 @@ function AddArea({
         </DialogHeader>
         {!area ? (
           <div className="grid grid-cols-2 gap-2">
-            {PHOTO_AREAS.map((a) => (
+            {PHOTO_AREAS.filter((a) => a.value === "whole" || GROUNDS_AREAS.has(a.value) === grounds).map((a) => (
               <button
                 key={a.value}
                 type="button"

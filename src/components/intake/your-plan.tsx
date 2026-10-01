@@ -1,5 +1,5 @@
 import { LotPicker } from "@/components/intake/lot-picker";
-import { PHOTO_AREAS, photoAreasFor, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { isGrounds, PHOTO_AREAS, photoAreasFor, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { projectPlan } from "@/lib/intake-plan";
 import type { LotData } from "@/lib/lot-map";
 
@@ -10,7 +10,7 @@ import type { LotData } from "@/lib/lot-map";
  * project, service by service, prep first.
  */
 export function YourPlan({ answers, photos, lot }: { answers: IntakeAnswers; photos: { path: string; url: string }[]; lot: LotData | null }) {
-  const areas = photoAreasFor(answers.areas);
+  const areas = photoAreasFor(answers.areas, isGrounds(answers));
   const plan = projectPlan(answers);
 
   return (
