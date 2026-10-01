@@ -141,6 +141,7 @@ export function BookingWizard({
   proof = NO_PROOF,
   service = null,
   preview = false,
+  start = null,
 }: {
   organizationId: string;
   organizationName: string;
@@ -168,6 +169,8 @@ export function BookingWizard({
    * straight from the arrows, nothing is recorded, and nothing books.
    */
   preview?: boolean;
+  /** The address the landing page sent along: the booking opens on who they are, with it already in. */
+  start?: { address: GeocodeSuggestion; located: boolean } | null;
 }) {
   // 0 is the landing card with the address; 1 is who they are; 2 is when.
   // Booked is the fourth page. What they want done is asked afterwards, on
@@ -391,6 +394,21 @@ export function BookingWizard({
     void loadTimes(found.lat, found.lng);
     setStep(1);
   }
+
+  // The landing page already took the address: picked as if it had been
+  // picked here, once, after the first render.
+  const startedFrom = useRef(false);
+  useEffect(() => {
+    if (preview || !start || startedFrom.current) return;
+    startedFrom.current = true;
+    const timer = setTimeout(() => {
+      if (start.located) setAddressEntry("located");
+      pickAddress(start.address);
+    }, 0);
+    return () => clearTimeout(timer);
+    // Once, for the address the link brought.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, preview]);
 
   /** Back to the first page to pick another address. */
   function changeAddress() {

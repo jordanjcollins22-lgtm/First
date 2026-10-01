@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { BookingWizard } from "@/components/booking/booking-wizard";
+import { readStartAddress } from "@/lib/start-link";
 
 import type { BookingOptions } from "./booking-options";
 
@@ -148,6 +149,7 @@ export function BookingForm() {
       referralCode={rec}
       proof={options.proof}
       service={options.service}
+      start={readStartAddress(searchParams)}
     />
   );
 }
