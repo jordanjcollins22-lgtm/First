@@ -18,6 +18,8 @@ export interface EvaluationToday {
   evaluator: string | null;
   dueAt: string;
   preEval: boolean;
+  /** When the account manager last emailed them the pre-eval form, if they have. */
+  preEvalAskedAt: string | null;
   stage: EvaluationStage;
   areasReviewed: number;
   areasTotal: number;
@@ -61,10 +63,12 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
 
-  const [{ data: intakes }, { data: proposals }] = await Promise.all([
+  const [{ data: intakes }, { data: proposals }, { data: asks }] = await Promise.all([
     supabase.from("evaluation_intakes").select("job_id, submitted_at").in("job_id", ids).not("submitted_at", "is", null),
     supabase.from("job_proposals").select("job_id, status, approved_at, generated_at, sent_at").in("job_id", ids),
+    supabase.from("client_message_log").select("reference_id, created_at").eq("kind", "pre_eval_ask").eq("status", "sent").in("reference_id", ids).order("created_at"),
   ]);
+  const askedAt = new Map(((asks ?? []) as { reference_id: string; created_at: string }[]).map((a) => [a.reference_id, a.created_at]));
   const sentForm = new Set(((intakes ?? []) as { job_id: string }[]).map((i) => i.job_id));
   const proposalFor = new Map(
     ((proposals ?? []) as { job_id: string; status: string; approved_at: string | null; generated_at: string | null; sent_at: string | null }[]).map((p) => [p.job_id, p])
@@ -85,6 +89,7 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
       evaluator: r.assignee ? (r.assignee.full_name || r.assignee.email).split(/\s+/)[0] : null,
       dueAt: r.evaluation_date,
       preEval,
+      preEvalAskedAt: askedAt.get(r.id) ?? null,
       areasReviewed,
       areasTotal,
       reviewHref: `/jobs/${r.id}?open=proposal`,
