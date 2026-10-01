@@ -5,7 +5,7 @@ import { revalidateJobViews } from "@/lib/revalidate-job";
 import { createClient } from "@/lib/supabase/server";
 import type { CanvasMark } from "@/lib/canvas-marks";
 import type { ImageGeo } from "@/lib/lot-map";
-import { isEmptyDesign, wouldBlank, type DesignShape } from "@/lib/design-safety";
+import { couldLoseGround, isEmptyDesign, keepSavedGround, wouldBlank, type DesignShape, type SavedGround } from "@/lib/design-safety";
 
 /** How many things are in a jsonb column that should hold a list. */
 function countOf(value: unknown): number {
@@ -33,6 +33,8 @@ export interface SaveCanvasDesignInput {
   houseOutline: { x: number; y: number }[];
   marks: CanvasMark[];
   zones: unknown[];
+  /** Whether the photo at imagePath is the one on the board. False while it is still loading. */
+  photoOnPath?: boolean;
 }
 
 /**
@@ -88,23 +90,67 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
     }
   }
 
+  // A board still loading the saved map sends the photo's defaults and can
+  // send no line or house. Those do not go over the real ones (see
+  // keepSavedGround); the read only happens when a save could lose something.
+  const sent: SavedGround & { photoOnPath?: boolean } = {
+    imagePath: input.imagePath,
+    imageX: input.imageX,
+    imageY: input.imageY,
+    imageScale: input.imageScale,
+    imageRotation: input.imageRotation,
+    imageRealWidthFeet: input.imageRealWidthFeet,
+    imageBearing: input.imageBearing,
+    imageGeo: input.imageGeo ?? null,
+    imageUploaded: input.imageUploaded,
+    propertyLine: input.propertyLine,
+    houseOutline: input.houseOutline,
+    photoOnPath: input.photoOnPath,
+  };
+  let ground: SavedGround = keepSavedGround(sent, null);
+  if (couldLoseGround(sent)) {
+    const { data: stored } = await supabase
+      .from("canvas_designs")
+      .select("image_path, image_x, image_y, image_scale, image_rotation, image_real_width_feet, image_bearing, image_geo, image_uploaded, property_line, house_outline")
+      .eq("job_id", jobId)
+      .maybeSingle();
+    ground = keepSavedGround(
+      sent,
+      stored
+        ? {
+            imagePath: stored.image_path,
+            imageX: stored.image_x,
+            imageY: stored.image_y,
+            imageScale: stored.image_scale,
+            imageRotation: stored.image_rotation,
+            imageRealWidthFeet: stored.image_real_width_feet,
+            imageBearing: stored.image_bearing,
+            imageGeo: stored.image_geo,
+            imageUploaded: stored.image_uploaded,
+            propertyLine: Array.isArray(stored.property_line) ? (stored.property_line as { x: number; y: number }[]) : [],
+            houseOutline: Array.isArray(stored.house_outline) ? (stored.house_outline as { x: number; y: number }[]) : [],
+          }
+        : null
+    );
+  }
+
   const { error } = await supabase.from("canvas_designs").upsert(
     {
       job_id: jobId,
       address: input.address,
-      image_path: input.imagePath,
-      image_x: input.imageX,
-      image_y: input.imageY,
-      image_scale: input.imageScale,
-      image_rotation: input.imageRotation,
-      image_real_width_feet: input.imageRealWidthFeet,
-      image_bearing: input.imageBearing,
-      ...(input.imageGeo !== undefined ? { image_geo: input.imageGeo } : {}),
+      image_path: ground.imagePath,
+      image_x: ground.imageX,
+      image_y: ground.imageY,
+      image_scale: ground.imageScale,
+      image_rotation: ground.imageRotation,
+      image_real_width_feet: ground.imageRealWidthFeet,
+      image_bearing: ground.imageBearing,
+      ...(input.imageGeo !== undefined || ground.imageGeo != null ? { image_geo: ground.imageGeo as never } : {}),
       orientation_confirmed: input.orientationConfirmed,
-      image_uploaded: input.imageUploaded,
+      image_uploaded: ground.imageUploaded,
       locked: input.locked,
-      property_line: input.propertyLine,
-      house_outline: input.houseOutline,
+      property_line: ground.propertyLine,
+      house_outline: ground.houseOutline,
       marks: input.marks,
       zones: input.zones,
     },

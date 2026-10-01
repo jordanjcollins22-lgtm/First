@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isEmptyDesign, wouldBlank, type DesignShape } from "@/lib/design-safety";
+import { couldLoseGround, isEmptyDesign, keepSavedGround, wouldBlank, type DesignShape, type SavedGround } from "@/lib/design-safety";
 
 function design(over: Partial<DesignShape> = {}): DesignShape {
   return {
@@ -79,5 +79,75 @@ describe("wouldBlank", () => {
 
   it("catches a design whose only content was a walkthrough note", () => {
     expect(wouldBlank(NOTHING, { ...NOTHING, markCount: 2 })).toBe(true);
+  });
+});
+
+describe("keepSavedGround", () => {
+  const geo = { lng: -76.3, lat: 39.5, zoom: 18.19, bearing: 288.8, request: 1280, kept: 1060 };
+  const stored: SavedGround = {
+    imagePath: "job/background-a.jpg",
+    imageX: 640,
+    imageY: 400,
+    imageScale: 0.719,
+    imageRotation: 0,
+    imageRealWidthFeet: 1190.6,
+    imageBearing: 288.8,
+    imageGeo: geo,
+    imageUploaded: false,
+    propertyLine: [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }],
+    houseOutline: [{ x: 640, y: 400 }],
+  };
+  // What a board sends before the saved photo has loaded onto it.
+  const halfLoaded = {
+    imagePath: "job/background-a.jpg",
+    imageX: 640,
+    imageY: 400,
+    imageScale: 1,
+    imageRotation: 0,
+    imageRealWidthFeet: null,
+    imageBearing: 0,
+    imageGeo: null,
+    imageUploaded: false,
+    propertyLine: [],
+    houseOutline: [],
+    photoOnPath: false,
+  };
+
+  it("keeps the photo's turn, zoom, line and house when the board has not loaded them", () => {
+    expect(keepSavedGround(halfLoaded, stored)).toEqual(stored);
+  });
+
+  it("keeps a drawn line and house even from a board that has the photo", () => {
+    const out = keepSavedGround({ ...stored, propertyLine: [], houseOutline: [], photoOnPath: true }, stored);
+    expect(out.propertyLine).toEqual(stored.propertyLine);
+    expect(out.houseOutline).toEqual(stored.houseOutline);
+  });
+
+  it("keeps where the photo was taken when the save has no record of it", () => {
+    const out = keepSavedGround({ ...stored, imageGeo: null, imageBearing: 0 }, stored);
+    expect(out.imageGeo).toEqual(geo);
+    expect(out.imageBearing).toBe(288.8);
+  });
+
+  it("writes a real change on the same photo", () => {
+    const moved = { ...stored, imageScale: 0.9, propertyLine: [{ x: 5, y: 5 }, { x: 6, y: 5 }, { x: 6, y: 6 }], photoOnPath: true };
+    const out = keepSavedGround(moved, stored);
+    expect(out.imageScale).toBe(0.9);
+    expect(out.propertyLine).toEqual(moved.propertyLine);
+  });
+
+  it("writes everything as sent for a new photo", () => {
+    const fresh = { ...halfLoaded, imagePath: "job/background-b.jpg" };
+    expect(keepSavedGround(fresh, stored)).toEqual({ ...fresh, photoOnPath: undefined });
+  });
+
+  it("writes everything as sent when nothing is stored yet", () => {
+    expect(keepSavedGround(halfLoaded, null)).toEqual({ ...halfLoaded, photoOnPath: undefined });
+  });
+
+  it("only reads the stored map when a save could lose something", () => {
+    expect(couldLoseGround(halfLoaded)).toBe(true);
+    expect(couldLoseGround({ ...stored, photoOnPath: true })).toBe(false);
+    expect(couldLoseGround({ ...halfLoaded, imagePath: null })).toBe(false);
   });
 });

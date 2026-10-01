@@ -877,6 +877,9 @@ export function ImageCanvasBoard({
       submit: async () => {
         if (!jobId) return false;
         try {
+          // Not before the saved map is on the board: until then this is the
+          // board's defaults, not the map.
+          if (!loadedRef.current) throw new Error("Still loading");
           await saveCanvasDesign(jobId, {
             address,
             imagePath: uploadedImagePathRef.current,
@@ -894,6 +897,7 @@ export function ImageCanvasBoard({
             houseOutline,
             marks: withoutEmpty(marks),
             zones,
+            photoOnPath: image != null && !imageDirtyRef.current,
           });
         } catch {
           // The autosave has most of it; submitting still goes ahead.
@@ -942,6 +946,9 @@ export function ImageCanvasBoard({
             houseOutline,
             marks: withoutEmpty(marks),
             zones,
+            // The photo at imagePath is the one on the board: not still
+            // loading, and not a new one whose upload has not gone through.
+            photoOnPath: image != null && !imageDirtyRef.current,
           };
           try {
             await saveCanvasDesign(jobId, design);
