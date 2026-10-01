@@ -25,7 +25,7 @@ export function AnsweringLeaderboard({
   linkNames?: boolean;
 }) {
   return (
-    <section className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4">
+    <section data-tour="leaderboard" className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4">
       <h2 className="mb-1 text-sm font-semibold">Leaderboard</h2>
       <p className="mb-2 text-xs text-muted-foreground">
         Only what came in through affiliate links.{linkNames ? " Tap a name to see their answered posts." : ""}

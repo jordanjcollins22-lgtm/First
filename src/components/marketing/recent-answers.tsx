@@ -18,7 +18,7 @@ export function RecentAnswers({ posts }: { posts: BoardPost[] }) {
     .sort((a, b) => (b.mine!.postedAt ?? b.mine!.updatedAt).localeCompare(a.mine!.postedAt ?? a.mine!.updatedAt));
   if (answered.length === 0) return null;
   return (
-    <section className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4">
+    <section data-tour="recent" className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">Your recent answers</h2>
       <p className="mb-2 text-xs text-muted-foreground">Clicked off before you pasted? Copy the comment again and go back to the post.</p>
       <ul className="flex flex-col divide-y divide-border/60">

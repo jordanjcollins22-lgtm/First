@@ -183,7 +183,7 @@ export function CommentCard({
 
   return (
     <div className="mx-auto w-full max-w-md space-y-4">
-      <div className="flex min-h-[26rem] flex-col rounded-2xl border border-border bg-card p-4 shadow-lg shadow-black/5">
+      <div data-tour="card" className="flex min-h-[26rem] flex-col rounded-2xl border border-border bg-card p-4 shadow-lg shadow-black/5">
         <div className="mb-3 flex items-baseline justify-between text-xs text-muted-foreground">
           <span>{waiting} waiting</span>
           <span>You&apos;ve answered {answeredToday} today</span>
@@ -204,14 +204,14 @@ export function CommentCard({
               {post.groupName ? ` in ${post.groupName}` : ""}
             </div>
             {/* When it went up, said plainly, and what that means for answering it. */}
-            <div className={`rounded-lg px-3 py-2 text-xs ${FRESHNESS_STYLE[post.freshness]}`}>
+            <div data-tour="age" className={`rounded-lg px-3 py-2 text-xs ${FRESHNESS_STYLE[post.freshness]}`}>
               <p className="font-semibold">
                 {post.ageLabel}
                 {post.postedAt ? <span className="font-normal opacity-80"> · {shortWhen(post.postedAt)}</span> : null}
               </p>
               <p className="opacity-90">{post.ageHint}</p>
             </div>
-            <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm">{post.text}</p>
+            <p data-tour="post" className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm">{post.text}</p>
             <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <span>{post.matchReason ? `Why it's here: ${post.matchReason}` : ""}</span>
               {post.hasUrl && (
@@ -287,6 +287,7 @@ export function CommentCard({
               // adds their own opener and tracked link, with nothing to wait for.
               <div className="mt-auto space-y-2">
                 <Textarea
+                  data-tour="comment"
                   value={edits[post.id] ?? post.draft}
                   rows={6}
                   onChange={(e) => setEdits((d) => ({ ...d, [post.id]: e.target.value }))}
@@ -294,11 +295,11 @@ export function CommentCard({
                 />
                 <p className="text-[11px] text-muted-foreground">Written for this post. Change anything you like; [your link] becomes your own link.</p>
                 <div className="grid grid-cols-[auto_1fr] gap-2">
-                  <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setError(null); setAsking(true); }} className="h-11 text-sm">
+                  <Button data-tour="cant" type="button" variant="outline" disabled={busy !== null} onClick={() => { setError(null); setAsking(true); }} className="h-11 text-sm">
                     <Ban className="mr-1 h-4 w-4" />
                     Can&apos;t respond
                   </Button>
-                  <Button type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-11 text-sm">
+                  <Button data-tour="respond" type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-11 text-sm">
                     {busy === "respond" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <MessageSquareReply className="mr-1 h-4 w-4" />}
                     {busy === "respond" ? "Adding your link…" : "Use this comment"}
                   </Button>
@@ -306,19 +307,19 @@ export function CommentCard({
               </div>
             ) : !mine ? (
               <div className="mt-auto grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setError(null); setAsking(true); }} className="h-auto flex-col gap-1 py-3 text-sm">
+                <Button data-tour="cant" type="button" variant="outline" disabled={busy !== null} onClick={() => { setError(null); setAsking(true); }} className="h-auto flex-col gap-1 py-3 text-sm">
                   <Ban className="h-5 w-5" />
                   Can&apos;t respond
                 </Button>
-                <Button type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-auto flex-col gap-1 py-3 text-sm">
+                <Button data-tour="respond" type="button" disabled={busy !== null} onClick={() => run("respond")} className="h-auto flex-col gap-1 py-3 text-sm">
                   {busy === "respond" ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquareReply className="h-5 w-5" />}
                   {busy === "respond" ? "Writing…" : "Respond"}
                 </Button>
               </div>
             ) : (
               <div className="mt-auto space-y-2">
-                <Textarea value={comment} rows={6} onChange={(e) => setEdits((d) => ({ ...d, [post.id]: e.target.value }))} />
-                <Button type="button" className="w-full" disabled={busy !== null} onClick={copyAndGo}>
+                <Textarea data-tour="comment" value={comment} rows={6} onChange={(e) => setEdits((d) => ({ ...d, [post.id]: e.target.value }))} />
+                <Button data-tour="respond" type="button" className="w-full" disabled={busy !== null} onClick={copyAndGo}>
                   {busy === "posted" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Copy className="mr-1 h-4 w-4" />}
                   {post.hasUrl ? "Copy & go to post" : "Copy & find the post"}
                 </Button>
@@ -421,7 +422,7 @@ function FoundAPost({ onAdded }: { onAdded: (seenId: string) => void }) {
   }
 
   return (
-    <div className="mt-4 space-y-2 border-t border-border pt-3">
+    <div data-tour="found" className="mt-4 space-y-2 border-t border-border pt-3">
       <p className="text-sm font-semibold">Found a post?</p>
       <Input
         type="url"

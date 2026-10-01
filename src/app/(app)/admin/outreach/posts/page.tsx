@@ -14,6 +14,9 @@ import { AnsweringLeaderboard } from "@/components/marketing/answering-leaderboa
 import { AnsweredPosts } from "@/components/marketing/answered-posts";
 import { CommentCard } from "@/components/marketing/comment-card";
 import { RecentAnswers } from "@/components/marketing/recent-answers";
+import { AffiliateTutorial } from "@/components/tutorial/affiliate-tutorial";
+import { AFFILIATE_TUTORIAL_KEY } from "@/lib/affiliate-tutorial";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Posts to answer.
@@ -37,6 +40,10 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
   // The owner can look at anybody's answered posts from the leaderboard;
   // everybody else sees their own.
   const whoId = owner && params.who ? params.who : profile.id;
+
+  // Whether they have been through the tutorial: kept on their own sign-in.
+  const { data: auth } = await (await createClient()).auth.getUser();
+  const tutorialSeen = Boolean(auth.user?.user_metadata?.[AFFILIATE_TUTORIAL_KEY]);
 
   const now = new Date();
   const [posts, today, settings, leaderboard, answered] = await Promise.all([
@@ -89,6 +96,8 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
           paste it from your own account. Not a job, or an ad? Say so and the next one comes up.
         </p>
       </header>
+
+      <AffiliateTutorial seen={tutorialSeen} />
 
       <CommentCard posts={posts} pinned={pinned} owner={owner} answeredToday={today} dailyLimit={settings.dailyCap} />
 

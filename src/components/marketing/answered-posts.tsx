@@ -54,7 +54,7 @@ export function AnsweredPosts({ posts, whose }: { posts: AnsweredPost[]; whose: 
   return (
     // Closed until opened, so the card above stays the first thing on the
     // page. Somebody else's list, opened from the leaderboard, starts open.
-    <details id="answered" open={Boolean(whose)} className="group mx-auto w-full max-w-md scroll-mt-4 rounded-2xl border border-border bg-card p-4">
+    <details data-tour="answered" id="answered" open={Boolean(whose)} className="group mx-auto w-full max-w-md scroll-mt-4 rounded-2xl border border-border bg-card p-4">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0">
           <span className="block text-sm font-semibold">{whose ? `${whose}'s answered posts` : "Your answered posts"}</span>
