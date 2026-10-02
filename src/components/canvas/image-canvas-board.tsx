@@ -11,7 +11,7 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 import Link from "next/link";
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RefreshCw, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, X, ZoomIn } from "lucide-react";
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Home, ImageUp, Loader2, Lock, MapPin, Maximize2, Minimize2, Minus, MousePointer2, PenTool, RefreshCw, RotateCcw, Route, Ruler, Satellite, StickyNote, Trash2, Undo2, Unlock, Wrench, X, ZoomIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { publicEnv } from "@/lib/public-env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
 import type { MeasurementKind } from "@/lib/zone-measurement";
+import { dotShape, feetPerBoardPixel, measuredShape } from "@/lib/dot-area";
 import { canSubmit, submitLabel } from "@/lib/evaluation-resubmit";
 import {
   canStepMapZoom,
@@ -102,7 +103,7 @@ interface CanvasImage {
   uploaded: boolean;
 }
 
-type Tool = "move" | "zone" | "property-line" | "house" | "note";
+type Tool = "move" | "zone" | "dot" | "property-line" | "house" | "note";
 
 function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasElement): Point {
   const rect = canvas.getBoundingClientRect();
@@ -572,6 +573,18 @@ export function ImageCanvasBoard({
 
       const cx = zone.points.reduce((sum, p) => sum + p.x, 0) / zone.points.length;
       const cy = zone.points.reduce((sum, p) => sum + p.y, 0) / zone.points.length;
+      // Where it was tapped.
+      if (zone.anchor) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(zone.anchor.x, zone.anchor.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = zone.color;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+        ctx.restore();
+      }
       // On the walkthrough, the area's number from the list, not its name.
       const badge = walkthrough?.badges[zone.id];
       if (badge != null) {
@@ -1116,6 +1129,34 @@ export function ImageCanvasBoard({
     setServiceDialogZoneId(id);
   }
 
+  /** How many feet a pixel of the board is, when the photo's place on the ground is known. */
+  function feetPerPixel(): number | null {
+    if (!imageGeo || !image) return null;
+    return feetPerBoardPixel({ lat: imageGeo.lat, zoom: imageGeo.zoom, request: imageGeo.request, elementWidth: image.element.width, scale: image.scale });
+  }
+
+  /** A tap puts an area there, about 12 feet across, and asks the same questions. */
+  function placeDot(point: Point) {
+    const id = uuid();
+    setZones((prev) => [
+      ...prev,
+      {
+        id,
+        name: `Zone ${prev.length + 1}`,
+        color: ZONE_COLORS[prev.length % ZONE_COLORS.length],
+        points: dotShape(point, feetPerPixel()),
+        anchor: point,
+        location: "",
+        service: null,
+        lengthFt: null,
+        widthFt: null,
+        areaSqFt: null,
+        perimeterFt: null,
+      },
+    ]);
+    setServiceDialogZoneId(id);
+  }
+
   function finalizePropertyLine() {
     if (drawingPoints.length < 3) return;
     setPropertyLine(drawingPoints);
@@ -1482,10 +1523,22 @@ export function ImageCanvasBoard({
     perimeterFt: number | null,
     measurementKind: MeasurementKind
   ) {
+    const perPx = feetPerPixel();
     setZones((prev) =>
       prev.map((zone) =>
         zone.id === serviceDialogZoneId
-          ? { ...zone, location, service, lengthFt, widthFt, areaSqFt, perimeterFt, measurementKind }
+          ? {
+              ...zone,
+              location,
+              service,
+              lengthFt,
+              widthFt,
+              areaSqFt,
+              perimeterFt,
+              measurementKind,
+              // A tapped area takes the size of what was measured, on its dot.
+              ...(zone.anchor ? { points: measuredShape(zone.anchor, zone.points, { kind: measurementKind, lengthFt, widthFt, areaSqFt }, perPx) } : {}),
+            }
           : zone
       )
     );
@@ -1517,6 +1570,11 @@ export function ImageCanvasBoard({
 
     if (tool === "house") {
       placeHouseMarker(point);
+      return;
+    }
+
+    if (tool === "dot") {
+      placeDot(point);
       return;
     }
 
@@ -2043,6 +2101,15 @@ export function ImageCanvasBoard({
               <PenTool className="h-4 w-4" />
               Draw Work Zone
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={tool === "dot" ? "default" : "ghost"}
+              onClick={() => selectTool("dot")}
+            >
+              <MapPin className="h-4 w-4" />
+              Tap a Work Zone
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -2161,7 +2228,7 @@ export function ImageCanvasBoard({
             height={CANVAS_HEIGHT}
             className={cn(
               "block w-full",
-              tool === "zone" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
+              tool === "zone" || tool === "dot" ? "cursor-crosshair" : !locked && image ? "cursor-move" : "cursor-default"
             )}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -2284,6 +2351,16 @@ export function ImageCanvasBoard({
                   <PenTool className="h-4 w-4" />
                   Draw Zone
                 </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tool === "dot" ? "secondary" : "ghost"}
+                  className="justify-start text-white hover:text-white"
+                  onClick={() => selectTool("dot")}
+                >
+                  <MapPin className="h-4 w-4" />
+                  Tap Zone
+                </Button>
                 {tool !== "house" && drawingPoints.length > 0 && (
                   <Button
                     type="button"
@@ -2356,6 +2433,12 @@ export function ImageCanvasBoard({
             </div>
           )}
         </div>
+      )}
+
+      {tool === "dot" && (
+        <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          Tap where the work is. The same questions come up, and the area on the map takes the size you measure, centred on your tap.
+        </p>
       )}
 
       {tool === "note" && (

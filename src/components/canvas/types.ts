@@ -51,6 +51,11 @@ export interface WorkZone {
    * read back off their numbers instead (see kindOfSaved).
    */
   measurementKind?: "area" | "linear" | "none" | null;
+  /**
+   * Where it was tapped, for an area placed with a dot instead of drawn.
+   * Its outline is centred here and takes the size of its measurements.
+   */
+  anchor?: Point;
 }
 
 export interface StoredDesign {
