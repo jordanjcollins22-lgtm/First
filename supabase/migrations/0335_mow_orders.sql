@@ -46,9 +46,24 @@ create table if not exists mow_orders (
   property_id uuid references properties(id) on delete set null,
   job_id uuid references jobs(id) on delete set null,
 
-  -- When somebody reached them to set the day. The promise is within 24 hours of paying.
+  -- The day they picked to be mowed, when they paid. The call confirms it.
+  mow_day date,
+
+  -- When somebody reached them. The aim is within two minutes of asking or paying.
   called_at timestamptz,
   called_by uuid references profiles(id) on delete set null,
+  -- The "before your mow" email, sent by a person after reading it.
+  welcome_sent_at timestamptz,
+
+  -- For telling Meta which of its ad clicks became real buyers. fbc is the
+  -- click id from the ad link, fbp the browser id Meta's pixel set; with the
+  -- address and browser they are what lets Meta match the sale to the ad.
+  fbc text,
+  fbp text,
+  client_ip text,
+  client_user_agent text,
+  meta_lead_reported_at timestamptz,
+  meta_purchase_reported_at timestamptz,
 
   note text,
   created_at timestamptz not null default now(),
@@ -57,7 +72,7 @@ create table if not exists mow_orders (
 );
 
 comment on table mow_orders is
-  'A first mow bought and paid for from the quick mow page. A team member calls within 24 hours to set the day.';
+  'A request from the quick mow page: details given and a price seen, then a first mow paid for on a day they picked. A team member calls within two minutes to confirm.';
 
 create index if not exists mow_orders_org_idx on mow_orders (organization_id, status, paid_at desc);
 create index if not exists mow_orders_session_idx on mow_orders (checkout_session_id);
@@ -71,6 +86,34 @@ create policy mow_orders_own_org on mow_orders
   for all to authenticated
   using (organization_id = current_org_id())
   with check (organization_id = current_org_id());
+
+-- Every address checked on the quick mow page, in the area or not, for the
+-- funnel scoreboard: clicks, then checks, then in the area, then requests.
+-- No address and nobody's details: only whether it was in the area and which
+-- link brought them.
+create table if not exists mow_area_checks (
+  id bigint generated always as identity primary key,
+  organization_id uuid not null references organizations(id) on delete cascade,
+  -- Null when the county map couldn't be reached and they were let through.
+  in_area boolean,
+  referral_code text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists mow_area_checks_org_idx on mow_area_checks (organization_id, created_at desc);
+
+alter table mow_area_checks enable row level security;
+drop policy if exists mow_area_checks_own_org on mow_area_checks;
+create policy mow_area_checks_own_org on mow_area_checks
+  for select to authenticated
+  using (organization_id = current_org_id());
+
+-- Quick mow settings. Alerts are off until somebody turns them on, so nobody
+-- is texted about a request before the business has seen what the text says.
+-- The daily limit is how many first mows the page will put on one day.
+alter table organizations
+  add column if not exists quick_mow_alerts boolean not null default false,
+  add column if not exists mows_per_day integer not null default 18 check (mows_per_day between 1 and 100);
 
 -- Where a tracked link goes. Null is the booking page, as every link went
 -- before; a path such as '/mow' sends that one link somewhere else, still

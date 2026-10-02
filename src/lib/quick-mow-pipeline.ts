@@ -11,10 +11,10 @@
 export type QuickMowStage = "requested" | "to_call" | "to_schedule" | "scheduled" | "mowed" | "lost";
 
 export const QUICK_MOW_STAGES: { key: QuickMowStage; label: string; blurb: string }[] = [
-  { key: "requested", label: "Requested", blurb: "Gave their details and saw a price. Not paid yet: call them." },
-  { key: "to_call", label: "Paid, call within 24 hrs", blurb: "Paid for the first mow. Promised a call within 24 hours." },
-  { key: "to_schedule", label: "Called, to schedule", blurb: "Called. Put the mow on the calendar." },
-  { key: "scheduled", label: "Scheduled", blurb: "A day is set." },
+  { key: "requested", label: "Requested", blurb: "Gave their details and saw a price, not paid yet. Call within 2 minutes while they're still on the page." },
+  { key: "to_call", label: "Paid, call now", blurb: "Paid and picked a day. Call within 2 minutes to confirm it, and send the before-your-mow email." },
+  { key: "to_schedule", label: "Called, to schedule", blurb: "Called, but no day on the calendar yet. Put the mow on it." },
+  { key: "scheduled", label: "Scheduled", blurb: "Called and confirmed. A day is set." },
   { key: "mowed", label: "Mowed", blurb: "First mow done." },
   { key: "lost", label: "Lost", blurb: "Cancelled, or never went ahead." },
 ];
@@ -33,7 +33,9 @@ export function quickMowStage(facts: QuickMowFacts): QuickMowStage {
   if (facts.orderStatus === "cancelled" || facts.jobStatus === "cancelled") return "lost";
   if (facts.jobStatus === "completed" || facts.visits.some((v) => v.status === "done")) return "mowed";
   if (facts.orderStatus !== "paid") return "requested";
-  if (facts.visits.some((v) => v.status !== "cancelled")) return "scheduled";
+  // Paid and not yet called stays at the top, even with a day picked: the
+  // call is what confirms the day, and it is due within two minutes.
   if (!facts.calledAt) return "to_call";
+  if (facts.visits.some((v) => v.status !== "cancelled")) return "scheduled";
   return "to_schedule";
 }

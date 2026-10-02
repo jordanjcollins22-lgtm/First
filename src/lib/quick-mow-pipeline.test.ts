@@ -18,8 +18,12 @@ describe("where a quick mow request sits", () => {
     expect(quickMowStage({ ...base, orderStatus: "paid", jobStatus: "approved", calledAt: "2026-10-02T15:00:00Z" })).toBe("to_schedule");
   });
 
-  it("is scheduled once a visit is on the calendar, called or not", () => {
-    expect(quickMowStage({ ...base, orderStatus: "paid", jobStatus: "approved", visits: [{ status: "scheduled" }] })).toBe("scheduled");
+  it("is scheduled once called with a visit on the calendar", () => {
+    expect(quickMowStage({ ...base, orderStatus: "paid", jobStatus: "approved", calledAt: "2026-10-02T15:00:00Z", visits: [{ status: "scheduled" }] })).toBe("scheduled");
+  });
+
+  it("still needs the call when they picked a day but nobody has called", () => {
+    expect(quickMowStage({ ...base, orderStatus: "paid", jobStatus: "approved", visits: [{ status: "scheduled" }] })).toBe("to_call");
   });
 
   it("is mowed when the visit is done or the job is complete", () => {

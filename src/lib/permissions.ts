@@ -150,6 +150,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/evaluate/[jobId]":
     "One evaluation visit on the evaluator's phone. Guarded like the job it belongs to, on the evaluations " +
     "or job detail tab, the same way the job's directions page is.",
+  "/mow-orders/funnel":
+    "The quick mow funnel scoreboard, opened from the Quick Mow Pipeline. Checks the same tab itself; switching the " +
+    "team alerts on or off is checked again for an owner or admin.",
   "/admin/hiring/[id]":
     "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
     "before rating, moving or emailing anyone.",

@@ -12,6 +12,12 @@ import { fetchLotFromCounty } from "@/lib/data/lot-map";
 import type { LotData } from "@/lib/lot-map";
 import { dollars, estimateLawn, firstMowPrice, FIRST_MOW_DISCOUNT, MOW_TIERS, tierByKey, tierFor } from "@/lib/mow-price";
 import { log, maskEmail } from "@/lib/log";
+import { headers } from "next/headers";
+import { notifyTeamMember } from "@/lib/notifications";
+import { fbcFromClickId, metaEndpoint, metaEvent, type MetaEventInput } from "@/lib/meta-capi";
+import { dayLabel, isOpenDay, MOW_DAYS_AHEAD, openMowDays, type MowDay } from "@/lib/mow-days";
+import { paidAlert, requestAlert } from "@/lib/mow-messages";
+import { dateKeyIn } from "@/lib/time-zone";
 
 /**
  * The quick mow page: an address, a price, a card. Bought by somebody with
@@ -28,14 +34,83 @@ const DEFAULT_ORG = "00000000-0000-0000-0000-000000000001";
 
 async function business(orgSlug: string | null) {
   const admin = createAdminClient();
-  const query = admin.from("organizations").select("id, name, slug, business_phone");
+  const query = admin.from("organizations").select("id, name, slug, business_phone, quick_mow_alerts, mows_per_day");
   const { data } = orgSlug ? await query.eq("slug", orgSlug).maybeSingle() : await query.eq("id", DEFAULT_ORG).maybeSingle();
-  return { admin, org: data as { id: string; name: string; slug: string | null; business_phone: string | null } | null };
+  return {
+    admin,
+    org: data as { id: string; name: string; slug: string | null; business_phone: string | null; quick_mow_alerts: boolean; mows_per_day: number } | null,
+  };
 }
 
 function fail(err: unknown): { ok: false; message: string } {
   log.error("mow.action_failed", { error: err instanceof Error ? err.message : String(err) });
   return { ok: false, message: "Something went wrong on our end. Please try again." };
+}
+
+/** Who is asking, for matching the sale to the ad on Meta's side. */
+async function requester(): Promise<{ ip: string | null; userAgent: string | null }> {
+  try {
+    const list = await headers();
+    return { ip: list.get("x-forwarded-for")?.split(",")[0]?.trim() || null, userAgent: list.get("user-agent")?.slice(0, 400) || null };
+  } catch {
+    return { ip: null, userAgent: null };
+  }
+}
+
+/**
+ * Texts the account managers and owners, within seconds, when somebody asks
+ * for a price or pays: speed to lead. Only when quick mow alerts are switched
+ * on, and only through the app's own team alerts, which respect each
+ * person's own settings and fall back to email.
+ */
+async function alertTeam(admin: ReturnType<typeof createAdminClient>, orgId: string, body: string, dedupeKey: string): Promise<void> {
+  const { data: org } = await admin.from("organizations").select("quick_mow_alerts").eq("id", orgId).maybeSingle();
+  if (!org?.quick_mow_alerts) return;
+  const { data: people } = await admin
+    .from("profile_roles")
+    .select("profile_id, role_name, profiles!inner(organization_id)")
+    .in("role_name", ["account manager", "admin", "owner"])
+    .eq("profiles.organization_id", orgId);
+  const ids = [...new Set((people ?? []).map((p) => (p as { profile_id: string }).profile_id))];
+  await Promise.all(ids.map((id) => notifyTeamMember(id, "proposal_responses", body, { dedupeKey: `${dedupeKey}:${id}` }).catch(() => false)));
+}
+
+/** Sends one event to Meta. Off, quietly, until the pixel and token are set. Never in the way of the sale. */
+async function reportToMeta(input: MetaEventInput): Promise<boolean> {
+  const endpoint = metaEndpoint(process.env.META_PIXEL_ID, process.env.META_CAPI_TOKEN);
+  if (!endpoint) return false;
+  try {
+    const testCode = process.env.META_TEST_EVENT_CODE;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ data: [metaEvent(input)], ...(testCode ? { test_event_code: testCode } : {}) }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!response.ok) log.warn("mow.meta_rejected", { status: response.status, event: input.name });
+    return response.ok;
+  } catch (err) {
+    log.warn("mow.meta_failed", { event: input.name, error: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
+}
+
+/** Days a first mow can still be booked: tomorrow on, never a full day. */
+async function openDaysFor(admin: ReturnType<typeof createAdminClient>, orgId: string, perDay: number): Promise<MowDay[]> {
+  const now = new Date();
+  const from = dateKeyIn(new Date(now.getTime() + 86_400_000));
+  const to = dateKeyIn(new Date(now.getTime() + (MOW_DAYS_AHEAD + 1) * 86_400_000));
+  const { data } = await admin
+    .from("job_work_sessions")
+    .select("starts_on, status, jobs!inner(pipeline)")
+    .eq("organization_id", orgId)
+    .eq("jobs.pipeline", "quick_mow")
+    .neq("status", "cancelled")
+    .gte("starts_on", from)
+    .lte("starts_on", to);
+  const booked: Record<string, number> = {};
+  for (const row of (data ?? []) as { starts_on: string }[]) booked[row.starts_on] = (booked[row.starts_on] ?? 0) + 1;
+  return openMowDays(now, booked, perDay);
 }
 
 /** Coordinates for the address: the suggestion they picked, or a lookup of what they typed. */
@@ -76,6 +151,8 @@ export type MowQuote =
       overAcre: boolean;
       tiers: TierOption[];
       discountPercent: number;
+      /** Days they can pick for their first mow. */
+      days: MowDay[];
     }
   | { ok: false; message: string };
 
@@ -96,7 +173,13 @@ export type AreaCheck =
  * be reached the answer is "don't know", and they are let through rather
  * than turned away over somebody else's outage.
  */
-export async function checkServiceArea(input: { address: string; lat?: number | null; lng?: number | null }): Promise<AreaCheck> {
+export async function checkServiceArea(input: {
+  address: string;
+  lat?: number | null;
+  lng?: number | null;
+  orgSlug?: string | null;
+  rec?: string | null;
+}): Promise<AreaCheck> {
   try {
     const address = input.address.trim();
     if (address.length < 6) return { ok: false, message: "Type your full street address." };
@@ -107,6 +190,12 @@ export async function checkServiceArea(input: { address: string; lat?: number | 
       inArea = (await fetchLotFromCounty(placed.lat, placed.lng, address)) != null;
     } catch {
       inArea = null;
+    }
+    // Counted for the funnel scoreboard: whether it was in the area and which link brought them, nothing else.
+    const { admin, org } = await business(input.orgSlug ?? null);
+    if (org) {
+      const rec = input.rec && /^[a-z0-9]{4,12}$/.test(input.rec) ? input.rec : null;
+      await admin.from("mow_area_checks").insert({ organization_id: org.id, in_area: inArea, referral_code: rec }).then(undefined, () => {});
     }
     log.info("mow.area_checked", { inArea });
     return { ok: true, inArea, lat: placed.lat, lng: placed.lng };
@@ -142,6 +231,9 @@ export async function mowQuote(input: {
   lat?: number | null;
   lng?: number | null;
   rec: string | null;
+  /** ?fbclid= from the ad link, and Meta's own browser cookie, when they came from an ad. */
+  fbclid?: string | null;
+  fbp?: string | null;
 }): Promise<MowQuote> {
   try {
     const name = input.name.trim().slice(0, 120);
@@ -160,6 +252,9 @@ export async function mowQuote(input: {
     const tier = estimate ? tierFor(estimate.lawnSqft) : null;
     const price = tier ? firstMowPrice(tier) : null;
     const rec = input.rec && /^[a-z0-9]{4,12}$/.test(input.rec) ? input.rec : null;
+    const who = await requester();
+    const fbc = fbcFromClickId(input.fbclid, new Date());
+    const fbp = input.fbp && /^fb\.\d\.\d+\.\d+$/.test(input.fbp) ? input.fbp : null;
 
     const row = {
       name,
@@ -177,6 +272,10 @@ export async function mowQuote(input: {
       discount_cents: price?.discountCents ?? 0,
       amount_cents: price?.firstMowCents ?? null,
       referral_code: rec,
+      ...(fbc ? { fbc } : {}),
+      ...(fbp ? { fbp } : {}),
+      client_ip: who.ip,
+      client_user_agent: who.userAgent,
       updated_at: new Date().toISOString(),
     };
 
@@ -203,6 +302,33 @@ export async function mowQuote(input: {
       log.error("mow.request_failed", { orderId: saved.data.id, error: err instanceof Error ? err.message : String(err) })
     );
 
+    if (!earlier) {
+      // Speed to lead: the team hears about it now, while they are still on the page.
+      await alertTeam(
+        admin,
+        org.id,
+        requestAlert({ name, phone, address, price: price ? dollars(price.firstMowCents) : null }),
+        `mow:request:${saved.data.id}`
+      ).catch(() => {});
+      // A qualified lead for Meta: in our area (the county has their lot) and gave their details.
+      if (lot) {
+        const base = (await outboundBaseUrl()) || "";
+        const sent = await reportToMeta({
+          name: "Lead",
+          eventId: `${saved.data.id}:lead`,
+          at: new Date(),
+          sourceUrl: absolute(base, "/mow"),
+          email,
+          phone,
+          fbc,
+          fbp,
+          ip: who.ip,
+          userAgent: who.userAgent,
+        });
+        if (sent) await admin.from("mow_orders").update({ meta_lead_reported_at: new Date().toISOString() }).eq("id", saved.data.id);
+      }
+    }
+
     log.info("mow.quoted", { orderId: saved.data.id, tier: tier?.key ?? null, lot: Boolean(lot), email: maskEmail(email), rec });
     return {
       ok: true,
@@ -214,6 +340,7 @@ export async function mowQuote(input: {
       overAcre: Boolean(estimate && !tier),
       tiers: OPTIONS,
       discountPercent: Math.round(FIRST_MOW_DISCOUNT * 100),
+      days: await openDaysFor(admin, org.id, org.mows_per_day ?? 18),
     };
   } catch (err) {
     return fail(err);
@@ -223,7 +350,7 @@ export async function mowQuote(input: {
 export type StartResult = { ok: true; url: string } | { ok: false; message: string };
 
 /** The size they settled on, priced here, and the card form opened for the order their details are under. */
-export async function startMowOrder(input: { orderId: string; tier: string }): Promise<StartResult> {
+export async function startMowOrder(input: { orderId: string; tier: string; day: string | null }): Promise<StartResult> {
   try {
     if (!/^[0-9a-f-]{36}$/.test(input.orderId)) return { ok: false, message: "Start again from your address." };
     const tier = tierByKey(input.tier);
@@ -238,6 +365,12 @@ export async function startMowOrder(input: { orderId: string; tier: string }): P
       .maybeSingle();
     if (!order) return { ok: false, message: "Start again from your address." };
     if (order.status !== "unpaid") return { ok: false, message: "That mow is already paid for." };
+    const { data: org } = await admin.from("organizations").select("mows_per_day").eq("id", order.organization_id).maybeSingle();
+    const days = await openDaysFor(admin, order.organization_id, org?.mows_per_day ?? 18);
+    // A day they can have, or none at all when every day is full: then the call finds them the first opening.
+    if (days.length > 0 ? !input.day || !isOpenDay(input.day, days) : input.day !== null) {
+      return { ok: false, message: "That day just filled up. Pick another day." };
+    }
     const baseUrl = await outboundBaseUrl();
     if (!baseUrl) return { ok: false, message: "Couldn't start that payment. Try again." };
 
@@ -250,6 +383,7 @@ export async function startMowOrder(input: { orderId: string; tier: string }): P
         regular_cents: price.regularCents,
         discount_cents: price.discountCents,
         amount_cents: price.firstMowCents,
+        mow_day: input.day ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", order.id)
@@ -266,7 +400,7 @@ export async function startMowOrder(input: { orderId: string; tier: string }): P
             unit_amount: price.firstMowCents,
             product_data: {
               name: `First lawn mow, ${Math.round(FIRST_MOW_DISCOUNT * 100)}% off`,
-              description: `${tier.label} at ${order.address}. A team member will call within 24 hours to set your day.`,
+              description: `${tier.label} at ${order.address}${input.day ? ` on ${dayLabel(input.day)}` : ""}. A team member will call shortly to confirm.`,
             },
           },
           quantity: 1,
@@ -295,7 +429,9 @@ export async function settleMowOrder(orderId: string): Promise<void> {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("mow_orders")
-    .select("id, organization_id, name, email, phone, address, lat, lng, tier, lawn_sqft, amount_cents, regular_cents, referral_code, status, checkout_session_id")
+    .select(
+      "id, organization_id, name, email, phone, address, lat, lng, tier, lawn_sqft, amount_cents, regular_cents, referral_code, status, checkout_session_id, mow_day, fbc, fbp, client_ip, client_user_agent"
+    )
     .eq("id", orderId)
     .maybeSingle();
   if (!order || order.status !== "unpaid" || !order.checkout_session_id || !isStripeConfigured) return;
@@ -332,6 +468,46 @@ export async function settleMowOrder(orderId: string): Promise<void> {
         .eq("id", filed.jobId);
     }
     if (filed.customerId) await ensureClientAccount({ customerId: filed.customerId, email: order.email }).catch(() => null);
+
+    // The day they picked, on the calendar. The call confirms it.
+    if (filed.jobId && order.mow_day) {
+      await admin
+        .from("job_work_sessions")
+        .insert({
+          job_id: filed.jobId,
+          organization_id: order.organization_id,
+          starts_on: order.mow_day,
+          ends_on: order.mow_day,
+          status: "scheduled",
+          purpose: "First mow, booked and paid online. Call to confirm.",
+        })
+        .then(undefined, (err: unknown) => log.error("mow.visit_failed", { orderId: order.id, error: String(err) }));
+    }
+
+    const day = order.mow_day ? dayLabel(order.mow_day) : null;
+    await alertTeam(
+      admin,
+      order.organization_id,
+      paidAlert({ name: order.name, phone: order.phone, address: order.address, paid: dollars(order.amount_cents ?? 0), day }),
+      `mow:paid:${order.id}`
+    ).catch(() => {});
+
+    // A buyer, for Meta: the event the ads should learn from.
+    const base = (await outboundBaseUrl()) || "";
+    const reported = await reportToMeta({
+      name: "Purchase",
+      eventId: `${order.id}:purchase`,
+      at: new Date(),
+      sourceUrl: absolute(base, "/mow"),
+      email: order.email,
+      phone: order.phone,
+      fbc: order.fbc,
+      fbp: order.fbp,
+      ip: order.client_ip,
+      userAgent: order.client_user_agent,
+      valueCents: order.amount_cents,
+    });
+    if (reported) await admin.from("mow_orders").update({ meta_purchase_reported_at: new Date().toISOString() }).eq("id", order.id);
     log.info("mow.paid", { orderId: order.id, tier: order.tier, rec: order.referral_code });
   } catch (err) {
     log.error("mow.settle_failed", { orderId, error: err instanceof Error ? err.message : String(err) });
@@ -484,10 +660,11 @@ export async function mowOrderSummary(orderId: string): Promise<{
   paid: string;
   isPaid: boolean;
   phone: string | null;
+  day: string | null;
 } | null> {
   if (!/^[0-9a-f-]{36}$/.test(orderId)) return null;
   const admin = createAdminClient();
-  const { data } = await admin.from("mow_orders").select("name, address, tier, amount_cents, status, organization_id").eq("id", orderId).maybeSingle();
+  const { data } = await admin.from("mow_orders").select("name, address, tier, amount_cents, status, organization_id, mow_day").eq("id", orderId).maybeSingle();
   if (!data) return null;
   const { data: org } = await admin.from("organizations").select("business_phone").eq("id", data.organization_id).maybeSingle();
   return {
@@ -497,5 +674,6 @@ export async function mowOrderSummary(orderId: string): Promise<{
     paid: dollars(data.amount_cents ?? 0),
     isPaid: data.status === "paid",
     phone: (org as { business_phone?: string | null } | null)?.business_phone ?? null,
+    day: data.mow_day ? dayLabel(data.mow_day) : null,
   };
 }

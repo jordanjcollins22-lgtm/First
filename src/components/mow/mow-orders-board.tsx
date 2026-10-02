@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { AlertTriangle, CalendarDays, Check, Clock, Phone } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, Check, Clock, Loader2, Mail, Phone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { markMowCalled } from "@/lib/actions/mow-order-actions";
+import { markMowCalled, previewMowWelcome, sendMowWelcome } from "@/lib/actions/mow-order-actions";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { dayLabel } from "@/lib/mow-days";
 import type { MowOrderRow } from "@/lib/data/mow-orders";
 import { callClock } from "@/lib/mow-calls";
 import { dollars, tierByKey } from "@/lib/mow-price";
@@ -28,10 +31,15 @@ export function MowOrdersBoard({ orders, now }: { orders: MowOrderRow[] | null; 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6">
       <header>
-        <h1 className="text-xl font-semibold">Quick mow pipeline</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-xl font-semibold">Quick mow pipeline</h1>
+          <Link href="/mow-orders/funnel" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+            <BarChart3 className="h-4 w-4" /> Funnel scoreboard
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Everybody who asked for a price on the quick mow page. They&apos;re in the system as a client with a job from the moment they gave
-          their details.
+          Everybody who asked for a price on the quick mow page, in the system as a client with a job from the moment they gave their
+          details. Call within 2 minutes of them asking or paying.
         </p>
         {orders && (
           <p className="mt-2 text-sm">
@@ -104,7 +112,11 @@ function RequestCard({ order, now }: { order: MowOrderRow; now?: Date }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, start] = useTransition();
   const tier = order.tier ? tierByKey(order.tier) : null;
-  const clock = order.stage === "to_call" && order.paidAt ? callClock(order.paidAt, now) : null;
+  // Speed to lead: two minutes from asking, or from paying, until somebody calls.
+  const since = order.stage === "to_call" ? order.paidAt : order.stage === "requested" && !order.calledAt ? order.createdAt : null;
+  const clock = since ? callClock(since, now) : null;
+  const [draft, setDraft] = useState<{ to: string; subject: string; body: string } | null>(null);
+  const [emailed, setEmailed] = useState<string | null>(order.welcomeSentAt);
 
   return (
     <li className={`rounded-xl border bg-card p-3 ${clock?.overdue ? "border-destructive/50" : "border-border"}`}>
@@ -139,6 +151,12 @@ function RequestCard({ order, now }: { order: MowOrderRow; now?: Date }) {
         {order.referralCode ? ` · from link ${order.referralCode}` : ""}
         {order.lawnSqft ? ` · county lawn about ${order.lawnSqft.toLocaleString("en-US")} sq ft` : ""}
       </p>
+      {order.mowDay && (order.stage === "to_call" || order.stage === "to_schedule") && (
+        <p className="mt-1 flex items-center gap-1 text-sm font-medium">
+          <CalendarDays className="h-4 w-4 text-primary" /> Picked {dayLabel(order.mowDay)}
+          {order.stage === "to_call" ? <span className="font-normal text-muted-foreground"> · confirm it on the call</span> : null}
+        </p>
+      )}
       {order.visitOn && order.stage === "scheduled" && (
         <p className="mt-1 flex items-center gap-1 text-sm font-medium">
           <CalendarDays className="h-4 w-4 text-primary" /> {new Date(`${order.visitOn}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
@@ -159,7 +177,7 @@ function RequestCard({ order, now }: { order: MowOrderRow; now?: Date }) {
             {order.stage === "to_schedule" ? "Open job to schedule" : "Open job"}
           </Link>
         )}
-        {order.stage === "to_call" && (
+        {(order.stage === "to_call" || (order.stage === "requested" && !order.calledAt)) && (
           <Button
             type="button"
             variant="outline"
@@ -178,6 +196,59 @@ function RequestCard({ order, now }: { order: MowOrderRow; now?: Date }) {
           </Button>
         )}
       </div>
+      {order.status === "paid" && order.stage !== "mowed" && !draft && (
+        <div className="mt-2">
+          {emailed ? (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Mail className="h-3.5 w-3.5" /> Before-your-mow email sent {shortWhen(emailed)}
+            </p>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-primary"
+              disabled={busy}
+              onClick={() =>
+                start(async () => {
+                  const result = await previewMowWelcome(order.id);
+                  if (!result.ok) setError(result.message);
+                  else setDraft({ to: result.to, subject: result.subject, body: result.body });
+                })
+              }
+            >
+              <Mail className="mr-1 h-4 w-4" /> Before-your-mow email
+            </Button>
+          )}
+        </div>
+      )}
+      {draft && (
+        <div className="mt-2 space-y-2 rounded-lg border border-border bg-muted/30 p-2">
+          <p className="text-xs font-semibold">Goes to {draft.to}. Change anything; nothing sends until you press Send.</p>
+          <Input value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} aria-label="Subject" />
+          <Textarea rows={10} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} aria-label="Email" />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                start(async () => {
+                  const result = await sendMowWelcome({ id: order.id, subject: draft.subject, body: draft.body });
+                  if (!result.ok) return setError(result.message);
+                  setDraft(null);
+                  setEmailed(new Date().toISOString());
+                })
+              }
+            >
+              {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />} Send email
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setDraft(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
     </li>
   );

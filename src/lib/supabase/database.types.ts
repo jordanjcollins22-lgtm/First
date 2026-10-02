@@ -136,6 +136,8 @@ export interface Database {
           marketing_since: string;
           roads_updated_at: string | null;
           public_base_url: string | null;
+          quick_mow_alerts: boolean;
+          mows_per_day: number;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> & {
           name: string;
@@ -4116,6 +4118,13 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["loadout_checks"]["Row"]>;
         Relationships: [];
       };
+      /** An address checked on the quick mow page: in our area or not. */
+      mow_area_checks: {
+        Row: { id: number; organization_id: string; in_area: boolean | null; referral_code: string | null; created_at: string };
+        Insert: Partial<Database["public"]["Tables"]["mow_area_checks"]["Row"]> & { organization_id: string };
+        Update: Partial<Database["public"]["Tables"]["mow_area_checks"]["Row"]>;
+        Relationships: [];
+      };
       /** A first mow bought from the quick mow page. */
       mow_orders: {
         Row: {
@@ -4147,6 +4156,14 @@ export interface Database {
           note: string | null;
           created_at: string;
           updated_at: string;
+          mow_day: string | null;
+          welcome_sent_at: string | null;
+          fbc: string | null;
+          fbp: string | null;
+          client_ip: string | null;
+          client_user_agent: string | null;
+          meta_lead_reported_at: string | null;
+          meta_purchase_reported_at: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["mow_orders"]["Row"]> & {
           organization_id: string;
