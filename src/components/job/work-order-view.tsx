@@ -20,6 +20,8 @@ import type { ProposalSiteImageTransform } from "@/types/domain";
 import { CrewChecklistCard } from "@/components/job/crew-checklist-card";
 import type { CrewChecklist } from "@/lib/crew-checklist";
 import { AreaBoard, type AreaActions } from "@/components/job/area-board";
+import { ServiceTimers } from "@/components/job/service-timers";
+import type { JobServiceTimers } from "@/lib/data/service-timing";
 import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
 import type { JobReceipt } from "@/lib/data/job-receipts";
 import type { AreaBoardData } from "@/lib/data/area-board";
@@ -72,6 +74,7 @@ export function WorkOrderView({
   checklist,
   areaBoard,
   receipts = [],
+  serviceTimers,
   demo,
 }: {
   jobId: string;
@@ -126,6 +129,8 @@ export function WorkOrderView({
   areaBoard?: AreaBoardData;
   /** What the crew had to buy for this job, with the receipts. */
   receipts?: JobReceipt[];
+  /** Each service to time on this job, and its timers. */
+  serviceTimers?: JobServiceTimers | null;
   /**
    * A demo of this job's sheet: the same screen, every button run on the
    * screen only. The areas and receipts are the demo's; the photo and
@@ -229,6 +234,9 @@ export function WorkOrderView({
       {onSite && areaBoard && (
         <AreaBoard jobId={jobId} zones={order.zones} board={areaBoard} accountManager={accountManager} actions={demo?.areaActions} />
       )}
+
+      {/* Each service timed, so production rates come from real jobs. */}
+      {onSite && !demo && serviceTimers && serviceTimers.services.length > 0 && <ServiceTimers jobId={jobId} timers={serviceTimers} />}
 
       {demo?.after}
 

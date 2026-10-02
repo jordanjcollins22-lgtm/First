@@ -4266,6 +4266,63 @@ export interface Database {
         };
         Relationships: [];
       };
+      service_time_logs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          zone_id: string;
+          zone_name: string;
+          service_key: string;
+          unit: string;
+          planned_quantity: number | null;
+          quantity: number | null;
+          people: number | null;
+          started_at: string;
+          finished_at: string | null;
+          started_by: string | null;
+          finished_by: string | null;
+          excluded: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          job_id: string;
+          zone_id: string;
+          zone_name: string;
+          service_key: string;
+          unit: string;
+          planned_quantity?: number | null;
+          quantity?: number | null;
+          people?: number | null;
+          started_at?: string;
+          finished_at?: string | null;
+          started_by?: string | null;
+          finished_by?: string | null;
+          excluded?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          job_id?: string;
+          zone_id?: string;
+          zone_name?: string;
+          service_key?: string;
+          unit?: string;
+          planned_quantity?: number | null;
+          quantity?: number | null;
+          people?: number | null;
+          started_at?: string;
+          finished_at?: string | null;
+          started_by?: string | null;
+          finished_by?: string | null;
+          excluded?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       crew_day_events: {
         Row: {
           id: string;

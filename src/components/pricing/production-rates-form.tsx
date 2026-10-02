@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { CheckCircle2, Loader2, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ import {
   type ProductionUnit,
 } from "@/lib/forward-pricing";
 import { cn } from "@/lib/utils";
+import { setTimeLogExcluded } from "@/lib/actions/service-timing-actions";
+import { averageRate, clockHours, counts, hoursLabel, jobRate, labourHours, roundRate, type ServiceTimeLog } from "@/lib/service-timing";
 
 const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
@@ -37,12 +39,18 @@ export function ProductionRatesForm({
   canSave,
   canEdit,
   updatedAt,
+  timeLogs = [],
+  timingAvailable = false,
 }: {
   initial: PricingSetup;
   saved: boolean;
   canSave: boolean;
   canEdit: boolean;
   updatedAt: string | null;
+  /** Every service timed on a job, newest first. */
+  timeLogs?: ServiceTimeLog[];
+  /** False until migration 0337: nothing has been timed because nothing can be. */
+  timingAvailable?: boolean;
 }) {
   const [eq, setEq] = useState(initial.equation);
   const [services, setServices] = useState<ProductionService[]>(initial.services);
@@ -52,6 +60,20 @@ export function ProductionRatesForm({
   const [pending, start] = useTransition();
   const locked = !canEdit || pending;
   const cr = crewRateCents(eq);
+  const crewPeople = eq.leads + eq.technicians;
+  const [logs, setLogs] = useState(timeLogs);
+  const [openHistory, setOpenHistory] = useState<string | null>(null);
+  const logsFor = (key: string) => logs.filter((l) => l.serviceKey === key);
+  const exclude = (id: string, excluded: boolean) => {
+    setLogs((list) => list.map((l) => (l.id === id ? { ...l, excluded } : l)));
+    start(async () => {
+      const result = await setTimeLogExcluded(id, excluded);
+      if (!result.ok) {
+        setError(result.message);
+        setLogs((list) => list.map((l) => (l.id === id ? { ...l, excluded: !excluded } : l)));
+      }
+    });
+  };
 
   const change = <K extends keyof typeof eq>(key: K, value: (typeof eq)[K]) => {
     setEq((e) => ({ ...e, [key]: value }));
@@ -174,6 +196,11 @@ export function ProductionRatesForm({
             PR is how much of the service the whole crew gets done in one hour on site. Material is what it uses per unit. Priced at is what one unit comes to for the client,
             with today&apos;s crew rate and shares. Turn a service off to stop it being suggested; a price already saved with it still works.
           </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {timingAvailable
+              ? "Every time the crew times a service on a job, it is listed under the service with how much got done and how long it took. The average across all of them is ΣQ ÷ Σ labour-hours, for a crew your size; Use it puts it in PR."
+              : "Once database update 0337 is applied, the crew time each service on the job, and every job is listed under its service here with the average across all of them."}
+          </p>
         </div>
 
         {/* Desktop: one row each. */}
@@ -192,7 +219,8 @@ export function ProductionRatesForm({
             </thead>
             <tbody className="divide-y divide-border">
               {services.map((s, i) => (
-                <tr key={s.key} className={cn(s.active === false && "opacity-50")}>
+                <Fragment key={s.key}>
+                <tr className={cn(s.active === false && "opacity-50")}>
                   <td className="py-1.5 pr-2">
                     <TextBox value={s.label} placeholder="Name the service" disabled={locked} onChange={(label) => changeService(i, { label })} wide label="Service name" />
                   </td>
@@ -215,6 +243,23 @@ export function ProductionRatesForm({
                     <input type="checkbox" checked={s.active !== false} disabled={locked} onChange={(e) => changeService(i, { active: e.target.checked })} aria-label={`${s.label || "Service"} on`} className="h-4 w-4" />
                   </td>
                 </tr>
+                {s.unit !== "job" && (
+                  <tr className="border-t-0">
+                    <td colSpan={7} className="pb-2 pt-0">
+                      <TimedHistory
+                        service={s}
+                        logs={logsFor(s.key)}
+                        crewPeople={crewPeople}
+                        open={openHistory === s.key}
+                        onToggle={() => setOpenHistory((k) => (k === s.key ? null : s.key))}
+                        onUse={canEdit ? (pr) => changeService(i, { pr }) : undefined}
+                        onExclude={canEdit ? exclude : undefined}
+                        disabled={locked}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -253,6 +298,18 @@ export function ProductionRatesForm({
                   <PerUnit service={s} eq={eq} />
                 </span>
               </p>
+              {s.unit !== "job" && (
+                <TimedHistory
+                  service={s}
+                  logs={logsFor(s.key)}
+                  crewPeople={crewPeople}
+                  open={openHistory === s.key}
+                  onToggle={() => setOpenHistory((k) => (k === s.key ? null : s.key))}
+                  onUse={canEdit ? (pr) => changeService(i, { pr }) : undefined}
+                  onExclude={canEdit ? exclude : undefined}
+                  disabled={locked}
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -366,5 +423,111 @@ function PerUnit({ service, eq }: { service: ProductionService; eq: PricingSetup
       {money(Math.round(cents))}
       <span className="font-normal text-muted-foreground"> / {service.unit === "job" ? "job" : unitWord(service.unit)}</span>
     </>
+  );
+}
+
+const amount = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+/**
+ * Under a service: every job it was timed on, and the average across them,
+ * worked out for a crew this size, with a button to use it as the rate.
+ */
+function TimedHistory({
+  service,
+  logs,
+  crewPeople,
+  open,
+  onToggle,
+  onUse,
+  onExclude,
+  disabled,
+}: {
+  service: ProductionService;
+  logs: ServiceTimeLog[];
+  crewPeople: number;
+  open: boolean;
+  onToggle: () => void;
+  onUse?: (pr: number) => void;
+  onExclude?: (id: string, excluded: boolean) => void;
+  disabled: boolean;
+}) {
+  if (logs.length === 0) return <p className="text-xs text-muted-foreground">Not timed on a job yet.</p>;
+  const avg = averageRate(logs, crewPeople);
+  const unit = unitWord(service.unit);
+  const suggested = avg ? roundRate(avg.perCrewHour) : null;
+  return (
+    <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button type="button" onClick={onToggle} className="font-medium text-primary underline-offset-2 hover:underline" aria-expanded={open}>
+          Timed on {new Set(logs.map((l) => l.jobId)).size} job{new Set(logs.map((l) => l.jobId)).size === 1 ? "" : "s"} ({logs.length} time{logs.length === 1 ? "" : "s"}) {open ? "▴" : "▾"}
+        </button>
+        {avg ? (
+          <span className="tabular-nums">
+            Average <span className="font-semibold">{amount(roundRate(avg.perCrewHour))} {unit}/crew-hr</span>
+            <span className="text-muted-foreground">
+              {" "}
+              ({amount(avg.quantity)} {unit} in {amount(Math.round(avg.labourHours * 10) / 10)} labour-hrs = {amount(Math.round(avg.perLabourHour * 10) / 10)} per person-hour, × {crewPeople})
+            </span>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Nothing counted toward an average.</span>
+        )}
+        {onUse && suggested != null && suggested !== service.pr && (
+          <button type="button" disabled={disabled} onClick={() => onUse(suggested)} className="rounded-md border border-primary px-2 py-0.5 font-medium text-primary hover:bg-primary/10">
+            Use {amount(suggested)}
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[620px]">
+            <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="py-1 pr-2 text-left font-medium">Job</th>
+                <th className="px-2 py-1 text-left font-medium">Area</th>
+                <th className="px-2 py-1 text-left font-medium">Day</th>
+                <th className="px-2 py-1 text-right font-medium">Q</th>
+                <th className="px-2 py-1 text-right font-medium">Took</th>
+                <th className="px-2 py-1 text-right font-medium">People</th>
+                <th className="px-2 py-1 text-right font-medium">Labour-hrs</th>
+                <th className="px-2 py-1 text-right font-medium">Rate /crew-hr</th>
+                {onExclude && <th className="py-1 pl-2" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {logs.map((l) => {
+                const rate = jobRate(l, crewPeople);
+                return (
+                  <tr key={l.id} className={cn(!counts(l) && "text-muted-foreground line-through decoration-muted-foreground/50")}>
+                    <td className="py-1 pr-2">
+                      <a href={`/jobs/${l.jobId}`} className="text-primary hover:underline">
+                        {l.jobNumber != null ? `#${l.jobNumber}` : "Job"}
+                      </a>
+                      {l.where ? <span className="text-muted-foreground"> · {l.where}</span> : null}
+                    </td>
+                    <td className="px-2 py-1">{l.zoneName}</td>
+                    <td className="whitespace-nowrap px-2 py-1">{new Date(l.startedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
+                      {amount(l.quantity ?? 0)} {unitWord(l.unit)}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{hoursLabel(clockHours(l) ?? 0)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{l.people ?? "—"}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{amount(Math.round((labourHours(l) ?? 0) * 100) / 100)}</td>
+                    <td className="px-2 py-1 text-right font-medium tabular-nums">{rate != null ? amount(roundRate(rate)) : "—"}</td>
+                    {onExclude && (
+                      <td className="py-1 pl-2 text-right">
+                        <button type="button" disabled={disabled} onClick={() => onExclude(l.id, !l.excluded)} className="text-primary no-underline hover:underline">
+                          {l.excluded ? "Put back" : "Leave out"}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

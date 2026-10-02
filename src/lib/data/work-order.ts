@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
+import { loadJobServiceTimers, type JobServiceTimers } from "@/lib/data/service-timing";
+import { getCurrentProfile } from "@/lib/data/team";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { buildWorkOrder, type WorkOrder } from "@/lib/work-order";
 import { serviceTypeById } from "@/components/canvas/service-catalog";
@@ -71,6 +73,8 @@ export interface WorkOrderPageData {
   areaBoard: AreaBoardData;
   /** What the crew had to buy for this job, with the receipts. */
   receipts: JobReceipt[];
+  /** Each service to time, and the timers started: how long every service really takes. Null before migration 0337. */
+  serviceTimers?: JobServiceTimers | null;
 }
 
 
@@ -180,11 +184,18 @@ export async function getWorkOrderForJob(jobId: string): Promise<WorkOrderPageDa
     kitPhotos: await getKitPhotos().catch(() => ({})),
   });
 
-  const [areaBoard, receipts] = await Promise.all([loadAreaBoard(jobId, { zones, catalog, photos }), listJobReceipts(jobId).catch(() => [])]);
+  const me = await getCurrentProfile().catch(() => null);
+  const serviceName = (typeId: string) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId;
+  const [areaBoard, receipts, serviceTimers] = await Promise.all([
+    loadAreaBoard(jobId, { zones, catalog, photos }),
+    listJobReceipts(jobId).catch(() => []),
+    me ? loadJobServiceTimers(supabase, jobId, me.organization_id, zones, serviceName).catch(() => null) : Promise.resolve(null),
+  ]);
 
   return {
     areaBoard,
     receipts,
+    serviceTimers,
     checklist,
     approvedAdditions,
     photos,
