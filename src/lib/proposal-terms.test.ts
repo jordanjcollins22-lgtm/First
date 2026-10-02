@@ -33,6 +33,11 @@ describe("proposal terms", () => {
     expect(LOWER).toMatch(/rain|frozen/);
   });
 
+  it("says who does the work, and that licensed work goes to someone qualified", () => {
+    expect(LOWER).toContain("in-house team");
+    expect(LOWER).toMatch(/licensed services are required, appropriately qualified service providers/);
+  });
+
   it("ties acceptance to the terms rather than leaving them decorative", () => {
     expect(PROPOSAL_ACCEPT_NOTE.toLowerCase()).toMatch(/priced and booked|quoted and scheduled/);
   });

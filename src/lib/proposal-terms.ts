@@ -80,6 +80,17 @@ export const PROPOSAL_TERMS: ProposalTerm[] = [
       "what it costs, and you decide before anybody starts. We will not do extra work and then " +
       "send you a bill for it.",
   },
+  {
+    // Said once, here, so it is true of every proposal: the work is not all
+    // our own crew's, and licensed work is done by somebody licensed for it.
+    heading: "Who does the work",
+    body:
+      "We provide property maintenance and project management services. Depending on the " +
+      "project scope, services may be completed by our in-house team, independent service " +
+      "providers, specialty contractors, or a combination of these resources. When specialty or " +
+      "licensed services are required, appropriately qualified service providers may be engaged " +
+      "to complete those portions of the project.",
+  },
 ];
 
 export const PROPOSAL_TERMS_TITLE = "Before you accept";
