@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   LINK_MARKER,
+  introComment,
   LINK_SLOT,
   checkComment,
   commentBrief,
@@ -323,5 +324,16 @@ describe("a comment written before anybody takes the post", () => {
     expect(shown).not.toContain(LINK_MARKER);
     expect(draftFromDisplay(shown)).toBe(neutral);
     expect(finishComment(draftFromDisplay(shown), "https://jsl.md/b/abc")).toContain("https://jsl.md/b/abc");
+  });
+});
+
+describe("introComment", () => {
+  it("introduces the business with the link, in the commenter's own words, and passes the rules", () => {
+    const text = introComment(["office"], "JS Landscaping MD");
+    expect(text.startsWith("Hi everyone! I work with JS Landscaping MD.")).toBe(true);
+    expect(text.endsWith(LINK_MARKER)).toBe(true);
+    const link = "https://app.jslandscapingmd.com/r/abc1234";
+    expect(looksUsable(text.replace(LINK_MARKER, link), link)).toBe(true);
+    expect(introComment(["owner"], "JS Landscaping MD")).toContain("I operate JS Landscaping MD.");
   });
 });

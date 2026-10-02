@@ -10,7 +10,7 @@ import { answersToPost, answersToSamePost } from "@/lib/data/post-board";
 import { mentionComment } from "@/lib/outreach-agent";
 import { alreadyAnswered, isAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
-import { checkComment, draftFromDisplay, finishComment, LINK_MARKER, looksUsable, personaliseDraft } from "@/lib/comment-prompt";
+import { checkComment, draftFromDisplay, finishComment, introComment, LINK_MARKER, looksUsable, personaliseDraft } from "@/lib/comment-prompt";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { daysOld, fitOpenerToAge } from "@/lib/post-age";
 import { createClient } from "@/lib/supabase/server";
@@ -128,6 +128,8 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   const days = daysOld(row.posted_at ?? null, row.age_days ?? null, row.created_at, new Date());
   const edited = options.text?.trim() ? draftFromDisplay(options.text.trim()) : null;
   let read: { draft: string; askedBy: string | null; groupName: string | null; service: string | null; note: string };
+  // Set when the writer would not write one: the introduction goes instead.
+  let intro = false;
   if (edited || row.draft_comment) {
     // Checked again: what somebody typed into the box has to pass the same
     // rules as what the writer produced.
@@ -145,12 +147,26 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
     };
   } else {
     const fresh = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment", ageDays: days });
-    if (!fresh.ok) return letGo(fresh.error);
-    if (!fresh.draft) return letGo(fresh.draftNote ?? "Couldn't write one for that post. Try again.");
-    read = { draft: fresh.draft, askedBy: fresh.askedBy, groupName: fresh.groupName, service: fresh.service, note: fresh.note };
+    if (fresh.ok && fresh.draft) {
+      read = { draft: fresh.draft, askedBy: fresh.askedBy, groupName: fresh.groupName, service: fresh.service, note: fresh.note };
+    } else {
+      // Nobody asking (a business thread, "advertise here") or it could not
+      // be read: an introduction they can change, rather than a dead end
+      // that says try again when trying again can never work.
+      const organization = await getCurrentOrganization();
+      intro = true;
+      read = {
+        draft: introComment(profile.roles, organization.name),
+        askedBy: null,
+        groupName: fresh.ok ? fresh.groupName : null,
+        service: null,
+        note: fresh.ok ? fresh.note : row.text ?? "",
+      };
+    }
   }
 
-  const askedBy = row.author ?? read.askedBy ?? null;
+  // An introduction is to the room, not a reply to whoever started the thread.
+  const askedBy = intro ? null : row.author ?? read.askedBy ?? null;
   const recorded = await recordOutreach({
     kind: "comment",
     platform: "facebook",
@@ -163,7 +179,9 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   });
   if (!recorded.ok) return letGo(recorded.error);
 
-  const written = fitOpenerToAge(finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link), days);
+  const finished = finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link);
+  // "Do you still need someone?" is for a request, not an introduction.
+  const written = intro ? finished : fitOpenerToAge(finished, days);
   if (!looksUsable(written, recorded.link)) return letGo("The comment came back too thin. Try again.");
   const { text: comment } = mentionComment(written, askedBy);
 

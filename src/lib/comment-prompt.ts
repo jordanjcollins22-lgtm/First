@@ -74,6 +74,21 @@ export function commenterIntro(roles: readonly string[], businessName: string): 
   return `I work with ${name}`;
 }
 
+/**
+ * The comment for a post the writer will not answer: a business thread
+ * ("advertise your business here"), or one it could not read. A plain
+ * introduction with the link, in the commenter's own opener, for them to
+ * change as they like before they copy it.
+ */
+export function introComment(roles: readonly string[], businessName: string): string {
+  return [
+    "Hi everyone!",
+    `${commenterIntro(roles, businessName)}.`,
+    "We do landscaping, bed cleanups, mulch, lawn care and more around Harford County.",
+    `Free on-site evaluation, no obligation, and you get a written price for each area: ${LINK_MARKER}`,
+  ].join(" ");
+}
+
 export function commentSystemPrompt(
   businessName: string,
   services: { own?: string[]; partner?: string[] } = {},
