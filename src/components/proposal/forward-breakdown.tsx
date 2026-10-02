@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Images, Plus, X } from "lucide-react";
 
 import {
-  PRICING_EQUATION,
-  PRODUCTION_SERVICES,
   crewRateCents,
   priceForward,
   productionService,
@@ -14,6 +12,7 @@ import {
   type PriceLine,
   type PricedJob,
   type PricedLine,
+  type PricingEquation,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
@@ -22,16 +21,14 @@ import { cn } from "@/lib/utils";
 const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const qty = (n: number) => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 2 }));
 const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
-const eq = PRICING_EQUATION;
-
-/** The forward-priced job for these lines. */
-export function priceLines(lines: PriceLine[][]): PricedJob {
-  return priceForward(lines, eq);
+/** The forward-priced job for these lines, with the business's own rates. */
+export function priceLines(item: PriceApproval, lines: PriceLine[][]): PricedJob {
+  return priceForward(lines, item.pricing.equation, item.pricing.services);
 }
 
 /** Areas whose services come to nothing, by name: the price can't be accepted with them. */
 export function unpricedAreas(item: PriceApproval, lines: PriceLine[][]): string[] {
-  const job = priceLines(lines);
+  const job = priceLines(item, lines);
   return item.breakdown.areas.filter((_, i) => (job.areas[i]?.rCents ?? 0) <= 0).map((a) => a.name);
 }
 
@@ -44,7 +41,8 @@ export function unpricedAreas(item: PriceApproval, lines: PriceLine[][]): string
  * removed and added; the price follows.
  */
 export function ForwardBreakdown({ item, lines, onChange, locked = false }: { item: PriceApproval; lines: PriceLine[][]; onChange: (lines: PriceLine[][]) => void; locked?: boolean }) {
-  const job = priceLines(lines);
+  const job = priceLines(item, lines);
+  const { equation: eq, services } = item.pricing;
   const [gallery, setGallery] = useState<{ area: number; index: number } | null>(null);
   const forward = item.forward ?? [];
 
@@ -52,7 +50,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
     onChange(lines.map((ls, a) => (a === area ? ls.map((l, i) => (i === index ? { ...l, ...patch, note: patch.quantity !== undefined || patch.materialCents !== undefined ? null : l.note } : l)) : ls)));
   const removeLine = (area: number, index: number) => onChange(lines.map((ls, a) => (a === area ? ls.filter((_, i) => i !== index) : ls)));
   const addLine = (area: number, key: string) => {
-    const service = productionService(key);
+    const service = productionService(key, services);
     if (!service) return;
     const size = Number(String(item.breakdown.areas[area]?.size ?? "").replace(/[^0-9.]/g, "")) || 0;
     const quantity = service.unit === "SF" ? size : service.unit === "job" ? 1 : 0;
@@ -136,7 +134,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                                 `${qty(l.quantity)}${l.unit === "job" ? "" : ` ${l.unit}`}`
                               ) : (
                                 <span className="inline-flex items-center gap-1">
-                                  <QuantityInput line={l} onChange={(patch) => setLine(a, i, patch)} />
+                                  <QuantityInput line={l} perUnit={productionService(l.key, services)?.materialCentsPerUnit} onChange={(patch) => setLine(a, i, patch)} />
                                   <span className="text-xs text-muted-foreground">{l.unit}</span>
                                 </span>
                               )}
@@ -207,7 +205,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                             {locked || l.unit === "job" ? (
                               <span className="text-foreground tabular-nums">{qty(l.quantity)}</span>
                             ) : (
-                              <QuantityInput line={l} onChange={(patch) => setLine(a, i, patch)} />
+                              <QuantityInput line={l} perUnit={productionService(l.key, services)?.materialCentsPerUnit} onChange={(patch) => setLine(a, i, patch)} />
                             )}
                             {l.unit !== "job" && l.unit}
                           </span>
@@ -244,7 +242,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                       aria-label={`Add a service to ${area.name}`}
                     >
                       <option value="">Add a service…</option>
-                      {PRODUCTION_SERVICES.map((s) => (
+                      {services.filter((s) => s.active !== false).map((s) => (
                         <option key={s.key} value={s.key}>
                           {s.label}
                           {s.pr != null ? ` (${qty(s.pr)} ${s.unit}/hr)` : ""}
@@ -259,7 +257,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
         );
       })}
 
-      <JobTotals job={job} />
+      <JobTotals job={job} eq={eq} />
 
       {gallery && forward[gallery.area] && (
         <Gallery
@@ -275,7 +273,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
 }
 
 /** Q, typed. A service with a material per unit keeps its material in step. */
-function QuantityInput({ line, onChange }: { line: PricedLine; onChange: (patch: Partial<PriceLine>) => void }) {
+function QuantityInput({ line, perUnit, onChange }: { line: PricedLine; perUnit?: number; onChange: (patch: Partial<PriceLine>) => void }) {
   return (
     <input
       type="number"
@@ -286,7 +284,7 @@ function QuantityInput({ line, onChange }: { line: PricedLine; onChange: (patch:
       placeholder="0"
       onChange={(e) => {
         const quantity = Math.max(0, Number(e.target.value) || 0);
-        const per = productionService(line.key)?.materialCentsPerUnit;
+        const per = perUnit;
         onChange(per ? { quantity, materialCents: Math.round(quantity * per) } : { quantity });
       }}
       aria-label={`${line.label} quantity`}
@@ -316,7 +314,7 @@ function MoneyInput({ line, onChange }: { line: PricedLine; onChange: (patch: Pa
 }
 
 /** The job, added up, and where every dollar of the price goes. */
-function JobTotals({ job }: { job: PricedJob }) {
+function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
   const al = job.allocations;
   const shares: { label: string; cents: number }[] = [
     { label: `Cost (M + PLC), ${pct(projectCostMargin(eq))}`, cents: Math.round(job.costCents) },

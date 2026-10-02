@@ -58,7 +58,7 @@ export function PriceCard({
   const [stage, setStage] = useState<"price" | "decline" | "send" | "sent">(startAt ?? item.stage);
   // Priced the forward way: every area's services, which the price follows.
   const [lines, setLines] = useState<PriceLine[][] | null>(item.forward ? item.forward.map((a) => a.lines) : null);
-  const forwardCents = lines ? priceLines(lines).rCents : null;
+  const forwardCents = lines ? priceLines(item, lines).rCents : null;
   const unpriced = lines ? unpricedAreas(item, lines) : [];
   const [fixedTotal, setTotal] = useState(item.totalCents);
   // While it is being priced the forward way, the price is the services'.

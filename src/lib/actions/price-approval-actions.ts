@@ -8,7 +8,8 @@ import { isAccountManager } from "@/lib/affiliate-roles";
 import { isOwnerLevel } from "@/lib/roles";
 import { approveProposal, updateProposalDraft } from "@/lib/actions/proposal-actions";
 import { spreadPrice } from "@/lib/price-approval";
-import { PRICING_EQUATION, priceForward, readLines } from "@/lib/forward-pricing";
+import { priceForward, readLines } from "@/lib/forward-pricing";
+import { getProductionPricing } from "@/lib/data/production-pricing";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 export type PriceResult = { ok: true; sendTo: string | null } | { ok: false; error: string };
@@ -38,9 +39,11 @@ export async function acceptPrice(jobId: string, lines?: unknown): Promise<Price
       const { data: proposal } = await supabase.from("job_proposals").select("scope_snapshot").eq("job_id", jobId).maybeSingle();
       if (!proposal) return { ok: false, error: "There is no proposal on this job." };
       const snapshot = (proposal.scope_snapshot ?? []) as unknown as ProposalZoneSnapshot[];
-      const read = readLines(lines, snapshot.length);
+      const profile = await getCurrentProfile();
+      const pricing = await getProductionPricing(supabase, profile!.organization_id);
+      const read = readLines(lines, snapshot.length, pricing.services);
       if (!read) return { ok: false, error: "The areas have changed since this opened. Reload the page." };
-      const priced = priceForward(read, PRICING_EQUATION);
+      const priced = priceForward(read, pricing.equation, pricing.services);
       if (priced.rCents <= 0) return { ok: false, error: "Every service is at nothing. Put in the quantities first." };
       const repriced = snapshot.map((zone, i) => ({ ...zone, priceCents: priced.areas[i].rCents, priceDerived: true, lines: read[i] }));
       await updateProposalDraft(jobId, { totalCost: priced.rCents / 100, scopeSnapshot: repriced });

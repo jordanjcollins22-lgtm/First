@@ -105,6 +105,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "mow-orders", label: "Quick Mow Pipeline", href: "/mow-orders" },
   // Applicants from the job ads: their answers, their videos, and who gets an interview.
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
+  // The crew's pay and each service's production rate: what every forward price is worked out from.
+  { key: "production-rates", label: "Production Rates", href: "/admin/production-rates" },
 ];
 
 export type TabKey = string;

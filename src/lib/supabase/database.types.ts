@@ -4233,6 +4233,39 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["applicant_events"]["Row"]>;
         Relationships: [];
       };
+      production_pricing: {
+        Row: {
+          organization_id: string;
+          leads: number;
+          lead_rate_cents: number;
+          technicians: number;
+          technician_rate_cents: number;
+          services: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          organization_id: string;
+          leads?: number;
+          lead_rate_cents?: number;
+          technicians?: number;
+          technician_rate_cents?: number;
+          services?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          organization_id?: string;
+          leads?: number;
+          lead_rate_cents?: number;
+          technicians?: number;
+          technician_rate_cents?: number;
+          services?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       crew_day_events: {
         Row: {
           id: string;

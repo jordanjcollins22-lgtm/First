@@ -16,9 +16,10 @@
  * another. Hours are crew-hours, the clock while the crew (a lead and a
  * technician) is on site, because CR is the whole crew's rate.
  *
- * The production rates here are starting figures, not history: the crew
- * logs a job's start and finish, not each service's, so PR = Q ÷ ALH cannot
- * be worked out from past jobs yet. They are the figures to replace.
+ * The rates, the crew's pay and the materials are set on Admin, Production
+ * rates; the figures here are what is used until they are. They are starting
+ * figures, not history: the crew logs a job's start and finish, not each
+ * service's, so PR = Q ÷ ALH cannot be worked out from past jobs yet.
  *
  * Pure, so the arithmetic is tested without a database.
  */
@@ -35,7 +36,21 @@ export interface ProductionService {
   materialCentsPerUnit?: number;
   /** What that material is, in words. */
   materialName?: string;
+  /**
+   * Off: not suggested and not offered to add, though a price already saved
+   * with it still prices. Services are turned off rather than deleted, so an
+   * old proposal can always be read back.
+   */
+  active?: boolean;
 }
+
+export const PRODUCTION_UNITS: { unit: ProductionUnit; label: string }[] = [
+  { unit: "SF", label: "Square feet" },
+  { unit: "CY", label: "Cubic yards" },
+  { unit: "plant", label: "Plants" },
+  { unit: "bush", label: "Bushes" },
+  { unit: "job", label: "Per job (no crew time)" },
+];
 
 /** Every service the price is built from, with its production rate. */
 export const PRODUCTION_SERVICES: ProductionService[] = [
@@ -56,11 +71,11 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "disposal", label: "Disposal", unit: "job", pr: null, materialCentsPerUnit: 4000, materialName: "Dump fee" },
 ];
 
-const SERVICE_BY_KEY = new Map(PRODUCTION_SERVICES.map((s) => [s.key, s]));
-
-export function productionService(key: string): ProductionService | null {
-  return SERVICE_BY_KEY.get(key) ?? null;
+export function productionService(key: string, services: ProductionService[] = PRODUCTION_SERVICES): ProductionService | null {
+  return services.find((s) => s.key === key) ?? null;
 }
+
+const isOn = (s: ProductionService | null): s is ProductionService => s != null && s.active !== false;
 
 /** The crew and the shares of the price set aside. */
 export interface PricingEquation {
@@ -132,8 +147,8 @@ export interface PricedLine extends PriceLine {
   rCents: number;
 }
 
-export function priceLine(line: PriceLine, eq: PricingEquation): PricedLine {
-  const service = productionService(line.key);
+export function priceLine(line: PriceLine, eq: PricingEquation, services: ProductionService[] = PRODUCTION_SERVICES): PricedLine {
+  const service = productionService(line.key, services);
   const pr = service?.pr ?? null;
   const quantity = Math.max(0, Number.isFinite(line.quantity) ? line.quantity : 0);
   const materialCents = Math.max(0, Math.round(Number.isFinite(line.materialCents) ? line.materialCents : 0));
@@ -164,8 +179,8 @@ export interface PricedArea {
   rCents: number;
 }
 
-export function priceArea(lines: PriceLine[], eq: PricingEquation): PricedArea {
-  const priced = lines.map((l) => priceLine(l, eq));
+export function priceArea(lines: PriceLine[], eq: PricingEquation, services: ProductionService[] = PRODUCTION_SERVICES): PricedArea {
+  const priced = lines.map((l) => priceLine(l, eq, services));
   const plcCents = priced.reduce((s, l) => s + l.plcCents, 0);
   const materialCents = priced.reduce((s, l) => s + l.materialCents, 0);
   return {
@@ -207,8 +222,8 @@ export interface PricedJob {
   allocations: Allocations;
 }
 
-export function priceForward(areas: PriceLine[][], eq: PricingEquation): PricedJob {
-  const priced = areas.map((lines) => priceArea(lines, eq));
+export function priceForward(areas: PriceLine[][], eq: PricingEquation, services: ProductionService[] = PRODUCTION_SERVICES): PricedJob {
+  const priced = areas.map((lines) => priceArea(lines, eq, services));
   const sum = (pick: (a: PricedArea) => number) => priced.reduce((s, a) => s + pick(a), 0);
   const rCents = sum((a) => a.rCents);
   return {
@@ -250,7 +265,7 @@ function text(values: Record<string, unknown>, key: string): string {
  * one. Anything the walkthrough did not record (a count, a size) is left at
  * nothing and said, rather than guessed.
  */
-export function suggestLines(area: AreaFacts): PriceLine[] {
+export function suggestLines(area: AreaFacts, services: ProductionService[] = PRODUCTION_SERVICES): PriceLine[] {
   const v = area.values ?? {};
   const notes = `${area.notes ?? ""} ${text(v, "specialInstructions")} ${text(v, "desiredResult")}`;
   const size = area.areaSqFt != null && area.areaSqFt > 0 ? area.areaSqFt : null;
@@ -299,10 +314,11 @@ export function suggestLines(area: AreaFacts): PriceLine[] {
     lines.push(bySize("mowing-edging"));
   }
 
-  // Each service's material at its typical cost, for the quantity.
-  return lines.map((l) => {
-    const s = productionService(l.key);
-    return s?.materialCentsPerUnit ? { ...l, materialCents: Math.round(l.quantity * s.materialCentsPerUnit) } : l;
+  // Only services that are on, each with its material at its set cost.
+  return lines.flatMap((l) => {
+    const s = productionService(l.key, services);
+    if (!isOn(s)) return [];
+    return [s.materialCentsPerUnit ? { ...l, materialCents: Math.round(l.quantity * s.materialCentsPerUnit) } : l];
   });
 }
 
@@ -312,19 +328,20 @@ const HAULS_AWAY = new Set(["weed-pulling", "perennial-cutback", "debris-cleanup
  * Every area's suggested services, with one disposal line for the whole job
  * on the area with the most to haul away, when anything is hauled away.
  */
-export function suggestJob(areas: AreaFacts[], eq: PricingEquation = PRICING_EQUATION): PriceLine[][] {
-  const out = areas.map(suggestLines);
+export function suggestJob(areas: AreaFacts[], eq: PricingEquation = PRICING_EQUATION, services: ProductionService[] = PRODUCTION_SERVICES): PriceLine[][] {
+  const out = areas.map((a) => suggestLines(a, services));
   let most = -1;
   let mostHours = 0;
   out.forEach((lines, i) => {
-    const hours = priceArea(lines.filter((l) => HAULS_AWAY.has(l.key)), eq).plh;
+    const hours = priceArea(lines.filter((l) => HAULS_AWAY.has(l.key)), eq, services).plh;
     if (hours > mostHours) {
       mostHours = hours;
       most = i;
     }
   });
-  if (most >= 0) {
-    out[most] = [...out[most], { key: "disposal", quantity: 1, materialCents: productionService("disposal")!.materialCentsPerUnit!, note: "The whole job's dump fee. A typical figure: set it." }];
+  const disposal = productionService("disposal", services);
+  if (most >= 0 && isOn(disposal)) {
+    out[most] = [...out[most], { key: "disposal", quantity: 1, materialCents: disposal.materialCentsPerUnit ?? 0, note: "The whole job's dump fee. Check it." }];
   }
   return out;
 }
@@ -333,12 +350,12 @@ export function suggestJob(areas: AreaFacts[], eq: PricingEquation = PRICING_EQU
  * Lines sent back from the page, made safe: only services that exist, no
  * negative quantities or costs, and at most a sensible number per area.
  */
-export function readLines(input: unknown, areaCount: number): PriceLine[][] | null {
+export function readLines(input: unknown, areaCount: number, services: ProductionService[] = PRODUCTION_SERVICES): PriceLine[][] | null {
   if (!Array.isArray(input) || input.length !== areaCount) return null;
   return input.map((area) =>
     (Array.isArray(area) ? area : [])
       .slice(0, 30)
-      .filter((l): l is Record<string, unknown> => l != null && typeof l === "object" && productionService(String((l as Record<string, unknown>).key)) != null)
+      .filter((l): l is Record<string, unknown> => l != null && typeof l === "object" && productionService(String((l as Record<string, unknown>).key), services) != null)
       .map((l) => ({
         key: String(l.key),
         quantity: Math.min(1_000_000, Math.max(0, Number(l.quantity) || 0)),
@@ -346,4 +363,76 @@ export function readLines(input: unknown, areaCount: number): PriceLine[][] | nu
         note: typeof l.note === "string" ? l.note.slice(0, 200) : null,
       }))
   );
+}
+
+/** Everything a price is worked out from: the crew and shares, and every service's rate. */
+export interface PricingSetup {
+  equation: PricingEquation;
+  services: ProductionService[];
+}
+
+export const DEFAULT_SETUP: PricingSetup = { equation: PRICING_EQUATION, services: PRODUCTION_SERVICES };
+
+/** What one unit of a service is priced at, for the settings page: (CR ÷ PR + M per unit) ÷ PCM, in cents. */
+export function pricePerUnitCents(service: ProductionService, eq: PricingEquation): number | null {
+  const pcm = projectCostMargin(eq);
+  if (pcm <= 0) return null;
+  const labour = service.pr && service.pr > 0 ? crewRateCents(eq) / service.pr : 0;
+  return (labour + (service.materialCentsPerUnit ?? 0)) / pcm;
+}
+
+/** A key for a service added on the settings page, from its name: "Sod install" → "sod-install-3f9a". */
+export function serviceKey(label: string, taken: string[], random: () => number = Math.random): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "service";
+  let key = base;
+  while (taken.includes(key)) key = `${base}-${Math.floor(random() * 0xffff).toString(16).padStart(4, "0")}`;
+  return key;
+}
+
+const UNITS = new Set(PRODUCTION_UNITS.map((u) => u.unit));
+
+/**
+ * The settings page's form, made safe: crew counts and pay within reason,
+ * services with a name, a known unit, a rate above nothing (or none, per
+ * job), and no negative costs. Null, with what is wrong, when it can't be.
+ */
+export function readSetup(input: unknown): { ok: true; setup: PricingSetup } | { ok: false; error: string } {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const e = (o.equation ?? {}) as Record<string, unknown>;
+  const int = (v: unknown) => Math.round(Number(v));
+  const leads = int(e.leads);
+  const technicians = int(e.technicians);
+  const leadRateCents = int(e.leadRateCents);
+  const technicianRateCents = int(e.technicianRateCents);
+  if (![leads, technicians].every((n) => Number.isFinite(n) && n >= 0 && n <= 20)) return { ok: false, error: "The crew is between 0 and 20 people of each kind." };
+  if (leads + technicians === 0) return { ok: false, error: "The crew needs at least one person." };
+  if (![leadRateCents, technicianRateCents].every((n) => Number.isFinite(n) && n >= 0 && n <= 50_000)) return { ok: false, error: "Hourly pay is between $0 and $500." };
+  const list = Array.isArray(o.services) ? o.services : [];
+  if (list.length === 0 || list.length > 200) return { ok: false, error: "Keep at least one service." };
+  const services: ProductionService[] = [];
+  const keys = new Set<string>();
+  for (const raw of list) {
+    const r = (raw ?? {}) as Record<string, unknown>;
+    const key = String(r.key ?? "").trim();
+    const label = String(r.label ?? "").trim().slice(0, 80);
+    const unit = String(r.unit ?? "") as ProductionUnit;
+    if (!/^[a-z0-9-]{1,60}$/.test(key) || keys.has(key)) return { ok: false, error: "A service is missing its key. Reload the page." };
+    if (!label) return { ok: false, error: "Every service needs a name." };
+    if (!UNITS.has(unit)) return { ok: false, error: `Pick a unit for ${label}.` };
+    const pr = unit === "job" ? null : Number(r.pr);
+    if (pr !== null && !(Number.isFinite(pr) && pr > 0 && pr <= 1_000_000)) return { ok: false, error: `Give ${label} a production rate above 0.` };
+    const material = Math.round(Number(r.materialCentsPerUnit ?? 0));
+    if (!Number.isFinite(material) || material < 0 || material > 10_000_000) return { ok: false, error: `${label}'s material cost can't be negative.` };
+    keys.add(key);
+    services.push({
+      key,
+      label,
+      unit,
+      pr,
+      ...(material > 0 ? { materialCentsPerUnit: material } : {}),
+      ...(String(r.materialName ?? "").trim() ? { materialName: String(r.materialName).trim().slice(0, 60) } : {}),
+      active: r.active !== false,
+    });
+  }
+  return { ok: true, setup: { equation: { ...PRICING_EQUATION, leads, technicians, leadRateCents, technicianRateCents }, services } };
 }

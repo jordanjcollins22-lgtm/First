@@ -8,6 +8,10 @@ import { priceBreakdown } from "@/lib/price-approval";
 import { PRACTICE_ADDRESS, PRACTICE_ZONES, practicePriceCents } from "@/lib/practice-sample";
 import { jobCosts, priceSiteMap } from "@/lib/job-price";
 import { forwardAreas, type PriceApproval } from "@/lib/data/price-approvals";
+import { getProductionPricing } from "@/lib/data/production-pricing";
+import { DEFAULT_SETUP, type PricingSetup } from "@/lib/forward-pricing";
+import { getCurrentProfile } from "@/lib/data/team";
+import { createClient } from "@/lib/supabase/server";
 import type { WorkZone } from "@/components/canvas/types";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PriceApprovals, PriceCard } from "@/components/proposal/price-approvals";
@@ -55,7 +59,10 @@ export default async function AccountManagerJourneyPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   await requireTab("evaluations", "/my-day");
 
-  const catalog = await getCanvasCatalog();
+  const [catalog, profile, supabase] = await Promise.all([getCanvasCatalog(), getCurrentProfile(), createClient()]);
+  // Priced with this business's own production rates and crew pay.
+  const stored = profile ? await getProductionPricing(supabase, profile.organization_id) : DEFAULT_SETUP;
+  const pricing: PricingSetup = { equation: stored.equation, services: stored.services };
   // The sample job: the same three areas, and the same price, as the sample
   // proposal Review proposal opens, priced on this business's own rate card.
   const typeFor = (name: string) => catalog.servicePricing.find((p) => p.name === name)?.service_type_id ?? null;
@@ -112,7 +119,8 @@ export default async function AccountManagerJourneyPage() {
     // Sample walkthrough photos, one area without any.
     areaPhotos: breakdown.areas.map((_, i) => SAMPLE_PHOTOS[i] ?? []),
     siteMap: { kind: "sample", zones: PRACTICE_ZONES.map((z) => ({ name: z.name, color: z.color, points: z.points })) },
-    forward: forwardAreas(zones, null, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId),
+    forward: forwardAreas(zones, null, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId, pricing),
+    pricing,
   };
 
   // Jace's My Day: the three squares, each opening on a sample of what is in it.

@@ -6,11 +6,14 @@ import {
   crewRateCents,
   priceForward,
   priceLine,
+  pricePerUnitCents,
   projectCostMargin,
   readLines,
+  readSetup,
   revenueAllocation,
   suggestJob,
   suggestLines,
+  serviceKey,
   type AreaFacts,
 } from "@/lib/forward-pricing";
 
@@ -127,5 +130,55 @@ describe("lines sent back from the page", () => {
   it("refuses lines that don't line up with the areas", () => {
     expect(readLines([[]], 2)).toBeNull();
     expect(readLines("nope", 1)).toBeNull();
+  });
+});
+
+describe("the production rates settings", () => {
+  const good = {
+    equation: { leads: 1, technicians: 2, leadRateCents: 4500, technicianRateCents: 3000 },
+    services: [
+      { key: "weed-pulling", label: "Hand weed pulling", unit: "SF", pr: 600 },
+      { key: "disposal", label: "Disposal", unit: "job", pr: 5, materialCentsPerUnit: 7500, materialName: "Dump fee" },
+      { key: "old", label: "Old service", unit: "plant", pr: 4, active: false },
+    ],
+  };
+
+  it("reads a good form, with the crew rate following the crew", () => {
+    const read = readSetup(good);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(crewRateCents(read.setup.equation)).toBe(10_500);
+    // A per-job cost has no crew time, whatever was typed.
+    expect(read.setup.services[1].pr).toBeNull();
+    expect(read.setup.services[2].active).toBe(false);
+    // The shares are not set here.
+    expect(read.setup.equation.grossProfit).toBe(0.5);
+  });
+
+  it("refuses a crew of nobody, a service with no name or rate, and negative costs", () => {
+    expect(readSetup({ ...good, equation: { ...good.equation, leads: 0, technicians: 0 } }).ok).toBe(false);
+    expect(readSetup({ ...good, services: [{ key: "x", label: "", unit: "SF", pr: 5 }] }).ok).toBe(false);
+    expect(readSetup({ ...good, services: [{ key: "x", label: "X", unit: "SF", pr: 0 }] }).ok).toBe(false);
+    expect(readSetup({ ...good, services: [{ key: "x", label: "X", unit: "SF", pr: 5, materialCentsPerUnit: -1 }] }).ok).toBe(false);
+    expect(readSetup({ ...good, services: [{ key: "x", label: "X", unit: "acre", pr: 5 }] }).ok).toBe(false);
+    expect(readSetup({ ...good, services: [good.services[0], good.services[0]] }).ok).toBe(false);
+  });
+
+  it("says what one unit is priced at", () => {
+    // $75 a crew-hour over 600 sq ft is 12.5 cents a foot; over 0.35 that is about 36 cents.
+    expect(Math.round(pricePerUnitCents({ key: "a", label: "A", unit: "SF", pr: 600 }, eq)!)).toBe(36);
+    expect(Math.round(pricePerUnitCents({ key: "d", label: "D", unit: "job", pr: null, materialCentsPerUnit: 7000 }, eq)!)).toBe(20_000);
+  });
+
+  it("prices with the saved rates, and stops suggesting a service that is off", () => {
+    const services = [{ key: "weed-pulling", label: "Hand weed pulling", unit: "SF" as const, pr: 300 }, { key: "weed-spraying", label: "Weed spraying", unit: "SF" as const, pr: 3000, active: false }];
+    expect(priceLine({ key: "weed-pulling", quantity: 300, materialCents: 0 }, eq, services).plh).toBe(1);
+    const lines = suggestLines(area({ serviceName: "Weed Removal", notes: "pull and spray", areaSqFt: 100 }), services);
+    expect(lines.map((l) => l.key)).toEqual(["weed-pulling"]);
+  });
+
+  it("makes a key from a new service's name, never one already taken", () => {
+    expect(serviceKey("Sod install!", [])).toBe("sod-install");
+    expect(serviceKey("Sod install", ["sod-install"], () => 0.5)).toBe("sod-install-7fff");
   });
 });
