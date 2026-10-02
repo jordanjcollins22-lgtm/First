@@ -101,6 +101,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
   { key: "signs", label: "Neighborhood Sign", href: "/admin/marketing/poster" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
+  // Applicants from the job ads: their answers, their videos, and who gets an interview.
+  { key: "hiring", label: "Hiring", href: "/admin/hiring" },
 ];
 
 export type TabKey = string;
@@ -146,6 +148,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/evaluate/[jobId]":
     "One evaluation visit on the evaluator's phone. Guarded like the job it belongs to, on the evaluations " +
     "or job detail tab, the same way the job's directions page is.",
+  "/admin/hiring/[id]":
+    "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
+    "before rating, moving or emailing anyone.",
   "/login": "Sign-in page, nobody is signed in yet, so there are no roles to check.",
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +

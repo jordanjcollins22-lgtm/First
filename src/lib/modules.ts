@@ -143,6 +143,8 @@ export const MODULES: readonly AppModule[] = [
       // what do we own, what is it worth, and what is about to need replacing.
       { key: "fleet", label: "Fleet", tabs: ["fleet"] },
       { key: "team", label: "Team", tabs: ["team"] },
+      // Next to Team: who joins it, from the job ads to the interview.
+      { key: "hiring", label: "Hiring", tabs: ["hiring"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team"] },
       { key: "finance", label: "Finance", tabs: ["payments", "subscriptions", "transactions"] },
       // Both are what somebody reads standing on a property: which weed that

@@ -4114,6 +4114,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["loadout_checks"]["Row"]>;
         Relationships: [];
       };
+      /** Someone who applied for a job with us, from the careers page. */
+      job_applicants: {
+        Row: {
+          id: string;
+          organization_id: string;
+          position: string;
+          token: string;
+          name: string;
+          email: string;
+          phone: string;
+          zip: string;
+          answers: Json;
+          screen_reasons: string[];
+          stage: string;
+          source: string | null;
+          video_path: string | null;
+          video_link: string | null;
+          video_submitted_at: string | null;
+          rating: number | null;
+          review_note: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          interview_at: string | null;
+          decided_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_applicants"]["Row"]> & {
+          organization_id: string;
+          position: string;
+          token: string;
+          name: string;
+          email: string;
+          phone: string;
+          zip: string;
+          stage: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_applicants"]["Row"]>;
+        Relationships: [];
+      };
+      /** What happened to an application, in order. Append-only. */
+      applicant_events: {
+        Row: {
+          id: number;
+          applicant_id: string;
+          at: string;
+          kind: string;
+          detail: Json | null;
+          actor: string | null;
+          actor_name: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["applicant_events"]["Row"]> & {
+          applicant_id: string;
+          kind: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["applicant_events"]["Row"]>;
+        Relationships: [];
+      };
       crew_day_events: {
         Row: {
           id: string;

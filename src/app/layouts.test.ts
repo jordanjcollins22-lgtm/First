@@ -102,6 +102,14 @@ describe("routes a customer opens", () => {
     expect(needsAuthCheck("/receipt/abc123")).toBe(false);
   });
 
+  // Somebody answering a job ad has no account. A sign-in screen in front of
+  // the apply form is an ad nobody can answer.
+  it("lets an applicant reach the careers pages", () => {
+    expect(isPublic("/careers")).toBe(true);
+    expect(isPublic("/careers/project-lead")).toBe(true);
+    expect(needsAuthCheck("/careers/video/abc123")).toBe(false);
+  });
+
   it("keeps the sign-in page itself reachable", () => {
     expect(PUBLIC_PREFIXES).toContain("/login");
     expect(isPublic("/login")).toBe(true);
