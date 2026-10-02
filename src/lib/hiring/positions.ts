@@ -212,7 +212,7 @@ export const POSITIONS: readonly Position[] = [
   },
   {
     key: "account-manager",
-    title: "Account Manager (Sales)",
+    title: "Account Manager",
     tagline: "Own the client from first visit to finished job: send proposals, follow up and close.",
     pay: null,
     commission: "7% commission on every job you close",
@@ -252,7 +252,7 @@ export const POSITIONS: readonly Position[] = [
   },
   {
     key: "affiliate",
-    title: "Affiliate (Commission Only)",
+    title: "Affiliate",
     tagline: "Help neighbors who are asking for yard work find us online, and earn on every job that books.",
     pay: null,
     commission: "4% commission on every job that books through your link",
