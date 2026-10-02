@@ -79,6 +79,42 @@ export type MowQuote =
     }
   | { ok: false; message: string };
 
+export type AreaCheck =
+  | {
+      ok: true;
+      /** Yes when the county has a lot at the address. Null when the county map couldn't be reached: let them through. */
+      inArea: boolean | null;
+      lat: number | null;
+      lng: number | null;
+    }
+  | { ok: false; message: string };
+
+/**
+ * Whether we mow at an address: it is in our area when Harford County has a
+ * lot there. Nothing is saved; this is the first thing anybody does on the
+ * page, before they have told us who they are. When the county's map can't
+ * be reached the answer is "don't know", and they are let through rather
+ * than turned away over somebody else's outage.
+ */
+export async function checkServiceArea(input: { address: string; lat?: number | null; lng?: number | null }): Promise<AreaCheck> {
+  try {
+    const address = input.address.trim();
+    if (address.length < 6) return { ok: false, message: "Type your full street address." };
+    const placed = await placeAddress(address, input.lat, input.lng);
+    if (!placed) return { ok: false, message: "We couldn't find that address. Check it and try again, or pick one from the list." };
+    let inArea: boolean | null;
+    try {
+      inArea = (await fetchLotFromCounty(placed.lat, placed.lng, address)) != null;
+    } catch {
+      inArea = null;
+    }
+    log.info("mow.area_checked", { inArea });
+    return { ok: true, inArea, lat: placed.lat, lng: placed.lng };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function contactProblem(name: string, email: string, phone: string, address: string): string | null {
