@@ -10,6 +10,8 @@ import { acceptPrice, setPrice } from "@/lib/actions/price-approval-actions";
 import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
+import { ForwardBreakdown, priceLines, unpricedAreas } from "@/components/proposal/forward-breakdown";
+import type { PriceLine } from "@/lib/forward-pricing";
 import { cn } from "@/lib/utils";
 
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -54,7 +56,13 @@ export function PriceCard({
   startAt?: "decline" | "send" | "sent";
 }) {
   const [stage, setStage] = useState<"price" | "decline" | "send" | "sent">(startAt ?? item.stage);
-  const [total, setTotal] = useState(item.totalCents);
+  // Priced the forward way: every area's services, which the price follows.
+  const [lines, setLines] = useState<PriceLine[][] | null>(item.forward ? item.forward.map((a) => a.lines) : null);
+  const forwardCents = lines ? priceLines(lines).rCents : null;
+  const unpriced = lines ? unpricedAreas(item, lines) : [];
+  const [fixedTotal, setTotal] = useState(item.totalCents);
+  // While it is being priced the forward way, the price is the services'.
+  const total = forwardCents != null && (stage === "price" || stage === "decline") ? forwardCents : fixedTotal;
   const [typed, setTyped] = useState("");
   const [sendTo, setSendTo] = useState<string | null>(item.email);
   const [error, setError] = useState<string | null>(null);
@@ -64,10 +72,14 @@ export function PriceCard({
 
   function accept() {
     setError(null);
-    if (preview) return setStage("send");
+    if (preview) {
+      if (forwardCents != null) setTotal(forwardCents);
+      return setStage("send");
+    }
     start(async () => {
-      const result = await acceptPrice(item.jobId);
+      const result = lines ? await acceptPrice(item.jobId, lines) : await acceptPrice(item.jobId);
       if (!result.ok) return setError(result.error);
+      if (forwardCents != null) setTotal(forwardCents);
       setSendTo(result.sendTo);
       setStage("send");
     });
@@ -107,7 +119,9 @@ export function PriceCard({
         </div>
       </div>
 
-      {(stage === "price" || stage === "decline") && (
+      {(stage === "price" || stage === "decline") && lines && <ForwardBreakdown item={item} lines={lines} onChange={setLines} locked={stage === "decline" || pending} />}
+
+      {(stage === "price" || stage === "decline") && !lines && (
         <>
           <Breakdown item={item} total={total} pending={pending} onUsePrice={(cents) => submitPrice(cents / 100)} />
           {total !== worked && worked > 0 && (
@@ -133,9 +147,15 @@ export function PriceCard({
         </div>
       )}
 
+      {stage === "price" && unpriced.length > 0 && (
+        <p className="rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          {listed(unpriced)} {unpriced.length === 1 ? "comes" : "come"} to nothing. Put in the quantities, or add the services, before accepting.
+        </p>
+      )}
+
       {stage === "price" && (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || item.wordingToApprove.length > 0} onClick={accept}>
+          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || item.wordingToApprove.length > 0 || unpriced.length > 0} onClick={accept}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
             Accept price
           </Button>

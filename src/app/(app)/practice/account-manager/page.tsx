@@ -7,7 +7,7 @@ import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { priceBreakdown } from "@/lib/price-approval";
 import { PRACTICE_ADDRESS, PRACTICE_ZONES, practicePriceCents } from "@/lib/practice-sample";
 import { jobCosts, priceSiteMap } from "@/lib/job-price";
-import type { PriceApproval } from "@/lib/data/price-approvals";
+import { forwardAreas, type PriceApproval } from "@/lib/data/price-approvals";
 import type { WorkZone } from "@/components/canvas/types";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { PriceApprovals, PriceCard } from "@/components/proposal/price-approvals";
@@ -112,6 +112,7 @@ export default async function AccountManagerJourneyPage() {
     // Sample walkthrough photos, one area without any.
     areaPhotos: breakdown.areas.map((_, i) => SAMPLE_PHOTOS[i] ?? []),
     siteMap: { kind: "sample", zones: PRACTICE_ZONES.map((z) => ({ name: z.name, color: z.color, points: z.points })) },
+    forward: forwardAreas(zones, null, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId),
   };
 
   // Jace's My Day: the three squares, each opening on a sample of what is in it.

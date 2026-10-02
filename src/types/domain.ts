@@ -687,6 +687,13 @@ export interface ProposalZoneSnapshot {
    */
   performedBy?: "own" | "partner";
   partnerName?: string | null;
+  /**
+   * The services this area was priced from, with the forward pricing
+   * equation, when the account manager approved it that way: each service's
+   * quantity and its material or direct cost. Kept so the price can be seen
+   * again line by line, and the crew's hours checked against it.
+   */
+  lines?: { key: string; quantity: number; materialCents: number; note?: string | null }[];
 }
 
 /** How the reference photo sits under the drawn zones — same transform the

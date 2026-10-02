@@ -13,7 +13,10 @@ import { jobCosts, priceSiteMap, type JobCosts } from "@/lib/job-price";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { THUMBNAIL } from "@/lib/storage-image-url";
+import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
+import { suggestJob, type PriceLine } from "@/lib/forward-pricing";
+import { zoneMeasurements } from "@/lib/proposal-pricing";
+import { isSalting } from "@/lib/salting";
 
 export interface ApprovalProduct {
   name: string;
@@ -59,11 +62,49 @@ export interface PriceApproval {
   markup: string;
   /** Each area's walkthrough photos, as images to show, in the order of breakdown.areas. */
   areaPhotos: string[][];
+  /**
+   * Each area as the forward pricing equation prices it, in the order of
+   * breakdown.areas: what the evaluator wrote about it, every photo at full
+   * size, and its services, as saved when it was approved or else suggested
+   * from the walkthrough.
+   */
+  forward: ForwardArea[] | null;
   /** The whole site map, as the proposal draws it. Sample: the practice drawing, with no photo behind it. */
   siteMap:
     | { kind: "image"; imagePath: string; transform: ProposalSiteImageTransform; zones: Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points">[] }
     | { kind: "sample"; zones: { name: string; color: string; points: { x: number; y: number }[] }[] }
     | null;
+}
+
+export interface ForwardArea {
+  /** What the evaluator wrote about the area. */
+  notes: string | null;
+  /** Its walkthrough photos, large, for looking through them one by one. */
+  photos: string[];
+  lines: PriceLine[];
+}
+
+/**
+ * Each area's services: the ones saved on the proposal when it was priced
+ * this way, or else the ones the walkthrough suggests.
+ */
+export function forwardAreas(zones: WorkZone[], snapshot: ProposalZoneSnapshot[] | null, serviceName: (typeId: string) => string): ForwardArea[] {
+  const priced = zones.filter((z) => z.service);
+  const suggested = suggestJob(
+    priced.map((z) => ({
+      typeId: z.service!.typeId,
+      serviceName: serviceName(z.service!.typeId),
+      values: (z.service!.values ?? {}) as Record<string, unknown>,
+      notes: z.service!.notes ?? null,
+      areaSqFt: zoneMeasurements(z)?.areaSqFt ?? null,
+    }))
+  );
+  const saved = snapshot && snapshot.length === priced.length && snapshot.every((s) => Array.isArray(s.lines)) ? snapshot : null;
+  return priced.map((z, i) => ({
+    notes: z.service!.notes?.trim() || null,
+    photos: (z.service!.photos ?? []).map((path) => canvasImageUrl(path, PREVIEW)),
+    lines: saved ? (saved[i].lines ?? []) : suggested[i],
+  }));
 }
 
 /**
@@ -193,6 +234,9 @@ export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
       crewRateCents: catalog.crewCostPerHourCents,
       markup,
       areaPhotos: breakdown.areas.map((a) => a.photoPaths.map((path) => canvasImageUrl(path, THUMBNAIL))),
+      forward: zones.some((z) => isSalting(z.service!.typeId))
+        ? null
+        : forwardAreas(zones, r.scope_snapshot, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId),
       siteMap:
         r.site_image_path && r.site_image_transform
           ? { kind: "image" as const, imagePath: r.site_image_path, transform: r.site_image_transform, zones: r.scope_snapshot ?? [] }
