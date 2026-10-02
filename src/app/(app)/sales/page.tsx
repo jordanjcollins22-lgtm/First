@@ -10,6 +10,7 @@ import PipelinePage from "@/app/(app)/pipeline/page";
 import LeadsPage from "@/app/(app)/leads/page";
 import ProposalsPage from "@/app/(app)/proposals/page";
 import ContactsPage from "@/app/(app)/contacts/page";
+import MowOrdersPage from "@/app/(app)/mow-orders/page";
 
 /**
  * Selling, in the order it happens.
@@ -25,11 +26,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab } = await searchParams;
 
-  const [pipeline, leads, proposals, clients] = await Promise.all([
+  const [pipeline, leads, proposals, clients, mows] = await Promise.all([
     holdsAny(["pipeline"]),
     holdsAny(["leads"]),
     holdsAny(["proposals", "invoices"]),
     holdsAny(["contacts"]),
+    holdsAny(["mow-orders"]),
   ]);
 
   return (
@@ -41,6 +43,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         ...(leads ? { leads: <LeadsPage /> } : {}),
         ...(proposals ? { proposals: <ProposalsPage /> } : {}),
         ...(clients ? { clients: <ContactsPage /> } : {}),
+        ...(mows ? { mows: <MowOrdersPage /> } : {}),
       }}
     />
   );

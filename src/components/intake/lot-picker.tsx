@@ -21,6 +21,7 @@ export function LotPicker({
   onToggle,
   disabled,
   readOnly = false,
+  caption,
 }: {
   lot: LotData;
   picked: string[];
@@ -28,6 +29,8 @@ export function LotPicker({
   disabled?: boolean;
   /** Just the picture: for showing them what they picked, with nothing to tap. */
   readOnly?: boolean;
+  /** Said under the picture instead of the usual words, for a page that isn't the pre-evaluation. */
+  caption?: string;
 }) {
   const [turn, setTurn] = useState(0);
   const clip = useId().replace(/:/g, "");
@@ -85,7 +88,7 @@ export function LotPicker({
         </svg>
       </div>
       {readOnly ? (
-        <figcaption className="text-xs text-muted-foreground">Your property line from the county, with the parts you picked.</figcaption>
+        <figcaption className="text-xs text-muted-foreground">{caption ?? "Your property line from the county, with the parts you picked."}</figcaption>
       ) : (
       <figcaption className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>Your property line from the county. Tap a part of the yard, or pick below.</span>

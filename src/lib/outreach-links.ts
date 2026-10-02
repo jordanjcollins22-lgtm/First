@@ -101,13 +101,20 @@ export function bookingDestination(input: {
   orgSlug: string | null;
   affiliateSlug: string | null;
   code: string;
+  /**
+   * A page of ours this one link opens instead of the booking page, such as
+   * the quick mow page. Anything that isn't a plain path on this site is
+   * ignored, so a link can never be pointed somewhere else.
+   */
+  destination?: string | null;
 }): string {
   const base = input.baseUrl.replace(/\/$/, "");
   const params = new URLSearchParams();
   if (input.orgSlug) params.set("org", input.orgSlug);
   if (input.affiliateSlug) params.set("ref", input.affiliateSlug);
   params.set("rec", input.code);
-  return `${base}/book?${params.toString()}`;
+  const path = input.destination && /^\/[a-z0-9/_-]*$/.test(input.destination) && !input.destination.startsWith("//") ? input.destination : "/book";
+  return `${base}${path}?${params.toString()}`;
 }
 
 /**

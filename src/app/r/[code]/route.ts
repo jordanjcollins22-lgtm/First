@@ -45,7 +45,7 @@ export async function GET(
     const admin = createAdminClient();
     const { data: link } = await admin
       .from("outreach_links")
-      .select("id, organization_id, profile_id, click_count")
+      .select("id, organization_id, profile_id, click_count, destination")
       .eq("code", code)
       .maybeSingle();
 
@@ -64,6 +64,7 @@ export async function GET(
       orgSlug: org?.slug ?? null,
       affiliateSlug: sender?.affiliate_slug ?? null,
       code,
+      destination: link.destination,
     });
 
     // Counted before the redirect is returned, but never allowed to hold it

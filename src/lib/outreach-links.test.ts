@@ -92,6 +92,20 @@ describe("where a tracked link sends somebody", () => {
     expect(to).toContain("org=acme-1234");
     expect(to).toContain("ref=b49d3f3c5f");
   });
+
+  it("opens the page the link was made for, still carrying its code", () => {
+    expect(
+      bookingDestination({ baseUrl: "https://x.test", orgSlug: "acme-1234", affiliateSlug: null, code: "grass26", destination: "/mow" })
+    ).toBe("https://x.test/mow?org=acme-1234&rec=grass26");
+  });
+
+  it("never sends a link off the site, whatever its destination says", () => {
+    for (const destination of ["https://evil.test", "//evil.test", "javascript:alert(1)", "/Mow?x=1", ""]) {
+      expect(bookingDestination({ baseUrl: "https://x.test", orgSlug: null, affiliateSlug: null, code: "abc2345", destination })).toBe(
+        "https://x.test/book?rec=abc2345"
+      );
+    }
+  });
 });
 
 describe("what carried the link", () => {

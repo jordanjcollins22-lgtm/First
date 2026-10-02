@@ -3121,6 +3121,7 @@ export interface Database {
           created_at: string;
           via: string;
           post_url: string | null;
+          destination: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["outreach_links"]["Row"]> & {
           organization_id: string;
@@ -4112,6 +4113,50 @@ export interface Database {
           item_key: string;
         };
         Update: Partial<Database["public"]["Tables"]["loadout_checks"]["Row"]>;
+        Relationships: [];
+      };
+      /** A first mow bought from the quick mow page. */
+      mow_orders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          email: string;
+          phone: string;
+          address: string;
+          lat: number | null;
+          lng: number | null;
+          lot_sqft: number | null;
+          lawn_sqft: number | null;
+          tier: string;
+          tier_moved: boolean;
+          regular_cents: number;
+          discount_cents: number;
+          amount_cents: number;
+          referral_code: string | null;
+          status: string;
+          checkout_session_id: string | null;
+          paid_at: string | null;
+          customer_id: string | null;
+          property_id: string | null;
+          job_id: string | null;
+          called_at: string | null;
+          called_by: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["mow_orders"]["Row"]> & {
+          organization_id: string;
+          name: string;
+          email: string;
+          phone: string;
+          address: string;
+          tier: string;
+          regular_cents: number;
+          amount_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["mow_orders"]["Row"]>;
         Relationships: [];
       };
       /** Someone who applied for a job with us, from the careers page. */

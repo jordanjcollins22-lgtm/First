@@ -101,6 +101,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "door-hangers", label: "Door Hangers", href: "/admin/door-hangers" },
   { key: "signs", label: "Neighborhood Sign", href: "/admin/marketing/poster" },
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
+  // Mows bought and paid for on the quick mow page, waiting for a call to set the day.
+  { key: "mow-orders", label: "Quick Mows", href: "/mow-orders" },
   // Applicants from the job ads: their answers, their videos, and who gets an interview.
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
 ];

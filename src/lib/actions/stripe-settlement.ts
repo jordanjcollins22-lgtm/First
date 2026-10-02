@@ -10,6 +10,7 @@ import { placePaidBooking } from "@/lib/actions/public-flyer-actions";
 import { settleGroupPass } from "@/lib/actions/public-group-pass-actions";
 import { settleTip } from "@/lib/actions/public-tip-actions";
 import { settleSaltOrder } from "@/lib/actions/public-salt-actions";
+import { settleMowOrder } from "@/lib/actions/public-mow-actions";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
 import { getCurrentProfile } from "@/lib/data/team";
 import { outboundBaseUrl } from "@/lib/base-url";
@@ -90,6 +91,11 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     await settleSaltOrder(saltOrderId).catch((err) =>
       console.error("settleSaltOrder failed:", err)
     );
+  }
+
+  const mowOrderId = session.metadata?.mow_order_id ?? null;
+  if (mowOrderId) {
+    await settleMowOrder(mowOrderId).catch((err) => console.error("settleMowOrder failed:", err));
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;
