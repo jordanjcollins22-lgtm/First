@@ -7,11 +7,11 @@ export interface MowOrderRow {
   phone: string;
   email: string;
   address: string;
-  tier: string;
+  tier: string | null;
   tierMoved: boolean;
   lawnSqft: number | null;
-  amountCents: number;
-  regularCents: number;
+  amountCents: number | null;
+  regularCents: number | null;
   status: string;
   paidAt: string | null;
   createdAt: string;

@@ -4128,11 +4128,12 @@ export interface Database {
           lng: number | null;
           lot_sqft: number | null;
           lawn_sqft: number | null;
-          tier: string;
+          estimated_tier: string | null;
+          tier: string | null;
           tier_moved: boolean;
-          regular_cents: number;
+          regular_cents: number | null;
           discount_cents: number;
-          amount_cents: number;
+          amount_cents: number | null;
           referral_code: string | null;
           status: string;
           checkout_session_id: string | null;
@@ -4152,9 +4153,6 @@ export interface Database {
           email: string;
           phone: string;
           address: string;
-          tier: string;
-          regular_cents: number;
-          amount_cents: number;
         };
         Update: Partial<Database["public"]["Tables"]["mow_orders"]["Row"]>;
         Relationships: [];

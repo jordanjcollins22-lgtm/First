@@ -16,7 +16,7 @@ export function MowOrdersBoard({ orders, now }: { orders: MowOrderRow[] | null; 
   const toCall = (orders ?? []).filter((o) => o.status === "paid" && !o.calledAt).sort((a, b) => (a.paidAt ?? "").localeCompare(b.paidAt ?? ""));
   const called = (orders ?? []).filter((o) => o.status === "paid" && o.calledAt);
   const unpaid = (orders ?? []).filter((o) => o.status === "unpaid");
-  const paidTotal = (orders ?? []).filter((o) => o.status === "paid").reduce((sum, o) => sum + o.amountCents, 0);
+  const paidTotal = (orders ?? []).filter((o) => o.status === "paid").reduce((sum, o) => sum + (o.amountCents ?? 0), 0);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
@@ -28,7 +28,7 @@ export function MowOrdersBoard({ orders, now }: { orders: MowOrderRow[] | null; 
         {orders && (
           <p className="mt-2 text-sm">
             <span className="font-semibold">{(orders ?? []).filter((o) => o.status === "paid").length} paid</span>
-            <span className="text-muted-foreground"> · {dollars(paidTotal)} taken · {unpaid.length} started but didn&apos;t pay</span>
+            <span className="text-muted-foreground"> · {dollars(paidTotal)} taken · {unpaid.length} saw a price but didn&apos;t pay</span>
           </p>
         )}
       </header>
@@ -50,15 +50,15 @@ export function MowOrdersBoard({ orders, now }: { orders: MowOrderRow[] | null; 
 
       {unpaid.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-base font-semibold">Started but didn&apos;t pay</h2>
-          <p className="text-xs text-muted-foreground">They got a price and opened the card form. Worth a call: they wanted a mow.</p>
+          <h2 className="text-base font-semibold">Saw a price, didn&apos;t pay</h2>
+          <p className="text-xs text-muted-foreground">They gave their details and saw their price, then didn&apos;t pay. Worth a call: they wanted a mow.</p>
           <ul className="divide-y divide-border rounded-xl border border-border bg-card">
             {unpaid.map((o) => (
               <li key={o.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{o.name}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {o.address} · {tierByKey(o.tier)?.label ?? o.tier} · {shortWhen(o.createdAt)}
+                    {o.address} · {o.tier ? tierByKey(o.tier)?.label ?? o.tier : "No price yet (no county lot, or over an acre)"} · {shortWhen(o.createdAt)}
                   </p>
                 </div>
                 <a href={`tel:${o.phone}`} className="flex items-center gap-1 font-medium text-primary">
@@ -102,7 +102,7 @@ function OrderCard({ order, now }: { order: MowOrderRow; now?: Date }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, start] = useTransition();
   const clock = order.paidAt ? callClock(order.paidAt, now) : null;
-  const tier = tierByKey(order.tier);
+  const tier = order.tier ? tierByKey(order.tier) : null;
 
   return (
     <li className={`rounded-xl border bg-card p-3 ${clock?.overdue ? "border-destructive/50" : "border-border"}`}>
@@ -111,7 +111,7 @@ function OrderCard({ order, now }: { order: MowOrderRow; now?: Date }) {
           <p className="font-semibold">{order.name}</p>
           <p className="text-sm text-muted-foreground">{order.address}</p>
           <p className="mt-0.5 text-sm">
-            {tier?.label ?? order.tier} · paid <span className="font-semibold">{dollars(order.amountCents)}</span>
+            {tier?.label ?? order.tier} · paid <span className="font-semibold">{dollars(order.amountCents ?? 0)}</span>
             {order.lawnSqft ? <span className="text-muted-foreground"> · county says about {order.lawnSqft.toLocaleString("en-US")} sq ft</span> : null}
           </p>
           {order.tierMoved && (

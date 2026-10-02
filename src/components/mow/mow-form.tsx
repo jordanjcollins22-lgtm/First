@@ -13,10 +13,11 @@ import { mowQuote, startMowOrder, type MowQuote } from "@/lib/actions/public-mow
 type Quote = Extract<MowQuote, { ok: true }>;
 
 /**
- * Three steps on one screen, each appearing under the last: where, how much,
- * who. The price comes from their own lot, and they can move it a size up or
- * down if the picture is wrong, because they know their lawn better than the
- * county does.
+ * Where, who, then how much: the address, their details, and only then the
+ * picture of their lot and the price, with the card form one tap away. Their
+ * details are saved as the price is shown, so somebody who leaves at the
+ * price is still somebody to call. They can move the size up or down if the
+ * picture is wrong, because they know their lawn better than the county.
  */
 export function MowForm({
   orgSlug,
@@ -26,16 +27,16 @@ export function MowForm({
   orgSlug: string | null;
   rec: string | null;
   /** Opens on a price already found. Only for previewing the page. */
-  preview?: { address: string; quote: Quote };
+  preview?: { address: string; quote: Quote; name?: string; phone?: string; email?: string };
 }) {
   const [address, setAddress] = useState(preview?.address ?? "");
   const [picked, setPicked] = useState<GeocodeSuggestion | null>(null);
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [quote, setQuote] = useState<Quote | null>(preview?.quote ?? null);
-  const [tier, setTier] = useState<string | null>(preview?.quote.tier ?? null);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [tier, setTier] = useState<string | null>(preview?.quote?.tier ?? null);
+  const [name, setName] = useState(preview?.name ?? "");
+  const [phone, setPhone] = useState(preview?.phone ?? "");
+  const [email, setEmail] = useState(preview?.email ?? "");
   const [error, setError] = useState<string | null>(null);
   const [looking, startLooking] = useTransition();
   const [paying, startPaying] = useTransition();
@@ -56,12 +57,10 @@ export function MowForm({
     }, 300);
   }
 
-  function lookUp(chosen?: GeocodeSuggestion) {
-    const where = chosen ?? picked;
-    const text = chosen?.fullAddress ?? address;
+  function lookUp() {
     setError(null);
     startLooking(async () => {
-      const result = await mowQuote({ address: text, lat: where?.lat ?? null, lng: where?.lng ?? null });
+      const result = await mowQuote({ orgSlug, name, email, phone, address, lat: picked?.lat ?? null, lng: picked?.lng ?? null, rec });
       if (!result.ok) return setError(result.message);
       setQuote(result);
       setTier(result.tier);
@@ -72,8 +71,9 @@ export function MowForm({
     setAddress(s.fullAddress);
     setPicked(s);
     setSuggestions([]);
-    lookUp(s);
   }
+
+  const ready = address.trim().length >= 6 && name.trim().length >= 2 && phone.replace(/\D/g, "").length >= 10 && email.includes("@");
 
   const tiers = quote?.tiers ?? [];
   const index = tiers.findIndex((t) => t.key === tier);
@@ -83,20 +83,7 @@ export function MowForm({
     if (!quote || !current) return;
     setError(null);
     startPaying(async () => {
-      const result = await startMowOrder({
-        orgSlug,
-        name,
-        email,
-        phone,
-        address,
-        lat: quote.lat,
-        lng: quote.lng,
-        tier: current.key,
-        estimatedTier: quote.tier,
-        lotSqft: quote.lotSqft,
-        lawnSqft: quote.lawnSqft,
-        rec,
-      });
+      const result = await startMowOrder({ orderId: quote.orderId, tier: current.key });
       if (!result.ok) return setError(result.message);
       window.location.href = result.url;
     });
@@ -116,7 +103,7 @@ export function MowForm({
 
       <section className="rounded-2xl bg-[#2f6d3c] px-4 py-3 text-white">
         <p className="text-sm font-semibold">Last-minute openings: 15% off your first mow</p>
-        <p className="text-xs text-white/80">Type your address for your price. Takes about a minute.</p>
+        <p className="text-xs text-white/80">Your address and details, then your price. Takes about a minute.</p>
       </section>
 
       {/* 1. Where */}
@@ -130,7 +117,6 @@ export function MowForm({
             id="mow-address"
             value={address}
             onChange={(e) => onAddress(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && lookUp()}
             autoComplete="street-address"
             placeholder="Start typing and pick yours"
             className="h-12 pl-9 text-base"
@@ -147,15 +133,23 @@ export function MowForm({
             ))}
           </ul>
         )}
+      </section>
+
+      {/* 2. Who */}
+      <section className="flex flex-col gap-2">
+        <p className="text-sm font-semibold">Your details</p>
+        <Input placeholder="Full name" autoComplete="name" value={name} onChange={(e) => { setName(e.target.value); setQuote(null); }} className="h-11" />
+        <Input placeholder="Phone (we'll call to set your day)" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setQuote(null); }} className="h-11" />
+        <Input placeholder="Email for your receipt" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => { setEmail(e.target.value); setQuote(null); }} className="h-11" />
         {!quote && (
-          <Button type="button" className="h-12 text-base font-semibold" disabled={looking || address.trim().length < 6} onClick={() => lookUp()}>
+          <Button type="button" className="h-12 text-base font-semibold" disabled={looking || !ready} onClick={lookUp}>
             {looking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
             {looking ? "Finding your property" : "See my price"}
           </Button>
         )}
       </section>
 
-      {/* 2. How much */}
+      {/* 3. How much */}
       {quote && (
         <section className="flex flex-col gap-3">
           {quote.lot ? (
@@ -216,13 +210,9 @@ export function MowForm({
         </section>
       )}
 
-      {/* 3. Who, and pay */}
+      {/* 4. Pay */}
       {quote && current && !quote.overAcre && (
-        <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-base font-semibold">Reserve your spot</h2>
-          <Input placeholder="Full name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
-          <Input placeholder="Phone (we'll call to set your day)" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-11" />
-          <Input placeholder="Email for your receipt" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11" />
+        <section className="flex flex-col gap-2">
           <Button type="button" className="h-12 text-base font-semibold" disabled={paying} onClick={pay}>
             {paying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
             Pay {current.firstMow} and reserve my spot

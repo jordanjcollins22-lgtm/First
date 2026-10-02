@@ -65,6 +65,8 @@ const OPTIONS: TierOption[] = MOW_TIERS.map((tier) => {
 export type MowQuote =
   | {
       ok: true;
+      /** The order their details were saved under. Paying finishes this one. */
+      orderId: string;
       /** The lot from the county, for the picture. Null when the county had none for this address. */
       lot: LotData | null;
       lotSqft: number | null;
@@ -74,22 +76,94 @@ export type MowQuote =
       overAcre: boolean;
       tiers: TierOption[];
       discountPercent: number;
-      lat: number | null;
-      lng: number | null;
     }
   | { ok: false; message: string };
 
-/** Their lot, their lawn's size, and its price. Never refuses for want of a lot: they can pick a size themselves. */
-export async function mowQuote(input: { address: string; lat?: number | null; lng?: number | null }): Promise<MowQuote> {
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function contactProblem(name: string, email: string, phone: string, address: string): string | null {
+  if (address.length < 6) return "Type your full street address.";
+  if (name.length < 2) return "We need your name.";
+  if (phone.replace(/\D/g, "").length < 10) return "We need a phone number with area code.";
+  if (!EMAIL.test(email)) return "That email doesn't look right.";
+  return null;
+}
+
+/**
+ * Their details, saved, then their lot, their lawn's size and its price.
+ *
+ * The details are kept before the price is shown, so somebody who sees a
+ * price and leaves is still somebody to call. Asking again with the same
+ * email and address picks up the same order rather than making another.
+ * Never refuses for want of a lot: they can pick a size themselves.
+ */
+export async function mowQuote(input: {
+  orgSlug: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  lat?: number | null;
+  lng?: number | null;
+  rec: string | null;
+}): Promise<MowQuote> {
   try {
-    const address = input.address.trim();
-    if (address.length < 6) return { ok: false, message: "Type your full street address." };
+    const name = input.name.trim().slice(0, 120);
+    const email = input.email.trim().toLowerCase().slice(0, 200);
+    const phone = input.phone.trim().slice(0, 40);
+    const address = input.address.trim().slice(0, 300);
+    const problem = contactProblem(name, email, phone, address);
+    if (problem) return { ok: false, message: problem };
+
+    const { admin, org } = await business(input.orgSlug);
+    if (!org) return { ok: false, message: "We're not taking mows from this link right now." };
+
     const placed = await placeAddress(address, input.lat, input.lng);
     const lot = placed ? await fetchLotFromCounty(placed.lat, placed.lng, address).catch(() => null) : null;
     const estimate = estimateLawn(lot);
     const tier = estimate ? tierFor(estimate.lawnSqft) : null;
+    const price = tier ? firstMowPrice(tier) : null;
+    const rec = input.rec && /^[a-z0-9]{4,12}$/.test(input.rec) ? input.rec : null;
+
+    const row = {
+      name,
+      email,
+      phone,
+      address,
+      lat: placed?.lat ?? null,
+      lng: placed?.lng ?? null,
+      lot_sqft: estimate?.lotSqft ?? null,
+      lawn_sqft: estimate?.lawnSqft ?? null,
+      estimated_tier: tier?.key ?? null,
+      tier: tier?.key ?? null,
+      tier_moved: false,
+      regular_cents: price?.regularCents ?? null,
+      discount_cents: price?.discountCents ?? 0,
+      amount_cents: price?.firstMowCents ?? null,
+      referral_code: rec,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: earlier } = await admin
+      .from("mow_orders")
+      .select("id")
+      .eq("organization_id", org.id)
+      .eq("status", "unpaid")
+      .ilike("email", email)
+      .ilike("address", address)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const saved = earlier
+      ? await admin.from("mow_orders").update(row).eq("id", earlier.id).select("id").single()
+      : await admin.from("mow_orders").insert({ ...row, organization_id: org.id, status: "unpaid" }).select("id").single();
+    if (saved.error || !saved.data) return fail(saved.error);
+
+    log.info("mow.quoted", { orderId: saved.data.id, tier: tier?.key ?? null, lot: Boolean(lot), email: maskEmail(email), rec });
     return {
       ok: true,
+      orderId: saved.data.id,
       lot,
       lotSqft: estimate?.lotSqft ?? null,
       lawnSqft: estimate?.lawnSqft ?? null,
@@ -97,8 +171,6 @@ export async function mowQuote(input: { address: string; lat?: number | null; ln
       overAcre: Boolean(estimate && !tier),
       tiers: OPTIONS,
       discountPercent: Math.round(FIRST_MOW_DISCOUNT * 100),
-      lat: placed?.lat ?? null,
-      lng: placed?.lng ?? null,
     };
   } catch (err) {
     return fail(err);
@@ -107,70 +179,43 @@ export async function mowQuote(input: { address: string; lat?: number | null; ln
 
 export type StartResult = { ok: true; url: string } | { ok: false; message: string };
 
-/** The order, written unpaid, and the card form opened for it. */
-export async function startMowOrder(input: {
-  orgSlug: string | null;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  lat: number | null;
-  lng: number | null;
-  tier: string;
-  estimatedTier: string | null;
-  lotSqft: number | null;
-  lawnSqft: number | null;
-  rec: string | null;
-}): Promise<StartResult> {
+/** The size they settled on, priced here, and the card form opened for the order their details are under. */
+export async function startMowOrder(input: { orderId: string; tier: string }): Promise<StartResult> {
   try {
-    const name = input.name.trim();
-    const email = input.email.trim().toLowerCase();
-    const phone = input.phone.trim();
-    const address = input.address.trim();
-    if (name.length < 2) return { ok: false, message: "We need a name to put the mow under." };
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: "That email doesn't look right." };
-    if (phone.replace(/\D/g, "").length < 10) return { ok: false, message: "We need a phone number to call you about your day." };
-    if (address.length < 6) return { ok: false, message: "We need your full address." };
+    if (!/^[0-9a-f-]{36}$/.test(input.orderId)) return { ok: false, message: "Start again from your address." };
     const tier = tierByKey(input.tier);
     if (!tier) return { ok: false, message: "Pick your lawn size." };
-
-    const { admin, org } = await business(input.orgSlug);
-    if (!org) return { ok: false, message: "We're not taking mows from this link right now." };
     if (!isStripeConfigured) return { ok: false, message: "Card payments aren't switched on yet. Give us a call and we'll book you in." };
+
+    const admin = createAdminClient();
+    const { data: order } = await admin
+      .from("mow_orders")
+      .select("id, organization_id, email, address, status, estimated_tier, referral_code")
+      .eq("id", input.orderId)
+      .maybeSingle();
+    if (!order) return { ok: false, message: "Start again from your address." };
+    if (order.status !== "unpaid") return { ok: false, message: "That mow is already paid for." };
     const baseUrl = await outboundBaseUrl();
     if (!baseUrl) return { ok: false, message: "Couldn't start that payment. Try again." };
 
     const price = firstMowPrice(tier);
-    const placed = await placeAddress(address, input.lat, input.lng);
-    const rec = input.rec && /^[a-z0-9]{4,12}$/.test(input.rec) ? input.rec : null;
-
-    const { data: order, error } = await admin
+    const { error } = await admin
       .from("mow_orders")
-      .insert({
-        organization_id: org.id,
-        name: name.slice(0, 120),
-        email: email.slice(0, 200),
-        phone: phone.slice(0, 40),
-        address: address.slice(0, 300),
-        lat: placed?.lat ?? null,
-        lng: placed?.lng ?? null,
-        lot_sqft: input.lotSqft != null && Number.isFinite(input.lotSqft) ? Math.round(input.lotSqft) : null,
-        lawn_sqft: input.lawnSqft != null && Number.isFinite(input.lawnSqft) ? Math.round(input.lawnSqft) : null,
+      .update({
         tier: tier.key,
-        tier_moved: input.estimatedTier !== tier.key,
+        tier_moved: order.estimated_tier !== tier.key,
         regular_cents: price.regularCents,
         discount_cents: price.discountCents,
         amount_cents: price.firstMowCents,
-        referral_code: rec,
-        status: "unpaid",
+        updated_at: new Date().toISOString(),
       })
-      .select("id")
-      .single();
-    if (error || !order) return fail(error);
+      .eq("id", order.id)
+      .eq("status", "unpaid");
+    if (error) return fail(error);
 
     const session = await stripeClient().checkout.sessions.create({
       mode: "payment",
-      customer_email: email,
+      customer_email: order.email,
       line_items: [
         {
           price_data: {
@@ -178,20 +223,20 @@ export async function startMowOrder(input: {
             unit_amount: price.firstMowCents,
             product_data: {
               name: `First lawn mow, ${Math.round(FIRST_MOW_DISCOUNT * 100)}% off`,
-              description: `${tier.label} at ${address}. A team member will call within 24 hours to set your day.`,
+              description: `${tier.label} at ${order.address}. A team member will call within 24 hours to set your day.`,
             },
           },
           quantity: 1,
         },
       ],
       success_url: `${absolute(baseUrl, `/mow/done/${order.id}`)}?paid=1`,
-      cancel_url: absolute(baseUrl, rec ? `/mow?rec=${rec}` : "/mow"),
-      metadata: { mow_order_id: order.id, organization_id: org.id },
+      cancel_url: absolute(baseUrl, order.referral_code ? `/mow?rec=${order.referral_code}` : "/mow"),
+      metadata: { mow_order_id: order.id, organization_id: order.organization_id },
     });
     if (!session.url) return { ok: false, message: "Couldn't open the card form. Try again." };
 
     await admin.from("mow_orders").update({ checkout_session_id: session.id, updated_at: new Date().toISOString() }).eq("id", order.id);
-    log.info("mow.checkout_started", { orderId: order.id, tier: tier.key, email: maskEmail(email), rec });
+    log.info("mow.checkout_started", { orderId: order.id, tier: tier.key });
     return { ok: true, url: session.url };
   } catch (err) {
     return fail(err);
@@ -247,10 +292,10 @@ type OrderRow = {
   address: string;
   lat: number | null;
   lng: number | null;
-  tier: string;
+  tier: string | null;
   lawn_sqft: number | null;
-  amount_cents: number;
-  regular_cents: number;
+  amount_cents: number | null;
+  regular_cents: number | null;
   referral_code: string | null;
 };
 
@@ -296,7 +341,7 @@ async function placeClient(admin: ReturnType<typeof createAdminClient>, order: O
 
 /** Sold and paid for, so approved: nobody has to go and quote it. No date yet; the call sets that. */
 async function openJob(admin: ReturnType<typeof createAdminClient>, order: OrderRow, propertyId: string): Promise<string | null> {
-  const tier = tierByKey(order.tier);
+  const tier = order.tier ? tierByKey(order.tier) : null;
   const { data: job, error } = await admin
     .from("jobs")
     .insert({
@@ -305,7 +350,7 @@ async function openJob(admin: ReturnType<typeof createAdminClient>, order: Order
       status: "approved",
       referral_code: order.referral_code,
       client_notes:
-        `Paid ${dollars(order.amount_cents)} for a first mow (${tier?.label ?? order.tier}, regular ${dollars(order.regular_cents)}, ` +
+        `Paid ${dollars(order.amount_cents ?? 0)} for a first mow (${tier?.label ?? order.tier}, regular ${dollars(order.regular_cents ?? 0)}, ` +
         `${Math.round(FIRST_MOW_DISCOUNT * 100)}% off). ` +
         (order.lawn_sqft ? `Lawn about ${order.lawn_sqft.toLocaleString("en-US")} sq ft from the county lot. ` : "") +
         "Bought on the quick mow page. Call within 24 hours of payment to set the day.",
@@ -350,8 +395,8 @@ export async function mowOrderSummary(orderId: string): Promise<{
   return {
     firstName: data.name.split(/\s+/)[0] ?? data.name,
     address: data.address,
-    tierLabel: tierByKey(data.tier)?.label ?? data.tier,
-    paid: dollars(data.amount_cents),
+    tierLabel: (data.tier && tierByKey(data.tier)?.label) || "Lawn mow",
+    paid: dollars(data.amount_cents ?? 0),
     isPaid: data.status === "paid",
     phone: (org as { business_phone?: string | null } | null)?.business_phone ?? null,
   };

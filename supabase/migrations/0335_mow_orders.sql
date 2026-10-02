@@ -21,18 +21,23 @@ create table if not exists mow_orders (
   lng double precision,
 
   -- The estimate they were shown, and the tier they paid for. Kept as shown,
-  -- since the client may have moved it a size up or down themselves.
+  -- since the client may have moved it a size up or down themselves. Saved
+  -- with their details before the price is shown, so somebody who leaves at
+  -- the price is still a name and a number; until they pick a size (no lot
+  -- on the county map, or more than an acre) the tier and price are empty.
   lot_sqft integer,
   lawn_sqft integer,
-  tier text not null,
+  estimated_tier text,
+  tier text,
   tier_moved boolean not null default false,
-  regular_cents integer not null check (regular_cents > 0),
+  regular_cents integer check (regular_cents > 0),
   discount_cents integer not null default 0 check (discount_cents >= 0),
-  amount_cents integer not null check (amount_cents > 0),
+  amount_cents integer check (amount_cents > 0),
 
   -- The tracked link they came from (?rec=), so a booking counts for the post.
   referral_code text,
 
+  -- Unpaid is everybody who saw a price and has not paid; paid has an amount.
   status text not null default 'unpaid' check (status in ('unpaid', 'paid', 'cancelled')),
   checkout_session_id text,
   paid_at timestamptz,
@@ -47,7 +52,8 @@ create table if not exists mow_orders (
 
   note text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint mow_orders_paid_has_amount check (status <> 'paid' or (tier is not null and amount_cents is not null))
 );
 
 comment on table mow_orders is
