@@ -110,6 +110,9 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/admin/outreach/posts/saved/[seenId]":
+    "The saved copy of one answered post, opened from the answered posts list on Posts to Answer. " +
+    "Checks the posts-to-answer tab itself, and shows only posts the viewer answered or added, or any to the owner.",
   "/practice/account-manager":
     "Every page of the account manager pricing a submitted walkthrough, with a sample job, in preview. " +
     "Prices, saves and sends nothing, and checks the evaluations tab itself, like the other practice pages.",

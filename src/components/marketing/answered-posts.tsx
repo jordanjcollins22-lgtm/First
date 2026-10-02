@@ -107,11 +107,17 @@ export function AnsweredPosts({ posts, whose }: { posts: AnsweredPost[]; whose: 
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-                {(p.postUrl || p.comment) && (
+                {(p.postUrl || p.comment || p.savedId) && (
                   <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
                     {p.postUrl && (
                       <a href={p.postUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
                         Open the post
+                      </a>
+                    )}
+                    {/* Kept for good, in case the post itself is taken down. */}
+                    {p.savedId && (
+                      <a href={`/admin/outreach/posts/saved/${p.savedId}`} className="font-medium text-primary hover:underline">
+                        Saved copy
                       </a>
                     )}
                     {p.comment && <CopyComment text={p.comment} />}

@@ -409,6 +409,8 @@ export interface AnsweredPost {
   amount: number | null;
   /** The client's first name, once they have booked. */
   client: string | null;
+  /** The post as it was kept when it was found, to look back at if it is taken down. */
+  savedId: string | null;
 }
 
 /**
@@ -430,7 +432,7 @@ export async function answeredPostsFor(organizationId: string, profileId: string
     orgJobs(organizationId),
     admin
       .from("outreach_post_answers")
-      .select("link_id, seen:outreach_seen_posts(url)")
+      .select("link_id, seen_post_id, seen:outreach_seen_posts(url)")
       .eq("organization_id", organizationId)
       .eq("profile_id", profileId)
       .not("link_id", "is", null),
@@ -439,9 +441,11 @@ export async function answeredPostsFor(organizationId: string, profileId: string
 
   const jobByCode = new Map<string, LinkedJob>();
   for (const j of jobs) if (j.referralCode && !jobByCode.has(j.referralCode)) jobByCode.set(j.referralCode, j);
-  type AnswerRow = { link_id: string; seen: { url: string | null } | { url: string | null }[] | null };
+  type AnswerRow = { link_id: string; seen_post_id: string | null; seen: { url: string | null } | { url: string | null }[] | null };
   const urlByLink = new Map<string, string>();
+  const savedByLink = new Map<string, string>();
   for (const a of (answers ?? []) as unknown as AnswerRow[]) {
+    if (a.seen_post_id) savedByLink.set(a.link_id, a.seen_post_id);
     const seen = Array.isArray(a.seen) ? a.seen[0] : a.seen;
     if (seen?.url && isPostLink(seen.url)) urlByLink.set(a.link_id, seen.url);
   }
@@ -463,6 +467,7 @@ export async function answeredPostsFor(organizationId: string, profileId: string
       stage: stageOf(job, l.click_count ?? 0),
       amount: job?.proposalTotal ?? null,
       client: job?.customerFirstName ?? null,
+      savedId: savedByLink.get(l.id) ?? null,
     };
   });
 
@@ -481,6 +486,7 @@ export async function answeredPostsFor(organizationId: string, profileId: string
       stage: stageOf(j, 0),
       amount: j.proposalTotal,
       client: j.customerFirstName,
+      savedId: null,
     });
   }
   return rows;
