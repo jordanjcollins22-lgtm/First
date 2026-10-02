@@ -22,6 +22,7 @@ import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientatio
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
 import type { MeasurementKind } from "@/lib/zone-measurement";
 import { dotShape, feetPerBoardPixel, measuredShape } from "@/lib/dot-area";
+import { fitInsideLine, hasPropertyLine, insideLine, shapeInsideLine } from "@/lib/zone-bounds";
 import { canSubmit, submitLabel } from "@/lib/evaluation-resubmit";
 import {
   canStepMapZoom,
@@ -354,6 +355,8 @@ export function ImageCanvasBoard({
   >(null);
   /** Set when regenerating would clear a client's acceptance. */
   const [evalConfirm, setEvalConfirm] = useState<string | null>(null);
+  /** Said on the map when a zone would have gone outside the property line. */
+  const [boundsNote, setBoundsNote] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   /** The saved map, or a fresh photo, has finished loading (or failed to). */
   const [designLoaded, setDesignLoaded] = useState(false);
@@ -1105,9 +1108,21 @@ export function ImageCanvasBoard({
     onZonesRef.current?.(zones);
   }, [zones]);
 
+  // Long enough to read, then out of the way.
+  useEffect(() => {
+    if (!boundsNote) return;
+    const timer = setTimeout(() => setBoundsNote(null), 6000);
+    return () => clearTimeout(timer);
+  }, [boundsNote]);
+
   function finalizeZone() {
     if (drawingPoints.length < 3) return;
     const points = drawingPoints;
+    // Every corner is already inside; a side can still cut across a corner of the lot.
+    if (hasPropertyLine(propertyLine) && !shapeInsideLine(points, propertyLine)) {
+      setBoundsNote("One side of this zone crosses the property line. Undo a corner and go around it.");
+      return;
+    }
     const id = uuid();
     setZones((prev) => [
       ...prev,
@@ -1137,6 +1152,10 @@ export function ImageCanvasBoard({
 
   /** A tap puts an area there, about 12 feet across, and asks the same questions. */
   function placeDot(point: Point) {
+    if (hasPropertyLine(propertyLine) && !insideLine(point, propertyLine)) {
+      setBoundsNote("That spot is outside the property line. Tap inside the dashed line.");
+      return;
+    }
     const id = uuid();
     setZones((prev) => [
       ...prev,
@@ -1505,6 +1524,7 @@ export function ImageCanvasBoard({
     setTool(next);
     setDrawingPoints([]);
     setCursorPos(null);
+    setBoundsNote(null);
   }
 
   function handleDeleteZone(id: string) {
@@ -1524,6 +1544,18 @@ export function ImageCanvasBoard({
     measurementKind: MeasurementKind
   ) {
     const perPx = feetPerPixel();
+    // A tapped area takes the size of what was measured, on its dot, and is
+    // kept inside the property line: slid in if it hangs over, drawn smaller
+    // only if it cannot fit. The measurements stay as entered.
+    const tapped = zones.find((zone) => zone.id === serviceDialogZoneId && zone.anchor);
+    let reshaped: Point[] | null = null;
+    if (tapped?.anchor) {
+      const measured = measuredShape(tapped.anchor, tapped.points, { kind: measurementKind, lengthFt, widthFt, areaSqFt }, perPx);
+      const fitted = fitInsideLine(measured, tapped.anchor, propertyLine);
+      reshaped = fitted.points;
+      if (fitted.shrunk) setBoundsNote("That area is bigger than the room inside the property line there, so it's drawn smaller. The measurements are kept.");
+      else if (fitted.moved) setBoundsNote("Moved in a little so it sits inside the property line.");
+    }
     setZones((prev) =>
       prev.map((zone) =>
         zone.id === serviceDialogZoneId
@@ -1536,8 +1568,7 @@ export function ImageCanvasBoard({
               areaSqFt,
               perimeterFt,
               measurementKind,
-              // A tapped area takes the size of what was measured, on its dot.
-              ...(zone.anchor ? { points: measuredShape(zone.anchor, zone.points, { kind: measurementKind, lengthFt, widthFt, areaSqFt }, perPx) } : {}),
+              ...(reshaped ? { points: reshaped } : {}),
             }
           : zone
       )
@@ -1594,6 +1625,11 @@ export function ImageCanvasBoard({
     }
 
     if (tool === "zone" || tool === "property-line") {
+      // A zone's corners go inside the property line; a tap outside it is not taken.
+      if (tool === "zone" && hasPropertyLine(propertyLine) && !insideLine(point, propertyLine) && !shouldClose(drawingPoints, point)) {
+        setBoundsNote("That corner is outside the property line. Zones have to stay inside the dashed line.");
+        return;
+      }
       if (shouldClose(drawingPoints, point)) {
         if (tool === "zone") finalizeZone();
         else finalizePropertyLine();
@@ -2395,6 +2431,13 @@ export function ImageCanvasBoard({
             </button>
           </div>
         )}
+
+        {/* On the map, not under it: the evaluator is looking at the spot they tapped, fullscreen or not. */}
+        {boundsNote && (
+          <div role="status" className="pointer-events-none absolute inset-x-3 bottom-14 flex justify-center">
+            <p className="max-w-md rounded-xl bg-black/80 px-3 py-2 text-center text-sm font-medium text-white shadow-lg">{boundsNote}</p>
+          </div>
+        )}
       </div>
 
       {isDrawingNow && (
@@ -2437,7 +2480,7 @@ export function ImageCanvasBoard({
 
       {tool === "dot" && (
         <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          Tap where the work is. The same questions come up, and the area on the map takes the size you measure, centred on your tap.
+          Tap where the work is. The same questions come up, and the area on the map takes the size you measure, centred on your tap. It has to be inside the property line.
         </p>
       )}
 
