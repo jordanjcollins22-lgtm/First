@@ -5,9 +5,9 @@ import { listMowOrders } from "@/lib/data/mow-orders";
 import { MowOrdersBoard } from "@/components/mow/mow-orders-board";
 
 /**
- * Quick mows: paid for on the quick mow page and waiting for a call to set
- * the day, oldest first, with the 24-hour clock on each. Below them, people
- * who opened the card form and didn't finish, who are worth a call too.
+ * The quick mow pipeline: every request from the quick mow page, from a
+ * price seen, to paid and waiting on its 24-hour call, to scheduled and
+ * mowed. Each request is already a client and a job in the system.
  */
 export const dynamic = "force-dynamic";
 

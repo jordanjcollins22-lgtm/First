@@ -1863,6 +1863,7 @@ export interface Database {
           completion_notes: string | null;
           created_at: string;
           updated_at: string;
+          pipeline: string;
         };
         Insert: Partial<Database["public"]["Tables"]["jobs"]["Row"]> & {
           property_id: string;

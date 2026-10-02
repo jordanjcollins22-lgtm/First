@@ -65,9 +65,15 @@ async function PipelineTab() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold">Pipeline</h1>
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-2xl font-bold">Pipeline</h1>
+        {/* Its own funnel, so its own board: no evaluation, no proposal. */}
+        <Link href="/mow-orders" className="text-sm font-medium text-primary hover:underline">
+          Quick mow pipeline →
+        </Link>
+      </div>
       <p className="mb-4 text-muted-foreground">
-        Every live job, from going out to look at it through to finishing the work.
+        Every live job, from going out to look at it through to finishing the work. Quick mow requests have their own pipeline.
       </p>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">

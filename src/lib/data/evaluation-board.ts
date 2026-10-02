@@ -59,6 +59,8 @@ export async function getEvaluationBoard(): Promise<EvaluationBoard> {
         "properties!inner(address, customers(name)), " +
         "profiles!jobs_assigned_to_fkey(full_name, email, does_evaluations)"
     )
+    // Quick mow requests have no evaluation; they live on their own pipeline.
+    .neq("pipeline", "quick_mow")
     .order("evaluation_date", { ascending: false, nullsFirst: false })
     .limit(LIMIT);
   if (error) throw error;

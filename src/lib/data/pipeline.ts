@@ -95,6 +95,8 @@ export async function getPipeline(): Promise<PipelineCard[]> {
 
   return jobs
     .map((job) => {
+      // Quick mow requests have their own pipeline (Sales > Quick mows).
+      if ((job as { pipeline?: string }).pipeline === "quick_mow") return null;
       const proposal = proposalByJob.get(job.id) ?? null;
       const dispute = {
         openedAt: job.dispute_opened_at,

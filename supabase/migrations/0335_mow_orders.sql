@@ -81,4 +81,14 @@ alter table outreach_links add column if not exists destination text
 comment on column outreach_links.destination is
   'A path on our own site this link opens instead of the booking page. Null for the booking page.';
 
+-- Which pipeline a job is on. Quick mow requests have their own funnel (seen a
+-- price, paid, called, scheduled, mowed) and no evaluation or proposal, so
+-- they would only clutter the evaluation-and-proposal pipeline. Everything
+-- already in the database is on the main one.
+alter table jobs add column if not exists pipeline text not null default 'main'
+  check (pipeline in ('main', 'quick_mow'));
+
+comment on column jobs.pipeline is
+  'main: evaluation, proposal and project work. quick_mow: a lawn mow requested and paid for on the quick mow page.';
+
 notify pgrst, 'reload schema';

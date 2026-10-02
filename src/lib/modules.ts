@@ -104,7 +104,7 @@ export const MODULES: readonly AppModule[] = [
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "People being worked toward an evaluation." },
       { key: "proposals", label: "Proposals", tabs: ["proposals", "invoices"], blurb: "What we offered, and what came back." },
       { key: "clients", label: "Clients", tabs: ["contacts"], blurb: "The contact book." },
-      { key: "mows", label: "Quick mows", tabs: ["mow-orders"], blurb: "Mows paid for online, waiting for a call to set the day." },
+      { key: "mows", label: "Quick mow pipeline", tabs: ["mow-orders"], blurb: "Requests from the quick mow page, from a price seen to a lawn mowed." },
     ],
   },
   {

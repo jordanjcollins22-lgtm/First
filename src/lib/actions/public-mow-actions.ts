@@ -160,6 +160,13 @@ export async function mowQuote(input: {
       : await admin.from("mow_orders").insert({ ...row, organization_id: org.id, status: "unpaid" }).select("id").single();
     if (saved.error || !saved.data) return fail(saved.error);
 
+    // Into the system as a request: the client, their property and a job on
+    // the quick mow pipeline. Never in the way of the price: if filing fails,
+    // the order still has their details and paying files it again.
+    await fileRequest(admin, saved.data.id).catch((err) =>
+      log.error("mow.request_failed", { orderId: saved.data.id, error: err instanceof Error ? err.message : String(err) })
+    );
+
     log.info("mow.quoted", { orderId: saved.data.id, tier: tier?.key ?? null, lot: Boolean(lot), email: maskEmail(email), rec });
     return {
       ok: true,
@@ -244,7 +251,7 @@ export async function startMowOrder(input: { orderId: string; tier: string }): P
 }
 
 /**
- * The money landed: make the client, the property and the sold job, once.
+ * The money landed: the request's job becomes sold work, once.
  * Called from the Stripe webhook and from the page they land on, whichever
  * is first; the status claim stops the second from doing it again.
  */
@@ -271,13 +278,24 @@ export async function settleMowOrder(orderId: string): Promise<void> {
       .maybeSingle();
     if (!claimed) return;
 
-    const placed = await placeClient(admin, order);
-    const jobId = placed.propertyId ? await openJob(admin, order, placed.propertyId) : null;
-    await admin
-      .from("mow_orders")
-      .update({ customer_id: placed.customerId, property_id: placed.propertyId, job_id: jobId, updated_at: new Date().toISOString() })
-      .eq("id", order.id);
-    await ensureClientAccount({ customerId: placed.customerId, email: order.email }).catch(() => null);
+    // The request's own client and job, made now if filing it at the price failed.
+    const filed = await fileRequest(admin, order.id);
+    if (filed.jobId) {
+      const tier = order.tier ? tierByKey(order.tier) : null;
+      await admin
+        .from("jobs")
+        .update({
+          name: "Lawn mow, first visit",
+          status: "approved",
+          client_notes:
+            `Paid ${dollars(order.amount_cents ?? 0)} for a first mow (${tier?.label ?? order.tier}, regular ${dollars(order.regular_cents ?? 0)}, ` +
+            `${Math.round(FIRST_MOW_DISCOUNT * 100)}% off). ` +
+            (order.lawn_sqft ? `Lawn about ${order.lawn_sqft.toLocaleString("en-US")} sq ft from the county lot. ` : "") +
+            "Bought on the quick mow page. Call within 24 hours of payment to set the day.",
+        })
+        .eq("id", filed.jobId);
+    }
+    if (filed.customerId) await ensureClientAccount({ customerId: filed.customerId, email: order.email }).catch(() => null);
     log.info("mow.paid", { orderId: order.id, tier: order.tier, rec: order.referral_code });
   } catch (err) {
     log.error("mow.settle_failed", { orderId, error: err instanceof Error ? err.message : String(err) });
@@ -339,21 +357,65 @@ async function placeClient(admin: ReturnType<typeof createAdminClient>, order: O
   return { customerId, propertyId: property.id };
 }
 
-/** Sold and paid for, so approved: nobody has to go and quote it. No date yet; the call sets that. */
-async function openJob(admin: ReturnType<typeof createAdminClient>, order: OrderRow, propertyId: string): Promise<string | null> {
+/**
+ * The request, filed: the client (matched to anybody we already know), their
+ * property, and a job on the quick mow pipeline, linked back to the order.
+ * Safe to call again; it only makes what is missing, and refreshes the job's
+ * note with the latest price they saw.
+ */
+async function fileRequest(
+  admin: ReturnType<typeof createAdminClient>,
+  orderId: string
+): Promise<{ customerId: string | null; jobId: string | null }> {
+  const { data: order } = await admin
+    .from("mow_orders")
+    .select("id, organization_id, name, email, phone, address, lat, lng, tier, lawn_sqft, amount_cents, regular_cents, referral_code, status, customer_id, property_id, job_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order) return { customerId: null, jobId: null };
+
+  let { customer_id: customerId, property_id: propertyId, job_id: jobId } = order;
+  if (!customerId) {
+    const placed = await placeClient(admin, order);
+    customerId = placed.customerId;
+    propertyId = placed.propertyId;
+  }
+  if (!jobId && propertyId) jobId = await openRequestJob(admin, order, propertyId);
+  else if (jobId && order.status === "unpaid") {
+    await admin.from("jobs").update({ client_notes: requestNote(order) }).eq("id", jobId).eq("status", "estimating");
+  }
+
+  if (customerId !== order.customer_id || propertyId !== order.property_id || jobId !== order.job_id) {
+    await admin
+      .from("mow_orders")
+      .update({ customer_id: customerId, property_id: propertyId, job_id: jobId, updated_at: new Date().toISOString() })
+      .eq("id", order.id);
+  }
+  return { customerId, jobId };
+}
+
+function requestNote(order: OrderRow): string {
   const tier = order.tier ? tierByKey(order.tier) : null;
+  const price = tier ? `Saw ${tier.label.toLowerCase()} at ${dollars(firstMowPrice(tier).firstMowCents)} for the first mow (regular ${dollars(tier.cents)}). ` : "No instant price (no county lot, or more than an acre). ";
+  return (
+    "Quick mow request from the quick mow page. " +
+    price +
+    (order.lawn_sqft ? `Lawn about ${order.lawn_sqft.toLocaleString("en-US")} sq ft from the county lot. ` : "") +
+    "Not paid yet: call them."
+  );
+}
+
+/** A request, not yet sold: on the quick mow pipeline, credited to the link it came from. */
+async function openRequestJob(admin: ReturnType<typeof createAdminClient>, order: OrderRow, propertyId: string): Promise<string | null> {
   const { data: job, error } = await admin
     .from("jobs")
     .insert({
       property_id: propertyId,
-      name: "Lawn mow, first visit",
-      status: "approved",
+      name: "Quick mow request",
+      status: "estimating",
+      pipeline: "quick_mow",
       referral_code: order.referral_code,
-      client_notes:
-        `Paid ${dollars(order.amount_cents ?? 0)} for a first mow (${tier?.label ?? order.tier}, regular ${dollars(order.regular_cents ?? 0)}, ` +
-        `${Math.round(FIRST_MOW_DISCOUNT * 100)}% off). ` +
-        (order.lawn_sqft ? `Lawn about ${order.lawn_sqft.toLocaleString("en-US")} sq ft from the county lot. ` : "") +
-        "Bought on the quick mow page. Call within 24 hours of payment to set the day.",
+      client_notes: requestNote(order),
     })
     .select("id")
     .maybeSingle();

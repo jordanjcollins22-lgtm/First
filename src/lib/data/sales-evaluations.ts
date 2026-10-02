@@ -28,6 +28,8 @@ export async function listSalesEvaluations(): Promise<SalesEvaluation[]> {
           "assigned_to, properties!inner(address, customers(name, account_manager_id)), profiles!jobs_assigned_to_fkey(full_name, email)"
       )
       .eq("status", "estimating")
+      // A quick mow request is estimating too, but there is nothing to evaluate: it has its own pipeline.
+      .neq("pipeline", "quick_mow")
       .limit(500),
     // A job with a proposal on it, in any state, has produced one. It used
     // to stay here on its job status alone, so a client whose quote went
