@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { threadSentEmail } from "@/lib/data/thread-email";
 import { log, maskEmail, maskPhone } from "@/lib/log";
 import { isResendConfigured, isSmsConfigured } from "@/lib/env";
 import { sendSms, toE164 } from "@/lib/sms";
@@ -256,6 +257,13 @@ export async function sendClientMessage(
     });
     if (!result.ok) throw new Error(result.message);
     await record("sent", { providerId: result.id });
+    await threadSentEmail(admin, {
+      organizationId: message.organizationId,
+      jobId: message.referenceId ?? null,
+      customerId: message.customerId,
+      subject: message.subject,
+      body: message.body,
+    });
     log.info("client_message.sent", { kind: message.kind, channel: "email", customerId: message.customerId, to: maskEmail(contact.email), providerId: result.id });
     return { sent: true, providerId: result.id };
   } catch (error) {

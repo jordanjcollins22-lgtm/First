@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { threadSentEmail } from "@/lib/data/thread-email";
 
 import { log, maskEmail } from "@/lib/log";
 import { outboundReady, sendOutbound } from "@/lib/email/outbound";
@@ -127,6 +128,7 @@ export async function sendDueEvaluationEmails(
     });
 
     if (sent.ok) {
+      await threadSentEmail(admin, { organizationId: item.organization_id, jobId: item.job_id, customerId: item.customer_id, subject: item.subject, body: item.body });
       await admin.rpc("evaluation_sequence_sent", {
         p_dedupe_key: item.dedupe_key,
         p_message_id: sent.id,

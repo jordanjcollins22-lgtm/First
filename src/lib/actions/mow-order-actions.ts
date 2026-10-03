@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { threadSentEmail } from "@/lib/data/thread-email";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -119,6 +120,7 @@ export async function sendMowWelcome(input: { id: string; subject: string; body:
     await admin.from("client_message_log").update({ status: "failed", detail: sent.message }).eq("dedupe_key", dedupeKey).eq("organization_id", draft.organizationId);
     return { ok: false, message: `It didn't send: ${sent.message}` };
   }
+  await threadSentEmail(admin, { organizationId: draft.organizationId, customerId: draft.customerId, subject, body });
   await admin.from("mow_orders").update({ welcome_sent_at: new Date().toISOString() }).eq("id", input.id);
   log.info("mow.welcome_sent", { orderId: input.id, to: maskEmail(draft.to) });
   revalidatePath("/mow-orders");

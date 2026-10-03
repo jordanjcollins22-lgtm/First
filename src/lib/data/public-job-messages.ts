@@ -17,6 +17,9 @@ export async function listExternalMessagesForJob(jobId: string): Promise<JobMess
     .select("*")
     .eq("job_id", jobId)
     .eq("channel", "external")
+    // Copies of the emails the app sent are for the office's inbox; the
+    // client already has the email itself.
+    .or("reference_kind.is.null,reference_kind.neq.email")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as JobMessage[];

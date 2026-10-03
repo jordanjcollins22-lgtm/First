@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { threadSentEmail } from "@/lib/data/thread-email";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { isOwnerLevel } from "@/lib/roles";
@@ -119,6 +121,7 @@ export async function sendPreEvalAsk(jobId: string): Promise<PreEvalAskResult> {
     return { ok: false, message: `It didn't send: ${sent.message}` };
   }
   await supabase.from("client_message_log").update({ provider_id: sent.id }).eq("dedupe_key", dedupeKey).eq("organization_id", draft.organizationId);
+  await threadSentEmail(createAdminClient(), { organizationId: draft.organizationId, jobId, customerId: draft.customerId, subject: draft.subject, body: draft.body });
   log.info("pre_eval_ask.sent", { jobId, to: maskEmail(draft.to), via: sent.via });
   revalidatePath("/my-day");
   return { ok: true, message: `Sent to ${draft.to}.` };

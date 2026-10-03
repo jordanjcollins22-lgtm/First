@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { threadSentEmail } from "@/lib/data/thread-email";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { sendEmail } from "@/lib/email/send";
 import { sendOutbound } from "@/lib/email/outbound";
@@ -180,6 +181,7 @@ export async function deliverApproval(admin: Admin, approval: ApprovalRow, decid
       inReplyTo: payload.reply_thread_id ?? null,
     });
     if (sent.ok) {
+      await threadSentEmail(admin, { organizationId: approval.organization_id, jobId: approval.job_id, customerId: approval.customer_id, subject: approval.subject, body: approval.body });
       await admin.rpc("evaluation_sequence_sent", {
         p_dedupe_key: approval.dedupe_key,
         p_message_id: sent.id,
@@ -232,6 +234,15 @@ export async function deliverApproval(admin: Admin, approval: ApprovalRow, decid
         : { status: "failed", decided_at: now, decided_by: decidedBy, detail: sent.message }
     )
     .eq("id", approval.id);
+  if (sent.ok && approval.source !== "team_request") {
+    await threadSentEmail(admin, {
+      organizationId: approval.organization_id,
+      jobId: approval.job_id ?? payload.reference_id ?? null,
+      customerId: approval.customer_id,
+      subject: approval.subject,
+      body: approval.body,
+    });
+  }
   // The proposal is sent from this moment, not from its approval.
   if (sent.ok && approval.kind === "proposal_ready" && approval.job_id) {
     await admin.from("job_proposals").update({ sent_at: now }).eq("job_id", approval.job_id).is("sent_at", null);
