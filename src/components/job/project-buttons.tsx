@@ -60,12 +60,18 @@ export function ProjectButtons({
         )
       )}
     </div>
-    {/* The crew's own screens for this job, to click through. Saves nothing. */}
-    {hasSiteMap && (
-      <Link href={`/jobs/${jobId}/crew-demo`} className="self-end text-xs font-medium text-primary hover:underline">
-        Click through the crew sheet (demo)
+    <div className="flex flex-wrap justify-end gap-x-4 gap-y-1">
+      {/* A walk-around video, for a 3D model and a top-down plan of the yard. */}
+      <Link href={`/jobs/${jobId}/scan`} className="text-xs font-medium text-primary hover:underline">
+        3D scan from a video (demo)
       </Link>
-    )}
+      {/* The crew's own screens for this job, to click through. Saves nothing. */}
+      {hasSiteMap && (
+        <Link href={`/jobs/${jobId}/crew-demo`} className="text-xs font-medium text-primary hover:underline">
+          Click through the crew sheet (demo)
+        </Link>
+      )}
+    </div>
     </div>
   );
 }
