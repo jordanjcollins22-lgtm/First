@@ -170,8 +170,32 @@ export async function sendProviderEmail(input: SendEmailInput): Promise<ResendRe
       subject: input.subject,
       html: input.html,
       text: input.text,
-      reply_to: input.replyTo ?? undefined,
+      // Several reply addresses are kept as one comma-separated setting, so a
+      // reply can reach the office's own inbox and the app's at once.
+      reply_to: replyAddresses(input.replyTo),
       headers: input.headers,
     },
   });
+}
+
+function replyAddresses(value: string | null | undefined): string[] | undefined {
+  const list = (value ?? "").split(",").map((a) => a.trim()).filter(Boolean);
+  return list.length ? list : undefined;
+}
+
+export interface ReceivedEmail {
+  id: string;
+  from: string;
+  to: string[];
+  subject: string | null;
+  text: string | null;
+  html: string | null;
+  created_at: string;
+  message_id: string | null;
+  authentication: { spf?: string | null; dkim?: string | null; dmarc?: string | null } | null;
+}
+
+/** One email somebody sent us, with its body. The webhook only says it arrived. */
+export async function getReceivedEmail(id: string): Promise<ResendResult<ReceivedEmail>> {
+  return call<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(id)}`);
 }

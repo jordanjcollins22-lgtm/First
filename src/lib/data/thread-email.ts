@@ -53,7 +53,8 @@ export async function threadSentEmail(
   }
 }
 
-async function jobFor(admin: Admin, organizationId: string, jobId: string | null, customerId: string | null): Promise<string | null> {
+/** The job a message about this client belongs on: the one named, else their most recent. */
+export async function jobFor(admin: Admin, organizationId: string, jobId: string | null, customerId: string | null): Promise<string | null> {
   if (jobId) {
     const { data } = await admin
       .from("jobs")

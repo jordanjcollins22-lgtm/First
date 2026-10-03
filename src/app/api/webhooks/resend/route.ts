@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { recordConsent } from "@/lib/data/client-messaging";
+import { fileInboundEmail } from "@/lib/data/inbound-email";
 import { log } from "@/lib/log";
 
 /**
@@ -14,6 +15,9 @@ import { log } from "@/lib/log";
  * the campaign's rate is right; a complaint also takes the person off
  * every future email, because somebody who pressed "spam" has said no in
  * the loudest way there is. Opens and clicks are noted for the numbers.
+ *
+ * Replies from clients arrive here too, as email.received, and go into
+ * their conversation (lib/data/inbound-email.ts).
  *
  * Signed by the provider (Svix). Without the signing secret set, the
  * route is closed in production: a forged call could unsubscribe people.
@@ -46,6 +50,13 @@ export async function POST(request: NextRequest) {
   if (!emailId) return NextResponse.json({ ok: true, ignored: "no email id" });
 
   const admin = createAdminClient();
+
+  // A client replied to one of our emails: into their conversation.
+  if (type === "email.received") {
+    const outcome = await fileInboundEmail(admin, emailId);
+    return NextResponse.json({ ok: true, inbound: outcome });
+  }
+
   const { data: recipient } = await admin
     .from("email_campaign_recipients")
     .select("id, organization_id, customer_id, status")
