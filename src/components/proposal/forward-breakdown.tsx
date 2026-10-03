@@ -17,7 +17,8 @@ import {
   type PricingEquation,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
-import { jobMaterials, purchaseNoun, type InventoryItem, type MaterialRow } from "@/lib/forward-materials";
+import { bulkOrders, jobMaterials, purchaseNoun, splitCost, type InventoryItem, type MaterialRow } from "@/lib/forward-materials";
+import { costWith, pickSupplier, type Supplier, type SupplierPick } from "@/lib/material-suppliers";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { cn } from "@/lib/utils";
 
@@ -297,7 +298,24 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
         );
       })}
 
-      <ForwardMaterials rows={jobMaterials(item.breakdown.areas.map((a) => a.name), lines, services, item.inventory ?? [])} />
+      <ForwardMaterials
+        rows={jobMaterials(item.breakdown.areas.map((a) => a.name), lines, services, item.inventory ?? [])}
+        suppliers={item.suppliers ?? []}
+        site={item.site ?? null}
+        onUse={
+          locked
+            ? undefined
+            : (changes) =>
+                onChange(
+                  lines.map((ls, a) =>
+                    ls.map((l, i) => {
+                      const c = changes.find((x) => x.area === a && x.line === i);
+                      return c ? { ...l, materialCents: c.cents, note: "Material at the supplier's price, delivery in" } : l;
+                    })
+                  )
+                )
+        }
+      />
 
       <JobTotals job={job} eq={eq} />
 
@@ -362,13 +380,65 @@ function MoneyInput({ line, onChange }: { line: PricedLine; onChange: (patch: Pa
  * buy it. One with nowhere to buy it, or not in the inventory at all, says
  * so and links to the inventory, where the link goes.
  */
-function ForwardMaterials({ rows }: { rows: MaterialRow[] }) {
+function ForwardMaterials({
+  rows,
+  suppliers,
+  site,
+  onUse,
+}: {
+  rows: MaterialRow[];
+  suppliers: Supplier[];
+  site: PriceApproval["site"];
+  onUse?: (changes: { area: number; line: number; cents: number }[]) => void;
+}) {
   if (rows.length === 0) return null;
+  const { orders, rest } = bulkOrders(rows);
   return (
     <section className="overflow-hidden rounded-xl border border-border">
       <p className="border-b border-border bg-muted/50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Materials and where to buy them</p>
       <ul className="divide-y divide-border">
-        {rows.map((r, i) => (
+        {orders.map((o) => {
+          const sold = suppliers.some((s) => s.products.some((p) => p.kind === o.kind));
+          const yards = Math.ceil(o.quantity * 2 - 1e-9) / 2;
+          const byBag = o.rows.flatMap((r) => r.items).find((i) => i.buy);
+          return (
+            <li key={o.kind} className="flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-start md:gap-4">
+              <div className="min-w-0 md:w-64 md:shrink-0">
+                <p className="text-sm font-medium">{o.material} for the whole job</p>
+                <p className="text-xs text-muted-foreground">
+                  {qty(Math.round(o.quantity * 100) / 100)} {o.unit} in all: {o.rows.map((r) => `${r.areaName} ${qty(r.quantity)}`).join(", ")}
+                </p>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                  Over {qty(o.over)} {unitWords(o.unit)}: one order from a bulk supplier
+                </p>
+                {sold ? (
+                  <SupplierChoice
+                    pick={pickSupplier(suppliers, o.kind, o.quantity, site)}
+                    hasSite={site != null}
+                    current={o.rows.reduce((sum, r) => sum + r.materialCents, 0)}
+                    onUse={onUse ? (cents) => onUse(splitCost(o, cents)) : undefined}
+                  />
+                ) : (
+                  <p className="text-sm">
+                    Order {yards} cu yd.{" "}
+                    <Link href="/admin/suppliers" className="text-amber-800 underline underline-offset-2 dark:text-amber-300">
+                      No supplier with {o.kind} yet
+                    </Link>
+                    .
+                  </p>
+                )}
+                {byBag && o.rows.length === 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    By the bag it would be {byBag.buy!.text} of {byBag.item.name}.
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+        {rest.map((r, i) => (
           <li key={i} className="flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-start md:gap-4">
             <div className="min-w-0 md:w-64 md:shrink-0">
               <p className="text-sm font-medium">{r.material}</p>
@@ -424,6 +494,126 @@ function ForwardMaterials({ rows }: { rows: MaterialRow[] }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+const miles = (m: number | null) => (m == null ? null : `${m < 10 ? m.toFixed(1) : Math.round(m)} mi`);
+
+/**
+ * The closest bulk supplier with a price: its products with their photo and
+ * price, what delivery to the job costs, and a button to price the line with
+ * it. A closer supplier we have no price for is named, with its phone, to
+ * call; the rest are listed by distance.
+ */
+function SupplierChoice({ pick, hasSite, current, onUse }: { pick: SupplierPick; hasSite: boolean; current: number; onUse?: (cents: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const rec = pick.recommended;
+  const others = pick.all.filter((o) => o !== rec && !pick.closerToCall.includes(o));
+  return (
+    <div className="flex flex-col gap-2">
+      {rec ? (
+        <div className="rounded-lg border border-border p-2.5">
+          <p className="text-sm">
+            <span className="font-semibold">{rec.supplier.name}</span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {hasSite ? `closest with a price${rec.miles != null ? `, ${miles(rec.miles)}` : ""}` : "cheapest with a price (no position for this job)"}
+            </span>
+          </p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {rec.products.map((p) => {
+              const cost = costWith(rec, p);
+              return (
+                <li key={p.id} className="flex items-center gap-3">
+                  {p.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-md border border-border bg-white object-cover" />
+                  ) : (
+                    <span className="h-11 w-11 shrink-0 rounded-md bg-muted" aria-hidden />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      {p.productUrl ? (
+                        <a href={p.productUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+                          {p.name}
+                        </a>
+                      ) : (
+                        p.name
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {p.priceCents != null ? `${money(p.priceCents)}/${p.unit}` : "No price"}
+                      {p.deliveredPriceCents != null && ` (${money(p.deliveredPriceCents)} delivered)`}
+                      {cost != null && ` · ${qty(rec.amount)} ${rec.amountUnit}${rec.delivery ? ` + ${money(rec.delivery.feeCents)} delivery` : ""} = ${money(cost)}`}
+                    </p>
+                  </div>
+                  {onUse && cost != null && (
+                    <button
+                      type="button"
+                      onClick={() => onUse(cost)}
+                      disabled={cost === current}
+                      className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-sm font-medium text-primary hover:bg-muted disabled:text-muted-foreground"
+                    >
+                      {cost === current ? "In M" : "Use"}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {rec.delivery
+              ? `Delivery to ${rec.delivery.town}: ${money(rec.delivery.feeCents)}.`
+              : rec.supplier.delivers
+                ? `Delivery fee to this job isn't published${rec.supplier.phone ? `: call ${rec.supplier.phone}` : ""}.`
+                : "Pick up only."}
+            {rec.supplier.deliveryMinimum != null && ` ${qty(rec.supplier.deliveryMinimum)} ${rec.amountUnit} delivery minimum.`}
+            {rec.underMinimum && " This is under it: pick it up, or pay for the minimum."}
+            {rec.supplier.checkedOn && ` Prices as of ${rec.supplier.checkedOn}.`}
+          </p>
+          {rec.supplier.deliveryNote && <p className="mt-1 text-xs text-muted-foreground">{rec.supplier.deliveryNote}</p>}
+        </div>
+      ) : (
+        <p className="text-sm text-amber-800 dark:text-amber-300">No supplier has a price for this yet.</p>
+      )}
+      {pick.closerToCall.map((o) => (
+        <p key={o.supplier.id} className="text-sm text-amber-800 dark:text-amber-300">
+          {o.supplier.name} is {rec ? "closer" : "nearby"}
+          {o.miles != null && ` (${miles(o.miles)})`} but we have no price: call
+          {o.supplier.phone ? (
+            <>
+              {" "}
+              <a href={`tel:${o.supplier.phone.replace(/[^0-9+]/g, "")}`} className="font-medium underline underline-offset-2">
+                {o.supplier.phone}
+              </a>
+            </>
+          ) : (
+            " them"
+          )}
+          .
+        </p>
+      ))}
+      {others.length > 0 && (
+        <div>
+          <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs font-medium text-primary">
+            {open ? "Hide" : "Show"} {others.length} other supplier{others.length === 1 ? "" : "s"}
+          </button>
+          {open && (
+            <ul className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+              {others.map((o) => (
+                <li key={o.supplier.id}>
+                  <span className="font-medium text-foreground">{o.supplier.name}</span>
+                  {o.miles != null && ` · ${miles(o.miles)}`}
+                  {o.product ? ` · ${o.product.name} ${money(o.product.priceCents!)}/${o.product.unit}` : " · no price"}
+                  {o.costCents != null && ` · ${money(o.costCents)} for this job`}
+                  {o.supplier.phone && ` · ${o.supplier.phone}`}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -17,6 +17,8 @@ import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
 import { DEFAULT_SETUP, suggestJob, type PriceLine, type PricingSetup } from "@/lib/forward-pricing";
 import { getProductionPricing } from "@/lib/data/production-pricing";
 import { getInventoryItems } from "@/lib/data/inventory-items";
+import { getMaterialSuppliers } from "@/lib/data/material-suppliers";
+import { zipOf, type Supplier } from "@/lib/material-suppliers";
 import type { InventoryItem } from "@/lib/forward-materials";
 import { zoneMeasurements } from "@/lib/proposal-pricing";
 import { isSalting } from "@/lib/salting";
@@ -78,6 +80,10 @@ export interface PriceApproval {
   driveMinutesPerDay: number | null;
   /** The job materials in the inventory, for showing what each service's material is and where to buy it. */
   inventory: InventoryItem[];
+  /** Bulk suppliers and what they sell, for recommending the closest one with a price. */
+  suppliers: Supplier[];
+  /** Where the job is, for how far each supplier is and what it charges to deliver there. */
+  site: { lat: number; lng: number; zip: string | null } | null;
   /** The whole site map, as the proposal draws it. Sample: the practice drawing, with no photo behind it. */
   siteMap:
     | { kind: "image"; imagePath: string; transform: ProposalSiteImageTransform; zones: Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points">[] }
@@ -185,13 +191,14 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
   if (rows.length === 0) return [];
 
   const jobIds = rows.map((r) => r.job_id);
-  const [catalog, designs, fees, stock, pricing, inventory] = await Promise.all([
+  const [catalog, designs, fees, stock, pricing, inventory, bulk] = await Promise.all([
     getCanvasCatalog(),
     supabase.from("canvas_designs").select("job_id, zones").in("job_id", jobIds),
     feesForJobs(supabase, profile.organization_id, jobIds),
     supabase.from("materials").select("name, image_path, purchase_url").eq("organization_id", profile.organization_id),
     getProductionPricing(supabase, profile.organization_id),
     getInventoryItems(supabase, profile.organization_id),
+    getMaterialSuppliers(supabase, profile.organization_id),
   ]);
   const setup: PricingSetup = { equation: pricing.equation, services: pricing.services };
   // Each product by its name, with its photo and link, for the approval to show.
@@ -266,6 +273,11 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
       pricing: setup,
       driveMinutesPerDay: driveThereAndBack(travels[index]),
       inventory,
+      suppliers: bulk.suppliers,
+      site:
+        r.job.property?.lat != null && r.job.property?.lng != null
+          ? { lat: r.job.property.lat, lng: r.job.property.lng, zip: zipOf(r.job.property.address) }
+          : null,
       siteMap:
         r.site_image_path && r.site_image_transform
           ? { kind: "image" as const, imagePath: r.site_image_path, transform: r.site_image_transform, zones: r.scope_snapshot ?? [] }

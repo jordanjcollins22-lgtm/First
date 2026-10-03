@@ -4362,6 +4362,131 @@ export interface Database {
         };
         Relationships: [];
       };
+      material_suppliers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          address: string | null;
+          lat: number | null;
+          lng: number | null;
+          phone: string | null;
+          website: string | null;
+          delivers: boolean;
+          delivery_minimum: number | null;
+          delivery_fees: Json;
+          delivery_note: string | null;
+          notes: string | null;
+          source_url: string | null;
+          checked_on: string | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          address?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          phone?: string | null;
+          website?: string | null;
+          delivers?: boolean;
+          delivery_minimum?: number | null;
+          delivery_fees?: Json;
+          delivery_note?: string | null;
+          notes?: string | null;
+          source_url?: string | null;
+          checked_on?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          name?: string;
+          address?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          phone?: string | null;
+          website?: string | null;
+          delivers?: boolean;
+          delivery_minimum?: number | null;
+          delivery_fees?: Json;
+          delivery_note?: string | null;
+          notes?: string | null;
+          source_url?: string | null;
+          checked_on?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      supplier_products: {
+        Row: {
+          id: string;
+          organization_id: string;
+          supplier_id: string;
+          kind: string;
+          name: string;
+          unit: string;
+          price_cents: number | null;
+          delivered_price_cents: number | null;
+          image_url: string | null;
+          product_url: string | null;
+          checked_on: string | null;
+          sort: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          supplier_id: string;
+          kind: string;
+          name: string;
+          unit?: string;
+          price_cents?: number | null;
+          delivered_price_cents?: number | null;
+          image_url?: string | null;
+          product_url?: string | null;
+          checked_on?: string | null;
+          sort?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          supplier_id?: string;
+          kind?: string;
+          name?: string;
+          unit?: string;
+          price_cents?: number | null;
+          delivered_price_cents?: number | null;
+          image_url?: string | null;
+          product_url?: string | null;
+          checked_on?: string | null;
+          sort?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "supplier_products_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "material_suppliers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crew_day_events: {
         Row: {
           id: string;

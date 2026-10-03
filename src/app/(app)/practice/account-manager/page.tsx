@@ -10,6 +10,7 @@ import { jobCosts, priceSiteMap } from "@/lib/job-price";
 import { forwardAreas, type PriceApproval } from "@/lib/data/price-approvals";
 import { getProductionPricing } from "@/lib/data/production-pricing";
 import { getInventoryItems } from "@/lib/data/inventory-items";
+import { getMaterialSuppliers } from "@/lib/data/material-suppliers";
 import { DEFAULT_SETUP, type PricingSetup } from "@/lib/forward-pricing";
 import { getCurrentProfile } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
@@ -65,6 +66,7 @@ export default async function AccountManagerJourneyPage() {
   const stored = profile ? await getProductionPricing(supabase, profile.organization_id) : DEFAULT_SETUP;
   const pricing: PricingSetup = { equation: stored.equation, services: stored.services };
   const inventory = profile ? await getInventoryItems(supabase, profile.organization_id) : [];
+  const bulk = profile ? await getMaterialSuppliers(supabase, profile.organization_id) : { suppliers: [], available: false };
   // The sample job: the same three areas, and the same price, as the sample
   // proposal Review proposal opens, priced on this business's own rate card.
   const typeFor = (name: string) => catalog.servicePricing.find((p) => p.name === name)?.service_type_id ?? null;
@@ -126,6 +128,9 @@ export default async function AccountManagerJourneyPage() {
     // The same sample drive: twenty minutes out, twenty back.
     driveMinutesPerDay: 40,
     inventory,
+    // The sample job has no real position, so the cheapest supplier is shown.
+    suppliers: bulk.suppliers,
+    site: null,
   };
 
   // Jace's My Day: the three squares, each opening on a sample of what is in it.

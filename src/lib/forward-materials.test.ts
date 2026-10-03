@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { itemsFor, jobMaterials, purchaseFor, purchaseNoun, type InventoryItem } from "@/lib/forward-materials";
+import { bulkOrders, itemsFor, jobMaterials, purchaseFor, purchaseNoun, splitCost, type InventoryItem } from "@/lib/forward-materials";
 import { PRODUCTION_SERVICES, productionService } from "@/lib/forward-pricing";
 
 const item = (over: Partial<InventoryItem>): InventoryItem => ({ id: "00000000-0000-0000-0000-000000000000", name: "Item", unit: null, imageUrl: null, url: null, coverageSqFt: null, wastePct: 0, ...over });
@@ -72,5 +72,23 @@ describe("materials matched to the inventory", () => {
       ["Zone 2", "Weed spraying", 0],
     ]);
     expect(rows[0].items[0].buy?.text).toBe("1 bag");
+  });
+
+  it("adds a material up across the job into one bulk order, and shares its cost back by quantity", () => {
+    // Two beds of 0.8 yd: each under the 1 yd threshold, 1.6 together.
+    const rows = jobMaterials(
+      ["Zone 1", "Zone 2", "Zone 3"],
+      [[{ key: "mulch-install", quantity: 0.8, materialCents: 0 }], [{ key: "weed-pulling", quantity: 100, materialCents: 0 }, { key: "mulch-install", quantity: 0.8, materialCents: 0 }], [{ key: "seeding", quantity: 500, materialCents: 0 }]],
+      PRODUCTION_SERVICES,
+      inventory
+    );
+    const { orders, rest } = bulkOrders(rows);
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({ kind: "mulch", quantity: 1.6, over: 1 });
+    expect(orders[0].rows.map((r) => [r.area, r.line])).toEqual([[0, 0], [1, 1]]);
+    expect(rest.map((r) => r.service)).toEqual(["Seeding (seed, rake in, straw)"]);
+    expect(splitCost(orders[0], 10001)).toEqual([{ area: 0, line: 0, cents: 5001 }, { area: 1, line: 1, cents: 5000 }]);
+    // One small bed stays bought by the bag.
+    expect(bulkOrders(jobMaterials(["Zone 1"], [[{ key: "mulch-install", quantity: 0.5, materialCents: 0 }]], PRODUCTION_SERVICES, inventory)).orders).toEqual([]);
   });
 });

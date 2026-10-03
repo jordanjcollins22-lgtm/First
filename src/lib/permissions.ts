@@ -107,6 +107,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
   // The crew's pay and each service's production rate: what every forward price is worked out from.
   { key: "production-rates", label: "Production Rates", href: "/admin/production-rates" },
+  // Bulk mulch, topsoil and stone suppliers near the work: prices, delivery fees and minimums.
+  { key: "suppliers", label: "Bulk Suppliers", href: "/admin/suppliers" },
   // The company shirts: the designs, and ordering them by design, colour and size.
   { key: "shirts", label: "Company Shirts", href: "/admin/shirts" },
 ];

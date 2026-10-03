@@ -11,6 +11,7 @@
  * Pure, so the matching is tested without a database.
  */
 
+import { supplierKindFor, type SupplierKind } from "@/lib/material-suppliers";
 import { productionService, type PriceLine, type ProductionService, type ProductionUnit } from "@/lib/forward-pricing";
 
 export interface InventoryItem {
@@ -111,8 +112,11 @@ export function bulkThreshold(service: ProductionService): number | null {
 }
 
 export interface MaterialRow {
-  /** The area's position and name. */
+  /** The area's position and name, and the line's position in it. */
   area: number;
+  line: number;
+  /** The bulk material it is, for finding suppliers: mulch, topsoil, stone. */
+  kind: SupplierKind | null;
   areaName: string;
   service: string;
   quantity: number;
@@ -121,6 +125,8 @@ export interface MaterialRow {
   material: string;
   /** M for the line, in cents. */
   materialCents: number;
+  /** The service's bulk threshold, in its unit; null when it is never ordered in bulk. */
+  bulkOver: number | null;
   /** Bought at the store: each item and how many of it. */
   items: { item: InventoryItem; buy: Purchase | null }[];
   /**
@@ -141,7 +147,7 @@ function bulkAmount(quantity: number, unit: ProductionUnit, wastePct: number): s
 /** Every line that uses a material, with what to buy and how many, or the bulk order when it is over the threshold. Disposal and other per-job costs are left out. */
 export function jobMaterials(areaNames: string[], lines: PriceLine[][], services: ProductionService[], inventory: InventoryItem[]): MaterialRow[] {
   return lines.flatMap((areaLines, area) =>
-    areaLines.flatMap((line) => {
+    areaLines.flatMap((line, lineIndex) => {
       const service = productionService(line.key, services);
       if (!service || service.unit === "job") return [];
       if (!service.materialName && !service.materialIds?.length) return [];
@@ -151,12 +157,15 @@ export function jobMaterials(areaNames: string[], lines: PriceLine[][], services
       return [
         {
           area,
+          line: lineIndex,
+          kind: supplierKindFor(service),
           areaName: areaNames[area] ?? `Area ${area + 1}`,
           service: service.label,
           quantity: line.quantity,
           unit: service.unit,
           material: service.materialName ?? "Material",
           materialCents: Math.max(0, Math.round(line.materialCents)),
+          bulkOver: over,
           items: items.map((item) => ({ item, buy: purchaseFor(item, service, line.quantity) })),
           bulk:
             over != null && line.quantity > over
@@ -166,4 +175,46 @@ export function jobMaterials(areaNames: string[], lines: PriceLine[][], services
       ];
     })
   );
+}
+
+/** One bulk order for the whole job: every line of a material added up, so it is ordered, and delivered, once. */
+export interface BulkOrder {
+  kind: SupplierKind;
+  /** The material, as named on Production rates. */
+  material: string;
+  /** The threshold it is over. */
+  over: number;
+  unit: ProductionUnit;
+  /** All the lines' quantities together. */
+  quantity: number;
+  rows: MaterialRow[];
+}
+
+/**
+ * The job's bulk materials as one order each: every line of a material that
+ * a supplier sells (mulch, topsoil, stone) is added up, and when the total is
+ * over the threshold it is one order, delivered once. The rest are bought by
+ * the bag, line by line.
+ */
+export function bulkOrders(rows: MaterialRow[]): { orders: BulkOrder[]; rest: MaterialRow[] } {
+  const byKind = new Map<SupplierKind, MaterialRow[]>();
+  for (const r of rows) if (r.kind && r.bulkOver != null) byKind.set(r.kind, [...(byKind.get(r.kind) ?? []), r]);
+  const orders: BulkOrder[] = [];
+  for (const [kind, group] of byKind) {
+    const quantity = group.reduce((s, r) => s + r.quantity, 0);
+    const over = Math.min(...group.map((r) => r.bulkOver!));
+    if (quantity > over) orders.push({ kind, material: group[0].material, over, unit: group[0].unit, quantity, rows: group });
+  }
+  const ordered = new Set(orders.flatMap((o) => o.rows));
+  return { orders, rest: rows.filter((r) => !ordered.has(r)).map((r) => (r.kind && r.bulk ? { ...r, bulk: null } : r)) };
+}
+
+/** An order's cost shared across its lines by quantity, in whole cents that add up to it. */
+export function splitCost(order: BulkOrder, cents: number): { area: number; line: number; cents: number }[] {
+  let left = Math.round(cents);
+  return order.rows.map((r, i) => {
+    const share = i === order.rows.length - 1 ? left : order.quantity > 0 ? Math.round((cents * r.quantity) / order.quantity) : 0;
+    left -= share;
+    return { area: r.area, line: r.line, cents: share };
+  });
 }
