@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/database.types";
-import { DEFAULT_SETUP, readSetup, type PricingSetup } from "@/lib/forward-pricing";
+import { DEFAULT_SETUP, readSetup, withNewServices, type PricingSetup } from "@/lib/forward-pricing";
 
 export interface StoredSetup extends PricingSetup {
   /** Whether the business has saved its own; false while the starting figures are in use. */
@@ -38,5 +38,5 @@ export async function getProductionPricing(supabase: SupabaseClient<Database>, o
     console.error("[production-pricing] stored settings unreadable:", read.error);
     return { ...DEFAULT_SETUP, saved: false, canSave: true, updatedAt: data.updated_at };
   }
-  return { ...read.setup, saved: true, canSave: true, updatedAt: data.updated_at };
+  return { ...read.setup, services: withNewServices(read.setup.services), saved: true, canSave: true, updatedAt: data.updated_at };
 }

@@ -11,7 +11,7 @@ import type { JobServiceTimers } from "@/lib/data/service-timing";
 import { cn } from "@/lib/utils";
 
 // "sq ft", "cu yd", "1 plant", "3 plants", "2 bushes".
-const unitWord = (u: string, n = 2) => (u === "SF" ? "sq ft" : u === "CY" ? "cu yd" : n === 1 ? u : u === "bush" ? "bushes" : `${u}s`);
+const unitWord = (u: string, n = 2) => (u === "SF" ? "sq ft" : u === "LF" ? "linear ft" : u === "CY" ? "cu yd" : n === 1 ? u : u === "bush" ? "bushes" : `${u}s`);
 const amount = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /**

@@ -22,7 +22,7 @@ import { averageRate, clockHours, counts, hoursLabel, jobRate, labourHours, roun
 
 const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
-const unitWord = (u: ProductionUnit) => (u === "SF" ? "sq ft" : u === "CY" ? "cu yd" : u);
+const unitWord = (u: ProductionUnit) => (u === "SF" ? "sq ft" : u === "LF" ? "linear ft" : u === "CY" ? "cu yd" : u);
 
 /** A typed number, or 0 for an empty box. */
 const num = (v: string) => (v.trim() === "" ? 0 : Number(v));

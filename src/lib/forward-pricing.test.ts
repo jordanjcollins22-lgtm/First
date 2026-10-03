@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PRICING_EQUATION,
+  PRODUCTION_SERVICES,
   allocations,
   crewRateCents,
   priceForward,
@@ -14,6 +15,8 @@ import {
   suggestJob,
   suggestLines,
   serviceKey,
+  servicesByGroup,
+  withNewServices,
   type AreaFacts,
 } from "@/lib/forward-pricing";
 
@@ -104,8 +107,47 @@ describe("the services suggested from the walkthrough", () => {
     expect(line.note).toMatch(/No count/);
   });
 
-  it("suggests nothing for a service with no production rate", () => {
-    expect(suggestLines(area({ typeId: "soft-washing", serviceName: "Soft Washing", areaSqFt: 400 }))).toEqual([]);
+  it("suggests nothing for a kind of area it has no services for", () => {
+    expect(suggestLines(area({ typeId: "custom-9", serviceName: "Fence repair", areaSqFt: 400 }))).toEqual([]);
+  });
+
+  it("prices every kind of area on the walkthrough", () => {
+    const keys = (a: Partial<AreaFacts>) => suggestLines(area({ areaSqFt: 810, ...a })).map((l) => l.key);
+    // Sod, after grading, topsoil an inch deep and soil prep.
+    expect(keys({ typeId: "lawn-restoration", values: { method: "Sod", grade: "Needs Correction", soilCondition: "Needs Topsoil" } })).toEqual([
+      "hand-grading",
+      "topsoil-install",
+      "soil-prep",
+      "sod-install",
+    ]);
+    expect(keys({ typeId: "lawn-restoration", values: { condition: "Bare", method: "Seed" } })).toEqual(["soil-prep", "seeding"]);
+    expect(keys({ typeId: "lawn-restoration", values: { condition: "Thin" } })).toEqual(["soil-prep", "overseeding"]);
+    expect(keys({ typeId: "leaf-seasonal-cleanup", values: { type: "Full Fall Cleanup", leafVolume: "Heavy" } })).toEqual(["leaf-removal-heavy", "perennial-cutback"]);
+    expect(keys({ typeId: "leaf-seasonal-cleanup", values: { type: "Fall Cutback" } })).toEqual(["perennial-cutback"]);
+    expect(keys({ typeId: "leaf-seasonal-cleanup", values: { type: "Leaf Cleanup", leafVolume: "Light" } })).toEqual(["leaf-removal"]);
+    expect(keys({ typeId: "grading" })).toEqual(["hand-grading"]);
+    expect(keys({ typeId: "soft-washing" })).toEqual(["soft-washing"]);
+    expect(keys({ typeId: "lawn-care", values: { serviceType: "Aeration" } })).toEqual(["aeration"]);
+    expect(keys({ typeId: "lawn-care", values: { serviceType: "Fertilization" } })).toEqual(["fertilization"]);
+    // Kinds the business added itself, by name.
+    expect(keys({ typeId: "custom-6fe1", serviceName: "Snow Removal" })).toEqual(["snow-removal"]);
+    expect(keys({ typeId: "custom-57a9", serviceName: "Sod Installation" })).toEqual(["soil-prep", "sod-install"]);
+    expect(keys({ typeId: "custom-35da", serviceName: "Gutters" })).toEqual(["gutter-cleaning"]);
+    expect(keys({ typeId: "landscape-bed", values: { material: "Rock", existingMaterialCondition: "Needs Removal", edge: "No Edge" } })).toEqual([
+      "material-removal",
+      "rock-install",
+      "bed-edging",
+    ]);
+  });
+
+  it("works out topsoil from the area and depth, and asks for edge length", () => {
+    const lines = suggestLines(area({ typeId: "lawn-restoration", values: { soilCondition: "Needs Topsoil", method: "Sod" }, areaSqFt: 810 }));
+    // 810 sq ft an inch deep is 2.5 cu yd.
+    expect(lines.find((l) => l.key === "topsoil-install")).toMatchObject({ quantity: 2.5, materialCents: 10000 });
+    expect(lines.find((l) => l.key === "sod-install")).toMatchObject({ quantity: 810, materialCents: 40500 });
+    const [edge] = suggestLines(area({ typeId: "landscape-bed", values: { edge: "Existing Edge Needs Redone" } }));
+    expect(edge).toMatchObject({ key: "bed-edging", quantity: 0 });
+    expect(edge.note).toMatch(/linear feet/);
   });
 
   it("puts one disposal line on the area with the most to haul away", () => {
@@ -175,6 +217,32 @@ describe("the production rates settings", () => {
     expect(priceLine({ key: "weed-pulling", quantity: 300, materialCents: 0 }, eq, services).plh).toBe(1);
     const lines = suggestLines(area({ serviceName: "Weed Removal", notes: "pull and spray", areaSqFt: 100 }), services);
     expect(lines.map((l) => l.key)).toEqual(["weed-pulling"]);
+  });
+
+  it("adds services new to the list to saved settings, keeping the saved rates", () => {
+    const saved = [{ key: "weed-pulling", label: "Hand weed pulling", unit: "SF" as const, pr: 300 }];
+    const merged = withNewServices(saved);
+    expect(merged[0]).toMatchObject({ key: "weed-pulling", pr: 300, group: "Weeds and cleanup" });
+    expect(merged.some((s) => s.key === "sod-install")).toBe(true);
+    expect(merged.filter((s) => s.key === "weed-pulling")).toHaveLength(1);
+  });
+
+  it("sorts the add list into sections, leaving out services that are off", () => {
+    const groups = servicesByGroup([
+      { key: "a", label: "A", unit: "SF", pr: 1, group: "Lawn" },
+      { key: "b", label: "B", unit: "SF", pr: 1, group: "Lawn", active: false },
+      { key: "c", label: "C", unit: "SF", pr: 1 },
+    ]);
+    expect(groups).toEqual([
+      { group: "Lawn", services: [expect.objectContaining({ key: "a" })] },
+      { group: "Other", services: [expect.objectContaining({ key: "c" })] },
+    ]);
+    expect(servicesByGroup(PRODUCTION_SERVICES).map((g) => g.group)).toEqual(["Weeds and cleanup", "Plants and shrubs", "Beds and materials", "Lawn", "Seasonal", "Washing and gutters", "Other"]);
+  });
+
+  it("keeps a service's section when the settings are saved", () => {
+    const read = readSetup({ equation: { leads: 1, technicians: 1, leadRateCents: 4500, technicianRateCents: 3000 }, services: [{ key: "sod-install", label: "Sod", unit: "SF", pr: 400, group: "Lawn" }, { key: "x", label: "X", unit: "LF", pr: 100, group: "Nonsense" }] });
+    expect(read.ok && read.setup.services).toEqual([expect.objectContaining({ group: "Lawn" }), expect.not.objectContaining({ group: expect.anything() })]);
   });
 
   it("makes a key from a new service's name, never one already taken", () => {

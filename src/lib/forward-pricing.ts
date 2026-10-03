@@ -24,7 +24,7 @@
  * Pure, so the arithmetic is tested without a database.
  */
 
-export type ProductionUnit = "SF" | "CY" | "plant" | "bush" | "job";
+export type ProductionUnit = "SF" | "LF" | "CY" | "plant" | "bush" | "job";
 
 export interface ProductionService {
   key: string;
@@ -36,6 +36,8 @@ export interface ProductionService {
   materialCentsPerUnit?: number;
   /** What that material is, in words. */
   materialName?: string;
+  /** Which part of the "Add a service" list it sits under. Other when not set. */
+  group?: ServiceGroup;
   /**
    * Off: not suggested and not offered to add, though a price already saved
    * with it still prices. Services are turned off rather than deleted, so an
@@ -46,30 +48,76 @@ export interface ProductionService {
 
 export const PRODUCTION_UNITS: { unit: ProductionUnit; label: string }[] = [
   { unit: "SF", label: "Square feet" },
+  { unit: "LF", label: "Linear feet" },
   { unit: "CY", label: "Cubic yards" },
   { unit: "plant", label: "Plants" },
   { unit: "bush", label: "Bushes" },
   { unit: "job", label: "Per job (no crew time)" },
 ];
 
-/** Every service the price is built from, with its production rate. */
+/** The sections of the "Add a service" list, in order. */
+export const SERVICE_GROUPS = ["Weeds and cleanup", "Plants and shrubs", "Beds and materials", "Lawn", "Seasonal", "Washing and gutters", "Other"] as const;
+export type ServiceGroup = (typeof SERVICE_GROUPS)[number];
+
+/**
+ * Every service the price is built from, with its production rate.
+ *
+ * From lawn restoration down, the rates and material costs are starting
+ * estimates for a crew of two, added so every kind of area on the
+ * walkthrough can be priced. Check them on Production rates before leaning
+ * on them; the service timers will show what the crew actually does.
+ */
 export const PRODUCTION_SERVICES: ProductionService[] = [
-  { key: "weed-pulling", label: "Hand weed pulling", unit: "SF", pr: 600 },
-  { key: "weed-spraying", label: "Weed spraying", unit: "SF", pr: 3000, materialCentsPerUnit: 2, materialName: "Herbicide" },
-  { key: "perennial-cutback", label: "Perennial cut-back / overgrowth removal", unit: "SF", pr: 500 },
-  { key: "debris-cleanup", label: "Debris cleanup", unit: "SF", pr: 800 },
-  { key: "plant-removal-small", label: "Plant removal, small", unit: "plant", pr: 6 },
-  { key: "plant-removal-medium", label: "Plant / bush removal, medium", unit: "plant", pr: 3 },
-  { key: "bush-removal-large", label: "Bush removal, large (with roots)", unit: "bush", pr: 1 },
-  { key: "plant-cutback", label: "Plant cut-back", unit: "plant", pr: 12 },
-  { key: "shrub-trimming", label: "Shrub trimming", unit: "plant", pr: 8 },
-  { key: "plant-relocation", label: "Plant relocation", unit: "plant", pr: 6 },
-  { key: "mulch-install", label: "Mulch install", unit: "CY", pr: 2.5, materialCentsPerUnit: 3500, materialName: "Mulch" },
-  { key: "plant-install-1gal", label: "Plant installation, 1 gal", unit: "plant", pr: 12, materialCentsPerUnit: 800, materialName: "Plants" },
-  { key: "plant-install-3gal", label: "Plant installation, 3 gal", unit: "plant", pr: 6, materialCentsPerUnit: 2500, materialName: "Plants" },
-  { key: "mowing-edging", label: "Mowing + edging", unit: "SF", pr: 6000 },
-  { key: "disposal", label: "Disposal", unit: "job", pr: null, materialCentsPerUnit: 4000, materialName: "Dump fee" },
+  { key: "weed-pulling", label: "Hand weed pulling", unit: "SF", pr: 600, group: "Weeds and cleanup" },
+  { key: "weed-spraying", label: "Weed spraying", unit: "SF", pr: 3000, materialCentsPerUnit: 2, materialName: "Herbicide", group: "Weeds and cleanup" },
+  { key: "perennial-cutback", label: "Perennial cut-back / overgrowth removal", unit: "SF", pr: 500, group: "Weeds and cleanup" },
+  { key: "debris-cleanup", label: "Debris cleanup", unit: "SF", pr: 800, group: "Weeds and cleanup" },
+  { key: "plant-removal-small", label: "Plant removal, small", unit: "plant", pr: 6, group: "Plants and shrubs" },
+  { key: "plant-removal-medium", label: "Plant / bush removal, medium", unit: "plant", pr: 3, group: "Plants and shrubs" },
+  { key: "bush-removal-large", label: "Bush removal, large (with roots)", unit: "bush", pr: 1, group: "Plants and shrubs" },
+  { key: "plant-cutback", label: "Plant cut-back", unit: "plant", pr: 12, group: "Plants and shrubs" },
+  { key: "shrub-trimming", label: "Shrub trimming", unit: "plant", pr: 8, group: "Plants and shrubs" },
+  { key: "plant-relocation", label: "Plant relocation", unit: "plant", pr: 6, group: "Plants and shrubs" },
+  { key: "mulch-install", label: "Mulch install", unit: "CY", pr: 2.5, materialCentsPerUnit: 3500, materialName: "Mulch", group: "Beds and materials" },
+  { key: "plant-install-1gal", label: "Plant installation, 1 gal", unit: "plant", pr: 12, materialCentsPerUnit: 800, materialName: "Plants", group: "Plants and shrubs" },
+  { key: "plant-install-3gal", label: "Plant installation, 3 gal", unit: "plant", pr: 6, materialCentsPerUnit: 2500, materialName: "Plants", group: "Plants and shrubs" },
+  { key: "mowing-edging", label: "Mowing + edging", unit: "SF", pr: 6000, group: "Lawn" },
+  { key: "disposal", label: "Disposal", unit: "job", pr: null, materialCentsPerUnit: 4000, materialName: "Dump fee", group: "Other" },
+  // Starting estimates (see above).
+  { key: "rock-install", label: "Rock install", unit: "CY", pr: 1.5, materialCentsPerUnit: 6000, materialName: "Rock", group: "Beds and materials" },
+  { key: "material-removal", label: "Old mulch / rock removal", unit: "CY", pr: 1.5, group: "Beds and materials" },
+  { key: "bed-edging", label: "Bed edging (cut a new edge)", unit: "LF", pr: 150, group: "Beds and materials" },
+  { key: "soil-prep", label: "Soil prep (rake out and level)", unit: "SF", pr: 1000, group: "Lawn" },
+  { key: "topsoil-install", label: "Topsoil spread", unit: "CY", pr: 2, materialCentsPerUnit: 4000, materialName: "Topsoil", group: "Lawn" },
+  { key: "hand-grading", label: "Grading by hand", unit: "SF", pr: 400, group: "Lawn" },
+  { key: "seeding", label: "Seeding (seed, rake in, straw)", unit: "SF", pr: 2000, materialCentsPerUnit: 3, materialName: "Seed and straw", group: "Lawn" },
+  { key: "sod-install", label: "Sod installation", unit: "SF", pr: 400, materialCentsPerUnit: 50, materialName: "Sod", group: "Lawn" },
+  { key: "overseeding", label: "Overseeding", unit: "SF", pr: 5000, materialCentsPerUnit: 1, materialName: "Seed", group: "Lawn" },
+  { key: "aeration", label: "Core aeration", unit: "SF", pr: 10000, group: "Lawn" },
+  { key: "fertilization", label: "Fertilization", unit: "SF", pr: 20000, materialCentsPerUnit: 1, materialName: "Fertilizer", group: "Lawn" },
+  { key: "leaf-removal", label: "Leaf removal", unit: "SF", pr: 3000, group: "Seasonal" },
+  { key: "leaf-removal-heavy", label: "Leaf removal, heavy", unit: "SF", pr: 1500, group: "Seasonal" },
+  { key: "snow-removal", label: "Snow removal (shovel and blow)", unit: "SF", pr: 1500, group: "Seasonal" },
+  { key: "soft-washing", label: "Soft washing", unit: "SF", pr: 1000, materialCentsPerUnit: 2, materialName: "Cleaner", group: "Washing and gutters" },
+  { key: "gutter-cleaning", label: "Gutter cleaning", unit: "LF", pr: 100, group: "Washing and gutters" },
 ];
+
+/**
+ * The saved services plus any added to the list since they were saved, so a
+ * new service shows up without the settings having to be saved again. Saved
+ * ones keep their rates; nothing is ever dropped.
+ */
+export function withNewServices(saved: ProductionService[], defaults: ProductionService[] = PRODUCTION_SERVICES): ProductionService[] {
+  const have = new Set(saved.map((s) => s.key));
+  const byKey = new Map(defaults.map((s) => [s.key, s]));
+  return [...saved.map((s) => (s.group ? s : { ...s, group: byKey.get(s.key)?.group })), ...defaults.filter((s) => !have.has(s.key))];
+}
+
+/** Services that are on, in their sections, for the "Add a service" list. Empty sections are left out. */
+export function servicesByGroup(services: ProductionService[]): { group: ServiceGroup; services: ProductionService[] }[] {
+  const on = services.filter((s) => s.active !== false);
+  return SERVICE_GROUPS.map((group) => ({ group, services: on.filter((s) => (s.group ?? "Other") === group) })).filter((g) => g.services.length > 0);
+}
 
 export function productionService(key: string, services: ProductionService[] = PRODUCTION_SERVICES): ProductionService | null {
   return services.find((s) => s.key === key) ?? null;
@@ -276,6 +324,11 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
     n != null
       ? { key, quantity: n, materialCents: 0, note: `${n} ${n === 1 ? what.replace(/e?s$/, "") : what}, from the walkthrough` }
       : { key, quantity: 0, materialCents: 0, note: `No count on the walkthrough. Type how many ${what}.` };
+  // Spread or dug out this many inches deep, to the next half yard.
+  const byDepth = (key: string, inches: number): PriceLine =>
+    size != null
+      ? { key, quantity: Math.ceil(((size * (inches / 12)) / 27) * 2) / 2, materialCents: 0, note: `${sf(size)} at ${inches} inch${inches === 1 ? "" : "es"} deep` }
+      : { key, quantity: 0, materialCents: 0, note: "Not measured on the walkthrough. Type the yards." };
   const weedy = (level: string) => level !== "" && !/^none$/i.test(level);
   const lines: PriceLine[] = [];
   const name = `${area.typeId} ${area.serviceName}`.toLowerCase();
@@ -300,18 +353,42 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
     if (weedy(text(v, "weedLevel"))) lines.push(bySize("weed-pulling"));
     const moved = count(v, "plantRelocation__qty");
     if (moved != null) lines.push(byCount("plant-relocation", moved, "plants"));
-    if (/mulch/i.test(text(v, "material"))) {
-      if (size != null) {
-        // Two inches deep, to the next half yard.
-        const yards = Math.ceil(((size * (2 / 12)) / 27) * 2) / 2;
-        lines.push({ key: "mulch-install", quantity: yards, materialCents: 0, note: `${sf(size)} at 2 inches deep` });
-      } else lines.push({ key: "mulch-install", quantity: 0, materialCents: 0, note: "Not measured on the walkthrough. Type the yards." });
-    }
+    if (/needs removal/i.test(text(v, "existingMaterialCondition"))) lines.push(byDepth("material-removal", 2));
+    const material = text(v, "material");
+    if (/mulch/i.test(material)) lines.push(byDepth("mulch-install", 2));
+    else if (/rock/i.test(material)) lines.push(byDepth("rock-install", 2));
+    if (/no edge|needs redone/i.test(text(v, "edge"))) lines.push({ key: "bed-edging", quantity: 0, materialCents: 0, note: "The walkthrough measures area, not length. Type the linear feet of edge." });
   } else if (area.typeId === "plant-installation") {
     const big = /3\s*gal/i.test(text(v, "sizeContainer"));
     lines.push(byCount(big ? "plant-install-3gal" : "plant-install-1gal", count(v, "quantity"), "plants"));
   } else if (area.typeId === "lawn-care") {
-    lines.push(bySize("mowing-edging"));
+    const kind = text(v, "serviceType");
+    lines.push(
+      bySize(
+        /fertili/i.test(kind) ? "fertilization" : /weed/i.test(kind) ? "weed-spraying" : /aerat/i.test(kind) ? "aeration" : /overseed/i.test(kind) ? "overseeding" : "mowing-edging"
+      )
+    );
+  } else if (area.typeId === "lawn-restoration") {
+    if (/needs correction/i.test(text(v, "grade"))) lines.push(bySize("hand-grading"));
+    if (/topsoil/i.test(text(v, "soilCondition"))) lines.push(byDepth("topsoil-install", 1));
+    lines.push(bySize("soil-prep"));
+    if (/sod/i.test(text(v, "method"))) lines.push(bySize("sod-install"));
+    else lines.push(bySize(/thin/i.test(text(v, "condition")) ? "overseeding" : "seeding"));
+  } else if (area.typeId === "leaf-seasonal-cleanup") {
+    const kind = text(v, "type");
+    if (!/^fall cutback$/i.test(kind)) lines.push(bySize(/heavy|extreme/i.test(text(v, "leafVolume")) ? "leaf-removal-heavy" : "leaf-removal"));
+    if (/cutback|full/i.test(kind)) lines.push(bySize("perennial-cutback"));
+  } else if (area.typeId === "grading") {
+    lines.push(bySize("hand-grading"));
+  } else if (area.typeId === "soft-washing") {
+    lines.push(bySize("soft-washing"));
+  } else if (/snow/.test(name)) {
+    // Kinds of area the business added itself, matched by their name.
+    lines.push(bySize("snow-removal"));
+  } else if (/\bsod\b/.test(name)) {
+    lines.push(bySize("soil-prep"), bySize("sod-install"));
+  } else if (/gutter/.test(name)) {
+    lines.push({ key: "gutter-cleaning", quantity: 0, materialCents: 0, note: "Type the linear feet of gutter." });
   }
 
   // Only services that are on, each with its material at its set cost.
@@ -322,7 +399,19 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
   });
 }
 
-const HAULS_AWAY = new Set(["weed-pulling", "perennial-cutback", "debris-cleanup", "plant-removal-small", "plant-removal-medium", "bush-removal-large", "plant-cutback", "shrub-trimming"]);
+const HAULS_AWAY = new Set([
+  "weed-pulling",
+  "perennial-cutback",
+  "debris-cleanup",
+  "plant-removal-small",
+  "plant-removal-medium",
+  "bush-removal-large",
+  "plant-cutback",
+  "shrub-trimming",
+  "material-removal",
+  "leaf-removal",
+  "leaf-removal-heavy",
+]);
 
 /**
  * Every area's suggested services, with one disposal line for the whole job
@@ -431,6 +520,7 @@ export function readSetup(input: unknown): { ok: true; setup: PricingSetup } | {
       pr,
       ...(material > 0 ? { materialCentsPerUnit: material } : {}),
       ...(String(r.materialName ?? "").trim() ? { materialName: String(r.materialName).trim().slice(0, 60) } : {}),
+      ...((SERVICE_GROUPS as readonly string[]).includes(String(r.group ?? "")) ? { group: r.group as ServiceGroup } : {}),
       active: r.active !== false,
     });
   }

@@ -9,6 +9,7 @@ import {
   productionService,
   projectCostMargin,
   revenueAllocation,
+  servicesByGroup,
   type PriceLine,
   type PricedJob,
   type PricedLine,
@@ -249,11 +250,15 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                       aria-label={`Add a service to ${area.name}`}
                     >
                       <option value="">Add a service…</option>
-                      {services.filter((s) => s.active !== false).map((s) => (
-                        <option key={s.key} value={s.key}>
-                          {s.label}
-                          {s.pr != null ? ` (${qty(s.pr)} ${s.unit}/hr)` : ""}
-                        </option>
+                      {servicesByGroup(services).map(({ group, services: inGroup }) => (
+                        <optgroup key={group} label={group}>
+                          {inGroup.map((s) => (
+                            <option key={s.key} value={s.key}>
+                              {s.label}
+                              {s.pr != null ? ` (${qty(s.pr)} ${s.unit}/hr)` : ""}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </label>
