@@ -16,7 +16,7 @@ import {
   type ProductionService,
   type ProductionUnit,
 } from "@/lib/forward-pricing";
-import { itemsFor, type InventoryItem } from "@/lib/forward-materials";
+import { holdsFor, itemsFor, purchaseNoun, type InventoryItem } from "@/lib/forward-materials";
 import { cn } from "@/lib/utils";
 import { setTimeLogExcluded } from "@/lib/actions/service-timing-actions";
 import { averageRate, clockHours, counts, hoursLabel, jobRate, labourHours, roundRate, type ServiceTimeLog } from "@/lib/service-timing";
@@ -325,7 +325,7 @@ export function ProductionRatesForm({
         )}
       </section>
 
-      <MaterialLinks services={services} inventory={inventory} disabled={locked} onChange={(i, materialIds) => changeService(i, { materialIds })} />
+      <MaterialLinks services={services} inventory={inventory} disabled={locked} onChange={changeService} />
 
       {canEdit && (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur">
@@ -539,9 +539,10 @@ function TimedHistory({
 }
 
 /**
- * Which inventory items each service's material is bought as, so the price
- * card can show its photo and a link to buy it. Until one is picked, the
- * material's name is matched in the inventory; picking makes it exact.
+ * What each service's material is bought as: the inventory items, how much
+ * one of each holds (so the price card can say how many bags), and over how
+ * much it is ordered from a bulk supplier instead, and which product. Until
+ * items are picked, the material's name is matched in the inventory.
  */
 function MaterialLinks({
   services,
@@ -552,7 +553,7 @@ function MaterialLinks({
   services: ProductionService[];
   inventory: InventoryItem[];
   disabled: boolean;
-  onChange: (index: number, materialIds: string[]) => void;
+  onChange: (index: number, patch: Partial<ProductionService>) => void;
 }) {
   const withMaterial = services.map((s, i) => ({ s, i })).filter(({ s }) => s.active !== false && s.unit !== "job" && (s.materialName || s.materialIds?.length));
   if (withMaterial.length === 0) return null;
@@ -561,8 +562,8 @@ function MaterialLinks({
       <div>
         <h2 className="text-base font-semibold">Materials and where to buy them</h2>
         <p className="text-sm text-muted-foreground">
-          The inventory items each service&apos;s material is bought as. The price card shows their photo, how much to buy and a link to buy it. Until you pick, the
-          material&apos;s name is looked up in the inventory (marked matched). Items and their links are added on{" "}
+          What each service&apos;s material is bought as, how much one holds, so the price card says how many to buy, and over how much it is ordered from a bulk
+          supplier instead. Until you pick, the material&apos;s name is looked up in the inventory (marked matched). Items and their links are added on{" "}
           <a href="/admin/materials" className="font-medium text-primary underline underline-offset-2">
             Materials
           </a>
@@ -574,42 +575,73 @@ function MaterialLinks({
           const items = itemsFor(s, inventory);
           const ids = items.map((it) => it.id);
           const matched = !s.materialIds;
+          // Yards are typed as cubic feet, which is what a bag says on it.
+          const cuFt = s.unit === "CY";
+          const holdsUnit = cuFt ? "cu ft" : unitWord(s.unit);
+          const setHolds = (id: string, typed: number | null) => {
+            const next = { ...(s.materialHolds ?? {}) };
+            if (typed != null && typed > 0) next[id] = cuFt ? typed / 27 : typed;
+            else delete next[id];
+            onChange(i, { materialHolds: next, materialIds: ids });
+          };
           return (
-            <li key={s.key} className="flex flex-col gap-2 py-2.5 md:flex-row md:items-start md:gap-4">
+            <li key={s.key} className="flex flex-col gap-2 py-3 md:flex-row md:items-start md:gap-4">
               <div className="min-w-0 md:w-56 md:shrink-0">
                 <p className="text-sm font-medium">{s.label || "New service"}</p>
                 <p className="text-xs text-muted-foreground">{s.materialName || "Material"}</p>
               </div>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
                 {items.length === 0 && <span className="text-sm text-amber-800 dark:text-amber-300">Not in the inventory yet.</span>}
-                {items.map((it) => (
-                  <span key={it.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/40 py-1 pl-1 pr-2 text-xs">
-                    {it.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.imageUrl} alt="" className="h-6 w-6 shrink-0 rounded-full bg-white object-contain" />
-                    ) : (
-                      <span className="h-6 w-6 shrink-0 rounded-full bg-muted" aria-hidden />
-                    )}
-                    <span className="truncate">{it.name}</span>
-                    {!it.url && <span className="shrink-0 text-amber-800 dark:text-amber-300">no link</span>}
-                    {matched && <span className="shrink-0 text-muted-foreground">matched</span>}
-                    {!disabled && (
-                      <button
-                        type="button"
-                        onClick={() => onChange(i, ids.filter((id) => id !== it.id))}
-                        className="shrink-0 rounded-full px-1 text-muted-foreground hover:text-foreground"
-                        aria-label={`Unlink ${it.name} from ${s.label}`}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </span>
-                ))}
+                {items.map((it) => {
+                  const set = s.materialHolds?.[it.id];
+                  const fallback = set == null ? holdsFor(it, s) : null;
+                  const show = (n: number) => Math.round((cuFt ? n * 27 : n) * 1000) / 1000;
+                  return (
+                    <div key={it.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-2">
+                      {it.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.imageUrl} alt="" className="h-8 w-8 shrink-0 rounded bg-white object-contain" />
+                      ) : (
+                        <span className="h-8 w-8 shrink-0 rounded bg-muted" aria-hidden />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {it.name}
+                        {!it.url && <span className="ml-1.5 text-xs text-amber-800 dark:text-amber-300">no link</span>}
+                        {matched && <span className="ml-1.5 text-xs text-muted-foreground">matched</span>}
+                      </span>
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        One {purchaseNoun(it)} {s.unit === "SF" ? "covers" : "holds"}
+                        <input
+                          type="number"
+                          step="any"
+                          min={0}
+                          disabled={disabled}
+                          value={set != null ? show(set) : ""}
+                          placeholder={fallback != null ? String(show(fallback)) : "?"}
+                          onChange={(e) => setHolds(it.id, e.target.value === "" ? null : Number(e.target.value))}
+                          aria-label={`How much one ${purchaseNoun(it)} of ${it.name} ${s.unit === "SF" ? "covers" : "holds"}`}
+                          className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                        />
+                        {holdsUnit}
+                      </label>
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={() => onChange(i, { materialIds: ids.filter((id) => id !== it.id) })}
+                          className="rounded px-1.5 text-muted-foreground hover:text-foreground"
+                          aria-label={`Unlink ${it.name} from ${s.label}`}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
                 {!disabled && inventory.length > 0 && (
                   <select
                     value=""
-                    onChange={(e) => e.target.value && onChange(i, [...ids, e.target.value])}
-                    className="h-8 max-w-full rounded-md border border-input bg-background px-2 text-sm"
+                    onChange={(e) => e.target.value && onChange(i, { materialIds: [...ids, e.target.value] })}
+                    className="h-8 max-w-full self-start rounded-md border border-input bg-background px-2 text-sm"
                     aria-label={`Link an inventory item to ${s.label}`}
                   >
                     <option value="">Link an item…</option>
@@ -622,6 +654,40 @@ function MaterialLinks({
                       ))}
                   </select>
                 )}
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <label className="flex items-center gap-1.5">
+                    Order from a bulk supplier over
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      disabled={disabled}
+                      value={s.bulkOver ?? ""}
+                      placeholder="never"
+                      onChange={(e) => onChange(i, { bulkOver: e.target.value === "" ? null : Number(e.target.value) })}
+                      aria-label={`Bulk threshold for ${s.label}`}
+                      className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                    />
+                    {unitWord(s.unit)}
+                  </label>
+                  {s.bulkOver != null && (
+                    <select
+                      value={s.bulkMaterialId ?? ""}
+                      disabled={disabled}
+                      onChange={(e) => onChange(i, { bulkMaterialId: e.target.value || null })}
+                      className="h-8 max-w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                      aria-label={`Bulk supplier's product for ${s.label}`}
+                    >
+                      <option value="">Bulk product: none picked</option>
+                      {inventory.map((it) => (
+                        <option key={it.id} value={it.id}>
+                          {it.name.length > 60 ? `${it.name.slice(0, 60)}…` : it.name}
+                          {it.url ? "" : " (no link)"}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
             </li>
           );

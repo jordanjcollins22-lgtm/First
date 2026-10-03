@@ -41,6 +41,21 @@ export interface ProductionService {
    * matched from the material's name. Empty: none.
    */
   materialIds?: string[];
+  /**
+   * How much of the service one purchase of each linked item covers, by item
+   * id, in the service's unit: a 0.75 cu ft bag of topsoil holds 0.028 cu yd,
+   * a bag of seed covers 5,000 sq ft. Unset: worked out from the inventory
+   * where it can be.
+   */
+  materialHolds?: Record<string, number>;
+  /**
+   * Over this much of the service, its material is ordered from a bulk
+   * supplier instead of bought by the bag. Null: never. Unset: the starting
+   * figure for the service, if it has one.
+   */
+  bulkOver?: number | null;
+  /** The bulk supplier's product, from the inventory, with its link. */
+  bulkMaterialId?: string | null;
   /** Which part of the "Add a service" list it sits under. Other when not set. */
   group?: ServiceGroup;
   /**
@@ -83,17 +98,17 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "plant-cutback", label: "Plant cut-back", unit: "plant", pr: 12, group: "Plants and shrubs" },
   { key: "shrub-trimming", label: "Shrub trimming", unit: "plant", pr: 8, group: "Plants and shrubs" },
   { key: "plant-relocation", label: "Plant relocation", unit: "plant", pr: 6, group: "Plants and shrubs" },
-  { key: "mulch-install", label: "Mulch install", unit: "CY", pr: 2.5, materialCentsPerUnit: 3500, materialName: "Mulch", group: "Beds and materials" },
+  { key: "mulch-install", label: "Mulch install", unit: "CY", pr: 2.5, materialCentsPerUnit: 3500, materialName: "Mulch", group: "Beds and materials", bulkOver: 1 },
   { key: "plant-install-1gal", label: "Plant installation, 1 gal", unit: "plant", pr: 12, materialCentsPerUnit: 800, materialName: "Plants", group: "Plants and shrubs" },
   { key: "plant-install-3gal", label: "Plant installation, 3 gal", unit: "plant", pr: 6, materialCentsPerUnit: 2500, materialName: "Plants", group: "Plants and shrubs" },
   { key: "mowing-edging", label: "Mowing + edging", unit: "SF", pr: 6000, group: "Lawn" },
   { key: "disposal", label: "Disposal", unit: "job", pr: null, materialCentsPerUnit: 4000, materialName: "Dump fee", group: "Other" },
   // Starting estimates (see above).
-  { key: "rock-install", label: "Rock install", unit: "CY", pr: 1.5, materialCentsPerUnit: 6000, materialName: "Rock", group: "Beds and materials" },
+  { key: "rock-install", label: "Rock install", unit: "CY", pr: 1.5, materialCentsPerUnit: 6000, materialName: "Rock", group: "Beds and materials", bulkOver: 1 },
   { key: "material-removal", label: "Old mulch / rock removal", unit: "CY", pr: 1.5, group: "Beds and materials" },
   { key: "bed-edging", label: "Bed edging (cut a new edge)", unit: "LF", pr: 150, group: "Beds and materials" },
   { key: "soil-prep", label: "Soil prep (rake out and level)", unit: "SF", pr: 1000, group: "Lawn" },
-  { key: "topsoil-install", label: "Topsoil spread", unit: "CY", pr: 2, materialCentsPerUnit: 4000, materialName: "Topsoil", group: "Lawn" },
+  { key: "topsoil-install", label: "Topsoil spread", unit: "CY", pr: 2, materialCentsPerUnit: 4000, materialName: "Topsoil", group: "Lawn", bulkOver: 1 },
   { key: "hand-grading", label: "Grading by hand", unit: "SF", pr: 400, group: "Lawn" },
   { key: "seeding", label: "Seeding (seed, rake in, straw)", unit: "SF", pr: 2000, materialCentsPerUnit: 3, materialName: "Seed and straw", group: "Lawn" },
   { key: "sod-install", label: "Sod installation", unit: "SF", pr: 400, materialCentsPerUnit: 50, materialName: "Sod", group: "Lawn" },
@@ -115,7 +130,13 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
 export function withNewServices(saved: ProductionService[], defaults: ProductionService[] = PRODUCTION_SERVICES): ProductionService[] {
   const have = new Set(saved.map((s) => s.key));
   const byKey = new Map(defaults.map((s) => [s.key, s]));
-  return [...saved.map((s) => (s.group ? s : { ...s, group: byKey.get(s.key)?.group })), ...defaults.filter((s) => !have.has(s.key))];
+  return [
+    ...saved.map((s) => {
+      const d = byKey.get(s.key);
+      return { ...s, group: s.group ?? d?.group, ...(s.bulkOver === undefined && d?.bulkOver !== undefined ? { bulkOver: d.bulkOver } : {}) };
+    }),
+    ...defaults.filter((s) => !have.has(s.key)),
+  ];
 }
 
 /** Services that are on, in their sections, for the "Add a service" list. Empty sections are left out. */
@@ -598,6 +619,17 @@ export function readSetup(input: unknown): { ok: true; setup: PricingSetup } | {
       ...(material > 0 ? { materialCentsPerUnit: material } : {}),
       ...(String(r.materialName ?? "").trim() ? { materialName: String(r.materialName).trim().slice(0, 60) } : {}),
       ...((SERVICE_GROUPS as readonly string[]).includes(String(r.group ?? "")) ? { group: r.group as ServiceGroup } : {}),
+      ...(r.materialHolds && typeof r.materialHolds === "object"
+        ? {
+            materialHolds: Object.fromEntries(
+              Object.entries(r.materialHolds as Record<string, unknown>)
+                .filter(([id, n]) => /^[0-9a-f-]{36}$/i.test(id) && Number.isFinite(Number(n)) && Number(n) > 0 && Number(n) <= 1_000_000)
+                .map(([id, n]) => [id, Number(n)])
+            ),
+          }
+        : {}),
+      ...(r.bulkOver === null ? { bulkOver: null } : Number.isFinite(Number(r.bulkOver)) && Number(r.bulkOver) > 0 && r.bulkOver !== "" && r.bulkOver !== undefined ? { bulkOver: Number(r.bulkOver) } : {}),
+      ...(typeof r.bulkMaterialId === "string" && /^[0-9a-f-]{36}$/i.test(r.bulkMaterialId) ? { bulkMaterialId: r.bulkMaterialId } : {}),
       ...(Array.isArray(r.materialIds)
         ? { materialIds: [...new Set(r.materialIds.map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id)))].slice(0, 5) }
         : {}),

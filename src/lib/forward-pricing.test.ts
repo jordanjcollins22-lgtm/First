@@ -244,6 +244,22 @@ describe("the production rates settings", () => {
     expect(servicesByGroup(PRODUCTION_SERVICES).map((g) => g.group)).toEqual(["Weeds and cleanup", "Plants and shrubs", "Beds and materials", "Lawn", "Seasonal", "Washing and gutters", "Other"]);
   });
 
+  it("keeps how much each item holds and the bulk threshold when the settings are saved", () => {
+    const id = "50aa615c-ff30-4225-ba82-037fe63d5abb";
+    const read = readSetup({
+      equation: { leads: 1, technicians: 1, leadRateCents: 4500, technicianRateCents: 3000 },
+      services: [
+        { key: "topsoil-install", label: "Topsoil", unit: "CY", pr: 2, materialHolds: { [id]: 0.0278, junk: 3, [`${id.slice(0, -1)}0`]: -1 }, bulkOver: 1.5, bulkMaterialId: id },
+        { key: "mulch-install", label: "Mulch", unit: "CY", pr: 2.5, bulkOver: null },
+      ],
+    });
+    expect(read.ok && read.setup.services[0]).toMatchObject({ materialHolds: { [id]: 0.0278 }, bulkOver: 1.5, bulkMaterialId: id });
+    expect(read.ok && read.setup.services[1].bulkOver).toBeNull();
+    // Saved before bulk existed: the starting threshold fills in; one turned off stays off.
+    expect(withNewServices([{ key: "mulch-install", label: "Mulch", unit: "CY", pr: 2.5 }])[0].bulkOver).toBe(1);
+    expect(withNewServices([{ key: "mulch-install", label: "Mulch", unit: "CY", pr: 2.5, bulkOver: null }])[0].bulkOver).toBeNull();
+  });
+
   it("keeps a service's section when the settings are saved", () => {
     const read = readSetup({ equation: { leads: 1, technicians: 1, leadRateCents: 4500, technicianRateCents: 3000 }, services: [{ key: "sod-install", label: "Sod", unit: "SF", pr: 400, group: "Lawn" }, { key: "x", label: "X", unit: "LF", pr: 100, group: "Nonsense" }] });
     expect(read.ok && read.setup.services).toEqual([expect.objectContaining({ group: "Lawn" }), expect.not.objectContaining({ group: expect.anything() })]);

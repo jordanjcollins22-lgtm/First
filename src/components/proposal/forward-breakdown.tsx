@@ -17,7 +17,7 @@ import {
   type PricingEquation,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
-import { jobMaterials, type MaterialRow } from "@/lib/forward-materials";
+import { jobMaterials, purchaseNoun, type InventoryItem, type MaterialRow } from "@/lib/forward-materials";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { cn } from "@/lib/utils";
 
@@ -378,7 +378,29 @@ function ForwardMaterials({ rows }: { rows: MaterialRow[] }) {
               </p>
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
-              {r.items.length === 0 ? (
+              {r.bulk ? (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                    Over {qty(r.bulk.over)} {unitWords(r.unit)}: order from a bulk supplier
+                  </p>
+                  {r.bulk.item ? (
+                    <MaterialItem item={r.bulk.item} line={`Order ${r.bulk.amount}`} action="Order" />
+                  ) : (
+                    <p className="text-sm">
+                      Order {r.bulk.amount}.{" "}
+                      <Link href="/admin/production-rates" className="text-amber-800 underline underline-offset-2 dark:text-amber-300">
+                        No bulk supplier picked yet
+                      </Link>
+                      .
+                    </p>
+                  )}
+                  {r.items.find((i) => i.buy) && (
+                    <p className="text-xs text-muted-foreground">
+                      By the bag it would be {r.items.find((i) => i.buy)!.buy!.text} of {r.items.find((i) => i.buy)!.item.name}.
+                    </p>
+                  )}
+                </>
+              ) : r.items.length === 0 ? (
                 <p className="text-sm text-amber-800 dark:text-amber-300">
                   Not in the inventory yet.{" "}
                   <Link href="/admin/materials" className="font-medium underline underline-offset-2">
@@ -388,32 +410,13 @@ function ForwardMaterials({ rows }: { rows: MaterialRow[] }) {
                 </p>
               ) : (
                 r.items.map(({ item, buy }) => (
-                  <div key={item.id} className="flex items-center gap-3">
-                    {item.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-md border border-border bg-white object-contain" />
-                    ) : (
-                      <span className="h-11 w-11 shrink-0 rounded-md bg-muted" aria-hidden />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 text-sm">{item.name}</p>
-                      {buy && <p className="text-xs text-muted-foreground">Buy about {buy}</p>}
-                    </div>
-                    {item.url ? (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-sm font-medium text-primary hover:bg-muted"
-                      >
-                        Buy <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    ) : (
-                      <Link href="/admin/materials" className="shrink-0 text-xs text-amber-800 underline underline-offset-2 dark:text-amber-300">
-                        No link yet
-                      </Link>
-                    )}
-                  </div>
+                  <MaterialItem
+                    key={item.id}
+                    item={item}
+                    line={buy ? `Buy ${buy.text}` : null}
+                    missing={buy ? null : `How much one ${purchaseNoun(item)} holds isn't set`}
+                    action="Buy"
+                  />
                 ))
               )}
             </div>
@@ -421,6 +424,45 @@ function ForwardMaterials({ rows }: { rows: MaterialRow[] }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+const unitWords = (u: string) => (u === "SF" ? "sq ft" : u === "CY" ? "cu yd" : u === "LF" ? "linear ft" : `${u}s`);
+
+/** One thing to buy: its photo, name, how many, and a link to buy or order it. */
+function MaterialItem({ item, line, missing = null, action }: { item: InventoryItem; line: string | null; missing?: string | null; action: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      {item.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-md border border-border bg-white object-contain" />
+      ) : (
+        <span className="h-11 w-11 shrink-0 rounded-md bg-muted" aria-hidden />
+      )}
+      <div className="min-w-0 flex-1">
+        {line && <p className="text-sm font-semibold">{line}</p>}
+        <p className="line-clamp-2 text-sm">{item.name}</p>
+        {missing && (
+          <Link href="/admin/production-rates" className="text-xs text-amber-800 underline underline-offset-2 dark:text-amber-300">
+            {missing}
+          </Link>
+        )}
+      </div>
+      {item.url ? (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-sm font-medium text-primary hover:bg-muted"
+        >
+          {action} <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      ) : (
+        <Link href="/admin/materials" className="shrink-0 text-xs text-amber-800 underline underline-offset-2 dark:text-amber-300">
+          No link yet
+        </Link>
+      )}
+    </div>
   );
 }
 

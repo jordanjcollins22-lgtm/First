@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buyAmount, itemsFor, jobMaterials, type InventoryItem } from "@/lib/forward-materials";
+import { itemsFor, jobMaterials, purchaseFor, purchaseNoun, type InventoryItem } from "@/lib/forward-materials";
 import { PRODUCTION_SERVICES, productionService } from "@/lib/forward-pricing";
 
 const item = (over: Partial<InventoryItem>): InventoryItem => ({ id: "00000000-0000-0000-0000-000000000000", name: "Item", unit: null, imageUrl: null, url: null, coverageSqFt: null, wastePct: 0, ...over });
@@ -23,15 +23,38 @@ describe("materials matched to the inventory", () => {
     expect(itemsFor({ ...seeding, materialIds: [] }, inventory)).toEqual([]);
   });
 
-  it("works out how much to buy in the item's own unit, waste in", () => {
+  it("says how many to buy, waste in", () => {
+    const seeding = productionService("seeding")!;
+    const topsoilSvc = productionService("topsoil-install")!;
     // 810 sq ft + 10% over 5,000 a bag is one bag; 6,000 is two.
-    expect(buyAmount(seed, 810, "SF")).toBe("1 bag");
-    expect(buyAmount(seed, 6000, "SF")).toBe("2 bag");
-    // 2.5 yards + 10% is 2.75, to the next half yard.
-    expect(buyAmount(topsoil, 2.5, "CY")).toBe("3 cu yd");
-    expect(buyAmount(straw, 810, "SF")).toBeNull();
-    // Sold by the pound: the coverage is per bag, so it can't be said.
-    expect(buyAmount(item({ unit: "lbs", coverageSqFt: 8000 }), 810, "SF")).toBeNull();
+    expect(purchaseFor(seed, seeding, 810)?.text).toBe("1 bag");
+    expect(purchaseFor(seed, seeding, 6000)?.text).toBe("2 bags");
+    // Sold by the yard: 2.5 yards + 10% is 2.75, to the next half yard.
+    expect(purchaseFor(topsoil, topsoilSvc, 2.5)?.text).toBe("3 cu yd");
+    // In 0.75 cu ft bags: 2.5 yards + 10% is 74.25 cu ft, 99 bags.
+    expect(purchaseFor(topsoil, { ...topsoilSvc, materialHolds: { [topsoil.id]: 0.75 / 27 } }, 2.5)).toMatchObject({ count: 99, noun: "bag", text: "99 bags" });
+    // Nothing says how much a bale of straw covers.
+    expect(purchaseFor(straw, seeding, 810)).toBeNull();
+    expect(purchaseFor(straw, { ...seeding, materialHolds: { [straw.id]: 500 } }, 810)?.text).toBe("2 bales");
+  });
+
+  it("names a purchase by what it is carried in", () => {
+    expect(purchaseNoun(straw)).toBe("bale");
+    expect(purchaseNoun(item({ unit: "lbs" }))).toBe("bag");
+    expect(purchaseNoun(item({ unit: "cubic yards" }))).toBe("bag");
+    expect(purchaseNoun(item({ unit: "1 Roll" }))).toBe("roll");
+  });
+
+  it("orders from the bulk supplier over the threshold, and by the bag under it", () => {
+    const bulk = item({ id: "55555555-5555-5555-5555-555555555555", name: "Screened topsoil, by the yard", unit: "cubic yards", url: "https://example.com/bulk", wastePct: 10 });
+    const services = PRODUCTION_SERVICES.map((s) => (s.key === "topsoil-install" ? { ...s, materialIds: [topsoil.id], materialHolds: { [topsoil.id]: 0.75 / 27 }, bulkMaterialId: bulk.id } : s));
+    const [small, big] = jobMaterials(["Zone 1", "Zone 2"], [[{ key: "topsoil-install", quantity: 0.5, materialCents: 0 }], [{ key: "topsoil-install", quantity: 2.5, materialCents: 0 }]], services, [topsoil, bulk]);
+    expect(small.bulk).toBeNull();
+    expect(small.items[0].buy?.text).toBe("20 bags");
+    expect(big.bulk).toEqual({ over: 1, item: bulk, amount: "3 cu yd" });
+    // No bulk product picked yet: still says to order in bulk, and how much.
+    const [none] = jobMaterials(["Zone 1"], [[{ key: "topsoil-install", quantity: 2.5, materialCents: 0 }]], PRODUCTION_SERVICES, [topsoil]);
+    expect(none.bulk).toMatchObject({ over: 1, item: null, amount: "3 cu yd" });
   });
 
   it("lists each line with a material, leaving out disposal", () => {
@@ -48,6 +71,6 @@ describe("materials matched to the inventory", () => {
       ["Zone 1", "Seeding (seed, rake in, straw)", 2],
       ["Zone 2", "Weed spraying", 0],
     ]);
-    expect(rows[0].items[0].buy).toBe("1 bag");
+    expect(rows[0].items[0].buy?.text).toBe("1 bag");
   });
 });
