@@ -249,6 +249,9 @@ export function EddmMailingPanel({
                   <a href={`/eddm/mailings/${m.id}/order`} target="_blank" rel="noopener noreferrer" className="text-xs underline">
                     Order package
                   </a>
+                  <a href={`/eddm/mailings/${m.id}/print`} target="_blank" rel="noopener noreferrer" className="text-xs underline">
+                    Print flyers
+                  </a>
                   {m.status === "planned" && (
                     <Button type="button" size="sm" variant="ghost" disabled={isPending} onClick={() => setStatus(m.id, "printed")}>
                       Printed

@@ -76,6 +76,10 @@ export default async function RouteOrderPage({ params }: { params: Promise<{ ord
             <Link href={`/eddm/mailings/${mailing.id}/order`} className="underline">
               Open the USPS order package (route list, facing slips)
             </Link>
+            {" · "}
+            <Link href={`/eddm/mailings/${mailing.id}/print`} className="underline">
+              Print the flyers
+            </Link>
           </p>
         )}
       </section>

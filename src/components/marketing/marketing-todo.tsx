@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil } from "lucide-react";
+import { Check, Download, ExternalLink, Loader2, Mail, MapPin, Megaphone, Pencil, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -544,9 +544,14 @@ export function MarketingTodo({
                           )}
                           {play.kind === "flyers" && play.quantity > 0 && !pending && (
                             play.mailingId ? (
-                              <a href={`/eddm/mailings/${play.mailingId}/order`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                                <ExternalLink className="h-3 w-3" /> Order package
-                              </a>
+                              <>
+                                <a href={`/eddm/mailings/${play.mailingId}/order`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                                  <ExternalLink className="h-3 w-3" /> Order package
+                                </a>
+                                <a href={`/eddm/mailings/${play.mailingId}/print`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                                  <Printer className="h-3 w-3" /> Print flyers
+                                </a>
+                              </>
                             ) : (
                               <button type="button" disabled={working} className="inline-flex items-center gap-1 text-primary hover:underline" onClick={() => mail(play)}>
                                 <Mail className="h-3 w-3" /> Make the mailing

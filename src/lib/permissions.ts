@@ -201,6 +201,12 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/eddm/mailings/[mailingId]/order":
     "The printed order package for one EDDM mailing, at its own URL so it can be opened in a tab and " +
     "printed. Guarded by requireAnyTab on Project Data, which is the only place a mailing can be made.",
+  "/eddm/mailings/[mailingId]/print":
+    "Printing one EDDM mailing's flyers, a tray at a time. Guarded by requireAnyTab on Project Data, like " +
+    "the order package beside it.",
+  "/eddm/mailings/[mailingId]/print/pdf":
+    "One tray's worth of a mailing's flyers as the print file. Guarded by the Project Data tab, like the " +
+    "print page it is reached from.",
   "/jobs/review":
     "Every project a client said yes to, scored on issues, hours, cost, a review, a referral and profit. " +
     "Gated in the page on the owner, admin and account manager roles directly, the same people who see a " +

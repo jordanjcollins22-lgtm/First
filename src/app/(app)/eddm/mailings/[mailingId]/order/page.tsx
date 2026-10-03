@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Printer } from "lucide-react";
 
 import { requireAnyTab } from "@/lib/data/access";
 import { getEddmMailing } from "@/lib/data/eddm";
@@ -48,7 +50,16 @@ export default async function EddmOrderPage({ params }: { params: Promise<{ mail
             EDDM Retail order package · {organization.name} · prepared {today}
           </p>
         </div>
-        <PrintButton />
+        <div className="flex flex-wrap gap-2 print:hidden">
+          <Link
+            href={`/eddm/mailings/${mailing.id}/print`}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+          >
+            <Printer className="h-4 w-4" />
+            Print the flyers
+          </Link>
+          <PrintButton />
+        </div>
       </div>
 
       {problems.length > 0 && (
