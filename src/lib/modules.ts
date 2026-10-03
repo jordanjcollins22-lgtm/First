@@ -100,6 +100,9 @@ export const MODULES: readonly AppModule[] = [
     href: "/sales",
     question: "How do we win this customer?",
     subtabs: [
+      // First, so Sales opens on it: every evaluation out today with its
+      // progress bar, the same view My Day has.
+      { key: "today", label: "Today", tabs: ["pipeline"], blurb: "Every evaluation out today, and where each has got to." },
       { key: "pipeline", label: "Pipeline", tabs: ["pipeline"], blurb: "Every opportunity, and what is holding it up." },
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "People being worked toward an evaluation." },
       { key: "proposals", label: "Proposals", tabs: ["proposals", "invoices"], blurb: "What we offered, and what came back." },
@@ -116,6 +119,9 @@ export const MODULES: readonly AppModule[] = [
       // Availability is not a tab of its own on purpose: the weekly hours and
       // the days off are drawn on the grid itself, which is where somebody
       // looks at them.
+      // First, so Operations opens on it: every project out today with its
+      // progress bar, its issues and the crew's photos to approve.
+      { key: "today", label: "Today", tabs: ["job-detail"], blurb: "Every project out today, where each has got to, and anything wrong." },
       { key: "calendar", label: "Calendar", tabs: ["evaluations"], blurb: "Evaluations and work sessions, with everyone's hours and days off on the grid." },
       { key: "evaluations", label: "Evaluations", tabs: ["evaluations"], blurb: "Booked, done, and waiting on a proposal." },
       // One subtab for the whole job board, with the views as chips inside

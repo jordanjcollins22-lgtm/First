@@ -11,6 +11,10 @@ import LeadsPage from "@/app/(app)/leads/page";
 import ProposalsPage from "@/app/(app)/proposals/page";
 import ContactsPage from "@/app/(app)/contacts/page";
 import MowOrdersPage from "@/app/(app)/mow-orders/page";
+import { getCurrentProfile } from "@/lib/data/team";
+import { getEvaluationsToday } from "@/lib/data/evaluations-today";
+import { EvaluationsToday } from "@/components/evaluations/evaluations-today";
+import { isOwnerLevel } from "@/lib/roles";
 
 /**
  * Selling, in the order it happens.
@@ -39,7 +43,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       module="sales"
       asked={tab}
       content={{
-        ...(pipeline ? { pipeline: <PipelinePage /> } : {}),
+        ...(pipeline ? { today: <EvaluationsTodayTab />, pipeline: <PipelinePage /> } : {}),
         ...(leads ? { leads: <LeadsPage /> } : {}),
         ...(proposals ? { proposals: <ProposalsPage /> } : {}),
         ...(clients ? { clients: <ContactsPage /> } : {}),
@@ -47,4 +51,16 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       }}
     />
   );
+}
+
+/** Every evaluation out today with its progress bar: all of them for the office, their own for anybody else. */
+async function EvaluationsTodayTab() {
+  const profile = await getCurrentProfile();
+  if (!profile) return null;
+  const evaluations = await getEvaluationsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+    console.error("Evaluations today failed to load:", err);
+    return null;
+  });
+  if (!evaluations) return <p className="text-sm text-muted-foreground">Couldn&apos;t load today&apos;s evaluations. Try again in a moment.</p>;
+  return <EvaluationsToday evaluations={evaluations} />;
 }

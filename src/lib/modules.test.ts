@@ -101,7 +101,7 @@ describe("which subtab a link opens", () => {
   });
 
   it("ignores a made-up tab in a typed URL", () => {
-    expect(openingSubtab("sales", ADMIN, "../admin")).toBe("pipeline");
+    expect(openingSubtab("sales", ADMIN, "../admin")).toBe("today");
   });
 });
 

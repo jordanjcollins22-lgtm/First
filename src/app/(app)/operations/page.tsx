@@ -21,6 +21,8 @@ import { subtabsFor } from "@/lib/modules";
 import { evaluatorOptions, roleViewFor } from "@/lib/affiliate-roles";
 import { canRunJobs, isOwnerLevel } from "@/lib/roles";
 import type { Profile } from "@/types/domain";
+import { getProjectsToday } from "@/lib/data/projects-today";
+import { ProjectsToday } from "@/components/projects/projects-today";
 
 /**
  * Operations: when the work happens, and whether it is getting done.
@@ -49,6 +51,7 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
   // is not the sum of every tab's wait -- the weather service used to hold up
   // the calendar.
   const content: Record<string, React.ReactNode> = {};
+  if (shown.has("today")) content.today = <Deferred load={() => ProjectsTodayTab(profile)} />;
   if (shown.has("calendar")) content.calendar = <Deferred load={() => CalendarTab({ section: "calendar" })} />;
   if (shown.has("evaluations")) content.evaluations = <Deferred load={() => EvaluationsTab({ profile, onlyTheirs })} />;
   if (shown.has("jobs")) content.jobs = <Deferred load={() => JobsTab({ profile, onlyTheirs, initial: jobView ?? null })} />;
@@ -199,4 +202,15 @@ async function SuggestionsTab(viewer: Profile | null) {
       canToggle={isOwnerLevel(roles)}
     />
   );
+}
+
+/** Every project out today with its progress bar: all of them for the office, their own for anybody else. */
+async function ProjectsTodayTab(profile: Profile | null) {
+  if (!profile) return null;
+  const projects = await getProjectsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+    console.error("Projects today failed to load:", err);
+    return null;
+  });
+  if (!projects) return <p className="text-sm text-muted-foreground">Couldn&apos;t load today&apos;s projects. Try again in a moment.</p>;
+  return <ProjectsToday projects={projects} />;
 }
