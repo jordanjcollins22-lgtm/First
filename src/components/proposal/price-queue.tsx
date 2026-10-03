@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { PriceCard } from "@/components/proposal/price-approvals";
@@ -16,6 +16,10 @@ const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { m
  */
 export function PriceQueue({ items, initialOpen = null }: { items: PriceApproval[]; initialOpen?: string | null }) {
   const [open, setOpen] = useState<string | null>(initialOpen ?? (items.length === 1 ? items[0].jobId : null));
+  // Opened from an evaluation's Price it: brought into view.
+  useEffect(() => {
+    if (initialOpen) document.getElementById(`price-${initialOpen}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [initialOpen]);
   if (items.length === 0) return null;
   const toPrice = items.filter((i) => i.stage === "price").length;
   return (

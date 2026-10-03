@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, CheckCircle2, FileText, Loader2, X } from "lucide-react";
+import { Check, CheckCircle2, Copy, Loader2, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { acceptPrice, savePriceDraft, setPrice } from "@/lib/actions/price-approval-actions";
+import { sendProposalToClient } from "@/lib/actions/proposal-actions";
 import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
@@ -105,6 +106,30 @@ export function PriceCard({
       if (forwardCents != null) setTotal(forwardCents);
       setSendTo(result.sendTo);
       setStage("send");
+    });
+  }
+
+  // The client's own link, for texting when there is no email on file.
+  const clientLink = item.proposalHref ? item.proposalHref.replace(/[?&]preview=1/, "") : null;
+  const [copied, setCopied] = useState(false);
+  async function copyLink() {
+    if (!clientLink) return;
+    try {
+      await navigator.clipboard.writeText(new URL(clientLink, window.location.origin).toString());
+      setCopied(true);
+    } catch {
+      setError("Couldn't copy the link.");
+    }
+  }
+
+  function send() {
+    setError(null);
+    if (preview) return setStage("sent");
+    start(async () => {
+      const result = await sendProposalToClient(item.jobId);
+      if (!result.ok) return setError(result.error);
+      setSendTo(result.to);
+      setStage("sent");
     });
   }
 
@@ -225,33 +250,49 @@ export function PriceCard({
         </div>
       )}
 
+      {/* The last step, still on the card: the proposal as the client will
+          see it, then Send to client. */}
       {stage === "send" && (
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-            <CheckCircle2 className="h-4 w-4" /> Price accepted. Review the proposal, then send it.
+            <CheckCircle2 className="h-4 w-4" /> Price accepted. Read it as the client will see it, then send it.
           </p>
-          {/* The one next step: read it as the client will. Send to client is
-              at the bottom of that page, once it has been read. */}
-          {item.proposalHref && (
-            <a
-              href={item.proposalHref}
-              className="inline-flex h-14 items-center justify-center gap-2 rounded-md bg-primary text-base font-semibold text-primary-foreground"
-            >
-              <FileText className="h-5 w-5" /> Review proposal
+          {item.proposalHref && !preview && (
+            <iframe
+              src={`${item.proposalHref}${item.proposalHref.includes("?") ? "&" : "?"}embed=1`}
+              title={`Proposal for ${item.client}`}
+              className="h-[70vh] w-full rounded-xl border border-border bg-white"
+            />
+          )}
+          {preview && item.proposalHref && (
+            <a href={item.proposalHref} className="text-sm font-medium text-primary underline underline-offset-2">
+              See the sample proposal
             </a>
           )}
+          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || (!sendTo && !preview)} onClick={send}>
+            {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-5 w-5" />}
+            Send to client
+          </Button>
           <p className="text-center text-xs text-muted-foreground">
-            {sendTo
-              ? `Review it as the client will see it. Send to client is at the bottom. It emails to ${sendTo}.`
-              : "Review it as the client will see it. No email on file, so copy its link and text it to them."}
+            {sendTo ? `It emails ${sendTo} the link, the price and how long it stands.` : "No email on file, so it can't be emailed. Copy the link and text it to them."}
           </p>
+          {!sendTo && clientLink && (
+            <Button type="button" variant="outline" className="h-11" onClick={() => copyLink()}>
+              <Copy className="mr-2 h-4 w-4" /> {copied ? "Copied" : "Copy the client's link"}
+            </Button>
+          )}
         </div>
       )}
 
       {stage === "sent" && (
-        <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-          <CheckCircle2 className="h-4 w-4" /> Sent to {sendTo ?? "the client"}. It is on their proposal page now.
-        </p>
+        <div className="flex flex-col gap-1 rounded-xl bg-emerald-50 p-3 text-sm dark:bg-emerald-950/40">
+          <p className="flex items-center gap-1.5 font-medium text-emerald-800 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" /> Sent to {sendTo ?? "the client"}.
+          </p>
+          <p className="text-xs text-emerald-900/80 dark:text-emerald-200/80">
+            It&apos;s with the client now. When they accept, decline, raise a concern or ask for a change, the team is told, and that&apos;s the next step.
+          </p>
+        </div>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}

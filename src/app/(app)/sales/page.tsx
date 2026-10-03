@@ -76,7 +76,7 @@ async function EvaluationsTodayTab({ price }: { price: string | null }) {
   ]);
   return (
     <>
-      {approvals && <PriceQueue items={approvals} initialOpen={price} />}
+      {approvals && <PriceQueue key={price ?? "none"} items={approvals} initialOpen={price} />}
       <h2 className="mb-2 text-lg font-bold">Evaluations today</h2>
       {evaluations ? <EvaluationsToday evaluations={evaluations} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load today&apos;s evaluations. Try again in a moment.</p>}
     </>

@@ -98,7 +98,8 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
       areasReviewed,
       areasTotal,
       // The price with everything behind it, service by service, then Accept and Send.
-      reviewHref: `/sales/price/${r.id}`,
+      // Opens its card in "To price and send", on this same screen.
+      reviewHref: `/sales?tab=today&price=${r.id}#price-${r.id}`,
       stage: evaluationStage(
         {
           dueAt: r.evaluation_date,

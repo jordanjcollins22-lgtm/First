@@ -27,7 +27,7 @@ export default async function ProposalPage({
   }
 
   const { token } = await params;
-  const { preview } = await searchParams;
+  const { preview, embed } = await searchParams;
   const data = await getProposalByToken(token);
 
   if (!data) return <LinkNotValid />;
@@ -54,7 +54,8 @@ export default async function ProposalPage({
           preview, which would otherwise count as the client reading it. */}
       {!previewing && <ViewBeacon token={token} />}
       <ProposalView data={data} token={token} messages={messages} preview={previewing} />
-      {sendBar && <PreviewSendBar jobId={proposalRow.job_id} sendTo={sendBar.sendTo} sentAt={sendBar.sentAt} />}
+      {/* Shown inside the price card, which has its own Send to client. */}
+      {sendBar && embed !== "1" && <PreviewSendBar jobId={proposalRow.job_id} sendTo={sendBar.sendTo} sentAt={sendBar.sentAt} />}
     </>
   );
 }
