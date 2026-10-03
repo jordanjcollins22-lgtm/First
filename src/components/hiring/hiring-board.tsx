@@ -11,7 +11,7 @@ import { IndeedAds } from "@/components/hiring/indeed-ads";
 
 const BOARD: Stage[] = ["video_submitted", "video_requested", "interview", "hired", "screened_out", "not_a_fit"];
 
-export type AdCard = { key: string; title: string; body: string; applyUrl: string; needsPay: boolean };
+export type AdCard = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean };
 
 export function HiringBoard({
   applicants,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { indeedAd, needsPay, PAY_MISSING, publicPayLine } from "@/lib/hiring/indeed-ad";
+import { indeedAd, indeedPayFields, needsPay, PAY_MISSING, payLine, publicPayLine } from "@/lib/hiring/indeed-ad";
 import { POSITIONS, positionFor, type Position } from "@/lib/hiring/positions";
 import { cleanAnswers, cleanContact, missing, nextStages, screen } from "@/lib/hiring/screening";
 
@@ -122,14 +122,33 @@ describe("the Indeed ad", () => {
   const input = { business: "Sample Landscaping", area: "Harford County, MD", applyUrl: "https://example.com/careers/project-lead" };
 
   it("says loudly when the pay is missing, so it isn't posted without", () => {
-    const ad = indeedAd(lead, input);
-    expect(needsPay(lead)).toBe(true);
-    expect(ad.body).toContain(PAY_MISSING);
+    const unpaid = { ...lead, pay: null };
+    expect(needsPay(unpaid)).toBe(true);
+    expect(indeedAd(unpaid, input).body).toContain(PAY_MISSING);
+    expect(needsPay({ ...affiliate, commission: null })).toBe(true);
+  });
+
+  it("has the pay for every job, hourly for the crew and commission only for the rest", () => {
+    for (const p of POSITIONS) expect(needsPay(p)).toBe(false);
+    expect(payLine(positionFor("project-technician")!)).toBe("$20 an hour, plus commission on the jobs you complete, coming soon");
+    expect(payLine(lead)).toBe("$30 an hour, plus commission on the jobs you complete, coming soon");
+    expect(payLine(positionFor("evaluator")!)).toBe("Commission only, no hourly pay: 4% commission on every job you evaluate that sells");
+    expect(payLine(positionFor("account-manager")!)).toBe("Commission only, no hourly pay: 7% commission on every job you close");
+    expect(indeedPayFields(lead)).toContain("Exact amount, $30.00 per hour");
+    expect(indeedPayFields(positionFor("project-technician")!)).toContain("$20.00 per hour");
+    expect(indeedPayFields(affiliate)).toContain("commission only");
+  });
+
+  it("asks every commission-only applicant if that's OK, and screens out a no", () => {
+    for (const p of POSITIONS.filter((x) => x.commissionOnly)) {
+      const q = p.questions.find((x) => /commission only/i.test(x.label));
+      expect(q?.passes).toEqual(["yes"]);
+    }
   });
 
   it("never shows applicants the placeholder on our own page", () => {
-    expect(publicPayLine(affiliate)).toBe("4% commission on every job that books through your link");
-    expect(publicPayLine(lead)).toBeNull();
+    expect(publicPayLine(affiliate)).toBe("Commission only, no hourly pay: 4% commission on every job that books through your link");
+    expect(publicPayLine({ ...lead, pay: null, commission: null })).toBeNull();
     for (const p of POSITIONS) expect(publicPayLine(p) ?? "").not.toContain(PAY_MISSING);
   });
 

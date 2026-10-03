@@ -32,10 +32,12 @@ export interface Position {
   title: string;
   /** One line for the careers page and the top of the ad. */
   tagline: string;
-  /** How the role is paid. Null until it is filled in; the ad says so and the admin page warns. */
+  /** The hourly pay. Null for a commission-only role, or until it is filled in; the ad says so and the admin page warns. */
   pay: string | null;
-  /** Commission that is already set by the company's commission pool, said in the ad. */
+  /** Commission, said in the ad: set by the company's commission pool, or coming for the crew. */
   commission: string | null;
+  /** Paid by commission alone, with no hourly pay: said plainly, so nobody applies expecting a wage. */
+  commissionOnly: boolean;
   schedule: string;
   duties: readonly string[];
   lookingFor: readonly string[];
@@ -105,8 +107,9 @@ export const POSITIONS: readonly Position[] = [
     key: "project-technician",
     title: "Landscape Project Technician",
     tagline: "Hands-on landscaping work: bed cleanups, mulch, planting, lawn work and installs.",
-    pay: null,
-    commission: null,
+    pay: "$20 an hour",
+    commission: "commission on the jobs you complete, coming soon",
+    commissionOnly: false,
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
       "Clean up beds, pull weeds, edge, and lay mulch and rock",
@@ -141,8 +144,9 @@ export const POSITIONS: readonly Position[] = [
     key: "project-lead",
     title: "Landscape Project Lead",
     tagline: "Run the crew on site: plan the day, do the work, and hand the client a finished job.",
-    pay: null,
-    commission: null,
+    pay: "$30 an hour",
+    commission: "commission on the jobs you complete, coming soon",
+    commissionOnly: false,
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
       "Lead a small crew through each job from load-out to final walkthrough",
@@ -182,6 +186,7 @@ export const POSITIONS: readonly Position[] = [
     tagline: "Visit homeowners, walk the property with them, and map out the work in our app.",
     pay: null,
     commission: "4% commission on every job you evaluate that sells",
+    commissionOnly: true,
     schedule: "Flexible. Visits are booked in time slots during the day, some evenings and Saturdays.",
     duties: [
       "Meet homeowners at their property and walk it with them",
@@ -194,10 +199,18 @@ export const POSITIONS: readonly Position[] = [
       "Careful with details: measurements, photos and notes",
       "Comfortable using an app on your phone",
       "Landscaping knowledge is a plus. We train on the rest",
+      "Commission only: you're paid on the jobs you evaluate that sell, not hours",
     ],
     questions: [
       ...BASICS,
       ...DRIVING,
+      {
+        key: "commission_only",
+        label: "This is commission only: 4% of every job you evaluate that sells, with no hourly pay. Is that OK with you?",
+        kind: "yesno",
+        passes: YES,
+        failReason: "Doesn't want commission-only pay",
+      },
       { key: "walk", label: "Are you OK walking properties and measuring yards in all weather?", kind: "yesno", passes: YES, failReason: "Won't walk properties" },
       { key: "people", label: "Are you comfortable meeting and talking with homeowners you don't know?", kind: "yesno", passes: YES, failReason: "Not comfortable meeting homeowners" },
       {
@@ -216,6 +229,7 @@ export const POSITIONS: readonly Position[] = [
     tagline: "Own the client from first visit to finished job: send proposals, follow up and close.",
     pay: null,
     commission: "7% commission on every job you close",
+    commissionOnly: true,
     schedule: "Weekdays, mostly from your phone and computer. Some site visits.",
     duties: [
       "Price evaluations and send proposals from our app",
@@ -228,6 +242,7 @@ export const POSITIONS: readonly Position[] = [
       "Makes the follow-up call every time, and enjoys it",
       "Organized: nothing falls through the cracks",
       "Clear, friendly writer for texts and emails",
+      "Commission only: you're paid on the jobs you close, not hours",
     ],
     questions: [
       ...BASICS,
@@ -240,10 +255,10 @@ export const POSITIONS: readonly Position[] = [
       { key: "calls", label: "Are you comfortable making follow-up phone calls to clients every day?", kind: "yesno", passes: YES, failReason: "Not comfortable making calls" },
       {
         key: "commission_ok",
-        label: "Part of this role's pay is 7% commission on the jobs you close. Is that OK with you?",
+        label: "This is commission only: 7% of every job you close, with no hourly pay. Is that OK with you?",
         kind: "yesno",
         passes: YES,
-        failReason: "Doesn't want commission pay",
+        failReason: "Doesn't want commission-only pay",
       },
       { key: "computer", label: "Are you comfortable working in an app and on a computer all day?", kind: "yesno", passes: YES, failReason: "Not comfortable with computer work" },
       ...ABOUT,
@@ -256,6 +271,7 @@ export const POSITIONS: readonly Position[] = [
     tagline: "Help neighbors who are asking for yard work find us online, and earn on every job that books.",
     pay: null,
     commission: "4% commission on every job that books through your link",
+    commissionOnly: true,
     schedule: "Work from your phone, any time. As many or as few hours as you like.",
     duties: [
       "Answer local Facebook posts from people asking for yard work, using comments we write for you",
