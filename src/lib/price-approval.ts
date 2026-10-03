@@ -162,3 +162,13 @@ export function readPrice(text: string): number | null {
   const n = Number(text.replace(/[$,\s]/g, ""));
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
+
+/**
+ * Whether a proposal is priced on the price card, service by service, and
+ * approved there: every proposal but salting, which is priced by the salt
+ * rules. Anywhere else that would approve it sends it there instead, so the
+ * old rate card's figure is never what a client is sent.
+ */
+export function pricedOnCard(snapshot: Pick<ProposalZoneSnapshot, "serviceLabel">[] | null | undefined): boolean {
+  return !(snapshot ?? []).some((z) => /salting/i.test(z.serviceLabel ?? ""));
+}

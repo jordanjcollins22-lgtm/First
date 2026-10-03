@@ -65,13 +65,13 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
 
   const [{ data: intakes }, { data: proposals }, { data: asks }] = await Promise.all([
     supabase.from("evaluation_intakes").select("job_id, submitted_at").in("job_id", ids).not("submitted_at", "is", null),
-    supabase.from("job_proposals").select("job_id, status, approved_at, generated_at, sent_at").in("job_id", ids),
+    supabase.from("job_proposals").select("job_id, status, approved_at, generated_at, sent_at, scope_snapshot").in("job_id", ids),
     supabase.from("client_message_log").select("reference_id, created_at").eq("kind", "pre_eval_ask").eq("status", "sent").in("reference_id", ids).order("created_at"),
   ]);
   const askedAt = new Map(((asks ?? []) as { reference_id: string; created_at: string }[]).map((a) => [a.reference_id, a.created_at]));
   const sentForm = new Set(((intakes ?? []) as { job_id: string }[]).map((i) => i.job_id));
   const proposalFor = new Map(
-    ((proposals ?? []) as { job_id: string; status: string; approved_at: string | null; generated_at: string | null; sent_at: string | null }[]).map((p) => [p.job_id, p])
+    ((proposals ?? []) as { job_id: string; status: string; approved_at: string | null; generated_at: string | null; sent_at: string | null; scope_snapshot: unknown }[]).map((p) => [p.job_id, p])
   );
 
   const now = new Date();
@@ -80,7 +80,12 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
     const areasTotal = plan.filter((i) => i.keep !== false).length;
     const areasReviewed = areasTotal - stillToReview(plan).length;
     const proposal = proposalFor.get(r.id);
-    const priced = proposal && proposal.status !== "needs_approval" ? (proposal.approved_at ?? proposal.generated_at ?? r.evaluation_submitted_at) : null;
+    // One approved at the old rate card's price and not sent still needs pricing service by service.
+    // Salting is priced by the salt rules, never service by service, so it counts as priced as it is.
+    const snapshot = Array.isArray(proposal?.scope_snapshot) ? (proposal!.scope_snapshot as { lines?: unknown; serviceLabel?: string }[]) : [];
+    const forward = snapshot.some((z) => /salting/i.test(z.serviceLabel ?? "")) || (snapshot.length > 0 && snapshot.every((z) => Array.isArray(z.lines)));
+    const approvedAtOldPrice = proposal?.status === "sent" && !proposal.sent_at && !forward;
+    const priced = proposal && proposal.status !== "needs_approval" && !approvedAtOldPrice ? (proposal.approved_at ?? proposal.generated_at ?? r.evaluation_submitted_at) : null;
     const preEval = sentForm.has(r.id);
     return {
       jobId: r.id,

@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Eye, Loader2, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
 import { approveProposal, sendProposalToClient } from "@/lib/actions/proposal-actions";
+import { pricedOnCard } from "@/lib/price-approval";
 import type { JobEstimate } from "@/lib/job-estimate";
 import type { JobProposal } from "@/types/domain";
 
@@ -127,10 +130,20 @@ export function ProposalSquare({
             <Button type="button" variant="outline" disabled={pending} onClick={openEditor} className="h-11">
               <X className="mr-1 h-4 w-4" /> No
             </Button>
-            <Button type="button" disabled={pending} onClick={yes} className="h-11">
-              {busy === "yes" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
-              Yes, {`$${Math.round(clientPays).toLocaleString()}`}
-            </Button>
+            {/* Priced service by service on the price card, and approved there, so the
+                old rate card's figure is never what goes out. Salting keeps its own. */}
+            {pricedOnCard(proposal.scope_snapshot) ? (
+              <Button type="button" asChild className="h-11">
+                <Link href={`/sales/price/${jobId}`}>
+                  <Check className="mr-1 h-4 w-4" /> Price and send
+                </Link>
+              </Button>
+            ) : (
+              <Button type="button" disabled={pending} onClick={yes} className="h-11">
+                {busy === "yes" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
+                Yes, {`$${Math.round(clientPays).toLocaleString()}`}
+              </Button>
+            )}
           </div>
         )}
         {proposal && approved && (

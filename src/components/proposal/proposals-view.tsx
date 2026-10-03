@@ -50,6 +50,9 @@ function ProposalRow({
   const [note, setNote] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [trimming, setTrimming] = useState(false);
+  const zones = proposal.scope_snapshot ?? [];
+  const salting = zones.some((z) => /salting/i.test(z.serviceLabel ?? ""));
+  const forwardPriced = zones.length > 0 && zones.every((z) => Array.isArray(z.lines));
 
   function saveTotal() {
     setError(null);
@@ -164,25 +167,45 @@ function ProposalRow({
         </p>
       )}
 
+      {/* Waiting on a price: priced service by service on the price card,
+          not here, so the old rate card's figure is never what gets approved.
+          Salting keeps its own price, from the salt rules. */}
+      {showApprove && !salting && (
+        <p className="text-xs text-muted-foreground">
+          {forwardPriced ? "Priced service by service." : "Not priced service by service yet: the figure here is the old rate card's."} Open it to see the
+          price, approve it and review the proposal.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground">$</span>
-          <Input
-            type="number"
-            value={total}
-            onChange={(e) => setTotal(e.target.value)}
-            disabled={!showApprove || isPending}
-            className="h-9 w-28 text-sm"
-          />
-        </div>
-        {showApprove && (
+        {showApprove && !salting ? (
           <>
-            <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={saveTotal}>
-              {saved ? "Saved" : "Save price"}
+            <span className="text-sm font-semibold tabular-nums">${Number(proposal.total_cost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>
+            <Button type="button" size="sm" asChild>
+              <Link href={`/sales/price/${job.id}`}>Price and send</Link>
             </Button>
-            <Button type="button" size="sm" disabled={isPending} onClick={approve}>
-              Approve &amp; send
-            </Button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">$</span>
+              <Input
+                type="number"
+                value={total}
+                onChange={(e) => setTotal(e.target.value)}
+                disabled={!showApprove || isPending}
+                className="h-9 w-28 text-sm"
+              />
+            </div>
+            {showApprove && (
+              <>
+                <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={saveTotal}>
+                  {saved ? "Saved" : "Save price"}
+                </Button>
+                <Button type="button" size="sm" disabled={isPending} onClick={approve}>
+                  Approve &amp; send
+                </Button>
+              </>
+            )}
           </>
         )}
         {/* Available after it has gone out too: a client ringing up to drop

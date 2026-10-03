@@ -11,7 +11,9 @@ import { ViewCount } from "@/components/proposal/view-count";
 import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
 import { cn } from "@/lib/utils";
 import { proposalStatusLabel, proposalStatusTone } from "@/lib/proposal-sent";
+import Link from "next/link";
 import { generateProposal, updateProposalDraft, approveProposal, setProposalValidity, markProposalSent } from "@/lib/actions/proposal-actions";
+import { pricedOnCard } from "@/lib/price-approval";
 import { DEFAULT_VALID_DAYS, VALID_DAY_OPTIONS, validityLine } from "@/lib/proposal-validity";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { suggestZoneScope, tidyZoneScope } from "@/lib/actions/scope-suggestion-actions";
@@ -689,17 +691,25 @@ export function ProposalPanel({
                 })}
                 <span className="text-muted-foreground">then it closes on its own</span>
               </div>
-              <Button
-                type="button"
-                className="self-start"
-                disabled={isPending || reviewSettled === false || Boolean(zeroPriceBlocker(proposal))}
-                title={
-                  zeroPriceBlocker(proposal) ?? (reviewSettled === false ? "Approve or decline every zone's recommended scope first." : undefined)
-                }
-                onClick={handleApprove}
-              >
-                Approve &amp; send to client
-              </Button>
+              {/* Priced service by service on the price card, and approved there,
+                  so the old rate card's figure is never what goes out. */}
+              {!practice && pricedOnCard(proposal.scope_snapshot) ? (
+                <Button type="button" className="self-start" asChild>
+                  <Link href={`/sales/price/${jobId}`}>Price and send</Link>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  className="self-start"
+                  disabled={isPending || reviewSettled === false || Boolean(zeroPriceBlocker(proposal))}
+                  title={
+                    zeroPriceBlocker(proposal) ?? (reviewSettled === false ? "Approve or decline every zone's recommended scope first." : undefined)
+                  }
+                  onClick={handleApprove}
+                >
+                  Approve &amp; send to client
+                </Button>
+              )}
             </>
           )}
 

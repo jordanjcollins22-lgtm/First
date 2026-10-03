@@ -613,7 +613,7 @@ export function todosOf(pulse: OpsPulse, targets: OpsTargets, signals: Signal[],
       key: "approve-proposals",
       title: `Approve ${pulse.now.proposalsNeedsApproval} proposal${pulse.now.proposalsNeedsApproval === 1 ? "" : "s"} waiting to go out`,
       detail: "A proposal nobody has approved is a job nobody has asked for.",
-      href: "/proposals",
+      href: "/sales?tab=today",
       severity: "watch",
       money: pulse.now.proposalsNeedsApproval * avgTicket * 0.5,
     });

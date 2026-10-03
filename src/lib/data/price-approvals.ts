@@ -107,6 +107,11 @@ export interface ForwardArea {
  * Each area's services: the ones saved on the proposal when it was priced
  * this way, or else the ones the walkthrough suggests.
  */
+/** Whether a proposal's areas were priced service by service, the forward way, rather than by the old rate card. */
+export function pricedForward(snapshot: ProposalZoneSnapshot[] | null, areaCount: number): snapshot is ProposalZoneSnapshot[] {
+  return Boolean(snapshot && snapshot.length === areaCount && snapshot.every((s) => Array.isArray(s.lines)));
+}
+
 export function forwardAreas(
   zones: WorkZone[],
   snapshot: ProposalZoneSnapshot[] | null,
@@ -125,7 +130,7 @@ export function forwardAreas(
     pricing.equation,
     pricing.services
   );
-  const saved = snapshot && snapshot.length === priced.length && snapshot.every((s) => Array.isArray(s.lines)) ? snapshot : null;
+  const saved = pricedForward(snapshot, priced.length) ? snapshot : null;
   return priced.map((z, i) => ({
     notes: z.service!.notes?.trim() || null,
     photos: (z.service!.photos ?? []).map((path) => canvasImageUrl(path, PREVIEW)),
@@ -243,6 +248,10 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
     const breakdown = priceBreakdown(zones, catalog);
     const fee = fees.get(r.job_id)!;
     const costs = jobCosts(priceSiteMap({ zones, catalog, travel: travels[index], feePct: fee.pct }));
+    const salting = zones.some((z) => isSalting(z.service!.typeId));
+    // Made ready to send at the old rate card's price: it opens to be priced the
+    // forward way first, so what is approved and sent is that price.
+    const oldPrice = !salting && r.status === "sent" && !r.sent_at && !pricedForward(r.scope_snapshot, zones.length);
     return {
       jobId: r.job_id,
       client: r.job.property?.customer?.name || "Client",
@@ -250,7 +259,7 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
       email: r.job.property?.customer?.email?.trim() || null,
       evaluator: r.job.assignee?.full_name || r.job.assignee?.email || null,
       submittedAt: r.job.evaluation_submitted_at ?? r.generated_at,
-      stage: r.status === "needs_approval" ? ("price" as const) : ("send" as const),
+      stage: r.status === "needs_approval" || oldPrice ? ("price" as const) : ("send" as const),
       wordingToApprove: toApprove.get(r.job_id) ?? [],
       reviewHref: `/jobs/${r.job_id}?open=proposal`,
       totalCents: Math.round((Number(r.total_cost ?? 0) - Number(r.discount_amount ?? 0)) * 100),
@@ -267,7 +276,7 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
       crewRateCents: catalog.crewCostPerHourCents,
       markup,
       areaPhotos: breakdown.areas.map((a) => a.photoPaths.map((path) => canvasImageUrl(path, THUMBNAIL))),
-      forward: zones.some((z) => isSalting(z.service!.typeId))
+      forward: salting
         ? null
         : forwardAreas(zones, r.scope_snapshot, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId, setup),
       pricing: setup,
