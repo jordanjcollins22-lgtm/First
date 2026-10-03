@@ -93,6 +93,8 @@ export function ProposalSquare({
 
   const previewHref = proposal ? `/proposal/${proposal.token}?preview=1` : null;
   const status = proposal?.status ?? null;
+  // Priced service by service, the forward way: every area has its services on it.
+  const forward = proposal && proposal.scope_snapshot.length > 0 && proposal.scope_snapshot.every((z) => Array.isArray(z.lines)) ? proposal.scope_snapshot : null;
   const approved = status === "sent" && Boolean(proposal?.approved_at);
 
   return (
@@ -113,13 +115,37 @@ export function ProposalSquare({
 
         {!proposal && <p className="mt-2 text-sm text-muted-foreground">Built from the site map when the evaluation is submitted.</p>}
 
-        {proposal && !estimate && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Built before estimates existed. Rebuild it from the site map (in Change it, below) to see the hours, travel and materials.
-          </p>
+        {/* Priced service by service: each area at its price, as on the price
+            card. The old estimate's hours and travel are not what it came to. */}
+        {forward ? (
+          <div className="mt-3 flex flex-col gap-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Each area, service by service</p>
+            {forward.map((z, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-3 border-b border-border py-1 text-sm last:border-0">
+                <span className="min-w-0">
+                  <span className="font-medium">{z.zoneName}</span>
+                  <span className="text-muted-foreground"> · {z.serviceLabel}</span>
+                </span>
+                <span className="shrink-0 tabular-nums">${Math.round((z.priceCents ?? 0) / 100).toLocaleString()}</span>
+              </div>
+            ))}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Services, materials, travel and the 75% day are on the price card.{" "}
+              <Link href={`/sales/price/${jobId}`} className="font-medium text-primary underline underline-offset-2">
+                Open it
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <>
+            {proposal && !estimate && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Built before estimates existed. Rebuild it from the site map (in Change it, below) to see the hours, travel and materials.
+              </p>
+            )}
+            {estimate && <EstimateBody estimate={estimate} />}
+          </>
         )}
-
-        {estimate && <EstimateBody estimate={estimate} />}
 
         {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
         {note && <p className="mt-3 text-sm font-medium text-primary">{note}</p>}

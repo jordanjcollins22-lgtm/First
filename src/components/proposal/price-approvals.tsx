@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, CheckCircle2, FileText, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { acceptPrice, setPrice } from "@/lib/actions/price-approval-actions";
+import { acceptPrice, savePriceDraft, setPrice } from "@/lib/actions/price-approval-actions";
 import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
@@ -65,6 +65,19 @@ export function PriceCard({
     return item.stage === "price" ? priceFromSuppliers(start, item.pricing.services, item.suppliers ?? [], item.site ?? null).lines : start;
   });
   const forwardCents = lines ? priceLines(item, lines).rCents : null;
+  // Saved to the proposal as it is worked on, not approved, so the job page
+  // and the proposal show this same price whether or not the wording is done.
+  const [draft, setDraft] = useState<"saving" | "saved" | string | null>(null);
+  useEffect(() => {
+    if (preview || !lines || stage !== "price") return;
+    const timer = setTimeout(() => {
+      setDraft("saving");
+      savePriceDraft(item.jobId, lines)
+        .then((result) => setDraft(result.ok ? "saved" : result.error))
+        .catch(() => setDraft("Couldn't save the price to the proposal."));
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [lines, stage, preview, item.jobId]);
   const unpriced = lines ? unpricedAreas(item, lines) : [];
   const [fixedTotal, setTotal] = useState(item.totalCents);
   // While it is being priced the forward way, the price is the services'.
@@ -126,6 +139,11 @@ export function PriceCard({
       </div>
 
       {(stage === "price" || stage === "decline") && lines && <ForwardBreakdown item={item} lines={lines} onChange={setLines} locked={stage === "decline" || pending} />}
+      {stage === "price" && lines && draft && (
+        <p className={cn("text-xs", draft === "saved" || draft === "saving" ? "text-muted-foreground" : "text-destructive")}>
+          {draft === "saving" ? "Saving this price to the proposal…" : draft === "saved" ? "This price is on the proposal and the job page. Not approved yet." : draft}
+        </p>
+      )}
 
       {(stage === "price" || stage === "decline") && !lines && (
         <>

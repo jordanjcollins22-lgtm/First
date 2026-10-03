@@ -16,6 +16,7 @@ import {
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { forwardPriceForJob } from "@/lib/data/forward-price";
 import { requestMeasurements } from "@/lib/data/measurement-request";
 import { deliverApproval, queueApproval } from "@/lib/data/outbound-approvals";
 import { isOwnerLevel } from "@/lib/roles";
@@ -261,6 +262,26 @@ export async function generateProposal(
   );
   if (error) throw error;
 
+  // Priced the forward way straight away, service by service, as the price
+  // card prices it, so the job page, the proposal and the card all say the
+  // same price from the start. Best effort: the rate card's price above
+  // stands if it can't be worked out. Salting keeps its own.
+  let forwardPriced = false;
+  if (nextStatus === "needs_approval") {
+    const forward = await forwardPriceForJob(supabase, organizationId, jobId).catch((err: unknown) => {
+      console.error("[proposal] forward price failed:", jobId, err);
+      return null;
+    });
+    if (forward?.ok) {
+      const { error: forwardError } = await supabase
+        .from("job_proposals")
+        .update({ total_cost: forward.totalCents / 100, scope_snapshot: forward.snapshot as unknown as Database["public"]["Tables"]["job_proposals"]["Update"]["scope_snapshot"] })
+        .eq("job_id", jobId);
+      if (forwardError) console.error("[proposal] forward price not saved:", jobId, forwardError.message);
+      else forwardPriced = true;
+    }
+  }
+
   revalidateJobViews(jobId);
 
   // Areas drawn but never measured cannot be priced. The evaluator is
@@ -290,7 +311,7 @@ export async function generateProposal(
   // What actually moved, so "the paperwork is stuck on lawn care" is
   // something the evaluator can check on the spot rather than days later.
   const diff = diffScope(previous, scopeSnapshot);
-  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: [decision.note, priceNote, askedNote].filter(Boolean).join(" ") || null };
+  return { ok: true, token, changes: describeDiff(diff), unchanged: diff.identical, note: [decision.note, forwardPriced ? null : priceNote, askedNote].filter(Boolean).join(" ") || null };
 }
 
 /**
