@@ -78,7 +78,9 @@ export function FocusableSiteMap({
         transform={transform}
         zones={shown}
         frame={frame}
-        numbered={numbered}
+        // The buttons below carry the numbers when there are buttons, so the
+        // map's own numbered list would only say the same thing twice.
+        numbered={numbered && !worthPicking}
         dimSurroundings={dimSurroundings}
         // The index is into whatever was passed as `zones`, which is every
         // zone until one is picked and just that one afterwards. So while
@@ -109,11 +111,17 @@ export function FocusableSiteMap({
                     : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
                 }`}
               >
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: zone.color }}
-                  aria-hidden
-                />
+                {numbered ? (
+                  <span
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                    style={{ backgroundColor: zone.color }}
+                    aria-hidden
+                  >
+                    {(zone as { number?: number }).number ?? index + 1}
+                  </span>
+                ) : (
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: zone.color }} aria-hidden />
+                )}
                 {zone.zoneName}
               </button>
             );

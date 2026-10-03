@@ -134,8 +134,7 @@ export function SiteMapImage({
   const unit = Math.max(view.width, view.height);
   const casingWidth = unit * 0.014;
   const strokeWidth = unit * 0.006;
-  const markerRadius = unit * 0.035;
-  const markerFont = unit * 0.042;
+
   const maskId = `zone-mask-${imagePath.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
@@ -175,10 +174,6 @@ export function SiteMapImage({
           />
         )}
         {zonesWithOutlines.map(({ zone, index }, i) => {
-          const centre = zone.points.reduce(
-            (acc, p) => ({ x: acc.x + p.x / zone.points.length, y: acc.y + p.y / zone.points.length }),
-            { x: 0, y: 0 }
-          );
           return (
             <g
               key={i}
@@ -210,45 +205,41 @@ export function SiteMapImage({
                 strokeWidth={strokeWidth}
                 strokeLinejoin="round"
               />
-              {numbered && (
-                <>
-                  <circle
-                    cx={centre.x}
-                    cy={centre.y}
-                    r={markerRadius}
-                    fill="#ffffff"
-                    stroke="#0b1f14"
-                    strokeWidth={strokeWidth}
-                  />
-                  <text
-                    x={centre.x}
-                    y={centre.y}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={markerFont}
-                    fontWeight="bold"
-                    fill="#0b1f14"
-                  >
-                    {/* Its number on the full map. Counting what is drawn
-                        would renumber every zone the moment one is shown on
-                        its own, and "zone 5" is what somebody says out loud
-                        across a garden. */}
-                    {zone.number ?? i + 1}
-                  </text>
-                </>
-              )}
             </g>
           );
         })}
       </svg>
-      {showLegend && !numbered && zonesWithOutlines.length > 0 && (
+      {/* Nothing is written on the map itself: a number or a label on a
+          narrow bed covers the bed it names. Each area is its colour on the
+          map, and its number and name sit under it in the same colour. */}
+      {(showLegend || numbered) && zonesWithOutlines.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {zonesWithOutlines.map(({ zone }, i) => (
-            <span key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: zone.color }} aria-hidden />
-              {zone.zoneName}
-            </span>
-          ))}
+          {zonesWithOutlines.map(({ zone, index }, i) =>
+            numbered ? (
+              <button
+                key={i}
+                type="button"
+                onClick={onZoneClick ? () => onZoneClick(index) : undefined}
+                disabled={!onZoneClick}
+                className="flex items-center gap-1.5 text-xs font-medium text-foreground disabled:cursor-default"
+              >
+                <span
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  style={{ backgroundColor: zone.color }}
+                  aria-hidden
+                >
+                  {/* Its number on the full map, the same when one area is shown on its own. */}
+                  {zone.number ?? i + 1}
+                </span>
+                {zone.zoneName}
+              </button>
+            ) : (
+              <span key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: zone.color }} aria-hidden />
+                {zone.zoneName}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>
