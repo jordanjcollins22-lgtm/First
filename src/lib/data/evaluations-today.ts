@@ -92,7 +92,8 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
       preEvalAskedAt: askedAt.get(r.id) ?? null,
       areasReviewed,
       areasTotal,
-      reviewHref: `/jobs/${r.id}?open=proposal`,
+      // The price with everything behind it, service by service, then Accept and Send.
+      reviewHref: `/sales/price/${r.id}`,
       stage: evaluationStage(
         {
           dueAt: r.evaluation_date,

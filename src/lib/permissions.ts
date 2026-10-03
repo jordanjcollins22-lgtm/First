@@ -157,6 +157,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/mow-orders/funnel":
     "The quick mow funnel scoreboard, opened from the Quick Mow Pipeline. Checks the same tab itself; switching the " +
     "team alerts on or off is checked again for an owner or admin.",
+  "/sales/price/[jobId]":
+    "One walkthrough's price, service by service, to accept and send. Reached from Price it on an " +
+    "evaluation. Guarded like the price approvals it shows: owners, admins and account managers only, " +
+    "and Accept price checks again.",
   "/admin/shirts/[id]":
     "One shirt order's sheet for the print shop, opened from Company Shirts. Checks the shirts tab itself, " +
     "and its actions check it again.",

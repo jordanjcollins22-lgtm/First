@@ -122,21 +122,22 @@ export function forwardAreas(
  * priced yet, then priced and not sent. For owners, admins and account
  * managers; null for anybody else.
  */
-export async function getPriceApprovals(): Promise<PriceApproval[] | null> {
+export async function getPriceApprovals(only?: { jobId?: string }): Promise<PriceApproval[] | null> {
   const profile = await getCurrentProfile();
   if (!profile) return null;
   if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin") && !isAccountManager(profile.roles)) return null;
 
   const supabase = await createClient();
   const since = new Date(Date.now() - 60 * 86_400_000).toISOString();
-  const { data, error } = await supabase
+  let query = supabase
     .from("job_proposals")
     .select(
       "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, site_image_path, site_image_transform, scope_snapshot, job:jobs!inner(id, status, evaluation_submitted_at, referral_code, referred_by_profile_id, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, lat, lng, customer:customers(name, email, account_manager_id)))"
     )
-    .in("status", ["needs_approval", "sent"])
-    .order("generated_at", { ascending: true })
-    .limit(50);
+    .in("status", ["needs_approval", "sent"]);
+  // One job, for its own pricing page.
+  if (only?.jobId) query = query.eq("job_id", only.jobId);
+  const { data, error } = await query.order("generated_at", { ascending: true }).limit(50);
   if (error) throw error;
 
   type Row = {
