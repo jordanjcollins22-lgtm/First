@@ -16,6 +16,7 @@ import {
   type ProductionService,
   type ProductionUnit,
 } from "@/lib/forward-pricing";
+import { itemsFor, type InventoryItem } from "@/lib/forward-materials";
 import { cn } from "@/lib/utils";
 import { setTimeLogExcluded } from "@/lib/actions/service-timing-actions";
 import { averageRate, clockHours, counts, hoursLabel, jobRate, labourHours, roundRate, type ServiceTimeLog } from "@/lib/service-timing";
@@ -41,6 +42,7 @@ export function ProductionRatesForm({
   updatedAt,
   timeLogs = [],
   timingAvailable = false,
+  inventory = [],
 }: {
   initial: PricingSetup;
   saved: boolean;
@@ -51,6 +53,8 @@ export function ProductionRatesForm({
   timeLogs?: ServiceTimeLog[];
   /** False until migration 0337: nothing has been timed because nothing can be. */
   timingAvailable?: boolean;
+  /** The job materials in the inventory, to link each service's material to. */
+  inventory?: InventoryItem[];
 }) {
   const [eq, setEq] = useState(initial.equation);
   const [services, setServices] = useState<ProductionService[]>(initial.services);
@@ -321,6 +325,8 @@ export function ProductionRatesForm({
         )}
       </section>
 
+      <MaterialLinks services={services} inventory={inventory} disabled={locked} onChange={(i, materialIds) => changeService(i, { materialIds })} />
+
       {canEdit && (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
@@ -529,5 +535,98 @@ function TimedHistory({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Which inventory items each service's material is bought as, so the price
+ * card can show its photo and a link to buy it. Until one is picked, the
+ * material's name is matched in the inventory; picking makes it exact.
+ */
+function MaterialLinks({
+  services,
+  inventory,
+  disabled,
+  onChange,
+}: {
+  services: ProductionService[];
+  inventory: InventoryItem[];
+  disabled: boolean;
+  onChange: (index: number, materialIds: string[]) => void;
+}) {
+  const withMaterial = services.map((s, i) => ({ s, i })).filter(({ s }) => s.active !== false && s.unit !== "job" && (s.materialName || s.materialIds?.length));
+  if (withMaterial.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+      <div>
+        <h2 className="text-base font-semibold">Materials and where to buy them</h2>
+        <p className="text-sm text-muted-foreground">
+          The inventory items each service&apos;s material is bought as. The price card shows their photo, how much to buy and a link to buy it. Until you pick, the
+          material&apos;s name is looked up in the inventory (marked matched). Items and their links are added on{" "}
+          <a href="/admin/materials" className="font-medium text-primary underline underline-offset-2">
+            Materials
+          </a>
+          .
+        </p>
+      </div>
+      <ul className="flex flex-col divide-y divide-border">
+        {withMaterial.map(({ s, i }) => {
+          const items = itemsFor(s, inventory);
+          const ids = items.map((it) => it.id);
+          const matched = !s.materialIds;
+          return (
+            <li key={s.key} className="flex flex-col gap-2 py-2.5 md:flex-row md:items-start md:gap-4">
+              <div className="min-w-0 md:w-56 md:shrink-0">
+                <p className="text-sm font-medium">{s.label || "New service"}</p>
+                <p className="text-xs text-muted-foreground">{s.materialName || "Material"}</p>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                {items.length === 0 && <span className="text-sm text-amber-800 dark:text-amber-300">Not in the inventory yet.</span>}
+                {items.map((it) => (
+                  <span key={it.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/40 py-1 pl-1 pr-2 text-xs">
+                    {it.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.imageUrl} alt="" className="h-6 w-6 shrink-0 rounded-full bg-white object-contain" />
+                    ) : (
+                      <span className="h-6 w-6 shrink-0 rounded-full bg-muted" aria-hidden />
+                    )}
+                    <span className="truncate">{it.name}</span>
+                    {!it.url && <span className="shrink-0 text-amber-800 dark:text-amber-300">no link</span>}
+                    {matched && <span className="shrink-0 text-muted-foreground">matched</span>}
+                    {!disabled && (
+                      <button
+                        type="button"
+                        onClick={() => onChange(i, ids.filter((id) => id !== it.id))}
+                        className="shrink-0 rounded-full px-1 text-muted-foreground hover:text-foreground"
+                        aria-label={`Unlink ${it.name} from ${s.label}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {!disabled && inventory.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => e.target.value && onChange(i, [...ids, e.target.value])}
+                    className="h-8 max-w-full rounded-md border border-input bg-background px-2 text-sm"
+                    aria-label={`Link an inventory item to ${s.label}`}
+                  >
+                    <option value="">Link an item…</option>
+                    {inventory
+                      .filter((it) => !ids.includes(it.id))
+                      .map((it) => (
+                        <option key={it.id} value={it.id}>
+                          {it.name.length > 70 ? `${it.name.slice(0, 70)}…` : it.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

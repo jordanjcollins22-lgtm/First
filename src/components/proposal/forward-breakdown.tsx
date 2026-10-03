@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Images, Plus, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, ExternalLink, Images, Plus, X } from "lucide-react";
 
 import {
   crewRateCents,
@@ -16,6 +17,7 @@ import {
   type PricingEquation,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
+import { jobMaterials, type MaterialRow } from "@/lib/forward-materials";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +26,7 @@ const qty = (n: number) => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.
 const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
 /** The forward-priced job for these lines, with the business's own rates. */
 export function priceLines(item: PriceApproval, lines: PriceLine[][]): PricedJob {
-  return priceForward(lines, item.pricing.equation, item.pricing.services);
+  return priceForward(lines, item.pricing.equation, item.pricing.services, item.driveMinutesPerDay);
 }
 
 /** Areas whose services come to nothing, by name: the price can't be accepted with them. */
@@ -175,6 +177,21 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                           </td>
                         </tr>
                       )}
+                      {priced.offWork.plh > 0 && (
+                        <tr className="text-muted-foreground">
+                          <td className="py-1.5 pr-2 align-top">
+                            <span className="font-medium text-foreground">Travel and time off the work</span>
+                            <span className="block text-xs">{offWorkWhy(job.offWork)}, shared by crew-hours</span>
+                          </td>
+                          <td />
+                          <td />
+                          <td className="px-2 py-1.5 text-right align-top tabular-nums">{priced.offWork.plh.toFixed(2)}</td>
+                          <td className="px-2 py-1.5 text-right align-top tabular-nums">{money(Math.round(priced.offWork.plcCents))}</td>
+                          <td className="px-2 py-1.5 text-right align-top">—</td>
+                          <td className="py-1.5 pl-2 text-right align-top font-semibold tabular-nums text-foreground">{money(priced.offWork.rCents)}</td>
+                          {!locked && <td />}
+                        </tr>
+                      )}
                       <tr className="font-semibold">
                         <td className="py-1.5 pr-2">{area.name} total</td>
                         <td />
@@ -230,6 +247,17 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                     );
                   })}
                   {priced.lines.length === 0 && <li className="py-2 text-sm text-amber-800 dark:text-amber-300">No services yet. Add what this area needs.</li>}
+                  {priced.offWork.plh > 0 && (
+                    <li className="flex justify-between gap-2 py-2 text-sm">
+                      <span className="min-w-0">
+                        <span className="font-medium">Travel and time off the work</span>
+                        <span className="block text-xs text-muted-foreground tabular-nums">
+                          {offWorkWhy(job.offWork)} · PLH {priced.offWork.plh.toFixed(2)} · PLC {money(Math.round(priced.offWork.plcCents))}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums">{money(priced.offWork.rCents)}</span>
+                    </li>
+                  )}
                   <li className="flex justify-between gap-2 py-2 text-sm font-semibold">
                     <span>
                       {area.name} total
@@ -268,6 +296,8 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
           </section>
         );
       })}
+
+      <ForwardMaterials rows={jobMaterials(item.breakdown.areas.map((a) => a.name), lines, services, item.inventory ?? [])} />
 
       <JobTotals job={job} eq={eq} />
 
@@ -327,6 +357,80 @@ function MoneyInput({ line, onChange }: { line: PricedLine; onChange: (patch: Pa
 }
 
 /** The job, added up, and where every dollar of the price goes. */
+/**
+ * Every material going in, with its photo, how much to buy and a link to
+ * buy it. One with nowhere to buy it, or not in the inventory at all, says
+ * so and links to the inventory, where the link goes.
+ */
+function ForwardMaterials({ rows }: { rows: MaterialRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="overflow-hidden rounded-xl border border-border">
+      <p className="border-b border-border bg-muted/50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Materials and where to buy them</p>
+      <ul className="divide-y divide-border">
+        {rows.map((r, i) => (
+          <li key={i} className="flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-start md:gap-4">
+            <div className="min-w-0 md:w-64 md:shrink-0">
+              <p className="text-sm font-medium">{r.material}</p>
+              <p className="text-xs text-muted-foreground">
+                {r.service}, {r.areaName} · {qty(r.quantity)} {r.unit}
+                {r.materialCents > 0 && <> · M {money(r.materialCents)}</>}
+              </p>
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              {r.items.length === 0 ? (
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  Not in the inventory yet.{" "}
+                  <Link href="/admin/materials" className="font-medium underline underline-offset-2">
+                    Add it with a link to buy it
+                  </Link>
+                  .
+                </p>
+              ) : (
+                r.items.map(({ item, buy }) => (
+                  <div key={item.id} className="flex items-center gap-3">
+                    {item.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-md border border-border bg-white object-contain" />
+                    ) : (
+                      <span className="h-11 w-11 shrink-0 rounded-md bg-muted" aria-hidden />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm">{item.name}</p>
+                      {buy && <p className="text-xs text-muted-foreground">Buy about {buy}</p>}
+                    </div>
+                    {item.url ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-sm font-medium text-primary hover:bg-muted"
+                      >
+                        Buy <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : (
+                      <Link href="/admin/materials" className="shrink-0 text-xs text-amber-800 underline underline-offset-2 dark:text-amber-300">
+                        No link yet
+                      </Link>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Why the time off the work is what it is, in words. */
+function offWorkWhy(off: PricedJob["offWork"]): string {
+  const days = `${off.days} day${off.days === 1 ? "" : "s"}`;
+  if (off.by === "drive") return `${off.driveMinutesPerDay} min drive there and back × ${days}`;
+  return `the rest of ${days} at ${qty(off.workHoursPerDay)} hrs of work a day${off.driveMinutesPerDay != null ? ` (drive ${off.driveMinutesPerDay} min a day)` : ""}`;
+}
+
 function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
   const al = job.allocations;
   const shares: { label: string; cents: number }[] = [
@@ -343,7 +447,13 @@ function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
         <p className="border-b border-border bg-muted/50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">The whole job</p>
         <dl className="divide-y divide-border text-sm">
           {[
-            ["Projected crew-hours (PLH)", job.plh.toFixed(2)],
+            ["Crew-hours of work", (job.plh - job.offWork.plh).toFixed(2)],
+            [`Travel and time off the work: ${offWorkWhy(job.offWork)}`, job.offWork.plh.toFixed(2)],
+            [
+              "Days at the job",
+              job.offWork.days > 0 ? `${job.offWork.days} (${qty(job.offWork.workHoursPerDay)} hrs of work a day)` : "—",
+            ],
+            ["Projected crew-hours paid (PLH)", job.plh.toFixed(2)],
             [`Projected labour cost (PLC), at ${money(crewRateCents(eq))}/hr`, money(Math.round(job.plcCents))],
             ["Materials and direct costs (M)", money(job.materialCents)],
             ["Cost (M + PLC)", money(Math.round(job.costCents))],
@@ -372,7 +482,9 @@ function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
       </div>
       <p className="text-xs text-muted-foreground md:col-span-2">
         CR = {eq.leads} lead × {money(eq.leadRateCents)} + {eq.technicians} technician × {money(eq.technicianRateCents)} = {money(crewRateCents(eq))}/hr · RA ={" "}
-        {pct(revenueAllocation(eq))} · PCM = {projectCostMargin(eq).toFixed(2)}. PLH is crew-hours on site; each service has its own production rate (PR).
+        {pct(revenueAllocation(eq))} · PCM = {projectCostMargin(eq).toFixed(2)}. Each service has its own production rate (PR). A {qty(eq.workdayHours)}-hour day is {pct(eq.onJobShare)}{" "}
+        working at the job; the rest of the day (the drive, loading, the dump, breaks) is paid too, so it is priced in: the larger of that share and the actual drive
+        there and back each day.
       </p>
     </div>
   );

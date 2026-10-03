@@ -10,6 +10,8 @@ import { approveProposal, updateProposalDraft } from "@/lib/actions/proposal-act
 import { spreadPrice } from "@/lib/price-approval";
 import { priceForward, readLines } from "@/lib/forward-pricing";
 import { getProductionPricing } from "@/lib/data/production-pricing";
+import { travelForProperty } from "@/lib/data/job-travel";
+import { driveThereAndBack } from "@/lib/data/price-approvals";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 export type PriceResult = { ok: true; sendTo: string | null } | { ok: false; error: string };
@@ -43,7 +45,11 @@ export async function acceptPrice(jobId: string, lines?: unknown): Promise<Price
       const pricing = await getProductionPricing(supabase, profile!.organization_id);
       const read = readLines(lines, snapshot.length, pricing.services);
       if (!read) return { ok: false, error: "The areas have changed since this opened. Reload the page." };
-      const priced = priceForward(read, pricing.equation, pricing.services);
+      // The same drive the card was priced with, so the price saved is the one shown.
+      const { data: job } = await supabase.from("jobs").select("property:properties(lat, lng)").eq("id", jobId).maybeSingle();
+      const at = (job?.property ?? null) as { lat: number | null; lng: number | null } | null;
+      const travel = await travelForProperty(supabase, profile!.organization_id, at?.lat != null && at?.lng != null ? { lat: at.lat, lng: at.lng } : null).catch(() => null);
+      const priced = priceForward(read, pricing.equation, pricing.services, travel ? driveThereAndBack(travel) : null);
       if (priced.rCents <= 0) return { ok: false, error: "Every service is at nothing. Put in the quantities first." };
       const repriced = snapshot.map((zone, i) => ({ ...zone, priceCents: priced.areas[i].rCents, priceDerived: true, lines: read[i] }));
       await updateProposalDraft(jobId, { totalCost: priced.rCents / 100, scopeSnapshot: repriced });

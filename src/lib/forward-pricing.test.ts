@@ -5,6 +5,7 @@ import {
   PRODUCTION_SERVICES,
   allocations,
   crewRateCents,
+  offWork,
   priceForward,
   priceLine,
   pricePerUnitCents,
@@ -21,6 +22,8 @@ import {
 } from "@/lib/forward-pricing";
 
 const eq = PRICING_EQUATION;
+/** The equation as trained, before travel and time off the work: every paid hour at the job. */
+const work = { ...eq, onJobShare: 1 };
 
 describe("the forward pricing equation", () => {
   it("works the training example through", () => {
@@ -32,7 +35,7 @@ describe("the forward pricing equation", () => {
     const labour = priceLine({ key: "weed-pulling", quantity: 12 * 600, materialCents: 0 }, eq);
     expect(labour.plh).toBeCloseTo(12);
     expect(labour.plcCents).toBeCloseTo(90_000);
-    const job = priceForward([[labour, { key: "disposal", quantity: 1, materialCents: 50_000 }]], eq);
+    const job = priceForward([[labour, { key: "disposal", quantity: 1, materialCents: 50_000 }]], work);
     expect(job.rCents).toBe(400_000);
     expect(job.allocations).toEqual({ grossProfitCents: 200_000, affiliateCents: 16_000, evaluatorCents: 16_000, accountManagerCents: 28_000, reserveCents: 0 });
   });
@@ -57,7 +60,7 @@ describe("the forward pricing equation", () => {
         [{ key: "plant-cutback", quantity: 2, materialCents: 0 }],
         [{ key: "disposal", quantity: 1, materialCents: 7500 }],
       ],
-      eq
+      work
     );
     expect(job.plh).toBeCloseTo(5.12, 2);
     expect(Math.round(job.plcCents)).toBe(38_375);
@@ -66,9 +69,10 @@ describe("the forward pricing equation", () => {
     expect(allocations(job.rCents, eq).grossProfitCents).toBe(69_107);
   });
 
-  it("adds an area's lines up to exactly its price", () => {
+  it("adds an area's lines and its share of time off the work up to exactly its price", () => {
     const job = priceForward([[{ key: "weed-pulling", quantity: 333, materialCents: 0 }, { key: "weed-spraying", quantity: 333, materialCents: 777 }]], eq);
-    expect(job.areas[0].rCents).toBe(job.areas[0].lines.reduce((s, l) => s + l.rCents, 0));
+    expect(job.areas[0].rCents).toBe(job.areas[0].lines.reduce((s, l) => s + l.rCents, 0) + job.areas[0].offWork.rCents);
+    expect(job.areas[0].offWork.rCents).toBeGreaterThan(0);
   });
 });
 
@@ -248,5 +252,44 @@ describe("the production rates settings", () => {
   it("makes a key from a new service's name, never one already taken", () => {
     expect(serviceKey("Sod install!", [])).toBe("sod-install");
     expect(serviceKey("Sod install", ["sod-install"], () => 0.5)).toBe("sod-install-7fff");
+  });
+});
+
+describe("travel and time off the work", () => {
+  it("pays the rest of each day: a quarter as much again as the work, at 75%", () => {
+    // 30 hours of work at 6 hours a day is 5 days; the time off them is 10 hours.
+    const off = offWork(30, eq, 40);
+    expect(off).toMatchObject({ days: 5, workHoursPerDay: 6, by: "share" });
+    expect(off.plh).toBeCloseTo(10);
+    expect(off.plcCents).toBeCloseTo(10 * 7500);
+  });
+
+  it("pays the drive when that is more, on a small job", () => {
+    // 2 hours of work: the share is 0.67 hours, the 50 minute drive is 0.83.
+    const off = offWork(2, eq, 50);
+    expect(off).toMatchObject({ days: 1, by: "drive" });
+    expect(off.plh).toBeCloseTo(50 / 60);
+  });
+
+  it("goes by the share when the drive is unknown, and is nothing with no work", () => {
+    expect(offWork(6, eq, null)).toMatchObject({ days: 1, by: "share" });
+    expect(offWork(0, eq, 40)).toMatchObject({ days: 0, plh: 0, by: "none" });
+  });
+
+  it("shares it across the areas by their crew-hours, so they still add up to the job", () => {
+    const job = priceForward(
+      [[{ key: "weed-pulling", quantity: 600 * 18, materialCents: 0 }], [{ key: "weed-pulling", quantity: 600 * 6, materialCents: 0 }]],
+      eq,
+      undefined,
+      30
+    );
+    // 24 hours of work, 4 days, 8 hours off it: 6 and 2.
+    expect(job.offWork.plh).toBeCloseTo(8);
+    expect(job.areas[0].offWork.plh).toBeCloseTo(6);
+    expect(job.areas[1].offWork.plh).toBeCloseTo(2);
+    expect(job.plh).toBeCloseTo(32);
+    expect(job.areas[0].rCents + job.areas[1].rCents).toBe(job.rCents);
+    // 32 crew-hours at $75 over 0.35.
+    expect(job.rCents).toBe(Math.round((18 * 7500) / 0.35) + Math.round((6 * 7500) / 0.35) + Math.round((6 * 7500) / 0.35) + Math.round((2 * 7500) / 0.35));
   });
 });

@@ -2,6 +2,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getProductionPricing } from "@/lib/data/production-pricing";
+import { getInventoryItems } from "@/lib/data/inventory-items";
 import { listServiceTimeLogs } from "@/lib/data/service-timing";
 import { createClient } from "@/lib/supabase/server";
 import { isOwnerLevel } from "@/lib/roles";
@@ -21,7 +22,11 @@ export default async function ProductionRatesPage() {
   const profile = await getCurrentProfile();
   if (!profile) return null;
   const supabase = await createClient();
-  const [setup, timed] = await Promise.all([getProductionPricing(supabase, profile.organization_id), listServiceTimeLogs(supabase, profile.organization_id)]);
+  const [setup, timed, inventory] = await Promise.all([
+    getProductionPricing(supabase, profile.organization_id),
+    listServiceTimeLogs(supabase, profile.organization_id),
+    getInventoryItems(supabase, profile.organization_id),
+  ]);
   const canEdit = isOwnerLevel(profile.roles) || profile.roles.includes("admin");
   return (
     <ProductionRatesForm
@@ -32,6 +37,7 @@ export default async function ProductionRatesPage() {
       updatedAt={setup.updatedAt}
       timeLogs={timed.logs}
       timingAvailable={timed.available}
+      inventory={inventory}
     />
   );
 }

@@ -36,6 +36,11 @@ export interface ProductionService {
   materialCentsPerUnit?: number;
   /** What that material is, in words. */
   materialName?: string;
+  /**
+   * The inventory items it is bought as, with their photo and link. Unset:
+   * matched from the material's name. Empty: none.
+   */
+  materialIds?: string[];
   /** Which part of the "Add a service" list it sits under. Other when not set. */
   group?: ServiceGroup;
   /**
@@ -139,6 +144,13 @@ export interface PricingEquation {
   evaluator: number;
   accountManager: number;
   reserve: number;
+  /** The crew's paid day, in hours. */
+  workdayHours: number;
+  /**
+   * The share of that day spent working at the job. The rest goes on the
+   * drive, loading, the dump and breaks, and is paid all the same.
+   */
+  onJobShare: number;
 }
 
 /**
@@ -155,6 +167,8 @@ export const PRICING_EQUATION: PricingEquation = {
   evaluator: 0.04,
   accountManager: 0.07,
   reserve: 0,
+  workdayHours: 8,
+  onJobShare: 0.75,
 };
 
 /** CR = (NPL × PLR) + (NPT × PTR). */
@@ -223,8 +237,10 @@ export interface PricedArea {
   materialCents: number;
   /** M + PLC. */
   costCents: number;
-  /** The lines' prices added up, so the area's price is exactly its lines. */
+  /** The lines' prices added up, so the area's price is exactly its lines, plus its share of time off the work once priced as a job. */
   rCents: number;
+  /** Its share of the job's travel and time off the work, by its crew-hours. Nothing until priced as a job. */
+  offWork: { plh: number; plcCents: number; rCents: number };
 }
 
 export function priceArea(lines: PriceLine[], eq: PricingEquation, services: ProductionService[] = PRODUCTION_SERVICES): PricedArea {
@@ -238,6 +254,7 @@ export function priceArea(lines: PriceLine[], eq: PricingEquation, services: Pro
     materialCents,
     costCents: materialCents + plcCents,
     rCents: priced.reduce((s, l) => s + l.rCents, 0),
+    offWork: { plh: 0, plcCents: 0, rCents: 0 },
   };
 }
 
@@ -260,18 +277,77 @@ export function allocations(rCents: number, eq: PricingEquation): Allocations {
   };
 }
 
+/**
+ * The time the crew is paid for but not working at the job: the drive there
+ * and back every day, loading, the dump, breaks.
+ *
+ * A day holds workdayHours × onJobShare hours of work at the job (8 × 75%
+ * is 6), so the work takes that many days. The time off the work is the
+ * larger of the rest of those days, pro rata (a quarter as much again as
+ * the work, at 75%), and the actual drive there and back each day. A small
+ * job close by pays mostly its drive; a big one pays its quarter of every
+ * day, which covers the drive.
+ */
+export interface OffWork {
+  /** Days at the job, the work at onJobShare of each. */
+  days: number;
+  /** Hours of work at the job in one day. */
+  workHoursPerDay: number;
+  /** The drive there and back, in minutes a day; null when it could not be worked out. */
+  driveMinutesPerDay: number | null;
+  /** Crew-hours paid but not working at the job. */
+  plh: number;
+  plcCents: number;
+  /** Which it came to: the share of the day, or the drive. */
+  by: "share" | "drive" | "none";
+}
+
+export function offWork(workPlh: number, eq: PricingEquation, driveMinutesPerDay: number | null = null): OffWork {
+  const share = eq.onJobShare > 0 && eq.onJobShare <= 1 ? eq.onJobShare : 1;
+  const workHoursPerDay = Math.max(0.5, eq.workdayHours * share);
+  const drive = driveMinutesPerDay != null && Number.isFinite(driveMinutesPerDay) && driveMinutesPerDay > 0 ? driveMinutesPerDay : null;
+  if (!(workPlh > 0)) return { days: 0, workHoursPerDay, driveMinutesPerDay: drive, plh: 0, plcCents: 0, by: "none" };
+  const days = Math.ceil(workPlh / workHoursPerDay - 1e-9);
+  const byShare = workPlh * (1 / share - 1);
+  const byDrive = drive != null ? (days * drive) / 60 : 0;
+  const plh = Math.max(byShare, byDrive);
+  return { days, workHoursPerDay, driveMinutesPerDay: drive, plh, plcCents: plh * crewRateCents(eq), by: plh <= 0 ? "none" : byDrive > byShare ? "drive" : "share" };
+}
+
 export interface PricedJob {
   areas: PricedArea[];
+  /** All crew-hours paid: the work and the time off it. */
   plh: number;
   plcCents: number;
   materialCents: number;
   costCents: number;
   rCents: number;
   allocations: Allocations;
+  offWork: OffWork;
 }
 
-export function priceForward(areas: PriceLine[][], eq: PricingEquation, services: ProductionService[] = PRODUCTION_SERVICES): PricedJob {
-  const priced = areas.map((lines) => priceArea(lines, eq, services));
+/**
+ * The whole job. Its time off the work is shared across the areas by their
+ * crew-hours, so each area's price carries its part and the areas still add
+ * up to the job.
+ */
+export function priceForward(
+  areas: PriceLine[][],
+  eq: PricingEquation,
+  services: ProductionService[] = PRODUCTION_SERVICES,
+  driveMinutesPerDay: number | null = null
+): PricedJob {
+  const pcm = projectCostMargin(eq);
+  const worked = areas.map((lines) => priceArea(lines, eq, services));
+  const workPlh = worked.reduce((s, a) => s + a.plh, 0);
+  const off = offWork(workPlh, eq, driveMinutesPerDay);
+  const priced = worked.map((a) => {
+    const part = workPlh > 0 ? a.plh / workPlh : 0;
+    const plh = off.plh * part;
+    const plcCents = off.plcCents * part;
+    const rCents = pcm > 0 ? Math.round(plcCents / pcm) : 0;
+    return { ...a, plh: a.plh + plh, plcCents: a.plcCents + plcCents, costCents: a.costCents + plcCents, rCents: a.rCents + rCents, offWork: { plh, plcCents, rCents } };
+  });
   const sum = (pick: (a: PricedArea) => number) => priced.reduce((s, a) => s + pick(a), 0);
   const rCents = sum((a) => a.rCents);
   return {
@@ -282,6 +358,7 @@ export function priceForward(areas: PriceLine[][], eq: PricingEquation, services
     costCents: sum((a) => a.costCents),
     rCents,
     allocations: allocations(rCents, eq),
+    offWork: off,
   };
 }
 
@@ -521,6 +598,9 @@ export function readSetup(input: unknown): { ok: true; setup: PricingSetup } | {
       ...(material > 0 ? { materialCentsPerUnit: material } : {}),
       ...(String(r.materialName ?? "").trim() ? { materialName: String(r.materialName).trim().slice(0, 60) } : {}),
       ...((SERVICE_GROUPS as readonly string[]).includes(String(r.group ?? "")) ? { group: r.group as ServiceGroup } : {}),
+      ...(Array.isArray(r.materialIds)
+        ? { materialIds: [...new Set(r.materialIds.map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id)))].slice(0, 5) }
+        : {}),
       active: r.active !== false,
     });
   }

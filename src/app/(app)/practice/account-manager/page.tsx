@@ -9,6 +9,7 @@ import { PRACTICE_ADDRESS, PRACTICE_ZONES, practicePriceCents } from "@/lib/prac
 import { jobCosts, priceSiteMap } from "@/lib/job-price";
 import { forwardAreas, type PriceApproval } from "@/lib/data/price-approvals";
 import { getProductionPricing } from "@/lib/data/production-pricing";
+import { getInventoryItems } from "@/lib/data/inventory-items";
 import { DEFAULT_SETUP, type PricingSetup } from "@/lib/forward-pricing";
 import { getCurrentProfile } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
@@ -63,6 +64,7 @@ export default async function AccountManagerJourneyPage() {
   // Priced with this business's own production rates and crew pay.
   const stored = profile ? await getProductionPricing(supabase, profile.organization_id) : DEFAULT_SETUP;
   const pricing: PricingSetup = { equation: stored.equation, services: stored.services };
+  const inventory = profile ? await getInventoryItems(supabase, profile.organization_id) : [];
   // The sample job: the same three areas, and the same price, as the sample
   // proposal Review proposal opens, priced on this business's own rate card.
   const typeFor = (name: string) => catalog.servicePricing.find((p) => p.name === name)?.service_type_id ?? null;
@@ -121,6 +123,9 @@ export default async function AccountManagerJourneyPage() {
     siteMap: { kind: "sample", zones: PRACTICE_ZONES.map((z) => ({ name: z.name, color: z.color, points: z.points })) },
     forward: forwardAreas(zones, null, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId, pricing),
     pricing,
+    // The same sample drive: twenty minutes out, twenty back.
+    driveMinutesPerDay: 40,
+    inventory,
   };
 
   // Jace's My Day: the three squares, each opening on a sample of what is in it.

@@ -16,6 +16,8 @@ import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
 import { DEFAULT_SETUP, suggestJob, type PriceLine, type PricingSetup } from "@/lib/forward-pricing";
 import { getProductionPricing } from "@/lib/data/production-pricing";
+import { getInventoryItems } from "@/lib/data/inventory-items";
+import type { InventoryItem } from "@/lib/forward-materials";
 import { zoneMeasurements } from "@/lib/proposal-pricing";
 import { isSalting } from "@/lib/salting";
 
@@ -72,6 +74,10 @@ export interface PriceApproval {
   forward: ForwardArea[] | null;
   /** The crew, pay and production rates the forward price is worked out with. */
   pricing: PricingSetup;
+  /** The drive from the shop to the house and back, in minutes, for the forward price's time off the work. Null when it could not be worked out. */
+  driveMinutesPerDay: number | null;
+  /** The job materials in the inventory, for showing what each service's material is and where to buy it. */
+  inventory: InventoryItem[];
   /** The whole site map, as the proposal draws it. Sample: the practice drawing, with no photo behind it. */
   siteMap:
     | { kind: "image"; imagePath: string; transform: ProposalSiteImageTransform; zones: Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points">[] }
@@ -179,12 +185,13 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
   if (rows.length === 0) return [];
 
   const jobIds = rows.map((r) => r.job_id);
-  const [catalog, designs, fees, stock, pricing] = await Promise.all([
+  const [catalog, designs, fees, stock, pricing, inventory] = await Promise.all([
     getCanvasCatalog(),
     supabase.from("canvas_designs").select("job_id, zones").in("job_id", jobIds),
     feesForJobs(supabase, profile.organization_id, jobIds),
     supabase.from("materials").select("name, image_path, purchase_url").eq("organization_id", profile.organization_id),
     getProductionPricing(supabase, profile.organization_id),
+    getInventoryItems(supabase, profile.organization_id),
   ]);
   const setup: PricingSetup = { equation: pricing.equation, services: pricing.services };
   // Each product by its name, with its photo and link, for the approval to show.
@@ -257,10 +264,17 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
         ? null
         : forwardAreas(zones, r.scope_snapshot, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId, setup),
       pricing: setup,
+      driveMinutesPerDay: driveThereAndBack(travels[index]),
+      inventory,
       siteMap:
         r.site_image_path && r.site_image_transform
           ? { kind: "image" as const, imagePath: r.site_image_path, transform: r.site_image_transform, zones: r.scope_snapshot ?? [] }
           : null,
     };
   });
+}
+
+/** The drive there and back, in minutes, or null when either leg is unknown. */
+export function driveThereAndBack(travel: { toSiteMinutes: number | null; fromSiteMinutes: number | null }): number | null {
+  return travel.toSiteMinutes != null && travel.fromSiteMinutes != null ? travel.toSiteMinutes + travel.fromSiteMinutes : null;
 }
