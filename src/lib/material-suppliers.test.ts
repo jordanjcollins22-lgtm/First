@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PRODUCTION_SERVICES, productionService } from "@/lib/forward-pricing";
-import { deliveryFeeFor, milesBetween, pickSupplier, readSupplier, supplierKindFor, zipOf, type Supplier, type SupplierProduct } from "@/lib/material-suppliers";
+import { bestProduct, deliveryFeeFor, milesBetween, orderAmount, pickSupplier, readSupplier, supplierKindFor, zipOf, type Supplier, type SupplierProduct } from "@/lib/material-suppliers";
 
 const product = (over: Partial<SupplierProduct>): SupplierProduct => ({
   id: Math.random().toString(36).slice(2),
@@ -130,5 +130,38 @@ describe("the Suppliers page's form", () => {
     expect(readSupplier({ name: "A", deliveryFees: [{ town: "Bel Air", zips: "2101", feeCents: 4000 }] }).ok).toBe(false);
     expect(readSupplier({ name: "A", deliveryFees: [{ town: "Bel Air", zips: "21014" }] }).ok).toBe(false);
     expect(readSupplier({ name: "A", products: [{ kind: "lumber", name: "2x4" }] }).ok).toBe(false);
+  });
+});
+
+describe("the best product for what the client asked for", () => {
+  const mulch = [
+    product({ id: "nat", name: "Natural triple shredded mulch", priceCents: 3700 }),
+    product({ id: "blk", name: "Dyed black mulch", priceCents: 4200 }),
+    product({ id: "brn", name: "Dyed brown mulch", priceCents: 4200 }),
+  ];
+  const stone = [
+    product({ id: "cr6", kind: "stone", name: "Grey CR-6", unit: "ton", priceCents: 5200 }),
+    product({ id: "dust", kind: "stone", name: "Grey stone dust", unit: "ton", priceCents: 5500 }),
+    product({ id: "g57", kind: "stone", name: "Grey #57 stone", unit: "ton", priceCents: 6300 }),
+    product({ id: "sm", kind: "stone", name: "Small Delaware river rounds", unit: "ton", priceCents: 10200 }),
+    product({ id: "md", kind: "stone", name: "Medium Delaware river rounds", unit: "ton", priceCents: 14900 }),
+  ];
+
+  it("matches the colour or size they picked, else the cheapest", () => {
+    expect(bestProduct(mulch, "mulch", "black")?.id).toBe("blk");
+    expect(bestProduct(mulch, "mulch", "Brown")?.id).toBe("brn");
+    expect(bestProduct(mulch, "mulch", null)?.id).toBe("nat");
+    expect(bestProduct(mulch, "mulch", "purple")?.id).toBe("nat");
+    expect(bestProduct(stone, "stone", "medium")?.id).toBe("md");
+  });
+
+  it("never covers a bed in base stone when no rock was picked", () => {
+    expect(bestProduct(stone, "stone", null)?.id).toBe("sm");
+    expect(bestProduct(stone.filter((p) => !/river/.test(p.name)), "stone", null)?.id).toBe("g57");
+  });
+
+  it("orders to the next half yard, or ton for stone sold by the ton", () => {
+    expect(orderAmount({ unit: "yd" }, 5.6)).toBe(6);
+    expect(orderAmount({ unit: "ton" }, 3)).toBe(4.5);
   });
 });

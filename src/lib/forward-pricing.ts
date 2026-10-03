@@ -216,6 +216,16 @@ export interface PriceLine {
   materialCents: number;
   /** Where Q came from, or what is missing. */
   note?: string | null;
+  /**
+   * What the client asked for, for picking the material: "black" mulch,
+   * "small" river rock. The supplier's product whose name has it is used.
+   */
+  prefer?: string | null;
+  /**
+   * M follows the bulk supplier's price on its own, changing with the
+   * quantity. False once somebody types M themselves.
+   */
+  supplied?: boolean;
 }
 
 export interface PricedLine extends PriceLine {
@@ -453,8 +463,9 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
     if (moved != null) lines.push(byCount("plant-relocation", moved, "plants"));
     if (/needs removal/i.test(text(v, "existingMaterialCondition"))) lines.push(byDepth("material-removal", 2));
     const material = text(v, "material");
-    if (/mulch/i.test(material)) lines.push(byDepth("mulch-install", 2));
-    else if (/rock/i.test(material)) lines.push(byDepth("rock-install", 2));
+    // The colour or rock the client picked, so the supplier's matching one is priced.
+    if (/mulch/i.test(material)) lines.push({ ...byDepth("mulch-install", 2), prefer: text(v, "color").toLowerCase() || null });
+    else if (/rock/i.test(material)) lines.push({ ...byDepth("rock-install", 2), prefer: text(v, "rockSize").toLowerCase() || null });
     if (/no edge|needs redone/i.test(text(v, "edge"))) lines.push({ key: "bed-edging", quantity: 0, materialCents: 0, note: "The walkthrough measures area, not length. Type the linear feet of edge." });
   } else if (area.typeId === "plant-installation") {
     const big = /3\s*gal/i.test(text(v, "sizeContainer"));
@@ -548,6 +559,8 @@ export function readLines(input: unknown, areaCount: number, services: Productio
         quantity: Math.min(1_000_000, Math.max(0, Number(l.quantity) || 0)),
         materialCents: Math.min(100_000_000, Math.max(0, Math.round(Number(l.materialCents) || 0))),
         note: typeof l.note === "string" ? l.note.slice(0, 200) : null,
+        ...(typeof l.prefer === "string" && l.prefer.trim() ? { prefer: l.prefer.trim().slice(0, 80) } : {}),
+        ...(typeof l.supplied === "boolean" ? { supplied: l.supplied } : {}),
       }))
   );
 }

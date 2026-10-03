@@ -11,7 +11,7 @@
  * Pure, so the matching is tested without a database.
  */
 
-import { supplierKindFor, type SupplierKind } from "@/lib/material-suppliers";
+import { bestProduct, orderAmount, pickSupplier, supplierKindFor, unitPrice, type Supplier, type SupplierKind, type SupplierPick, type SupplierProduct } from "@/lib/material-suppliers";
 import { productionService, type PriceLine, type ProductionService, type ProductionUnit } from "@/lib/forward-pricing";
 
 export interface InventoryItem {
@@ -217,4 +217,64 @@ export function splitCost(order: BulkOrder, cents: number): { area: number; line
     left -= share;
     return { area: r.area, line: r.line, cents: share };
   });
+}
+
+/** One bulk order as it was priced: the supplier, and the product each of its lines uses. */
+export interface SuppliedOrder {
+  order: BulkOrder;
+  pick: SupplierPick;
+  /** The product each of the order's lines is priced at, in the order's line order; null where M was typed by hand. */
+  products: (SupplierProduct | null)[];
+}
+
+/**
+ * Prices every bulk material from the closest supplier with a price, with
+ * no clicks: each material is one order for the whole job, each line at the
+ * product the client asked for (or the best fit), and the delivery fee
+ * shared by quantity. A line whose M was typed by hand is left as it is.
+ * Run again on every change, so the material follows the quantities.
+ */
+export function priceFromSuppliers(
+  lines: PriceLine[][],
+  services: ProductionService[],
+  suppliers: Supplier[],
+  site: { lat: number; lng: number; zip: string | null } | null
+): { lines: PriceLine[][]; orders: SuppliedOrder[] } {
+  if (suppliers.length === 0) return { lines, orders: [] };
+  const { orders } = bulkOrders(jobMaterials(lines.map((_, i) => `Area ${i + 1}`), lines, services, []));
+  const next = lines.map((ls) => [...ls]);
+  const supplied: SuppliedOrder[] = [];
+  for (const order of orders) {
+    const pick = pickSupplier(suppliers, order.kind, order.quantity, site);
+    const rec = pick.recommended;
+    if (!rec) continue;
+    const lineOf = (r: MaterialRow) => lines[r.area][r.line];
+    // The order's own choice: what the largest line asked for, else the best fit.
+    const largest = [...order.rows].sort((a, b) => b.quantity - a.quantity)[0];
+    const fallback = bestProduct(rec.products, order.kind, lineOf(largest).prefer);
+    // A line that asked for something gets it; the rest follow the order, so one material goes on the whole job.
+    const products = order.rows.map((r) => {
+      const line = lineOf(r);
+      if (line.supplied === false) return null;
+      return (line.prefer ? bestProduct(rec.products, order.kind, line.prefer) : null) ?? fallback;
+    });
+    // Each product ordered once for its lines, to the next half yard or ton; delivery once for the order.
+    const byProduct = new Map<string, number>();
+    order.rows.forEach((r, i) => {
+      const p = products[i];
+      if (p) byProduct.set(p.id, (byProduct.get(p.id) ?? 0) + r.quantity);
+    });
+    order.rows.forEach((r, i) => {
+      const p = products[i];
+      if (!p) return;
+      const groupYards = byProduct.get(p.id)!;
+      const unit = unitPrice(p, rec.delivery) ?? 0;
+      const share = groupYards > 0 ? r.quantity / groupYards : 0;
+      const material = unit * orderAmount(p, groupYards) * share;
+      const delivery = (rec.delivery?.feeCents ?? 0) * (order.quantity > 0 ? r.quantity / order.quantity : 0);
+      next[r.area][r.line] = { ...next[r.area][r.line], materialCents: Math.round(material + delivery), supplied: true };
+    });
+    supplied.push({ order, pick, products });
+  }
+  return { lines: next, orders: supplied };
 }

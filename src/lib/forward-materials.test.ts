@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { bulkOrders, itemsFor, jobMaterials, purchaseFor, purchaseNoun, splitCost, type InventoryItem } from "@/lib/forward-materials";
+import { bulkOrders, itemsFor, jobMaterials, priceFromSuppliers, purchaseFor, purchaseNoun, splitCost, type InventoryItem } from "@/lib/forward-materials";
+import type { Supplier } from "@/lib/material-suppliers";
 import { PRODUCTION_SERVICES, productionService } from "@/lib/forward-pricing";
 
 const item = (over: Partial<InventoryItem>): InventoryItem => ({ id: "00000000-0000-0000-0000-000000000000", name: "Item", unit: null, imageUrl: null, url: null, coverageSqFt: null, wastePct: 0, ...over });
@@ -90,5 +91,35 @@ describe("materials matched to the inventory", () => {
     expect(splitCost(orders[0], 10001)).toEqual([{ area: 0, line: 0, cents: 5001 }, { area: 1, line: 1, cents: 5000 }]);
     // One small bed stays bought by the bag.
     expect(bulkOrders(jobMaterials(["Zone 1"], [[{ key: "mulch-install", quantity: 0.5, materialCents: 0 }]], PRODUCTION_SERVICES, inventory)).orders).toEqual([]);
+  });
+
+  it("prices bulk materials from the closest supplier on its own, at the colour asked for, delivery shared", () => {
+    const mk = (over: Partial<Supplier>): Supplier => ({ id: "s", name: "S", address: null, lat: null, lng: null, phone: null, website: null, delivers: true, deliveryMinimum: 3, deliveryFees: [], deliveryNote: null, notes: null, sourceUrl: null, checkedOn: null, active: true, products: [], ...over });
+    const p = (id: string, name: string, cents: number) => ({ id, kind: "mulch" as const, name, unit: "yd" as const, priceCents: cents, deliveredPriceCents: null, imageUrl: null, productUrl: null, checkedOn: null });
+    const near = mk({ id: "near", lat: 39.49, lng: -76.4, deliveryFees: [{ town: "Bel Air", zips: ["21014"], feeCents: 3500 }], products: [p("nat", "Natural triple shredded mulch", 3700), p("blk", "Dyed black mulch", 4200)] });
+    const far = mk({ id: "far", lat: 39.7, lng: -76.6, products: [p("cheap", "Cheap mulch", 1000)] });
+    const site = { lat: 39.536, lng: -76.352, zip: "21014" };
+    const lines = [
+      [{ key: "mulch-install", quantity: 6, materialCents: 0, prefer: "black" }],
+      [{ key: "mulch-install", quantity: 4, materialCents: 0 }],
+    ];
+    const { lines: priced, orders } = priceFromSuppliers(lines, PRODUCTION_SERVICES, [far, near], site);
+    expect(orders).toHaveLength(1);
+    expect(orders[0].pick.recommended?.supplier.id).toBe("near");
+    expect(orders[0].products.map((x) => x?.id)).toEqual(["blk", "blk"]);
+    // 10 yd of black at $42, and $35 delivery once: 6/10 and 4/10 of it.
+    expect(priced[0][0]).toMatchObject({ materialCents: Math.round(6 * 4200 + 3500 * 0.6), supplied: true });
+    expect(priced[1][0]).toMatchObject({ materialCents: Math.round(4 * 4200 + 3500 * 0.4), supplied: true });
+
+    // M typed by hand stays; the other line is still priced, and delivery still shared by the order.
+    const typed = priceFromSuppliers([[{ ...lines[0][0], materialCents: 12345, supplied: false }], lines[1]], PRODUCTION_SERVICES, [near], site);
+    expect(typed.lines[0][0].materialCents).toBe(12345);
+    expect(typed.orders[0].products[0]).toBeNull();
+    expect(typed.lines[1][0].supplied).toBe(true);
+
+    // Under the bulk threshold, or with no suppliers, nothing changes.
+    const small = [[{ key: "mulch-install", quantity: 0.5, materialCents: 1750 }]];
+    expect(priceFromSuppliers(small, PRODUCTION_SERVICES, [near], site).lines).toEqual(small);
+    expect(priceFromSuppliers(lines, PRODUCTION_SERVICES, [], site).lines).toBe(lines);
   });
 });

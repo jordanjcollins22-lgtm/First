@@ -119,7 +119,7 @@ export interface SupplierPick {
 }
 
 /** A product's price a unit: delivered when there is a delivery fee and a delivered price, else picked up. */
-function unitPrice(product: SupplierProduct, delivery: DeliveryFee | null): number | null {
+export function unitPrice(product: SupplierProduct, delivery: DeliveryFee | null): number | null {
   if (product.priceCents == null) return null;
   return delivery && product.deliveredPriceCents != null ? product.deliveredPriceCents : product.priceCents;
 }
@@ -263,4 +263,29 @@ export function readSupplier(input: unknown): { ok: true; supplier: SupplierInpu
       products,
     },
   };
+}
+
+/** How much of a product to order for this many yards, in its own unit: yards, or tons for stone sold by the ton, to the next half. */
+export function orderAmount(product: Pick<SupplierProduct, "unit">, yards: number): number {
+  const raw = product.unit === "ton" ? yards * TONS_PER_YARD_OF_STONE : yards;
+  return Math.ceil(raw * 2 - 1e-9) / 2;
+}
+
+/** Base and fill stone, never what a bed is covered with. */
+const NOT_DECORATIVE = /cr-?6|dust|crusher|fill|sand/i;
+
+/**
+ * The product to use from a supplier for what the client asked for: the one
+ * whose name has their choice ("black", "small"), else for a bed of rock a
+ * river rock or #57 rather than base stone, else the cheapest with a price.
+ */
+export function bestProduct(products: SupplierProduct[], kind: SupplierKind, prefer: string | null | undefined): SupplierProduct | null {
+  const priced = products.filter((p) => p.priceCents != null).sort((a, b) => a.priceCents! - b.priceCents!);
+  const want = (prefer ?? "").toLowerCase().trim();
+  if (want) {
+    const match = priced.find((p) => p.name.toLowerCase().includes(want));
+    if (match) return match;
+  }
+  if (kind === "stone") return priced.find((p) => /river|round/i.test(p.name)) ?? priced.find((p) => !NOT_DECORATIVE.test(p.name)) ?? priced[0] ?? null;
+  return priced[0] ?? null;
 }

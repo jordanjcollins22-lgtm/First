@@ -12,6 +12,7 @@ import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { ForwardBreakdown, priceLines, unpricedAreas } from "@/components/proposal/forward-breakdown";
 import type { PriceLine } from "@/lib/forward-pricing";
+import { priceFromSuppliers } from "@/lib/forward-materials";
 import { cn } from "@/lib/utils";
 
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -57,7 +58,12 @@ export function PriceCard({
 }) {
   const [stage, setStage] = useState<"price" | "decline" | "send" | "sent">(startAt ?? item.stage);
   // Priced the forward way: every area's services, which the price follows.
-  const [lines, setLines] = useState<PriceLine[][] | null>(item.forward ? item.forward.map((a) => a.lines) : null);
+  // Still to price: bulk materials priced from the closest supplier straight away, with no clicks.
+  const [lines, setLines] = useState<PriceLine[][] | null>(() => {
+    if (!item.forward) return null;
+    const start = item.forward.map((a) => a.lines);
+    return item.stage === "price" ? priceFromSuppliers(start, item.pricing.services, item.suppliers ?? [], item.site ?? null).lines : start;
+  });
   const forwardCents = lines ? priceLines(item, lines).rCents : null;
   const unpriced = lines ? unpricedAreas(item, lines) : [];
   const [fixedTotal, setTotal] = useState(item.totalCents);

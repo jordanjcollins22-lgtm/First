@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ExternalLink, Images, Plus, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Images, Plus, X } from "lucide-react";
 
 import {
   crewRateCents,
@@ -17,8 +17,8 @@ import {
   type PricingEquation,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
-import { bulkOrders, jobMaterials, purchaseNoun, splitCost, type InventoryItem, type MaterialRow } from "@/lib/forward-materials";
-import { costWith, pickSupplier, type Supplier, type SupplierPick } from "@/lib/material-suppliers";
+import { bulkOrders, jobMaterials, priceFromSuppliers, purchaseNoun, type InventoryItem, type MaterialRow, type SuppliedOrder } from "@/lib/forward-materials";
+import { costWith, pickSupplier, type Supplier, type SupplierPick, type SupplierProduct } from "@/lib/material-suppliers";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { cn } from "@/lib/utils";
 
@@ -50,16 +50,26 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
   const [gallery, setGallery] = useState<{ area: number; index: number } | null>(null);
   const forward = item.forward ?? [];
 
-  const setLine = (area: number, index: number, patch: Partial<PriceLine>) =>
-    onChange(lines.map((ls, a) => (a === area ? ls.map((l, i) => (i === index ? { ...l, ...patch, note: patch.quantity !== undefined || patch.materialCents !== undefined ? null : l.note } : l)) : ls)));
-  const removeLine = (area: number, index: number) => onChange(lines.map((ls, a) => (a === area ? ls.filter((_, i) => i !== index) : ls)));
+  // Bulk materials are priced from the closest supplier on every change, so they follow the quantities with no clicks.
+  const suppliers = item.suppliers ?? [];
+  const site = item.site ?? null;
+  const change = (next: PriceLine[][]) => onChange(priceFromSuppliers(next, services, suppliers, site).lines);
+  const supplied = priceFromSuppliers(lines, services, suppliers, site).orders;
+  const setLine = (area: number, index: number, patch: Partial<PriceLine>) => {
+    // M typed by hand stays as typed, rather than being repriced from the supplier.
+    const typed = patch.materialCents !== undefined && patch.quantity === undefined ? { supplied: false } : {};
+    change(lines.map((ls, a) => (a === area ? ls.map((l, i) => (i === index ? { ...l, ...patch, ...typed, note: patch.quantity !== undefined || patch.materialCents !== undefined ? null : l.note } : l)) : ls)));
+  };
+  const removeLine = (area: number, index: number) => change(lines.map((ls, a) => (a === area ? ls.filter((_, i) => i !== index) : ls)));
+  const setOrder = (rows: { area: number; line: number }[], patch: Partial<PriceLine>) =>
+    change(lines.map((ls, a) => ls.map((l, i) => (rows.some((r) => r.area === a && r.line === i) ? { ...l, ...patch } : l))));
   const addLine = (area: number, key: string) => {
     const service = productionService(key, services);
     if (!service) return;
     const size = Number(String(item.breakdown.areas[area]?.size ?? "").replace(/[^0-9.]/g, "")) || 0;
     const quantity = service.unit === "SF" ? size : service.unit === "job" ? 1 : 0;
     const materialCents = service.materialCentsPerUnit ? Math.round(quantity * service.materialCentsPerUnit) : 0;
-    onChange(lines.map((ls, a) => (a === area ? [...ls, { key, quantity, materialCents, note: quantity === 0 ? "Type how many." : null }] : ls)));
+    change(lines.map((ls, a) => (a === area ? [...ls, { key, quantity, materialCents, note: quantity === 0 ? "Type how many." : null }] : ls)));
   };
 
   return (
@@ -300,21 +310,10 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
 
       <ForwardMaterials
         rows={jobMaterials(item.breakdown.areas.map((a) => a.name), lines, services, item.inventory ?? [])}
-        suppliers={item.suppliers ?? []}
-        site={item.site ?? null}
-        onUse={
-          locked
-            ? undefined
-            : (changes) =>
-                onChange(
-                  lines.map((ls, a) =>
-                    ls.map((l, i) => {
-                      const c = changes.find((x) => x.area === a && x.line === i);
-                      return c ? { ...l, materialCents: c.cents, note: "Material at the supplier's price, delivery in" } : l;
-                    })
-                  )
-                )
-        }
+        suppliers={suppliers}
+        site={site}
+        supplied={supplied}
+        onOrder={locked ? undefined : setOrder}
       />
 
       <JobTotals job={job} eq={eq} />
@@ -384,12 +383,14 @@ function ForwardMaterials({
   rows,
   suppliers,
   site,
-  onUse,
+  supplied,
+  onOrder,
 }: {
   rows: MaterialRow[];
   suppliers: Supplier[];
   site: PriceApproval["site"];
-  onUse?: (changes: { area: number; line: number; cents: number }[]) => void;
+  supplied: SuppliedOrder[];
+  onOrder?: (rows: { area: number; line: number }[], patch: Partial<PriceLine>) => void;
 }) {
   if (rows.length === 0) return null;
   const { orders, rest } = bulkOrders(rows);
@@ -417,8 +418,10 @@ function ForwardMaterials({
                   <SupplierChoice
                     pick={pickSupplier(suppliers, o.kind, o.quantity, site)}
                     hasSite={site != null}
-                    current={o.rows.reduce((sum, r) => sum + r.materialCents, 0)}
-                    onUse={onUse ? (cents) => onUse(splitCost(o, cents)) : undefined}
+                    inUse={new Set((supplied.find((x) => x.order.kind === o.kind)?.products ?? []).flatMap((p) => (p ? [p.id] : [])))}
+                    handTyped={o.rows.filter((r) => supplied.find((x) => x.order.kind === o.kind)?.products[o.rows.indexOf(r)] === null).map((r) => r.areaName)}
+                    onPick={onOrder ? (product) => onOrder(o.rows, { prefer: product.name, supplied: true }) : undefined}
+                    onReprice={onOrder ? () => onOrder(o.rows, { supplied: true }) : undefined}
                   />
                 ) : (
                   <p className="text-sm">
@@ -505,7 +508,23 @@ const miles = (m: number | null) => (m == null ? null : `${m < 10 ? m.toFixed(1)
  * it. A closer supplier we have no price for is named, with its phone, to
  * call; the rest are listed by distance.
  */
-function SupplierChoice({ pick, hasSite, current, onUse }: { pick: SupplierPick; hasSite: boolean; current: number; onUse?: (cents: number) => void }) {
+function SupplierChoice({
+  pick,
+  hasSite,
+  inUse,
+  handTyped,
+  onPick,
+  onReprice,
+}: {
+  pick: SupplierPick;
+  hasSite: boolean;
+  /** The products the price is using now. */
+  inUse: Set<string>;
+  /** Areas whose material cost was typed by hand, so isn't following the supplier. */
+  handTyped: string[];
+  onPick?: (product: SupplierProduct) => void;
+  onReprice?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const rec = pick.recommended;
   const others = pick.all.filter((o) => o !== rec && !pick.closerToCall.includes(o));
@@ -547,15 +566,17 @@ function SupplierChoice({ pick, hasSite, current, onUse }: { pick: SupplierPick;
                       {cost != null && ` · ${qty(rec.amount)} ${rec.amountUnit}${rec.delivery ? ` + ${money(rec.delivery.feeCents)} delivery` : ""} = ${money(cost)}`}
                     </p>
                   </div>
-                  {onUse && cost != null && (
-                    <button
-                      type="button"
-                      onClick={() => onUse(cost)}
-                      disabled={cost === current}
-                      className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-sm font-medium text-primary hover:bg-muted disabled:text-muted-foreground"
-                    >
-                      {cost === current ? "In M" : "Use"}
-                    </button>
+                  {inUse.has(p.id) ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                      <Check className="h-3.5 w-3.5" /> In the price
+                    </span>
+                  ) : (
+                    onPick &&
+                    p.priceCents != null && (
+                      <button type="button" onClick={() => onPick(p)} className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-muted">
+                        Use instead
+                      </button>
+                    )
                   )}
                 </li>
               );
@@ -575,6 +596,16 @@ function SupplierChoice({ pick, hasSite, current, onUse }: { pick: SupplierPick;
         </div>
       ) : (
         <p className="text-sm text-amber-800 dark:text-amber-300">No supplier has a price for this yet.</p>
+      )}
+      {handTyped.length > 0 && (
+        <p className="text-xs text-amber-800 dark:text-amber-300">
+          M was typed by hand on {handTyped.join(", ")}, so it isn&apos;t following the supplier.{" "}
+          {onReprice && (
+            <button type="button" onClick={onReprice} className="font-medium underline underline-offset-2">
+              Price it from the supplier
+            </button>
+          )}
+        </p>
       )}
       {pick.closerToCall.map((o) => (
         <p key={o.supplier.id} className="text-sm text-amber-800 dark:text-amber-300">
