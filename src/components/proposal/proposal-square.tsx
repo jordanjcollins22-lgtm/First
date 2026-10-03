@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 import { approveProposal, sendProposalToClient } from "@/lib/actions/proposal-actions";
+import { EmailHeading, ProposalEmailPreview } from "@/components/proposal/email-preview";
 import { pricedOnCard } from "@/lib/price-approval";
 import type { JobEstimate } from "@/lib/job-estimate";
 import type { JobProposal } from "@/types/domain";
@@ -174,6 +175,12 @@ export function ProposalSquare({
         )}
         {proposal && approved && (
           <div className="mt-4 flex flex-col gap-2">
+            {sendTo && (
+              <>
+                <EmailHeading>The email they&apos;ll get</EmailHeading>
+                <ProposalEmailPreview key={proposal.sent_at ?? "unsent"} jobId={jobId} />
+              </>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Button type="button" variant="outline" asChild className="h-11">
                 <a href={previewHref ?? "#"} target="_blank" rel="noreferrer">
@@ -189,7 +196,7 @@ export function ProposalSquare({
               {sendTo
                 ? proposal.sent_at
                   ? `Sent ${new Date(proposal.sent_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}. Sending again emails ${sendTo} the same link.`
-                  : `Emails ${sendTo} the link, the price and how long it stands, as soon as you press it.`
+                  : `Sends the email above to ${sendTo} as soon as you press it.`
                 : "The client has no email on file. Copy the link from Change it, below, and text it to them."}
             </p>
           </div>

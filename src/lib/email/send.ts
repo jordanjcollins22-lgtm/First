@@ -25,6 +25,31 @@ export interface SendInput {
 }
 
 /**
+ * Who an email on this stream would come from, and where replies go, as the
+ * client's mail app will show it. Null when there is no verified domain and
+ * address yet, which is also when a send would be refused. Only reads.
+ */
+export async function senderFor(organizationId: string, stream: MailStream): Promise<{ from: string; replyTo: string | null } | null> {
+  const admin = createAdminClient();
+  const { data: domain } = await admin
+    .from("email_domains")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("stream", stream)
+    .eq("status", "verified")
+    .maybeSingle();
+  if (!domain) return null;
+  const { data: sender } = await admin
+    .from("email_senders")
+    .select("address, display_name, reply_to")
+    .eq("domain_id", domain.id)
+    .eq("is_default", true)
+    .maybeSingle();
+  if (!sender) return null;
+  return { from: sender.display_name ? `${sender.display_name} <${sender.address}>` : sender.address, replyTo: sender.reply_to };
+}
+
+/**
  * Send one email as the business.
  *
  * Picks the address from the verified domain for that stream, and refuses if

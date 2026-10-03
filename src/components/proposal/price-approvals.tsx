@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { acceptPrice, savePriceDraft, setPrice } from "@/lib/actions/price-approval-actions";
 import { sendProposalToClient } from "@/lib/actions/proposal-actions";
+import { EmailHeading, ProposalEmailPreview } from "@/components/proposal/email-preview";
+import { proposalReadyEmail } from "@/lib/proposal-ready-email";
+import { DEFAULT_VALID_DAYS } from "@/lib/proposal-validity";
 import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
@@ -257,6 +260,32 @@ export function PriceCard({
           <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
             <CheckCircle2 className="h-4 w-4" /> Price accepted. Read it as the client will see it, then send it.
           </p>
+          <EmailHeading>The email they&apos;ll get</EmailHeading>
+          <ProposalEmailPreview
+            key={sendTo ?? "none"}
+            jobId={item.jobId}
+            sample={
+              preview
+                ? {
+                    ok: true,
+                    to: "the client's email",
+                    from: null,
+                    replyTo: null,
+                    ...proposalReadyEmail({
+                      clientName: item.client,
+                      address: item.address,
+                      total: (total ?? 0) / 100,
+                      discount: 0,
+                      validDays: DEFAULT_VALID_DAYS,
+                      link: clientLink ?? "",
+                      businessName: "JS Landscaping",
+                      signedBy: null,
+                    }),
+                  }
+                : undefined
+            }
+          />
+          {item.proposalHref && !preview && <EmailHeading>The proposal the link opens</EmailHeading>}
           {item.proposalHref && !preview && (
             <iframe
               src={`${item.proposalHref}${item.proposalHref.includes("?") ? "&" : "?"}embed=1`}
@@ -274,7 +303,7 @@ export function PriceCard({
             Send to client
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            {sendTo ? `It emails ${sendTo} the link, the price and how long it stands.` : "No email on file, so it can't be emailed. Copy the link and text it to them."}
+            {sendTo ? `It sends the email above to ${sendTo}.` : "No email on file, so it can't be emailed. Copy the link and text it to them."}
           </p>
           {!sendTo && clientLink && (
             <Button type="button" variant="outline" className="h-11" onClick={() => copyLink()}>

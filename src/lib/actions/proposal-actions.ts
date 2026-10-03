@@ -25,6 +25,7 @@ import { staleAfter } from "@/lib/outbound-approval";
 import { proposalReadyEmail } from "@/lib/proposal-ready-email";
 import { proposalPath } from "@/lib/proposal-flow";
 import { outboundBaseUrl } from "@/lib/base-url";
+import { senderFor } from "@/lib/email/send";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
@@ -455,7 +456,7 @@ export async function sendProposalToClient(jobId: string): Promise<SendOutcome> 
   if (!proposal) return { ok: false, error: "There is no proposal on this job." };
   if (proposal.status !== "sent" || !proposal.approved_at) return { ok: false, error: "Say yes to it first." };
 
-  const signedBy = (profile.first_name || profile.full_name || "").trim().split(/\s+/)[0] || null;
+  const signedBy = signerOf(profile);
   const admin = createAdminClient();
   const parked = await writeProposalEmail(jobId, new Date(proposal.approved_at), signedBy, `send:${Date.now()}`).catch((err: unknown) => {
     console.error("[proposal] client email not written:", jobId, err);
@@ -472,6 +473,71 @@ export async function sendProposalToClient(jobId: string): Promise<SendOutcome> 
   return sent.ok ? { ok: true, to: parked.to } : { ok: false, error: sent.message };
 }
 
+/** The name the email is signed with: the first name of whoever presses Send. */
+function signerOf(profile: { first_name?: string | null; full_name?: string | null }): string | null {
+  return (profile.first_name || profile.full_name || "").trim().split(/\s+/)[0] || null;
+}
+
+export type EmailPreview =
+  | { ok: true; to: string; from: string | null; replyTo: string | null; subject: string; text: string }
+  | { ok: false; error: string; noEmail?: boolean };
+
+/**
+ * The email Send to client would send, word for word, before it is sent.
+ * Written by the same code as the real one, signed by whoever is looking,
+ * because they are the one who would press Send. Nothing is saved.
+ */
+export async function previewProposalEmail(jobId: string): Promise<EmailPreview> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin") && !isAccountManager(profile.roles)) {
+    return { ok: false, error: "Only an owner, admin or account manager can send a proposal." };
+  }
+  const email = await composeProposalEmail(jobId, signerOf(profile)).catch(() => null);
+  if (!email) return { ok: false, error: "The client has no email on file. Copy the link and text it to them.", noEmail: true };
+  const sender = await senderFor(email.organizationId, "transactional").catch(() => null);
+  return { ok: true, to: email.to, from: sender?.from ?? null, replyTo: sender?.replyTo ?? null, subject: email.subject, text: email.text };
+}
+
+/**
+ * The client's email for a proposal: who it goes to and what it says. Null
+ * when there is no email on file or no proposal link to put in it.
+ */
+async function composeProposalEmail(jobId: string, signedBy: string | null) {
+  const admin = createAdminClient();
+  const contact = await getJobCustomerContact(jobId);
+  const to = contact?.email?.trim();
+  if (!contact || !to) return null;
+
+  const [{ data: proposal }, { data: org }, { data: property }] = await Promise.all([
+    admin.from("job_proposals").select("token, total_cost, discount_amount, valid_days, expires_at").eq("job_id", jobId).maybeSingle(),
+    admin.from("organizations").select("name").eq("id", contact.organizationId).maybeSingle(),
+    admin.from("jobs").select("property:properties!inner(address)").eq("id", jobId).maybeSingle(),
+  ]);
+  if (!proposal?.token) return null;
+  const address = (property as unknown as { property: { address: string } } | null)?.property.address ?? "";
+  const total = Number(proposal.total_cost ?? 0) - Number(proposal.discount_amount ?? 0);
+  const email = proposalReadyEmail({
+    clientName: contact.customerName,
+    address,
+    total,
+    discount: Number(proposal.discount_amount ?? 0),
+    validDays: isValidDays(proposal.valid_days) ? proposal.valid_days : DEFAULT_VALID_DAYS,
+    link: `${await outboundBaseUrl()}${proposalPath(proposal.token)}`,
+    businessName: org?.name ?? "",
+    signedBy,
+  });
+  return {
+    to,
+    toName: contact.customerName,
+    customerId: contact.customerId,
+    organizationId: contact.organizationId,
+    expiresAt: proposal.expires_at,
+    subject: email.subject,
+    text: email.text,
+  };
+}
+
 /**
  * The client's copy: the email with the link, the price and how long it
  * stands, written into an approval record ready for the sender. Send to
@@ -486,48 +552,29 @@ async function writeProposalEmail(
   sendKey: string
 ): Promise<{ emailed: "written"; to: string; id: string } | { emailed: "no_email" }> {
   const admin = createAdminClient();
-  const contact = await getJobCustomerContact(jobId);
-  const to = contact?.email?.trim();
-  if (!contact || !to) return { emailed: "no_email" };
-
-  const [{ data: proposal }, { data: org }, { data: property }] = await Promise.all([
-    admin.from("job_proposals").select("token, total_cost, discount_amount, valid_days, expires_at").eq("job_id", jobId).maybeSingle(),
-    admin.from("organizations").select("name").eq("id", contact.organizationId).maybeSingle(),
-    admin.from("jobs").select("property:properties!inner(address)").eq("id", jobId).maybeSingle(),
-  ]);
-  if (!proposal?.token) return { emailed: "no_email" };
-  const address = (property as unknown as { property: { address: string } } | null)?.property.address ?? "";
-  const total = Number(proposal.total_cost ?? 0) - Number(proposal.discount_amount ?? 0);
-  const email = proposalReadyEmail({
-    clientName: contact.customerName,
-    address,
-    total,
-    discount: Number(proposal.discount_amount ?? 0),
-    validDays: isValidDays(proposal.valid_days) ? proposal.valid_days : DEFAULT_VALID_DAYS,
-    link: `${await outboundBaseUrl()}${proposalPath(proposal.token)}`,
-    businessName: org?.name ?? "",
-    signedBy,
-  });
+  const email = await composeProposalEmail(jobId, signedBy);
+  if (!email) return { emailed: "no_email" };
+  const to = email.to;
 
   const dedupeKey = `proposal_ready:${jobId}:${approvedAt.toISOString()}:${sendKey}`;
   await queueApproval(admin, {
-    organizationId: contact.organizationId,
+    organizationId: email.organizationId,
     source: "client_reminder",
     kind: "proposal_ready",
     dedupeKey,
-    customerId: contact.customerId,
+    customerId: email.customerId,
     jobId,
     toEmail: to,
-    toName: contact.customerName,
+    toName: email.toName,
     subject: email.subject,
     body: email.text,
     payload: { reference_id: jobId },
-    expiresAt: proposal.expires_at ? new Date(proposal.expires_at) : staleAfter("proposal_ready", approvedAt),
+    expiresAt: email.expiresAt ? new Date(email.expiresAt) : staleAfter("proposal_ready", approvedAt),
   });
   const { data: queued } = await admin
     .from("outbound_approvals")
     .select("id")
-    .eq("organization_id", contact.organizationId)
+    .eq("organization_id", email.organizationId)
     .eq("dedupe_key", dedupeKey)
     .maybeSingle();
   if (!queued) return { emailed: "no_email" };
