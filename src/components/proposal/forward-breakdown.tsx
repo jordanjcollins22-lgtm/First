@@ -65,6 +65,10 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
       {item.breakdown.areas.map((area, a) => {
         const priced = job.areas[a];
         const thumbs = item.areaPhotos[a] ?? [];
+        const pins = forward[a]?.markers ?? [];
+        // Lead with the photo the evaluator pinned the work on.
+        const cover = Math.min(forward[a]?.cover ?? 0, Math.max(0, thumbs.length - 1));
+        const others = thumbs.map((src, i) => ({ src, i })).filter((t) => t.i !== cover);
         return (
           <section key={`${area.name}-${a}`} className="overflow-hidden rounded-xl border border-border">
             <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -81,19 +85,22 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
                 {forward[a]?.notes && <p className="text-sm italic">&ldquo;{forward[a].notes}&rdquo;</p>}
                 {thumbs.length > 0 ? (
                   <>
-                    <button type="button" className="relative block overflow-hidden rounded-lg" onClick={() => setGallery({ area: a, index: 0 })} aria-label={`See all ${thumbs.length} photos of ${area.name}`}>
+                    <button type="button" className="relative block overflow-hidden rounded-lg" onClick={() => setGallery({ area: a, index: cover })} aria-label={`See all ${thumbs.length} photos of ${area.name}`}>
+                      {/* The whole photo, never cropped, so the pins land on the work they were dropped on. */}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={thumbs[0]} alt={`${area.name} on the walkthrough`} className="aspect-[4/3] w-full bg-muted object-cover" loading="lazy" />
+                      <img src={thumbs[cover]} alt={`${area.name} on the walkthrough`} className="block w-full bg-muted" loading="lazy" />
+                      <Pins points={pins[cover] ?? []} />
                       <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-xs font-medium text-white">
                         <Images className="h-3.5 w-3.5" /> {thumbs.length} photo{thumbs.length === 1 ? "" : "s"}
                       </span>
                     </button>
-                    {thumbs.length > 1 && (
+                    {(pins[cover] ?? []).length === 0 && <p className="text-[11px] text-amber-700 dark:text-amber-300">No pin on this photo: it was taken before pins were required.</p>}
+                    {others.length > 0 && (
                       <div className="grid grid-cols-4 gap-1">
-                        {thumbs.slice(1, 5).map((src, i) => (
-                          <button key={src} type="button" onClick={() => setGallery({ area: a, index: i + 1 })} aria-label={`Photo ${i + 2} of ${area.name}`}>
+                        {others.slice(0, 4).map((t) => (
+                          <button key={t.src} type="button" onClick={() => setGallery({ area: a, index: t.i })} aria-label={`Photo ${t.i + 1} of ${area.name}`}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={src} alt="" className="aspect-square w-full rounded-md bg-muted object-cover" loading="lazy" />
+                            <img src={t.src} alt="" className="aspect-square w-full rounded-md bg-muted object-cover" loading="lazy" />
                           </button>
                         ))}
                       </div>
@@ -264,6 +271,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
           title={`${item.breakdown.areas[gallery.area].name} · ${item.breakdown.areas[gallery.area].service}`}
           photos={forward[gallery.area].photos.length > 0 ? forward[gallery.area].photos : (item.areaPhotos[gallery.area] ?? [])}
           thumbs={item.areaPhotos[gallery.area] ?? []}
+          pins={forward[gallery.area].markers ?? []}
           start={gallery.index}
           onClose={() => setGallery(null)}
         />
@@ -366,7 +374,21 @@ function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
 }
 
 /** Every photo of one area, large, one at a time. Arrows or swipe through; Escape closes. */
-function Gallery({ title, photos, thumbs, start, onClose }: { title: string; photos: string[]; thumbs: string[]; start: number; onClose: () => void }) {
+function Gallery({
+  title,
+  photos,
+  thumbs,
+  pins,
+  start,
+  onClose,
+}: {
+  title: string;
+  photos: string[];
+  thumbs: string[];
+  pins: { x: number; y: number }[][];
+  start: number;
+  onClose: () => void;
+}) {
   const [index, setIndex] = useState(Math.min(start, Math.max(0, photos.length - 1)));
   const go = (step: number) => setIndex((i) => (i + step + photos.length) % photos.length);
   useEffect(() => {
@@ -400,8 +422,12 @@ function Gallery({ title, photos, thumbs, start, onClose }: { title: string; pho
           setTouchX(null);
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photos[index]} alt={`${title}, photo ${index + 1}`} className="max-h-full max-w-full object-contain" />
+        {/* Wrapped to the photo's own size, so the pins sit on it at the same fractions. */}
+        <div className="relative inline-block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={photos[index]} alt={`${title}, photo ${index + 1}`} className="block max-h-[calc(100dvh-170px)] max-w-full" />
+          <Pins points={pins[index] ?? []} large />
+        </div>
         {photos.length > 1 && (
           <>
             <button type="button" onClick={() => go(-1)} className="absolute left-2 rounded-full bg-black/60 p-2 hover:bg-black/80" aria-label="Previous photo">
@@ -424,5 +450,25 @@ function Gallery({ title, photos, thumbs, start, onClose }: { title: string; pho
         </div>
       )}
     </div>
+  );
+}
+
+/** The evaluator's pins on a photo: where the work is, at the fractions they were tapped at. */
+function Pins({ points, large = false }: { points: { x: number; y: number }[]; large?: boolean }) {
+  return (
+    <>
+      {points.map((p, i) => (
+        <span
+          key={i}
+          style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+          className={cn(
+            "pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-red-600 font-bold text-white shadow-md",
+            large ? "h-7 w-7 text-xs" : "h-5 w-5 text-[10px]"
+          )}
+        >
+          {i + 1}
+        </span>
+      ))}
+    </>
   );
 }

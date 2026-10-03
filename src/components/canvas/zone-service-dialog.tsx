@@ -66,9 +66,14 @@ function PhotoThumb({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt="" className="h-16 w-16 rounded-md border border-border object-cover" />
       </button>
-      {markerCount > 0 && (
+      {markerCount > 0 ? (
         <span className="absolute -bottom-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
           {markerCount}
+        </span>
+      ) : (
+        // Every photo needs a pin on the work: until it has one, it says so.
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-md bg-amber-500/90 py-0.5 text-center text-[9px] font-semibold text-white">
+          Tap to pin
         </span>
       )}
       <button
@@ -114,8 +119,10 @@ function PhotoMarkerEditor({
     <Dialog open onOpenChange={(next) => !next && onDone(markers)}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Mark areas on this photo</DialogTitle>
-          <DialogDescription>Tap the photo to drop a pin. Tap a pin to remove it.</DialogDescription>
+          <DialogTitle>Tap the area you&apos;re working on</DialogTitle>
+          <DialogDescription>
+            Tap the photo at least once, on the work itself, so whoever prices it and the crew know which part of the picture it is. Tap a pin to remove it.
+          </DialogDescription>
         </DialogHeader>
         <div className="relative select-none">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -142,9 +149,9 @@ function PhotoMarkerEditor({
         </div>
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            {markers.length === 0 ? "No pins yet" : `${markers.length} pin${markers.length === 1 ? "" : "s"}`}
+            {markers.length === 0 ? "Tap the photo to place a pin" : `${markers.length} pin${markers.length === 1 ? "" : "s"}`}
           </p>
-          <Button type="button" size="sm" onClick={() => onDone(markers)}>
+          <Button type="button" size="sm" disabled={markers.length === 0} onClick={() => onDone(markers)}>
             Done
           </Button>
         </div>
@@ -432,6 +439,11 @@ export function ZoneServiceDialog({
   // Freshly-uploaded photos wait here for a yes/no on marking, one at a time.
   const [markPromptQueue, setMarkPromptQueue] = useState<string[]>([]);
   const [markingPath, setMarkingPath] = useState<string | null>(null);
+  // The photo on the pin screen: the one tapped, or else each new photo in
+  // turn as soon as it is in, so a photo isn't finished until its work is pinned.
+  const pinning = markingPath ?? (photoUploading ? null : (markPromptQueue[0] ?? null));
+  // Photos with no pin on them yet: the area can't be saved until each has one.
+  const unpinned = photos.filter((p) => !(photoMarkers[p]?.length));
   const [itemSearch, setItemSearch] = useState("");
   const [showAddNewItem, setShowAddNewItem] = useState(false);
   const widthInputRef = useRef<HTMLInputElement>(null);
@@ -825,29 +837,32 @@ export function ZoneServiceDialog({
     setMarkPromptQueue((prev) => prev.filter((p) => p !== path));
   }
 
-  function dismissMarkPrompt() {
-    setMarkPromptQueue((prev) => prev.slice(1));
-  }
-
   function startMarking(path: string) {
     setMarkPromptQueue((prev) => prev.filter((p) => p !== path));
     setMarkingPath(path);
   }
 
   function finishMarking(markers: Point[]) {
-    if (!markingPath) return;
+    const path = pinning;
+    if (!path) return;
     setPhotoMarkers((prev) => {
       if (markers.length === 0) {
         const next = { ...prev };
-        delete next[markingPath];
+        delete next[path];
         return next;
       }
-      return { ...prev, [markingPath]: markers };
+      return { ...prev, [path]: markers };
     });
+    setMarkPromptQueue((prev) => prev.filter((p) => p !== path));
     setMarkingPath(null);
   }
 
   function handleSave() {
+    if (unpinned.length > 0) {
+      setStepKey("photos");
+      setPhotoError(`Tap the area you're working on in every photo first: ${unpinned.length === 1 ? "1 photo has" : `${unpinned.length} photos have`} no pin.`);
+      return;
+    }
     // Whatever the account manager chose on the job page, untouched. This used
     // to overwrite them with the service's whole tool list on every save,
     // which meant a zone nobody had picked tools for still arrived on the
@@ -1448,26 +1463,12 @@ export function ZoneServiceDialog({
             desk, copy a picture from anywhere and press Paste, or Ctrl+V (Cmd+V on a Mac). Copying it out of
             a document works too.
           </p>
-          {markPromptQueue.length > 0 && (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
-              <p className="text-xs">Mark the areas that need attention on that photo?</p>
-              <div className="flex shrink-0 gap-2">
-                <Button type="button" size="sm" variant="ghost" onClick={dismissMarkPrompt}>
-                  Skip
-                </Button>
-                <Button type="button" size="sm" onClick={() => startMarking(markPromptQueue[0])}>
-                  Mark it
-                </Button>
-              </div>
-            </div>
+          {unpinned.length > 0 && (
+            <p className="rounded-lg border border-amber-400 bg-amber-50/70 p-2.5 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              {unpinned.length === 1 ? "A photo has" : `${unpinned.length} photos have`} no pin yet. Tap {unpinned.length === 1 ? "it" : "each one"} and tap the area you&apos;re working on.
+            </p>
           )}
-          {markingPath && (
-            <PhotoMarkerEditor
-              path={markingPath}
-              initialMarkers={photoMarkers[markingPath] ?? []}
-              onDone={finishMarking}
-            />
-          )}
+          {pinning && <PhotoMarkerEditor key={pinning} path={pinning} initialMarkers={photoMarkers[pinning] ?? []} onDone={finishMarking} />}
         </div>
       </StepShell>
     );

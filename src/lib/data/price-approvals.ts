@@ -84,6 +84,10 @@ export interface ForwardArea {
   notes: string | null;
   /** Its walkthrough photos, large, for looking through them one by one. */
   photos: string[];
+  /** The evaluator's pins on each photo, in the same order: where the work is, as fractions of the picture. */
+  markers: { x: number; y: number }[][];
+  /** The photo to lead with: the first with a pin on it, else the first. */
+  cover: number;
   lines: PriceLine[];
 }
 
@@ -113,6 +117,8 @@ export function forwardAreas(
   return priced.map((z, i) => ({
     notes: z.service!.notes?.trim() || null,
     photos: (z.service!.photos ?? []).map((path) => canvasImageUrl(path, PREVIEW)),
+    markers: (z.service!.photos ?? []).map((path) => z.service!.photoMarkers?.[path] ?? []),
+    cover: Math.max(0, (z.service!.photos ?? []).findIndex((path) => (z.service!.photoMarkers?.[path]?.length ?? 0) > 0)),
     lines: saved ? (saved[i].lines ?? []) : suggested[i],
   }));
 }
