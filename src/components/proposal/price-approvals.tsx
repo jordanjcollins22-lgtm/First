@@ -10,6 +10,7 @@ import { acceptPrice, savePriceDraft, setPrice } from "@/lib/actions/price-appro
 import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } from "@/lib/price-approval";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
+import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
 import { ForwardBreakdown, priceLines, unpricedAreas } from "@/components/proposal/forward-breakdown";
 import type { PriceLine } from "@/lib/forward-pricing";
 import { priceFromSuppliers } from "@/lib/forward-materials";
@@ -65,6 +66,9 @@ export function PriceCard({
     return item.stage === "price" ? priceFromSuppliers(start, item.pricing.services, item.suppliers ?? [], item.site ?? null).lines : start;
   });
   const forwardCents = lines ? priceLines(item, lines).rCents : null;
+  // Wording still to approve, approved here on the card; Accept waits for it.
+  const needsWording = item.wordingToApprove.length > 0;
+  const [wordingDone, setWordingDone] = useState(!needsWording);
   // Saved to the proposal as it is worked on, not approved, so the job page
   // and the proposal show this same price whether or not the wording is done.
   const [draft, setDraft] = useState<"saving" | "saved" | string | null>(null);
@@ -159,15 +163,18 @@ export function PriceCard({
       {/* The wording each area is quoted with is approved or declined on
           the site map before anybody prices it: until then there is
           nothing to accept, and it says so here instead of failing. */}
-      {stage === "price" && item.wordingToApprove.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-sm dark:bg-amber-950/30">
-          <p className="font-semibold text-amber-900 dark:text-amber-200">
-            Approve or decline the wording for {listed(item.wordingToApprove)} on the site map first.
+      {/* The wording each area is quoted with is approved or declined right
+          here, before the price can be accepted: no leaving for the site map. */}
+      {stage === "price" && needsWording && (
+        <div className="flex flex-col gap-2 text-sm">
+          <p className={cn("font-semibold", wordingDone ? "text-emerald-700 dark:text-emerald-300" : "text-amber-900 dark:text-amber-200")}>
+            {wordingDone ? "Wording approved for every area." : `Approve or decline the wording for ${listed(item.wordingToApprove)} before accepting the price.`}
           </p>
-          <p className="text-xs text-muted-foreground">The price can be accepted once every area&apos;s wording is approved or declined.</p>
-          <Link href={item.reviewHref} className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground">
-            Open the site map to approve it
-          </Link>
+          {preview ? (
+            <p className="text-xs text-muted-foreground">On a real job, each area&apos;s recommended wording is shown here to approve or decline.</p>
+          ) : (
+            <ScopeReviewPanel jobId={item.jobId} onSettled={setWordingDone} />
+          )}
         </div>
       )}
 
@@ -179,11 +186,11 @@ export function PriceCard({
 
       {stage === "price" && (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || item.wordingToApprove.length > 0 || unpriced.length > 0} onClick={accept}>
+          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || !wordingDone || unpriced.length > 0} onClick={accept}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
             Accept price
           </Button>
-          <Button type="button" variant="outline" className="h-14 text-base font-semibold" disabled={pending || item.wordingToApprove.length > 0} onClick={() => setStage("decline")}>
+          <Button type="button" variant="outline" className="h-14 text-base font-semibold" disabled={pending || !wordingDone} onClick={() => setStage("decline")}>
             <X className="mr-2 h-5 w-5" /> Decline price
           </Button>
         </div>
