@@ -107,6 +107,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
   // The crew's pay and each service's production rate: what every forward price is worked out from.
   { key: "production-rates", label: "Production Rates", href: "/admin/production-rates" },
+  // The company shirts: the designs, and ordering them by design, colour and size.
+  { key: "shirts", label: "Company Shirts", href: "/admin/shirts" },
 ];
 
 export type TabKey = string;
@@ -155,6 +157,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/mow-orders/funnel":
     "The quick mow funnel scoreboard, opened from the Quick Mow Pipeline. Checks the same tab itself; switching the " +
     "team alerts on or off is checked again for an owner or admin.",
+  "/admin/shirts/[id]":
+    "One shirt order's sheet for the print shop, opened from Company Shirts. Checks the shirts tab itself, " +
+    "and its actions check it again.",
   "/admin/hiring/[id]":
     "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
     "before rating, moving or emailing anyone.",

@@ -143,7 +143,7 @@ export const MODULES: readonly AppModule[] = [
       // Next to Inventory because it is the same question at a bigger size:
       // what do we own, what is it worth, and what is about to need replacing.
       { key: "fleet", label: "Fleet", tabs: ["fleet"] },
-      { key: "team", label: "Team", tabs: ["team"] },
+      { key: "team", label: "Team", tabs: ["team", "shirts"] },
       // Next to Team: who joins it, from the job ads to the interview.
       { key: "hiring", label: "Hiring", tabs: ["hiring"] },
       { key: "services", label: "Services & pricing", tabs: ["services", "team", "production-rates"] },

@@ -4323,6 +4323,45 @@ export interface Database {
         };
         Relationships: [];
       };
+      shirt_orders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          status: string;
+          lines: Json;
+          note: string | null;
+          printer_note: string | null;
+          created_by: string | null;
+          created_at: string;
+          ordered_at: string | null;
+          received_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          status?: string;
+          lines: Json;
+          note?: string | null;
+          printer_note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          ordered_at?: string | null;
+          received_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          status?: string;
+          lines?: Json;
+          note?: string | null;
+          printer_note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          ordered_at?: string | null;
+          received_at?: string | null;
+        };
+        Relationships: [];
+      };
       crew_day_events: {
         Row: {
           id: string;
