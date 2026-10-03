@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRef, useState, useTransition } from "react";
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Loader2, Lock, MapPin, Search } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Loader2, Lock, MapPin, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,6 @@ export function MowForm({
   const [name, setName] = useState(preview?.name ?? "");
   const [phone, setPhone] = useState(preview?.phone ?? "");
   const [email, setEmail] = useState(preview?.email ?? "");
-  const [day, setDay] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, start] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,7 +95,6 @@ export function MowForm({
       if (!result.ok) return setError(result.message);
       setQuote(result);
       setTier(result.tier);
-      setDay(null);
       setStep("price");
     });
   }
@@ -107,10 +105,10 @@ export function MowForm({
 
   function pay() {
     if (!quote || !current) return;
-    if (!day && quote.days.length > 0) return setError("Pick the day you'd like your first mow.");
     setError(null);
     start(async () => {
-      const result = await startMowOrder({ orderId: quote.orderId, tier: current.key, day });
+      // No day picked here: a team member calls to put them on the schedule.
+      const result = await startMowOrder({ orderId: quote.orderId, tier: current.key, day: null });
       if (!result.ok) return setError(result.message);
       window.location.href = result.url;
     });
@@ -250,38 +248,11 @@ export function MowForm({
 
           {current && !quote.overAcre && (
             <>
-              <div className="flex flex-col gap-2">
-                <p className="flex items-center gap-1.5 text-sm font-semibold">
-                  <CalendarDays className="h-4 w-4 text-primary" /> Pick your day
-                </p>
-                {quote.days.length === 0 ? (
-                  <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm">Every day is full for the next two weeks. Pay to hold your spot and we&apos;ll call you with the first opening.</p>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2">
-                    {quote.days.slice(0, 9).map((d) => {
-                      const on = day === d.date;
-                      return (
-                        <button
-                          key={d.date}
-                          type="button"
-                          aria-pressed={on}
-                          onClick={() => setDay(d.date)}
-                          className={`rounded-xl border px-2 py-2 text-center text-sm transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/50"}`}
-                        >
-                          <span className="block font-semibold">{d.label.split(", ")[0]}</span>
-                          <span className="block">{d.label.split(", ")[1]}</span>
-                          {d.spotsLeft <= 3 && <span className={`block text-[11px] ${on ? "" : "text-amber-700"}`}>{d.spotsLeft} left</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <Button type="button" className="h-12 text-base font-semibold" disabled={busy || (quote.days.length > 0 && !day)} onClick={pay}>
+              <Button type="button" className="h-12 text-base font-semibold" disabled={busy} onClick={pay}>
                 {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
-                {day ? `Pay ${current.firstMow} and book ${quote.days.find((d) => d.date === day)?.label ?? "my day"}` : `Pick a day, then pay ${current.firstMow}`}
+                Pay {current.firstMow}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">Secure card payment. A team member will call you shortly to confirm your day.</p>
+              <p className="text-center text-xs text-muted-foreground">Secure card payment. A team member will reach out within 24 hours to get you on the schedule.</p>
             </>
           )}
         </section>

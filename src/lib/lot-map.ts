@@ -333,9 +333,14 @@ export function layoutLot(lot: LotData, width: number, height: number, turn = 0)
 }
 
 /** The satellite photo behind it, from Mapbox, turned to the same bearing. */
+/** The map's credits, shown under a photo from satelliteUrl. */
+export const MAP_CREDIT = "© Mapbox © OpenStreetMap © Maxar";
+
 export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">, token: string): string {
   const [lng, lat] = layout.center;
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x?access_token=${token}`;
+  // No logo or credits printed over the photo: the credits are said under it
+  // instead (MAP_CREDIT), which is what Mapbox asks for when they are off the image.
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x?attribution=false&logo=false&access_token=${token}`;
 }
 
 export function pathOf(points: Px[]): string {

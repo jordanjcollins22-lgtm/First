@@ -12,7 +12,7 @@ export type QuickMowStage = "requested" | "to_call" | "to_schedule" | "scheduled
 
 export const QUICK_MOW_STAGES: { key: QuickMowStage; label: string; blurb: string }[] = [
   { key: "requested", label: "Requested", blurb: "Gave their details and saw a price, not paid yet. Call within 2 minutes while they're still on the page." },
-  { key: "to_call", label: "Paid, call now", blurb: "Paid and picked a day. Call within 2 minutes to confirm it, and send the before-your-mow email." },
+  { key: "to_call", label: "Paid, call now", blurb: "Paid. Call within 2 minutes to put them on the schedule (we promise within 24 hours), and send the before-your-mow email." },
   { key: "to_schedule", label: "Called, to schedule", blurb: "Called, but no day on the calendar yet. Put the mow on it." },
   { key: "scheduled", label: "Scheduled", blurb: "Called and confirmed. A day is set." },
   { key: "mowed", label: "Mowed", blurb: "First mow done." },

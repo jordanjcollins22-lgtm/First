@@ -37,7 +37,7 @@ export default async function MowDonePage({
         <div className="flex items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">
           <Clock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <p className="text-sm">
-            <span className="font-semibold">What happens next:</span> a team member will call you shortly to confirm {order.day ? `your mow on ${order.day}` : "your mowing day"}.
+            <span className="font-semibold">What happens next:</span> a team member will reach out within 24 hours to get you on the schedule.
             {order.phone ? ` Questions before then? Call or text ${order.phone}.` : ""}
           </p>
         </div>
