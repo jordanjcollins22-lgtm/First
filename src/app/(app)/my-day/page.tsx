@@ -56,6 +56,10 @@ import { getEvaluationsToday } from "@/lib/data/evaluations-today";
 import { EvaluationsToday } from "@/components/evaluations/evaluations-today";
 import { getSalesInProgress } from "@/lib/data/sales-progress";
 import { SalesProgress } from "@/components/sales/sales-progress";
+import { getBroughtIn, myBookingLink } from "@/lib/data/brought-in";
+import { BroughtInPanel } from "@/components/crew/brought-in-panel";
+import { outboundBaseUrl } from "@/lib/base-url";
+import { qrSvg } from "@/lib/qr";
 import { isToolsOwner } from "@/lib/tool-editors";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
@@ -1149,6 +1153,13 @@ async function CrewDay({ profile }: { profile: Profile }) {
           events={day.events}
         />
       </div>
+      {/* What they brought in, and the two ways to bring in more: a lead
+          typed in on the spot, and their own link. */}
+      <div className="mt-4">
+        <Suspense fallback={<BlockLoading lines={2} />}>
+          <BroughtInBlock profile={profile} stops={day.stops.map((s) => ({ jobId: s.jobId, name: s.customerName }))} />
+        </Suspense>
+      </div>
       {boards && (boards.recent.length > 0 || boards.allTime.length > 0) && (
         <div className="mt-4">
           <CrewLeaderboard boards={boards} meId={profile.id} compact />
@@ -1156,6 +1167,13 @@ async function CrewDay({ profile }: { profile: Profile }) {
       )}
     </div>
   );
+}
+
+async function BroughtInBlock({ profile, stops }: { profile: Profile; stops: { jobId: string; name: string }[] }) {
+  const baseUrl = await outboundBaseUrl();
+  const [rows, link] = await Promise.all([getBroughtIn(profile.id).catch(() => []), myBookingLink(profile, baseUrl).catch(() => null)]);
+  const qr = link ? await qrSvg(link, 256).catch(() => null) : null;
+  return <BroughtInPanel rows={rows} link={link} qrSvg={qr} stops={stops} />;
 }
 
 /** The work, and only the work: today's stops, directions, on my way. */
