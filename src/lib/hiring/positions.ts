@@ -38,6 +38,8 @@ export interface Position {
   commission: string | null;
   /** Paid by commission alone, with no hourly pay: said plainly, so nobody applies expecting a wage. */
   commissionOnly: boolean;
+  /** What comes with the job besides pay. Maryland job ads must describe it. */
+  benefits: readonly string[];
   schedule: string;
   duties: readonly string[];
   lookingFor: readonly string[];
@@ -110,6 +112,7 @@ export const POSITIONS: readonly Position[] = [
     pay: "$20 an hour",
     commission: "commission on the jobs you complete, coming soon",
     commissionOnly: false,
+    benefits: ["Paid training", "Performance bonuses"],
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
       "Clean up beds, pull weeds, edge, and lay mulch and rock",
@@ -147,6 +150,7 @@ export const POSITIONS: readonly Position[] = [
     pay: "$30 an hour",
     commission: "commission on the jobs you complete, coming soon",
     commissionOnly: false,
+    benefits: ["Paid training", "Performance bonuses"],
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
       "Lead a small crew through each job from load-out to final walkthrough",
@@ -187,6 +191,7 @@ export const POSITIONS: readonly Position[] = [
     pay: null,
     commission: "4% commission on every job you evaluate that sells",
     commissionOnly: true,
+    benefits: ["Flexible schedule", "Performance bonuses"],
     schedule: "Flexible. Visits are booked in time slots during the day, some evenings and Saturdays.",
     duties: [
       "Meet homeowners at their property and walk it with them",
@@ -230,6 +235,7 @@ export const POSITIONS: readonly Position[] = [
     pay: null,
     commission: "7% commission on every job you close",
     commissionOnly: true,
+    benefits: ["Flexible schedule", "Performance bonuses"],
     schedule: "Weekdays, mostly from your phone and computer. Some site visits.",
     duties: [
       "Price evaluations and send proposals from our app",
@@ -272,6 +278,7 @@ export const POSITIONS: readonly Position[] = [
     pay: null,
     commission: "4% commission on every job that books through your link",
     commissionOnly: true,
+    benefits: ["Flexible schedule", "Performance bonuses"],
     schedule: "Work from your phone, any time. As many or as few hours as you like.",
     duties: [
       "Answer local Facebook posts from people asking for yard work, using comments we write for you",

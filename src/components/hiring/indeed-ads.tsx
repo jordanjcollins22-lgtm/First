@@ -40,8 +40,8 @@ export function IndeedAds({ ads }: { ads: Ad[] }) {
               </p>
             )}
             <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-3 font-sans text-sm">{ad.body}</pre>
-            <p className="rounded-lg border border-border px-3 py-2 text-xs">
-              <span className="font-semibold">In Indeed&apos;s pay section:</span> {ad.payFields}
+            <p className="whitespace-pre-line rounded-lg border border-border px-3 py-2 text-xs">
+              <span className="font-semibold">In Indeed&apos;s pay and benefits sections:</span> {ad.payFields}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => copy(`${ad.key}-title`, ad.title)}>

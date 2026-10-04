@@ -49,6 +49,12 @@ export function indeedPayFields(position: Position): string {
   return `Pay: ${hourly}.${position.commission ? " Under supplemental pay, tick Commission pay (the description says it's coming soon)." : ""}`;
 }
 
+/** Indeed's own benefit tick boxes, named as Indeed names them. */
+export function indeedBenefitFields(position: Position): string {
+  const boxes = position.benefits.map((b) => (b === "Performance bonuses" ? "Performance bonus (under supplemental pay)" : b));
+  return `Benefits: tick ${boxes.join(", ")}.`;
+}
+
 export function indeedAd(position: Position, input: AdInput): { title: string; body: string; payFields: string } {
   const bullets = (items: readonly string[]) => items.map((item) => `• ${item}`).join("\n");
   const body = [
@@ -63,6 +69,9 @@ export function indeedAd(position: Position, input: AdInput): { title: string; b
     "Pay",
     payLine(position),
     "",
+    "Benefits",
+    bullets(position.benefits),
+    "",
     "Schedule",
     position.schedule,
     "",
@@ -70,5 +79,5 @@ export function indeedAd(position: Position, input: AdInput): { title: string; b
     `Apply here: ${input.applyUrl}`,
     "It takes about 3 minutes. If you're a fit, you'll be asked to record a short video from your phone (about a minute) so we can meet you before an in-person interview.",
   ].join("\n");
-  return { title: position.title, body, payFields: indeedPayFields(position) };
+  return { title: position.title, body, payFields: `${indeedPayFields(position)}\n${indeedBenefitFields(position)}` };
 }
