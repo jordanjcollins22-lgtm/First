@@ -1,23 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ChevronDown, Copy, Loader2, Plus, Share2, Sparkles } from "lucide-react";
+import { Check, Copy, Loader2, Plus, Share2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { addBroughtInLead } from "@/lib/actions/brought-in-actions";
 import { upcoming, type BroughtInRow } from "@/lib/brought-in";
 import { cn } from "@/lib/utils";
+import { MissionBoard } from "@/components/crew/mission-board";
+import type { MyMissions } from "@/lib/data/missions";
 
 const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-/** The fastest ways to bring a project in, in the order they pay off. */
-const HOW = [
-  "Ask the client you're working for about one more thing you can see: other beds, mulch, edging, shrubs, gutters. Tap Add a lead, then More work.",
-  "Knock on the two houses next door and the three across the street while the crew works: \"We're doing the yard right there. Want a free look at yours while we're here?\" Tap Add a lead, then A neighbor.",
-  "At the final walkthrough, when they're happiest, ask who they know who'd want this, and give them your link.",
-  "Text your link and a before-and-after photo to 10 people you know.",
-  "Answer \"anyone know a landscaper?\" posts in local Facebook groups and Nextdoor with your link.",
-];
 
 /**
  * The projects this person brought in, and the two ways to bring in more:
@@ -29,15 +23,19 @@ export function BroughtInPanel({
   link,
   qrSvg,
   stops,
+  missions,
+  first,
 }: {
   rows: BroughtInRow[];
   link: string | null;
   qrSvg: string | null;
   /** Today's jobs, for adding more work for the client in front of them. */
   stops: { jobId: string; name: string }[];
+  missions: MyMissions;
+  /** Their first name, for the words the missions hand them. */
+  first: string;
 }) {
   const [adding, setAdding] = useState(false);
-  const [showHow, setShowHow] = useState(rows.length === 0);
   const [copied, setCopied] = useState(false);
   const open = upcoming(rows);
   const worth = open.reduce((sum, r) => sum + (r.yours ?? 0), 0);
@@ -124,17 +122,7 @@ export function BroughtInPanel({
         </ul>
       )}
 
-      <button type="button" onClick={() => setShowHow((s) => !s)} className="mt-3 flex w-full items-center justify-between text-sm font-semibold">
-        How to bring in projects, fastest first
-        <ChevronDown className={cn("h-4 w-4 transition-transform", showHow && "rotate-180")} />
-      </button>
-      {showHow && (
-        <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
-          {HOW.map((h) => (
-            <li key={h}>{h}</li>
-          ))}
-        </ol>
-      )}
+      <MissionBoard missions={missions} first={first} link={link} />
     </section>
   );
 }

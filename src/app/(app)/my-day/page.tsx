@@ -58,6 +58,7 @@ import { getSalesInProgress } from "@/lib/data/sales-progress";
 import { SalesProgress } from "@/components/sales/sales-progress";
 import { getBroughtIn, myBookingLink } from "@/lib/data/brought-in";
 import { BroughtInPanel } from "@/components/crew/brought-in-panel";
+import { getMyMissions } from "@/lib/data/missions";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { qrSvg } from "@/lib/qr";
 import { isToolsOwner } from "@/lib/tool-editors";
@@ -1171,9 +1172,14 @@ async function CrewDay({ profile }: { profile: Profile }) {
 
 async function BroughtInBlock({ profile, stops }: { profile: Profile; stops: { jobId: string; name: string }[] }) {
   const baseUrl = await outboundBaseUrl();
-  const [rows, link] = await Promise.all([getBroughtIn(profile.id).catch(() => []), myBookingLink(profile, baseUrl).catch(() => null)]);
+  const [rows, link, missions] = await Promise.all([
+    getBroughtIn(profile.id).catch(() => []),
+    myBookingLink(profile, baseUrl).catch(() => null),
+    getMyMissions(profile.id).catch(() => ({ ready: false, current: null, done: [] })),
+  ]);
   const qr = link ? await qrSvg(link, 256).catch(() => null) : null;
-  return <BroughtInPanel rows={rows} link={link} qrSvg={qr} stops={stops} />;
+  const first = (profile.first_name || profile.full_name || profile.email).trim().split(/\s+/)[0];
+  return <BroughtInPanel rows={rows} link={link} qrSvg={qr} stops={stops} missions={missions} first={first} />;
 }
 
 /** The work, and only the work: today's stops, directions, on my way. */

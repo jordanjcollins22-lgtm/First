@@ -4323,6 +4323,36 @@ export interface Database {
         };
         Relationships: [];
       };
+      team_missions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          category: string;
+          mission_key: string;
+          title: string;
+          goal: number;
+          progress: number;
+          started_at: string;
+          finished_at: string | null;
+          abandoned_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          profile_id: string;
+          category: string;
+          mission_key: string;
+          title: string;
+          goal: number;
+          progress?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          abandoned_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_missions"]["Insert"]>;
+        Relationships: [];
+      };
       shirt_orders: {
         Row: {
           id: string;
