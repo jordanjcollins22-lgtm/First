@@ -90,6 +90,7 @@ export async function sortReadPosts(
         town: verdict.town?.trim().slice(0, 60) || null,
         sort_reason: verdict.reason.trim().slice(0, 160) || null,
         business_id: businessId,
+        pitch: kind === "promotion" ? verdict.pitch ?? "other" : null,
         decision: kind === "promotion" ? "advert" : "read",
         updated_at: now,
       })
@@ -100,6 +101,42 @@ export async function sortReadPosts(
   }
   log.info("agent.posts_sorted", { organizationId, asked: rows.length, sorted, businesses });
   return { sorted, businesses };
+}
+
+/**
+ * The pitch on business adverts kept before the sorter named one: asked in
+ * batches, and only the pitch is written, so nothing else about the post
+ * moves. Cheap when there is nothing to do: one read.
+ */
+export async function pitchUnpitched(organizationId: string, options: { limit?: number; client?: Db } = {}): Promise<number> {
+  if (!isAnthropicConfigured) return 0;
+  const supabase = options.client ?? (await createClient());
+  const { data } = await supabase
+    .from("outreach_seen_posts")
+    .select("id, url, author, group_name, text")
+    .eq("organization_id", organizationId)
+    .eq("kind", "promotion")
+    .is("pitch", null)
+    .order("created_at", { ascending: false })
+    .limit(options.limit ?? BATCH);
+  const rows = ((data ?? []) as Row[]).filter((row) => (row.text ?? "").trim().length > 0);
+  if (rows.length === 0) return 0;
+  const asked: PostToSort[] = rows.map((row) => ({ id: row.id, author: row.author, group: row.group_name, text: row.text ?? "" }));
+  const answer = await askModel(asked, await sortContext(organizationId, supabase), "Every one of these posts is a business-ad. Name each one's pitch.");
+  if (!answer) return 0;
+  const matched = matchSorted(asked, answer);
+  let done = 0;
+  for (const row of rows) {
+    const verdict = matched.get(row.id);
+    if (!verdict) continue;
+    await supabase
+      .from("outreach_seen_posts")
+      .update({ pitch: verdict.pitch ?? "other" })
+      .eq("organization_id", organizationId)
+      .eq("id", row.id);
+    done += 1;
+  }
+  return done;
 }
 
 /**

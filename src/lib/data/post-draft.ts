@@ -61,12 +61,17 @@ export async function draftWaitingPosts(organizationId: string, limit = PER_PASS
       { screenshotPath: row.screenshot_path ?? null, pastedText: row.text ?? "", kind: "comment", ageDays: days },
       { supabase: admin, organizationId, organizationName: org?.name ?? "", roles: [] }
     );
-    const draft = read.ok ? read.draft : null;
+    // A second reading that says it isn't one of our services, or isn't
+    // somebody asking at all, takes it off the board rather than leave a
+    // responder to write "we don't do that, but" under somebody's post.
+    const notOurs = read.ok && (read.kind !== "request" || !read.service);
+    const draft = read.ok && !notOurs ? read.draft : null;
     if (draft) written += 1;
     else refused += 1;
     await admin
       .from("outreach_seen_posts")
       .update({
+        ...(notOurs ? { kind: "other", kind_by: "model", sort_reason: read.ok ? `Not work we do${read.note ? `: ${read.note}` : ""}`.slice(0, 200) : null } : {}),
         drafted_at: new Date().toISOString(),
         draft_comment: draft,
         draft_asked_by: read.ok ? read.askedBy : null,

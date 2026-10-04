@@ -5,6 +5,7 @@ import { getAgentSettings, recordSeen } from "@/lib/data/outreach-agent";
 import {
   ageDaysFromLabel,
   cleanPostText,
+  engagementFrom,
   cleanPostUrl,
   groupKeyFrom,
   isAnonymousAuthor,
@@ -52,6 +53,8 @@ interface IncomingPost {
   /** When it went up, read from the data Facebook keeps behind the post. Exact when there. */
   postedAt?: string | null;
   group?: { url?: string | null; name?: string | null } | null;
+  /** How many reacted, commented and shared when it was read. */
+  engagement?: { reactions?: number | null; comments?: number | null; shares?: number | null } | null;
 }
 
 /** A posting time from the page's data, if it is a real time and not in the future. */
@@ -155,6 +158,7 @@ export async function POST(request: NextRequest) {
         .eq("post_key", textKey)
         .maybeSingle();
       if (earlier) {
+        await keepEngagement(profile.organization_id, { id: earlier.id }, post.engagement, now);
         if (!earlier.url) {
           await (await createClient()).from("outreach_seen_posts").update({ url, updated_at: now.toISOString() }).eq("id", earlier.id);
         }
@@ -188,6 +192,7 @@ export async function POST(request: NextRequest) {
       postedAt: postedAt ?? postedAtFromAge(ageDays, now),
       matchReason: verdict.reason,
     });
+    await keepEngagement(profile.organization_id, id ? { id } : { postKey: key }, post.engagement, now);
     if (id) kept += 1;
     else {
       skipped += 1;
@@ -211,4 +216,25 @@ export async function POST(request: NextRequest) {
   // not wait on it.
   after(() => draftWaitingPosts(profile.organization_id).then(() => undefined, (err) => console.error("drafting failed:", err)));
   return NextResponse.json({ ok: true, actions: [], decided: [], kept, skipped, sorted: sort.sorted, businesses: sort.businesses, moreToRead: false });
+}
+
+/** The latest counts on a post, kept each time it is read. Never in the way of the read. */
+async function keepEngagement(
+  organizationId: string,
+  which: { id: string } | { postKey: string },
+  raw: IncomingPost["engagement"],
+  now: Date
+): Promise<void> {
+  const counts = engagementFrom(raw);
+  if (!counts) return;
+  try {
+    let query = (await createClient())
+      .from("outreach_seen_posts")
+      .update({ ...counts, engagement_at: now.toISOString() })
+      .eq("organization_id", organizationId);
+    query = "id" in which ? query.eq("id", which.id) : query.eq("post_key", which.postKey);
+    await query;
+  } catch (err) {
+    console.error("couldn't keep a post's counts:", err);
+  }
 }

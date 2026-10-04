@@ -22,6 +22,8 @@ import { after } from "next/server";
 import { sweepPosts } from "@/lib/data/post-sweep";
 import { getFinderLive } from "@/lib/data/finder-live";
 import { FinderLiveCard } from "@/components/marketing/finder-live";
+import { getCompetitorSummary } from "@/lib/data/competitor-posts";
+import { CompetitorPostsCard } from "@/components/marketing/competitor-posts";
 import extension from "../../../../../../extension/manifest.json";
 
 /**
@@ -43,7 +45,7 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, toJoin, look, toPick, businesses, redditLook, insights, live] = await Promise.all([
+  const [settings, counts, toJoin, look, toPick, businesses, redditLook, insights, live, competitors] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     groupsToJoin(profile.organization_id).catch(() => []),
@@ -56,6 +58,10 @@ export default async function GroupAgentPage() {
       return null;
     }),
     getFinderLive(profile.organization_id, now).catch(() => null),
+    getCompetitorSummary(profile.organization_id, now).catch((err) => {
+      console.error("Competitor posts failed to load:", err);
+      return null;
+    }),
   ]);
   // Anything read and not sorted yet is sorted once this page is sent, and
   // written for, so it is on Posts to Answer without a button.
@@ -136,6 +142,12 @@ export default async function GroupAgentPage() {
         </p>
         <AgentPicker rows={toPick} />
       </Fold>
+
+      {competitors && (
+        <Fold title="What works for other businesses" count={competitors.total}>
+          <CompetitorPostsCard summary={competitors} />
+        </Fold>
+      )}
 
       <Fold title="Businesses advertising" count={businesses.length}>
         <p className="mb-3 text-xs text-muted-foreground">Kept for subcontracting later, one row per business.</p>

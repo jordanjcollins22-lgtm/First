@@ -246,3 +246,19 @@ describe("settingsForBrowser", () => {
     expect(out.groups.map((g) => g.url)).toEqual([GROUPS_FEED_URL, "https://www.facebook.com/groups/abc/"]);
   });
 });
+
+describe("cleanPostText stops at the comments", () => {
+  it("keeps the post and drops what Facebook put under it", () => {
+    const read = [
+      "Jarrettsville Community",
+      "Angela Hamilton",
+      "We need a dumpster, preferably this week. Who do you recommend? Thanks!",
+      "Shared post",
+      "View more comments",
+      "Edward Rolek",
+      "Humpty Dumpsters",
+      "Comment as Jordan",
+    ].join("\n");
+    expect(cleanPostText(read)).toBe("Jarrettsville Community\nAngela Hamilton\nWe need a dumpster, preferably this week. Who do you recommend? Thanks!");
+  });
+});

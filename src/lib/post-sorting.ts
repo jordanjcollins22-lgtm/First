@@ -47,16 +47,32 @@ export const BusinessSchema = z.object({
   area: z.string().nullable(),
 });
 
+/** The kinds of pitch a business advert makes, for seeing which get a response. */
+export const PITCHES = ["before-after", "deal", "openings", "seasonal", "services-list", "testimonial", "other"] as const;
+export type Pitch = (typeof PITCHES)[number];
+
+export const PITCH_LABELS: Record<Pitch, string> = {
+  "before-after": "Before and after",
+  deal: "Price or deal",
+  openings: "Openings this week",
+  seasonal: "Seasonal (fall cleanup, leaves)",
+  "services-list": "List of services",
+  testimonial: "Review or testimonial",
+  other: "Something else",
+};
+
 export const SortedPostSchema = z.object({
   id: z.string(),
   kind: z.enum(["request", "promotion", "other"]),
-  category: z.enum(["for-us", "other-trade", "business-ad", "hiring", "yard-question", "found", "community"]),
+  category: z.enum(["for-us", "far", "other-trade", "business-ad", "hiring", "yard-question", "found", "community"]),
   /** Our own service name when it is one of ours, otherwise a short name for the work. */
   service: z.string().nullable(),
   town: z.string().nullable(),
   /** A few words on why. */
   reason: z.string(),
   business: BusinessSchema.nullable(),
+  /** For a business-ad: the kind of pitch it makes. */
+  pitch: z.enum(PITCHES).nullable(),
 });
 
 export const SortResultSchema = z.object({
@@ -109,21 +125,23 @@ export function sortSystemPrompt(context: SortContext): string {
     "For each post decide:",
     "",
     '1. "category", exactly one of:',
-    '- "for-us": a person wants to pay someone for work at a home or property that we do or arrange (the lists above, or plainly the same kind of outdoor property work), is still looking, and is not clearly far from our area. Asking who to hire, asking for recommendations, asking for quotes, or describing a yard problem and asking who can fix it all count.',
-    '- "other-trade": a person wants to hire for work we neither do nor arrange (plumbing, roofing, HVAC, electrical, cleaning inside the house, cars, pets, childcare, and so on), or wants a recommendation for a restaurant, shop or other business.',
+    '- "for-us": a homeowner or property owner wants to pay someone for work that is one of the services listed above, is still looking, and the property is in or near our area. Asking who to hire, asking for recommendations, asking for quotes, or describing a yard problem and asking who can fix it all count. The work has to be one of those services: being outdoors, or near a yard, is not enough.',
+    '- "other-trade": a person wants to hire for work that is not one of the services listed above. That includes dumpsters, junk hauling, concrete, steps, porches, decks, fences, pools and pool tile, paving, driveways, tree felling and stump grinding, roofing, gutters, plumbing, HVAC, electrical, cleaning, cars, pets and childcare. Also a recommendation for a restaurant, shop or other business.',
+    '- "far": a request for one of our services at a property clearly outside our area, such as Baltimore City or another county or state named in the post or group.',
     '- "business-ad": somebody advertising their own business, services, availability, products, events or things for sale.',
-    '- "hiring": a business looking for workers, or a person looking for a job.',
+    '- "hiring": a business looking for workers or for a subcontractor crew, or a person looking for a job.',
     '- "yard-question": a lawn, garden or yard question asking for advice to do it themselves, with no sign of wanting to hire anyone.',
     '- "found": the poster already has somebody, says thanks for the recommendations, or the job is done.',
     '- "community": everything else: news, politics, events, lost pets, questions and chat.',
     "",
-    '2. "kind": "request" when the poster wants to pay for work of any trade (for-us and other-trade), "promotion" for a business-ad, and "other" for the rest.',
+    '2. "kind": "request" when the poster wants to pay for work of any trade (for-us, far and other-trade), "promotion" for a business-ad, and "other" for the rest.',
     '3. "service": when category is for-us and the work matches one of our services, that service\'s name exactly as written above; otherwise a short plain name for the work ("Plumbing", "Pizza"), or null for chat.',
     '4. "town": the town or area named in the post or group, or null.',
     '5. "reason": a few words on why, like "wants front beds mulched in Bel Air" or "asking for a roofer".',
     "",
-    'When one post both asks and advertises, decide by who would be paying: the poster paying for work is asking; the poster wanting to be paid is a business-ad. When unsure whether it is for us, say for-us only if it is outdoor property work somebody would pay for.',
+    'When one post both asks and advertises, decide by who would be paying: the poster paying for work is asking; the poster wanting to be paid is a business-ad. When unsure whether it is for us, it is not: say other-trade.',
     "",
+    'For a business-ad only, set "pitch" to the main way it sells: "before-after" (shows or describes a job before and after), "deal" (a price, discount or special), "openings" (spots open, available this week, booking now), "seasonal" (fall cleanup, leaves, spring, snow), "services-list" (mainly a list of what they do), "testimonial" (a customer\'s words or reviews), or "other". For every other category set "pitch" to null.',
     'For a business-ad only, fill in "business" with the details written in the post and nothing else: the business name, the person\'s name, phone, email, website, the services they offer in a few words each, and the towns or area they mention. Use null for anything not written in the post, and an empty list when no services are named. Never invent or guess a phone number, email, or website. For every other category set "business" to null.',
   ];
   if (context.examples.length > 0) {

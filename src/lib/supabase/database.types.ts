@@ -3359,6 +3359,11 @@ export interface Database {
           service: string | null;
           town: string | null;
           sort_reason: string | null;
+          reactions: number | null;
+          comment_count: number | null;
+          share_count: number | null;
+          engagement_at: string | null;
+          pitch: string | null;
           draft_comment: string | null;
           draft_asked_by: string | null;
           draft_service: string | null;

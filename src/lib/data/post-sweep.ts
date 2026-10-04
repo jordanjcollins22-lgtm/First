@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sortReadPosts } from "@/lib/data/post-sorter";
+import { pitchUnpitched, sortReadPosts } from "@/lib/data/post-sorter";
 import { draftWaitingPosts } from "@/lib/data/post-draft";
 
 /**
@@ -29,6 +29,8 @@ export async function sweepPosts(organizationId: string): Promise<{ sorted: numb
       if (result.sorted < 40) break;
     }
     drafted = (await draftWaitingPosts(organizationId)).written;
+    // Adverts kept before the pitch was named get one, a batch at a time.
+    await pitchUnpitched(organizationId, { limit: 30, client: admin });
   } catch (err) {
     console.error("post sweep failed:", err);
   }

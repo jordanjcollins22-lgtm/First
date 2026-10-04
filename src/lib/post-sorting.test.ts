@@ -37,9 +37,9 @@ describe("matchSorted", () => {
   it("keeps only answers for posts that were asked about, first one wins", () => {
     const asked = [{ id: "1", author: null, group: null, text: "a" }, { id: "2", author: null, group: null, text: "b" }];
     const got = matchSorted(asked, [
-      { id: "1", kind: "request", category: "for-us", service: null, town: null, reason: "", business: null },
-      { id: "1", kind: "other", category: "community", service: null, town: null, reason: "", business: null },
-      { id: "9", kind: "promotion", category: "business-ad", service: null, town: null, reason: "", business: null },
+      { id: "1", kind: "request", category: "for-us", service: null, town: null, reason: "", business: null, pitch: null },
+      { id: "1", kind: "other", category: "community", service: null, town: null, reason: "", business: null, pitch: null },
+      { id: "9", kind: "promotion", category: "business-ad", service: null, town: null, reason: "", business: null, pitch: null },
     ]);
     expect(Array.from(got.keys())).toEqual(["1"]);
     expect(got.get("1")?.kind).toBe("request");
@@ -79,5 +79,13 @@ describe("which posts go to the affiliates", () => {
     expect(prompt).toContain("Bel Air, 21014");
     expect(prompt).toContain('"Where can I get fried chicken tonight?" -> not for us (Not related to our work)');
     expect(prompt).toContain('"Need my beds mulched" -> for us');
+  });
+});
+
+describe("far away and other trades stay off the board", () => {
+  it("only a request for our work, near here, is for the board", () => {
+    expect(kindFor({ kind: "request", category: "far" })).toBe("other");
+    expect(kindFor({ kind: "request", category: "other-trade" })).toBe("other");
+    expect(kindFor({ kind: "request", category: "for-us" })).toBe("request");
   });
 });

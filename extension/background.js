@@ -770,6 +770,35 @@ async function scanPosts(keywords, r, asked) {
     return tips.length ? tips[tips.length - 1] : "";
   };
 
+  // How many reacted, commented and shared, from what Facebook writes under
+  // the post and in the labels it gives screen readers. Kept so the app can
+  // see which posts get a response, ours and other businesses'.
+  const countOf = (raw) => {
+    const m = String(raw || "").trim().match(/^([\d.,]+)\s*([KkMm])?$/);
+    if (!m) return null;
+    const n = parseFloat(m[1].replace(/,/g, ""));
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n * (/k/i.test(m[2] || "") ? 1000 : /m/i.test(m[2] || "") ? 1000000 : 1));
+  };
+  const engagementOf = (box) => {
+    const out = { reactions: null, comments: null, shares: null };
+    const lines = (box.innerText || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    lines.forEach((line, i) => {
+      let m;
+      if ((m = line.match(/^all reactions:?\s*([\d.,]+[KkMm]?)?$/i))) out.reactions ??= countOf(m[1] || lines[i + 1]);
+      else if ((m = line.match(/^([\d.,]+[KkMm]?)\s+comments?$/i))) out.comments ??= countOf(m[1]);
+      else if ((m = line.match(/^([\d.,]+[KkMm]?)\s+shares?$/i))) out.shares ??= countOf(m[1]);
+    });
+    for (const el of box.querySelectorAll("[aria-label]")) {
+      const label = (el.getAttribute("aria-label") || "").trim();
+      let m;
+      if (out.comments == null && (m = label.match(/^([\d.,]+[KkMm]?)\s+comments?$/i))) out.comments = countOf(m[1]);
+      else if (out.shares == null && (m = label.match(/^([\d.,]+[KkMm]?)\s+shares?$/i))) out.shares = countOf(m[1]);
+      else if (out.reactions == null && (m = label.match(/^(?:all reactions|like)[:\s]+([\d.,]+[KkMm]?)\b/i))) out.reactions = countOf(m[1]);
+    }
+    return out;
+  };
+
   const readVisible = async () => {
     expand();
     const boxes = outermost().filter((el) => !done.has(el));
@@ -849,7 +878,7 @@ async function scanPosts(keywords, r, asked) {
           if (candidate && (!group || candidate !== group.name)) author = candidate;
         }
       }
-      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, postedAt: data.createdAt, group, matched });
+      byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, postedAt: data.createdAt, group, matched, engagement: engagementOf(box) });
     }
   };
 

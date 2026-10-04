@@ -312,14 +312,21 @@ export const DECISION_LABEL: Record<Decision, string> = {
  * of one or two characters, are dropped.
  */
 export function cleanPostText(text: string): string {
-  return (text ?? "")
-    .split("\n")
-    .map((line) => line.trim())
+  const lines = (text ?? "").split("\n").map((line) => line.trim());
+  // Everything after the post itself is Facebook's: the share line, the
+  // comments under it and the box to write one. Read as part of the post,
+  // somebody else's answer looked like the question.
+  const end = lines.findIndex((line) => POST_END.test(line));
+  return (end >= 0 ? lines.slice(0, end) : lines)
     .filter((line) => line.length > 2 && !/^facebook$/i.test(line) && !/^(like|comment|share|reply|follow|join|·)$/i.test(line))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/** A line that only comes after a post: where its comments and buttons start. */
+const POST_END =
+  /^(shared post|view (more|all|previous) comments?|view \d+ (more )?(comments?|replies)|most relevant|all comments|newest|write a (public )?comment|comment as \S.*|all reactions:?.*|\d+ comments?|\d+ shares?|like\s*comment\s*share)$/i;
 
 /**
  * A name for a post that has no link: its group and its first words.
@@ -513,4 +520,13 @@ export function normaliseGroupUrl(url: string): string | null {
   const match = parsed.pathname.match(/^\/groups\/([^/?#]+)/);
   if (!match) return null;
   return `https://www.facebook.com/groups/${match[1]}/`;
+}
+
+/** How many reacted, commented and shared, as the browser counted them. Null when it counted nothing. */
+export function engagementFrom(raw: unknown): { reactions: number | null; comment_count: number | null; share_count: number | null } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 10_000_000 ? Math.round(v) : null);
+  const out = { reactions: n(r.reactions), comment_count: n(r.comments), share_count: n(r.shares) };
+  return out.reactions == null && out.comment_count == null && out.share_count == null ? null : out;
 }
