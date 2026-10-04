@@ -47,6 +47,7 @@ import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
 import { countOpenPosts } from "@/lib/data/post-board";
+import { AFFILIATE_TUTORIAL_KEY } from "@/lib/affiliate-tutorial";
 import { listBoardJobs } from "@/lib/data/job-board";
 import { needsScheduling } from "@/lib/job-board";
 import { checkTabAccess } from "@/lib/data/access";
@@ -731,6 +732,36 @@ async function ToScheduleBlock() {
   );
 }
 
+/**
+ * Answering posts, for crew and anybody on trial who can: always there,
+ * not only when posts are waiting, so the way in is never hidden. Points at
+ * the one-minute tutorial until they have been through it.
+ */
+async function CommentsBlock() {
+  const { allowed } = await checkTabAccess("posts-to-answer").catch(() => ({ allowed: false }));
+  if (!allowed) return null;
+  const organizationId = await getCurrentOrganizationId().catch(() => null);
+  if (!organizationId) return null;
+  const [waiting, { data: auth }] = await Promise.all([
+    countOpenPosts(organizationId).catch(() => 0),
+    (await createClient()).auth.getUser(),
+  ]);
+  const tutorialDone = Boolean(auth.user?.user_metadata?.[AFFILIATE_TUTORIAL_KEY]);
+  return (
+    <Link href="/admin/outreach/posts" className="block rounded-2xl border border-primary/40 bg-primary/5 p-4 hover:bg-primary/10">
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="font-semibold">Answer posts, earn 4%</span>
+        <span className="text-sm font-semibold text-primary">{waiting > 0 ? `${waiting} waiting` : "Open"}</span>
+      </span>
+      <span className="mt-1 block text-xs text-muted-foreground">
+        {tutorialDone
+          ? "Neighbors asking for yard work. Take one and a comment is written for you with your own link; you post it from your own Facebook."
+          : "Start here: a one-minute walkthrough shows you how it works, then you can answer your first post."}
+      </span>
+    </Link>
+  );
+}
+
 async function PostsToAnswerBlock() {
   const { allowed } = await checkTabAccess("posts-to-answer").catch(() => ({ allowed: false }));
   if (!allowed) return null;
@@ -1154,6 +1185,11 @@ async function CrewDay({ profile }: { profile: Profile }) {
           events={day.events}
         />
       </div>
+      <div className="mt-4">
+        <Suspense fallback={null}>
+          <CommentsBlock />
+        </Suspense>
+      </div>
       {/* What they brought in, and the two ways to bring in more: a lead
           typed in on the spot, and their own link. */}
       <div className="mt-4">
@@ -1192,6 +1228,19 @@ async function TrialDay({ profile }: { profile: Profile }) {
   return (
     <div className="mx-auto max-w-md">
       <TodayBoard stops={day.stops} events={day.events} personName={profile.full_name || profile.email} leaveBlockedBy={null} />
+      <div className="mt-4">
+        <Suspense fallback={null}>
+          <CommentsBlock />
+        </Suspense>
+      </div>
+      {/* Somebody on trial who also brings work in: their projects, their link and the mission board. */}
+      {profile.is_affiliate && (
+        <div className="mt-4">
+          <Suspense fallback={<BlockLoading lines={2} />}>
+            <BroughtInBlock profile={profile} stops={day.stops.map((s) => ({ jobId: s.jobId, name: s.customerName }))} />
+          </Suspense>
+        </div>
+      )}
       {/* What they have earned and not yet been paid. On the day, where they
           look, so "how much am I owed" never needs asking. */}
       {owed.total > 0 && (
