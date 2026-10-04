@@ -5,6 +5,8 @@ import { systemStepNumbers } from "@/lib/client-message-sequence";
 import { SYSTEM_FLOW } from "@/lib/system-flow";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { MessagesJourney } from "@/components/messaging/messages-journey";
+import { getStageRoster } from "@/lib/data/stage-roster";
+import { StageRosterPanel } from "@/components/messaging/stage-roster-panel";
 
 /**
  * Every automated email and text a client gets, in the order they get them,
@@ -24,5 +26,22 @@ export default async function MessagesJourneyPage({ searchParams }: { searchPara
   const square = stepKey ? SYSTEM_FLOW.flatMap((stage) => stage.squares).find((sq) => sq.key === stepKey) : null;
   const step = square && messages.some((m) => m.square === square.key) ? { key: square.key, number: systemStepNumbers().get(square.key) ?? null, title: square.title } : null;
 
-  return <MessagesJourney messages={messages} businessName={businessName} fromEmail={fromEmail} step={step} />;
+  // Opened from a step: everybody at that step now, where they are in its messages, and what's next.
+  const roster = step
+    ? await getStageRoster(step.key, messages.filter((m) => m.square === step.key)).catch((err) => {
+        console.error("Stage roster failed to load:", err);
+        return null;
+      })
+    : null;
+
+  return (
+    <>
+      {roster && step && (
+        <div className="mx-auto max-w-6xl px-4 pt-6">
+          <StageRosterPanel roster={roster} stepTitle={step.title} />
+        </div>
+      )}
+      <MessagesJourney messages={messages} businessName={businessName} fromEmail={fromEmail} step={step} />
+    </>
+  );
 }
