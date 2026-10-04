@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { bookingDestination } from "@/lib/outreach-links";
 import { classifyAgent, countsAsOpen } from "@/lib/click-agent";
+import { carryAdParams } from "@/lib/ad-click";
 
 /**
  * Every handed-out link comes through here.
@@ -82,7 +83,10 @@ export async function GET(
       );
     }
 
-    return NextResponse.redirect(destination, 302);
+    // An ad's click id rides along, so the booking can be traced to the ad.
+    const onward = new URL(destination);
+    carryAdParams(request.nextUrl.searchParams, onward.searchParams);
+    return NextResponse.redirect(onward.toString(), 302);
   } catch (err) {
     console.error("tracked link failed:", err);
     return fallback;

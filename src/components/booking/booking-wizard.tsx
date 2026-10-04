@@ -6,6 +6,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, Map
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { readAdClick, type AdClick } from "@/lib/ad-click";
 import { cn } from "@/lib/utils";
 import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
 import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
@@ -219,6 +220,13 @@ export function BookingWizard({
       })
       .catch(() => {});
   }, [organizationId, variant, referralCode, linkRef, preview]);
+
+  // The ad they came from, if any. Kept for the tab, because a landing page
+  // can send them here without the click id on the address.
+  const adClickRef = useRef<AdClick | null>(null);
+  useEffect(() => {
+    adClickRef.current = rememberedAdClick();
+  }, []);
 
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -460,6 +468,7 @@ export function BookingWizard({
           bookingVariant: variant,
           addressEntry,
           visitId: visitIdRef.current,
+          adClick: adClickRef.current,
           notes: service ? `Asked about ${service} in the post we answered.` : "",
           // Not asked any more: the pre-evaluation form covers what they want.
           budgetRange: "Not sure yet",
@@ -984,4 +993,20 @@ export function BookingWizard({
       </div>
     </div>
   );
+}
+
+/** The ad click on this page's address, or the one this tab arrived with earlier. */
+function rememberedAdClick(): AdClick | null {
+  const KEY = "booking-ad-click";
+  try {
+    const now = readAdClick(window.location.search, document.cookie);
+    if (now) {
+      window.sessionStorage.setItem(KEY, JSON.stringify(now));
+      return now;
+    }
+    const kept = window.sessionStorage.getItem(KEY);
+    return kept ? readAdClick(new URLSearchParams(JSON.parse(kept) as Record<string, string>).toString(), document.cookie) : readAdClick("", document.cookie);
+  } catch {
+    return null;
+  }
 }

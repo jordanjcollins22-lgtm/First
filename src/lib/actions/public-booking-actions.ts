@@ -20,6 +20,8 @@ import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
 import { ensureClientAccount } from "@/lib/data/client-accounts";
+import { bookingSource, cleanAdClick, type AdClick } from "@/lib/ad-click";
+import { recordBookingAdClick } from "@/lib/data/meta-report";
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -45,6 +47,8 @@ export interface SubmitPublicBookingInput {
   bookingVariant?: AddressVariant | null;
   addressEntry?: AddressEntry | null;
   visitId?: string | null;
+  /** The ad they tapped to get here, read off the page's address in their browser. */
+  adClick?: AdClick | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -133,6 +137,7 @@ export async function submitPublicBooking(
   }
 
   const admin = createAdminClient();
+  const adClick = cleanAdClick(input.adClick);
 
   const { data: org, error: orgError } = await admin
     .from("organizations")
@@ -221,7 +226,13 @@ export async function submitPublicBooking(
   } else {
     const { data: customer, error: customerError } = await admin
       .from("customers")
-      .insert({ name: `${firstName} ${lastName}`, email, phone, organization_id: input.organizationId })
+      .insert({
+        name: `${firstName} ${lastName}`,
+        email,
+        phone,
+        organization_id: input.organizationId,
+        source: bookingSource(adClick, await knownReferralCode(admin, input.organizationId, input.referralCode)),
+      })
       .select()
       .single();
     if (customerError) throw customerError;
@@ -304,6 +315,19 @@ export async function submitPublicBooking(
     );
     if (requestedError) throw requestedError;
   }
+
+  // Which ad it came from, kept with the job, and the booking told to Meta.
+  // Never in the way of the booking.
+  const who = await requestHeaders();
+  await recordBookingAdClick(admin, {
+    jobId: job.id,
+    organizationId: input.organizationId,
+    click: adClick,
+    email,
+    phone,
+    ip: who.ip,
+    userAgent: who.userAgent,
+  }).catch((err) => log.warn("booking.meta_failed", { jobId: job.id, error: err instanceof Error ? err.message : String(err) }));
 
   // They've just become a client — take them off the cold-prospect list now
   // rather than at the next nightly sweep.
@@ -420,4 +444,14 @@ async function knownReferralCode(
     .eq("code", wanted)
     .maybeSingle();
   return data?.code ?? null;
+}
+
+/** The visitor's address and browser, sent with the Meta event so it can match them. */
+async function requestHeaders(): Promise<{ ip: string | null; userAgent: string | null }> {
+  try {
+    const list = await headers();
+    return { ip: list.get("x-forwarded-for")?.split(",")[0]?.trim() || null, userAgent: list.get("user-agent")?.slice(0, 400) || null };
+  } catch {
+    return { ip: null, userAgent: null };
+  }
 }

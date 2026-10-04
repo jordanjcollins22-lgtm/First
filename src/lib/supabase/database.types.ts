@@ -4323,6 +4323,44 @@ export interface Database {
         };
         Relationships: [];
       };
+      job_ad_clicks: {
+        Row: {
+          job_id: string;
+          organization_id: string;
+          fbc: string | null;
+          fbp: string | null;
+          gclid: string | null;
+          gbraid: string | null;
+          wbraid: string | null;
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
+          client_ip: string | null;
+          client_user_agent: string | null;
+          meta_lead_reported_at: string | null;
+          meta_purchase_reported_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          job_id: string;
+          organization_id: string;
+          fbc?: string | null;
+          fbp?: string | null;
+          gclid?: string | null;
+          gbraid?: string | null;
+          wbraid?: string | null;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
+          client_ip?: string | null;
+          client_user_agent?: string | null;
+          meta_lead_reported_at?: string | null;
+          meta_purchase_reported_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_ad_clicks"]["Insert"]>;
+        Relationships: [];
+      };
       team_missions: {
         Row: {
           id: string;

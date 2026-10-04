@@ -17,6 +17,7 @@ import { sendOutbound } from "@/lib/email/outbound";
 import { env } from "@/lib/env";
 import { collectEmail, isOfflineMethod, offlineConfirmation, offlineThreadNote, type OfflineMethod } from "@/lib/collect-payment";
 import { notifyJobTeam } from "@/lib/notifications";
+import { reportSaleToMeta } from "@/lib/data/meta-report";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
 import { startProposalCheckout } from "@/lib/proposal-checkout";
@@ -90,6 +91,9 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     await createAndSendInvoice(proposal.job_id, proposal.id, owed).catch((err) => {
       console.error("invoice at signing failed:", err);
     });
+
+    // A sale, for the ads to learn from. Off until Meta is connected.
+    await reportSaleToMeta(admin, proposal.job_id, Math.round(owed * 100)).catch(() => {});
   }
 
   // Every screen, not just this job and the list. The pipeline reads the
