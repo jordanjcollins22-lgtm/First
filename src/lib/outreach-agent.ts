@@ -86,6 +86,9 @@ export const DEFAULT_AREA_WORDS = [
 
 export const GROUPS_FEED_URL = "https://www.facebook.com/groups/feed/";
 
+/** The account's own home feed: friends, pages and groups together, where most of the asking turns up. */
+export const HOME_FEED_URL = "https://www.facebook.com/";
+
 /** Facebook's post search for one phrase. */
 export function searchUrl(phrase: string): string {
   return `https://www.facebook.com/search/posts?q=${encodeURIComponent(phrase.trim())}`;
@@ -469,12 +472,20 @@ export function looksLikeBlock(text: string): boolean {
 export function settingsForBrowser(
   settings: AgentSettings
 ): Omit<AgentSettings, "pausedUntil" | "pauseReason"> & { feedUrl: string; searches: { phrase: string; url: string }[] } {
+  // The feed the browser stays on longest is the home feed, where most of
+  // the asking turns up. The groups feed comes round in the rotation like a
+  // listed group, so both are read. Listed groups still only when switched on.
+  const feeds = settings.sources.feed !== false;
+  const groups = [
+    ...(feeds ? [{ url: GROUPS_FEED_URL, name: "your groups feed" }] : []),
+    ...(settings.sources.list !== false ? settings.groups : []),
+  ];
   return {
-    groups: settings.groups,
-    sources: settings.sources,
+    groups,
+    sources: { ...settings.sources, list: groups.length > 0 },
     searchPhrases: settings.searchPhrases,
     areaWords: settings.areaWords,
-    feedUrl: GROUPS_FEED_URL,
+    feedUrl: HOME_FEED_URL,
     searches: settings.searchPhrases.map((phrase) => ({ phrase, url: searchUrl(phrase) })),
     keywords: settings.keywords,
     dailyCap: settings.dailyCap,

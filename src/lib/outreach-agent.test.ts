@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SETTINGS,
+  GROUPS_FEED_URL,
+  HOME_FEED_URL,
+  settingsForBrowser,
   ageDaysFromLabel,
   allowance,
   cleanPostText,
@@ -227,5 +230,19 @@ describe("normaliseGroupUrl", () => {
     expect(normaliseGroupUrl("https://m.facebook.com/groups/12345/")).toBe("https://www.facebook.com/groups/12345/");
     expect(normaliseGroupUrl("https://nextdoor.com/g/abc")).toBeNull();
     expect(normaliseGroupUrl("facebook")).toBeNull();
+  });
+});
+
+describe("settingsForBrowser", () => {
+  const base = { ...DEFAULT_SETTINGS, groups: [{ url: "https://www.facebook.com/groups/abc/", name: "Abc" }] };
+  it("stays on the home feed and brings the groups feed round", () => {
+    const out = settingsForBrowser({ ...base, sources: { feed: true, search: true, list: false } });
+    expect(out.feedUrl).toBe(HOME_FEED_URL);
+    expect(out.groups.map((g) => g.url)).toEqual([GROUPS_FEED_URL]);
+    expect(out.sources.list).toBe(true);
+  });
+  it("keeps listed groups only when they are switched on", () => {
+    const out = settingsForBrowser({ ...base, sources: { feed: true, search: false, list: true } });
+    expect(out.groups.map((g) => g.url)).toEqual([GROUPS_FEED_URL, "https://www.facebook.com/groups/abc/"]);
   });
 });
