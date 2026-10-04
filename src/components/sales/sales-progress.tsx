@@ -19,7 +19,6 @@ export function SalesProgress({ sales }: { sales: SaleInProgress[] }) {
   }
   const open = sales.filter((s) => !s.stage.outcome);
   const won = sales.filter((s) => s.stage.outcome === "won");
-  const lost = sales.filter((s) => s.stage.outcome === "lost").length;
   const waitingCents = open.reduce((sum, s) => sum + (s.totalCents ?? 0), 0);
   const needYou = open.filter((s) => s.stage.issues.length > 0).length;
   return (
@@ -28,7 +27,6 @@ export function SalesProgress({ sales }: { sales: SaleInProgress[] }) {
         {open.length} out{waitingCents > 0 ? ` · ${money(waitingCents)} waiting` : ""}
         {needYou > 0 ? ` · ${needYou} need you` : ""}
         {won.length > 0 ? ` · ${won.length} sold this week` : ""}
-        {lost > 0 ? ` · ${lost} declined this week` : ""}
       </p>
       <ul className="flex flex-col gap-3">
         {sales.map((s) => (

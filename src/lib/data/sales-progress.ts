@@ -3,8 +3,9 @@ import { salesStage, type SalesStage } from "@/lib/sales-progress";
 
 /**
  * Sales in progress, for the owner and the account managers: every proposal
- * between the walkthrough and the client's answer, plus the answers from the
- * last week, each with where it has got to. Read from what is already
+ * between the walkthrough and the client's answer, plus the sales from the
+ * last week, each with where it has got to. Declined proposals are left off:
+ * there is nothing left to move on them. Read from what is already
  * recorded: the proposal, the client's opens and their messages.
  */
 
@@ -47,10 +48,10 @@ export async function getSalesInProgress(viewer: { id: string; seesAll: boolean 
     .select(
       "id, job_id, status, total_cost, discount_amount, approved_at, sent_at, responded_at, expires_at, jobs!inner(status, evaluation_submitted_at, properties(address, customers(name, account_manager_id)))"
     )
-    .or(`status.in.(draft,needs_approval,sent),responded_at.gte.${since}`);
+    .or(`status.in.(draft,needs_approval,sent),and(status.eq.accepted,responded_at.gte.${since})`);
 
   const rows = ((data ?? []) as unknown as Row[]).filter(
-    (r) => r.jobs && r.jobs.status !== "cancelled" && (viewer.seesAll || r.jobs.properties?.customers?.account_manager_id === viewer.id)
+    (r) => r.jobs && r.jobs.status !== "cancelled" && r.status !== "declined" && (viewer.seesAll || r.jobs.properties?.customers?.account_manager_id === viewer.id)
   );
   if (rows.length === 0) return [];
 
