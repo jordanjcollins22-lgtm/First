@@ -20,6 +20,8 @@ import { PostInsightsCard } from "@/components/marketing/post-insights";
 import { Download } from "lucide-react";
 import { after } from "next/server";
 import { sweepPosts } from "@/lib/data/post-sweep";
+import { getFinderLive } from "@/lib/data/finder-live";
+import { FinderLiveCard } from "@/components/marketing/finder-live";
 import extension from "../../../../../../extension/manifest.json";
 
 /**
@@ -41,7 +43,7 @@ export default async function GroupAgentPage() {
   if (!profile) return null;
 
   const now = new Date();
-  const [settings, counts, toJoin, look, toPick, businesses, redditLook, insights] = await Promise.all([
+  const [settings, counts, toJoin, look, toPick, businesses, redditLook, insights, live] = await Promise.all([
     getAgentSettings(profile.organization_id),
     agentCounts(profile.organization_id, now),
     groupsToJoin(profile.organization_id).catch(() => []),
@@ -53,6 +55,7 @@ export default async function GroupAgentPage() {
       console.error("Post insights failed to load:", err);
       return null;
     }),
+    getFinderLive(profile.organization_id, now).catch(() => null),
   ]);
   // Anything read and not sorted yet is sorted once this page is sent, and
   // written for, so it is on Posts to Answer without a button.
@@ -73,6 +76,8 @@ export default async function GroupAgentPage() {
           never comments.
         </p>
       </header>
+
+      {live && <FinderLiveCard initial={live} />}
 
       <section className="rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
