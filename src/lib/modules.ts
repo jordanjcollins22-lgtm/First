@@ -106,6 +106,7 @@ export const MODULES: readonly AppModule[] = [
       { key: "pipeline", label: "Pipeline", tabs: ["pipeline"], blurb: "Every opportunity, and what is holding it up." },
       { key: "leads", label: "Leads", tabs: ["leads"], blurb: "People being worked toward an evaluation." },
       { key: "proposals", label: "Proposals", tabs: ["proposals", "invoices"], blurb: "What we offered, and what came back." },
+      { key: "win-back", label: "Win back", tabs: ["proposals"], blurb: "Declined proposals, offered again as a smaller Phase 1." },
       { key: "clients", label: "Clients", tabs: ["contacts"], blurb: "The contact book." },
       { key: "mows", label: "Quick mow pipeline", tabs: ["mow-orders"], blurb: "Requests from the quick mow page, from a price seen to a lawn mowed." },
     ],

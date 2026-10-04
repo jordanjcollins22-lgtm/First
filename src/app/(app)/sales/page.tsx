@@ -17,6 +17,8 @@ import { EvaluationsToday } from "@/components/evaluations/evaluations-today";
 import { isOwnerLevel } from "@/lib/roles";
 import { getPriceApprovals } from "@/lib/data/price-approvals";
 import { PriceQueue } from "@/components/proposal/price-queue";
+import { getWinBack } from "@/lib/data/win-back";
+import { WinBack } from "@/components/sales/win-back";
 
 /**
  * Selling, in the order it happens.
@@ -48,6 +50,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         ...(pipeline ? { today: <EvaluationsTodayTab price={price ?? null} />, pipeline: <PipelinePage /> } : {}),
         ...(leads ? { leads: <LeadsPage /> } : {}),
         ...(proposals ? { proposals: <ProposalsPage /> } : {}),
+        ...(proposals ? { "win-back": <WinBackTab /> } : {}),
         ...(clients ? { clients: <ContactsPage /> } : {}),
         ...(mows ? { mows: <MowOrdersPage /> } : {}),
       }}
@@ -81,4 +84,18 @@ async function EvaluationsTodayTab({ price }: { price: string | null }) {
       {evaluations ? <EvaluationsToday evaluations={evaluations} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load today&apos;s evaluations. Try again in a moment.</p>}
     </>
   );
+}
+
+/** Declined proposals, each with a way to offer the most important part first. */
+async function WinBackTab() {
+  const [profile, rows] = await Promise.all([
+    getCurrentProfile(),
+    getWinBack().catch((err) => {
+      console.error("Win back failed to load:", err);
+      return null;
+    }),
+  ]);
+  if (!rows) return <p className="text-sm text-muted-foreground">Only owners, admins and account managers see this.</p>;
+  const sender = (profile?.full_name || "").trim().split(/\s+/)[0] || "the team";
+  return <WinBack rows={rows} sender={sender} />;
 }
