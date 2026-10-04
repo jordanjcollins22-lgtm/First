@@ -54,6 +54,8 @@ import { getProjectsToday } from "@/lib/data/projects-today";
 import { ProjectsToday } from "@/components/projects/projects-today";
 import { getEvaluationsToday } from "@/lib/data/evaluations-today";
 import { EvaluationsToday } from "@/components/evaluations/evaluations-today";
+import { getSalesInProgress } from "@/lib/data/sales-progress";
+import { SalesProgress } from "@/components/sales/sales-progress";
 import { isToolsOwner } from "@/lib/tool-editors";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { ApprovalsPanel } from "@/components/messaging/approvals-panel";
@@ -789,6 +791,10 @@ async function OwnersDay({ profile }: { profile: Profile }) {
       <Suspense fallback={<BlockLoading lines={3} />}>
         <EvaluationsTodayBlock profile={profile} />
       </Suspense>
+      {/* Between the walkthrough and the project: every proposal on its way to a yes or a no. */}
+      <Suspense fallback={<BlockLoading lines={3} />}>
+        <SalesBlock profile={profile} />
+      </Suspense>
       <Suspense fallback={<BlockLoading lines={3} />}>
         <ProjectsTodayBlock profile={profile} refresh={false} />
       </Suspense>
@@ -806,6 +812,20 @@ async function EvaluationsTodayBlock({ profile }: { profile: Profile }) {
     <section className="mb-6">
       <h2 className="mb-2 text-lg font-bold">Evaluations today</h2>
       <EvaluationsToday evaluations={evaluations} />
+    </section>
+  );
+}
+
+async function SalesBlock({ profile }: { profile: Profile }) {
+  const sales = await getSalesInProgress({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+    console.error("Sales in progress failed to load:", err);
+    return null;
+  });
+  if (!sales) return null;
+  return (
+    <section className="mb-6">
+      <h2 className="mb-2 text-lg font-bold">Sales</h2>
+      <SalesProgress sales={sales} />
     </section>
   );
 }
