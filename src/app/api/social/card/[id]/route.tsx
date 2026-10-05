@@ -1,4 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- drawn into a PNG by ImageResponse, not a page */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 
@@ -60,7 +62,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const [before, after] = await Promise.all([photoUrl(admin, post.before_photo_id), photoUrl(admin, post.after_photo_id)]);
   const style = post.card_style === "split" && before && after ? "split" : post.card_style === "brand" || !after ? "brand" : "photo";
-  const logo = `${request.nextUrl.origin}/logo-mark.png`;
+  const [bold, logoData] = await Promise.all([
+    readFile(join(process.cwd(), "assets/fonts/Montserrat-ExtraBold.ttf")),
+    readFile(join(process.cwd(), "public/logo-mark.png"), "base64"),
+  ]);
+  const logo = `data:image/png;base64,${logoData}`;
   const hook = (post.hook ?? "").trim();
   const name = org?.name ?? "JS Landscaping MD";
   const phone = org?.business_phone ?? "";
@@ -68,7 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const brandBar = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "28px 48px", background: GREEN, color: "white" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-        <img alt="" src={logo} width={64} height={64} style={{ borderRadius: 14, background: "white" }} />
+        <img alt="" src={logo} width={64} height={64} />
         <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}>{name}</div>
       </div>
       <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}>{phone}</div>
@@ -82,9 +88,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   );
 
   let picture;
+  const font = { fontFamily: "Montserrat" } as const;
   if (style === "split") {
     picture = (
-      <div style={{ display: "flex", flexDirection: "column", width: "100%", height: H, background: DARK }}>
+      <div style={{ ...font, display: "flex", flexDirection: "column", width: "100%", height: H, background: DARK }}>
         <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
           <div style={{ display: "flex", position: "relative", width: W, height: 470 }}>
             <img alt="" src={before!} width={W} height={470} style={{ objectFit: "cover" }} />
@@ -101,7 +108,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   } else if (style === "photo") {
     picture = (
-      <div style={{ display: "flex", position: "relative", width: W, height: H, background: DARK }}>
+      <div style={{ ...font, display: "flex", position: "relative", width: W, height: H, background: DARK }}>
         <img alt="" src={after!} width={W} height={H} style={{ objectFit: "cover", position: "absolute", top: 0, left: 0 }} />
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", position: "absolute", top: 0, left: 0, width: W, height: H, backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(0,0,0,0.85) 82%)" }}>
           <div style={{ display: "flex", padding: "0 48px 40px", color: "white", fontSize: 72, fontWeight: 800, lineHeight: 1.1 }}>{hook}</div>
@@ -111,7 +118,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   } else {
     picture = (
-      <div style={{ display: "flex", flexDirection: "column", width: W, height: H, background: `linear-gradient(160deg, ${GREEN} 0%, ${DARK} 100%)`, color: "white" }}>
+      <div style={{ ...font, display: "flex", flexDirection: "column", width: W, height: H, background: `linear-gradient(160deg, ${GREEN} 0%, ${DARK} 100%)`, color: "white" }}>
         <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", padding: "0 80px" }}>
           <div style={{ display: "flex", fontSize: 96, fontWeight: 800, lineHeight: 1.08 }}>{hook}</div>
           <div style={{ display: "flex", marginTop: 40, fontSize: 40, opacity: 0.85 }}>Harford County, Maryland</div>
@@ -124,6 +131,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return new ImageResponse(picture, {
     width: W,
     height: H,
+    fonts: [{ name: "Montserrat", data: bold, weight: 800, style: "normal" }],
     headers: { "cache-control": "public, max-age=300, s-maxage=300" },
   });
 }

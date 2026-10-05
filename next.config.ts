@@ -39,6 +39,11 @@ function imageHosts(): { protocol: "https"; hostname: string; pathname: string }
 }
 
 const nextConfig: NextConfig = {
+  // The social post pictures are drawn with a font and the logo read from
+  // disk, which the bundler cannot see on its own.
+  outputFileTracingIncludes: {
+    "/api/social/card/*": ["./assets/fonts/**", "./public/logo-mark.png"],
+  },
   images: {
     remotePatterns: imageHosts(),
     // Small screens only: the card is never wider than a phone.
