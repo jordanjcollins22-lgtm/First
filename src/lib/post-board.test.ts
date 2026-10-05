@@ -156,3 +156,26 @@ describe("one comment per person per post", () => {
     expect(alreadyAnswered([answer("1", "jace", "posted")], "jordan", "copy-a", onPost)).toBeNull();
   });
 });
+
+describe("boardOrder", () => {
+  it("puts the newest on Facebook first, not the newest found", async () => {
+    const { boardOrder } = await import("@/lib/post-board");
+    const now = new Date("2026-10-05T16:00:00Z");
+    const posts = [
+      { id: "found-now-posted-2d", posted_at: "2026-10-03T16:00:00Z", created_at: "2026-10-05T15:59:00Z" },
+      { id: "posted-20min", posted_at: "2026-10-05T15:40:00Z", created_at: "2026-10-05T15:45:00Z" },
+      { id: "no-time-found-1h", posted_at: null, created_at: "2026-10-05T15:00:00Z" },
+      { id: "posted-9d", posted_at: "2026-09-26T16:00:00Z", created_at: "2026-10-05T15:58:00Z" },
+      { id: "no-time-found-now", posted_at: null, created_at: "2026-10-05T15:59:30Z" },
+      { id: "posted-5h", posted_at: "2026-10-05T11:00:00Z", created_at: "2026-10-05T11:30:00Z" },
+    ];
+    expect([...posts].sort((a, b) => boardOrder(a, b, now)).map((p) => p.id)).toEqual([
+      "posted-20min",
+      "posted-5h",
+      "found-now-posted-2d",
+      "no-time-found-now",
+      "no-time-found-1h",
+      "posted-9d",
+    ]);
+  });
+});

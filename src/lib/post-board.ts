@@ -132,6 +132,31 @@ export function ageNow(ageDaysWhenRead: number | null, readAt: string, now: Date
   return (ageDaysWhenRead ?? 0) + since;
 }
 
+/** How recent a post has to be on Facebook to go ahead of the ones with no time. */
+export const NEWEST_FIRST_DAYS = 3;
+
+/**
+ * The order posts come up in: newest on Facebook first, not newest found.
+ * A post the finder only just read can be weeks old, and the one most
+ * likely to turn into work is the one that went up a few minutes ago.
+ *
+ * Posts from the last few days, newest first; then the ones that showed no
+ * time, newest found first; then older ones.
+ */
+export function boardOrder(
+  a: { posted_at: string | null; created_at: string },
+  b: { posted_at: string | null; created_at: string },
+  now: Date
+): number {
+  const tier = (p: { posted_at: string | null }) =>
+    !p.posted_at ? 1 : now.getTime() - new Date(p.posted_at).getTime() <= NEWEST_FIRST_DAYS * 86_400_000 ? 0 : 2;
+  const ta = tier(a);
+  const tb = tier(b);
+  if (ta !== tb) return ta - tb;
+  if (ta === 1) return b.created_at.localeCompare(a.created_at);
+  return new Date(b.posted_at as string).getTime() - new Date(a.posted_at as string).getTime();
+}
+
 /** Whether the post is still worth answering at all. */
 export function stillFresh(ageDaysWhenRead: number | null, readAt: string, now: Date): boolean {
   return ageNow(ageDaysWhenRead, readAt, now) <= BOARD_MAX_AGE_DAYS;

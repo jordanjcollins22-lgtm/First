@@ -89,9 +89,16 @@ export const GROUPS_FEED_URL = "https://www.facebook.com/groups/feed/";
 /** The account's own home feed: friends, pages and groups together, where most of the asking turns up. */
 export const HOME_FEED_URL = "https://www.facebook.com/";
 
-/** Facebook's post search for one phrase. */
+/**
+ * Facebook's "Recent posts" switch on a post search, as the search page
+ * writes it into the address: newest first, instead of the "top" posts it
+ * picks by default, which are often weeks old and long since answered.
+ */
+export const RECENT_POSTS_FILTER = btoa(JSON.stringify({ "recent_posts:0": JSON.stringify({ name: "recent_posts", args: "" }) }));
+
+/** Facebook's post search for one phrase, newest posts first. */
 export function searchUrl(phrase: string): string {
-  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(phrase.trim())}`;
+  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(phrase.trim())}&filters=${encodeURIComponent(RECENT_POSTS_FILTER)}`;
 }
 
 export const DEFAULT_SETTINGS: AgentSettings = {

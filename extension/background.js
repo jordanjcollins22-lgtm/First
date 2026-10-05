@@ -768,6 +768,18 @@ async function scanPosts(keywords, r, asked) {
   // hovered. Only for posts about the work, and only so many a look: each
   // one is a short wait.
   let hovered = 0;
+  // Words that are a post's time: "5h", "3d", "Just now", "Yesterday at
+  // 3:15 PM", "October 3 at 9:00 AM", "Friday, September 26, 2026 at 1:04 PM".
+  const timeish = (label) => {
+    const t = String(label || "").replace(/\s+/g, " ").trim();
+    if (!t || t.length > 60) return false;
+    return (
+      /^\d{1,2}\s?(m|h|d|w|y|min|mins|hr|hrs)$/i.test(t) ||
+      /^(just now|today|yesterday)\b/i.test(t) ||
+      /^(\w+day,?\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b/i.test(t)
+    );
+  };
+
   const hoverForDate = async (a) => {
     if (hovered >= (r.timeHoverMax ?? 12)) return "";
     hovered += 1;
@@ -871,10 +883,15 @@ async function scanPosts(keywords, r, asked) {
       if (byUrl.has(key) || memory.sent.has(key)) continue;
       memory.sent.add(key);
 
-      const ageLabel = permalink
-        ? (visibleLabel(permalink) || permalink.getAttribute("aria-label") || permalink.innerText || "").trim().slice(0, 40)
+      // The post's time is a link of its own under the poster's name. In a
+      // group it is the post link; on a search page the post link is often
+      // another one, so the link whose words read as a time is looked for
+      // first, and the post link is the fallback.
+      const timeAnchor = links.find((a) => timeish(visibleLabel(a)) || timeish(a.getAttribute("aria-label"))) ?? permalink ?? null;
+      const ageLabel = timeAnchor
+        ? (visibleLabel(timeAnchor) || timeAnchor.getAttribute("aria-label") || timeAnchor.innerText || "").trim().slice(0, 40)
         : "";
-      const postedLabel = permalink && matched ? await hoverForDate(permalink) : "";
+      const postedLabel = timeAnchor && matched && !data.createdAt ? await hoverForDate(timeAnchor) : "";
       // The header: the group's name, then the poster's. On a group's own
       // page the group is the page, so the first named link is the poster.
       const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);

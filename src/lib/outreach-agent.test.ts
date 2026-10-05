@@ -220,7 +220,9 @@ describe("groups and mentions", () => {
   });
 
   it("builds a search link", () => {
-    expect(searchUrl("lawn care Bel Air MD")).toBe("https://www.facebook.com/search/posts?q=lawn%20care%20Bel%20Air%20MD");
+    expect(searchUrl("lawn care Bel Air MD")).toBe(
+      "https://www.facebook.com/search/posts?q=lawn%20care%20Bel%20Air%20MD&filters=eyJyZWNlbnRfcG9zdHM6MCI6IntcIm5hbWVcIjpcInJlY2VudF9wb3N0c1wiLFwiYXJnc1wiOlwiXCJ9In0%3D"
+    );
   });
 });
 

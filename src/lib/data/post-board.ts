@@ -9,6 +9,7 @@ import type { Platform } from "@/lib/social-finder";
 import {
   BOARD_MAX_AGE_DAYS,
   ageNow,
+  boardOrder,
   groupSamePosts,
   isPostLink,
   onePerPerson,
@@ -162,7 +163,7 @@ function oneRowPerPost<T extends { id: string; url: string; post_key?: string | 
   });
 }
 
-/** The board as one person sees it, newest first. */
+/** The board as one person sees it, newest on Facebook first. */
 export async function getPostBoard(
   organizationId: string,
   profileId: string,
@@ -179,7 +180,7 @@ export async function getPostBoard(
   // The same post kept twice shows once, with everybody's answers to either.
   return oneRowPerPost(posts, answers)
     .filter(({ row, answers: list }) => isPostLink(row.url) || list.some((a) => a.profileId === profileId))
-    .sort((a, b) => b.row.created_at.localeCompare(a.row.created_at))
+    .sort((a, b) => boardOrder(a.row, b.row, now))
     .map(({ row, answers: list }) => boardPost(row, list, profileId, now, viewer));
 }
 
