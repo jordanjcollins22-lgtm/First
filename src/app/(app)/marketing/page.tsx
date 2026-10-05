@@ -16,6 +16,8 @@ import { attributionReport } from "@/lib/data/attribution";
 import { getBookingTest } from "@/lib/data/booking-test";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
+import { LeadSourcesPanel } from "@/components/marketing/lead-sources-panel";
+import { listLeadSources } from "@/lib/data/lead-sources";
 import { PropertyManagers } from "@/components/marketing/property-managers";
 import { getPmBoard } from "@/lib/data/pm-board";
 
@@ -84,18 +86,25 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
 async function AttributionTab() {
   const profile = await getCurrentProfile();
   const owner = isOwnerLevel(profile?.roles ?? []);
-  const [report, bookingTest] = await Promise.all([
+  const [report, bookingTest, leads] = await Promise.all([
     attributionReport().catch((err) => {
       console.error("Attribution failed to load:", err);
       return null;
     }),
     // The booking page's own test, the owner's to read.
     owner ? getBookingTest().catch(() => null) : Promise.resolve(null),
+    // Every lead and where it came from, first on the tab.
+    listLeadSources().catch((err) => {
+      console.error("Lead sources failed to load:", err);
+      return null;
+    }),
   ]);
+  const sources = leads ? <LeadSourcesPanel leads={leads} now={new Date().toISOString()} /> : null;
   const test = bookingTest ? <BookingTestCard test={bookingTest} /> : null;
   if (!report) {
     return (
       <div className="space-y-6">
+        {sources}
         <p className="text-sm text-muted-foreground">The attribution could not be worked out just now.</p>
         {test}
       </div>
@@ -103,6 +112,7 @@ async function AttributionTab() {
   }
   return (
     <div className="space-y-6">
+      {sources}
       <AttributionPanel totals={report.totals} health={report.health} jobs={report.jobs} />
       {test}
     </div>
