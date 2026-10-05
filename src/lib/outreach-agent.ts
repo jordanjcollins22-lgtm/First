@@ -86,8 +86,24 @@ export const DEFAULT_AREA_WORDS = [
 
 export const GROUPS_FEED_URL = "https://www.facebook.com/groups/feed/";
 
-/** The account's own home feed: friends, pages and groups together, where most of the asking turns up. */
-export const HOME_FEED_URL = "https://www.facebook.com/";
+/**
+ * The account's own home feed: friends, pages and groups together, where
+ * most of the asking turns up. Facebook's Feeds view, newest first, rather
+ * than the home page's pick of what it thinks is interesting, which shows
+ * posts from days ago between the new ones.
+ */
+export const HOME_FEED_URL = "https://www.facebook.com/?filter=all&sk=h_chr";
+
+/** A listed group sorted by new posts, the way its "New posts" sort writes it, instead of "Most relevant". */
+export function newestFirstGroupUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("sorting_setting", "CHRONOLOGICAL");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
 
 /**
  * Facebook's "Recent posts" switch on a post search, as the search page
@@ -486,13 +502,16 @@ export function looksLikeBlock(text: string): boolean {
 export function settingsForBrowser(
   settings: AgentSettings
 ): Omit<AgentSettings, "pausedUntil" | "pauseReason"> & { feedUrl: string; searches: { phrase: string; url: string }[] } {
+  // Everything is read newest first: the goal is the post that went up a
+  // few minutes ago. An older one passed on the way is still kept.
   // The feed the browser stays on longest is the home feed, where most of
   // the asking turns up. The groups feed comes round in the rotation like a
   // listed group, so both are read. Listed groups still only when switched on.
   const feeds = settings.sources.feed !== false;
   const groups = [
     ...(feeds ? [{ url: GROUPS_FEED_URL, name: "your groups feed" }] : []),
-    ...(settings.sources.list !== false ? settings.groups : []),
+    // Each listed group opened on its newest posts.
+    ...(settings.sources.list !== false ? settings.groups.map((g) => ({ ...g, url: newestFirstGroupUrl(g.url) })) : []),
   ];
   return {
     groups,

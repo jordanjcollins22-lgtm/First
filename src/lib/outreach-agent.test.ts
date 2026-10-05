@@ -20,6 +20,7 @@ import {
   mentionComment,
   mentionFromComment,
   searchUrl,
+  newestFirstGroupUrl,
   looksLikeBlock,
   matchesKeywords,
   nextDelaySeconds,
@@ -245,7 +246,13 @@ describe("settingsForBrowser", () => {
   });
   it("keeps listed groups only when they are switched on", () => {
     const out = settingsForBrowser({ ...base, sources: { feed: true, search: false, list: true } });
-    expect(out.groups.map((g) => g.url)).toEqual([GROUPS_FEED_URL, "https://www.facebook.com/groups/abc/"]);
+    expect(out.groups.map((g) => g.url)).toEqual([GROUPS_FEED_URL, "https://www.facebook.com/groups/abc/?sorting_setting=CHRONOLOGICAL"]);
+  });
+  it("reads everything newest first", () => {
+    expect(HOME_FEED_URL).toBe("https://www.facebook.com/?filter=all&sk=h_chr");
+    expect(newestFirstGroupUrl("https://www.facebook.com/groups/abc/?ref=share")).toBe(
+      "https://www.facebook.com/groups/abc/?ref=share&sorting_setting=CHRONOLOGICAL"
+    );
   });
 });
 
