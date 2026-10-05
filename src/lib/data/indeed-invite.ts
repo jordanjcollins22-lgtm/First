@@ -6,7 +6,7 @@ import { sendOutbound } from "@/lib/email/outbound";
 import type { ReceivedEmail } from "@/lib/email/resend";
 import { applyInvite, readIndeedNotice, type IndeedMail } from "@/lib/hiring/indeed-notice";
 import { positionFor } from "@/lib/hiring/positions";
-import { senderAddress } from "@/lib/inbound-email";
+import { htmlToText, senderAddress } from "@/lib/inbound-email";
 import { log, maskEmail } from "@/lib/log";
 import { notifyTeamMember } from "@/lib/notifications";
 import { TOOLS_OWNER_EMAILS } from "@/lib/tool-editors";
@@ -46,7 +46,7 @@ export async function listIndeedInvites(limit = 30): Promise<IndeedInviteRow[]> 
   }));
 }
 
-export type IndeedOutcome = "sent" | "no_address" | "repeat" | "failed" | "duplicate" | "gmail_code";
+export type IndeedOutcome = "sent" | "no_address" | "repeat" | "failed" | "duplicate" | "gmail_code" | "passed_on";
 
 /** A person who applied for one of our jobs is written to once a month at most. */
 const REPEAT_DAYS = 30;
@@ -80,8 +80,12 @@ export async function handleIndeedMail(
   if (!/indeed\.com$/.test(from) && !TOOLS_OWNER_EMAILS.includes(from)) return null;
   const notice = readIndeedNotice(mail);
   if (!notice) {
-    if (/indeed\.com$/.test(from)) log.info("indeed.not_an_application", { emailId, subject: (email.subject ?? "").slice(0, 120) });
-    return null;
+    if (!/indeed\.com$/.test(from)) return null;
+    // Anything else Indeed sends here (confirming this address, a team
+    // invite, a round-up) goes on to the owner, so none of it is lost.
+    log.info("indeed.not_an_application", { emailId, subject: (email.subject ?? "").slice(0, 120) });
+    await passOn(organizationId, email);
+    return "passed_on";
   }
   const position = positionFor(notice.position);
   if (!position) return null;
@@ -154,4 +158,21 @@ async function tellOwners(admin: Admin, organizationId: string, body: string, de
   await Promise.all(
     (owners ?? []).map((owner) => notifyTeamMember(owner.id, "hiring_alert", body, { dedupeKey, overridesKindPreference: true }).catch(() => false))
   );
+}
+
+/** An email Indeed sent the app that isn't an application, on to the owner's inbox with its links kept. */
+async function passOn(organizationId: string, email: ReceivedEmail): Promise<void> {
+  const withLinks = (email.html ?? "").replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, label: string) => {
+    const words = label.replace(/<[^>]+>/g, "").trim();
+    return words ? `${words} (${href})` : href;
+  });
+  const body = (email.text?.trim() || htmlToText(withLinks)).slice(0, 20000);
+  const sent = await sendOutbound({
+    organizationId,
+    to: TOOLS_OWNER_EMAILS[0],
+    subject: `Indeed sent the hiring inbox: ${email.subject ?? "(no subject)"}`,
+    text: `This came from Indeed to hiring@send.jslandscapingmd.com. It isn't an application, so the app passed it on to you.\n\n----------\n\n${body}`,
+    fromName: "JS Landscaping app",
+  });
+  if (!sent.ok) log.warn("indeed.pass_on_failed", { error: sent.message });
 }
