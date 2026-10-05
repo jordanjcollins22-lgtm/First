@@ -728,6 +728,7 @@ export default async function JobPage({
         proposalHref={proposal?.token ? proposalPath(proposal.token) : null}
         hasSiteMap={photoZones.length > 0}
         photoCount={photos.filter((photo) => photo.kind !== "issue").length}
+        managerView={!!viewer && canRunJobs(viewer.roles)}
       />
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />

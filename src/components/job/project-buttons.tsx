@@ -12,17 +12,20 @@ export function ProjectButtons({
   proposalHref,
   hasSiteMap,
   photoCount,
+  managerView = false,
 }: {
   jobId: string;
   /** The client's own copy of the proposal. Null until one exists. */
   proposalHref: string | null;
   hasSiteMap: boolean;
   photoCount: number;
+  /** Whoever runs jobs gets the whole crew sheet at once; the crew get theirs one area at a time. */
+  managerView?: boolean;
 }) {
   const buttons = [
     { key: "proposal", label: "Proposal", icon: FileText, href: proposalHref, external: true, empty: "Not built yet" },
     { key: "site-map", label: "Site map", icon: Map, href: hasSiteMap ? `/jobs/${jobId}/site-map` : null, external: false, empty: "Not drawn yet" },
-    { key: "crew-sheet", label: "Crew sheet", icon: ClipboardList, href: hasSiteMap ? `/jobs/${jobId}/work-order` : null, external: false, empty: "Needs the site map" },
+    { key: "crew-sheet", label: "Crew sheet", icon: ClipboardList, href: hasSiteMap ? `/jobs/${jobId}/${managerView ? "crew-overview" : "work-order"}` : null, external: false, empty: "Needs the site map" },
     {
       key: "photos",
       label: "Progress photos",

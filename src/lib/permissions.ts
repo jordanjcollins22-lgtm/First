@@ -242,6 +242,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The crew's sheet for one job, at its own URL so anybody can check what the crew will be " +
     "looking at. Guarded by requireJobAccess like the job page itself, it shows the work in a job, " +
     "and whoever can open the job can see that.",
+  "/jobs/[jobId]/crew-overview":
+    "The manager's crew sheet: every area of one job at once, staged in the order the work goes, with " +
+    "where each is up to. Guarded by requireJobAccess like the crew sheet, and anybody who does not run " +
+    "jobs is sent to the crew's own sheet instead. No money: it is built from the same work order.",
   "/jobs/[jobId]/site-map":
     "The finished site map for one job, read only: each area, what it gets, its materials and, for " +
     "people who may see job money, what it costs. Guarded by requireJobAccess like the job page, and " +
