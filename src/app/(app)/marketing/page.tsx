@@ -16,6 +16,8 @@ import { attributionReport } from "@/lib/data/attribution";
 import { getBookingTest } from "@/lib/data/booking-test";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
+import { PropertyManagers } from "@/components/marketing/property-managers";
+import { getPmBoard } from "@/lib/data/pm-board";
 
 /**
  * Where the next customer comes from.
@@ -66,6 +68,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
               ),
             }
           : {}),
+        ...(leads ? { "property-managers": <Deferred load={PropertyManagersTab} /> } : {}),
         ...(map || leads ? { attribution: <Deferred load={AttributionTab} /> } : {}),
       }}
     />
@@ -104,4 +107,21 @@ async function AttributionTab() {
       {test}
     </div>
   );
+}
+
+/**
+ * Cold email to property managers. The owner's alone: it sends in their
+ * name, so nobody else reads or approves it.
+ */
+async function PropertyManagersTab() {
+  const profile = await getCurrentProfile();
+  if (!profile || !isOwnerLevel(profile.roles)) {
+    return <p className="text-sm text-muted-foreground">Only an owner can see the property manager emails.</p>;
+  }
+  const board = await getPmBoard(profile.organization_id).catch((err) => {
+    console.error("Property managers failed to load:", err);
+    return null;
+  });
+  if (!board) return <p className="text-sm text-muted-foreground">The property manager list could not be loaded just now.</p>;
+  return <PropertyManagers board={board} />;
 }

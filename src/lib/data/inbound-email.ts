@@ -4,6 +4,9 @@ import { jobFor } from "@/lib/data/thread-email";
 import { getReceivedEmail } from "@/lib/email/resend";
 import { domainOf, looksForged, replyText, senderAddress } from "@/lib/inbound-email";
 import { log, maskEmail } from "@/lib/log";
+import { stopCompany } from "@/lib/data/pm-sender";
+import { notifyTeamMember } from "@/lib/notifications";
+import { TOOLS_OWNER_EMAILS } from "@/lib/tool-editors";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Admin = SupabaseClient<Database>;
@@ -48,6 +51,12 @@ export async function fileInboundEmail(admin: Admin, emailId: string): Promise<I
 
   const from = senderAddress(email.from);
   if (!from) return "unknown_sender";
+
+  // A property manager answering a cold email: their sequence stops and the
+  // owner hears about it. Then filed like any other email if they are also a client.
+  await notePmReply(admin, organizationId, from, replyText(email.text, email.html)).catch((err) =>
+    log.warn("inbound_email.pm_reply_failed", { error: err instanceof Error ? err.message : String(err) })
+  );
   const { data: customers } = await admin
     .from("customers")
     .select("id, name")
@@ -98,4 +107,38 @@ export async function fileInboundEmail(admin: Admin, emailId: string): Promise<I
   }
   log.info("inbound_email.filed", { emailId, jobId });
   return "filed";
+}
+
+/**
+ * Whether the sender is a property management company we have been
+ * writing to: the same address, or the same company domain when it is not a
+ * free mailbox. Their sequence stops and the owner is told.
+ */
+async function notePmReply(admin: Admin, organizationId: string, from: string, text: string): Promise<void> {
+  const domain = domainOf(from);
+  const free = /^(gmail|yahoo|aol|hotmail|outlook|icloud|comcast|verizon|live|msn)\./i.test(domain);
+  const { data: companies } = await admin
+    .from("pm_companies")
+    .select("id, name, email, status")
+    .eq("organization_id", organizationId)
+    .or(free ? `email.ilike.${from}` : `email.ilike.${from},email.ilike.%@${domain}`)
+    .limit(1);
+  const company = (companies ?? [])[0];
+  if (!company) return;
+  if (["unsubscribed", "do_not_contact"].includes(company.status)) return;
+  await stopCompany(admin, company.id, "replied");
+  await admin
+    .from("pm_companies")
+    .update({ replied_at: new Date().toISOString(), last_reply: text.slice(0, 4000) })
+    .eq("id", company.id);
+  const { data: owners } = await admin.from("profiles").select("id").eq("organization_id", organizationId).in("email", TOOLS_OWNER_EMAILS);
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, 160);
+  await Promise.all(
+    (owners ?? []).map((owner) =>
+      notifyTeamMember(owner.id, "pm_reply", `${company.name} replied to your email: "${preview}" Open Marketing > Property managers.`, {
+        dedupeKey: `pm_reply:${company.id}:${preview.slice(0, 40)}`,
+        overridesKindPreference: true,
+      }).catch(() => false)
+    )
+  );
 }

@@ -88,6 +88,9 @@ export const MODULES: readonly AppModule[] = [
       // in. Next to Content because it is the same job on the other side of
       // the fence: one is replying in somebody else's group, this is owning
       // the group and charging for the adverts.
+      // Cold email to local property management companies: found, written in
+      // the owner's words, read and approved, sent a few each weekday.
+      { key: "property-managers", label: "Property managers", tabs: ["leads"], blurb: "Cold email to local property managers, in your words, a few each weekday. Replies come straight to you." },
       { key: "groups", label: "Local groups", tabs: ["groups"], blurb: "The neighbourhood groups we run, what people asked for in them, and who paid to advertise." },
       // Money the business actually received, traced back to what brought it
       // in -- and, just as plainly, the work that cannot be traced at all.

@@ -4328,6 +4328,78 @@ export interface Database {
         };
         Relationships: [];
       };
+      pm_companies: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          website: string | null;
+          phone: string | null;
+          address: string | null;
+          lat: number | null;
+          lng: number | null;
+          place_id: string | null;
+          source: string;
+          contact_name: string | null;
+          email: string | null;
+          email_source: string | null;
+          status: string;
+          note: string | null;
+          unsubscribe_token: string;
+          last_error: string | null;
+          replied_at: string | null;
+          last_reply: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["pm_companies"]["Row"]> & { organization_id: string; name: string };
+        Update: Partial<Database["public"]["Tables"]["pm_companies"]["Row"]>;
+        Relationships: [];
+      };
+      pm_emails: {
+        Row: {
+          id: string;
+          organization_id: string;
+          company_id: string;
+          step: number;
+          subject: string;
+          body: string;
+          status: string;
+          send_after: string | null;
+          sent_at: string | null;
+          message_id: string | null;
+          error: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["pm_emails"]["Row"]> & { organization_id: string; company_id: string; step: number; subject: string; body: string };
+        Update: Partial<Database["public"]["Tables"]["pm_emails"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "pm_emails_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "pm_companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      pm_outreach_settings: {
+        Row: {
+          organization_id: string;
+          sending_on: boolean;
+          auto_approve: boolean;
+          daily_cap: number;
+          from_name: string | null;
+          story: string | null;
+          offer: string | null;
+          towns: string[];
+          last_search_at: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["pm_outreach_settings"]["Row"]> & { organization_id: string };
+        Update: Partial<Database["public"]["Tables"]["pm_outreach_settings"]["Row"]>;
+        Relationships: [];
+      };
       finder_computers: {
         Row: {
           id: string;

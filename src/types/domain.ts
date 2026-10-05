@@ -389,7 +389,9 @@ export type NotificationKind =
   // on the settings screen: the till being broken is not opt-in news.
   | "payments_down"
   // To the owner when the post finder on the laptop stops. Asked for, not a toggle.
-  | "finder_stopped";
+  | "finder_stopped"
+  // To the owner when a property manager answers a cold email. Asked for, not a toggle.
+  | "pm_reply";
 
 /** How one person wants to hear about one group. "default" follows their
  * general Team group messages setting. */
