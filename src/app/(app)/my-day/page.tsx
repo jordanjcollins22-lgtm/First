@@ -46,6 +46,7 @@ import { buildMyWork, type MyWork } from "@/lib/my-work";
 import { getToday } from "@/lib/data/today";
 import { getCallList } from "@/lib/data/call-list";
 import { listPendingApprovals, type PendingApproval } from "@/lib/data/outbound-approvals";
+import { countPlanDrafts } from "@/lib/data/social-plan";
 import { countOpenPosts } from "@/lib/data/post-board";
 import { AFFILIATE_TUTORIAL_KEY } from "@/lib/affiliate-tutorial";
 import { listBoardJobs } from "@/lib/data/job-board";
@@ -829,6 +830,9 @@ async function OwnersDay({ profile }: { profile: Profile }) {
       <Suspense fallback={null}>
         <ApprovalsBlock />
       </Suspense>
+      <Suspense fallback={null}>
+        <PostsToApproveBlock organizationId={profile.organization_id} />
+      </Suspense>
       <Suspense fallback={<BlockLoading lines={3} />}>
         <EvaluationsTodayBlock profile={profile} />
       </Suspense>
@@ -840,6 +844,20 @@ async function OwnersDay({ profile }: { profile: Profile }) {
         <ProjectsTodayBlock profile={profile} refresh={false} />
       </Suspense>
     </div>
+  );
+}
+
+/** The week's social posts waiting for a yes: one line and a link to them. */
+async function PostsToApproveBlock({ organizationId }: { organizationId: string }) {
+  const waiting = await countPlanDrafts(organizationId).catch(() => 0);
+  if (waiting === 0) return null;
+  return (
+    <Link href="/marketing?tab=content" className="mb-6 block rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm hover:bg-primary/10">
+      <span className="font-semibold">
+        {waiting} social {waiting === 1 ? "post" : "posts"} waiting for your approval
+      </span>
+      <span className="block text-xs text-muted-foreground">Picture, hook, text, call to action and hashtags for each day. Approve and it goes out on its day.</span>
+    </Link>
   );
 }
 

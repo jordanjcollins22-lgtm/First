@@ -5,6 +5,7 @@ import { env, isFacebookConfigured, isSupabaseAdminConfigured } from "@/lib/env"
 import { publishPhotoToPage } from "@/lib/social/facebook";
 import { log } from "@/lib/log";
 import { authorizeCron } from "@/lib/cron-auth";
+import { outboundBaseUrl } from "@/lib/base-url";
 
 /**
  * Sends the posts whose time has come.
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
 
   const { data: due, error } = await admin
     .from("social_posts")
-    .select("id, caption, image_path, job_id")
+    .select("id, caption, image_path, job_id, plan_day")
     .eq("status", "scheduled")
     .lte("scheduled_for", new Date().toISOString())
     .limit(20);
@@ -59,10 +60,14 @@ export async function GET(request: NextRequest) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   let sent = 0;
 
-  for (const post of due as { id: string; caption: string | null; image_path: string | null; job_id: string }[]) {
+  // A planned post's picture is drawn by the app at its own address.
+  const appBase = await outboundBaseUrl();
+  for (const post of due as { id: string; caption: string | null; image_path: string | null; job_id: string | null; plan_day: string | null }[]) {
     const imageUrl = post.image_path
       ? `${base}/storage/v1/object/public/social-posts/${post.image_path}`
-      : null;
+      : post.plan_day
+        ? `${appBase.replace(/\/$/, "")}/api/social/card/${post.id}`
+        : null;
     if (!imageUrl) continue;
 
     // Claimed before it goes anywhere, so two runs at once cannot both post

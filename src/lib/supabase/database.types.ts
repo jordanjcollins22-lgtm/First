@@ -294,7 +294,7 @@ export interface Database {
         Row: {
           id: string;
           organization_id: string;
-          job_id: string;
+          job_id: string | null;
           before_photo_id: string | null;
           after_photo_id: string | null;
           zone_id: string | null;
@@ -308,12 +308,19 @@ export interface Database {
           approved_by: string | null;
           approved_at: string | null;
           on_booking_page: boolean;
+          kind: string | null;
+          hook: string | null;
+          body: string | null;
+          cta: string | null;
+          hashtags: string[];
+          plan_day: string | null;
+          link_id: string | null;
+          card_style: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["social_posts"]["Row"]> & {
           organization_id: string;
-          job_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["social_posts"]["Row"]>;
         Relationships: [];

@@ -56,6 +56,8 @@ export async function listSocialPosts(): Promise<SocialPost[]> {
     .select(
       "id, job_id, before_photo_id, after_photo_id, zone_name, image_path, caption, status, scheduled_for, posted_at, channel, jobs(name, properties(address))"
     )
+    // The week's planned posts have their own list, and most have no job.
+    .is("plan_day", null)
     .order("created_at", { ascending: false });
 
   if (isMissingTable(error) || error) return [];
