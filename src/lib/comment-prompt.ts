@@ -132,6 +132,8 @@ export function commentSystemPrompt(
     "- Tree work in particular: felling, tree removal, large limb work and stump grinding are a licensed trade. Never say we do any of it. We coordinate it.",
     `- Never call ${name} licensed, certified, bonded, accredited or insured. You may say a partner we hire is licensed and insured, because that is about them.`,
     "- Never invent prices, availability, guarantees, or any detail that is not in the post.",
+    '- Never promise when we can come: no "today", "tomorrow", "before Saturday", "same day", "right away", "quickly" or "no problem" about timing. Nobody writing the comment can see the schedule. The booking link shows the real open times, so point to that instead.',
+    "- Never say we work in a place the post does not put in our area.",
     "- If the post is humorous or casual, you may lightly match their tone.",
     "- Output only the finished comment.",
   ].join("\n");
@@ -193,6 +195,7 @@ export function replySystemPrompt(
     "- Tree work in particular: felling, tree removal, large limb work and stump grinding are a licensed trade. Never say we do any of it. We coordinate it.",
     `- Never call ${name} licensed, certified, bonded, accredited or insured. You may say a partner we hire is licensed and insured, because that is about them.`,
     "- Never invent prices, availability, guarantees, or any detail that is not in the conversation.",
+    '- Never promise when we can come: no "today", "tomorrow", "before Saturday", "same day", "right away" or "no problem" about timing. The booking link shows the real open times.',
     "- Output only the finished reply.",
   ].join("\n");
 }
@@ -318,6 +321,21 @@ const PARTNER_FRAMING =
 const OUR_CREDENTIALS =
   /\b(?:we(?:'re| are)?|our (?:company|business|team|crew)|fully|i am|i'm)\s+(?:fully\s+)?(?:licensed|certified|bonded|accredited|insured)/i;
 
+/**
+ * Promising a day or a speed: "before Saturday is no problem", "we can get
+ * you on the schedule quickly", "getting out there fast isn't a problem".
+ * Only when it is a promise from us, so "since you need it done today"
+ * about what they asked for is left alone.
+ */
+const TIMING_PROMISE = new RegExp(
+  [
+    String.raw`\b(?:today|tonight|tomorrow|this week(?:end)?|same[- ]day|before (?:mon|tues|wednes|thurs|fri|satur|sun)day)\b[^.!?]*\b(?:no problem|not a problem|isn'?t a problem|we can|we'll|we will|guarantee)`,
+    String.raw`\b(?:we can|we'll|we will|we'd)\b[^.!?]*\b(?:today|tonight|tomorrow|this week(?:end)?|same[- ]day|right away|asap|quickly|fast|in no time|before (?:mon|tues|wednes|thurs|fri|satur|sun)day)\b`,
+    String.raw`\b(?:out there|there|over|on the schedule)\b[^.!?]*\b(?:fast|quickly|right away)\b[^.!?]*\b(?:no problem|not a problem|isn'?t a problem)`,
+  ].join("|"),
+  "i"
+);
+
 export interface CommentCheck {
   ok: boolean;
   /** What is wrong, in words somebody can act on. */
@@ -362,6 +380,16 @@ export function checkComment(text: string): CommentCheck {
     if (PARTNER_FRAMING.test(sentence)) continue;
     problems.push(
       "Claims we are licensed or insured. Say it about a partner we hire, or leave it out."
+    );
+  }
+
+  // A day nobody checked. "Getting your grass cut before Saturday in Joppa
+  // is no problem" went out under a post nobody had looked at the schedule
+  // for. The booking link shows the real open times; the comment points there.
+  for (const sentence of body.split(/(?<=[.!?])\s+|\n+/)) {
+    if (!TIMING_PROMISE.test(sentence)) continue;
+    problems.push(
+      "Promises when we can come. Nobody has checked the schedule, so leave the timing to the booking link."
     );
   }
 

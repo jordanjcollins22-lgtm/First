@@ -9,6 +9,7 @@ import { getSeen, setPicked } from "@/lib/data/outreach-agent";
 import { answersToPost, answersToSamePost } from "@/lib/data/post-board";
 import { mentionComment } from "@/lib/outreach-agent";
 import { alreadyAnswered, isAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
+import { outsideServiceArea, pacingRefusal, posterToTag, withoutTeamMention, type RecentAnswer, type ServiceMarket } from "@/lib/comment-guards";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
 import { checkComment, draftFromDisplay, finishComment, introComment, LINK_MARKER, looksUsable, personaliseDraft } from "@/lib/comment-prompt";
 import { getCurrentOrganization } from "@/lib/data/organizations";
@@ -85,13 +86,23 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
       return { ok: false, error: "You've already answered this post. One comment each, so it doesn't look like a campaign." };
     }
   }
+  const owner = isOwnerLevel(profile.roles);
   const refusal = whyNotTake({
     answers: onePerPerson(same.answers),
     profileId: profile.id,
     now,
-    override: isOwnerLevel(profile.roles),
+    override: owner,
   });
   if (refusal) return { ok: false, error: refusal };
+
+  const guards = await guardsFor(org, profile.id);
+  const mineAlready = same.answers.some((a) => a.profileId === profile.id && a.status !== "let_go");
+  if (!owner && !mineAlready) {
+    const away = outsideServiceArea({ town: row.town ?? null, text: row.text, markets: guards.markets });
+    if (away) return { ok: false, error: `${away} Leave it, or ask the office if we should take it.` };
+    const wait = pacingRefusal({ recent: guards.recent, groupName: row.group_name ?? null, now });
+    if (wait) return { ok: false, error: wait };
+  }
 
   const mine = answers.find((a) => a.profileId === profile.id);
   if (mine?.comment) {
@@ -166,7 +177,9 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   }
 
   // An introduction is to the room, not a reply to whoever started the thread.
-  const askedBy = intro ? null : row.author ?? read.askedBy ?? null;
+  // Never a teammate: on a forwarded post the name kept is often whoever
+  // forwarded it, and a comment tagging Jace under a stranger's post helps nobody.
+  const askedBy = intro ? null : posterToTag(row.author ?? read.askedBy ?? null, row.text, guards.teamNames);
   const recorded = await recordOutreach({
     kind: "comment",
     platform: "facebook",
@@ -180,8 +193,12 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   if (!recorded.ok) return letGo(recorded.error);
 
   const finished = finishComment(read.draft.replace(LINK_MARKER, recorded.link), recorded.link);
-  // "Do you still need someone?" is for a request, not an introduction.
-  const written = intro ? finished : fitOpenerToAge(finished, days);
+  // "Do you still need someone?" is for a request, not an introduction. A
+  // post with no date on it is asked too: it may be days old, and the
+  // question costs nothing under a fresh one.
+  const written = intro ? finished : fitOpenerToAge(withoutTeamMention(finished, guards.teamNames), days ?? 1);
+  const check = checkComment(written.split(recorded.link).join(""));
+  if (!check.ok) return letGo(`Change the wording before posting. ${check.problems.join(" ")}`);
   if (!looksUsable(written, recorded.link)) return letGo("The comment came back too thin. Try again.");
   const { text: comment } = mentionComment(written, askedBy);
 
@@ -195,6 +212,38 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   ]);
   refresh();
   return { ok: true, answerId: held.id, comment };
+}
+
+/**
+ * What the checks on taking a post need: the team's names, so nobody on it
+ * is tagged; the area we work in; and what this person answered in the last
+ * day, so their comments are spaced out.
+ */
+async function guardsFor(org: string, profileId: string): Promise<{ teamNames: string[]; markets: ServiceMarket[]; recent: RecentAnswer[] }> {
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  const [{ data: team }, { data: markets }, { data: recent }] = await Promise.all([
+    supabase.from("profiles").select("full_name").eq("organization_id", org),
+    supabase.from("target_markets").select("cities, counties, zips").eq("organization_id", org).eq("active", true),
+    supabase
+      .from("outreach_post_answers")
+      .select("created_at, seen_post_id")
+      .eq("organization_id", org)
+      .eq("profile_id", profileId)
+      .gte("created_at", since)
+      .neq("status", "let_go")
+      .limit(200),
+  ]);
+  const postIds = Array.from(new Set((recent ?? []).map((a) => a.seen_post_id)));
+  const { data: posts } = postIds.length
+    ? await supabase.from("outreach_seen_posts").select("id, group_name").in("id", postIds)
+    : { data: [] as { id: string; group_name: string | null }[] };
+  const groupOf = new Map((posts ?? []).map((p) => [p.id, p.group_name]));
+  return {
+    teamNames: (team ?? []).map((p) => p.full_name ?? "").filter(Boolean),
+    markets: (markets ?? []).map((m) => ({ cities: m.cities ?? [], counties: m.counties ?? [], zips: m.zips ?? [] })),
+    recent: (recent ?? []).map((a) => ({ createdAt: a.created_at, groupName: groupOf.get(a.seen_post_id) ?? null })),
+  };
 }
 
 /** They posted it. The post is theirs for good, and the link counts from here. */

@@ -18,8 +18,15 @@ import { postKeyForLink } from "@/lib/social-finder";
  * Pure functions, so the rules are tested without a database.
  */
 
-/** How many of the team may answer one post. The owner can always add one more. */
-export const ANSWERS_PER_POST = 2;
+/**
+ * How many of the team may answer one post. The owner can always add one more.
+ *
+ * One. It was two, on the idea that two of us under a post read as two
+ * people vouching, but in practice it read as a pile-on: thirteen posts
+ * got a second JS Landscaping comment hours after the first, and one
+ * neighbour got four across her two posts.
+ */
+export const ANSWERS_PER_POST = 1;
 
 /** How long taking a post holds it before somebody else may. */
 export const HOLD_HOURS = 2;
@@ -116,7 +123,8 @@ export function whyNotTake(input: { answers: BoardAnswer[]; profileId: string; n
   const standing = standingFor(input.answers, input.profileId, input.now);
   if (standing.pile === "mine" || input.override) return null;
   if (standing.pile === "full") {
-    return `${namesOf(standing.others)} already have this one. Two answers a post is the most, so leave it to them.`;
+    const verb = standing.others.length === 1 ? "has" : "have";
+    return `${namesOf(standing.others)} already ${verb} this one. One of us per post, so it doesn't look like a pile-on. Leave it to them.`;
   }
   return null;
 }

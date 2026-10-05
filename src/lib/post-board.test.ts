@@ -36,17 +36,16 @@ describe("standingFor", () => {
     expect(standingFor([], "me", now).pile).toBe("open");
   });
 
-  it("stays open with one person on it, and is full with two", () => {
-    expect(standingFor([answer({})], "me", now)).toMatchObject({ pile: "open", others: [{ name: "Jace" }] });
-    const two = [answer({ status: "posted" }), answer({ id: "b", profileId: "p2", name: "Andrew" })];
-    expect(standingFor(two, "me", now).pile).toBe("full");
+  it("is full as soon as one of the team has it", () => {
+    expect(standingFor([answer({})], "me", now)).toMatchObject({ pile: "full", others: [{ name: "Jace" }] });
+    expect(standingFor([answer({ status: "posted" })], "me", now).pile).toBe("full");
   });
 
   it("frees a place once the hold runs out, but never once posted", () => {
     const stale = answer({ id: "b", profileId: "p2", name: "Andrew", updatedAt: "2026-09-24T15:00:00Z" });
-    expect(standingFor([answer({}), stale], "me", now).pile).toBe("open");
-    const oldPosts = [answer({ status: "posted", updatedAt: "2026-09-20T12:00:00Z" }), answer({ id: "b", profileId: "p2", status: "posted", updatedAt: "2026-09-20T12:00:00Z" })];
-    expect(standingFor(oldPosts, "me", now).pile).toBe("full");
+    expect(standingFor([stale], "me", now).pile).toBe("open");
+    const oldPost = [answer({ status: "posted", updatedAt: "2026-09-20T12:00:00Z" })];
+    expect(standingFor(oldPost, "me", now).pile).toBe("full");
   });
 
   it("stays mine however many others answered", () => {
@@ -64,11 +63,11 @@ describe("standingFor", () => {
 describe("whyNotTake", () => {
   const base = { profileId: "me", now };
   const two = [answer({ status: "posted" }), answer({ id: "b", profileId: "p2", name: "Andrew" })];
-  it("allows a post with a place left", () => {
+  it("allows a post nobody has", () => {
     expect(whyNotTake({ ...base, answers: [] })).toBeNull();
-    expect(whyNotTake({ ...base, answers: [answer({ status: "posted" })] })).toBeNull();
   });
-  it("names who has a full one", () => {
+  it("turns away a post somebody else already answered", () => {
+    expect(whyNotTake({ ...base, answers: [answer({ status: "posted" })] })).toMatch(/Jace already has this one/);
     expect(whyNotTake({ ...base, answers: two })).toMatch(/Jace and Andrew already have this one/);
   });
   it("has no limit on how many a day", () => {
