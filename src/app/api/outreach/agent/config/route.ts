@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
   // it says it is ready for one. Copies before 2.13 cannot, so they are not
   // handed any: a post handed out waits a while before it is handed out again.
   const linkHunts =
-    state.active && request.nextUrl.searchParams.get("hunt") === "1" && !versionIsBehind(installed, "2.13.0")
+    state.active && request.nextUrl.searchParams.get("hunt") === "1" && !versionIsBehind(installed, "2.14.0")
       ? await handOutHunts(profile.organization_id, now, 1).catch(() => [])
       : [];
 

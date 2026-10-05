@@ -417,24 +417,6 @@ async function AccountManagerDay({
     ? await Promise.all([getCommissionFor(me).catch(() => null), advanceBook(me).catch(() => noBook)])
     : [null, noBook];
   const advancesOpen = book.advances.filter((a) => a.status === "requested" || a.status === "approved").length;
-  // The projects out today on their clients: where each has got to, and the crew's photos waiting on them.
-  const projects = me
-    ? await getProjectsToday({ id: me.id, seesAll: isOwnerLevel(me.roles) || me.roles.includes("admin") }).catch((err) => {
-        console.error("Projects today failed to load:", err);
-        return [];
-      })
-    : [];
-  const photosWaiting = projects.reduce((n, p) => n + p.photos.length, 0);
-  const projectIssues = projects.reduce((n, p) => n + p.issues.length, 0);
-  // The evaluations out today on their clients: where each has got to, and which are theirs to price or send.
-  const evaluationsOut = me
-    ? await getEvaluationsToday({ id: me.id, seesAll: isOwnerLevel(me.roles) || me.roles.includes("admin") }).catch((err) => {
-        console.error("Evaluations today failed to load:", err);
-        return [];
-      })
-    : [];
-  const evalsYourMove = evaluationsOut.filter((e) => e.stage.yourMove).length;
-  const evalsLate = evaluationsOut.filter((e) => e.stage.late).length;
 
   const squares: DaySquare[] = [
     ...(canComment
@@ -456,28 +438,6 @@ async function AccountManagerDay({
       title: "Site map approval",
       count: toPrice > 0 ? toPrice : toSend,
       line: toPrice > 0 ? `to price${toSend > 0 ? ` · ${toSend} to send` : ""}` : toSend > 0 ? "to send to the client" : "Nothing waiting",
-    },
-    {
-      key: "evaluations-today",
-      title: "Evaluations today",
-      count: evalsYourMove > 0 ? evalsYourMove : evaluationsOut.length,
-      line:
-        evaluationsOut.length === 0
-          ? "None out today"
-          : evalsYourMove > 0
-            ? `yours to price or send · ${evaluationsOut.length} today${evalsLate > 0 ? ` · ${evalsLate} late` : ""}`
-            : `out today${evalsLate > 0 ? ` · ${evalsLate} late` : ""}`,
-    },
-    {
-      key: "projects",
-      title: "Projects today",
-      count: photosWaiting > 0 ? photosWaiting : projects.length,
-      line:
-        projects.length === 0
-          ? "None out today"
-          : photosWaiting > 0
-            ? `${photosWaiting === 1 ? "photo" : "photos"} to approve · ${projects.length} out${projectIssues > 0 ? ` · ${projectIssues} ${projectIssues === 1 ? "issue" : "issues"}` : ""}`
-            : `out today${projectIssues > 0 ? ` · ${projectIssues} ${projectIssues === 1 ? "issue" : "issues"}` : ""}`,
     },
     {
       key: "jobs",
@@ -502,11 +462,7 @@ async function AccountManagerDay({
   // What opens: the one tapped, or else the most urgent with something in it.
   const chosen =
     squares.find((sq) => sq.key === open)?.key ??
-    (photosWaiting + projectIssues > 0
-      ? "projects"
-      : evalsYourMove + evalsLate > 0
-        ? "evaluations-today"
-      : today > 0
+    (today > 0
       ? "evaluations"
       : toPrice + toSend > 0
         ? "approval"
@@ -518,7 +474,24 @@ async function AccountManagerDay({
               ? "comments"
               : null);
 
+  // The same three progress blocks the owner's day opens on, over every
+  // client: evaluations out today, every proposal on its way to a yes, and
+  // the projects out today. The squares below are the rest of the job.
   return (
+    <>
+      {me && (
+        <>
+          <Suspense fallback={<BlockLoading lines={3} />}>
+            <EvaluationsTodayBlock profile={me} />
+          </Suspense>
+          <Suspense fallback={<BlockLoading lines={3} />}>
+            <SalesBlock profile={me} />
+          </Suspense>
+          <Suspense fallback={<BlockLoading lines={3} />}>
+            <ProjectsTodayBlock profile={me} refresh={false} />
+          </Suspense>
+        </>
+      )}
     <AccountManagerDayView
       squares={squares}
       initialOpen={chosen}
@@ -526,8 +499,6 @@ async function AccountManagerDay({
         ...(canComment ? { comments: <PostsToAnswerPage /> } : {}),
         evaluations: visits ? <EvaluatorDayView data={visits} /> : <p className="text-sm text-muted-foreground">Couldn&apos;t load your evaluations. Try again in a moment.</p>,
         approval: <PriceApprovals items={approvals ?? []} />,
-        "evaluations-today": <EvaluationsToday evaluations={evaluationsOut} />,
-        projects: <ProjectsToday projects={projects} />,
         jobs: <JobManagement items={managed} />,
         commission: (
           <div className="flex flex-col gap-3">
@@ -539,6 +510,7 @@ async function AccountManagerDay({
         ),
       }}
     />
+    </>
   );
 }
 
@@ -861,8 +833,17 @@ async function PostsToApproveBlock({ organizationId }: { organizationId: string 
   );
 }
 
+/**
+ * Who sees every client's evaluations, sales and projects on the three
+ * progress blocks: the owner, an admin, and the account manager, who
+ * follows every client from the walkthrough to the finished job.
+ */
+function seesEveryClient(roles: readonly string[]): boolean {
+  return isOwnerLevel(roles as Profile["roles"]) || roles.includes("admin") || isAccountManager(roles as Profile["roles"]);
+}
+
 async function EvaluationsTodayBlock({ profile }: { profile: Profile }) {
-  const evaluations = await getEvaluationsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+  const evaluations = await getEvaluationsToday({ id: profile.id, seesAll: seesEveryClient(profile.roles) }).catch((err) => {
     console.error("Evaluations today failed to load:", err);
     return null;
   });
@@ -876,7 +857,7 @@ async function EvaluationsTodayBlock({ profile }: { profile: Profile }) {
 }
 
 async function SalesBlock({ profile }: { profile: Profile }) {
-  const sales = await getSalesInProgress({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+  const sales = await getSalesInProgress({ id: profile.id, seesAll: seesEveryClient(profile.roles) }).catch((err) => {
     console.error("Sales in progress failed to load:", err);
     return null;
   });
@@ -890,7 +871,7 @@ async function SalesBlock({ profile }: { profile: Profile }) {
 }
 
 async function ProjectsTodayBlock({ profile, refresh = true }: { profile: Profile; refresh?: boolean }) {
-  const projects = await getProjectsToday({ id: profile.id, seesAll: isOwnerLevel(profile.roles) || profile.roles.includes("admin") }).catch((err) => {
+  const projects = await getProjectsToday({ id: profile.id, seesAll: seesEveryClient(profile.roles) }).catch((err) => {
     console.error("Projects today failed to load:", err);
     return null;
   });
