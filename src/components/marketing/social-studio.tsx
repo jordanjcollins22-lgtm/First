@@ -1,5 +1,6 @@
 "use client";
 
+import { PairChooser, photoThumb } from "@/components/marketing/pair-chooser";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -89,7 +90,7 @@ export function SocialStudio({
               <CandidateRow
                 key={`${candidate.beforePhotoId}:${candidate.afterPhotoId}`}
                 candidate={candidate}
-                onMake={() => setMaking(candidate)}
+                onMake={(chosen) => setMaking(chosen)}
                 onSkipped={() => router.refresh()}
               />
             ))}
@@ -179,15 +180,29 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 function CandidateRow({
-  candidate,
+  candidate: suggested,
   onMake,
   onSkipped,
 }: {
   candidate: PostCandidate;
-  onMake: () => void;
+  onMake: (candidate: PostCandidate) => void;
   onSkipped: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [choosing, setChoosing] = useState(false);
+  // The pair as somebody changed it: the app's own pairing is a guess, and a
+  // photo filed under the wrong area or the wrong button makes a bad one.
+  const [chosen, setChosen] = useState<{ beforeId: string; afterId: string; zone: string | null } | null>(null);
+  const candidate: PostCandidate = chosen
+    ? {
+        ...suggested,
+        beforePhotoId: chosen.beforeId,
+        afterPhotoId: chosen.afterId,
+        beforeUrl: photoThumb(chosen.beforeId, "large"),
+        afterUrl: photoThumb(chosen.afterId, "large"),
+        zoneName: chosen.zone ?? suggested.zoneName,
+      }
+    : suggested;
   const rowRef = useRef<HTMLDivElement>(null);
   const visible = useOnScreen(rowRef);
   const preview = useComposite(
@@ -198,15 +213,16 @@ function CandidateRow({
   );
 
   return (
+    <div className="rounded-xl border border-white/60 bg-card/60 p-2 backdrop-blur-md">
     <div
       ref={rowRef}
-      className="flex items-center gap-3 rounded-xl border border-white/60 bg-card/60 p-2 backdrop-blur-md"
+      className="flex items-center gap-3"
     >
       {/* The square itself, not the two photos it is made of — what somebody
           is deciding about is the post, so that is what they should see. */}
       <button
         type="button"
-        onClick={onMake}
+        onClick={() => onMake(candidate)}
         className="h-28 w-[90px] shrink-0 overflow-hidden rounded-md border border-border bg-muted"
         aria-label={`Preview the post for ${candidate.jobName}`}
       >
@@ -232,8 +248,11 @@ function CandidateRow({
           {[candidate.zoneName, candidate.town].filter(Boolean).join(" · ") || "Whole job"}
         </p>
         <div className="mt-1 flex gap-1">
-          <Button type="button" size="sm" disabled={!preview.blob} onClick={onMake}>
+          <Button type="button" size="sm" disabled={!preview.blob} onClick={() => onMake(candidate)}>
             Make post
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setChoosing((v) => !v)}>
+            Change photos
           </Button>
           <Button
             type="button"
@@ -256,6 +275,21 @@ function CandidateRow({
           </Button>
         </div>
       </div>
+    </div>
+      {choosing && (
+        <div className="mt-2">
+          <PairChooser
+            jobId={suggested.jobId}
+            beforeId={candidate.beforePhotoId}
+            afterId={candidate.afterPhotoId}
+            onUse={(pair) => {
+              setChosen(pair);
+              setChoosing(false);
+            }}
+            onCancel={() => setChoosing(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

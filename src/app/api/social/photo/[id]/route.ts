@@ -11,7 +11,7 @@ import { isSupabaseAdminConfigured } from "@/lib/env";
  */
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isSupabaseAdminConfigured || !/^[0-9a-f-]{36}$/i.test(id)) return new Response("Not found", { status: 404 });
   const profile = await getCurrentProfile();
@@ -22,7 +22,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { data: file } = await admin.storage.from("job-photos").download(photo.path);
   if (!file) return new Response("Not found", { status: 404 });
   const sharp = (await import("sharp")).default;
-  const small = await sharp(Buffer.from(await file.arrayBuffer())).rotate().resize({ width: 640, height: 640, fit: "inside" }).jpeg({ quality: 78 }).toBuffer();
+  // Small for choosing; large when it is drawn into a post square.
+  const edge = request.nextUrl.searchParams.get("size") === "large" ? 1600 : 640;
+  const small = await sharp(Buffer.from(await file.arrayBuffer())).rotate().resize({ width: edge, height: edge, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
   return new Response(new Uint8Array(small), {
     headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=86400" },
   });

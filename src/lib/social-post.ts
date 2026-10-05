@@ -50,8 +50,13 @@ export function pairPhotos<T extends PhotoLike>(photos: T[]): BeforeAfterPair<T>
   const pairs: BeforeAfterPair<T>[] = [];
 
   for (const group of byZone.values()) {
-    const befores = group.filter((p) => p.kind === "before").sort(byCreated);
     const afters = group.filter((p) => p.kind === "after").sort(byCreated);
+    // A "before" taken after the zone's first after is a photo from partway
+    // through the job filed under the wrong button, not a before.
+    const firstAfter = afters[0]?.created_at ?? null;
+    const befores = group
+      .filter((p) => p.kind === "before" && (!firstAfter || p.created_at <= firstAfter))
+      .sort(byCreated);
 
     for (let i = 0; i < Math.min(befores.length, afters.length); i++) {
       pairs.push({

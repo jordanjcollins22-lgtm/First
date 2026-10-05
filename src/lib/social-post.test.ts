@@ -49,6 +49,18 @@ describe("pairing photos", () => {
     expect(pairs[0].zoneName).toBe("Front bed");
   });
 
+  it("does not count a 'before' taken after the zone's first after", () => {
+    // Uploaded in one batch on the work day: the afters first, then two
+    // photos from partway through filed as befores. Those are not befores.
+    const pairs = pairPhotos([
+      photo({ id: "eval", kind: "before", zone_id: "bed", created_at: "2026-08-31T12:00:00Z" }),
+      photo({ id: "after", kind: "after", zone_id: "bed", created_at: "2026-10-01T11:44:00Z" }),
+      photo({ id: "mid", kind: "before", zone_id: "bed", created_at: "2026-10-01T11:46:00Z" }),
+      photo({ id: "after2", kind: "after", zone_id: "bed", created_at: "2026-10-01T11:47:00Z" }),
+    ]);
+    expect(pairs.map((p) => `${p.before.id}>${p.after.id}`)).toEqual(["eval>after"]);
+  });
+
   it("never pairs across zones", () => {
     // A before of the front next to an after of the back is two photographs,
     // not a transformation.
