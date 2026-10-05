@@ -366,12 +366,32 @@ export function textKeyFor(text: string, groupKey: string | null): string {
 }
 
 /**
+ * What the post itself says, without what Facebook writes above it when it
+ * is read off a search page: "X invited you to join this group", the
+ * group's name, the poster's name or "Anonymous member". Searched with
+ * those in front, the search looks for the wrong words.
+ */
+export function postOpening(text: string, names: (string | null | undefined)[] = []): string {
+  const escape = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const heads = [
+    /^.{0,80}?invited you to join this group\.?\s*/i,
+    /^anonymous (member|participant)\s*/i,
+    ...names.filter((n): n is string => Boolean(n && n.trim().length > 1)).map((n) => new RegExp(`^${escape(n.trim())}\\s*`, "i")),
+  ];
+  let body = cleanPostText(text).replace(/\s+/g, " ").trim();
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (const head of heads) body = body.replace(head, "");
+  }
+  return body.trim();
+}
+
+/**
  * A Facebook search for a post's opening words, for a post with no link of
  * its own: inside its group when the group is known, which lands on the post
  * itself far more often than a search of all of Facebook.
  */
-export function findPostUrl(text: string, groupKey?: string | null): string {
-  const words = cleanPostText(text).split(/\s+/).slice(0, 10).join(" ");
+export function findPostUrl(text: string, groupKey?: string | null, names: (string | null | undefined)[] = []): string {
+  const words = postOpening(text, names).split(/\s+/).slice(0, 10).join(" ");
   const q = encodeURIComponent(words);
   if (groupKey && /^[\w.-]+$/.test(groupKey)) return `https://www.facebook.com/groups/${groupKey}/search/?q=${q}`;
   return `https://www.facebook.com/search/posts?q=${q}`;

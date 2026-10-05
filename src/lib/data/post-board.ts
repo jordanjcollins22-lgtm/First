@@ -173,13 +173,11 @@ export async function getPostBoard(
 ): Promise<BoardPost[]> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  // Only a post with its own link comes in: the affiliates answer on the
-  // post itself, and one found without its link could not be answered at
-  // all. One somebody already answered stays for them, so what they wrote
-  // is still here to copy.
+  // Every request comes in, link or not. One read without its link (Facebook
+  // hides them on search pages) opens a search for its words instead, and
+  // the card says whose post to look for and in which group.
   // The same post kept twice shows once, with everybody's answers to either.
   return oneRowPerPost(posts, answers)
-    .filter(({ row, answers: list }) => isPostLink(row.url) || list.some((a) => a.profileId === profileId))
     .sort((a, b) => boardOrder(a.row, b.row, now))
     .map(({ row, answers: list }) => boardPost(row, list, profileId, now, viewer));
 }
@@ -195,7 +193,7 @@ function boardPost(
     const text = row.text ?? "";
     return {
       id: row.id,
-      link: isPostLink(row.url) ? row.url : findPostUrl(text, row.group_key),
+      link: isPostLink(row.url) ? row.url : findPostUrl(text, row.group_key, [row.group_name, row.author]),
       hasUrl: isPostLink(row.url),
       groupName: row.group_name,
       author: row.author,
@@ -226,7 +224,7 @@ function boardPost(
 export async function countOpenPosts(organizationId: string, now: Date = new Date()): Promise<number> {
   const posts = await freshRequests(organizationId, now);
   const answers = await answersFor(organizationId, posts.map((p) => p.id));
-  return oneRowPerPost(posts, answers).filter(({ row, answers: list }) => isPostLink(row.url) && standingFor(list, "", now).others.length === 0).length;
+  return oneRowPerPost(posts, answers).filter(({ answers: list }) => standingFor(list, "", now).others.length === 0).length;
 }
 
 /** How many one person has taken today, not counting any they handed back. */

@@ -18,7 +18,7 @@ export interface FinderLive {
     read: number;
     requests: number;
     businesses: number;
-    /** People asking for work that a responder can open: the post has a link. */
+    /** People asking for work, all of them on the board: with a link, or a search for the post. */
     onBoard: number;
     answered: number;
   };
@@ -76,7 +76,7 @@ export async function getFinderLive(organizationId: string, now: Date = new Date
       read: rows.length,
       requests: rows.filter((r) => r.kind === "request").length,
       businesses: rows.filter((r) => r.kind === "promotion").length,
-      onBoard: rows.filter((r) => r.kind === "request" && Boolean(r.url)).length,
+      onBoard: rows.filter((r) => r.kind === "request").length,
       answered: answered ?? 0,
     },
     waiting,

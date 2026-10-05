@@ -21,6 +21,7 @@ import {
   mentionFromComment,
   searchUrl,
   newestFirstGroupUrl,
+  postOpening,
   looksLikeBlock,
   matchesKeywords,
   nextDelaySeconds,
@@ -218,6 +219,18 @@ describe("groups and mentions", () => {
       "https://www.facebook.com/groups/1603533216622224/search/?q=Need%20my%20lawn%20cut"
     );
     expect(findPostUrl("Need my lawn cut", "bad/key")).toBe("https://www.facebook.com/search/posts?q=Need%20my%20lawn%20cut");
+  });
+
+  it("searches for what the post says, not the group and poster written above it", () => {
+    expect(postOpening("Edgewood Family\nPat Sample\nAnyone available to cut my grass today?", ["Edgewood Family", "Pat Sample"])).toBe(
+      "Anyone available to cut my grass today?"
+    );
+    expect(
+      postOpening("Sam Sample invited you to join this group. Harford Sample Group Anonymous member Looking for lawn service in Aberdeen", ["Harford Sample Group", null])
+    ).toBe("Looking for lawn service in Aberdeen");
+    expect(findPostUrl("Edgewood Family Pat Sample Need my lawn cut", null, ["Edgewood Family", "Pat Sample"])).toBe(
+      "https://www.facebook.com/search/posts?q=Need%20my%20lawn%20cut"
+    );
   });
 
   it("builds a search link", () => {

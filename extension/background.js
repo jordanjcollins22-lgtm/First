@@ -887,11 +887,26 @@ async function scanPosts(keywords, r, asked) {
       // group it is the post link; on a search page the post link is often
       // another one, so the link whose words read as a time is looked for
       // first, and the post link is the fallback.
-      const timeAnchor = links.find((a) => timeish(visibleLabel(a)) || timeish(a.getAttribute("aria-label"))) ?? permalink ?? null;
+      // With no link at all, the first link Facebook left empty is tried: the
+      // time link is the one it fills in on hover.
+      const anchors = Array.from(box.querySelectorAll("a"));
+      const timeAnchor =
+        anchors.find((a) => timeish(visibleLabel(a)) || timeish(a.getAttribute("aria-label"))) ?? permalink ?? (url ? null : anchors.find(unfilled)) ?? null;
       const ageLabel = timeAnchor
         ? (visibleLabel(timeAnchor) || timeAnchor.getAttribute("aria-label") || timeAnchor.innerText || "").trim().slice(0, 40)
         : "";
       const postedLabel = timeAnchor && matched && !data.createdAt ? await hoverForDate(timeAnchor) : "";
+      // Facebook fills in the time link's address when it is hovered, so a
+      // post that came without a link can have one now.
+      if (!url && timeAnchor) {
+        const found = canonical(timeAnchor.href || "", groupIdOf(links));
+        if (found) {
+          url = found;
+          via.hover = (via.hover ?? 0) + 1;
+          stats.withLink += 1;
+          if (matched) stats.mentionedNoLink = Math.max(0, stats.mentionedNoLink - 1);
+        }
+      }
       // The header: the group's name, then the poster's. On a group's own
       // page the group is the page, so the first named link is the poster.
       const gl = links.find((a) => isGroupLink(a.href) && (a.innerText || "").trim().length > 1);
