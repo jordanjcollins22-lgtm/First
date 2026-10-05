@@ -12,6 +12,7 @@ import { reviewSourcesDue } from "@/lib/data/review-sources";
 import { checkIn, computerKey, runningWithOwners } from "@/lib/data/finder-computers";
 import { readsReviews, shareFor } from "@/lib/finder-fleet";
 import { GROUPS_FEED_URL } from "@/lib/outreach-agent";
+import { handOutHunts } from "@/lib/data/link-hunt";
 
 /**
  * What the browser is allowed to do right now, and how to read the page.
@@ -72,9 +73,18 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // A post read without its link, for the extension to go back for, when
+  // it says it is ready for one. Copies before 2.13 cannot, so they are not
+  // handed any: a post handed out waits a while before it is handed out again.
+  const linkHunts =
+    state.active && request.nextUrl.searchParams.get("hunt") === "1" && !versionIsBehind(installed, "2.13.0")
+      ? await handOutHunts(profile.organization_id, now, 1).catch(() => [])
+      : [];
+
   return NextResponse.json({
     ok: true,
     settings: shared,
+    linkHunts,
     computer: { id: computer, place: shared.share.place, of: shared.share.of },
     // Nothing waits for the owner's OK any more; an older copy of the
     // extension reads toReview, and zero keeps it from nagging.

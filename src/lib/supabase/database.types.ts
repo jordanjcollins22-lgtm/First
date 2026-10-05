@@ -3371,6 +3371,8 @@ export interface Database {
           draft_error: string | null;
           drafted_at: string | null;
           added_by: string | null;
+          link_hunt_tries: number;
+          link_hunt_at: string | null;
           created_at: string;
           updated_at: string;
         };

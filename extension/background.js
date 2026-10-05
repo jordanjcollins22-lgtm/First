@@ -160,10 +160,13 @@ async function computerId() {
   return made;
 }
 
-async function fetchConfig() {
+async function fetchConfig(wantHunt = false) {
   try {
     const id = await computerId();
-    const res = await fetch(`${API}/config?v=${encodeURIComponent(VERSION)}&computer=${encodeURIComponent(id)}`, { credentials: "include", cache: "no-store" });
+    const res = await fetch(`${API}/config?v=${encodeURIComponent(VERSION)}&computer=${encodeURIComponent(id)}${wantHunt ? "&hunt=1" : ""}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
     if (res.status === 401) {
       await setStatus("Not signed in to the app. Open it and sign in, then this carries on.");
       return null;
@@ -220,7 +223,10 @@ async function tick(options = {}) {
   if (!options.force && store.lock && Date.now() - store.lock < LOCK_MS) return;
   await chrome.storage.local.set({ lock: Date.now() });
   try {
-    const config = await fetchConfig();
+    // Every few minutes, one post that came without its link is asked for,
+    // to go back and find it.
+    const huntAt = (await chrome.storage.local.get("huntAt")).huntAt ?? 0;
+    const config = await fetchConfig(Date.now() - huntAt >= HUNT_EVERY_MS);
     if (!config) return;
     const recipe = recipeOf(config);
     if (!recipe) {
@@ -258,6 +264,15 @@ async function tick(options = {}) {
     if (!config.active && config.because === "outside hours") {
       await closeFinder();
       await setStatus(`Outside looking hours (${config.settings.activeFrom}–${config.settings.activeTo}). The window opens again then.`);
+      return;
+    }
+
+    // A post to go back for: its group searched for what it says, the post
+    // that says the same picked out, and its link sent to the app.
+    const hunt = config.active && Array.isArray(config.linkHunts) ? config.linkHunts[0] : null;
+    if (hunt) {
+      await chrome.storage.local.set({ huntAt: Date.now() });
+      await huntForLink(hunt, config, recipe);
       return;
     }
 
@@ -331,6 +346,60 @@ async function tick(options = {}) {
     );
   } finally {
     await chrome.storage.local.set({ lock: 0 });
+  }
+}
+
+const HUNT_EVERY_MS = 4 * 60 * 1000;
+
+/** How much of the words looked for are in a post's text, from 0 to 1. */
+function wordsIn(words, text) {
+  const tokens = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 1);
+  const want = tokens(words);
+  if (want.length === 0) return 0;
+  const have = new Set(tokens(text));
+  return want.filter((w) => have.has(w)).length / want.length;
+}
+
+/**
+ * Go back for one post's link: open its group's search for what it says,
+ * read the results the way any page is read, and send the app the link of
+ * the one that says the same, with its words so the app can check. The
+ * finder window is reused; the next look opens its usual place again.
+ */
+async function huntForLink(hunt, config, recipe) {
+  await setStatus(`Going back for the link to a post: "${hunt.words}"…`);
+  let found = null;
+  try {
+    let finder = await finderGo(hunt.url, recipe.pacing.tabLoadTimeoutMs);
+    await sleep(recipe.scan.searchSettleMs);
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: finder.tabId },
+      func: scanPosts,
+      args: [config.settings.keywords ?? [], { ...recipe.scan, scrollTimes: 2 }, []],
+      world: "MAIN",
+    });
+    found = result?.result ?? null;
+    // Not one of the finder's places: the next look moves on from here.
+    await saveFinder({ ...finder, key: `hunt:${hunt.id}`, since: 0, scrolls: 0 });
+  } catch (err) {
+    await setStatus(`Couldn't go back for that post: ${err?.message ?? err}`);
+  }
+  const best = (found?.posts ?? [])
+    .filter((p) => p.url)
+    .map((p) => ({ p, score: wordsIn(hunt.words, p.text) + (hunt.author && p.author === hunt.author ? 0.2 : 0) }))
+    .sort((a, b) => b.score - a.score)[0];
+  const match = best && best.score >= 0.7 ? best.p : null;
+  try {
+    const res = await fetch(`${API}/found-link`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: hunt.id, url: match?.url ?? null, text: match?.text ?? null }),
+    });
+    const answer = await res.json().catch(() => null);
+    await setStatus(answer?.saved ? "Found the link to a post that came without one. It's on the board." : "Couldn't find that post's link this time.");
+  } catch (err) {
+    await setStatus(`Couldn't send the link: ${err?.message ?? err}`);
   }
 }
 
