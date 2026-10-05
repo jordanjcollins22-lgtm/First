@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useTransition } from "react";
-import { CheckCircle2, Link2, Loader2, Upload, Video } from "lucide-react";
+import { CheckCircle2, Loader2, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,11 +19,12 @@ import {
 /** Storage takes one upload up to this size (the project's limit). */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const TOO_BIG =
-  "That video is too big to send from here. Tap Record now to record it in this page (it comes out much smaller), or send it as a link below.";
+  "That video is too big to send. Tap Record now and record it again (it comes out much smaller), or send it as a link below.";
 
 /**
- * Record or choose a short video and send it. The phone uploads straight to
- * storage; a video too big for that is sent as a link instead.
+ * Record a short video and send it: one button. It records in the page, or
+ * with the phone's camera where the page can't. The phone uploads straight
+ * to storage; when that fails, sending a link is offered instead.
  */
 export function VideoStep({
   token,
@@ -37,7 +38,6 @@ export function VideoStep({
   businessName: string;
 }) {
   const recordRef = useRef<HTMLInputElement>(null);
-  const chooseRef = useRef<HTMLInputElement>(null);
   const [done, setDone] = useState(alreadyIn);
   const [error, setError] = useState<string | null>(null);
   const [showLink, setShowLink] = useState(false);
@@ -150,13 +150,6 @@ export function VideoStep({
         className="hidden"
         onChange={(e) => upload(e.target.files?.[0])}
       />
-      <input
-        ref={chooseRef}
-        type="file"
-        accept="video/*"
-        className="hidden"
-        onChange={(e) => upload(e.target.files?.[0])}
-      />
 
       {recordingHere ? (
         <VideoRecorder
@@ -179,24 +172,6 @@ export function VideoStep({
             )}
             {busy ? "Sending your video. Keep this page open" : "Record now"}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11"
-            disabled={busy}
-            onClick={() => chooseRef.current?.click()}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Choose a video I already recorded
-          </Button>
-          <button
-            type="button"
-            className="mt-1 flex items-center justify-center gap-1 text-sm text-muted-foreground underline-offset-2 hover:underline"
-            onClick={() => setShowLink((v) => !v)}
-          >
-            <Link2 className="h-4 w-4" /> Send a link instead (YouTube, Google
-            Drive, iCloud)
-          </button>
         </div>
       )}
 
