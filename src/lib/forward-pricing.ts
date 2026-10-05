@@ -24,6 +24,8 @@
  * Pure, so the arithmetic is tested without a database.
  */
 
+import { lawnWork } from "@/lib/lawn-work";
+
 export type ProductionUnit = "SF" | "LF" | "CY" | "plant" | "bush" | "job";
 
 export interface ProductionService {
@@ -114,6 +116,7 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "sod-install", label: "Sod installation", unit: "SF", pr: 400, materialCentsPerUnit: 50, materialName: "Sod", group: "Lawn" },
   { key: "overseeding", label: "Overseeding", unit: "SF", pr: 5000, materialCentsPerUnit: 1, materialName: "Seed", group: "Lawn" },
   { key: "aeration", label: "Core aeration", unit: "SF", pr: 10000, group: "Lawn" },
+  { key: "dethatching", label: "Dethatching (machine, thatch picked up)", unit: "SF", pr: 5000, group: "Lawn" },
   { key: "fertilization", label: "Fertilization", unit: "SF", pr: 20000, materialCentsPerUnit: 1, materialName: "Fertilizer", group: "Lawn" },
   { key: "leaf-removal", label: "Leaf removal", unit: "SF", pr: 3000, group: "Seasonal" },
   { key: "leaf-removal-heavy", label: "Leaf removal, heavy", unit: "SF", pr: 1500, group: "Seasonal" },
@@ -459,8 +462,14 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
     if (weedy(text(v, "weedLevel"))) lines.push(bySize("weed-pulling"));
   } else if (area.typeId === "landscape-bed") {
     if (weedy(text(v, "weedLevel"))) lines.push(bySize("weed-pulling"));
+    // The checklist's work items, each with the count the evaluator gave.
+    const chosen = (key: string) => text(v, key) !== "" && !/^none$/i.test(text(v, key));
+    if (chosen("bushTrimming")) lines.push(byCount("shrub-trimming", count(v, "bushTrimming__qty"), "bushes"));
+    if (chosen("bushRemoval")) lines.push(sized(byCount("plant-removal-medium", count(v, "bushRemoval__qty"), "bushes"), "medium bushes"));
+    if (chosen("plantRemoval")) lines.push(byCount("plant-removal-small", count(v, "plantRemoval__qty"), "plants"));
     const moved = count(v, "plantRelocation__qty");
     if (moved != null) lines.push(byCount("plant-relocation", moved, "plants"));
+    if (chosen("newPlantInstallation")) lines.push(sized(byCount("plant-install-1gal", count(v, "newPlantInstallation__qty"), "plants"), "1 gallon"));
     if (/needs removal/i.test(text(v, "existingMaterialCondition"))) lines.push(byDepth("material-removal", 2));
     const material = text(v, "material");
     // The colour or rock the client picked, so the supplier's matching one is priced.
@@ -478,8 +487,16 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
       )
     );
   } else if (area.typeId === "lawn-restoration") {
+    const work = lawnWork(v, area.notes);
     if (/needs correction/i.test(text(v, "grade"))) lines.push(bySize("hand-grading"));
     if (/topsoil/i.test(text(v, "soilCondition"))) lines.push(byDepth("topsoil-install", 1));
+    if (work.machine) {
+      // Machines over the lawn as it is, seed into it: no raking it level, no straw.
+      if (work.dethatch) lines.push(bySize("dethatching"));
+      if (work.aerate) lines.push(bySize("aeration"));
+      lines.push(bySize("overseeding"));
+      return withMaterials(lines, services);
+    }
     lines.push(bySize("soil-prep"));
     if (/sod/i.test(text(v, "method"))) lines.push(bySize("sod-install"));
     else lines.push(bySize(/thin/i.test(text(v, "condition")) ? "overseeding" : "seeding"));
@@ -500,12 +517,124 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
     lines.push({ key: "gutter-cleaning", quantity: 0, materialCents: 0, note: "Type the linear feet of gutter." });
   }
 
-  // Only services that are on, each with its material at its set cost.
+  return withMaterials(lines, services);
+}
+
+/** A count line that also says the size it was priced at, so a bigger one gets changed. */
+function sized(line: PriceLine, size: string): PriceLine {
+  return line.quantity > 0 ? { ...line, note: `${line.note}, priced as ${size}` } : line;
+}
+
+/** Only services that are on, each with its material at its set cost. */
+function withMaterials(lines: PriceLine[], services: ProductionService[]): PriceLine[] {
   return lines.flatMap((l) => {
     const s = productionService(l.key, services);
     if (!isOn(s)) return [];
     return [s.materialCentsPerUnit ? { ...l, materialCents: Math.round(l.quantity * s.materialCentsPerUnit) } : l];
   });
+}
+
+/**
+ * What the walkthrough asks for that the price doesn't cover, and what the
+ * price charges for that the walkthrough rules out. The suggested services
+ * are a starting point; this is the check on them, run on whatever lines the
+ * account manager ends up with, so a renovation priced as a redo, or bushes
+ * written in the notes and never priced, are caught before the price goes out.
+ *
+ * Read clause by clause from the notes and anything typed rather than picked,
+ * so "trees in the pond rocks to be removed" asks for a removal line, not
+ * every mention of a tree. It errs towards asking: a gap that isn't one is
+ * ticked off as checked.
+ */
+export interface ScopeGap {
+  /** Stable within the area, for ticking it off. */
+  id: string;
+  message: string;
+}
+
+const MENTIONS: { id: string; what: string; all: RegExp[]; keys: string[] }[] = [
+  { id: "dethatch", what: "dethatching", all: [/dethatch|de-thatch|power\s*rak|verti\s*-?cut/i], keys: ["dethatching"] },
+  { id: "aerate", what: "aeration", all: [/aerat/i], keys: ["aeration"] },
+  { id: "seed", what: "seeding", all: [/seed/i], keys: ["overseeding", "seeding"] },
+  { id: "sod", what: "sod", all: [/\bsod\b/i], keys: ["sod-install"] },
+  { id: "topsoil", what: "topsoil", all: [/topsoil/i], keys: ["topsoil-install"] },
+  { id: "grade", what: "grading", all: [/regrad|grading|\blevel(l)?ing\b/i], keys: ["hand-grading", "soil-prep"] },
+  { id: "weeds", what: "weeding", all: [/weed/i], keys: ["weed-pulling", "weed-spraying"] },
+  { id: "spray", what: "spraying", all: [/spray/i], keys: ["weed-spraying"] },
+  { id: "trim", what: "trimming", all: [/trim|prun|cut\s*back/i], keys: ["shrub-trimming", "plant-cutback", "perennial-cutback"] },
+  {
+    id: "remove",
+    what: "taking plants, bushes or trees out",
+    all: [/remov|pull\w*\s+(them\s+)?out|tak\w*\s+(them\s+)?(out|down)|tear\w*\s+out|dig\w*\s+out|cut\w*\s+down/i, /bush|shrub|tree|sapling|stump|hedge|plant/i],
+    keys: ["plant-removal-small", "plant-removal-medium", "bush-removal-large"],
+  },
+  {
+    id: "install",
+    what: "new plants",
+    all: [/replac|install|plant\w*\s+new|new\s+(plant|bush|shrub|tree)|ground\s*cover/i, /bush|shrub|tree|plant|ground\s*cover|perennial|flower/i],
+    keys: ["plant-install-1gal", "plant-install-3gal"],
+  },
+  { id: "relocate", what: "moving or splitting plants", all: [/relocat|transplant|split|divid|\bmov(e|ing)\b/i, /plant|hosta|bush|shrub|perennial|grass/i], keys: ["plant-relocation"] },
+  { id: "mulch", what: "mulch", all: [/mulch/i], keys: ["mulch-install"] },
+  { id: "rock", what: "rock", all: [/\brock\b|stone/i, /install|spread|put\s+down|new/i], keys: ["rock-install"] },
+  { id: "edge", what: "edging", all: [/\bedg(e|ing)\b/i], keys: ["bed-edging", "mowing-edging"] },
+  { id: "leaves", what: "leaf removal", all: [/\bleaf|leaves/i], keys: ["leaf-removal", "leaf-removal-heavy"] },
+  { id: "gutter", what: "gutters", all: [/gutter/i], keys: ["gutter-cleaning"] },
+  { id: "wash", what: "washing", all: [/wash/i], keys: ["soft-washing"] },
+];
+
+/** The checklist's work items, by field: answered anything but None, the price needs one of these. */
+const CHECKLIST: Record<string, { what: string; keys: string[] }> = {
+  bushTrimming: { what: "bush trimming", keys: ["shrub-trimming", "plant-cutback"] },
+  bushRemoval: { what: "bush removal", keys: ["plant-removal-small", "plant-removal-medium", "bush-removal-large"] },
+  plantRemoval: { what: "plant removal", keys: ["plant-removal-small", "plant-removal-medium", "bush-removal-large"] },
+  plantRelocation: { what: "plant relocation", keys: ["plant-relocation"] },
+  newPlantInstallation: { what: "new plants", keys: ["plant-install-1gal", "plant-install-3gal"] },
+};
+
+/** What the evaluator wrote rather than picked: the notes, "Other" answers, and anything typed in a sentence. */
+function writtenClauses(area: AreaFacts): string[] {
+  const typed = Object.entries(area.values ?? {})
+    .filter(([key, value]) => typeof value === "string" && !key.endsWith("__qty") && (key.endsWith("__other") || value.trim().split(/\s+/).length >= 3))
+    .map(([, value]) => value as string);
+  return [area.notes ?? "", ...typed]
+    .join(". ")
+    .split(/[.;\n]+|,\s*(?:and\s+)?|\band\b(?=\s+\w+(?:ing|ed)\b)/i)
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
+export function scopeGaps(area: AreaFacts, lines: PriceLine[], services: ProductionService[] = PRODUCTION_SERVICES): ScopeGap[] {
+  const gaps: ScopeGap[] = [];
+  const has = (keys: string[]) => lines.some((l) => keys.includes(l.key));
+  const label = (key: string) => productionService(key, services)?.label ?? key;
+
+  for (const m of MENTIONS) {
+    if (has(m.keys)) continue;
+    const said = writtenClauses(area).find((c) => m.all.every((re) => re.test(c)));
+    if (said) gaps.push({ id: `said-${m.id}`, message: `The walkthrough says "${said}", but nothing in the price covers ${m.what}.` });
+  }
+  if (area.typeId === "landscape-bed") {
+    for (const [field, c] of Object.entries(CHECKLIST)) {
+      const answer = String(area.values?.[field] ?? "").trim();
+      if (answer && !/^none$/i.test(answer) && !has(c.keys)) gaps.push({ id: `asked-${field}`, message: `The walkthrough asks for ${c.what} (${answer}), but nothing in the price covers it.` });
+    }
+  }
+  if (area.typeId === "lawn-restoration") {
+    const work = lawnWork(area.values ?? {}, area.notes);
+    const redo = lines.filter((l) => l.key === "soil-prep" || l.key === "seeding");
+    if (work.machine && redo.length > 0) {
+      gaps.push({
+        id: "lawn-redo",
+        message: `This lawn is being ${work.dethatch ? "dethatched, " : ""}aerated and overseeded, not redone, but ${redo.map((l) => label(l.key).toLowerCase()).join(" and ")} ${redo.length === 1 ? "is" : "are"} priced over all of it.`,
+      });
+    }
+  }
+  lines.forEach((l, i) => {
+    const s = productionService(l.key, services);
+    if (s && s.unit !== "job" && !(l.quantity > 0)) gaps.push({ id: `empty-${i}-${l.key}`, message: `${s.label} has no quantity, so it is priced at nothing.` });
+  });
+  return gaps;
 }
 
 const HAULS_AWAY = new Set([

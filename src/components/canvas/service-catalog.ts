@@ -1,4 +1,5 @@
 import { SALTING_SURFACES, SALTING_TREATMENT_OPTIONS, SALTING_TYPE_ID, saltingScope } from "@/lib/salting";
+import { LAWN_APPROACHES, lawnWork } from "@/lib/lawn-work";
 
 export type ServiceFieldType = "select" | "text" | "number";
 
@@ -146,12 +147,19 @@ const RAW_SERVICE_TYPES: ServiceTypeDef[] = [
     id: "lawn-restoration",
     label: "Lawn Restoration",
     fields: [
+      // Asked first: a machine renovation and a full redo are priced and done completely differently.
+      { key: "approach", label: "How it's done", type: "select", options: [...LAWN_APPROACHES] },
       { key: "condition", label: "Condition", type: "select", options: ["Bare", "Thin", "Damaged", "Landscape-to-Lawn Conversion"] },
       { key: "method", label: "Sod or seed", type: "select", options: ["Sod", "Seed"] },
       { key: "soilCondition", label: "Soil condition", type: "select", options: ["Good", "Needs Topsoil"] },
       { key: "grade", label: "Grade", type: "select", options: ["Good", "Needs Correction"] },
     ],
-    autoScope: () => "Surface preparation, topsoil as required, grading, seed installation, and cleanup.",
+    autoScope: (values) => {
+      const work = lawnWork(values);
+      if (work.machine)
+        return `${work.dethatch ? "Machine dethatching to pull out the dead thatch, " : ""}core aeration, and overseeding with seed suited to the area, then cleanup.`.replace(/^c/, "C");
+      return "Surface preparation, topsoil as required, grading, seed installation, and cleanup.";
+    },
   },
   {
     id: "lawn-care",

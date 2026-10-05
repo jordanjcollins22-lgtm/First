@@ -13,6 +13,7 @@ import {
   readLines,
   readSetup,
   revenueAllocation,
+  scopeGaps,
   suggestJob,
   suggestLines,
   serviceKey,
@@ -307,5 +308,93 @@ describe("travel and time off the work", () => {
     expect(job.areas[0].rCents + job.areas[1].rCents).toBe(job.rCents);
     // 32 crew-hours at $75 over 0.35.
     expect(job.rCents).toBe(Math.round((18 * 7500) / 0.35) + Math.round((6 * 7500) / 0.35) + Math.round((6 * 7500) / 0.35) + Math.round((2 * 7500) / 0.35));
+  });
+});
+
+// The walkthrough from 1713 Morning Brook Drive, as it was saved: a lawn to be
+// dethatched, aerated and overseeded, once priced as a full redo.
+const morningBrook = {
+  frontLawn: area({
+    typeId: "lawn-restoration",
+    notes: "Looking to dethatch, aerate and overseeding ",
+    values: { grade: "Good", method: "Seed", condition: "Damaged", soilCondition: "Aeration and overseeding" },
+    areaSqFt: 11495,
+  }),
+  backLawn: area({
+    typeId: "lawn-restoration",
+    notes: "Dethatching, aeration and overseeding",
+    values: { grade: "Good", method: "Seed", condition: "Thin", soilCondition: "Aeration and overseeding" },
+    areaSqFt: 34730,
+  }),
+  bed: area({
+    typeId: "landscape-bed",
+    notes: "Diseased bushes are being pulled out and replaced with low maintenance bushes. Trimming of all other bushes ",
+    values: { edge: "Existing Edge Needs Redone", material: "Mulch", weedLevel: "Heavy", bushRemoval: "Select Bushes", bushRemoval__qty: "6", newPlantInstallation: "Select Plants", newPlantInstallation__qty: "6" },
+    areaSqFt: 432,
+  }),
+  cleanup: area({
+    typeId: "landscape-cleanup",
+    notes: "Trimming, weed pulling. Trees in coi pond rocks that need to be removed. Hostas under deck need to be split, and relocated",
+    values: { weedLevel: "Heavy", cleanupType: "Other", cleanupType__other: "Trimming of plants, removing weeds, taking out unwanted trees" },
+    areaSqFt: 4928,
+  }),
+  side: area({ typeId: "plant-installation", notes: "Weed pulling, ground cover installed to prevent weeds", values: { plant: "Ground covering ", sizeContainer: "Small ground cover to prevent weeds" }, areaSqFt: 60 }),
+};
+
+describe("lawn renovation versus a redo", () => {
+  const keys = (a: AreaFacts) => suggestLines(a).map((l) => l.key);
+
+  it("prices machine work, not raking the lawn level, when the walkthrough says dethatch and aerate", () => {
+    expect(keys(morningBrook.frontLawn)).toEqual(["dethatching", "aeration", "overseeding"]);
+    expect(keys(morningBrook.backLawn)).toEqual(["dethatching", "aeration", "overseeding"]);
+  });
+
+  it("goes by the evaluator's answer for how it's done", () => {
+    expect(keys(area({ typeId: "lawn-restoration", values: { approach: "Aerate & Overseed" }, areaSqFt: 900 }))).toEqual(["aeration", "overseeding"]);
+    // A redo stays a redo, whatever the notes say about aerating it next year.
+    expect(keys(area({ typeId: "lawn-restoration", notes: "Aerate next fall", values: { approach: "Full Redo", condition: "Bare" }, areaSqFt: 900 }))).toEqual(["soil-prep", "seeding"]);
+  });
+
+  it("flags soil prep left on a lawn that is only being renovated", () => {
+    const redo = [
+      { key: "soil-prep", quantity: 34730, materialCents: 0 },
+      { key: "overseeding", quantity: 34730, materialCents: 34730 },
+    ];
+    const gaps = scopeGaps(morningBrook.backLawn, redo);
+    expect(gaps.map((g) => g.id)).toEqual(expect.arrayContaining(["lawn-redo", "said-dethatch", "said-aerate"]));
+    expect(scopeGaps(morningBrook.backLawn, suggestLines(morningBrook.backLawn))).toEqual([]);
+  });
+});
+
+describe("what the walkthrough asks for and the price leaves out", () => {
+  const ids = (a: AreaFacts, lines = suggestLines(a)) => scopeGaps(a, lines).map((g) => g.id);
+
+  it("prices the bed's bush removals and new plants from their counts", () => {
+    const lines = suggestLines(morningBrook.bed);
+    expect(lines.find((l) => l.key === "plant-removal-medium")).toMatchObject({ quantity: 6 });
+    expect(lines.find((l) => l.key === "plant-install-1gal")).toMatchObject({ quantity: 6, materialCents: 4800 });
+  });
+
+  it("catches the work written in the notes and never priced", () => {
+    // Trimming is only in the notes; the edge has no length yet.
+    expect(ids(morningBrook.bed)).toEqual(["said-trim", "empty-4-bed-edging"]);
+    expect(ids(morningBrook.cleanup)).toEqual(["said-trim", "said-remove", "said-relocate"]);
+    expect(ids(morningBrook.side)).toEqual(["said-weeds", "empty-0-plant-install-1gal"]);
+  });
+
+  it("asks nothing when the price covers what was written", () => {
+    const lines = [
+      { key: "debris-cleanup", quantity: 4928, materialCents: 0 },
+      { key: "weed-pulling", quantity: 4928, materialCents: 0 },
+      { key: "shrub-trimming", quantity: 10, materialCents: 0 },
+      { key: "plant-removal-small", quantity: 3, materialCents: 0 },
+      { key: "plant-relocation", quantity: 4, materialCents: 0 },
+    ];
+    expect(ids(morningBrook.cleanup, lines)).toEqual([]);
+  });
+
+  it("flags a checklist item taken off the price", () => {
+    const lines = suggestLines(morningBrook.bed).filter((l) => l.key !== "plant-removal-medium");
+    expect(ids(morningBrook.bed, lines)).toContain("asked-bushRemoval");
   });
 });

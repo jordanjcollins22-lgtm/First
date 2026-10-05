@@ -14,7 +14,7 @@ import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
-import { DEFAULT_SETUP, suggestJob, type PriceLine, type PricingSetup } from "@/lib/forward-pricing";
+import { DEFAULT_SETUP, suggestJob, type AreaFacts, type PriceLine, type PricingSetup } from "@/lib/forward-pricing";
 import { getProductionPricing } from "@/lib/data/production-pricing";
 import { getInventoryItems } from "@/lib/data/inventory-items";
 import { getMaterialSuppliers } from "@/lib/data/material-suppliers";
@@ -101,6 +101,8 @@ export interface ForwardArea {
   /** The photo to lead with: the first with a pin on it, else the first. */
   cover: number;
   lines: PriceLine[];
+  /** What the walkthrough recorded, for checking the lines against it as they change. */
+  facts: AreaFacts;
 }
 
 /**
@@ -119,17 +121,14 @@ export function forwardAreas(
   pricing: PricingSetup = DEFAULT_SETUP
 ): ForwardArea[] {
   const priced = zones.filter((z) => z.service);
-  const suggested = suggestJob(
-    priced.map((z) => ({
-      typeId: z.service!.typeId,
-      serviceName: serviceName(z.service!.typeId),
-      values: (z.service!.values ?? {}) as Record<string, unknown>,
-      notes: z.service!.notes ?? null,
-      areaSqFt: zoneMeasurements(z)?.areaSqFt ?? null,
-    })),
-    pricing.equation,
-    pricing.services
-  );
+  const facts: AreaFacts[] = priced.map((z) => ({
+    typeId: z.service!.typeId,
+    serviceName: serviceName(z.service!.typeId),
+    values: (z.service!.values ?? {}) as Record<string, unknown>,
+    notes: z.service!.notes ?? null,
+    areaSqFt: zoneMeasurements(z)?.areaSqFt ?? null,
+  }));
+  const suggested = suggestJob(facts, pricing.equation, pricing.services);
   const saved = pricedForward(snapshot, priced.length) ? snapshot : null;
   return priced.map((z, i) => ({
     notes: z.service!.notes?.trim() || null,
@@ -137,6 +136,7 @@ export function forwardAreas(
     markers: (z.service!.photos ?? []).map((path) => z.service!.photoMarkers?.[path] ?? []),
     cover: Math.max(0, (z.service!.photos ?? []).findIndex((path) => (z.service!.photoMarkers?.[path]?.length ?? 0) > 0)),
     lines: saved ? (saved[i].lines ?? []) : suggested[i],
+    facts: facts[i],
   }));
 }
 

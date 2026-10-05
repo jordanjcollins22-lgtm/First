@@ -54,6 +54,10 @@ const CLIENT: Record<string, ClientWording> = {
   "plant-installation.locationWithinZone": { ask: "Where would you like them to go?" },
   "trimming.desiredResult": { ask: "Is there a way you'd like them trimmed?" },
   "landscape-cleanup.plantsStaying": { ask: "Are there any plants in here you want to keep?" },
+  "lawn-restoration.approach": {
+    ask: "Would you like the lawn fully redone, or dethatched, aerated and overseeded?",
+    confirm: (v) => `You picked ${lower(v)}. Is that still right?`,
+  },
   "lawn-restoration.method": {
     ask: "Would you like sod or seed?",
     confirm: (v) => `You picked ${lower(v)}. Is that still right?`,

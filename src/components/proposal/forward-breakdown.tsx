@@ -10,11 +10,13 @@ import {
   productionService,
   projectCostMargin,
   revenueAllocation,
+  scopeGaps,
   servicesByGroup,
   type PriceLine,
   type PricedJob,
   type PricedLine,
   type PricingEquation,
+  type ScopeGap,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { bulkOrders, jobMaterials, priceFromSuppliers, purchaseNoun, type InventoryItem, type MaterialRow, type SuppliedOrder } from "@/lib/forward-materials";
@@ -37,6 +39,21 @@ export function unpricedAreas(item: PriceApproval, lines: PriceLine[][]): string
 }
 
 /**
+ * Each area's gaps between the walkthrough and its lines, keyed "area:gap" so
+ * a tick survives the lines changing around it.
+ */
+export function areaGaps(item: PriceApproval, lines: PriceLine[][]): { key: string; area: number; gap: ScopeGap }[] {
+  return (item.forward ?? []).flatMap((f, a) => (f.facts ? scopeGaps(f.facts, lines[a] ?? [], item.pricing.services).map((gap) => ({ key: `${a}:${gap.id}`, area: a, gap })) : []));
+}
+
+/** The gaps nobody has fixed or ticked off yet: the price can't be accepted with them. */
+export function openGaps(item: PriceApproval, lines: PriceLine[][], checked: string[]): string[] {
+  return areaGaps(item, lines)
+    .filter((g) => !checked.includes(g.key))
+    .map((g) => g.key);
+}
+
+/**
  * The price, built the forward way and shown all the way through: each area
  * on the left with what it is, what the evaluator wrote and its photos (tap
  * to go through them all), and on the right every service it needs, each at
@@ -44,8 +61,24 @@ export function unpricedAreas(item: PriceApproval, lines: PriceLine[][]): string
  * and where the price goes. Quantities and costs can be changed, services
  * removed and added; the price follows.
  */
-export function ForwardBreakdown({ item, lines, onChange, locked = false }: { item: PriceApproval; lines: PriceLine[][]; onChange: (lines: PriceLine[][]) => void; locked?: boolean }) {
+export function ForwardBreakdown({
+  item,
+  lines,
+  onChange,
+  locked = false,
+  checked = [],
+  onCheck,
+}: {
+  item: PriceApproval;
+  lines: PriceLine[][];
+  onChange: (lines: PriceLine[][]) => void;
+  locked?: boolean;
+  /** Gaps ticked off as looked at and not needed, by "area:gap". */
+  checked?: string[];
+  onCheck?: (key: string, on: boolean) => void;
+}) {
   const job = priceLines(item, lines);
+  const gaps = areaGaps(item, lines);
   const { equation: eq, services } = item.pricing;
   const [gallery, setGallery] = useState<{ area: number; index: number } | null>(null);
   const forward = item.forward ?? [];
@@ -127,6 +160,7 @@ export function ForwardBreakdown({ item, lines, onChange, locked = false }: { it
 
               {/* Every service it needs, worked through. */}
               <div className="min-w-0 p-3">
+                <AreaGaps gaps={gaps.filter((g) => g.area === a)} checked={checked} onCheck={onCheck} locked={locked} />
                 <div className="hidden overflow-x-auto md:block">
                   <table className="w-full min-w-[620px] text-sm">
                     <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -850,5 +884,46 @@ function Pins({ points, large = false }: { points: { x: number; y: number }[]; l
         </span>
       ))}
     </>
+  );
+}
+
+/**
+ * What the walkthrough asks for that the lines don't price, above the lines.
+ * Each is fixed by adding or changing a line, or ticked off as looked at.
+ */
+function AreaGaps({
+  gaps,
+  checked,
+  onCheck,
+  locked,
+}: {
+  gaps: { key: string; gap: ScopeGap }[];
+  checked: string[];
+  onCheck?: (key: string, on: boolean) => void;
+  locked: boolean;
+}) {
+  if (gaps.length === 0) return null;
+  return (
+    <ul className="mb-3 flex flex-col gap-1.5 rounded-lg border border-amber-400 bg-amber-50/70 p-2.5 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+      {gaps.map(({ key, gap }) => {
+        const on = checked.includes(key);
+        return (
+          <li key={key} className={cn("flex items-start gap-2", on && "opacity-60")}>
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0"
+              checked={on}
+              disabled={locked || !onCheck}
+              onChange={(e) => onCheck?.(key, e.target.checked)}
+              aria-label={`Checked, not needed: ${gap.message}`}
+            />
+            <span>
+              {gap.message}
+              <span className="block text-xs opacity-80">Add the service, or tick it if it is covered or not needed.</span>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

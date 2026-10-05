@@ -15,7 +15,7 @@ import { GROSS_PROFIT_TARGET, margin, priceForTarget, readPrice, type JobFee } f
 import type { PriceApproval } from "@/lib/data/price-approvals";
 import { PriceSiteMap } from "@/components/proposal/price-site-map";
 import { ScopeReviewPanel } from "@/components/canvas/scope-review-panel";
-import { ForwardBreakdown, priceLines, unpricedAreas } from "@/components/proposal/forward-breakdown";
+import { ForwardBreakdown, openGaps, priceLines, unpricedAreas } from "@/components/proposal/forward-breakdown";
 import type { PriceLine } from "@/lib/forward-pricing";
 import { priceFromSuppliers } from "@/lib/forward-materials";
 import { cn } from "@/lib/utils";
@@ -87,6 +87,10 @@ export function PriceCard({
     return () => clearTimeout(timer);
   }, [lines, stage, preview, item.jobId]);
   const unpriced = lines ? unpricedAreas(item, lines) : [];
+  // What the walkthrough asked for and the price leaves out, until fixed or ticked off.
+  const [checked, setChecked] = useState<string[]>([]);
+  const gapsOpen = lines ? openGaps(item, lines, checked) : [];
+  const check = (key: string, on: boolean) => setChecked((c) => (on ? [...c, key] : c.filter((k) => k !== key)));
   const [fixedTotal, setTotal] = useState(item.totalCents);
   // While it is being priced the forward way, the price is the services'.
   const total = forwardCents != null && (stage === "price" || stage === "decline") ? forwardCents : fixedTotal;
@@ -170,7 +174,7 @@ export function PriceCard({
         </div>
       </div>
 
-      {(stage === "price" || stage === "decline") && lines && <ForwardBreakdown item={item} lines={lines} onChange={setLines} locked={stage === "decline" || pending} />}
+      {(stage === "price" || stage === "decline") && lines && <ForwardBreakdown item={item} lines={lines} onChange={setLines} locked={stage === "decline" || pending} checked={checked} onCheck={check} />}
       {stage === "price" && lines && draft && (
         <p className={cn("text-xs", draft === "saved" || draft === "saving" ? "text-muted-foreground" : "text-destructive")}>
           {draft === "saving" ? "Saving this price to the proposal…" : draft === "saved" ? "This price is on the proposal and the job page. Not approved yet." : draft}
@@ -212,9 +216,15 @@ export function PriceCard({
         </p>
       )}
 
+      {stage === "price" && gapsOpen.length > 0 && (
+        <p className="rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          {gapsOpen.length} thing{gapsOpen.length === 1 ? "" : "s"} the walkthrough asks for {gapsOpen.length === 1 ? "isn't" : "aren't"} in the price. Add the service, or tick {gapsOpen.length === 1 ? "it" : "each one"} off, before accepting.
+        </p>
+      )}
+
       {stage === "price" && (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || !wordingDone || unpriced.length > 0} onClick={accept}>
+          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || !wordingDone || unpriced.length > 0 || gapsOpen.length > 0} onClick={accept}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
             Accept price
           </Button>

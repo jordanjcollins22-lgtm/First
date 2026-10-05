@@ -13,6 +13,7 @@
  */
 
 import type { Phase } from "@/lib/area-work";
+import { lawnWork } from "@/lib/lawn-work";
 
 type Values = Record<string, string | undefined>;
 
@@ -222,6 +223,18 @@ function leafCleanup(v: Values): CrewStep[] {
 
 function lawnRestoration(v: Values): CrewStep[] {
   const s = phased();
+  const work = lawnWork(v);
+  if (work.machine) {
+    // Renovating the lawn that is there: machines over it, seed into it.
+    s.prep("Flag the sprinkler heads and anything in the ground.");
+    s.prep("Walk the lawn and pick up sticks, toys and rocks.");
+    if (pick(v, "soilCondition") === "Needs Topsoil") s.prep("Spread topsoil across it.");
+    if (work.dethatch) s.work("Run the dethatcher over the whole lawn, then rake up and bag the thatch it pulls out.");
+    if (work.aerate) s.work("Run the aerator over the whole lawn.");
+    s.work("Overseed the whole lawn with the seeder, straight into the holes. No straw.");
+    s.cleanup(CLEAN_UP);
+    return s.done();
+  }
   if (pick(v, "condition") === "Landscape-to-Lawn Conversion") s.prep("Take out everything in the old bed: mulch or stone, fabric and roots.");
   s.prep("Flag the sprinkler heads and anything in the ground.");
   s.prep("Rake out the dead grass and loosen the top of the soil.");
