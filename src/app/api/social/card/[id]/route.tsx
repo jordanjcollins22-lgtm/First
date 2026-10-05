@@ -20,12 +20,29 @@ const H = 1350;
 const GREEN = "#2f6d3c";
 const DARK = "#14261a";
 
+/**
+ * A crew photo, made small enough to draw: phone photos run to 12MB, and
+ * one that size is more than the drawing can take. Turned upright from the
+ * phone's own record of which way was up, and shrunk to the post's width.
+ */
 async function photoUrl(admin: ReturnType<typeof createAdminClient>, id: string | null): Promise<string | null> {
   if (!id) return null;
   const { data: photo } = await admin.from("job_photos").select("path").eq("id", id).maybeSingle();
   if (!photo?.path) return null;
-  const { data } = await admin.storage.from("job-photos").createSignedUrl(photo.path, 600);
-  return data?.signedUrl ?? null;
+  const { data: file } = await admin.storage.from("job-photos").download(photo.path);
+  if (!file) return null;
+  try {
+    const sharp = (await import("sharp")).default;
+    const small = await sharp(Buffer.from(await file.arrayBuffer()))
+      .rotate()
+      .resize({ width: W, height: H, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    return `data:image/jpeg;base64,${small.toString("base64")}`;
+  } catch {
+    const { data } = await admin.storage.from("job-photos").createSignedUrl(photo.path, 600);
+    return data?.signedUrl ?? null;
+  }
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
