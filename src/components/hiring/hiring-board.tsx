@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, ExternalLink, Video } from "lucide-react";
 
 import type { ApplicantRow } from "@/lib/data/hiring";
+import type { IndeedInviteRow } from "@/lib/data/indeed-invite";
 import { POSITIONS, positionFor } from "@/lib/hiring/positions";
 import { STAGES, isStage, type Stage } from "@/lib/hiring/screening";
 import { shortWhen } from "@/lib/time-zone";
@@ -17,12 +18,18 @@ export function HiringBoard({
   applicants,
   ads,
   careersUrl,
+  indeedInvites = [],
+  hiringInbox,
   positionFilter,
   stageFilter,
 }: {
   applicants: ApplicantRow[] | null;
   ads: AdCard[];
   careersUrl: string;
+  /** Indeed applicants the app sent our application link to. */
+  indeedInvites?: IndeedInviteRow[] | null;
+  /** Where Indeed's application emails should go for that to happen. */
+  hiringInbox?: string;
   positionFilter?: string;
   stageFilter?: string;
 }) {
@@ -65,6 +72,8 @@ export function HiringBoard({
           </ul>
         )}
       </section>
+
+      <IndeedInvites invites={indeedInvites} inbox={hiringInbox} />
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold">By job</h2>
@@ -159,5 +168,46 @@ function ApplicantLine({ applicant, when, showStage }: { applicant: ApplicantRow
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
       </Link>
     </li>
+  );
+}
+
+const INVITE_STATUS: Record<IndeedInviteRow["status"], string> = {
+  sent: "Sent our application link",
+  repeat: "Already sent the link for another job",
+  no_address: "No address from Indeed: message them on Indeed",
+  failed: "Didn't send: message them on Indeed",
+};
+
+/** Who applied on Indeed and was sent our application link automatically. */
+function IndeedInvites({ invites, inbox }: { invites: IndeedInviteRow[] | null; inbox?: string }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-base font-semibold">Applied on Indeed</h2>
+      <p className="text-sm text-muted-foreground">
+        Anyone who applies with Indeed&apos;s own button is emailed the link to our application straight away, no approval needed.
+        {inbox ? (
+          <>
+            {" "}
+            Indeed&apos;s email for each new application has to reach <span className="font-medium text-foreground">{inbox}</span> for this to work.
+          </>
+        ) : null}
+      </p>
+      {invites === null ? (
+        <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Couldn&apos;t load these just now. Reload the page.</p>
+      ) : invites.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Nobody yet. Each one shows up here when their link goes.</p>
+      ) : (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+          {invites.map((i) => (
+            <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+              <span className="font-medium">{i.name ?? "Name not given"}</span>
+              <span className="text-xs text-muted-foreground">
+                {[positionFor(i.position)?.title ?? i.position, INVITE_STATUS[i.status], shortWhen(i.createdAt)].join(" · ")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

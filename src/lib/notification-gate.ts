@@ -158,6 +158,7 @@ const OTHER_LABELS: Record<string, string> = {
   payments_down: "Card payments are down",
   finder_stopped: "The post finder stopped",
   pm_reply: "A property manager replied",
+  hiring_alert: "Hiring",
 };
 
 export function label(kind: NotificationKind): string {

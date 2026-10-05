@@ -192,6 +192,8 @@ export interface ReceivedEmail {
   html: string | null;
   created_at: string;
   message_id: string | null;
+  /** Who a reply should go to, when the sender set it (Indeed's reaches the applicant). */
+  reply_to?: string | string[] | null;
   authentication: { spf?: string | null; dkim?: string | null; dmarc?: string | null } | null;
 }
 

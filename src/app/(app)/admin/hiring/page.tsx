@@ -9,6 +9,7 @@ import { indeedAd, needsPay } from "@/lib/hiring/indeed-ad";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { appUrl } from "@/lib/app-url";
 import { HiringBoard } from "@/components/hiring/hiring-board";
+import { HIRING_INBOX, listIndeedInvites } from "@/lib/data/indeed-invite";
 
 /**
  * Hiring: who applied from the job ads, whose video is waiting to be
@@ -23,13 +24,17 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
   if (!profile) return null;
   const { position: positionFilter, stage: stageFilter } = (await searchParams) ?? {};
 
-  const [applicants, base, org] = await Promise.all([
+  const [applicants, base, org, invites] = await Promise.all([
     listApplicants(profile.organization_id).catch((err) => {
       console.error("Hiring failed to load:", err);
       return null;
     }),
     outboundBaseUrl(),
     getCurrentOrganization().catch(() => null),
+    listIndeedInvites().catch((err) => {
+      console.error("Indeed invites failed to load:", err);
+      return null;
+    }),
   ]);
 
   const ads = POSITIONS.map((p) => {
@@ -42,6 +47,8 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
       applicants={applicants}
       ads={ads}
       careersUrl={appUrl(base, "/careers")}
+      indeedInvites={invites}
+      hiringInbox={HIRING_INBOX}
       positionFilter={positionFilter}
       stageFilter={stageFilter}
     />

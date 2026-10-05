@@ -3632,6 +3632,42 @@ export interface Database {
           },
         ];
       };
+      indeed_invites: {
+        Row: {
+          id: string;
+          organization_id: string;
+          email_id: string;
+          name: string | null;
+          position: string;
+          relay: string | null;
+          status: string;
+          detail: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          email_id: string;
+          name?: string | null;
+          position: string;
+          relay?: string | null;
+          status: string;
+          detail?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          email_id?: string;
+          name?: string | null;
+          position?: string;
+          relay?: string | null;
+          status?: string;
+          detail?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       invoices: {
         Row: {
           id: string;

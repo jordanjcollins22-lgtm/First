@@ -391,7 +391,9 @@ export type NotificationKind =
   // To the owner when the post finder on the laptop stops. Asked for, not a toggle.
   | "finder_stopped"
   // To the owner when a property manager answers a cold email. Asked for, not a toggle.
-  | "pm_reply";
+  | "pm_reply"
+  // To the owner when an Indeed applicant couldn't be sent our application link. Asked for, not a toggle.
+  | "hiring_alert";
 
 /** How one person wants to hear about one group. "default" follows their
  * general Team group messages setting. */

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { handleIndeedMail, type IndeedOutcome } from "@/lib/data/indeed-invite";
 import { jobFor } from "@/lib/data/thread-email";
 import { getReceivedEmail } from "@/lib/email/resend";
 import { domainOf, looksForged, replyText, senderAddress } from "@/lib/inbound-email";
@@ -11,7 +12,15 @@ import type { Database } from "@/lib/supabase/database.types";
 
 type Admin = SupabaseClient<Database>;
 
-export type InboundOutcome = "filed" | "duplicate" | "unknown_domain" | "unknown_sender" | "no_job" | "forged" | "unreadable";
+export type InboundOutcome =
+  | "filed"
+  | "duplicate"
+  | "unknown_domain"
+  | "unknown_sender"
+  | "no_job"
+  | "forged"
+  | "unreadable"
+  | `indeed_${IndeedOutcome}`;
 
 /**
  * A client's emailed reply, into their conversation.
@@ -51,6 +60,13 @@ export async function fileInboundEmail(admin: Admin, emailId: string): Promise<I
 
   const from = senderAddress(email.from);
   if (!from) return "unknown_sender";
+
+  // Indeed telling us somebody applied: they are sent our application link.
+  const indeed = await handleIndeedMail(admin, organizationId, emailId, email).catch((err) => {
+    log.warn("inbound_email.indeed_failed", { emailId, error: err instanceof Error ? err.message : String(err) });
+    return null;
+  });
+  if (indeed) return `indeed_${indeed}`;
 
   // A property manager answering a cold email: their sequence stops and the
   // owner hears about it. Then filed like any other email if they are also a client.
