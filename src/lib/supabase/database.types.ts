@@ -316,6 +316,8 @@ export interface Database {
           plan_day: string | null;
           link_id: string | null;
           card_style: string | null;
+          before_crop: { x: number; y: number; zoom: number } | null;
+          after_crop: { x: number; y: number; zoom: number } | null;
           created_at: string;
           updated_at: string;
         };

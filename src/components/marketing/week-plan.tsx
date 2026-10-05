@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2, Undo2, X } from "lucide-react";
+import { Check, ImageIcon, Loader2, Undo2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { approvePlanPost, savePlanPost, skipPlanPost, unapprovePlanPost, type PlanResult } from "@/lib/actions/social-plan-actions";
 import { PLAN_KIND_LABEL, cleanHashtags, composePlanCaption, planProblems } from "@/lib/social-plan";
 import type { PlanPost } from "@/lib/data/social-plan";
+import { PictureEditor } from "@/components/marketing/picture-editor";
 
 const dayName = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
@@ -52,7 +54,9 @@ function PlanCard({ post }: { post: PlanPost }) {
   const [tags, setTags] = useState(post.hashtags.join(" "));
   const [result, setResult] = useState<PlanResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editingPictures, setEditingPictures] = useState(false);
   const [pending, start] = useTransition();
+  const router = useRouter();
   const text = { hook, body, cta, hashtags: tags.split(/[\s,]+/).filter(Boolean) };
   const problems = planProblems(text);
   const approved = post.status === "scheduled";
@@ -81,10 +85,17 @@ function PlanCard({ post }: { post: PlanPost }) {
         </Badge>
       </div>
       <div className="grid gap-4 p-4 sm:grid-cols-[240px_1fr]">
-        <a href={post.imageUrl} target="_blank" rel="noreferrer" className="block">
-          {/* eslint-disable-next-line @next/next/no-img-element -- drawn by the app's own picture route */}
-          <img src={post.imageUrl} alt={`Picture for ${dayName(post.day)}`} className="w-full rounded-lg border" loading="lazy" />
-        </a>
+        <div className="flex flex-col gap-2">
+          <a href={post.imageUrl} target="_blank" rel="noreferrer" className="block">
+            {/* eslint-disable-next-line @next/next/no-img-element -- drawn by the app's own picture route */}
+            <img src={post.imageUrl} alt={`Picture for ${dayName(post.day)}`} className="w-full rounded-lg border" loading="lazy" />
+          </a>
+          {!posted && !editingPictures && (
+            <Button size="sm" variant="outline" onClick={() => setEditingPictures(true)}>
+              <ImageIcon className="h-4 w-4" /> Change pictures
+            </Button>
+          )}
+        </div>
         <div className="flex flex-col gap-3 text-sm">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-muted-foreground">Hook (first line, stops the scroll)</span>
@@ -136,6 +147,18 @@ function PlanCard({ post }: { post: PlanPost }) {
           {result && <p className={`text-sm ${result.ok ? "text-emerald-700" : "text-destructive"}`}>{result.message}</p>}
         </div>
       </div>
+      {editingPictures && (
+        <div className="border-t p-4">
+          <PictureEditor
+            post={post}
+            onDone={(r) => {
+              setEditingPictures(false);
+              if (r.message) setResult(r);
+              if (r.ok && r.message) router.refresh();
+            }}
+          />
+        </div>
+      )}
     </article>
   );
 }

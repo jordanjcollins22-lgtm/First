@@ -8,7 +8,8 @@ import { refuseInDemo } from "@/lib/demo-mode";
 import { isOwnerLevel } from "@/lib/roles";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { trackedLink } from "@/lib/outreach-links";
-import { cleanHashtags, composePlanCaption, planProblems, planSlot, type PlanText } from "@/lib/social-plan";
+import { cleanHashtags, composePlanCaption, planProblems, planSlot, type CardStyle, type PlanText } from "@/lib/social-plan";
+import { tidyCrop, type Crop } from "@/lib/social-crop";
 
 export type PlanResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -116,4 +117,88 @@ export async function unapprovePlanPost(id: string): Promise<PlanResult> {
   if (error) return { ok: false, message: "Couldn't change it. Try again." };
   revalidate();
   return { ok: true, message: "Back to waiting for approval." };
+}
+
+export interface PhotoChoice {
+  id: string;
+  kind: "before" | "after" | "during";
+  zone: string | null;
+  takenAt: string;
+}
+
+export interface PictureChoices {
+  jobs: { id: string; label: string }[];
+  jobId: string | null;
+  photos: PhotoChoice[];
+}
+
+/** Jobs with crew photos, newest first, and the photos of one of them, by area. */
+export async function getPictureChoices(jobId: string | null): Promise<PictureChoices | { error: string }> {
+  const who = await owner();
+  if ("refused" in who) return { error: who.refused };
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 180 * 86_400_000).toISOString();
+  const { data: recent } = await supabase
+    .from("job_photos")
+    .select("job_id, created_at, jobs(properties(address))")
+    .in("kind", ["before", "after", "during"])
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(1500);
+  type Recent = { job_id: string; created_at: string; jobs: { properties: { address: string | null } | null } | null };
+  const jobs: { id: string; label: string }[] = [];
+  for (const r of (recent ?? []) as unknown as Recent[]) {
+    if (jobs.some((j) => j.id === r.job_id)) continue;
+    const address = r.jobs?.properties?.address ?? "A job";
+    const short = address.split(",").slice(0, 2).join(",");
+    jobs.push({ id: r.job_id, label: `${short} · ${new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}` });
+  }
+  const pick = jobId ?? jobs[0]?.id ?? null;
+  if (!pick) return { jobs, jobId: null, photos: [] };
+  const { data: photos } = await supabase
+    .from("job_photos")
+    .select("id, kind, zone_name, created_at")
+    .eq("job_id", pick)
+    .in("kind", ["before", "after", "during"])
+    .order("zone_name")
+    .order("created_at");
+  return {
+    jobs,
+    jobId: pick,
+    photos: (photos ?? []).map((p) => ({ id: p.id, kind: p.kind as PhotoChoice["kind"], zone: p.zone_name, takenAt: p.created_at })),
+  };
+}
+
+/**
+ * Change a post's pictures: which photos, how they are laid out, and where
+ * each sits in its space.
+ */
+export async function setPlanPictures(
+  id: string,
+  input: { jobId: string | null; cardStyle: CardStyle; beforeId: string | null; afterId: string | null; beforeCrop: Crop; afterCrop: Crop }
+): Promise<PlanResult> {
+  const who = await owner();
+  if ("refused" in who) return { ok: false, message: who.refused };
+  if (input.cardStyle === "split" && (!input.beforeId || !input.afterId)) return { ok: false, message: "Pick a before and an after." };
+  if (input.cardStyle === "photo" && !input.afterId) return { ok: false, message: "Pick a photo." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("social_posts")
+    .update({
+      job_id: input.jobId,
+      card_style: input.cardStyle,
+      before_photo_id: input.cardStyle === "split" ? input.beforeId : null,
+      after_photo_id: input.cardStyle === "brand" ? null : input.afterId,
+      before_crop: tidyCrop(input.beforeCrop),
+      after_crop: tidyCrop(input.afterCrop),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .in("status", ["draft", "scheduled"]);
+  if (error) {
+    if (error.code === "23505") return { ok: false, message: "That before and after pair is already used on another post." };
+    return { ok: false, message: "Couldn't save the pictures. Try again." };
+  }
+  revalidate();
+  return { ok: true, message: "Pictures saved. The new picture is drawing." };
 }

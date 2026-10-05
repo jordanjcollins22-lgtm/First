@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { trackedLink } from "@/lib/outreach-links";
 import type { CardStyle, PlanKind } from "@/lib/social-plan";
+import { tidyCrop, type Crop } from "@/lib/social-crop";
 
 export interface PlanPost {
   id: string;
@@ -13,6 +14,11 @@ export interface PlanPost {
   cta: string;
   hashtags: string[];
   cardStyle: CardStyle | null;
+  jobId: string | null;
+  beforeId: string | null;
+  afterId: string | null;
+  beforeCrop: Crop;
+  afterCrop: Crop;
   /** The drawn picture, with the last change in it so an edit shows at once. */
   imageUrl: string;
   link: string | null;
@@ -26,7 +32,7 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("social_posts")
-    .select("id, plan_day, kind, status, hook, body, cta, hashtags, card_style, scheduled_for, posted_at, updated_at, link:outreach_links(code, click_count)")
+    .select("id, plan_day, kind, status, hook, body, cta, hashtags, card_style, job_id, before_photo_id, after_photo_id, before_crop, after_crop, scheduled_for, posted_at, updated_at, link:outreach_links(code, click_count)")
     .eq("organization_id", organizationId)
     .not("plan_day", "is", null)
     .gte("plan_day", fromDay)
@@ -45,6 +51,11 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
     cta: string | null;
     hashtags: string[] | null;
     card_style: string | null;
+    job_id: string | null;
+    before_photo_id: string | null;
+    after_photo_id: string | null;
+    before_crop: unknown;
+    after_crop: unknown;
     scheduled_for: string | null;
     posted_at: string | null;
     updated_at: string;
@@ -62,6 +73,11 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
       cta: r.cta ?? "",
       hashtags: r.hashtags ?? [],
       cardStyle: (r.card_style as CardStyle | null) ?? null,
+      jobId: r.job_id,
+      beforeId: r.before_photo_id,
+      afterId: r.after_photo_id,
+      beforeCrop: tidyCrop(r.before_crop),
+      afterCrop: tidyCrop(r.after_crop),
       imageUrl: `/api/social/card/${r.id}?v=${encodeURIComponent(r.updated_at)}`,
       link: link?.code ? trackedLink(base, link.code) : null,
       clicks: link?.click_count ?? 0,

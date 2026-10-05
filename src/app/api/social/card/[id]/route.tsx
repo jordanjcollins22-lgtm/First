@@ -6,6 +6,7 @@ import type { NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
+import { cropBox, tidyCrop } from "@/lib/social-crop";
 
 /**
  * The picture for one of the week's posts, drawn from the crew's own
@@ -20,14 +21,23 @@ export const maxDuration = 30;
 const W = 1080;
 const H = 1350;
 const GREEN = "#2f6d3c";
+/** The two photo spaces of a before-and-after picture. */
+const SPLIT_TOP = { width: W, height: 470 };
+const SPLIT_BOTTOM = { width: W, height: 462 };
 const DARK = "#14261a";
 
 /**
- * A crew photo, made small enough to draw: phone photos run to 12MB, and
- * one that size is more than the drawing can take. Turned upright from the
- * phone's own record of which way was up, and shrunk to the post's width.
+ * A crew photo cut to its space in the picture: turned upright from the
+ * phone's own record of which way was up, scaled to fill the space, zoomed
+ * and moved to where the owner placed it. Phone photos run to 12MB, more
+ * than the drawing can take whole, so it is always cut first.
  */
-async function photoUrl(admin: ReturnType<typeof createAdminClient>, id: string | null): Promise<string | null> {
+async function photoUrl(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string | null,
+  space: { width: number; height: number },
+  crop: unknown
+): Promise<string | null> {
   if (!id) return null;
   const { data: photo } = await admin.from("job_photos").select("path").eq("id", id).maybeSingle();
   if (!photo?.path) return null;
@@ -35,12 +45,14 @@ async function photoUrl(admin: ReturnType<typeof createAdminClient>, id: string 
   if (!file) return null;
   try {
     const sharp = (await import("sharp")).default;
-    const small = await sharp(Buffer.from(await file.arrayBuffer()))
-      .rotate()
-      .resize({ width: W, height: H, fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 82 })
+    const upright = await sharp(Buffer.from(await file.arrayBuffer())).rotate().toBuffer({ resolveWithObject: true });
+    const box = cropBox(upright.info.width, upright.info.height, space.width, space.height, tidyCrop(crop));
+    const cut = await sharp(upright.data)
+      .resize(box.width, box.height)
+      .extract({ left: box.left, top: box.top, width: space.width, height: space.height })
+      .jpeg({ quality: 84 })
       .toBuffer();
-    return `data:image/jpeg;base64,${small.toString("base64")}`;
+    return `data:image/jpeg;base64,${cut.toString("base64")}`;
   } catch {
     const { data } = await admin.storage.from("job-photos").createSignedUrl(photo.path, 600);
     return data?.signedUrl ?? null;
@@ -53,15 +65,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const admin = createAdminClient();
   const { data: post } = await admin
     .from("social_posts")
-    .select("id, hook, card_style, before_photo_id, after_photo_id, plan_day, organization_id")
+    .select("id, hook, card_style, before_photo_id, after_photo_id, before_crop, after_crop, plan_day, organization_id")
     .eq("id", id)
     .not("plan_day", "is", null)
     .maybeSingle();
   if (!post) return new Response("Not found", { status: 404 });
   const { data: org } = await admin.from("organizations").select("name, business_phone").eq("id", post.organization_id).maybeSingle();
 
-  const [before, after] = await Promise.all([photoUrl(admin, post.before_photo_id), photoUrl(admin, post.after_photo_id)]);
-  const style = post.card_style === "split" && before && after ? "split" : post.card_style === "brand" || !after ? "brand" : "photo";
+  const split = post.card_style === "split" && Boolean(post.before_photo_id);
+  const [before, after] = await Promise.all([
+    split ? photoUrl(admin, post.before_photo_id, SPLIT_TOP, post.before_crop) : Promise.resolve(null),
+    post.card_style === "brand" ? Promise.resolve(null) : photoUrl(admin, post.after_photo_id, split ? SPLIT_BOTTOM : { width: W, height: H }, post.after_crop),
+  ]);
+  const style = split && before && after ? "split" : post.card_style === "brand" || !after ? "brand" : "photo";
   const [bold, logoData] = await Promise.all([
     readFile(join(process.cwd(), "assets/fonts/Montserrat-ExtraBold.ttf")),
     readFile(join(process.cwd(), "public/logo-mark.png"), "base64"),
@@ -94,11 +110,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       <div style={{ ...font, display: "flex", flexDirection: "column", width: "100%", height: H, background: DARK }}>
         <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
           <div style={{ display: "flex", position: "relative", width: W, height: 470 }}>
-            <img alt="" src={before!} width={W} height={470} style={{ objectFit: "cover" }} />
+            <img alt="" src={before!} width={W} height={470} />
             {label("BEFORE")}
           </div>
           <div style={{ display: "flex", position: "relative", width: W, height: 470, borderTop: "8px solid white" }}>
-            <img alt="" src={after!} width={W} height={462} style={{ objectFit: "cover" }} />
+            <img alt="" src={after!} width={W} height={462} />
             {label("AFTER")}
           </div>
         </div>
@@ -109,7 +125,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } else if (style === "photo") {
     picture = (
       <div style={{ ...font, display: "flex", position: "relative", width: W, height: H, background: DARK }}>
-        <img alt="" src={after!} width={W} height={H} style={{ objectFit: "cover", position: "absolute", top: 0, left: 0 }} />
+        <img alt="" src={after!} width={W} height={H} style={{ position: "absolute", top: 0, left: 0 }} />
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", position: "absolute", top: 0, left: 0, width: W, height: H, backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(0,0,0,0.85) 82%)" }}>
           <div style={{ display: "flex", padding: "0 48px 40px", color: "white", fontSize: 72, fontWeight: 800, lineHeight: 1.1 }}>{hook}</div>
           {brandBar}
