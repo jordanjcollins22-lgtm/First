@@ -407,6 +407,10 @@ function ZoneSection({
   const setKind = setChosen;
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
+  const firstBefore = photos
+    .filter((p) => p.kind === "before")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+  const hasAfter = photos.some((p) => p.kind === "after");
 
   // The job-wide bucket is only worth showing when it holds something or
   // there are no zones to file things under.
@@ -502,6 +506,42 @@ function ZoneSection({
               </button>
             ))}
           </div>
+
+          {/* The area's before, right where the after is taken: stand where it
+              was taken and point the same way, so the two line up. The first
+              before is the one shown, since a later one can be from partway
+              through. */}
+          {zone && (kind === "after" || kind === "during") && firstBefore?.url && (
+            <div className="mb-2 rounded-lg border border-primary/40 bg-primary/5 p-2">
+              <p className="mb-1 text-xs font-semibold">Line it up with the before</p>
+              <Image
+                src={firstBefore.url}
+                alt={`Before photo, ${zone.name}`}
+                width={600}
+                height={450}
+                unoptimized
+                className="max-h-56 w-full rounded-md object-contain"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Stand where this was taken and point the camera the same way, so the before and after match.
+              </p>
+            </div>
+          )}
+
+          {/* A before taken once the area already has its after is a photo from
+              partway through, filed under the wrong button. Said before it is
+              taken, with the right button one tap away. */}
+          {zone && kind === "before" && hasAfter && (
+            <div className="mb-2 rounded-lg border border-amber-500/60 bg-amber-50/70 p-2 text-xs">
+              <p className="font-semibold">This area already has its after photo.</p>
+              <p className="mt-0.5">A photo taken now is a during or an after, not a before.</p>
+              {available.includes("during") && (
+                <button type="button" className="mt-1 font-semibold underline" onClick={() => setKind("during")}>
+                  Switch to During
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2">
             {/* capture opens the rear camera on a phone and is ignored on a

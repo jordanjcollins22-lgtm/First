@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { useOnSent, useWaiting, WaitingPhotos } from "@/components/offline/waiting-photos";
 import { angleLine, zoneProgress } from "@/lib/guided-zones";
+import { canvasImageUrl } from "@/lib/canvas-image-url";
 import type { WorkOrderZone } from "@/lib/work-order";
 import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
 
@@ -152,6 +153,16 @@ export function GuidedZones({ jobId, zones, photos }: { jobId: string; zones: Wo
         {/* The after photo, from the same angle. The next area waits on it. */}
         <div className="mt-3 rounded-lg border border-dashed border-primary/50 bg-primary/5 p-3">
           <p className="text-sm font-semibold">When this area is done, take the after photo.</p>
+          {/* The before, right beside the camera button: the after is taken
+              standing where this was, pointing the same way. */}
+          {current.photos[0] && (
+            // eslint-disable-next-line @next/next/no-img-element -- public evaluation photo, shown as taken
+            <img
+              src={canvasImageUrl(current.photos[0].path)}
+              alt={`Before, ${current.name}`}
+              className="mt-2 max-h-56 w-full rounded-md border object-contain"
+            />
+          )}
           <p className="mt-0.5 text-xs text-muted-foreground">{angleLine(current.photos.length)}</p>
           {afterHere.length > 0 && (
             <div className="mt-2 grid grid-cols-3 gap-1.5">
