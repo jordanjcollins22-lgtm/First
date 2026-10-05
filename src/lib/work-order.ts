@@ -18,6 +18,7 @@
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { crewInstructions } from "@/lib/crew-instructions";
 import type { Point, WorkZone } from "@/components/canvas/types";
+import { MEASURED_BY_KEY } from "@/lib/measured-by";
 
 export interface ZonePhoto {
   /** Storage path in the canvas-images bucket. */
@@ -103,7 +104,7 @@ export function buildWorkOrder(
     const typeId = zone.service.typeId;
 
     const tasks = Object.entries(zone.service.values ?? {})
-      .filter(([, value]) => value !== "" && value != null)
+      .filter(([key, value]) => key !== MEASURED_BY_KEY && value !== "" && value != null)
       .map(([key, value]) => ({ label: labelFor(typeId, key), value }));
 
     built.push({

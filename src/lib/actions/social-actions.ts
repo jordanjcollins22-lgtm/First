@@ -33,6 +33,7 @@ import {
   privateTermsFor,
   scrubCaption,
 } from "@/lib/social-caption";
+import { MEASURED_BY_KEY } from "@/lib/measured-by";
 
 /** The business line, when none is saved on the organization. */
 const DEFAULT_PHONE = "443-819-1521";
@@ -300,7 +301,7 @@ export async function writeSocialCaption(input: {
   const measured = zone ? zoneMeasurements(zone) : null;
   const materials = zone && catalog ? zoneMaterialLineItems(zone, measured?.areaSqFt ?? 0, catalog).map((m) => m.material) : [];
   const answers = Object.entries(zone?.service?.values ?? {})
-    .filter(([, v]) => typeof v === "string" && v.trim() && v.length <= 60)
+    .filter(([k, v]) => k !== MEASURED_BY_KEY && typeof v === "string" && v.trim() && v.length <= 60)
     .slice(0, 6)
     .map(([k, v]) => `${k.replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}: ${v}`);
   const details = [...new Set(materials)].map((m) => `material: ${m}`).concat(answers);

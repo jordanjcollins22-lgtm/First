@@ -25,6 +25,7 @@
  */
 
 import { lawnWork } from "@/lib/lawn-work";
+import { MEASURED_BY_KEY, MEASURED_FROM_MAP } from "@/lib/measured-by";
 
 export type ProductionUnit = "SF" | "LF" | "CY" | "plant" | "bush" | "job";
 
@@ -114,9 +115,9 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "hand-grading", label: "Grading by hand", unit: "SF", pr: 400, group: "Lawn" },
   { key: "seeding", label: "Seeding (seed, rake in, straw)", unit: "SF", pr: 2000, materialCentsPerUnit: 3, materialName: "Seed and straw", group: "Lawn" },
   { key: "sod-install", label: "Sod installation", unit: "SF", pr: 400, materialCentsPerUnit: 50, materialName: "Sod", group: "Lawn" },
-  { key: "overseeding", label: "Overseeding", unit: "SF", pr: 5000, materialCentsPerUnit: 1, materialName: "Seed", group: "Lawn" },
-  { key: "aeration", label: "Core aeration", unit: "SF", pr: 10000, group: "Lawn" },
-  { key: "dethatching", label: "Dethatching (machine, thatch picked up)", unit: "SF", pr: 5000, group: "Lawn" },
+  { key: "overseeding", label: "Overseeding", unit: "SF", pr: 20000, materialCentsPerUnit: 1, materialName: "Seed", group: "Lawn" },
+  { key: "aeration", label: "Core aeration", unit: "SF", pr: 15000, group: "Lawn" },
+  { key: "dethatching", label: "Dethatching (machine, thatch picked up)", unit: "SF", pr: 8000, group: "Lawn" },
   { key: "fertilization", label: "Fertilization", unit: "SF", pr: 20000, materialCentsPerUnit: 1, materialName: "Fertilizer", group: "Lawn" },
   { key: "leaf-removal", label: "Leaf removal", unit: "SF", pr: 3000, group: "Seasonal" },
   { key: "leaf-removal-heavy", label: "Leaf removal, heavy", unit: "SF", pr: 1500, group: "Seasonal" },
@@ -595,7 +596,7 @@ const CHECKLIST: Record<string, { what: string; keys: string[] }> = {
 /** What the evaluator wrote rather than picked: the notes, "Other" answers, and anything typed in a sentence. */
 function writtenClauses(area: AreaFacts): string[] {
   const typed = Object.entries(area.values ?? {})
-    .filter(([key, value]) => typeof value === "string" && !key.endsWith("__qty") && (key.endsWith("__other") || value.trim().split(/\s+/).length >= 3))
+    .filter(([key, value]) => typeof value === "string" && !key.endsWith("__qty") && key !== MEASURED_BY_KEY && (key.endsWith("__other") || value.trim().split(/\s+/).length >= 3))
     .map(([, value]) => value as string);
   return [area.notes ?? "", ...typed]
     .join(". ")
@@ -629,6 +630,12 @@ export function scopeGaps(area: AreaFacts, lines: PriceLine[], services: Product
         message: `This lawn is being ${work.dethatch ? "dethatched, " : ""}aerated and overseeded, not redone, but ${redo.map((l) => label(l.key).toLowerCase()).join(" and ")} ${redo.length === 1 ? "is" : "are"} priced over all of it.`,
       });
     }
+  }
+  if (area.values?.[MEASURED_BY_KEY] === MEASURED_FROM_MAP && area.areaSqFt != null) {
+    gaps.push({
+      id: "size-from-map",
+      message: `The ${sf(area.areaSqFt)} was estimated from the map, not measured on site. Check it against the aerial: only the part that gets the work.`,
+    });
   }
   lines.forEach((l, i) => {
     const s = productionService(l.key, services);

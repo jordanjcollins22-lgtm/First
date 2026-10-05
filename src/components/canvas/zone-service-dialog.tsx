@@ -1,5 +1,6 @@
 "use client";
 
+import { MEASURED_BY, MEASURED_BY_KEY, MEASURED_FROM_MAP } from "@/lib/measured-by";
 import { type ChangeEvent, type MouseEvent as ReactMouseEvent, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, Check, ClipboardPaste, Eye, ImagePlus, Loader2, MessageCircle, Pencil, Trash2, X } from "lucide-react";
@@ -449,6 +450,9 @@ export function ZoneServiceDialog({
   const widthInputRef = useRef<HTMLInputElement>(null);
   const [lengthFt, setLengthFt] = useState(initialLengthFt?.toString() ?? "");
   const [widthFt, setWidthFt] = useState(initialWidthFt?.toString() ?? "");
+  // On site or off a map: kept apart from the answers until saving, because
+  // picking the service clears those.
+  const [measuredBy, setMeasuredBy] = useState(initialService?.values?.[MEASURED_BY_KEY] ?? "");
   // Answering everything already on file would mean re-clicking through
   // questions that were already answered, so jump straight to the summary
   // for a zone that's been filled in before; walk fresh zones one at a time.
@@ -879,8 +883,9 @@ export function ZoneServiceDialog({
       if (entry.type || entry.color) cleanedChoices[name] = entry;
     }
 
+    const answered = measuredBy ? { ...values, [MEASURED_BY_KEY]: measuredBy } : values;
     const service: ZoneServiceData | null = typeId
-      ? { typeId, values, notes, photos, photoMarkers, tools, materials: extraMaterials, materialChoices: cleanedChoices }
+      ? { typeId, values: answered, notes, photos, photoMarkers, tools, materials: extraMaterials, materialChoices: cleanedChoices }
       : null;
 
     if (serviceType) {
@@ -1000,7 +1005,7 @@ export function ZoneServiceDialog({
         // An unconfirmed length is not a measurement. Letting Next through
         // would be guessing on the evaluator's behalf about the one thing
         // this step exists to establish.
-        nextDisabled={!measurementIsSettled(measurement)}
+        nextDisabled={!measurementIsSettled(measurement) || (measurement.lengthFt != null && !measuredBy)}
         question={asked(STEP_QUESTIONS.measurements)}
         title="What are the measurements?"
         subtitle="Measure on site, in feet. Length only is fine for a run."
@@ -1039,6 +1044,22 @@ export function ZoneServiceDialog({
               />
             </div>
           </div>
+          {/* A size off the map is checked against the aerial before it is priced. */}
+          {measurement.lengthFt != null && (
+            <div className="flex flex-col gap-1.5">
+              <Label>How did you get it?</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {MEASURED_BY.map((how) => (
+                  <Button key={how} type="button" size="sm" variant={measuredBy === how ? "default" : "outline"} onClick={() => setMeasuredBy(how)}>
+                    {how}
+                  </Button>
+                ))}
+              </div>
+              {measuredBy === MEASURED_FROM_MAP && (
+                <p className="text-xs text-amber-800 dark:text-amber-300">Only the part that gets the work: where the lawn stops at the trees, the beds and not the patio. It will be checked against the aerial before it is priced.</p>
+              )}
+            </div>
+          )}
           {/* A length with no width is ambiguous: a run, or a form somebody
               is halfway through typing. The difference is a price, so it is
               asked rather than assumed. */}

@@ -14,6 +14,7 @@
 
 import type { Phase } from "@/lib/area-work";
 import { lawnWork } from "@/lib/lawn-work";
+import { MEASURED_BY_KEY } from "@/lib/measured-by";
 
 type Values = Record<string, string | undefined>;
 
@@ -320,6 +321,6 @@ export function crewInstructions(typeId: string, values: Values): string[] {
   if (steps) return steps.map((s) => s.label);
   // A service we have no words for yet: say what was noted, plainly.
   return Object.entries(values)
-    .filter(([key, value]) => value && !key.includes("__"))
+    .filter(([key, value]) => value && !key.includes("__") && key !== MEASURED_BY_KEY)
     .map(([, value]) => `${value}.`);
 }

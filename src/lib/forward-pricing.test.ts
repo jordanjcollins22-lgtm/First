@@ -398,3 +398,12 @@ describe("what the walkthrough asks for and the price leaves out", () => {
     expect(ids(morningBrook.bed, lines)).toContain("asked-bushRemoval");
   });
 });
+
+describe("sizes taken off the map", () => {
+  it("asks for an estimated size to be checked against the aerial before the price goes out", () => {
+    const lawn = area({ typeId: "lawn-restoration", values: { approach: "Aerate & Overseed", measuredBy: "Estimated from the map" }, areaSqFt: 34730 });
+    expect(scopeGaps(lawn, suggestLines(lawn)).map((g) => g.id)).toEqual(["size-from-map"]);
+    const measured = area({ typeId: "lawn-restoration", values: { approach: "Aerate & Overseed", measuredBy: "Measured on site" }, areaSqFt: 34730 });
+    expect(scopeGaps(measured, suggestLines(measured))).toEqual([]);
+  });
+});
