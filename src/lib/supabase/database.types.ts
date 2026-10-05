@@ -4328,6 +4328,32 @@ export interface Database {
         };
         Relationships: [];
       };
+      finder_computers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string | null;
+          version: string | null;
+          label: string | null;
+          first_seen_at: string;
+          last_seen_at: string;
+          last_look: Json | null;
+          last_look_at: string | null;
+        };
+        Insert: {
+          id: string;
+          organization_id: string;
+          profile_id?: string | null;
+          version?: string | null;
+          label?: string | null;
+          first_seen_at?: string;
+          last_seen_at?: string;
+          last_look?: Json | null;
+          last_look_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["finder_computers"]["Insert"]>;
+        Relationships: [];
+      };
       job_ad_clicks: {
         Row: {
           job_id: string;

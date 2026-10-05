@@ -102,6 +102,40 @@ export function FinderLiveCard({ initial }: { initial: FinderLive }) {
         <span className="text-muted-foreground"> · {live.today.businesses} business ads kept for later</span>
       </p>
 
+      {live.computers.length > 0 && (
+        <div className="mt-3 rounded-xl border border-border/60 p-3">
+          <p className="text-xs font-semibold">
+            {(() => {
+              const running = live.computers.filter((c) => c.running).length;
+              return running > 1
+                ? `${running} computers running. Each reads its own home and groups feed; the searches and listed groups are split between them.`
+                : running === 1
+                  ? "1 computer running."
+                  : "No computer running right now.";
+            })()}
+          </p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {live.computers.map((c, i) => (
+              <li key={c.id} className="flex flex-wrap items-center gap-x-2 text-xs">
+                <span className={`inline-block h-2 w-2 rounded-full ${c.running ? "bg-emerald-500" : "bg-zinc-400"}`} aria-hidden />
+                <span className="font-medium">
+                  {c.name ?? "A computer"}
+                  {live.computers.filter((o) => o.name === c.name).length > 1 ? ` (${i + 1})` : ""}
+                </span>
+                <span className="text-muted-foreground">
+                  {c.running
+                    ? c.lookName
+                      ? `on ${c.lookName}${c.lookPosts != null ? `, read ${c.lookPosts}` : ""}`
+                      : "starting"
+                    : `last seen ${ago(c.seenAt, now)}`}
+                  {c.version ? ` · v${c.version}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {live.latest.length > 0 && (
         <ul className="mt-3 divide-y divide-border/60 border-t border-border/60">
           {live.latest.map((p) => (

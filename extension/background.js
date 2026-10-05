@@ -147,9 +147,23 @@ async function setStatus(text) {
 }
 
 /** What the app says right now. Null when not signed in or unreachable. */
+/**
+ * This computer's own id: made once, kept in this Chrome. The app uses it to
+ * tell computers apart, so two of them running at once split the searches
+ * between them instead of both doing all of them.
+ */
+async function computerId() {
+  const { computerId: kept } = await chrome.storage.local.get("computerId");
+  if (kept) return kept;
+  const made = crypto.randomUUID();
+  await chrome.storage.local.set({ computerId: made });
+  return made;
+}
+
 async function fetchConfig() {
   try {
-    const res = await fetch(`${API}/config?v=${encodeURIComponent(VERSION)}`, { credentials: "include", cache: "no-store" });
+    const id = await computerId();
+    const res = await fetch(`${API}/config?v=${encodeURIComponent(VERSION)}&computer=${encodeURIComponent(id)}`, { credentials: "include", cache: "no-store" });
     if (res.status === 401) {
       await setStatus("Not signed in to the app. Open it and sign in, then this carries on.");
       return null;
@@ -359,6 +373,7 @@ async function sendCandidates(target, found) {
         groupName: target.groupName || found.group || null,
         posts: found.posts,
         look: { name: target.name, source: target.source, stats: found.stats ?? null, version: VERSION },
+        computer: await computerId(),
       }),
     });
     if (!res.ok) {

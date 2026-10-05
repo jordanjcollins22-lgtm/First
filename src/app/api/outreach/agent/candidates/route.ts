@@ -2,6 +2,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentProfile } from "@/lib/data/team";
 import { getAgentSettings, recordSeen } from "@/lib/data/outreach-agent";
+import { computerKey, noteLook } from "@/lib/data/finder-computers";
 import {
   ageDaysFromLabel,
   cleanPostText,
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
     groupName?: string;
     posts?: IncomingPost[];
     look?: { name?: unknown; source?: unknown; stats?: unknown; version?: unknown } | null;
+    computer?: string | null;
   };
   try {
     body = await request.json();
@@ -125,6 +127,8 @@ export async function POST(request: NextRequest) {
   // scanner that has stopped seeing posts shows up here and not only in a
   // popup on one computer. Trimmed: this is a diagnosis, not an archive.
   if (body.look && typeof body.look === "object") {
+    // This computer's own last look too, for the list of computers running.
+    await noteLook(computerKey(body.computer, profile.id), profile.organization_id, lookFrom(body.look, posts.length), now).catch(() => undefined);
     await (await createClient())
       .from("outreach_agent_settings")
       .update({ last_look: lookFrom(body.look, posts.length), last_look_at: now.toISOString() })

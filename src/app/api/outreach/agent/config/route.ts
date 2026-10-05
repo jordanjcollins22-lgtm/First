@@ -9,6 +9,9 @@ import { settingsForBrowser, standing } from "@/lib/outreach-agent";
 import { DEFAULT_RECIPE, EXTENSION_DOWNLOAD_URL, EXTENSION_VERSION, versionIsBehind } from "@/lib/outreach-agent-recipe";
 import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
 import { reviewSourcesDue } from "@/lib/data/review-sources";
+import { checkIn, computerKey, runningWithOwners } from "@/lib/data/finder-computers";
+import { readsReviews, shareFor } from "@/lib/finder-fleet";
+import { GROUPS_FEED_URL } from "@/lib/outreach-agent";
 
 /**
  * What the browser is allowed to do right now, and how to read the page.
@@ -44,6 +47,18 @@ export async function GET(request: NextRequest) {
   ]);
   const state = standing({ settings, now, timeZone: BUSINESS_TIME_ZONE, ...counts });
   const installed = request.nextUrl.searchParams.get("v");
+
+  // Which computer this is, checked in before the work is shared out, so a
+  // computer that has just been turned on is counted at once.
+  const computer = computerKey(request.nextUrl.searchParams.get("computer"), profile.id);
+  await checkIn(
+    { id: computer, organizationId: profile.organization_id, profileId: profile.id, name: profile.full_name || profile.email, version: installed && /^\d+(\.\d+){0,3}$/.test(installed) ? installed : null },
+    now
+  ).catch(() => undefined);
+  const { running, owners } = await runningWithOwners(profile.organization_id, now).catch(() => ({ running: [], owners: new Set<string>() }));
+  const shared = shareFor(settingsForBrowser(settings), running, computer, GROUPS_FEED_URL);
+  // Only one computer reads the review pages.
+  const myReviews = readsReviews(running, computer, owners) ? reviews : [];
   // Which copy asked, so the app can say when it needs updating even while
   // the finder is paused and nothing is being looked at. Never holds up the
   // answer.
@@ -59,7 +74,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    settings: settingsForBrowser(settings),
+    settings: shared,
+    computer: { id: computer, place: shared.share.place, of: shared.share.of },
     // Nothing waits for the owner's OK any more; an older copy of the
     // extension reads toReview, and zero keeps it from nagging.
     counts: { ...counts, toReview: 0, toAnswer },
@@ -73,7 +89,7 @@ export async function GET(request: NextRequest) {
     who: profile.full_name || profile.email,
     now: now.toISOString(),
     recipe: DEFAULT_RECIPE,
-    reviews,
+    reviews: myReviews,
     extension: {
       expectedVersion: EXTENSION_VERSION,
       installedVersion: installed,
