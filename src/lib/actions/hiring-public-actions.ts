@@ -101,8 +101,13 @@ export async function applyForPosition(input: {
   return result.passed ? { ok: true, passed: true, token } : { ok: true, passed: false };
 }
 
-/** Big enough for a minute or two from a phone. Bigger goes as a link. */
-const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+/**
+ * The storage's own cap on one upload (the project setting, 50 MB), so a
+ * video over it is turned away before it is sent rather than after. The
+ * page records at a bitrate that keeps a couple of minutes well under it;
+ * a full-quality phone recording can be bigger and goes as a link.
+ */
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const VIDEO_TYPES: Record<string, string> = {
   "video/mp4": "mp4",
   "video/quicktime": "mov",
@@ -130,7 +135,7 @@ export async function startApplicantVideo(input: { token: string; type: string; 
   const applicant = await applicantFor(input.token);
   if (!applicant) return { ok: false, error: "That link has expired or was never ours." };
   if (applicant.stage !== "video_requested" && applicant.stage !== "video_submitted") return { ok: false, error: CLOSED };
-  const ext = VIDEO_TYPES[input.type];
+  const ext = VIDEO_TYPES[input.type.split(";")[0].trim().toLowerCase()];
   if (!ext) return { ok: false, error: "That isn't a video we can play. Try an MP4 or a video from your phone's camera." };
   if (!(input.size > 0)) return { ok: false, error: "Choose a video first." };
   if (input.size > MAX_VIDEO_BYTES) return { ok: false, error: "too_big" };
