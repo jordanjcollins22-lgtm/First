@@ -261,8 +261,8 @@ describe("settingsForBrowser", () => {
     const out = settingsForBrowser({ ...base, sources: { feed: true, search: false, list: true } });
     expect(out.groups.map((g) => g.url)).toEqual([GROUPS_FEED_URL, "https://www.facebook.com/groups/abc/?sorting_setting=CHRONOLOGICAL"]);
   });
-  it("reads everything newest first", () => {
-    expect(HOME_FEED_URL).toBe("https://www.facebook.com/?filter=all&sk=h_chr");
+  it("reads search and listed groups newest first, the home feed as it comes", () => {
+    expect(HOME_FEED_URL).toBe("https://www.facebook.com/");
     expect(newestFirstGroupUrl("https://www.facebook.com/groups/abc/?ref=share")).toBe(
       "https://www.facebook.com/groups/abc/?ref=share&sorting_setting=CHRONOLOGICAL"
     );

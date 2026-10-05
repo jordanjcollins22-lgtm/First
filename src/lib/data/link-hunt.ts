@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { log } from "@/lib/log";
 import { cleanPostUrl } from "@/lib/outreach-agent";
 import { isPostLink } from "@/lib/post-board";
 import { HUNT_MAX_TRIES, HUNT_RETRY_MS, HUNT_WITHIN_DAYS, huntUrl, huntWords, samePost } from "@/lib/link-hunt";
@@ -19,7 +20,7 @@ export async function handOutHunts(organizationId: string, now: Date, limit = 3)
   const admin = createAdminClient();
   const since = new Date(now.getTime() - HUNT_WITHIN_DAYS * 86_400_000).toISOString();
   const retry = new Date(now.getTime() - HUNT_RETRY_MS).toISOString();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("outreach_seen_posts")
     .select("id, text, author, group_name, group_key, link_hunt_at")
     .eq("organization_id", organizationId)
@@ -28,9 +29,15 @@ export async function handOutHunts(organizationId: string, now: Date, limit = 3)
     .eq("url", "")
     .lt("link_hunt_tries", HUNT_MAX_TRIES)
     .gte("created_at", since)
-    .or(`link_hunt_at.is.null,link_hunt_at.lt.${retry}`)
+    // Quoted: a timestamp has dots and colons, which an unquoted value in
+    // an or() filter is split on, and the whole filter then fails.
+    .or(`link_hunt_at.is.null,link_hunt_at.lt."${retry}"`)
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (error) {
+    log.warn("finder.hunt_query_failed", { error: error.message });
+    return [];
+  }
   const hunts: LinkHunt[] = [];
   for (const row of data ?? []) {
     const words = huntWords(row.text ?? "", [row.group_name, row.author]);

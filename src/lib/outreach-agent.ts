@@ -88,11 +88,12 @@ export const GROUPS_FEED_URL = "https://www.facebook.com/groups/feed/";
 
 /**
  * The account's own home feed: friends, pages and groups together, where
- * most of the asking turns up. Facebook's Feeds view, newest first, rather
- * than the home page's pick of what it thinks is interesting, which shows
- * posts from days ago between the new ones.
+ * most of the asking turns up. The plain home page: Facebook's newest-first
+ * Feeds view was tried and draws no posts the finder can read (every look
+ * on it came back with none), so new posts are put first on the board
+ * instead, by when they went up.
  */
-export const HOME_FEED_URL = "https://www.facebook.com/?filter=all&sk=h_chr";
+export const HOME_FEED_URL = "https://www.facebook.com/";
 
 /** A listed group sorted by new posts, the way its "New posts" sort writes it, instead of "Most relevant". */
 export function newestFirstGroupUrl(url: string): string {
