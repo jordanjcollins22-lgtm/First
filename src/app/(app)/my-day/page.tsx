@@ -824,6 +824,11 @@ async function OwnersDay({ profile }: { profile: Profile }) {
       {/* One refresh for both, every two minutes, rather than one each. */}
       <AutoRefresh seconds={120} />
       <h1 className="mb-4 text-2xl font-bold">My Day</h1>
+      {/* Emails the app is holding for a yes, first: nothing else on the
+          page sends them, and a proposal waiting here is a client waiting. */}
+      <Suspense fallback={null}>
+        <ApprovalsBlock />
+      </Suspense>
       <Suspense fallback={<BlockLoading lines={3} />}>
         <EvaluationsTodayBlock profile={profile} />
       </Suspense>
