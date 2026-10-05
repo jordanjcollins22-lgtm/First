@@ -627,7 +627,7 @@ async function scanPosts(keywords, r, asked) {
   const done = memory.done;
   const tries = memory.tries;
   const byUrl = new Map();
-  const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, shared: 0, samples: [] };
+  const stats = { posts: 0, withText: 0, mentioned: 0, mentionedNoLink: 0, withLink: 0, shared: 0, samples: [], probes: [] };
 
   // Catch what Facebook copies. Pressing "Copy link" makes the page write
   // the post's link to the clipboard; the write is caught here instead, so
@@ -693,7 +693,7 @@ async function scanPosts(keywords, r, asked) {
   // anything: another link inside the post that carries the post's number
   // (a photo, the comments, a reaction), and the data Facebook keeps behind
   // the post on the page itself, which also has when it went up.
-  const via = { page: 0, anchor: 0, data: 0, share: 0, time: 0 };
+  const via = { page: 0, anchor: 0, data: 0, html: 0, hover: 0, share: 0, time: 0 };
   const canonical = (href, groupId) => {
     let u;
     try {
@@ -748,11 +748,28 @@ async function scanPosts(keywords, r, asked) {
     let budget = r.dataBudget ?? 3000;
     let url = null;
     let createdAt = null;
+    // The post's number under the names search results keep it, when no
+    // address is kept with it, and the group's number to put it in.
+    let postId = null;
+    let dataGroup = null;
+    const keys = new Set();
     const groupId = groupIdOf(Array.from(box.querySelectorAll("a[href]")));
     const look = (value, depth) => {
       if (budget <= 0 || (url && createdAt) || depth > (r.dataDepth ?? 7)) return;
       if (typeof value === "string") {
         if (!url && value.length < 400 && /facebook\.com/i.test(value)) url = canonical(value, groupId);
+        // "feedback:<post number>", written in base64, on every post's comments box.
+        if (!postId && /^ZmVlZGJhY2s6[A-Za-z0-9+/=]{4,40}$/.test(value)) {
+          try {
+            const m = atob(value).match(/^feedback:(\d{8,20})$/);
+            if (m) {
+              postId = m[1];
+              keys.add("feedback");
+            }
+          } catch {
+            // Not base64 after all.
+          }
+        }
         return;
       }
       if (!value || typeof value !== "object" || seen.has(value)) return;
@@ -769,6 +786,15 @@ async function scanPosts(keywords, r, asked) {
         if (!createdAt && (key === "creation_time" || key === "created_time") && typeof v === "number" && v > 1e9 && v < 4e9) {
           createdAt = new Date(v * 1000).toISOString();
           continue;
+        }
+        if ((key === "post_id" || key === "top_level_post_id" || key === "story_fbid" || key === "mf_story_key") && typeof v === "string" && /^\d{8,20}$/.test(v)) {
+          keys.add(key);
+          if (!postId) postId = v;
+          continue;
+        }
+        if ((key === "group_id" || key === "groupID") && typeof v === "string" && /^\d{5,20}$/.test(v)) {
+          keys.add(key);
+          if (!dataGroup) dataGroup = v;
         }
         if (!url && (key === "permalink_url" || key === "url" || key === "wwwURL" || key === "shareable_url") && typeof v === "string") {
           const found = canonical(v, groupId);
@@ -805,7 +831,76 @@ async function scanPosts(keywords, r, asked) {
     } catch {
       // The page's data could not be read; the Share menu is still tried.
     }
-    return { url, createdAt };
+    // Only the post's number was kept: its address is made from it, in its
+    // group when the group is known. Facebook opens a bare post number too.
+    if (!url && postId) {
+      const g = groupId && !/^(feed|discover|joins|search)$/i.test(groupId) ? groupId : dataGroup;
+      url = g ? `https://www.facebook.com/groups/${g}/posts/${postId}/` : `https://www.facebook.com/${postId}`;
+    }
+    return { url, createdAt, keys: Array.from(keys), fiber: Boolean(fiberOf(box)) };
+  };
+
+  // Any address of the post written anywhere in its own markup: in a link
+  // Facebook has not drawn as one, in a photo's link ("set=gm.<number>"),
+  // or escaped inside the page's own data.
+  const fromHtml = (box, groupId) => {
+    let html = "";
+    try {
+      html = box.innerHTML.replace(/\\\//g, "/").replace(/&amp;/g, "&").replace(/%2F/gi, "/").replace(/%3F/gi, "?").replace(/%3D/gi, "=").replace(/%26/g, "&");
+    } catch {
+      return null;
+    }
+    const tries = [
+      /https?:\/\/(?:www\.)?facebook\.com\/groups\/[^"'\s<>?#/]+\/(?:posts|permalink)\/(?:\d+|pfbid\w+)/i,
+      /https?:\/\/(?:www\.)?facebook\.com\/[^"'\s<>?#/]+\/posts\/(?:pfbid\w+|\d+)/i,
+      /https?:\/\/(?:www\.)?facebook\.com\/(?:story|permalink)\.php\?story_fbid=(?:pfbid\w+|\d+)&(?:amp;)?id=\d+/i,
+    ];
+    for (const re of tries) {
+      const m = html.match(re);
+      if (m) {
+        const url = canonical(m[0], groupId);
+        if (url) return url;
+      }
+    }
+    const gm = html.match(/[?&]set=gm\.(\d{8,20})/);
+    if (gm && groupId) return `https://www.facebook.com/groups/${groupId}/posts/${gm[1]}/`;
+    return null;
+  };
+
+  // What a post with no link had in it, for working out why: the shapes of
+  // its links (numbers written as N), how many were empty, whether the page
+  // data was there, and which kinds of post address appear in its markup.
+  const probeOf = (box, data) => {
+    const anchors = Array.from(box.querySelectorAll("a"));
+    const shape = (h) =>
+      String(h || "(none)")
+        .replace(/^https?:\/\/(www\.)?facebook\.com/i, "")
+        .replace(/pfbid\w+/g, "P")
+        .replace(/\d{3,}/g, "N")
+        .replace(/=[^&]*/g, "")
+        .slice(0, 70);
+    let html = "";
+    try {
+      html = box.innerHTML;
+    } catch {
+      // Nothing to count.
+    }
+    const count = (re) => (html.match(re) || []).length;
+    return {
+      anchors: anchors.length,
+      empty: anchors.filter(unfilled).length,
+      shapes: Array.from(new Set(anchors.map((a) => shape(a.getAttribute("href"))))).slice(0, 12),
+      fiber: data?.fiber ?? false,
+      keys: data?.keys ?? [],
+      html: {
+        groupPosts: count(/\/groups\/[^"'\s<>]+\/(?:posts|permalink)\//g),
+        ownPosts: count(/\/posts\/pfbid/g),
+        storyFbid: count(/story_fbid/g),
+        setGm: count(/set=gm\./g),
+        feedback: count(/ZmVlZGJhY2s6/g),
+      },
+      article: box.getAttribute("role") || (box.hasAttribute("aria-posinset") ? "posinset" : box.getAttribute("data-pagelet") || "?"),
+    };
   };
 
   // When a post went up. Facebook scrambles the short "2h" with hidden
@@ -921,6 +1016,10 @@ async function scanPosts(keywords, r, asked) {
         url = data.url;
         how = "data";
       }
+      if (!url) {
+        url = fromHtml(box, groupIdOf(links));
+        if (url) how = "html";
+      }
       // No link yet: one more hover on the next pass before giving up on it.
       if (!url && attempt < 2) continue;
       done.add(box);
@@ -994,6 +1093,7 @@ async function scanPosts(keywords, r, asked) {
           if (candidate && (!group || candidate !== group.name)) author = candidate;
         }
       }
+      if (!url && stats.probes.length < (r.probeMax ?? 4)) stats.probes.push(probeOf(box, data));
       byUrl.set(key, { url, text, author: author.slice(0, 80), anonymous, ageLabel, postedLabel, postedAt: data.createdAt, group, matched, engagement: engagementOf(box) });
     }
   };

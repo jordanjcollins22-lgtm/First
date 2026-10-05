@@ -86,8 +86,24 @@ function lookFrom(raw: { name?: unknown; source?: unknown; stats?: unknown; vers
     // Where each link came from, so a look that finds none says which way failed.
     via: (() => {
       const v = (stats.via && typeof stats.via === "object" ? stats.via : {}) as Record<string, unknown>;
-      return { page: num(v.page), anchor: num(v.anchor), data: num(v.data), share: num(v.share), time: num(v.time) };
+      return { page: num(v.page), anchor: num(v.anchor), data: num(v.data), html: num(v.html), hover: num(v.hover), share: num(v.share), time: num(v.time) };
     })(),
+    // What posts that came without a link had in them, so why can be read
+    // straight off the look: link shapes, empty links, the page data, and
+    // which kinds of post address are anywhere in the markup.
+    probes: (Array.isArray(stats.probes) ? stats.probes.slice(0, 4) : []).map((p) => {
+      const row = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+      const html = (row.html && typeof row.html === "object" ? row.html : {}) as Record<string, unknown>;
+      return {
+        anchors: num(row.anchors),
+        empty: num(row.empty),
+        shapes: (Array.isArray(row.shapes) ? row.shapes : []).slice(0, 12).map((x) => str(x, 70)),
+        fiber: row.fiber === true,
+        keys: (Array.isArray(row.keys) ? row.keys : []).slice(0, 8).map((x) => str(x, 30)),
+        html: { groupPosts: num(html.groupPosts), ownPosts: num(html.ownPosts), storyFbid: num(html.storyFbid), setGm: num(html.setGm), feedback: num(html.feedback) },
+        article: str(row.article, 30),
+      };
+    }),
     textChars: num(stats.textChars),
     sent,
     samples: samples.map((s) => {
