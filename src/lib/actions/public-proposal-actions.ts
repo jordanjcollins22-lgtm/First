@@ -25,6 +25,8 @@ import { previewResult, schedulePath } from "@/lib/proposal-flow";
 import { isSameSitting } from "@/lib/proposal-views";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
+import { applyOption, readOptions } from "@/lib/proposal-options";
+import type { Json } from "@/lib/supabase/database.types";
 
 /**
  * The client's Accept/Decline click — no logged-in user exists, so this runs
@@ -36,13 +38,13 @@ import type { ProposalZoneSnapshot } from "@/types/domain";
 /** The client already has an invoice to pay; no checkout needs starting. */
 class AlreadyInvoiced extends Error {}
 
-export async function respondToProposal(token: string, response: "accepted" | "declined", note: string) {
+export async function respondToProposal(token: string, response: "accepted" | "declined", note: string, optionKey?: string | null) {
   if (response !== "accepted" && response !== "declined") throw new Error("Invalid response.");
 
   const admin = createAdminClient();
   const { data: proposal, error } = await admin
     .from("job_proposals")
-    .select("id, job_id, status, total_cost, discount_amount, expires_at")
+    .select("id, job_id, status, total_cost, discount_amount, expires_at, options, scope_snapshot")
     .eq("token", token)
     .maybeSingle();
   if (error) throw error;
@@ -59,15 +61,34 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     throw new Error("This proposal has no price on it yet. Please give us a call before accepting.");
   }
 
+  // Offered more than one way: accepting is accepting one of them, and the
+  // proposal takes that one's price and areas before anything is billed.
+  const snapshot = (Array.isArray(proposal.scope_snapshot) ? proposal.scope_snapshot : []) as unknown as ProposalZoneSnapshot[];
+  const offered = readOptions(proposal.options, snapshot.length);
+  let chosen: { totalCost: number; snapshot: ProposalZoneSnapshot[] } | null = null;
+  if (response === "accepted" && offered) {
+    const option = offered.options.find((o) => o.key === optionKey);
+    if (!option) throw new Error("Choose one of the options first.");
+    chosen = applyOption(snapshot, option);
+  }
+
   const { error: updateError } = await admin
     .from("job_proposals")
     .update({
       status: response,
       responded_at: new Date().toISOString(),
       client_response_note: note.trim() || null,
+      ...(chosen
+        ? {
+            total_cost: chosen.totalCost,
+            scope_snapshot: chosen.snapshot as unknown as Json,
+            options: { ...(proposal.options as Record<string, unknown>), chosen: optionKey } as unknown as Json,
+          }
+        : {}),
     })
     .eq("id", proposal.id);
   if (updateError) throw updateError;
+  if (chosen) proposal.total_cost = chosen.totalCost;
 
   notifyJobTeam(
     proposal.job_id,

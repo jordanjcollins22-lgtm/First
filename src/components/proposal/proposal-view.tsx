@@ -38,6 +38,8 @@ import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
 import { displayLabel } from "@/lib/zone-scope";
 import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
+import { readOptions } from "@/lib/proposal-options";
+import { OptionCards } from "@/components/proposal/option-cards";
 import type { JobMessage, ProposalStatus } from "@/types/domain";
 
 function formatTotal(total: number | null): string {
@@ -121,6 +123,10 @@ function ProposalBody({
     }))
   );
 
+  // More than one way to do the job: the client picks one, and Accept accepts it.
+  const offered = readOptions(proposal.options, proposal.scope_snapshot.length);
+  const [optionKey, setOptionKey] = useState<string | null>(offered?.chosen ?? null);
+  const picked = offered?.options.find((o) => o.key === optionKey) ?? null;
   const [status, setStatus] = useState<ProposalStatus>(proposal.status);
   const [respondedAt, setRespondedAt] = useState(proposal.responded_at);
   const [decliningNote, setDecliningNote] = useState("");
@@ -146,7 +152,7 @@ function ProposalBody({
     setError(null);
     startTransition(async () => {
       try {
-        await respondToProposal(token, response, note);
+        await respondToProposal(token, response, note, optionKey);
         setStatus(response);
         setRespondedAt(new Date().toISOString());
         // Straight on to how they are paying, on its own page. Leaving them
@@ -323,6 +329,19 @@ function ProposalBody({
       {/* The price. Nearly always the most read thing on the page, and the
           one whose reading time is worth the most: a client sitting on this
           for ninety seconds is deciding, and can be rung while they are. */}
+      {offered ? (
+        <Watched section="price">
+          <OptionCards
+            options={offered.options}
+            selected={optionKey}
+            onSelect={(key) => {
+              click("choose-option", key);
+              setOptionKey(key);
+            }}
+            locked={status !== "sent" && status !== "needs_approval"}
+          />
+        </Watched>
+      ) : (
       <Watched
         section="price"
         className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-6 text-center"
@@ -345,6 +364,7 @@ function ProposalBody({
           </>
         )}
       </Watched>
+      )}
 
       {/* Before the terms and the buttons: a client with an unanswered worry
           does not read terms, they close the tab. Most of those worries have
@@ -445,13 +465,13 @@ function ProposalBody({
                   type="button"
                   size="xl"
                   className="w-full sm:flex-1"
-                  disabled={isPending}
+                  disabled={isPending || (offered != null && !picked)}
                   onClick={() => {
                     click("accept");
                     respond("accepted");
                   }}
                 >
-                  Accept this proposal
+                  {offered ? (picked ? `Accept ${picked.name}, ${formatTotal(picked.totalCents / 100)}` : "Choose an option above") : "Accept this proposal"}
                 </Button>
                 <Button
                   type="button"

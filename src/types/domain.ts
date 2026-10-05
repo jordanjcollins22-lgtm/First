@@ -756,6 +756,8 @@ export interface JobProposal {
   id: string;
   /** What the number was built from: hours, crew, travel, materials, costs. Null on proposals built before it existed. */
   estimate?: import("@/lib/job-estimate").JobEstimate | null;
+  /** More than one way to do the job, each with its price; read with readOptions. Null for a single price. */
+  options?: unknown;
   job_id: string;
   organization_id: string;
   token: string;

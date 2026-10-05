@@ -3590,6 +3590,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
           estimate: Json | null;
+          options: Json | null;
         };
         Insert: Partial<Database["public"]["Tables"]["job_proposals"]["Row"]> & {
           job_id: string;
