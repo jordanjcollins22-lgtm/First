@@ -3,8 +3,10 @@
  * own application link without anybody typing it.
  *
  * Indeed hides an applicant's real address behind one at indeedemail.com:
- * mail to it reaches them through Indeed's messages. That address is the
- * reply-to of Indeed's application email, and often in its body too. The job
+ * mail to it reaches them through Indeed's messages. Indeed sends each
+ * application from that address ("conversation-...@indeedemail.com", subject
+ * "[Action required] New application for <job>"); older emails came from
+ * indeed.com with it as the reply-to or in the body. Either way it is found. The job
  * is in the subject or body by its Indeed title, which is the title our
  * positions use. The daily round-up ("5 new applicants across 3 jobs") names
  * several people and gives no address, so it is not one of these.
@@ -33,10 +35,21 @@ export interface IndeedNotice {
 
 const RELAY = /[a-z0-9._%+-]+@indeedemail\.com/gi;
 
+/** An address on Indeed's own domain, or one of its relay addresses for an applicant. */
+export function isIndeedAddress(address: string): boolean {
+  return /@([a-z0-9-]+\.)*(indeed|indeedemail)\.com$/i.test(address.trim());
+}
+
+/** The relay address the email was sent from, when an applicant's Indeed conversation sent it. */
+export function relaySender(from: string): string | null {
+  const found = from.match(RELAY);
+  return found ? found[0].toLowerCase() : null;
+}
+
 /** Whether the email came from Indeed at all, sent straight or forwarded on. */
 export function isFromIndeed(mail: IndeedMail): boolean {
   const from = mail.from.toLowerCase();
-  if (/@([a-z0-9-]+\.)*indeed\.com\b/.test(from)) return true;
+  if (/@([a-z0-9-]+\.)*(indeed|indeedemail)\.com\b/.test(from)) return true;
   // Forwarded by hand: from the owner, with Indeed's own message inside.
   return /^\s*(fwd?|fw):/i.test(mail.subject ?? "") && /indeed/i.test(`${mail.text ?? ""}${mail.html ?? ""}`);
 }
@@ -69,12 +82,28 @@ const SUBJECT_NAMES = [
   new RegExp(`candidate[^:]*:\\s*${NAME}\\s*$`, "i"),
 ];
 
+const BODY_NAMES = [
+  // "Daniel Jay applied to your job" / "Daniel Jay has applied for"
+  new RegExp(`(?:^|\\n)[ \\t]*${NAME} (?:has |just )?applied\\b`),
+  // "You have a new application from Daniel Jay"
+  new RegExp(`application from ${NAME}\\b`),
+];
+
 /** Their name, from the subject when it says it, as Indeed writes it. */
 export function nameIn(subject: string): string | null {
-  const clean = subject.replace(/^\s*((fwd?|fw|re):\s*)+/i, "").trim();
+  const clean = subject.replace(/^\s*((fwd?|fw|re):\s*|\[[^\]]*\]\s*)+/i, "").trim();
   for (const pattern of SUBJECT_NAMES) {
     const match = clean.match(pattern);
     if (match) return tidyName(match[1]);
+  }
+  return null;
+}
+
+/** Their name from the body, for the emails whose subject only names the job. */
+export function nameInBody(text: string): string | null {
+  for (const pattern of BODY_NAMES) {
+    const match = text.match(pattern);
+    if (match && !/^(indeed|someone|a candidate|you)\b/i.test(match[1])) return tidyName(match[1]);
   }
   return null;
 }
@@ -87,6 +116,8 @@ export function tidyName(name: string): string {
 
 /** The address that reaches them: the reply-to first, then any in the body. */
 export function relayIn(mail: IndeedMail): string | null {
+  const sender = relaySender(mail.from);
+  if (sender) return sender;
   const replyTo = Array.isArray(mail.replyTo) ? mail.replyTo.join(" ") : (mail.replyTo ?? "");
   const found = `${replyTo} ${mail.text ?? ""} ${mail.html ?? ""}`.match(RELAY);
   return found ? found[0].toLowerCase() : null;
@@ -100,12 +131,20 @@ export function readIndeedNotice(mail: IndeedMail): IndeedNotice | null {
   if (!isFromIndeed(mail)) return null;
   const subject = mail.subject ?? "";
   if (isRoundUp(subject)) return null;
+  // A reply in an applicant's conversation (to our own invite, say) is them
+  // talking to us, not a new application.
+  if (/^\s*(re|fwd?|fw)\s*:/i.test(subject) && relaySender(mail.from)) return null;
   const relay = relayIn(mail);
-  const looksLikeApplication = /appl(y|ied|ication)|candidate/i.test(subject);
+  const looksLikeApplication = relaySender(mail.from)
+    ? /new application|applied|new candidate/i.test(subject)
+    : /appl(y|ied|ication)|candidate/i.test(subject);
   if (!looksLikeApplication && !relay) return null;
-  const position = positionIn(subject) ?? positionIn(`${mail.text ?? ""} ${mail.html ?? ""}`);
+  if (!looksLikeApplication && relaySender(mail.from)) return null;
+  const body = `${mail.text ?? ""} ${mail.html ?? ""}`;
+  const position = positionIn(subject) ?? positionIn(body);
   if (!position) return null;
-  return { name: nameIn(subject), position, relay };
+  const plain = mail.text ?? (mail.html ?? "").replace(/<[^>]+>/g, "\n");
+  return { name: nameIn(subject) ?? nameInBody(plain), position, relay };
 }
 
 /** The first name to greet them by, or "there" when the email didn't say. */

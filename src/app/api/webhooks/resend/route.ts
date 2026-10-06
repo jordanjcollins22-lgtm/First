@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isSupabaseAdminConfigured } from "@/lib/env";
 import { recordConsent } from "@/lib/data/client-messaging";
 import { fileInboundEmail } from "@/lib/data/inbound-email";
+import { catchUpIndeedMail, noteIndeedBounce } from "@/lib/data/indeed-invite";
 import { log } from "@/lib/log";
 
 /**
@@ -54,7 +55,14 @@ export async function POST(request: NextRequest) {
   // A client replied to one of our emails: into their conversation.
   if (type === "email.received") {
     const outcome = await fileInboundEmail(admin, emailId);
+    // Each Indeed email is also the moment to answer any earlier one that was missed.
+    if (outcome.startsWith("indeed_")) await catchUpIndeedMail(admin).catch(() => null);
     return NextResponse.json({ ok: true, inbound: outcome });
+  }
+
+  // An applicant's invite that Indeed would not take: the owner is told.
+  if (type === "email.bounced" && (await noteIndeedBounce(admin, emailId).catch(() => false))) {
+    return NextResponse.json({ ok: true, indeed: "bounced" });
   }
 
   const { data: recipient } = await admin

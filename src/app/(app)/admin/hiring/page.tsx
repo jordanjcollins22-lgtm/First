@@ -1,4 +1,4 @@
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseAdminConfigured, isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganization } from "@/lib/data/organizations";
@@ -9,7 +9,8 @@ import { indeedAd, needsPay } from "@/lib/hiring/indeed-ad";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { appUrl } from "@/lib/app-url";
 import { HiringBoard } from "@/components/hiring/hiring-board";
-import { HIRING_INBOX, listIndeedInvites } from "@/lib/data/indeed-invite";
+import { HIRING_INBOX, catchUpIndeedMail, listIndeedInvites } from "@/lib/data/indeed-invite";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Hiring: who applied from the job ads, whose video is waiting to be
@@ -23,6 +24,12 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
   const profile = await getCurrentProfile();
   if (!profile) return null;
   const { position: positionFilter, stage: stageFilter } = (await searchParams) ?? {};
+
+  // Any Indeed application the inbox got but the app never answered is
+  // answered now, so the list below is complete whenever this page is open.
+  if (isSupabaseAdminConfigured) {
+    await catchUpIndeedMail(createAdminClient(), profile.organization_id).catch((err) => console.error("Indeed catch-up failed:", err));
+  }
 
   const [applicants, base, org, invites] = await Promise.all([
     listApplicants(profile.organization_id).catch((err) => {

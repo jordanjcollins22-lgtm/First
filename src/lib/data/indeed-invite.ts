@@ -3,8 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { appUrl } from "@/lib/app-url";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { sendOutbound } from "@/lib/email/outbound";
-import type { ReceivedEmail } from "@/lib/email/resend";
-import { applyInvite, readIndeedNotice, type IndeedMail } from "@/lib/hiring/indeed-notice";
+import { getReceivedEmail, listReceivedEmails, type ReceivedEmail } from "@/lib/email/resend";
+import { applyInvite, isIndeedAddress, readIndeedNotice, relaySender, type IndeedMail } from "@/lib/hiring/indeed-notice";
 import { positionFor } from "@/lib/hiring/positions";
 import { htmlToText, senderAddress } from "@/lib/inbound-email";
 import { log, maskEmail } from "@/lib/log";
@@ -48,6 +48,33 @@ export async function listIndeedInvites(limit = 30): Promise<IndeedInviteRow[]> 
 
 export type IndeedOutcome = "sent" | "no_address" | "repeat" | "failed" | "duplicate" | "gmail_code" | "passed_on";
 
+const PROVIDER_ID = "provider:";
+
+/**
+ * A bounce on an email we sent: when it was an applicant's invite, the invite
+ * is marked failed and the owner is told who to message on Indeed instead.
+ * Returns whether it was one of ours.
+ */
+export async function noteIndeedBounce(admin: Admin, emailId: string): Promise<boolean> {
+  const { data: invite } = await admin
+    .from("indeed_invites")
+    .select("id, organization_id, name, position")
+    .eq("detail", `${PROVIDER_ID}${emailId}`)
+    .maybeSingle();
+  if (!invite) return false;
+  await admin.from("indeed_invites").update({ status: "failed", detail: "Indeed did not accept the email (bounced)." }).eq("id", invite.id);
+  const position = positionFor(invite.position);
+  const applyUrl = appUrl(await outboundBaseUrl(), `/careers/${invite.position}?src=indeed`);
+  log.warn("indeed.invite_bounced", { inviteId: invite.id });
+  await tellOwners(
+    admin,
+    invite.organization_id,
+    `${invite.name ?? "An applicant"} (${position?.title ?? invite.position}) didn't get our application link: Indeed bounced the email. Message them on Indeed with: ${applyUrl}`,
+    `indeed_bounced:${invite.id}`
+  );
+  return true;
+}
+
 /** A person who applied for one of our jobs is written to once a month at most. */
 const REPEAT_DAYS = 30;
 
@@ -77,12 +104,13 @@ export async function handleIndeedMail(
 
   const mail: IndeedMail = { from: email.from, subject: email.subject, text: email.text, html: email.html, replyTo: email.reply_to ?? null };
   // Forwarded by hand only counts from the owner's own mailbox.
-  if (!/indeed\.com$/.test(from) && !TOOLS_OWNER_EMAILS.includes(from)) return null;
+  if (!isIndeedAddress(from) && !TOOLS_OWNER_EMAILS.includes(from)) return null;
   const notice = readIndeedNotice(mail);
   if (!notice) {
-    if (!/indeed\.com$/.test(from)) return null;
+    if (!isIndeedAddress(from)) return null;
     // Anything else Indeed sends here (confirming this address, a team
-    // invite, a round-up) goes on to the owner, so none of it is lost.
+    // invite, a round-up, an applicant writing back) goes on to the owner,
+    // so none of it is lost.
     log.info("indeed.not_an_application", { emailId, subject: (email.subject ?? "").slice(0, 120) });
     await passOn(organizationId, email);
     return "passed_on";
@@ -136,7 +164,19 @@ export async function handleIndeedMail(
   const sender = owner?.first_name || owner?.full_name?.split(" ")[0] || business;
   const { subject, text } = applyInvite({ name: notice.name, positionTitle: position.title, applyUrl, sender, business });
 
-  const sent = await sendOutbound({ organizationId, to: notice.relay, toName: notice.name ?? undefined, subject, text, fromName: business });
+  // From the hiring address: it is the one on the Indeed account, and Indeed
+  // only passes on mail to an applicant from the employer's own addresses.
+  // Their answers come back to it too, and are passed on to the owner.
+  const sent = await sendOutbound({
+    organizationId,
+    to: notice.relay,
+    toName: notice.name ?? undefined,
+    subject,
+    text,
+    fromName: business,
+    fromAddress: HIRING_INBOX,
+    replyTo: `${HIRING_INBOX}, ${TOOLS_OWNER_EMAILS[0]}`,
+  });
   if (!sent.ok) {
     await finish("failed", sent.message.slice(0, 500));
     log.warn("indeed.invite_failed", { emailId, to: maskEmail(notice.relay), error: sent.message });
@@ -148,7 +188,8 @@ export async function handleIndeedMail(
     );
     return "failed";
   }
-  await finish("sent", null);
+  // The provider's id is kept so a bounce can find this invite again (noteIndeedBounce).
+  await finish("sent", sent.via === "resend" ? `${PROVIDER_ID}${sent.id}` : null);
   log.info("indeed.invite_sent", { emailId, position: position.key, to: maskEmail(notice.relay), via: sent.via });
   return "sent";
 }
@@ -167,12 +208,62 @@ async function passOn(organizationId: string, email: ReceivedEmail): Promise<voi
     return words ? `${words} (${href})` : href;
   });
   const body = (email.text?.trim() || htmlToText(withLinks)).slice(0, 20000);
+  // An applicant writing back through Indeed (to our invite, say) reads as them, not as Indeed.
+  const fromApplicant = Boolean(relaySender(email.from));
   const sent = await sendOutbound({
     organizationId,
     to: TOOLS_OWNER_EMAILS[0],
-    subject: `Indeed sent the hiring inbox: ${email.subject ?? "(no subject)"}`,
-    text: `This came from Indeed to hiring@send.jslandscapingmd.com. It isn't an application, so the app passed it on to you.\n\n----------\n\n${body}`,
+    subject: fromApplicant ? `Applicant wrote through Indeed: ${email.subject ?? "(no subject)"}` : `Indeed sent the hiring inbox: ${email.subject ?? "(no subject)"}`,
+    text: fromApplicant
+      ? `An applicant wrote to ${HIRING_INBOX} through Indeed. Answer them on Indeed, or reply to ${relaySender(email.from)}.\n\n----------\n\n${body}`
+      : `This came from Indeed to ${HIRING_INBOX}. It isn't an application, so the app passed it on to you.\n\n----------\n\n${body}`,
     fromName: "JS Landscaping app",
   });
   if (!sent.ok) log.warn("indeed.pass_on_failed", { error: sent.message });
+}
+
+/**
+ * Indeed applications that reached the hiring inbox but were never answered:
+ * a webhook that did not arrive, or one the app could not read at the time.
+ * Each is handled as if it had just arrived; one already answered is skipped
+ * by its email id, so running this often is harmless. Only applications are
+ * picked up here, so nothing else is passed on twice.
+ */
+export async function catchUpIndeedMail(admin: Admin, organizationId?: string, days = 7): Promise<{ checked: number; handled: number; error?: string }> {
+  // Without an organisation, the one whose domain the hiring inbox is on.
+  const orgId =
+    organizationId ??
+    (await admin.from("email_domains").select("organization_id").eq("hostname", HIRING_INBOX.split("@")[1]).limit(1).maybeSingle()).data?.organization_id;
+  if (!orgId) return { checked: 0, handled: 0, error: "No organisation owns the hiring inbox's domain." };
+  const listed = await listReceivedEmails();
+  if (!listed.ok) {
+    log.warn("indeed.catch_up_unavailable", { error: listed.message });
+    return { checked: 0, handled: 0, error: listed.message };
+  }
+  const since = Date.now() - days * 86_400_000;
+  const candidates = listed.data.filter(
+    (e) =>
+      (e.to ?? []).some((a) => (senderAddress(a) ?? "") === HIRING_INBOX) &&
+      Boolean(relaySender(e.from ?? "")) &&
+      !/^\s*(re|fwd?|fw)\s*:/i.test(e.subject ?? "") &&
+      new Date(e.created_at).getTime() >= since
+  );
+  if (candidates.length === 0) return { checked: 0, handled: 0 };
+
+  const { data: done } = await admin.from("indeed_invites").select("email_id").in("email_id", candidates.map((e) => e.id));
+  const answered = new Set((done ?? []).map((r) => r.email_id));
+  let handled = 0;
+  for (const listedEmail of candidates.filter((e) => !answered.has(e.id))) {
+    const fetched = await getReceivedEmail(listedEmail.id);
+    if (!fetched.ok) continue;
+    const mail: IndeedMail = { from: fetched.data.from, subject: fetched.data.subject, text: fetched.data.text, html: fetched.data.html, replyTo: fetched.data.reply_to ?? null };
+    if (!readIndeedNotice(mail)) continue;
+    const outcome = await handleIndeedMail(admin, orgId, listedEmail.id, fetched.data).catch((err) => {
+      log.warn("indeed.catch_up_failed", { emailId: listedEmail.id, error: err instanceof Error ? err.message : String(err) });
+      return null;
+    });
+    if (outcome && outcome !== "duplicate") handled += 1;
+  }
+  if (handled > 0) log.info("indeed.caught_up", { handled });
+  return { checked: candidates.length, handled };
 }

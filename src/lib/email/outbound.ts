@@ -20,6 +20,10 @@ export interface OutboundInput {
   fromName: string;
   /** The message this one continues, so a client's mail client threads them. */
   inReplyTo?: string | null;
+  /** Send from this address on the verified domain rather than the default one (Resend only). */
+  fromAddress?: string | null;
+  /** Where replies go, instead of the sender's usual reply-to (Resend only). */
+  replyTo?: string | null;
 }
 
 export type OutboundResult = { ok: true; id: string; via: "resend" | "gmail" } | { ok: false; message: string };
@@ -33,6 +37,8 @@ export async function sendOutbound(input: OutboundInput): Promise<OutboundResult
     text: input.text,
     stream: "transactional",
     inReplyTo: input.inReplyTo ?? null,
+    fromAddress: input.fromAddress ?? null,
+    replyTo: input.replyTo ?? null,
   });
   if (viaResend.ok) return { ok: true, id: viaResend.id, via: "resend" };
 

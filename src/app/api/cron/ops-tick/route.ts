@@ -9,6 +9,7 @@ import { syncOrganization } from "@/lib/plaid";
 import { isPlaidConfigured } from "@/lib/env";
 import { probeStripe, recordPaymentsHealth } from "@/lib/data/payments-health";
 import { expireProposals } from "@/lib/data/expire-proposals";
+import { catchUpIndeedMail } from "@/lib/data/indeed-invite";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -37,6 +38,12 @@ export async function GET(request: NextRequest) {
   const expired = await expireProposals(admin).catch((err) => {
     console.error("[ops] expiring proposals:", err);
     return 0;
+  });
+
+  // Indeed applications the hiring inbox got but nobody answered get their link now.
+  const indeed = await catchUpIndeedMail(admin).catch((err) => {
+    console.error("[ops] Indeed catch-up:", err);
+    return null;
   });
 
   const report: Record<string, unknown>[] = [];
@@ -97,5 +104,5 @@ export async function GET(request: NextRequest) {
       report.push({ org: org.name, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  return NextResponse.json({ organisations: report, expiredProposals: expired });
+  return NextResponse.json({ organisations: report, expiredProposals: expired, indeed });
 }

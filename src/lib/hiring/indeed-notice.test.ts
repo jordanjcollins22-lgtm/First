@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyInvite, isFromIndeed, nameIn, positionIn, readIndeedNotice, relayIn, tidyName } from "@/lib/hiring/indeed-notice";
+import { applyInvite, isFromIndeed, isIndeedAddress, nameIn, nameInBody, positionIn, readIndeedNotice, relayIn, tidyName } from "@/lib/hiring/indeed-notice";
 
 const application = {
   from: "Indeed <indeedapply@indeed.com>",
@@ -50,5 +50,46 @@ describe("Indeed's application email", () => {
     expect(mail.text.startsWith("Hi Sample,\n\nThanks for applying for the Landscape Project Technician job on Indeed.")).toBe(true);
     expect(mail.text).toContain("https://example.com/careers/project-technician?src=indeed");
     expect(applyInvite({ name: null, positionTitle: "X", applyUrl: "u", sender: "J", business: "B" }).text.startsWith("Hi there,")).toBe(true);
+  });
+});
+
+describe("Indeed's application email sent from the applicant's relay address", () => {
+  // As it arrives today: from the conversation address, which is also how to reach them.
+  const relayed = {
+    from: "conversation-sampleperson-landscapeprojectlead-1rd@indeedemail.com",
+    subject: "[Action required] New application for Landscape Project Lead, Aberdeen, MD",
+    text: "Sample Person applied to your job\nLandscape Project Lead\nAberdeen, MD",
+    html: null,
+    replyTo: null,
+  };
+
+  it("is Indeed's, and reads the job, the address and the name", () => {
+    expect(isIndeedAddress("conversation-x-1rd@indeedemail.com")).toBe(true);
+    expect(isIndeedAddress("someone@notindeedemail.com")).toBe(false);
+    expect(readIndeedNotice(relayed)).toEqual({
+      name: "Sample Person",
+      position: "project-lead",
+      relay: "conversation-sampleperson-landscapeprojectlead-1rd@indeedemail.com",
+    });
+  });
+
+  it("knows each job from the subject", () => {
+    expect(readIndeedNotice({ ...relayed, subject: "[Action required] New application for Landscape Evaluator", text: "" })?.position).toBe("evaluator");
+    expect(readIndeedNotice({ ...relayed, subject: "[Action required] New application for Landscape Project Technician", text: "" })?.position).toBe("project-technician");
+  });
+
+  it("greets by name only when the email gives one", () => {
+    expect(readIndeedNotice({ ...relayed, text: "Review this candidate on Indeed." })?.name).toBeNull();
+    expect(nameInBody("You have a new application from SAMPLE PERSON")).toBe("Sample Person");
+    expect(nameInBody("Indeed applied filters")).toBeNull();
+  });
+
+  it("leaves the applicant's replies to be passed on, not answered with another invite", () => {
+    expect(readIndeedNotice({ ...relayed, subject: "Re: Next step for your application – JS Landscaping", text: "Landscape Project Lead, sounds good" })).toBeNull();
+    expect(readIndeedNotice({ ...relayed, subject: "Question about the job", text: "Landscape Project Lead" })).toBeNull();
+  });
+
+  it("strips Indeed's bracketed tag before reading a name from the subject", () => {
+    expect(nameIn("[Action required] Sample Person applied to Landscape Evaluator")).toBe("Sample Person");
   });
 });

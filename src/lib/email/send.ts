@@ -22,6 +22,14 @@ export interface SendInput {
    * References so the client's mail app shows the sequence as one thread.
    */
   inReplyTo?: string | null;
+  /**
+   * An address on the verified domain to send from instead of the default
+   * sender, for mail that has to come from one particular address (Indeed
+   * only relays mail from addresses on the employer account).
+   */
+  fromAddress?: string | null;
+  /** Where replies go, instead of the sender's usual reply-to. */
+  replyTo?: string | null;
 }
 
 /**
@@ -111,7 +119,7 @@ export async function sendEmail(input: SendInput, attempt = 0): Promise<SendResu
   const result = await sendProviderEmail({
     // A display name makes the difference between mail that reads as a person
     // and mail that reads as a robot, in the one line a recipient scans.
-    from: sender.display_name ? `${sender.display_name} <${sender.address}>` : sender.address,
+    from: fromLine(sender, domain.hostname, input.fromAddress),
     to,
     subject: input.subject,
     html: input.html,
@@ -119,13 +127,19 @@ export async function sendEmail(input: SendInput, attempt = 0): Promise<SendResu
     headers: input.inReplyTo ? { "In-Reply-To": asMessageId(input.inReplyTo), References: asMessageId(input.inReplyTo) } : undefined,
     // Replies go to a mailbox somebody reads. The sending subdomain exists to
     // protect reputation, not to be somewhere anybody looks.
-    replyTo: sender.reply_to,
+    replyTo: input.replyTo ?? sender.reply_to,
   });
 
   if (!result.ok) {
     log.error("email.failed", undefined, { organizationId: input.organizationId, stream: input.stream, to: to.map(maskEmail), message: result.message });
   }
   return result.ok ? { ok: true, id: result.data.id } : result;
+}
+
+/** The From line: the address asked for when it is on the verified domain, else the default sender. */
+function fromLine(sender: { address: string; display_name: string | null }, hostname: string, wanted: string | null | undefined): string {
+  const address = wanted && wanted.toLowerCase().endsWith(`@${hostname.toLowerCase()}`) ? wanted : sender.address;
+  return sender.display_name ? `${sender.display_name} <${address}>` : address;
 }
 
 /** A bare id becomes a Message-ID; one already in angle brackets is left alone. */

@@ -201,3 +201,11 @@ export interface ReceivedEmail {
 export async function getReceivedEmail(id: string): Promise<ResendResult<ReceivedEmail>> {
   return call<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(id)}`);
 }
+
+/** The emails received lately, newest first, without bodies: for catching up on any a webhook missed. */
+export async function listReceivedEmails(limit = 100): Promise<ResendResult<{ id: string; from: string; to: string[]; subject: string | null; created_at: string }[]>> {
+  const result = await call<{ data?: { id: string; from: string; to: string[]; subject: string | null; created_at: string }[] }>(
+    `/emails/receiving?limit=${limit}`
+  );
+  return result.ok ? { ok: true, data: result.data.data ?? [] } : result;
+}
