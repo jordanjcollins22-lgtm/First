@@ -179,7 +179,7 @@ export function MowForm({
             <CheckCircle2 className="mt-1 h-6 w-6 shrink-0 text-primary" />
             Good news, we service your property
           </h1>
-          {lot && <LotPicker lot={lot} picked={["whole"]} readOnly caption="Your property line from the county records." />}
+          {lot && <LotPicker lot={lot} picked={["whole"]} readOnly streetLabel={false} caption="Your property line from the county records." />}
           <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
             <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
             {address}
@@ -204,7 +204,7 @@ export function MowForm({
           <h1 className="text-2xl font-bold leading-tight">Here&apos;s your price{name.trim() ? `, ${name.trim().split(/\s+/)[0]}` : ""}</h1>
           {quote.lot ? (
             <>
-              <LotPicker lot={quote.lot} picked={["whole"]} readOnly caption="Your property line from the county records." />
+              <LotPicker lot={quote.lot} picked={["whole"]} readOnly streetLabel={false} caption="Your property line from the county records." />
               <p className="text-sm text-muted-foreground">
                 {quote.lawnSqft
                   ? `Your lot is about ${quote.lotSqft?.toLocaleString("en-US")} sq ft. Leaving out the house, driveway and beds, that's about ${quote.lawnSqft.toLocaleString("en-US")} sq ft of lawn.`

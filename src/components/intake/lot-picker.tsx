@@ -22,6 +22,7 @@ export function LotPicker({
   disabled,
   readOnly = false,
   caption,
+  streetLabel = true,
 }: {
   lot: LotData;
   picked: string[];
@@ -31,6 +32,8 @@ export function LotPicker({
   readOnly?: boolean;
   /** Said under the picture instead of the usual words, for a page that isn't the pre-evaluation. */
   caption?: string;
+  /** Write which side faces the street. Off where nobody is picking a yard. */
+  streetLabel?: boolean;
 }) {
   const [turn, setTurn] = useState(0);
   const clip = useId().replace(/:/g, "");
@@ -73,7 +76,7 @@ export function LotPicker({
           {layout.house && (
             <path d={pathOf(layout.house)} fill="white" fillOpacity={lit("foundation") ? 0.15 : 0.08} stroke="white" strokeWidth={1.5} pointerEvents="none" />
           )}
-          {layout.frontLabel && (
+          {streetLabel && layout.frontLabel && (
             <text
               x={Math.min(WIDTH - 60, Math.max(60, layout.frontLabel.at[0]))}
               y={Math.min(HEIGHT - 12, Math.max(20, layout.frontLabel.at[1]))}
