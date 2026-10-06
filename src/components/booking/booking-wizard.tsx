@@ -647,19 +647,28 @@ export function BookingWizard({
   // suggestions drop down over the card rather than push it, so it stays one
   // screen.
   const addressSearch = (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor="address" className="text-sm font-semibold">
+    // Set off in its own tinted panel: as plain text on a white card it read
+    // as part of the page, and people looked straight past it to the photo.
+    // The borders are marked important because globals.css sets every
+    // element's border colour outside a layer, which beats a utility's.
+    <div className="flex flex-col gap-2 rounded-xl border-2 border-primary/40! bg-primary/10 p-3 shadow-sm">
+      <label htmlFor="address" className="flex items-center gap-1.5 text-base font-bold text-primary">
+        <MapPin className="h-5 w-5" />
         Where is the property?
       </label>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-primary" />
         <Input
           id="address"
           value={addressQuery}
           onChange={(e) => handleAddressQueryChange(e.target.value)}
           placeholder="Start typing your address"
           disabled={!isMapboxConfigured}
-          className="h-12 border-primary/50 pl-10 pr-10 text-base"
+          className={cn(
+            "h-12 border-2 border-primary! bg-background pl-10 pr-10 text-base shadow-md focus-visible:ring-4 focus-visible:ring-primary/30",
+            // A soft glow while it is empty, so the eye finds it first.
+            !addressQuery && "animate-[pulse-ring_2s_ease-in-out_infinite] motion-reduce:animate-none"
+          )}
           autoComplete="off"
         />
         {searching ? (

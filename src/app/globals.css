@@ -832,3 +832,14 @@ body {
     break-before: auto;
   }
 }
+
+/* The booking page's address box, glowing gently until somebody types in it. */
+@keyframes pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 15%, transparent);
+  }
+}
