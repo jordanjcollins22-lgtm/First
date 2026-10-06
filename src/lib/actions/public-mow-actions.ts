@@ -163,6 +163,8 @@ export type AreaCheck =
       inArea: boolean | null;
       lat: number | null;
       lng: number | null;
+      /** Their lot from the county, to show them the property we just said yes to. */
+      lot: LotData | null;
     }
   | { ok: false; message: string };
 
@@ -186,8 +188,10 @@ export async function checkServiceArea(input: {
     const placed = await placeAddress(address, input.lat, input.lng);
     if (!placed) return { ok: false, message: "We couldn't find that address. Check it and try again, or pick one from the list." };
     let inArea: boolean | null;
+    let lot: LotData | null = null;
     try {
-      inArea = (await fetchLotFromCounty(placed.lat, placed.lng, address)) != null;
+      lot = await fetchLotFromCounty(placed.lat, placed.lng, address);
+      inArea = lot != null;
     } catch {
       inArea = null;
     }
@@ -198,7 +202,7 @@ export async function checkServiceArea(input: {
       await admin.from("mow_area_checks").insert({ organization_id: org.id, in_area: inArea, referral_code: rec }).then(undefined, () => {});
     }
     log.info("mow.area_checked", { inArea });
-    return { ok: true, inArea, lat: placed.lat, lng: placed.lng };
+    return { ok: true, inArea, lat: placed.lat, lng: placed.lng, lot };
   } catch (err) {
     return fail(err);
   }

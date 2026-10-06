@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { LotPicker } from "@/components/intake/lot-picker";
 import { searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { checkServiceArea, mowQuote, startMowOrder, type MowQuote } from "@/lib/actions/public-mow-actions";
+import type { LotData } from "@/lib/lot-map";
 
 type Quote = Extract<MowQuote, { ok: true }>;
 type Step = "area" | "details" | "price";
@@ -29,12 +30,14 @@ export function MowForm({
   orgSlug: string | null;
   rec: string | null;
   /** Opens on a given screen. Only for previewing the page. */
-  preview?: { step: Step; address: string; quote?: Quote; name?: string; phone?: string; email?: string };
+  preview?: { step: Step; address: string; lot?: LotData | null; quote?: Quote; name?: string; phone?: string; email?: string };
 }) {
   const [step, setStep] = useState<Step>(preview?.step ?? "area");
   const [address, setAddress] = useState(preview?.address ?? "");
   const [picked, setPicked] = useState<GeocodeSuggestion | null>(null);
   const [placed, setPlaced] = useState<{ lat: number; lng: number } | null>(null);
+  // Their lot, from the area check: shown back to them as the property we mow.
+  const [lot, setLot] = useState<LotData | null>(preview?.lot ?? null);
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [outside, setOutside] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(preview?.quote ?? null);
@@ -71,6 +74,7 @@ export function MowForm({
       if (!result.ok) return setError(result.message);
       if (result.inArea === false) return setOutside(true);
       setPlaced(result.lat != null && result.lng != null ? { lat: result.lat, lng: result.lng } : null);
+      setLot(result.lot);
       setStep("details");
     });
   }
@@ -170,14 +174,17 @@ export function MowForm({
       {/* 2. Who are you? */}
       {step === "details" && (
         <section className="flex flex-col gap-3">
-          <div className="flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-            <p>
-              <span className="font-semibold">Good news, we mow at your address.</span>
-              <span className="block text-muted-foreground">{address}</span>
-            </p>
-          </div>
-          <h1 className="text-2xl font-bold leading-tight">Where should we send your price?</h1>
+          {/* Their own property first: the yes is about this lawn, not an address in a box. */}
+          <h1 className="flex items-start gap-2 text-2xl font-bold leading-tight">
+            <CheckCircle2 className="mt-1 h-6 w-6 shrink-0 text-primary" />
+            Good news, we service your property
+          </h1>
+          {lot && <LotPicker lot={lot} picked={["whole"]} readOnly caption="Your property line from the county records." />}
+          <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+            {address}
+          </p>
+          <p className="pt-1 text-lg font-semibold leading-tight">Where should we send your price?</p>
           <Input placeholder="Full name" aria-label="Full name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="h-12 text-base" />
           <Input placeholder="Phone (we'll call to set your day)" aria-label="Phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 text-base" />
           <Input placeholder="Email for your receipt" aria-label="Email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" />
