@@ -40,6 +40,8 @@ import { displayLabel } from "@/lib/zone-scope";
 import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
 import { readOptions } from "@/lib/proposal-options";
 import { OptionCards } from "@/components/proposal/option-cards";
+import { LotPicker } from "@/components/intake/lot-picker";
+import type { LotData } from "@/lib/lot-map";
 import type { JobMessage, ProposalStatus } from "@/types/domain";
 
 function formatTotal(total: number | null): string {
@@ -73,6 +75,8 @@ export function ProposalView(props: {
   token: string;
   messages: JobMessage[];
   preview?: boolean;
+  /** Their lot from the county, shown when nobody drew a site map. */
+  lot?: LotData | null;
 }) {
   return (
     <AttentionProvider token={props.token} preview={props.preview}>
@@ -86,11 +90,13 @@ function ProposalBody({
   token,
   messages,
   preview = false,
+  lot = null,
 }: {
   data: PublicProposal;
   token: string;
   messages: JobMessage[];
   preview?: boolean;
+  lot?: LotData | null;
 }) {
   const { click } = useAttention();
   const { proposal, propertyAddress, customerName, organizationName, serviceNames } = data;
@@ -202,6 +208,16 @@ function ProposalBody({
             transform={proposal.site_image_transform}
             zones={proposal.scope_snapshot}
           />
+        </Watched>
+      )}
+
+      {/* No site map was drawn (a quick lawn quote, say): their lot from the
+          county instead, with the house on it, so the page still shows the
+          place we are talking about. */}
+      {!(proposal.site_image_path && proposal.site_image_transform) && lot && (
+        <Watched section="property-map">
+          <h2 className="mb-2 text-lg font-semibold">Your property</h2>
+          <LotPicker lot={lot} picked={["whole"]} readOnly caption="Your property line and house from the county map." />
         </Watched>
       )}
 

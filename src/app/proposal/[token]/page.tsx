@@ -10,6 +10,17 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { isOwnerLevel } from "@/lib/roles";
 import { isAccountManager } from "@/lib/affiliate-roles";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchLotFromCounty } from "@/lib/data/lot-map";
+import type { LotData } from "@/lib/lot-map";
+
+/** Their lot from the county, for a proposal with no site map drawn. Nothing at all when the county can't be reached. */
+async function lotForJob(jobId: string): Promise<LotData | null> {
+  const { data } = await createAdminClient().from("jobs").select("properties(address, lat, lng)").eq("id", jobId).maybeSingle();
+  const place = (data as unknown as { properties: { address: string; lat: number | null; lng: number | null } | null } | null)?.properties;
+  if (!place || place.lat == null || place.lng == null) return null;
+  return fetchLotFromCounty(place.lat, place.lng, place.address).catch(() => null);
+}
 
 export default async function ProposalPage({
   params,
@@ -34,7 +45,11 @@ export default async function ProposalPage({
 
   // The job id came back with the proposal, so this is one query rather than
   // two — no second lookup of the token to find what we are already holding.
-  const messages = await listExternalMessagesForJob(data.proposal.job_id);
+  const hasSiteMap = Boolean(data.proposal.site_image_path && data.proposal.site_image_transform);
+  const [messages, lot] = await Promise.all([
+    listExternalMessagesForJob(data.proposal.job_id),
+    hasSiteMap ? Promise.resolve(null) : lotForJob(data.proposal.job_id),
+  ]);
 
   const previewing = isPreview(preview);
 
@@ -53,7 +68,7 @@ export default async function ProposalPage({
       {/* Internal only, and invisible. Not rendered for the office's own
           preview, which would otherwise count as the client reading it. */}
       {!previewing && <ViewBeacon token={token} />}
-      <ProposalView data={data} token={token} messages={messages} preview={previewing} />
+      <ProposalView data={data} token={token} messages={messages} preview={previewing} lot={lot} />
       {/* Shown inside the price card, which has its own Send to client. */}
       {sendBar && embed !== "1" && <PreviewSendBar jobId={proposalRow.job_id} sendTo={sendBar.sendTo} sentAt={sendBar.sentAt} />}
     </>
