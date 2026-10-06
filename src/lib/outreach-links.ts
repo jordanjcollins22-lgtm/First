@@ -107,14 +107,36 @@ export function bookingDestination(input: {
    * ignored, so a link can never be pointed somewhere else.
    */
   destination?: string | null;
+  /** What the post asked for. Picks the page when the link names none of its own. */
+  service?: string | null;
 }): string {
   const base = input.baseUrl.replace(/\/$/, "");
   const params = new URLSearchParams();
   if (input.orgSlug) params.set("org", input.orgSlug);
   if (input.affiliateSlug) params.set("ref", input.affiliateSlug);
   params.set("rec", input.code);
-  const path = input.destination && /^\/[a-z0-9/_-]*$/.test(input.destination) && !input.destination.startsWith("//") ? input.destination : "/book";
+  const chosen = input.destination && /^\/[a-z0-9/_-]*$/.test(input.destination) && !input.destination.startsWith("//") ? input.destination : null;
+  const path = chosen ?? funnelForService(input.service) ?? "/book";
   return `${base}${path}?${params.toString()}`;
+}
+
+/**
+ * The page that sells one service on the spot, where there is one.
+ *
+ * Somebody who asked a group for their grass cut wants a price, not an
+ * appointment for somebody to come and look: lawn links sent to the
+ * evaluation booking drew 235 clicks and one booking. Where a service can be
+ * priced and paid for without a visit, and the page counts the sale back to
+ * the link, its link goes there instead. Anything else stays with the booking
+ * page, which already names the service.
+ *
+ * Decided at click time, so links already posted follow it too.
+ */
+export function funnelForService(service: string | null | undefined): string | null {
+  const s = (service ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (s === "lawn care" || /\bmow|grass cut|lawn cut|cut (the |my |her |his )?grass/.test(s)) return "/mow";
+  return null;
 }
 
 /**

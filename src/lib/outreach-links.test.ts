@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   makeCode,
   bookingDestination,
+  funnelForService,
   bookingRate,
   clickRate,
   goesToOnePerson,
@@ -295,5 +296,34 @@ describe("the leaderboard", () => {
       { ...base, profileId: "c", name: "Cy", posts: 10, bookings: 3 },
     ]);
     expect(ranked.map((p) => `${p.rank} ${p.name}`)).toEqual(["1 Bo", "2 Cy", "3 Ann"]);
+  });
+});
+
+describe("which page a service's link opens", () => {
+  it("sends a lawn request to the quick mow page, with the same code", () => {
+    expect(
+      bookingDestination({ baseUrl: "https://x.test", orgSlug: "acme-1234", affiliateSlug: "max", code: "abc2345", service: "Lawn Care" })
+    ).toBe("https://x.test/mow?org=acme-1234&ref=max&rec=abc2345");
+  });
+
+  it("recognises mowing however the service is worded", () => {
+    for (const service of ["Lawn care", "lawn mowing", "Weekly mow", "Grass cutting", "cut my grass"]) {
+      expect(funnelForService(service)).toBe("/mow");
+    }
+  });
+
+  it("leaves everything without a page of its own on the booking page", () => {
+    for (const service of ["Lawn Restoration", "Trimming", "Snow Removal", "Landscape Bed", "", null, undefined]) {
+      expect(funnelForService(service)).toBeNull();
+    }
+    expect(bookingDestination({ baseUrl: "https://x.test", orgSlug: null, affiliateSlug: null, code: "abc2345", service: "Trimming" })).toBe(
+      "https://x.test/book?rec=abc2345"
+    );
+  });
+
+  it("lets a destination set on the link win over the service", () => {
+    expect(
+      bookingDestination({ baseUrl: "https://x.test", orgSlug: null, affiliateSlug: null, code: "abc2345", service: "Lawn Care", destination: "/book" })
+    ).toBe("https://x.test/book?rec=abc2345");
   });
 });
