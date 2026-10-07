@@ -1,8 +1,7 @@
 import { searchPlaces, type PlaceResult } from "./sources/places";
 import { findPastPerformers } from "./sources/usaspending";
 import { findEmailOnWebsite } from "./sources/website-email";
-import type { TradeDefinition } from "./trades";
-import type { Opportunity } from "./types";
+import type { Opportunity, TradeDefinition } from "./types";
 
 /**
  * Find local subcontractors near the place of performance. Merges:

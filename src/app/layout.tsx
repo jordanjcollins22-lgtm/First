@@ -23,6 +23,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Link href="/admin/service-templates" className="hover:text-primary">
                 Service Templates
               </Link>
+              <Link href="/govcon" className="hover:text-primary">
+                Gov Contracts
+              </Link>
             </nav>
           </div>
         </header>
