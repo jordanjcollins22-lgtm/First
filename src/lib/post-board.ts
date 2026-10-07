@@ -1,4 +1,5 @@
 import { postKeyForLink } from "@/lib/social-finder";
+import { workNamed } from "@/lib/post-words";
 
 /**
  * The rules of the Posts to answer board.
@@ -152,8 +153,8 @@ export const NEWEST_FIRST_DAYS = 3;
  * time, newest found first; then older ones.
  */
 export function boardOrder(
-  a: { posted_at: string | null; created_at: string },
-  b: { posted_at: string | null; created_at: string },
+  a: { posted_at: string | null; created_at: string; service?: string | null; text?: string | null },
+  b: { posted_at: string | null; created_at: string; service?: string | null; text?: string | null },
   now: Date
 ): number {
   const tier = (p: { posted_at: string | null }) =>
@@ -161,8 +162,25 @@ export function boardOrder(
   const ta = tier(a);
   const tb = tier(b);
   if (ta !== tb) return ta - tb;
+  // We're a project business: of posts as fresh as each other, a cleanup,
+  // a bed, a planting or a regrade comes before somebody wanting the grass cut.
+  const pa = isRoutineMowing(a) ? 1 : 0;
+  const pb = isRoutineMowing(b) ? 1 : 0;
+  if (pa !== pb) return pa - pb;
   if (ta === 1) return b.created_at.localeCompare(a.created_at);
   return new Date(b.posted_at as string).getTime() - new Date(a.posted_at as string).getTime();
+}
+
+/**
+ * A post that only wants the grass cut: sorted as lawn care, or naming no
+ * work but mowing. Kept on the board, below the project work.
+ */
+export function isRoutineMowing(p: { service?: string | null; text?: string | null }): boolean {
+  if (p.service && p.service.trim().toLowerCase() !== "lawn care") return false;
+  const work = workNamed(p.text ?? "");
+  const mowing = ["lawn", "mow", "grass"];
+  if (p.service?.trim().toLowerCase() === "lawn care") return work.every((w) => mowing.includes(w));
+  return work.length > 0 && work.every((w) => mowing.includes(w));
 }
 
 /** Whether the post is still worth answering at all. */

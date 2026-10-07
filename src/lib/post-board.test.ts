@@ -178,3 +178,21 @@ describe("boardOrder", () => {
     ]);
   });
 });
+
+describe("project work first", () => {
+  it("puts a cleanup above a grass cut posted at the same time", async () => {
+    const { boardOrder, isRoutineMowing } = await import("@/lib/post-board");
+    const now = new Date("2026-10-07T20:00:00Z");
+    const at = "2026-10-07T18:00:00Z";
+    const mow = { id: "mow", posted_at: at, created_at: at, service: "Lawn Care", text: "Need someone to mow my lawn weekly" };
+    const beds = { id: "beds", posted_at: at, created_at: at, service: "Landscape Bed", text: "Looking for someone to redo my front beds and mulch" };
+    expect(isRoutineMowing(mow)).toBe(true);
+    expect(isRoutineMowing(beds)).toBe(false);
+    expect([mow, beds].sort((a, b) => boardOrder(a, b, now)).map((p) => p.id)).toEqual(["beds", "mow"]);
+  });
+
+  it("counts a lawn post that also wants beds or cleanup as project work", async () => {
+    const { isRoutineMowing } = await import("@/lib/post-board");
+    expect(isRoutineMowing({ service: "Lawn Care", text: "Need my grass cut and the flower beds weeded" })).toBe(false);
+  });
+});
