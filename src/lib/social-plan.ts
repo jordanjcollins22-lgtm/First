@@ -21,6 +21,9 @@ export const PLAN_KIND_LABEL: Record<PlanKind, string> = {
 /** How the picture is drawn: one photo, a before and after side by side, or the brand colours alone. */
 export type CardStyle = "photo" | "split" | "brand";
 
+/** Where a planned post goes: the business page, posted on its day, or local groups, posted by hand. */
+export type Placement = "page" | "group";
+
 /** When a planned post goes out on its day: mid-morning, when the daily timer runs. */
 export const PLAN_POST_TIME = "10:00";
 
@@ -51,8 +54,11 @@ export function cleanHashtags(tags: string[]): string[] {
   return out.slice(0, 5);
 }
 
-/** What would stop a post going out as written. */
-export function planProblems(post: PlanText): string[] {
+/**
+ * What would stop a post going out as written. A group post needs no
+ * hashtags: in a neighbourhood group they read as an advert.
+ */
+export function planProblems(post: PlanText, placement: Placement = "page"): string[] {
   const problems: string[] = [];
   const all = `${post.hook}\n${post.body}\n${post.cta}`;
   if (!post.hook.trim()) problems.push("It needs a hook.");
@@ -61,7 +67,7 @@ export function planProblems(post: PlanText): string[] {
   if (/\$\s?\d/.test(all)) problems.push("It names a price.");
   if (/\b(licensed|insured|bonded|certified)\b/i.test(all)) problems.push("It claims a licence or insurance.");
   const tags = cleanHashtags(post.hashtags);
-  if (tags.length < 3) problems.push("Give it three to five hashtags.");
+  if (placement === "page" && tags.length < 3) problems.push("Give it three to five hashtags.");
   return problems;
 }
 

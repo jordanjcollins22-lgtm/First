@@ -10,6 +10,7 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import { trackedLink } from "@/lib/outreach-links";
 import { cleanHashtags, composePlanCaption, planProblems, planSlot, type CardStyle, type PlanText } from "@/lib/social-plan";
 import { tidyCrop, type Crop } from "@/lib/social-crop";
+import { tidyLayout, type Layout } from "@/lib/social-layout";
 
 export type PlanResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -60,11 +61,14 @@ export async function approvePlanPost(id: string, text: PlanText): Promise<PlanR
   const supabase = await createClient();
   const { data: post } = await supabase
     .from("social_posts")
-    .select("id, status, plan_day, link:outreach_links(code)")
+    .select("id, status, plan_day, placement, link:outreach_links(code)")
     .eq("id", id)
     .maybeSingle();
   if (!post?.plan_day) return { ok: false, message: "Couldn't find that post." };
   if (post.status === "posted") return { ok: false, message: "That one has already gone out." };
+  // Nothing can publish to a group, so a group post is never scheduled for
+  // the page; it is copied, posted by hand and marked posted.
+  if (post.placement === "group") return { ok: false, message: "Group posts go up by hand. Copy it, post it, then press Mark as posted." };
   const link = (Array.isArray(post.link) ? post.link[0] : post.link) as { code: string } | null;
   const url = link?.code ? trackedLink(await outboundBaseUrl(), link.code) : null;
   const now = new Date();
@@ -87,6 +91,38 @@ export async function approvePlanPost(id: string, text: PlanText): Promise<PlanR
   if (error) return { ok: false, message: "Couldn't approve. Try again." };
   revalidate();
   return { ok: true, message: "Approved. It goes out on its day." };
+}
+
+/** A post somebody put up by hand: in local groups, or on the page themselves. */
+export async function markPlanPosted(id: string, text: PlanText): Promise<PlanResult> {
+  const who = await owner();
+  if ("refused" in who) return { ok: false, message: who.refused };
+  const t = tidy(text);
+  const supabase = await createClient();
+  const { data: post } = await supabase.from("social_posts").select("id, placement, link:outreach_links(code)").eq("id", id).maybeSingle();
+  if (!post) return { ok: false, message: "Couldn't find that post." };
+  const link = (Array.isArray(post.link) ? post.link[0] : post.link) as { code: string } | null;
+  const url = link?.code ? trackedLink(await outboundBaseUrl(), link.code) : null;
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("social_posts")
+    .update({
+      hook: t.hook,
+      body: t.body,
+      cta: t.cta,
+      hashtags: t.hashtags,
+      caption: composePlanCaption(t, url),
+      status: "posted",
+      posted_at: now,
+      scheduled_for: null,
+      channel: post.placement === "group" ? "groups-by-hand" : "page-by-hand",
+      updated_at: now,
+    })
+    .eq("id", id)
+    .in("status", ["draft", "scheduled"]);
+  if (error) return { ok: false, message: "Couldn't mark it posted. Try again." };
+  revalidate();
+  return { ok: true, message: "Marked as posted." };
 }
 
 /** Take it out of the week. */
@@ -175,7 +211,7 @@ export async function getPictureChoices(jobId: string | null): Promise<PictureCh
  */
 export async function setPlanPictures(
   id: string,
-  input: { jobId: string | null; cardStyle: CardStyle; beforeId: string | null; afterId: string | null; beforeCrop: Crop; afterCrop: Crop }
+  input: { jobId: string | null; cardStyle: CardStyle; beforeId: string | null; afterId: string | null; beforeCrop: Crop; afterCrop: Crop; layout: Layout }
 ): Promise<PlanResult> {
   const who = await owner();
   if ("refused" in who) return { ok: false, message: who.refused };
@@ -191,6 +227,7 @@ export async function setPlanPictures(
       after_photo_id: input.cardStyle === "brand" ? null : input.afterId,
       before_crop: tidyCrop(input.beforeCrop),
       after_crop: tidyCrop(input.afterCrop),
+      layout: tidyLayout(input.layout),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

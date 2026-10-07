@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { trackedLink } from "@/lib/outreach-links";
-import type { CardStyle, PlanKind } from "@/lib/social-plan";
+import type { CardStyle, PlanKind, Placement } from "@/lib/social-plan";
 import { tidyCrop, type Crop } from "@/lib/social-crop";
+import { tidyLayout, type Layout } from "@/lib/social-layout";
 
 export interface PlanPost {
   id: string;
@@ -19,6 +20,8 @@ export interface PlanPost {
   afterId: string | null;
   beforeCrop: Crop;
   afterCrop: Crop;
+  layout: Layout;
+  placement: Placement;
   /** The drawn picture, with the last change in it so an edit shows at once. */
   imageUrl: string;
   link: string | null;
@@ -32,12 +35,13 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("social_posts")
-    .select("id, plan_day, kind, status, hook, body, cta, hashtags, card_style, job_id, before_photo_id, after_photo_id, before_crop, after_crop, scheduled_for, posted_at, updated_at, link:outreach_links(code, click_count)")
+    .select("id, plan_day, kind, status, hook, body, cta, hashtags, card_style, job_id, before_photo_id, after_photo_id, before_crop, after_crop, layout, placement, scheduled_for, posted_at, updated_at, link:outreach_links(code, click_count)")
     .eq("organization_id", organizationId)
     .not("plan_day", "is", null)
     .gte("plan_day", fromDay)
     .neq("status", "skipped")
     .order("plan_day")
+    .order("placement", { ascending: false })
     .limit(limit);
   if (error) throw error;
   const base = await outboundBaseUrl();
@@ -56,6 +60,8 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
     after_photo_id: string | null;
     before_crop: unknown;
     after_crop: unknown;
+    layout: unknown;
+    placement: string | null;
     scheduled_for: string | null;
     posted_at: string | null;
     updated_at: string;
@@ -78,6 +84,8 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
       afterId: r.after_photo_id,
       beforeCrop: tidyCrop(r.before_crop),
       afterCrop: tidyCrop(r.after_crop),
+      layout: tidyLayout(r.layout),
+      placement: r.placement === "group" ? "group" : "page",
       imageUrl: `/api/social/card/${r.id}?v=${encodeURIComponent(r.updated_at)}`,
       link: link?.code ? trackedLink(base, link.code) : null,
       clicks: link?.click_count ?? 0,

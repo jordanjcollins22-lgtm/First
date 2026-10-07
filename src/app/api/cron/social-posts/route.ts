@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
     .from("social_posts")
     .select("id, caption, image_path, job_id, plan_day")
     .eq("status", "scheduled")
+    // Group posts are posted by hand; only the page is published to.
+    .neq("placement", "group")
     .lte("scheduled_for", new Date().toISOString())
     .limit(20);
 

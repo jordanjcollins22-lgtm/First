@@ -318,6 +318,8 @@ export interface Database {
           card_style: string | null;
           before_crop: { x: number; y: number; zoom: number } | null;
           after_crop: { x: number; y: number; zoom: number } | null;
+          layout: { arrange?: string; fit?: string; text?: string; bar?: string } | null;
+          placement: "page" | "group";
           created_at: string;
           updated_at: string;
         };

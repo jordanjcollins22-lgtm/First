@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ImageIcon, Loader2, Undo2, X } from "lucide-react";
+import { Check, Download, ImageIcon, Loader2, Undo2, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { approvePlanPost, savePlanPost, skipPlanPost, unapprovePlanPost, type PlanResult } from "@/lib/actions/social-plan-actions";
+import { approvePlanPost, markPlanPosted, savePlanPost, skipPlanPost, unapprovePlanPost, type PlanResult } from "@/lib/actions/social-plan-actions";
 import { PLAN_KIND_LABEL, cleanHashtags, composePlanCaption, planProblems } from "@/lib/social-plan";
 import type { PlanPost } from "@/lib/data/social-plan";
 import { PictureEditor } from "@/components/marketing/picture-editor";
@@ -58,7 +58,8 @@ function PlanCard({ post }: { post: PlanPost }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   const text = { hook, body, cta, hashtags: tags.split(/[\s,]+/).filter(Boolean) };
-  const problems = planProblems(text);
+  const group = post.placement === "group";
+  const problems = planProblems(text, post.placement);
   const approved = post.status === "scheduled";
   const posted = post.status === "posted";
   const act = (fn: () => Promise<PlanResult>) => start(async () => setResult(await fn()));
@@ -78,10 +79,15 @@ function PlanCard({ post }: { post: PlanPost }) {
       <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="font-semibold">{dayName(post.day)}</span>
+          {group && (
+            <Badge>
+              <Users className="h-3 w-3" /> Facebook groups
+            </Badge>
+          )}
           {post.kind && <Badge variant="outline">{PLAN_KIND_LABEL[post.kind]}</Badge>}
         </div>
         <Badge variant={posted ? "default" : approved ? "secondary" : "outline"}>
-          {posted ? "Posted" : approved ? "Approved" : "Waiting for you"}
+          {posted ? "Posted" : approved ? "Approved" : group ? "Post by hand" : "Waiting for you"}
         </Badge>
       </div>
       <div className="grid gap-4 p-4 sm:grid-cols-[240px_1fr]">
@@ -92,8 +98,18 @@ function PlanCard({ post }: { post: PlanPost }) {
           </a>
           {!posted && !editingPictures && (
             <Button size="sm" variant="outline" onClick={() => setEditingPictures(true)}>
-              <ImageIcon className="h-4 w-4" /> Change pictures
+              <ImageIcon className="h-4 w-4" /> Change pictures and layout
             </Button>
+          )}
+          <Button size="sm" variant="outline" asChild>
+            <a href={post.imageUrl} download={`js-landscaping-${post.day}${group ? "-groups" : ""}.png`}>
+              <Download className="h-4 w-4" /> Download picture
+            </a>
+          </Button>
+          {group && (
+            <p className="text-[11px] text-muted-foreground">
+              Post it in each group yourself, uploading the picture rather than sharing the page. Change a few words from group to group.
+            </p>
           )}
         </div>
         <div className="flex flex-col gap-3 text-sm">
@@ -110,7 +126,7 @@ function PlanCard({ post }: { post: PlanPost }) {
             <Input value={cta} onChange={(e) => setCta(e.target.value)} disabled={posted} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">Hashtags (3 to 5: service and town)</span>
+            <span className="text-xs font-semibold text-muted-foreground">{group ? "Hashtags (leave empty for groups)" : "Hashtags (3 to 5: service and town)"}</span>
             <Input value={tags} onChange={(e) => setTags(e.target.value)} disabled={posted} />
             <span className="text-xs text-muted-foreground">{cleanHashtags(text.hashtags).join(" ")}</span>
           </label>
@@ -122,11 +138,18 @@ function PlanCard({ post }: { post: PlanPost }) {
           {problems.length > 0 && !posted && <p className="text-xs text-destructive">{problems.join(" ")}</p>}
           {!posted && (
             <div className="flex flex-wrap gap-2">
-              {!approved && (
-                <Button disabled={pending || problems.length > 0} onClick={() => act(() => approvePlanPost(post.id, text))}>
+              {group ? (
+                <Button disabled={pending || problems.length > 0} onClick={() => act(() => markPlanPosted(post.id, text))}>
                   {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Approve
+                  Mark as posted
                 </Button>
+              ) : (
+                !approved && (
+                  <Button disabled={pending || problems.length > 0} onClick={() => act(() => approvePlanPost(post.id, text))}>
+                    {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    Approve
+                  </Button>
+                )
               )}
               <Button variant="outline" disabled={pending} onClick={() => act(() => savePlanPost(post.id, text))}>
                 Save changes

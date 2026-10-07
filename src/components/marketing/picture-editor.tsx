@@ -8,15 +8,20 @@ import { getPictureChoices, setPlanPictures, type PictureChoices, type PlanResul
 import { CENTRE, MAX_ZOOM, cropBox, type Crop } from "@/lib/social-crop";
 import type { CardStyle } from "@/lib/social-plan";
 import type { PlanPost } from "@/lib/data/social-plan";
+import {
+  ARRANGE_LABEL,
+  BAR_LABEL,
+  FIT_LABEL,
+  TEXT_LABEL,
+  photoSpaces,
+  type Arrange,
+  type BarSize,
+  type Fit,
+  type Layout,
+  type TextSize,
+} from "@/lib/social-layout";
 
 const thumb = (id: string) => `/api/social/photo/${id}`;
-
-/** The spaces each photo fills in the finished picture, as the picture route draws them. */
-const SPACE = {
-  top: { width: 1080, height: 470 },
-  bottom: { width: 1080, height: 462 },
-  full: { width: 1080, height: 1350 },
-};
 
 type Slot = "before" | "after";
 
@@ -36,6 +41,14 @@ export function PictureEditor({ post, onDone }: { post: PlanPost; onDone: (r: Pl
   const [beforeCrop, setBeforeCrop] = useState<Crop>(post.beforeCrop);
   const [afterCrop, setAfterCrop] = useState<Crop>(post.afterCrop);
   const [choosing, setChoosing] = useState<Slot>(post.beforeId ? "after" : "before");
+  const [layout, setLayout] = useState<Layout>(post.layout);
+  const spaces = photoSpaces(style === "split" ? "split" : "photo", layout);
+  // The finished picture with this layout, drawn from the saved photos.
+  const [preview, setPreview] = useState(post.imageUrl);
+  useEffect(() => {
+    const t = setTimeout(() => setPreview(`${post.imageUrl}&layout=${encodeURIComponent(JSON.stringify(layout))}`), 400);
+    return () => clearTimeout(t);
+  }, [layout, post.imageUrl]);
   const [loading, startLoad] = useTransition();
   const [saving, startSave] = useTransition();
 
@@ -77,7 +90,7 @@ export function PictureEditor({ post, onDone }: { post: PlanPost; onDone: (r: Pl
 
   function save() {
     startSave(async () => {
-      const r = await setPlanPictures(post.id, { jobId, cardStyle: style, beforeId, afterId, beforeCrop, afterCrop });
+      const r = await setPlanPictures(post.id, { jobId, cardStyle: style, beforeId, afterId, beforeCrop, afterCrop, layout });
       onDone(r);
     });
   }
@@ -99,21 +112,45 @@ export function PictureEditor({ post, onDone }: { post: PlanPost; onDone: (r: Pl
       </div>
 
       {style !== "brand" && (
+        <div className="grid gap-3 rounded-md border p-2 sm:grid-cols-[1fr_180px]">
+          <div className="flex flex-col gap-2">
+            {style === "split" && (
+              <Choice label="Layout" value={layout.arrange} options={ARRANGE_LABEL} onChange={(v: Arrange) => setLayout({ ...layout, arrange: v })} />
+            )}
+            <Choice label="Photos" value={layout.fit} options={FIT_LABEL} onChange={(v: Fit) => setLayout({ ...layout, fit: v })} />
+            <Choice label="Headline" value={layout.text} options={TEXT_LABEL} onChange={(v: TextSize) => setLayout({ ...layout, text: v })} />
+            <Choice label="Bottom bar" value={layout.bar} options={BAR_LABEL} onChange={(v: BarSize) => setLayout({ ...layout, bar: v })} />
+            <p className="text-[11px] text-muted-foreground">
+              Phone photos are tall: side by side, or showing the whole photo, keeps more of the work in. The preview uses the saved photos; save to see new ones.
+            </p>
+          </div>
+          <a href={preview} target="_blank" rel="noreferrer" className="block">
+            {/* eslint-disable-next-line @next/next/no-img-element -- drawn by the app's own picture route */}
+            <img src={preview} alt="Preview of the finished picture" className="w-full rounded border" />
+          </a>
+        </div>
+      )}
+
+      {style !== "brand" && (
         <>
           <div className="grid gap-3 sm:grid-cols-[200px_1fr]">
             <div className="flex flex-col gap-2">
               {style === "split" ? (
                 <>
-                  <Framer label="Before" id={beforeId} space={SPACE.top} crop={beforeCrop} onCrop={setBeforeCrop} active={choosing === "before"} onPick={() => setChoosing("before")} />
-                  <Framer label="After" id={afterId} space={SPACE.bottom} crop={afterCrop} onCrop={setAfterCrop} active={choosing === "after"} onPick={() => setChoosing("after")} />
+                  <div className={layout.arrange === "side" ? "grid grid-cols-2 gap-1" : "flex flex-col gap-2"}>
+                    <Framer label="Before" id={beforeId} space={spaces.before ?? spaces.after} fit={layout.fit} crop={beforeCrop} onCrop={setBeforeCrop} active={choosing === "before"} onPick={() => setChoosing("before")} />
+                    <Framer label="After" id={afterId} space={spaces.after} fit={layout.fit} crop={afterCrop} onCrop={setAfterCrop} active={choosing === "after"} onPick={() => setChoosing("after")} />
+                  </div>
                   <Button size="sm" variant="outline" onClick={swap} disabled={!beforeId || !afterId}>
                     <ArrowUpDown className="h-4 w-4" /> Swap before and after
                   </Button>
                 </>
               ) : (
-                <Framer label="Photo" id={afterId} space={SPACE.full} crop={afterCrop} onCrop={setAfterCrop} active onPick={() => setChoosing("after")} />
+                <Framer label="Photo" id={afterId} space={spaces.after} fit={layout.fit} crop={afterCrop} onCrop={setAfterCrop} active onPick={() => setChoosing("after")} />
               )}
-              <p className="text-[11px] text-muted-foreground">Drag a photo to move it. Use the slider to zoom.</p>
+              <p className="text-[11px] text-muted-foreground">
+                {layout.fit === "whole" ? "The whole photo is shown, so there is nothing to move." : "Drag a photo to move it. Use the slider to zoom."}
+              </p>
             </div>
 
             <div className="flex min-w-0 flex-col gap-2">
@@ -179,14 +216,30 @@ export function PictureEditor({ post, onDone }: { post: PlanPost; onDone: (r: Pl
   );
 }
 
+/** One row of layout choices. */
+function Choice<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: Record<T, string>; onChange: (v: T) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="w-20 text-xs font-semibold text-muted-foreground">{label}</span>
+      {(Object.keys(options) as T[]).map((key) => (
+        <Button key={key} type="button" size="sm" variant={value === key ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => onChange(key)}>
+          {options[key]}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * One photo in its frame, shaped like its space in the finished picture and
  * cut by the same rule the picture is drawn with. Drag to move; slider to zoom.
+ * Shown whole, it sits inside the frame on the dark background instead.
  */
 function Framer({
   label,
   id,
   space,
+  fit,
   crop,
   onCrop,
   active,
@@ -195,6 +248,7 @@ function Framer({
   label: string;
   id: string | null;
   space: { width: number; height: number };
+  fit: Fit;
   crop: Crop;
   onCrop: (c: Crop) => void;
   active: boolean;
@@ -214,7 +268,8 @@ function Framer({
   }, []);
 
   const frameH = Math.round((frameW * space.height) / space.width);
-  const box = natural ? cropBox(natural.w, natural.h, frameW, frameH, crop) : null;
+  const whole = fit === "whole";
+  const box = natural && !whole ? cropBox(natural.w, natural.h, frameW, frameH, crop) : null;
 
   function onPointerDown(e: React.PointerEvent) {
     onPick();
@@ -256,13 +311,19 @@ function Framer({
             alt={label}
             draggable={false}
             onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-            style={box ? { position: "absolute", width: box.width, height: box.height, left: -box.left, top: -box.top, maxWidth: "none" } : { opacity: 0 }}
+            style={
+              whole
+                ? { width: "100%", height: "100%", objectFit: "contain", background: "#14261a" }
+                : box
+                  ? { position: "absolute", width: box.width, height: box.height, left: -box.left, top: -box.top, maxWidth: "none" }
+                  : { opacity: 0 }
+            }
           />
         ) : (
           <span className="flex h-full items-center justify-center text-xs text-muted-foreground">Tap a photo</span>
         )}
       </div>
-      {id && (
+      {id && !whole && (
         <label className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
           Zoom
           <input
