@@ -14,7 +14,7 @@ export function PositionView({
 }: {
   position: Position;
   orgName: string;
-  keep: { org: string | null; src: string | null };
+  keep: { org: string | null; src: string | null; inv?: string | null };
 }) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-5 px-4 py-6">
@@ -56,7 +56,7 @@ export function PositionView({
         </div>
       </section>
 
-      <ApplyForm position={position} org={keep.org} source={keep.src} businessName={orgName} />
+      <ApplyForm position={position} org={keep.org} source={keep.src} invite={keep.inv ?? null} businessName={orgName} />
     </main>
   );
 }

@@ -178,13 +178,26 @@ const INVITE_STATUS: Record<IndeedInviteRow["status"], string> = {
   failed: "Didn't send: message them on Indeed",
 };
 
+/** Where an invite has got to: applied, or still waiting and whether the reminder has gone. */
+function inviteProgress(i: IndeedInviteRow): { label: string; waiting: boolean } {
+  if (i.applied) return { label: "Applied", waiting: false };
+  if (i.status !== "sent") return { label: INVITE_STATUS[i.status], waiting: false };
+  if (i.remindedAt) return { label: "Hasn't applied, reminder sent: call or message them on Indeed", waiting: true };
+  return { label: "Sent our application link, hasn't applied yet", waiting: false };
+}
+
 /** Who applied on Indeed and was sent our application link automatically. */
 function IndeedInvites({ invites, inbox }: { invites: IndeedInviteRow[] | null; inbox?: string }) {
+  const chase = (invites ?? []).filter((i) => inviteProgress(i).waiting).length;
   return (
     <section className="space-y-2">
-      <h2 className="text-base font-semibold">Applied on Indeed</h2>
+      <h2 className="flex items-center gap-2 text-base font-semibold">
+        Applied on Indeed
+        {chase > 0 ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400">{chase} to follow up</span> : null}
+      </h2>
       <p className="text-sm text-muted-foreground">
-        Anyone who applies with Indeed&apos;s own button is emailed the link to our application straight away, no approval needed.
+        Anyone who applies with Indeed&apos;s own button is emailed the link to our application straight away, no approval needed, and
+        reminded once a day later if they haven&apos;t filled it in. Anyone still waiting after that is marked to follow up.
         {inbox ? (
           <>
             {" "}
@@ -198,14 +211,17 @@ function IndeedInvites({ invites, inbox }: { invites: IndeedInviteRow[] | null; 
         <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Nobody yet. Each one shows up here when their link goes.</p>
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-          {invites.map((i) => (
-            <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-              <span className="font-medium">{i.name ?? "Name not given"}</span>
-              <span className="text-xs text-muted-foreground">
-                {[positionFor(i.position)?.title ?? i.position, INVITE_STATUS[i.status], shortWhen(i.createdAt)].join(" · ")}
-              </span>
-            </li>
-          ))}
+          {invites.map((i) => {
+            const progress = inviteProgress(i);
+            return (
+              <li key={i.id} className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm ${progress.waiting ? "bg-amber-500/5" : ""}`}>
+                <span className="font-medium">{i.name ?? "Name not given"}</span>
+                <span className={`text-xs ${progress.waiting ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+                  {[positionFor(i.position)?.title ?? i.position, progress.label, shortWhen(i.createdAt)].join(" · ")}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

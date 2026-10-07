@@ -19,11 +19,14 @@ export function ApplyForm({
   position,
   org,
   source,
+  invite,
   businessName,
 }: {
   position: Position;
   org: string | null;
   source: string | null;
+  /** The Indeed invite whose link they came by, so the Hiring page knows they applied. */
+  invite: string | null;
   businessName: string;
 }) {
   const router = useRouter();
@@ -41,7 +44,7 @@ export function ApplyForm({
     setError(null);
     setGaps([]);
     start(async () => {
-      const result = await applyForPosition({ org, position: position.key, contact, answers, source, website }).catch(
+      const result = await applyForPosition({ org, position: position.key, contact, answers, source, invite, website }).catch(
         () => ({ ok: false as const, error: "We couldn't send that. Check your signal and try again.", missing: undefined })
       );
       if (!result.ok) {

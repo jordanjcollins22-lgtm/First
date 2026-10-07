@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyInvite, isFromIndeed, isIndeedAddress, nameIn, nameInBody, positionIn, readIndeedNotice, relayIn, tidyName } from "@/lib/hiring/indeed-notice";
+import { applyInvite, applyReminder, isFromIndeed, isIndeedAddress, nameIn, nameInBody, positionIn, readIndeedNotice, relayIn, tidyName } from "@/lib/hiring/indeed-notice";
 
 const application = {
   from: "Indeed <indeedapply@indeed.com>",
@@ -91,5 +91,15 @@ describe("Indeed's application email sent from the applicant's relay address", (
 
   it("strips Indeed's bracketed tag before reading a name from the subject", () => {
     expect(nameIn("[Action required] Sample Person applied to Landscape Evaluator")).toBe("Sample Person");
+  });
+});
+
+describe("the one reminder", () => {
+  it("points them back at the same link and asks for their own email", () => {
+    const mail = applyReminder({ name: "Sample Applicant", positionTitle: "Landscape Evaluator", applyUrl: "https://example.com/careers/evaluator?src=indeed&inv=abc", sender: "Jordan", business: "JS Landscaping" });
+    expect(mail.subject).toBe("Still interested? – JS Landscaping");
+    expect(mail.text.startsWith("Hi Sample,")).toBe(true);
+    expect(mail.text).toContain("https://example.com/careers/evaluator?src=indeed&inv=abc");
+    expect(mail.text).toContain("personal email");
   });
 });

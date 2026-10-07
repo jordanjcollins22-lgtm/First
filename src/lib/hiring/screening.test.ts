@@ -91,6 +91,8 @@ describe("cleaning what was sent", () => {
       "An email address we can reach you at",
       "Your 5-digit ZIP code",
     ]);
+    // Indeed's relay only reaches them inside Indeed.
+    expect(missing(tech, { ...CONTACT, email: "conversation-sample-x1@indeedemail.com" }, answers)).toEqual(["Your personal email, not your Indeed address"]);
     delete answers.why;
     expect(missing(tech, CONTACT, answers)).toContain("Why do you want this job? A couple of sentences is plenty.");
   });

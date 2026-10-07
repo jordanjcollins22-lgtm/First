@@ -168,3 +168,19 @@ export function applyInvite(input: { name: string | null; positionTitle: string;
       `Thanks,\n${input.sender}\n${input.business}`,
   };
 }
+
+/** The one reminder, a day on, to an applicant who hasn't filled in our application yet. */
+export function applyReminder(input: { name: string | null; positionTitle: string; applyUrl: string; sender: string; business: string }): {
+  subject: string;
+  text: string;
+} {
+  return {
+    subject: `Still interested? – ${input.business}`,
+    text:
+      `Hi ${greetingName(input.name)},\n\n` +
+      `Just checking you saw this. To be considered for the ${input.positionTitle} job, please fill in our short application. It takes about two minutes:\n\n` +
+      `${input.applyUrl}\n\n` +
+      `Please use your personal email on it, so we can reach you directly about an interview.\n\n` +
+      `Thanks,\n${input.sender}\n${input.business}`,
+  };
+}

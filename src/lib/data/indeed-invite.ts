@@ -4,7 +4,7 @@ import { appUrl } from "@/lib/app-url";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { sendOutbound } from "@/lib/email/outbound";
 import { getReceivedEmail, listReceivedEmails, type ReceivedEmail } from "@/lib/email/resend";
-import { applyInvite, isIndeedAddress, readIndeedNotice, relaySender, type IndeedMail } from "@/lib/hiring/indeed-notice";
+import { applyInvite, applyReminder, isIndeedAddress, readIndeedNotice, relaySender, type IndeedMail } from "@/lib/hiring/indeed-notice";
 import { positionFor } from "@/lib/hiring/positions";
 import { htmlToText, senderAddress } from "@/lib/inbound-email";
 import { log, maskEmail } from "@/lib/log";
@@ -25,6 +25,10 @@ export interface IndeedInviteRow {
   status: "sent" | "no_address" | "repeat" | "failed";
   detail: string | null;
   createdAt: string;
+  /** They went on to fill in our application. */
+  applied: boolean;
+  /** When the one reminder went, if it did. */
+  remindedAt: string | null;
 }
 
 /** The Indeed applicants written to lately, newest first, for the Hiring page. */
@@ -32,7 +36,7 @@ export async function listIndeedInvites(limit = 30): Promise<IndeedInviteRow[]> 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("indeed_invites")
-    .select("id, name, position, status, detail, created_at")
+    .select("id, name, position, status, detail, created_at, applicant_id, reminded_at")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -43,6 +47,8 @@ export async function listIndeedInvites(limit = 30): Promise<IndeedInviteRow[]> 
     status: r.status as IndeedInviteRow["status"],
     detail: r.status === "failed" ? r.detail : null,
     createdAt: r.created_at,
+    applied: Boolean(r.applicant_id),
+    remindedAt: r.reminded_at,
   }));
 }
 
@@ -64,7 +70,7 @@ export async function noteIndeedBounce(admin: Admin, emailId: string): Promise<b
   if (!invite) return false;
   await admin.from("indeed_invites").update({ status: "failed", detail: "Indeed did not accept the email (bounced)." }).eq("id", invite.id);
   const position = positionFor(invite.position);
-  const applyUrl = appUrl(await outboundBaseUrl(), `/careers/${invite.position}?src=indeed`);
+  const applyUrl = await inviteLink(invite.position, invite.id);
   log.warn("indeed.invite_bounced", { inviteId: invite.id });
   await tellOwners(
     admin,
@@ -128,7 +134,8 @@ export async function handleIndeedMail(
   const finish = (status: "sent" | "no_address" | "repeat" | "failed", detail: string | null) =>
     admin.from("indeed_invites").update({ status, detail }).eq("id", claimed.id);
 
-  const applyUrl = appUrl(await outboundBaseUrl(), `/careers/${position.key}?src=indeed`);
+  // The link carries this invite, so their application is matched back to it.
+  const applyUrl = await inviteLink(position.key, claimed.id);
   const who = notice.name ?? "Someone";
 
   if (!notice.relay) {
@@ -156,12 +163,7 @@ export async function handleIndeedMail(
     return "repeat";
   }
 
-  const [{ data: org }, { data: owner }] = await Promise.all([
-    admin.from("organizations").select("name").eq("id", organizationId).maybeSingle(),
-    admin.from("profiles").select("first_name, full_name").eq("organization_id", organizationId).in("email", TOOLS_OWNER_EMAILS).limit(1).maybeSingle(),
-  ]);
-  const business = (org as { name?: string } | null)?.name ?? "JS Landscaping";
-  const sender = owner?.first_name || owner?.full_name?.split(" ")[0] || business;
+  const { business, sender } = await senderNames(admin, organizationId);
   const { subject, text } = applyInvite({ name: notice.name, positionTitle: position.title, applyUrl, sender, business });
 
   // From the hiring address: it is the one on the Indeed account, and Indeed
@@ -266,4 +268,116 @@ export async function catchUpIndeedMail(admin: Admin, organizationId?: string, d
   }
   if (handled > 0) log.info("indeed.caught_up", { handled });
   return { checked: candidates.length, handled };
+}
+
+/** Our application for one job, carrying the invite it was sent with. */
+async function inviteLink(positionKey: string, inviteId: string): Promise<string> {
+  return appUrl(await outboundBaseUrl(), `/careers/${positionKey}?src=indeed&inv=${inviteId}`);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * An application, matched back to the Indeed invite that brought it: by the
+ * invite the link carried, or, for a link sent before links carried one, by
+ * the same name for the same job. Lets the Hiring page show who applied and
+ * stops their reminder.
+ */
+export async function linkIndeedInvite(
+  admin: Admin,
+  input: { organizationId: string; applicantId: string; position: string; name: string; invite: string | null; source: string | null }
+): Promise<void> {
+  if (input.invite && UUID.test(input.invite)) {
+    const { data } = await admin
+      .from("indeed_invites")
+      .update({ applicant_id: input.applicantId })
+      .eq("id", input.invite)
+      .eq("organization_id", input.organizationId)
+      .is("applicant_id", null)
+      .select("id");
+    if ((data ?? []).length > 0) return;
+  }
+  if (input.source !== "indeed" || input.name.trim().length < 2) return;
+  const since = new Date(Date.now() - REPEAT_DAYS * 86_400_000).toISOString();
+  const { data: byName } = await admin
+    .from("indeed_invites")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("position", input.position)
+    .ilike("name", input.name.trim())
+    .is("applicant_id", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const match = (byName ?? [])[0];
+  if (match) await admin.from("indeed_invites").update({ applicant_id: input.applicantId }).eq("id", match.id);
+}
+
+/** How long after the link before the one reminder, and how long after that nobody is chased. */
+const REMIND_AFTER_HOURS = 20;
+const STOP_AFTER_DAYS = 7;
+
+/**
+ * One reminder, through Indeed, to each applicant sent our link a day or more
+ * ago who hasn't filled in the application. Never a second: once reminded,
+ * they stay on the Hiring page as waiting, for a call or a message instead.
+ */
+export async function remindIndeedApplicants(admin: Admin): Promise<{ reminded: number; failed: number }> {
+  const before = new Date(Date.now() - REMIND_AFTER_HOURS * 3_600_000).toISOString();
+  const after = new Date(Date.now() - STOP_AFTER_DAYS * 86_400_000).toISOString();
+  const { data: due } = await admin
+    .from("indeed_invites")
+    .select("id, organization_id, name, position, relay")
+    .eq("status", "sent")
+    .is("applicant_id", null)
+    .is("reminded_at", null)
+    .not("relay", "is", null)
+    .lte("created_at", before)
+    .gte("created_at", after)
+    .limit(50);
+  let reminded = 0;
+  let failed = 0;
+  for (const invite of due ?? []) {
+    const position = positionFor(invite.position);
+    if (!position || !invite.relay) continue;
+    // Claimed first, so two runs at once remind once.
+    const { data: claimed } = await admin
+      .from("indeed_invites")
+      .update({ reminded_at: new Date().toISOString() })
+      .eq("id", invite.id)
+      .is("reminded_at", null)
+      .select("id");
+    if ((claimed ?? []).length === 0) continue;
+
+    const { business, sender } = await senderNames(admin, invite.organization_id);
+    const { subject, text } = applyReminder({ name: invite.name, positionTitle: position.title, applyUrl: await inviteLink(position.key, invite.id), sender, business });
+    const sent = await sendOutbound({
+      organizationId: invite.organization_id,
+      to: invite.relay,
+      toName: invite.name ?? undefined,
+      subject,
+      text,
+      fromName: business,
+      fromAddress: HIRING_INBOX,
+      replyTo: `${HIRING_INBOX}, ${TOOLS_OWNER_EMAILS[0]}`,
+    });
+    if (sent.ok) {
+      reminded += 1;
+      log.info("indeed.reminder_sent", { inviteId: invite.id });
+    } else {
+      failed += 1;
+      log.warn("indeed.reminder_failed", { inviteId: invite.id, error: sent.message });
+    }
+  }
+  return { reminded, failed };
+}
+
+/** The business name and the owner's first name, for signing what goes to applicants. */
+async function senderNames(admin: Admin, organizationId: string): Promise<{ business: string; sender: string }> {
+  const [{ data: org }, { data: owner }] = await Promise.all([
+    admin.from("organizations").select("name").eq("id", organizationId).maybeSingle(),
+    admin.from("profiles").select("first_name, full_name").eq("organization_id", organizationId).in("email", TOOLS_OWNER_EMAILS).limit(1).maybeSingle(),
+  ]);
+  const business = (org as { name?: string } | null)?.name ?? "JS Landscaping";
+  return { business, sender: owner?.first_name || owner?.full_name?.split(" ")[0] || business };
 }

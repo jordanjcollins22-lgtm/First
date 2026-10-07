@@ -9,7 +9,7 @@ import { syncOrganization } from "@/lib/plaid";
 import { isPlaidConfigured } from "@/lib/env";
 import { probeStripe, recordPaymentsHealth } from "@/lib/data/payments-health";
 import { expireProposals } from "@/lib/data/expire-proposals";
-import { catchUpIndeedMail } from "@/lib/data/indeed-invite";
+import { catchUpIndeedMail, remindIndeedApplicants } from "@/lib/data/indeed-invite";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -43,6 +43,11 @@ export async function GET(request: NextRequest) {
   // Indeed applications the hiring inbox got but nobody answered get their link now.
   const indeed = await catchUpIndeedMail(admin).catch((err) => {
     console.error("[ops] Indeed catch-up:", err);
+    return null;
+  });
+  // And anyone sent it a day ago who hasn't applied gets their one reminder.
+  const indeedReminders = await remindIndeedApplicants(admin).catch((err) => {
+    console.error("[ops] Indeed reminders:", err);
     return null;
   });
 
@@ -104,5 +109,5 @@ export async function GET(request: NextRequest) {
       report.push({ org: org.name, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  return NextResponse.json({ organisations: report, expiredProposals: expired, indeed });
+  return NextResponse.json({ organisations: report, expiredProposals: expired, indeed, indeedReminders });
 }

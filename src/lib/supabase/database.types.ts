@@ -3644,6 +3644,8 @@ export interface Database {
           status: string;
           detail: string | null;
           created_at: string;
+          applicant_id: string | null;
+          reminded_at: string | null;
         };
         Insert: {
           id?: string;
@@ -3655,6 +3657,8 @@ export interface Database {
           status: string;
           detail?: string | null;
           created_at?: string;
+          applicant_id?: string | null;
+          reminded_at?: string | null;
         };
         Update: {
           id?: string;
@@ -3666,6 +3670,8 @@ export interface Database {
           status?: string;
           detail?: string | null;
           created_at?: string;
+          applicant_id?: string | null;
+          reminded_at?: string | null;
         };
         Relationships: [];
       };

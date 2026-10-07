@@ -48,6 +48,8 @@ export function missing(position: Position, contact: Contact, answers: Answers):
   const out: string[] = [];
   if (contact.name.length < 2) out.push("Your name");
   if (!EMAIL.test(contact.email)) out.push("An email address we can reach you at");
+  // Indeed's relay address only reaches them inside Indeed; we write to them directly.
+  else if (/@indeedemail\.com$/i.test(contact.email)) out.push("Your personal email, not your Indeed address");
   if (contact.phone.replace(/\D/g, "").length < 10) out.push("A phone number with area code");
   if (!/^\d{5}$/.test(contact.zip)) out.push("Your 5-digit ZIP code");
   for (const q of position.questions) {

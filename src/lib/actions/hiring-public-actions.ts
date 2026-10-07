@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { APPLICANT_TOKEN, careersOrg } from "@/lib/data/hiring";
 import { positionFor } from "@/lib/hiring/positions";
 import { cleanAnswers, cleanContact, missing, screen } from "@/lib/hiring/screening";
+import { linkIndeedInvite } from "@/lib/data/indeed-invite";
 import { log, maskEmail } from "@/lib/log";
 
 /**
@@ -33,6 +34,8 @@ export async function applyForPosition(input: {
   contact: unknown;
   answers: unknown;
   source: string | null;
+  /** The Indeed invite the link carried, when they came from one. */
+  invite?: string | null;
   /** A field people can't see. Anything in it was filled in by a bot. */
   website?: string;
 }): Promise<ApplyResult> {
@@ -96,6 +99,9 @@ export async function applyForPosition(input: {
     kind: "applied",
     detail: { passed: result.passed, reasons: result.reasons, source },
   });
+  await linkIndeedInvite(admin, { organizationId: org.id, applicantId: row.id, position: position.key, name: contact.name, invite: input.invite ?? null, source }).catch((err) =>
+    log.warn("hiring.invite_link_failed", { error: err instanceof Error ? err.message : String(err) })
+  );
   log.info("hiring.applied", { position: position.key, passed: result.passed, email: maskEmail(contact.email), source });
   revalidatePath("/admin/hiring");
   return result.passed ? { ok: true, passed: true, token } : { ok: true, passed: false };

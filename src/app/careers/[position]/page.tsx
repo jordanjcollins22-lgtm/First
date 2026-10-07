@@ -17,13 +17,13 @@ export default async function PositionPage({
   searchParams,
 }: {
   params: Promise<{ position: string }>;
-  searchParams?: Promise<{ org?: string; src?: string }>;
+  searchParams?: Promise<{ org?: string; src?: string; inv?: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { position: key } = await params;
-  const { org: orgParam, src } = (await searchParams) ?? {};
+  const { org: orgParam, src, inv } = (await searchParams) ?? {};
   const position = positionFor(key);
   const org = await careersOrg(orgParam);
   if (!position || !org) notFound();
-  return <PositionView position={position} orgName={org.name} keep={{ org: org.id === DEFAULT_HIRING_ORG ? null : org.id, src: src ?? null }} />;
+  return <PositionView position={position} orgName={org.name} keep={{ org: org.id === DEFAULT_HIRING_ORG ? null : org.id, src: src ?? null, inv: inv ?? null }} />;
 }
