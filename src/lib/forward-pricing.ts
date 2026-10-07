@@ -27,7 +27,7 @@
 import { lawnWork } from "@/lib/lawn-work";
 import { MEASURED_BY_KEY, MEASURED_FROM_MAP } from "@/lib/measured-by";
 
-export type ProductionUnit = "SF" | "LF" | "CY" | "plant" | "bush" | "job";
+export type ProductionUnit = "SF" | "LF" | "CY" | "plant" | "bush" | "tree" | "job";
 
 export interface ProductionService {
   key: string;
@@ -75,6 +75,7 @@ export const PRODUCTION_UNITS: { unit: ProductionUnit; label: string }[] = [
   { unit: "CY", label: "Cubic yards" },
   { unit: "plant", label: "Plants" },
   { unit: "bush", label: "Bushes" },
+  { unit: "tree", label: "Trees" },
   { unit: "job", label: "Per job (no crew time)" },
 ];
 
@@ -100,6 +101,10 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "bush-removal-large", label: "Bush removal, large (with roots)", unit: "bush", pr: 1, group: "Plants and shrubs" },
   { key: "plant-cutback", label: "Plant cut-back", unit: "plant", pr: 12, group: "Plants and shrubs" },
   { key: "shrub-trimming", label: "Shrub trimming", unit: "plant", pr: 8, group: "Plants and shrubs" },
+  // A tree is not a big shrub: ladders or a pole saw, limbs dragged out, cut
+  // down and loaded. A starting figure of one tree a crew-hour, debris in the
+  // truck included; change it on the production rates page as jobs come in.
+  { key: "tree-trimming", label: "Tree trimming (debris hauled)", unit: "tree", pr: 1, group: "Plants and shrubs" },
   { key: "plant-relocation", label: "Plant relocation", unit: "plant", pr: 6, group: "Plants and shrubs" },
   { key: "mulch-install", label: "Mulch install", unit: "CY", pr: 2.5, materialCentsPerUnit: 3500, materialName: "Mulch", group: "Beds and materials", bulkOver: 1 },
   { key: "plant-install-1gal", label: "Plant installation, 1 gal", unit: "plant", pr: 12, materialCentsPerUnit: 800, materialName: "Plants", group: "Plants and shrubs" },
@@ -457,7 +462,10 @@ export function suggestLines(area: AreaFacts, services: ProductionService[] = PR
     lines.push(byCount(s === "large" ? "bush-removal-large" : s === "medium" ? "plant-removal-medium" : "plant-removal-small", n, what));
   } else if (area.typeId === "trimming") {
     const n = count(v, "quantity");
-    lines.push(byCount(/cut\s*back/i.test(notes) ? "plant-cutback" : "shrub-trimming", n, "plants"));
+    // "Large tree" on the walkthrough is a tree, priced as one: a tree
+    // trimmed as a shrub came out at minutes a tree.
+    if (/\btrees?\b/i.test(`${text(v, "type")} ${notes}`)) lines.push(byCount("tree-trimming", n, "trees"));
+    else lines.push(byCount(/cut\s*back/i.test(notes) ? "plant-cutback" : "shrub-trimming", n, "plants"));
   } else if (area.typeId === "landscape-cleanup") {
     lines.push(bySize("debris-cleanup"));
     if (weedy(text(v, "weedLevel"))) lines.push(bySize("weed-pulling"));
@@ -562,7 +570,7 @@ const MENTIONS: { id: string; what: string; all: RegExp[]; keys: string[] }[] = 
   { id: "grade", what: "grading", all: [/regrad|grading|\blevel(l)?ing\b/i], keys: ["hand-grading", "soil-prep"] },
   { id: "weeds", what: "weeding", all: [/weed/i], keys: ["weed-pulling", "weed-spraying"] },
   { id: "spray", what: "spraying", all: [/spray/i], keys: ["weed-spraying"] },
-  { id: "trim", what: "trimming", all: [/trim|prun|cut\s*back/i], keys: ["shrub-trimming", "plant-cutback", "perennial-cutback"] },
+  { id: "trim", what: "trimming", all: [/trim|prun|cut\s*back/i], keys: ["shrub-trimming", "tree-trimming", "plant-cutback", "perennial-cutback"] },
   {
     id: "remove",
     what: "taking plants, bushes or trees out",
@@ -645,6 +653,7 @@ export function scopeGaps(area: AreaFacts, lines: PriceLine[], services: Product
 }
 
 const HAULS_AWAY = new Set([
+  "tree-trimming",
   "weed-pulling",
   "perennial-cutback",
   "debris-cleanup",

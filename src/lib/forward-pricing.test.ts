@@ -93,6 +93,9 @@ describe("the services suggested from the walkthrough", () => {
 
   it("removes plants by size and count", () => {
     expect(suggestLines(area({ typeId: "plant-bush-removal", values: { size: "Large", type: "Bush", quantity: "1" } }))[0]).toMatchObject({ key: "bush-removal-large", quantity: 1 });
+    // A tree on the walkthrough is trimmed as a tree, not as a shrub.
+    expect(suggestLines(area({ typeId: "trimming", values: { type: "Large tree", quantity: "5" } }))[0]).toMatchObject({ key: "tree-trimming", quantity: 5 });
+    expect(suggestLines(area({ typeId: "trimming", values: { type: "Shrub", quantity: "4" } }))[0]).toMatchObject({ key: "shrub-trimming", quantity: 4 });
     expect(suggestLines(area({ typeId: "plant-bush-removal", values: { size: "Small", type: "Plant", quantity: "3" } }))[0]).toMatchObject({ key: "plant-removal-small", quantity: 3 });
   });
 
