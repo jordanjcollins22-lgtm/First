@@ -15,11 +15,19 @@
  * Pure, so the rule is tested.
  */
 
-const WORK = [
-  "lawn", "mow", "landscap", "mulch", "leaf", "leaves", "cleanup", "clean up", "yard",
-  "hedge", "shrub", "bush", "grass", "weed", "aerat", "overseed", "sod", "trim", "edging",
-  "snow", "plow", "gutter", "brush", "overgrown", "flower bed", "flowerbed", "garden", "tree", "stump",
-] as const;
+/**
+ * The work, as whole words with only their own endings: "bush" and "bushes"
+ * but never "bushings" (car parts), "trim" and "trimming" but never
+ * "trimester". A few are stems, where every ending is the work itself.
+ */
+const WORK: readonly { word: string; pattern: RegExp }[] = [
+  ["lawn", "lawns?"], ["mow", "mow(?:s|ing|ed|er|ers)?"], ["landscaping", "landscap\\w*"], ["mulch", "mulch(?:es|ing|ed)?"],
+  ["leaves", "leaf|leaves"], ["cleanup", "clean ?ups?"], ["yard", "yards?"], ["hedge", "hedges?"], ["shrub", "shrubs?"],
+  ["bush", "bush(?:es)?"], ["grass", "grass"], ["weeds", "weeds?|weeding"], ["aeration", "aerat\\w*"], ["overseeding", "overseed\\w*"],
+  ["sod", "sod"], ["trim", "trim(?:s|ming|med)?"], ["edging", "edging"], ["snow", "snow"], ["plow", "plow(?:s|ing|ed)?"],
+  ["gutters", "gutters?"], ["brush", "brush"], ["overgrown", "overgrown"], ["flower bed", "flower ?beds?"],
+  ["garden", "garden(?:s|ing)?"], ["tree", "trees?"], ["stump", "stumps?"],
+].map(([word, source]) => ({ word, pattern: new RegExp(`(?:^| )(?:${source})(?= |$)`) }));
 
 const ASKING = [
   "recommend", "anyone know", "any one know", "anybody know", "does anyone", "can anyone",
@@ -42,9 +50,14 @@ function fold(text: string): string {
   return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
 }
 
-/** "sod" and "trim" only as the start of a word, so "episode" and "nutrimax" don't count. */
+/** Phrases from the start of a word, so "episode" never counts as "sod". */
 function found(haystack: string, words: readonly string[]): string[] {
   return words.filter((word) => haystack.includes(` ${fold(word).trim()}`));
+}
+
+/** The work the post names, each as a whole word. */
+function workIn(haystack: string): string[] {
+  return WORK.filter((w) => w.pattern.test(haystack)).map((w) => w.word);
 }
 
 export interface WordsVerdict {
@@ -58,7 +71,7 @@ export function requestByWords(text: string): WordsVerdict {
   const haystack = fold(text);
   const selling = found(haystack, SELLING);
   if (selling.length > 0) return { request: false, matched: selling };
-  const work = found(haystack, WORK);
+  const work = workIn(haystack);
   const asking = found(haystack, ASKING);
   if (work.length === 0 || asking.length === 0) return { request: false, matched: [] };
   return { request: true, matched: [...asking.slice(0, 2), ...work.slice(0, 2)] };

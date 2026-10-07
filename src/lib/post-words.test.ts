@@ -23,6 +23,16 @@ describe("requestByWords", () => {
     expect(ad.matched).toContain("licensed");
   });
 
+  it("never takes car parts or a pregnancy for yard work", () => {
+    expect(requestByWords("In need of some advice, my car needs arms and bushings on the front").request).toBe(false);
+    expect(requestByWords("Can anyone recommend a doctor for my second trimester?").request).toBe(false);
+  });
+
+  it("knows the work in its other forms", () => {
+    expect(requestByWords("Looking for someone for mowing and trimming bushes").request).toBe(true);
+    expect(requestByWords("Need someone to clear the weeds and plow the driveway").request).toBe(true);
+  });
+
   it("matches words from their start only", () => {
     expect(requestByWords("Does anyone know when the next episode airs?").request).toBe(false);
   });
