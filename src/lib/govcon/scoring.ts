@@ -31,6 +31,10 @@ const RED_FLAGS: Array<{ pattern: RegExp; label: string; penalty: number; disqua
   { pattern: /background (check|investigation)|base access|dbids|\bcac\b|piv card/i, label: "Base access / background checks for crews", penalty: 2 },
   { pattern: /collective bargaining|\bcba\b|nondisplacement|non-displacement/i, label: "CBA wages / incumbent workforce rules", penalty: 2 },
   { pattern: /24\/7|24 hours a day|emergency (response|call)/i, label: "24/7 emergency response", penalty: 2 },
+  // Mostly state/local titles, where there's no PSC code to catch these.
+  { pattern: /\b(purchase of|supply of|supplies\b|furnish and deliver|asphalt (concrete )?mix|traffic paint|bulk (salt|mulch) purchase)/i, label: "Product purchase, not a service", penalty: 10, disqualify: true },
+  { pattern: /pre-?qualified|prequalification required/i, label: "Restricted to prequalified contractors", penalty: 10, disqualify: true },
+  { pattern: /\b(sbe|dbe|mbe|wbe|hub)\b.{0,15}(set-?aside|goal|requirement|participation)/i, label: "Local SBE/DBE certification or participation goal", penalty: 2 },
 ];
 
 export function daysUntil(deadline: string | null, now: Date): number | null {

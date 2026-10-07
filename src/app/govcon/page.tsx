@@ -61,6 +61,18 @@ export default async function GovconDashboard() {
         <CardContent><OpportunityTable rows={d.ready} empty="Nothing ready yet — bids appear here once sub quotes are in and priced." /></CardContent>
       </Card>
 
+      {d.needsDocs.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>State & local bids waiting for documents</CardTitle></CardHeader>
+          <CardContent>
+            <p className="mb-2 text-sm text-muted-foreground">
+              Portal bids keep documents behind a free vendor login. Open each one, download the bid package, and upload it — analysis, subs and pricing then run automatically.
+            </p>
+            <OpportunityTable rows={d.needsDocs} empty="" />
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader><CardTitle>Collecting sub quotes</CardTitle></CardHeader>
         <CardContent><OpportunityTable rows={d.inFlight} empty="No RFQs out right now." /></CardContent>

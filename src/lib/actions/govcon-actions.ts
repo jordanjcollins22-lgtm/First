@@ -241,3 +241,39 @@ export async function updateContract(id: string, formData: FormData) {
   revalidatePath("/govcon/contracts");
   revalidatePath("/govcon");
 }
+
+/** Step 1 of a document upload: signed URLs so the browser uploads straight to storage. */
+export async function createDocUploadUrls(opportunityId: string, fileNames: string[]) {
+  await requireAuth();
+  const db = createAdminClient();
+  const out: Array<{ name: string; path: string; token: string }> = [];
+  for (const name of fileNames.slice(0, 10)) {
+    const safe = name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-120);
+    const path = `${opportunityId}/${Date.now()}-${safe}`;
+    const { data, error } = await db.storage.from("govcon-docs").createSignedUploadUrl(path);
+    if (error) throw new Error(error.message);
+    out.push({ name, path, token: data.token });
+  }
+  return out;
+}
+
+/** Step 2: record the uploads and queue the opportunity for AI analysis. */
+export async function registerUploadedDocs(opportunityId: string, docs: Array<{ name: string; path: string; size: number }>) {
+  await requireAuth();
+  const db = createAdminClient();
+  const { data: opp } = await db.from("govcon_opportunities").select("uploaded_docs, status").eq("id", opportunityId).single();
+  if (!opp) throw new Error("Opportunity not found");
+  const existing = (opp.uploaded_docs ?? []) as Array<{ path: string }>;
+  const merged = [...existing, ...docs.filter((d) => d.path.startsWith(`${opportunityId}/`))];
+  const requeue = ["needs_docs", "new", "no_bid", "expired"].includes(opp.status);
+  await db
+    .from("govcon_opportunities")
+    .update({
+      uploaded_docs: merged,
+      ...(requeue ? { status: "new" as const, recommendation: "bid" as const, priority: 1000, last_error: null, status_reason: "Documents uploaded — queued for analysis" } : {}),
+    })
+    .eq("id", opportunityId);
+  await event(opportunityId, "docs_uploaded", `Uploaded ${docs.length} document(s)${requeue ? " — will be analyzed on the next run" : ""}`);
+  revalidatePath(`/govcon/opportunities/${opportunityId}`);
+  revalidatePath("/govcon");
+}

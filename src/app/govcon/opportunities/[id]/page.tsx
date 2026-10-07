@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionButton, CopyButton } from "@/components/govcon/action-button";
+import { DocUpload } from "@/components/govcon/doc-upload";
 import { daysLeft } from "@/components/govcon/opportunity-table";
 import { StatusBadge } from "@/components/govcon/status-badge";
 import { addManualQuote, prioritizeOpportunity, repriceBid, setOpportunityStatus } from "@/lib/actions/govcon-actions";
@@ -362,6 +363,17 @@ export default async function OpportunityPage({ params }: PageProps<"/govcon/opp
           </Section>
 
           <Section title="Documents">
+            {opp.status === "needs_docs" && (
+              <p className="rounded-md bg-amber-50 p-2 text-amber-900">
+                This portal keeps bid documents behind a free vendor login. Register at{" "}
+                {opp.url ? <a href={opp.url} target="_blank" rel="noreferrer" className="underline">the portal</a> : "the portal"}, download the
+                documents, and upload them here — the rest is automatic.
+              </p>
+            )}
+            {((opp.uploaded_docs ?? []) as Array<{ name: string; path: string }>).map((d) => (
+              <p key={d.path} className="text-xs">📎 {d.name}</p>
+            ))}
+            <DocUpload opportunityId={id} />
             {attachments.length ? (
               <ul className="space-y-1">
                 {attachments.map((a) => (

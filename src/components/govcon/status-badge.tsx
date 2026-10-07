@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   new: "bg-secondary text-secondary-foreground",
+  needs_docs: "bg-amber-100 text-amber-900",
   sourcing: "bg-amber-100 text-amber-900",
   awaiting_quotes: "bg-amber-100 text-amber-900",
   ready: "bg-primary text-primary-foreground",
@@ -18,6 +19,7 @@ const STATUS_STYLES: Record<string, string> = {
 const LABELS: Record<string, string> = {
   awaiting_quotes: "awaiting quotes",
   no_bid: "no-bid",
+  needs_docs: "needs documents",
   ready: "ready to submit",
 };
 

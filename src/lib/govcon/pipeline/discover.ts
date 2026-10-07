@@ -3,6 +3,7 @@ import type { GovconOpportunityRow } from "@/lib/supabase/database.types";
 import { createContractFromWin } from "../contracts";
 import { opportunityKey } from "../normalize";
 import { scoreOpportunity } from "../scoring";
+import { fetchAllBonfire } from "../sources/bonfire";
 import { searchRecentOpportunities } from "../sources/sam-api";
 import { streamSamCsv, type AwardNoticeRow } from "../sources/sam-csv";
 import type { Opportunity } from "../types";
@@ -15,11 +16,11 @@ import { logEvent, oppToRow, saveSettingsState, type PipelineContext } from "./c
  * Only notices that match a brokerable trade and aren't disqualified are
  * stored. Award notices are matched against bids we submitted (win/loss).
  */
-const PRE_ANALYSIS_STATUSES = new Set(["new", "no_bid"]);
-const OPEN_STATUSES = ["new", "sourcing", "awaiting_quotes", "ready"] as const;
+const PRE_ANALYSIS_STATUSES = new Set(["new", "no_bid", "needs_docs"]);
+const OPEN_STATUSES = ["new", "needs_docs", "sourcing", "awaiting_quotes", "ready"] as const;
 
 export async function discover(ctx: PipelineContext) {
-  const stats = { scanned: 0, candidates: 0, inserted: 0, updated: 0, amended: 0, awardsMatched: 0, expired: 0, csv: "skipped" as string };
+  const stats = { scanned: 0, candidates: 0, inserted: 0, updated: 0, amended: 0, awardsMatched: 0, expired: 0, csv: "skipped" as string, portalBids: 0, portalsFailed: [] as string[] };
   const byKey = new Map<string, Opportunity>();
   const awards: AwardNoticeRow[] = [];
 
@@ -48,6 +49,15 @@ export async function discover(ctx: PipelineContext) {
     } catch (e) {
       await logEvent(ctx, null, "warning", `SAM API search failed: ${(e as Error).message}`);
     }
+  }
+  // State & local portals (titles + deadlines; documents come by upload).
+  try {
+    const bonfire = await fetchAllBonfire(ctx.profile.bonfirePortals);
+    stats.portalBids = bonfire.opportunities.length;
+    stats.portalsFailed = bonfire.failed;
+    for (const opp of bonfire.opportunities) consider(opp);
+  } catch (e) {
+    await logEvent(ctx, null, "warning", `Portal scan failed: ${(e as Error).message}`);
   }
   stats.candidates = byKey.size;
 

@@ -43,7 +43,7 @@ export async function getDashboard() {
       .order(order, { ascending: order === "response_deadline" })
       .limit(limit);
 
-  const [ready, inFlight, fresh, submitted, events, runs, settings, submittedCount, wonCount, callCount] = await Promise.all([
+  const [ready, inFlight, fresh, submitted, events, runs, settings, submittedCount, wonCount, callCount, needsDocs] = await Promise.all([
     list(["ready"], "response_deadline"),
     list(["sourcing", "awaiting_quotes"], "response_deadline"),
     db.from("govcon_opportunities").select(OPP_LIST_COLUMNS).eq("status", "new").gt("response_deadline", now.toISOString()).order("score", { ascending: false }).limit(50),
@@ -54,11 +54,13 @@ export async function getDashboard() {
     db.from("govcon_bids").select("id", { count: "exact", head: true }).gte("submitted_at", monthStart),
     db.from("govcon_opportunities").select("id", { count: "exact", head: true }).eq("status", "won"),
     db.from("govcon_rfqs").select("id", { count: "exact", head: true }).eq("channel", "call").eq("status", "queued"),
+    list(["needs_docs"], "response_deadline"),
   ]);
   for (const r of [ready, inFlight, fresh, submitted, events, runs]) if (r.error) throw r.error;
 
   return {
     ready: (ready.data ?? []) as OpportunityListItem[],
+    needsDocs: (needsDocs.data ?? []) as OpportunityListItem[],
     inFlight: (inFlight.data ?? []) as OpportunityListItem[],
     fresh: (fresh.data ?? []) as OpportunityListItem[],
     submitted: (submitted.data ?? []) as OpportunityListItem[],
