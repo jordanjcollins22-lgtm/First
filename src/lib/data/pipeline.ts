@@ -39,6 +39,12 @@ export interface PipelineCard {
   disputeLine: string | null;
   /** The job this one copies, when the same person is booked twice at one address. */
   duplicateOf: { jobId: string; label: string } | null;
+  /**
+   * An evaluation still to happen: whether the client has filled out the
+   * pre-eval, and when they were last asked to. The card offers to send it,
+   * or to move the visit. Null once the visit is done or called off.
+   */
+  upcomingVisit: { preEvalDone: boolean; preEvalAskedAt: string | null } | null;
 }
 
 export async function getPipeline(): Promise<PipelineCard[]> {
@@ -47,7 +53,8 @@ export async function getPipeline(): Promise<PipelineCard[]> {
 
   // One query for every proposal rather than one per job.
   const supabase = await createClient();
-  const [{ data: proposals }, views] = await Promise.all([
+  const visitIds = jobs.filter((j) => j.evaluation_status === "scheduled").map((j) => j.id);
+  const [{ data: proposals }, views, { data: intakes }, { data: asks }] = await Promise.all([
     supabase
       .from("job_proposals")
       .select("id, job_id, status, total_cost, discount_amount, paid_at, sent_at")
@@ -58,7 +65,16 @@ export async function getPipeline(): Promise<PipelineCard[]> {
     // Empty before the views migration, or if it fails: a board without the
     // read counts is the board we had, and it still has to render.
     viewsForAllProposals().catch(() => ({}) as Record<string, ViewSummary>),
+    visitIds.length
+      ? supabase.from("evaluation_intakes").select("job_id").in("job_id", visitIds).not("submitted_at", "is", null)
+      : Promise.resolve({ data: [] as { job_id: string }[] }),
+    visitIds.length
+      ? supabase.from("client_message_log").select("reference_id, created_at").eq("kind", "pre_eval_ask").eq("status", "sent").in("reference_id", visitIds).order("created_at")
+      : Promise.resolve({ data: [] as { reference_id: string; created_at: string }[] }),
   ]);
+  const preEvalIn = new Set(((intakes ?? []) as { job_id: string }[]).map((i) => i.job_id));
+  // Ordered oldest first, so the last one kept is the latest ask.
+  const askedAt = new Map(((asks ?? []) as { reference_id: string; created_at: string }[]).map((a) => [a.reference_id, a.created_at]));
 
   const proposalByJob = new Map(
     (
@@ -154,6 +170,10 @@ export async function getPipeline(): Promise<PipelineCard[]> {
           const d = duplicates.get(job.id);
           return d ? { jobId: d.keeperId, label: d.keeperLabel } : null;
         })(),
+        upcomingVisit:
+          job.evaluation_status === "scheduled" && position.stage === "evaluation"
+            ? { preEvalDone: preEvalIn.has(job.id), preEvalAskedAt: askedAt.get(job.id) ?? null }
+            : null,
       } satisfies PipelineCard;
     })
     .filter((c): c is PipelineCard => c !== null);

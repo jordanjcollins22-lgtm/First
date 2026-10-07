@@ -11,6 +11,8 @@ import { MoveJob } from "@/components/pipeline/move-job";
 import { DeleteDuplicate } from "@/components/pipeline/delete-duplicate";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
+import { isAccountManager } from "@/lib/affiliate-roles";
+import { PreEvalAsk } from "@/components/evaluations/pre-eval-ask";
 
 function money(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -46,6 +48,8 @@ export default async function PipelinePage() {
 async function PipelineTab() {
   const roles = (await getCurrentProfile())?.roles ?? [];
   const canDelete = isOwnerLevel(roles) || roles.includes("admin");
+  // Who may email a client the pre-eval: the same people the send itself allows.
+  const canAskPreEval = canDelete || isAccountManager(roles);
   let cards: PipelineCard[] = [];
   try {
     cards = await getPipeline();
@@ -203,6 +207,20 @@ async function PipelineTab() {
                                     </p>
                                   )}
                                 </Link>
+                                {/* A visit still to happen: get the pre-eval to
+                                    them, or move it, without opening the job. */}
+                                {card.upcomingVisit && (
+                                  <div className="mt-1 flex flex-col gap-1">
+                                    {card.upcomingVisit.preEvalDone ? (
+                                      <p className="text-[11px] font-medium text-primary">Pre-eval filled out</p>
+                                    ) : (
+                                      canAskPreEval && <PreEvalAsk jobId={card.jobId} askedAt={card.upcomingVisit.preEvalAskedAt} />
+                                    )}
+                                    <Link href={`/jobs/${card.jobId}?open=schedule`} className="text-[11px] font-medium text-primary hover:underline">
+                                      Reschedule →
+                                    </Link>
+                                  </div>
+                                )}
                                 <MoveJob
                                   jobId={card.jobId}
                                   overridden={card.overridden}
