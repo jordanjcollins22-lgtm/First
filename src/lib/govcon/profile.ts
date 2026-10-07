@@ -16,6 +16,8 @@ export const DEFAULT_PROFILE: CompanyProfile = {
   minDaysToRespond: 5,
   maxEstimatedValue: 1_500_000,
   monthlyProposalTarget: 25,
+  // ~25 proposals/month needs a few analyses a day once no-bids drop out.
+  maxAnalysesPerDay: 8,
 };
 
 export function mergeProfile(overrides: Partial<CompanyProfile> | null | undefined): CompanyProfile {

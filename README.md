@@ -11,6 +11,16 @@ Address → satellite map loads → draw work areas (polygon/rectangle/line/poin
 → attach photos → auto-cluster into zones → generate a work sequence →
 auto-generated scope of work per area → crew step-through preview.
 
+## Gov Contracts module (`/govcon`)
+
+An unattended pipeline for winning government contracts as the prime and
+subcontracting the work to local businesses. It finds SAM.gov solicitations
+daily, reads the scope of work, finds local subs, collects quotes, and prices and
+drafts each bid for you to review and submit. See
+[`docs/govcon/README.md`](docs/govcon/README.md) for how it works, setup and the
+compliance guardrails, and [`docs/govcon/research/`](docs/govcon/research/)
+for the underlying research.
+
 ## Setup
 
 You need two things before the app is usable past the landing page:

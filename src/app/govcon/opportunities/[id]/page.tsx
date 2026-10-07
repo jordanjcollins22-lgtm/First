@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ActionButton, CopyButton } from "@/components/govcon/action-button";
 import { daysLeft } from "@/components/govcon/opportunity-table";
 import { StatusBadge } from "@/components/govcon/status-badge";
-import { addManualQuote, repriceBid, setOpportunityStatus } from "@/lib/actions/govcon-actions";
+import { addManualQuote, prioritizeOpportunity, repriceBid, setOpportunityStatus } from "@/lib/actions/govcon-actions";
 import { getOpportunityDetail } from "@/lib/data/govcon";
 import type { ProposalDraft, QuoteCheck, SolicitationAnalysis } from "@/lib/govcon/ai";
 import type { ComparableAward } from "@/lib/govcon/sources/usaspending";
@@ -91,6 +91,9 @@ export default async function OpportunityPage({ params }: PageProps<"/govcon/opp
           {opp.last_error && <p className="text-sm text-destructive">{opp.last_error}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {opp.status === "new" && (
+            <ActionButton action={prioritizeOpportunity.bind(null, id)}>Pursue this bid</ActionButton>
+          )}
           {opp.status === "ready" && (
             <ActionButton action={setOpportunityStatus.bind(null, id, "submitted", undefined)} confirmText="Mark this proposal as submitted to the government?">
               Mark submitted

@@ -79,6 +79,7 @@ export default async function GovconSettingsPage() {
           <Field label="Minimum days to respond" name="minDaysToRespond" type="number" defaultValue={profile.minDaysToRespond} hint="Skip bids due sooner — not enough time for sub quotes" />
           <Field label="Max contract value $" name="maxEstimatedValue" type="number" defaultValue={profile.maxEstimatedValue} />
           <Field label="Monthly proposal target" name="monthlyProposalTarget" type="number" defaultValue={profile.monthlyProposalTarget} />
+          <Field label="Max solicitations read by AI per day" name="maxAnalysesPerDay" type="number" defaultValue={profile.maxAnalysesPerDay} hint="Cost control — highest-scoring bids are read first" />
           <Field label="States (blank = all)" name="states" defaultValue={profile.states.join(", ")} hint="e.g. NC, SC, VA" />
         </CardContent>
       </Card>

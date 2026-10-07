@@ -14,7 +14,15 @@ import { logEvent, rowToOpp, timeLeft, type PipelineContext } from "./context";
  * awards for a price anchor. Re-scores with what the documents revealed.
  */
 export async function analyze(ctx: PipelineContext, limit = 6) {
-  const stats = { analyzed: 0, toSourcing: 0, noBid: 0, errors: 0 };
+  const stats = { analyzed: 0, toSourcing: 0, noBid: 0, errors: 0, dailyCapReached: false };
+  const dayStart = new Date(Date.UTC(ctx.now.getUTCFullYear(), ctx.now.getUTCMonth(), ctx.now.getUTCDate())).toISOString();
+  const { count: doneToday } = await ctx.db
+    .from("govcon_opportunities")
+    .select("id", { count: "exact", head: true })
+    .gte("analyzed_at", dayStart);
+  const remaining = ctx.profile.maxAnalysesPerDay - (doneToday ?? 0);
+  if (remaining <= 0) return { ...stats, dailyCapReached: true };
+  limit = Math.min(limit, remaining);
   const minDeadline = new Date(ctx.now.getTime() + ctx.profile.minDaysToRespond * 86_400_000).toISOString();
   const { data: rows, error } = await ctx.db
     .from("govcon_opportunities")

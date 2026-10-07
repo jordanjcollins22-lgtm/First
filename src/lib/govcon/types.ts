@@ -125,6 +125,8 @@ export interface CompanyProfile {
   maxEstimatedValue: number;
   /** Monthly proposal-volume target (the "20-25 a month" rule). */
   monthlyProposalTarget: number;
+  /** Cap on solicitations read by AI per day (cost control, ~$0.25-1 each). */
+  maxAnalysesPerDay: number;
 }
 
 export type BidRecommendation = "bid" | "maybe" | "no_bid";

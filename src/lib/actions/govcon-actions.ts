@@ -53,13 +53,28 @@ export async function setOpportunityStatus(
 ) {
   await requireAuth();
   const db = createAdminClient();
-  await db.from("govcon_opportunities").update({ status, status_reason: reason ?? null }).eq("id", id);
+  // Reopening queues it for analysis, which only picks up "bid" rows.
+  const extra = status === "new" ? { recommendation: "bid" as const, last_error: null } : {};
+  await db.from("govcon_opportunities").update({ status, status_reason: reason ?? null, ...extra }).eq("id", id);
   if (status === "submitted") {
     await db.from("govcon_bids").update({ status: "submitted", submitted_at: new Date().toISOString() }).eq("opportunity_id", id);
   } else if (status === "won" || status === "lost") {
     await db.from("govcon_bids").update({ status }).eq("opportunity_id", id);
   }
   await event(id, status, `Marked ${status.replace("_", "-")} by user${reason ? `: ${reason}` : ""}`);
+  revalidatePath(`/govcon/opportunities/${id}`);
+  revalidatePath("/govcon");
+}
+
+/** Push a "maybe" (or any new match) to the front of the analysis queue. */
+export async function prioritizeOpportunity(id: string) {
+  await requireAuth();
+  await createAdminClient()
+    .from("govcon_opportunities")
+    .update({ recommendation: "bid", score: 100, status_reason: "Prioritized by user", last_error: null })
+    .eq("id", id)
+    .eq("status", "new");
+  await event(id, "prioritized", "Prioritized — documents will be read on the next run");
   revalidatePath(`/govcon/opportunities/${id}`);
   revalidatePath("/govcon");
 }
@@ -183,6 +198,7 @@ export async function saveGovconSettings(formData: FormData) {
     minDaysToRespond: num("minDaysToRespond", 5),
     maxEstimatedValue: num("maxEstimatedValue", 1_500_000),
     monthlyProposalTarget: num("monthlyProposalTarget", 25),
+    maxAnalysesPerDay: num("maxAnalysesPerDay", 8),
   };
   const company = {
     name: profile.companyName,
