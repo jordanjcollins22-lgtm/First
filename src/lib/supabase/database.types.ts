@@ -3635,6 +3635,12 @@ export interface Database {
           },
         ];
       };
+      booking_claims: {
+        Row: { key: string; job_id: string | null; created_at: string };
+        Insert: { key: string; job_id?: string | null; created_at?: string };
+        Update: { key?: string; job_id?: string | null; created_at?: string };
+        Relationships: [];
+      };
       indeed_invites: {
         Row: {
           id: string;

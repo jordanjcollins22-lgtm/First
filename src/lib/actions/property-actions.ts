@@ -1,5 +1,7 @@
 "use server";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+import { claimBooking, releaseClaim, settleClaim } from "@/lib/data/booking-claims";
 import { modeForAddress } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
@@ -336,6 +338,26 @@ export type BookedEvaluation =
  * is looking at a client rather than at a diary.
  */
 export async function bookEvaluation(input: ManualEvaluationInput): Promise<BookedEvaluation> {
+  // Made once: Book pressed twice before the first came back used to book
+  // the client twice. The second waits for the first and reports the same visit.
+  const profile = await getCurrentProfile().catch(() => null);
+  const who = (input.customerId || input.customerEmail?.trim().toLowerCase() || input.customerName?.trim().toLowerCase() || "").slice(0, 120);
+  if (!profile || !who || !input.startsAt) return makeEvaluationBooking(input);
+  const admin = createAdminClient();
+  const key = `office:${profile.organization_id}:${who}:${input.address.trim().toLowerCase()}:${input.startsAt}`;
+  const claim = await claimBooking(admin, key);
+  if (!claim.won) {
+    return claim.jobId
+      ? { ok: true, jobId: claim.jobId, message: "Already booked: this is the same visit." }
+      : { ok: false, message: "That booking is still going through. Give it a moment and check the calendar." };
+  }
+  const made = await makeEvaluationBooking(input).catch((err: unknown): BookedEvaluation => ({ ok: false, message: err instanceof Error ? err.message : "Couldn't book that." }));
+  if (made.ok) await settleClaim(admin, key, made.jobId);
+  else await releaseClaim(admin, key).catch(() => undefined);
+  return made;
+}
+
+async function makeEvaluationBooking(input: ManualEvaluationInput): Promise<BookedEvaluation> {
   try {
     const profile = await getCurrentProfile();
     if (!profile) return { ok: false, message: "Sign in first." };

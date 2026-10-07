@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { classifyAgent } from "@/lib/click-agent";
 import { isVariant, type AddressEntry, type AddressVariant, type LocateResult } from "@/lib/booking-test";
+import { bookingPageKey, claimBooking, releaseClaim, settleClaim } from "@/lib/data/booking-claims";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
 import { freeOf } from "@/lib/busy";
@@ -107,6 +108,35 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * trusted from the client.
  */
 export async function submitPublicBooking(
+  input: SubmitPublicBookingInput
+): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
+  // Made once: the same person sending the same booking twice at once (a
+  // double tap, a resend on a slow phone) used to be booked twice. The
+  // second waits for the first and is told about the same visit.
+  const email = input.email.trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return makePublicBooking(input);
+  const admin = createAdminClient();
+  const key = bookingPageKey(input.organizationId, email, `${input.date}T${input.time}`);
+  const claim = await claimBooking(admin, key);
+  if (!claim.won) {
+    if (!claim.jobId) throw new Error("Your booking is still going through. Give it a moment, then refresh the page.");
+    const [{ data: job }, { data: intake }] = await Promise.all([
+      admin.from("jobs").select("evaluation_mode").eq("id", claim.jobId).maybeSingle(),
+      admin.from("evaluation_intakes").select("token").eq("job_id", claim.jobId).maybeSingle(),
+    ]);
+    return { jobId: claim.jobId, mode: (job?.evaluation_mode ?? "in_person") as EvaluationMode, prepToken: intake?.token ?? null };
+  }
+  try {
+    const made = await makePublicBooking(input);
+    await settleClaim(admin, key, made.jobId);
+    return made;
+  } catch (err) {
+    await releaseClaim(admin, key).catch(() => undefined);
+    throw err;
+  }
+}
+
+async function makePublicBooking(
   input: SubmitPublicBookingInput
 ): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
   const firstName = input.firstName.trim();

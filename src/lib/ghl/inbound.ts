@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { claimBooking, ghlKey, releaseClaim, settleClaim } from "@/lib/data/booking-claims";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { log } from "@/lib/log";
 import { modeForAddress } from "@/lib/evaluation-mode";
@@ -43,7 +44,31 @@ export type GhlBookingResult = { ok: true; jobId: string; customerId: string; pr
  * thin address matches a real street in the wrong state, and this writes
  * a property with nobody looking.
  */
+/**
+ * Made once per appointment, however many times GoHighLevel delivers it: the
+ * webhook and the calendar sync, or one webhook sent twice at the same
+ * moment, used to both find nothing and both book the client.
+ */
 export async function createBookingFromGhl(input: GhlBookingInput): Promise<GhlBookingResult> {
+  const admin = createAdminClient();
+  if (!input.appointmentId) return makeBookingFromGhl(input);
+
+  const key = ghlKey(input.appointmentId);
+  const claim = await claimBooking(admin, key);
+  if (!claim.won) {
+    const jobId = claim.jobId ?? (await admin.from("jobs").select("id").eq("ghl_appointment_id", input.appointmentId).maybeSingle()).data?.id ?? null;
+    if (!jobId) return { ok: false, error: "This appointment is already being booked. Try again in a minute." };
+    const { data } = await admin.from("jobs").select("property_id, properties(customer_id)").eq("id", jobId).maybeSingle();
+    const row = data as unknown as { property_id: string; properties: { customer_id: string } | null } | null;
+    return { ok: true, jobId, customerId: row?.properties?.customer_id ?? "", propertyId: row?.property_id ?? "" };
+  }
+  const made = await makeBookingFromGhl(input).catch((err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
+  if (made.ok) await settleClaim(admin, key, made.jobId);
+  else await releaseClaim(admin, key);
+  return made;
+}
+
+async function makeBookingFromGhl(input: GhlBookingInput): Promise<GhlBookingResult> {
   const admin = createAdminClient();
 
   const matches = await searchAddress(input.address, undefined, { autocomplete: false });
