@@ -44,4 +44,18 @@ describe("a site map priced the one way", () => {
     expect(costs.labour[0].label).toBe("Salting visits");
     expect(margin(priced.totalCents, costs.labourCents, costs.materialsCents, 15).grossPct).toBeGreaterThanOrEqual(0.5);
   });
+
+  it("salts every area on one trip a visit, shown as one line", () => {
+    const drive = { surface: "Driveway", treatments: "3" };
+    const walk = { surface: "Sidewalks and walkways", treatments: "3" };
+    const zones = [z("Lane", "salting", null, drive), z("Walk", "salting", null, walk), z("Pad", "salting", null, drive)];
+    const priced = priceSiteMap({ zones, catalog, travel, feePct: 15 });
+    const costs = jobCosts(priced);
+    expect(costs.visits).toBe(3);
+    expect(costs.labour).toHaveLength(1);
+    expect(costs.labour[0].detail).toMatch(/across 3 areas, 50 min from the shop and back$/);
+    expect(costs.labourCents).toBe(priced.salting[0]!.visit!.labourCents * 3);
+    expect(priced.areaPricesCents.reduce((a, b) => a + b, 0)).toBe(priced.totalCents);
+    expect(margin(priced.totalCents, costs.labourCents, costs.materialsCents, 15).grossPct).toBeGreaterThanOrEqual(0.5);
+  });
 });

@@ -3,7 +3,7 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { buildEstimate, withTravelShare, type EstimateTravelInput, type JobEstimate } from "@/lib/job-estimate";
 import { computeProposalTotal, formatMaterialQuantity, zoneCrewHours, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
 import { DEFAULT_SALT_SETTINGS } from "@/lib/salt";
-import { isSalting, priceSaltingVisits, type SaltingVisits } from "@/lib/salting";
+import { isSalting, priceSaltingVisitsTogether, type SaltingVisits } from "@/lib/salting";
 
 /**
  * A whole site map priced the one way, for the proposal the client gets and
@@ -48,15 +48,16 @@ export function priceSiteMap(input: {
   const ownCents = own.map((o) => Math.round(o.total * 100));
   const salt = catalog.salt ?? DEFAULT_SALT_SETTINGS;
 
-  const salting = zones.map((zone) =>
-    isSalting(zone.service?.typeId)
-      ? priceSaltingVisits(zone.service!.values, salt, {
-          toSiteMinutes: input.travel.toSiteMinutes,
-          fromSiteMinutes: input.travel.fromSiteMinutes,
-          crewCostPerHourCents: catalog.crewCostPerHourCents,
-          feePct: input.feePct,
-        })
-      : null
+  // One trip a visit for all of a property's salting, however many areas it is drawn as.
+  const salting = priceSaltingVisitsTogether(
+    zones.map((zone) => (isSalting(zone.service?.typeId) ? zone.service!.values : null)),
+    salt,
+    {
+      toSiteMinutes: input.travel.toSiteMinutes,
+      fromSiteMinutes: input.travel.fromSiteMinutes,
+      crewCostPerHourCents: catalog.crewCostPerHourCents,
+      feePct: input.feePct,
+    }
   );
   const workIndexes = zones.map((_, index) => index).filter((index) => !salting[index]);
 
@@ -155,7 +156,20 @@ export function jobCosts(priced: SiteMapPrice): JobCosts {
     }
   }
   const salting = priced.salting.filter((s): s is SaltingVisits => s != null);
+  // Areas sharing a trip are one line: the visit, not each area's share of it.
+  const shown = new Set<object>();
   for (const s of salting) {
+    if (s.visit) {
+      if (shown.has(s.visit)) continue;
+      shown.add(s.visit);
+      const v = s.visit;
+      labour.push({
+        label: "Salting visits",
+        detail: `${s.treatments} × ${v.billedHours} hr${v.billedHours === 1 ? "" : "s"}: ${v.onSiteMinutes} min on site across ${v.areas} areas, ${v.travelMinutes} min from the shop and back`,
+        cents: v.labourCents * s.treatments,
+      });
+      continue;
+    }
     labour.push({
       label: "Salting visits",
       detail: `${s.treatments} × ${s.billedHours} hr${s.billedHours === 1 ? "" : "s"}: ${s.onSiteMinutes} min on site, ${s.travelMinutes} min from the shop and back`,

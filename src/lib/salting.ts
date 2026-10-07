@@ -120,6 +120,21 @@ export interface SaltingVisits {
   totalCents: number;
   /** Raised over the salt page's price to reach the floor. */
   lifted: boolean;
+  /**
+   * The one trip it shares with the property's other salting areas, when
+   * there are any: this area's own figures above are its share of it.
+   */
+  visit?: SharedSaltingVisit;
+}
+
+/** One visit covering every salting area on a property with the same treatments. */
+export interface SharedSaltingVisit {
+  areas: number;
+  onSiteMinutes: number;
+  /** Shop to the house and back, once. */
+  travelMinutes: number;
+  billedHours: number;
+  labourCents: number;
 }
 
 /**
@@ -156,6 +171,75 @@ export function priceSaltingVisits(
     totalCents: perVisitCents * quote.treatments,
     lifted: perVisitCents > quote.perTreatmentCents,
   };
+}
+
+type SaltingTrip = Parameters<typeof priceSaltingVisits>[2];
+
+/**
+ * Every salting area on one property, priced as the crew actually works it:
+ * one drive from the shop and back a visit, whatever the number of areas,
+ * and the visit charged in whole hours once rather than an hour an area.
+ * Areas on the same number of treatments share a visit; each carries its
+ * share of the visit's time by its minutes on site, so they still add up,
+ * and each is held to the gross profit floor on its own share. An area with
+ * nobody to share with is priced exactly as priceSaltingVisits prices it.
+ * Null for an area that is not salting.
+ */
+export function priceSaltingVisitsTogether(
+  areas: (Record<string, string | undefined> | null)[],
+  settings: SaltSettings,
+  trip: SaltingTrip
+): (SaltingVisits | null)[] {
+  const priced = areas.map((values) => (values ? { values, order: saltingOrder(values) } : null));
+  const groups = new Map<number, number[]>();
+  priced.forEach((p, index) => {
+    if (p) groups.set(p.order.treatments, [...(groups.get(p.order.treatments) ?? []), index]);
+  });
+  const out: (SaltingVisits | null)[] = areas.map(() => null);
+  const fallback = trip.fallbackDriveMinutes ?? 30;
+  const to = trip.toSiteMinutes ?? fallback;
+  const back = trip.fromSiteMinutes ?? trip.toSiteMinutes ?? fallback;
+  for (const indexes of groups.values()) {
+    if (indexes.length === 1) {
+      out[indexes[0]] = priceSaltingVisits(priced[indexes[0]]!.values, settings, trip);
+      continue;
+    }
+    const ones = indexes.map((index) => {
+      const { order } = priced[index]!;
+      return { index, order, quote: quoteOrder(order, settings), one: priceTreatment(order.surface, order.petFriendly, settings) };
+    });
+    const onSite = ones.reduce((sum, o) => sum + o.one.minutes, 0);
+    const hours = billedHours((onSite + to + back) / 60);
+    const labour = Math.round(hours * Math.max(0, trip.crewCostPerHourCents));
+    const visit: SharedSaltingVisit = { areas: ones.length, onSiteMinutes: onSite, travelMinutes: Math.round(to + back), billedHours: hours, labourCents: labour };
+    // Each area's share, by its minutes on site; the last takes what rounding leaves, so the shares add up.
+    let labourLeft = labour;
+    let travelLeft = visit.travelMinutes;
+    ones.forEach((o, i) => {
+      const share = onSite > 0 ? o.one.minutes / onSite : 1 / ones.length;
+      const last = i === ones.length - 1;
+      const labourCents = last ? labourLeft : Math.round(labour * share);
+      labourLeft -= labourCents;
+      const travelMinutes = last ? travelLeft : Math.round(visit.travelMinutes * share);
+      travelLeft -= travelMinutes;
+      const floor = priceForTarget(labourCents, o.one.materialCents, trip.feePct) ?? 0;
+      const perVisitCents = Math.max(o.quote.perTreatmentCents, floor);
+      out[o.index] = {
+        treatments: o.quote.treatments,
+        onSiteMinutes: o.one.minutes,
+        travelMinutes,
+        billedHours: hours * share,
+        labourCents,
+        materialCents: o.one.materialCents,
+        saltPageCents: o.quote.perTreatmentCents,
+        perVisitCents,
+        totalCents: perVisitCents * o.quote.treatments,
+        lifted: perVisitCents > o.quote.perTreatmentCents,
+        visit,
+      };
+    });
+  }
+  return out;
 }
 
 /**
