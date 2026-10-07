@@ -102,9 +102,9 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "plant-cutback", label: "Plant cut-back", unit: "plant", pr: 12, group: "Plants and shrubs" },
   { key: "shrub-trimming", label: "Shrub trimming", unit: "plant", pr: 8, group: "Plants and shrubs" },
   // A tree is not a big shrub: ladders or a pole saw, limbs dragged out, cut
-  // down and loaded. A starting figure of one tree a crew-hour, debris in the
-  // truck included; change it on the production rates page as jobs come in.
-  { key: "tree-trimming", label: "Tree trimming (debris hauled)", unit: "tree", pr: 1, group: "Plants and shrubs" },
+  // down and loaded. Half an hour a tree, debris in the truck included (the
+  // owner's figure); change it on the production rates page as jobs come in.
+  { key: "tree-trimming", label: "Tree trimming (debris hauled)", unit: "tree", pr: 2, group: "Plants and shrubs" },
   { key: "plant-relocation", label: "Plant relocation", unit: "plant", pr: 6, group: "Plants and shrubs" },
   { key: "mulch-install", label: "Mulch install", unit: "CY", pr: 2.5, materialCentsPerUnit: 3500, materialName: "Mulch", group: "Beds and materials", bulkOver: 1 },
   { key: "plant-install-1gal", label: "Plant installation, 1 gal", unit: "plant", pr: 12, materialCentsPerUnit: 800, materialName: "Plants", group: "Plants and shrubs" },
