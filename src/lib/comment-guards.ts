@@ -96,20 +96,52 @@ const NEARBY_OUTSIDE = [
   "delaware",
 ];
 
+/**
+ * Other states, by name, and by their two letters where they're written in
+ * capitals ("Mechanicsville, VA"). Maryland is ours; two-letter codes that
+ * are also everyday words (OK, IN, ME, OR, HI, OH, ID) are left out.
+ */
+const OTHER_STATES = [
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia",
+  "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "massachusetts",
+  "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
+  "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island",
+  "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington state", "west virginia",
+  "wisconsin", "wyoming",
+];
+const OTHER_STATE_CODES = /(?:^|[\s,(])(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|IA|KS|KY|LA|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)(?=$|[\s,).!])/;
+
+/** The other state a place is in, or null. */
+function otherState(text: string): string | null {
+  const named = OTHER_STATES.find((s) => mentions(text, s));
+  if (named) return titleCase(named);
+  return text.match(OTHER_STATE_CODES)?.[1] ?? null;
+}
+
 function mentions(text: string, place: string): boolean {
+  // Street, MD is a town in Harford; "street" on its own is every address.
+  if (place.trim().toLowerCase() === "street") return /\bstreet\b\s*(?:,\s*)?(?:md\b|maryland\b|\/)/i.test(text);
   return new RegExp(`\\b${escapeRegExp(place)}\\b`, "i").test(text);
+}
+
+/** Whether any of our towns, counties or zip codes is named. */
+export function namesOurArea(text: string | null | undefined, markets: readonly ServiceMarket[]): boolean {
+  const value = text ?? "";
+  return markets.some((m) => [...m.cities, ...m.counties, ...m.zips].filter(Boolean).some((place) => mentions(value, place)));
 }
 
 /**
  * Why a post is outside the area we work in, or null when it is in it or
  * there is no telling.
  *
- * The town the sorter read off the post decides first. Without one, the
- * post's own words do: a place we know is outside, or "Baltimore" with
+ * The town the sorter read off the post decides first. Then the group it
+ * was posted in: "Dundalk News" is Dundalk whatever the post says, and a
+ * group named for a town in another state is out. Then the post's own
+ * words: a place we know is outside, another state, or "Baltimore" with
  * none of our towns beside it. A post that names nowhere is let through,
  * because most people asking in a Harford group are in Harford.
  */
-export function outsideServiceArea(input: { town?: string | null; text?: string | null; markets: readonly ServiceMarket[] }): string | null {
+export function outsideServiceArea(input: { town?: string | null; text?: string | null; group?: string | null; markets: readonly ServiceMarket[] }): string | null {
   if (input.markets.length === 0) return null;
   const ours = input.markets.flatMap((m) => [...m.cities, ...m.counties, ...m.zips]).filter(Boolean);
   const inOurs = (value: string) => ours.some((place) => mentions(value, place));
@@ -120,9 +152,14 @@ export function outsideServiceArea(input: { town?: string | null; text?: string 
       return `This post is in ${town}, outside the area we work in.`;
     }
   }
+  const group = (input.group ?? "").trim();
+  if (group && !inOurs(group)) {
+    const away = NEARBY_OUTSIDE.find((p) => mentions(group, p)) ?? otherState(group);
+    if (away) return `This post is from ${group}, outside the area we work in.`;
+  }
   const text = input.text ?? "";
   if (inOurs(text)) return null;
-  const outside = NEARBY_OUTSIDE.find((p) => mentions(text, p)) ?? (/\bbaltimore\b/i.test(text) ? "Baltimore" : null);
+  const outside = NEARBY_OUTSIDE.find((p) => mentions(text, p)) ?? otherState(text) ?? (/\bbaltimore\b/i.test(text) ? "Baltimore" : null);
   return outside ? `This post is in ${titleCase(outside)}, outside the area we work in.` : null;
 }
 

@@ -60,6 +60,11 @@ function workIn(haystack: string): string[] {
   return WORK.filter((w) => w.pattern.test(haystack)).map((w) => w.word);
 }
 
+/** The yard work a post asks about, in the order of the list above. */
+export function workNamed(text: string): string[] {
+  return workIn(fold(text));
+}
+
 export interface WordsVerdict {
   /** Names the work, asks for someone, and isn't selling. */
   request: boolean;

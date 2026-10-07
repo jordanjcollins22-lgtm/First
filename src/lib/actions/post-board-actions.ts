@@ -11,7 +11,7 @@ import { mentionComment } from "@/lib/outreach-agent";
 import { alreadyAnswered, isAnswered, isPostLink, onePerPerson, whyNotTake } from "@/lib/post-board";
 import { outsideServiceArea, posterToTag, withoutTeamMention, type ServiceMarket } from "@/lib/comment-guards";
 import { readAndDraft, recordOutreach, saveComment } from "@/lib/actions/outreach-link-actions";
-import { checkComment, draftFromDisplay, finishComment, introComment, LINK_MARKER, looksUsable, personaliseDraft } from "@/lib/comment-prompt";
+import { checkComment, draftFromDisplay, finishComment, introComment, LINK_MARKER, looksUsable, personaliseDraft, wordsComment } from "@/lib/comment-prompt";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { daysOld, fitOpenerToAge } from "@/lib/post-age";
 import { createClient } from "@/lib/supabase/server";
@@ -98,7 +98,7 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
   const guards = await guardsFor(org);
   const mineAlready = same.answers.some((a) => a.profileId === profile.id && a.status !== "let_go");
   if (!owner && !mineAlready) {
-    const away = outsideServiceArea({ town: row.town ?? null, text: row.text, markets: guards.markets });
+    const away = outsideServiceArea({ town: row.town ?? null, text: row.text, group: row.group_name ?? null, markets: guards.markets });
     if (away) return { ok: false, error: `${away} Leave it, or ask the office if we should take it.` };
   }
 
@@ -156,16 +156,21 @@ export async function takePost(seenId: string, options: { text?: string } = {}):
     };
   } else {
     const fresh = await readAndDraft({ screenshotPath: row.screenshot_path ?? null, pastedText: row.text, kind: "comment", ageDays: days });
+    const organization = fresh.ok && fresh.draft ? null : await getCurrentOrganization();
+    // No model to write it (no credit, or the call failed): a comment built
+    // from the work the post names, worded differently from post to post.
+    const byWords = fresh.ok || !organization ? null : wordsComment({ postText: row.text, seed: row.id, roles: profile.roles, businessName: organization.name, town: row.town ?? null });
     if (fresh.ok && fresh.draft) {
       read = { draft: fresh.draft, askedBy: fresh.askedBy, groupName: fresh.groupName, service: fresh.service, note: fresh.note };
+    } else if (byWords) {
+      read = { draft: byWords, askedBy: null, groupName: null, service: null, note: row.text ?? "" };
     } else {
       // Nobody asking (a business thread, "advertise here") or it could not
       // be read: an introduction they can change, rather than a dead end
       // that says try again when trying again can never work.
-      const organization = await getCurrentOrganization();
       intro = true;
       read = {
-        draft: introComment(profile.roles, organization.name),
+        draft: introComment(profile.roles, organization?.name ?? ""),
         askedBy: null,
         groupName: fresh.ok ? fresh.groupName : null,
         service: null,

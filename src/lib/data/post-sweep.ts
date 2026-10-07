@@ -3,6 +3,7 @@ import { pitchUnpitched, sortReadPosts } from "@/lib/data/post-sorter";
 import { draftWaitingPosts } from "@/lib/data/post-draft";
 import { BOARD_MAX_AGE_DAYS } from "@/lib/post-board";
 import { requestByWords, wordsReason } from "@/lib/post-words";
+import { namesOurArea, outsideServiceArea } from "@/lib/comment-guards";
 
 /**
  * Everything the finder brought in, sorted and ready to answer, with nobody
@@ -48,12 +49,20 @@ export async function sweepPosts(organizationId: string): Promise<{ sorted: numb
  * Unsorted posts still young enough for the board, looked at by their words
  * alone. A match goes on the board marked as flagged by words; anything
  * else is left unsorted for the next proper sort, never called "other".
+ * Words can't tell where somebody is, so only a post whose group or text
+ * names one of our towns, and nowhere outside, is flagged this way.
  */
 async function flagByWords(admin: ReturnType<typeof createAdminClient>, organizationId: string): Promise<number> {
   const since = new Date(Date.now() - BOARD_MAX_AGE_DAYS * 86_400_000).toISOString();
+  const { data: markets } = await admin
+    .from("target_markets")
+    .select("cities, counties, zips")
+    .eq("organization_id", organizationId)
+    .eq("active", true);
+  const ours = (markets ?? []).map((m) => ({ cities: m.cities ?? [], counties: m.counties ?? [], zips: m.zips ?? [] }));
   const { data } = await admin
     .from("outreach_seen_posts")
-    .select("id, text")
+    .select("id, text, group_name")
     .eq("organization_id", organizationId)
     .eq("decision", "read")
     .is("kind", null)
@@ -65,6 +74,9 @@ async function flagByWords(admin: ReturnType<typeof createAdminClient>, organiza
   for (const row of data ?? []) {
     const verdict = requestByWords(row.text ?? "");
     if (!verdict.request) continue;
+    const where = `${row.group_name ?? ""}\n${row.text ?? ""}`;
+    if (!namesOurArea(where, ours)) continue;
+    if (outsideServiceArea({ text: row.text, group: row.group_name, markets: ours })) continue;
     const { error } = await admin
       .from("outreach_seen_posts")
       .update({ kind: "request", kind_by: "words", category: "for-us", sort_reason: wordsReason(verdict.matched), updated_at: now })

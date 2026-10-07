@@ -1,4 +1,5 @@
 import { hasRole, isOwnerLevel } from "@/lib/roles";
+import { workNamed } from "@/lib/post-words";
 
 /**
  * Writing the comment that goes under somebody's post.
@@ -87,6 +88,73 @@ export function introComment(roles: readonly string[], businessName: string): st
     "We do landscaping, bed cleanups, mulch, lawn care and more around Harford County.",
     `Free on-site evaluation, no obligation, and you get a written price for each area: ${LINK_MARKER}`,
   ].join(" ");
+}
+
+/** What we say we do, for the work a post names. Tree and gutter work is coordinated, never claimed. */
+const OUR_WORK: { words: string[]; say: string }[] = [
+  { words: ["lawn", "mow", "grass"], say: "lawn mowing" },
+  { words: ["leaves", "cleanup", "yard"], say: "leaf and yard cleanups" },
+  { words: ["mulch"], say: "fresh mulch" },
+  { words: ["hedge", "shrub", "bush", "trim"], say: "hedge and shrub trimming" },
+  { words: ["weeds", "garden", "flower bed", "edging"], say: "bed cleanups and weeding" },
+  { words: ["overgrown", "brush"], say: "clearing overgrown areas" },
+  { words: ["aeration", "overseeding", "sod"], say: "aeration and overseeding" },
+  { words: ["snow", "plow"], say: "snow removal" },
+  { words: ["landscaping"], say: "landscaping" },
+];
+const PARTNER_WORK: { words: string[]; say: string }[] = [
+  { words: ["tree", "stump"], say: "the tree work" },
+  { words: ["gutters"], say: "the gutters" },
+];
+
+function joinAnd(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** A number from a post's id, so the same post always gets the same wording and different posts get different ones. */
+function pick<T>(seed: string, options: readonly T[], salt = 0): T {
+  let h = salt;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return options[h % options.length];
+}
+
+/**
+ * A comment for somebody asking for yard work, written without a model: for
+ * when there is no credit, or a call fails. It names the work they asked
+ * about, in one of several wordings chosen by the post, so a day of answers
+ * doesn't read as one comment pasted twenty times. The same rules as a
+ * written comment: the commenter's own opener, tree and gutter work only
+ * ever coordinated, no timing promised, and the booking link to finish.
+ * Null when the post names no work we can speak to.
+ */
+export function wordsComment(input: { postText: string; seed: string; roles: readonly string[]; businessName: string; town?: string | null }): string | null {
+  const work = workNamed(input.postText);
+  const ours = OUR_WORK.filter((w) => w.words.some((x) => work.includes(x))).map((w) => w.say).slice(0, 3);
+  const partner = PARTNER_WORK.filter((w) => w.words.some((x) => work.includes(x))).map((w) => w.say);
+  if (ours.length === 0 && partner.length === 0) return null;
+  const where = input.town?.trim() ? input.town.trim() : "Harford County";
+  const services = joinAnd(ours);
+  const middle = ours.length
+    ? pick(input.seed, [
+        `We've been featured in the news, have amazing reviews, and we handle ${services} all around ${where}.`,
+        `We have amazing reviews from neighbors around ${where}, and ${services} is right in our wheelhouse.`,
+        `We've been featured in the news and have amazing reviews, and we'd be glad to help with ${services}.`,
+        `Neighbors around ${where} leave us amazing reviews, and we take care of ${services} every week.`,
+      ])
+    : pick(input.seed, [
+        `We've been featured in the news and have amazing reviews around ${where}.`,
+        `Neighbors around ${where} leave us amazing reviews.`,
+      ]);
+  const coordinate = partner.length ? ` For ${joinAnd(partner)}, we can help coordinate it through our trusted contractor network.` : "";
+  const close = pick(input.seed, ["Happy to help!", "Happy to take a look!", "Happy to help if you still need someone!"], 7);
+  return [
+    `${commenterIntro(input.roles, input.businessName)}. ${middle}${coordinate}`,
+    "You can book a free in-person evaluation or instantly schedule online in under 5 minutes using the link below. It will show all available dates and times so you can choose what works best:",
+    "",
+    LINK_MARKER,
+    "",
+    close,
+  ].join("\n");
 }
 
 export function commentSystemPrompt(

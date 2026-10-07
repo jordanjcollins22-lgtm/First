@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { checkComment } from "./comment-prompt";
-import { isForwarded, outsideServiceArea, posterToTag, withoutTeamMention } from "./comment-guards";
+import { isForwarded, namesOurArea, outsideServiceArea, posterToTag, withoutTeamMention } from "./comment-guards";
 
 const team = ["Jace", "jordan collins", "Max", "Shalon Smith"];
 
@@ -85,5 +85,27 @@ describe("checkComment and timing", () => {
     expect(checkComment("Leaf and seasonal cleanup is one of our main services this time of year.").ok).toBe(true);
     expect(checkComment("We can keep your yard on a regular cut schedule.").ok).toBe(true);
     expect(checkComment("It will show all available dates and times so you can choose what works best.").ok).toBe(true);
+  });
+});
+
+describe("the area, from the group a post is in", () => {
+  const markets = [{ cities: ["Bel Air", "Abingdon", "Street"], counties: ["Harford"], zips: ["21014"] }];
+
+  it("knows Dundalk News is Dundalk, whatever the post says", () => {
+    expect(outsideServiceArea({ text: "Looking for junk removal. Located on the ABC streets.", group: "Dundalk News", markets })).toMatch(/Dundalk News/);
+  });
+
+  it("knows a group in another state", () => {
+    expect(outsideServiceArea({ text: "Need one time yard help", group: "Mechanicsville, VA Residents & Friends", markets })).toMatch(/outside/);
+  });
+
+  it("lets a Harford group through", () => {
+    expect(outsideServiceArea({ text: "Anyone know a lawn guy?", group: "Harford Happenings", markets })).toBeNull();
+  });
+
+  it("reads Street as the town only when it is written as one", () => {
+    expect(namesOurArea("Lives on Main Street", markets)).toBe(false);
+    expect(namesOurArea("Street/Pylesville/north Harford community page", markets)).toBe(true);
+    expect(namesOurArea("Out in Street, MD", markets)).toBe(true);
   });
 });
