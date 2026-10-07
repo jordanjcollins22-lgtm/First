@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { GOVCON_AUTH_COOKIE, dashboardToken, isGovconAuthorized } from "@/lib/govcon/auth";
+import { createContractFromWin } from "@/lib/govcon/contracts";
 import { runPipeline, type Stage } from "@/lib/govcon/pipeline";
 import { priceBid, type PriceAnchor } from "@/lib/govcon/pricing";
 import type { SetAside, TradeKey } from "@/lib/govcon/types";
@@ -60,6 +61,7 @@ export async function setOpportunityStatus(
     await db.from("govcon_bids").update({ status: "submitted", submitted_at: new Date().toISOString() }).eq("opportunity_id", id);
   } else if (status === "won" || status === "lost") {
     await db.from("govcon_bids").update({ status }).eq("opportunity_id", id);
+    if (status === "won") await createContractFromWin(db, id);
   }
   await event(id, status, `Marked ${status.replace("_", "-")} by user${reason ? `: ${reason}` : ""}`);
   revalidatePath(`/govcon/opportunities/${id}`);
@@ -199,6 +201,13 @@ export async function saveGovconSettings(formData: FormData) {
     maxEstimatedValue: num("maxEstimatedValue", 1_500_000),
     monthlyProposalTarget: num("monthlyProposalTarget", 25),
     maxAnalysesPerDay: num("maxAnalysesPerDay", 8),
+    monthlyRevenueTarget: num("monthlyRevenueTarget", 4_000_000),
+    autoScale: formData.get("autoScale") === "on",
+    maxAnalysesPerDayCeiling: num("maxAnalysesPerDayCeiling", 40),
+    bonfirePortals: String(formData.get("bonfirePortals") ?? "")
+      .split(/[\s,]+/)
+      .map((s) => s.trim().toLowerCase().replace(/\.bonfirehub\.com.*$/, "").replace(/^https?:\/\//, ""))
+      .filter((s) => /^[a-z0-9-]+$/.test(s)),
   };
   const company = {
     name: profile.companyName,
@@ -212,4 +221,23 @@ export async function saveGovconSettings(formData: FormData) {
   await createAdminClient().from("govcon_settings").upsert({ id: 1, profile, company });
   revalidatePath("/govcon");
   revalidatePath("/govcon/settings");
+}
+
+export async function updateContract(id: string, formData: FormData) {
+  await requireAuth();
+  const num = (k: string) => Number(String(formData.get(k) ?? "").replace(/[$,]/g, ""));
+  const status = String(formData.get("status") ?? "active");
+  await createAdminClient()
+    .from("govcon_contracts")
+    .update({
+      contract_number: String(formData.get("contract_number") ?? "").trim() || null,
+      annual_value: num("annual_value") || 0,
+      sub_annual_cost: num("sub_annual_cost") || 0,
+      start_date: String(formData.get("start_date") ?? "") || null,
+      end_date: String(formData.get("end_date") ?? "") || null,
+      status: (["active", "complete", "terminated"].includes(status) ? status : "active") as "active" | "complete" | "terminated",
+    })
+    .eq("id", id);
+  revalidatePath("/govcon/contracts");
+  revalidatePath("/govcon");
 }

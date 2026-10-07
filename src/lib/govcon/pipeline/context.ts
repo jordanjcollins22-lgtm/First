@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { GovconOpportunityRow } from "@/lib/supabase/database.types";
 
+import { getGoalStatus } from "../goal-status";
 import { mergeProfile } from "../profile";
 import type { OpportunityScore, SubcontractingAssessment } from "../types";
 import type { CompanyInfo } from "../templates";
@@ -36,7 +37,15 @@ export async function createContext(budgetMs: number): Promise<PipelineContext> 
   const db = createAdminClient();
   const { data: settings } = await db.from("govcon_settings").select("*").eq("id", 1).maybeSingle();
   const company = (settings?.company ?? {}) as Partial<CompanyInfo>;
-  const profile = mergeProfile(settings?.profile ?? null);
+  const baseProfile = mergeProfile(settings?.profile ?? null);
+  // Auto-scale: the revenue goal sets how many proposals (and AI reads) we need.
+  let profile = baseProfile;
+  if (baseProfile.autoScale) {
+    const goal = await getGoalStatus(db, baseProfile).catch(() => null);
+    if (goal) {
+      profile = { ...baseProfile, monthlyProposalTarget: goal.effectiveProposalTarget, maxAnalysesPerDay: goal.effectiveAnalysesPerDay };
+    }
+  }
   return {
     db,
     profile,
@@ -105,6 +114,7 @@ export function oppToRow(
     recommendation: score.recommendation,
     score_detail: { factors: score.factors, disqualifiers: score.disqualifiers, flags: score.flags },
     subcontracting: score.subcontracting,
+    priority: score.total, // refined by the estimate stage once a price anchor is known
   };
 }
 

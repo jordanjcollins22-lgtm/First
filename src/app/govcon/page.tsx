@@ -1,9 +1,10 @@
 import { connection } from "next/server";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GoalPanel } from "@/components/govcon/goal-panel";
 import { OpportunityTable } from "@/components/govcon/opportunity-table";
 import { RunButtons } from "@/components/govcon/run-buttons";
-import { getDashboard, isGovconDbConfigured } from "@/lib/data/govcon";
+import { getDashboard, getGoal, isGovconDbConfigured } from "@/lib/data/govcon";
 
 export const maxDuration = 300; // "run now" server actions
 
@@ -29,7 +30,7 @@ export default async function GovconDashboard() {
       </p>
     );
   }
-  const d = await getDashboard();
+  const [d, goal] = await Promise.all([getDashboard(), getGoal()]);
   const lastRun = d.runs[0];
 
   return (
@@ -46,12 +47,14 @@ export default async function GovconDashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Stat label="Submitted this month" value={`${d.submittedThisMonth} / ${d.profile.monthlyProposalTarget}`} sub="Win rate is ~5–10%: volume wins" />
+        <Stat label="Submitted this month" value={`${d.submittedThisMonth} / ${goal.effectiveProposalTarget.toLocaleString()}`} sub="Target set by the revenue goal" />
         <Stat label="Ready to submit" value={d.ready.length} />
         <Stat label="Collecting quotes" value={d.inFlight.length} />
         <Stat label="Subs to call" value={d.callList} />
         <Stat label="Won" value={d.won} />
       </div>
+
+      <GoalPanel goal={goal} />
 
       <Card>
         <CardHeader><CardTitle>Ready for your review</CardTitle></CardHeader>

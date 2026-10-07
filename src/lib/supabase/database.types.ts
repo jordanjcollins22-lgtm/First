@@ -242,6 +242,8 @@ export interface Database {
       govcon_bids: GovconTable<GovconBidRow, "opportunity_id" | "sub_cost" | "price" | "markup">;
       govcon_events: GovconTable<GovconEventRow, "kind" | "message">;
       govcon_runs: GovconTable<GovconRunRow, "stage">;
+      govcon_contracts: GovconTable<GovconContractRow, "opportunity_id">;
+      govcon_sam_entities: GovconTable<GovconSamEntityRow, "uei" | "legal_name">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -299,7 +301,7 @@ export type GovconOpportunityRow = {
   recommendation: "bid" | "maybe" | "no_bid";
   score_detail: Json;
   subcontracting: Json;
-  status: "new" | "sourcing" | "awaiting_quotes" | "ready" | "submitted" | "won" | "lost" | "no_bid" | "expired";
+  status: "new" | "needs_docs" | "sourcing" | "awaiting_quotes" | "ready" | "submitted" | "won" | "lost" | "no_bid" | "expired";
   status_reason: string | null;
   analysis: Json | null;
   attachments: Json;
@@ -307,6 +309,10 @@ export type GovconOpportunityRow = {
   price_anchor: Json | null;
   analyzed_at: string | null;
   last_error: string | null;
+  expected_annual_value: number | null;
+  priority: number;
+  estimated_at: string | null;
+  uploaded_docs: Json;
   created_at: string;
   updated_at: string;
 };
@@ -410,4 +416,40 @@ export type GovconRunRow = {
   ok: boolean | null;
   stats: Json;
   error: string | null;
+};
+
+export type GovconContractRow = {
+  id: string;
+  opportunity_id: string;
+  bid_id: string | null;
+  subcontractor_id: string | null;
+  contract_number: string | null;
+  total_value: number;
+  annual_value: number;
+  sub_annual_cost: number;
+  start_date: string | null;
+  end_date: string | null;
+  status: "active" | "complete" | "terminated";
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GovconSamEntityRow = {
+  uei: string;
+  cage: string | null;
+  legal_name: string;
+  dba_name: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip5: string | null;
+  website: string | null;
+  naics: string[];
+  small_naics: string[];
+  business_types: string[];
+  poc_name: string | null;
+  registration_expires: string | null;
+  extract_date: string | null;
+  updated_at: string;
 };

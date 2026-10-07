@@ -8,6 +8,7 @@ import type {
   GovconSubcontractorRow,
 } from "@/lib/supabase/database.types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getGoalStatus } from "@/lib/govcon/goal-status";
 import { mergeProfile } from "@/lib/govcon/profile";
 import type { CompanyInfo } from "@/lib/govcon/templates";
 import type { CompanyProfile } from "@/lib/govcon/types";
@@ -169,4 +170,22 @@ export async function getQuotePortal(token: string) {
       open: ["awaiting_quotes", "sourcing"].includes(opp.status) && (!rfq.quote_due_at || Date.parse(rfq.quote_due_at) > Date.now()),
     },
   };
+}
+
+export async function getGoal() {
+  const db = createAdminClient();
+  const { data } = await db.from("govcon_settings").select("profile").eq("id", 1).maybeSingle();
+  return getGoalStatus(db, mergeProfile((data?.profile ?? null) as Partial<CompanyProfile> | null));
+}
+
+export async function listContracts() {
+  const db = createAdminClient();
+  const { data: contracts, error } = await db.from("govcon_contracts").select("*").order("start_date", { ascending: false });
+  if (error) throw error;
+  const oppIds = (contracts ?? []).map((c) => c.opportunity_id);
+  const { data: opps } = oppIds.length
+    ? await db.from("govcon_opportunities").select("id, title, agency, pop_city, pop_state").in("id", oppIds)
+    : { data: [] as Array<Pick<GovconOpportunityRow, "id" | "title" | "agency" | "pop_city" | "pop_state">> };
+  const byId = new Map((opps ?? []).map((o) => [o.id, o]));
+  return (contracts ?? []).map((c) => ({ ...c, opp: byId.get(c.opportunity_id) ?? null }));
 }

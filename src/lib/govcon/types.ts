@@ -127,6 +127,14 @@ export interface CompanyProfile {
   monthlyProposalTarget: number;
   /** Cap on solicitations read by AI per day (cost control, ~$0.25-1 each). */
   maxAnalysesPerDay: number;
+  /** Revenue goal from this channel, per month. */
+  monthlyRevenueTarget: number;
+  /** Derive proposal target + daily analysis budget from the revenue goal. */
+  autoScale: boolean;
+  /** Hard ceiling on daily AI reads when autoScale is on (cost guard). */
+  maxAnalysesPerDayCeiling: number;
+  /** Extra Bonfire portal subdomains to watch (state/local bids). */
+  bonfirePortals: string[];
 }
 
 export type BidRecommendation = "bid" | "maybe" | "no_bid";

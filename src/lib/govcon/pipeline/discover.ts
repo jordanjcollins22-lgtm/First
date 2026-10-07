@@ -1,5 +1,6 @@
 import type { GovconOpportunityRow } from "@/lib/supabase/database.types";
 
+import { createContractFromWin } from "../contracts";
 import { opportunityKey } from "../normalize";
 import { scoreOpportunity } from "../scoring";
 import { searchRecentOpportunities } from "../sources/sam-api";
@@ -115,6 +116,7 @@ async function matchAwards(ctx: PipelineContext, awards: AwardNoticeRow[]): Prom
     const won = ours.length >= 4 && norm(award.awardee).includes(ours);
     await ctx.db.from("govcon_opportunities").update({ status: won ? "won" : "lost", status_reason: `Awarded to ${award.awardee ?? "?"} for $${award.amount ?? "?"}` }).eq("id", opp.id);
     await ctx.db.from("govcon_bids").update({ status: won ? "won" : "lost", award_amount: award.amount, awardee: award.awardee }).eq("opportunity_id", opp.id);
+    if (won) await createContractFromWin(ctx.db, opp.id, award.amount);
     await logEvent(ctx, opp.id, won ? "won" : "lost", won ? `WON — award ${award.awardNumber} for $${award.amount}` : `Lost to ${award.awardee} at $${award.amount}`, award);
     matched++;
   }

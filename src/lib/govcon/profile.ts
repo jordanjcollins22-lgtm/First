@@ -14,10 +14,16 @@ export const DEFAULT_PROFILE: CompanyProfile = {
   targetMarkup: 0.25,
   minMarkup: 0.12,
   minDaysToRespond: 5,
-  maxEstimatedValue: 1_500_000,
+  // Large enough for mid-size contracts the revenue goal depends on.
+  maxEstimatedValue: 5_000_000,
   monthlyProposalTarget: 25,
   // ~25 proposals/month needs a few analyses a day once no-bids drop out.
   maxAnalysesPerDay: 8,
+  monthlyRevenueTarget: 4_000_000,
+  autoScale: true,
+  // ~40 reads/day ≈ $20-40/day of Claude usage.
+  maxAnalysesPerDayCeiling: 40,
+  bonfirePortals: [],
 };
 
 export function mergeProfile(overrides: Partial<CompanyProfile> | null | undefined): CompanyProfile {

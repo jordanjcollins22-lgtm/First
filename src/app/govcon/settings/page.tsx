@@ -74,13 +74,26 @@ export default async function GovconSettingsPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Bidding rules</CardTitle></CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
+          <Field label="Monthly revenue goal $" name="monthlyRevenueTarget" type="number" defaultValue={profile.monthlyRevenueTarget} hint="Drives proposal volume when auto-scale is on" />
+          <label className="flex items-center gap-2 text-sm sm:pt-6">
+            <input type="checkbox" name="autoScale" defaultChecked={profile.autoScale} /> Auto-scale volume to the revenue goal
+          </label>
+          <Field label="Auto-scale ceiling (AI reads / day)" name="maxAnalysesPerDayCeiling" type="number" defaultValue={profile.maxAnalysesPerDayCeiling} hint="Cost guard: ~$0.50-1 per read" />
           <Field label="Target markup %" name="targetMarkup" type="number" defaultValue={Math.round(profile.targetMarkup * 100)} hint="Added to the winning sub quote" />
           <Field label="Minimum markup %" name="minMarkup" type="number" defaultValue={Math.round(profile.minMarkup * 100)} hint="Floor when trimming to beat past award prices" />
           <Field label="Minimum days to respond" name="minDaysToRespond" type="number" defaultValue={profile.minDaysToRespond} hint="Skip bids due sooner — not enough time for sub quotes" />
           <Field label="Max contract value $" name="maxEstimatedValue" type="number" defaultValue={profile.maxEstimatedValue} />
           <Field label="Monthly proposal target" name="monthlyProposalTarget" type="number" defaultValue={profile.monthlyProposalTarget} />
-          <Field label="Max solicitations read by AI per day" name="maxAnalysesPerDay" type="number" defaultValue={profile.maxAnalysesPerDay} hint="Cost control — highest-scoring bids are read first" />
+          <Field label="Min solicitations read by AI per day" name="maxAnalysesPerDay" type="number" defaultValue={profile.maxAnalysesPerDay} hint="Cost control — highest-scoring bids are read first" />
           <Field label="States (blank = all)" name="states" defaultValue={profile.states.join(", ")} hint="e.g. NC, SC, VA" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Extra Bonfire portals (state/local)</CardTitle></CardHeader>
+        <CardContent className="space-y-1">
+          <Input name="bonfirePortals" defaultValue={profile.bonfirePortals.join(", ")} placeholder="e.g. cityofxyz, countyabc" />
+          <p className="text-xs text-muted-foreground">Subdomain of any {"{name}"}.bonfirehub.com portal. 24 verified portals are watched by default.</p>
         </CardContent>
       </Card>
 

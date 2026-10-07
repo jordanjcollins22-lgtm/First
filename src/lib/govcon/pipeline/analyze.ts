@@ -1,8 +1,9 @@
 import { analyzeSolicitation, isAiConfigured, type SolicitationAnalysis } from "../ai";
-import { loadSolicitationDocuments } from "../documents";
+import { loadSolicitationDocuments, loadUploadedDocuments, type UploadedDoc } from "../documents";
+import { priorityScore } from "../goals";
 import { scoreOpportunity } from "../scoring";
 import { getNoticeDetail } from "../sources/sam-attachments";
-import { anchorFromComparables, findComparableAwards } from "../sources/usaspending";
+import { anchorFromComparables, findComparableAwards, type ComparableAward } from "../sources/usaspending";
 import { sanitizeScopeForSub } from "../templates";
 import { logEvent, rowToOpp, timeLeft, type PipelineContext } from "./context";
 
@@ -31,7 +32,7 @@ export async function analyze(ctx: PipelineContext, limit = 6) {
     .eq("recommendation", "bid")
     .in("notice_type", ["solicitation", "combined_synopsis_solicitation"])
     .gt("response_deadline", minDeadline)
-    .order("score", { ascending: false })
+    .order("priority", { ascending: false })
     .limit(limit);
   if (error) throw error;
 
@@ -40,7 +41,20 @@ export async function analyze(ctx: PipelineContext, limit = 6) {
     stats.analyzed++;
     try {
       const opp = rowToOpp(row);
-      const detail = await getNoticeDetail(opp.externalId).catch(() => null);
+      const uploaded = (row.uploaded_docs ?? []) as UploadedDoc[];
+      const isPortal = row.source === "state_portal";
+      // State/local portals keep documents behind a vendor login: wait for a
+      // human to download them once and drop them on the opportunity page.
+      if (isPortal && !uploaded.length) {
+        await ctx.db
+          .from("govcon_opportunities")
+          .update({ status: "needs_docs", status_reason: "Register on the portal, download the bid documents, and upload them here" })
+          .eq("id", row.id);
+        await logEvent(ctx, row.id, "needs_docs", "Waiting for bid documents from the portal");
+        stats.analyzed--;
+        continue;
+      }
+      const detail = isPortal ? null : await getNoticeDetail(opp.externalId).catch(() => null);
       if (detail?.description && detail.description.length > (opp.description?.length ?? 0)) opp.description = detail.description;
       if (detail?.placeOfPerformance) {
         opp.placeOfPerformance = {
@@ -51,7 +65,12 @@ export async function analyze(ctx: PipelineContext, limit = 6) {
         };
       }
 
-      const { documents, attachments, skipped } = await loadSolicitationDocuments(opp.externalId);
+      const sam = isPortal
+        ? { documents: [], attachments: [], skipped: [] as string[] }
+        : await loadSolicitationDocuments(opp.externalId);
+      const own = await loadUploadedDocuments(ctx.db, uploaded);
+      const documents = [...own, ...sam.documents];
+      const { attachments, skipped } = sam;
 
       let analysis: SolicitationAnalysis | null = null;
       if (isAiConfigured()) {
@@ -66,7 +85,10 @@ export async function analyze(ctx: PipelineContext, limit = 6) {
         if (analysis.estimatedValue && !opp.estimatedValue) opp.estimatedValue = analysis.estimatedValue;
       }
 
-      const comparables = await findComparableAwards(opp, ctx.now).catch(() => []);
+      // Reuse the estimate stage's lookup when it already ran.
+      const comparables = row.estimated_at
+        ? ((row.comparables ?? []) as unknown as ComparableAward[])
+        : await findComparableAwards(opp, ctx.now).catch(() => []);
       const anchor = anchorFromComparables(comparables);
 
       // Re-score with document findings folded in.
@@ -105,6 +127,8 @@ export async function analyze(ctx: PipelineContext, limit = 6) {
           description: opp.description?.slice(0, 100_000) ?? null,
           estimated_value: opp.estimatedValue,
           score: rescored.total,
+          expected_annual_value: opp.estimatedValue ?? anchor?.annualAmount ?? row.expected_annual_value,
+          priority: priorityScore(rescored.total, opp.estimatedValue ?? anchor?.annualAmount ?? row.expected_annual_value),
           recommendation: rescored.recommendation,
           score_detail: { factors: rescored.factors, disqualifiers: rescored.disqualifiers, flags: rescored.flags },
           subcontracting: rescored.subcontracting,
